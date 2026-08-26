@@ -608,7 +608,8 @@ committed tsv.
   creature?" — now stands **per case for all 25 tap-order rows** (§2c), not just gi309. 16 are proven
   DEFECT, 1 WARRANTED, 8 lose no attacker on the control's line at all.
 - ANSWERED since the first draft: the 393 non-tap-order cases are no longer bare classification —
-  §2d prices the pre-fix payment of all 418. What remains genuinely open is the **168 UNPRICED**,
+  §2d prices the pre-fix payment of all 418. What remains genuinely open is the **168 UNPRICED**
+  (deferred and written up separately: [`unpriced-prepay-rows.md`](unpriced-prepay-rows.md)),
   138 of them hinata, where a Reality Spasm untap-refloat or an unresolved `{X}` in `manaPaid` means
   the ledger cannot balance the turn either way. Hinata's split (56 LAUNDERED / 14 LEGAL / 138
   unpriced) is therefore the least settled part of this document.

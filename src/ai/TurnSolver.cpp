@@ -26515,6 +26515,152 @@ static bool LineColorGateEnabled()
     return v;
 }
 
+// Structural legality of the DECLARED board activations, for CheckLine stage 2. Returns a
+// human-readable reason when the line is provably illegal, or "" when it is not (which includes
+// "cannot be settled here" -- see the soundness rule at the call site: a false Illegal masks a real
+// reachability gap, so silence is always the safe answer).
+//
+// Every test admits the line's own casts as an enabler, because stage 2 runs before the cast sim:
+// a Sliver cast this turn satisfies Sliver Hive's subtype gate, an Equipment cast this turn is a
+// legal `equip=` source. Mana affordability is NOT judged here -- the sim below owns that.
+static std::string BoardActivationIllegalReason(const GameState& s, const TurnSolver::LineSpec& spec)
+{
+    const int active = s.active_player_index;
+    const Player& ap = s.ActivePlayer();
+
+    auto controls = [&](const std::string& name) {
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == active && p.card.m_name == name) { return true; } }
+        return false;
+    };
+    auto cast_here = [&](const std::string& name) {
+        return std::find(spec.casts.begin(), spec.casts.end(), name) != spec.casts.end();
+    };
+    // Present now, or arriving via this line's own casts.
+    auto live = [&](const std::string& name) { return controls(name) || cast_here(name); };
+    // A controlled permanent with this subtype, or one this line casts.
+    auto have_subtype = [&](const std::string& sub) {
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == active && CardHasSubtype(p.card, sub)) { return true; } }
+        for (const std::string& n : spec.casts)
+        { const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+          if (d && CardHasSubtype(d->card, sub)) { return true; } }
+        return false;
+    };
+    auto def_of = [](const std::string& name) { return CardDatabase::Instance().Lookup(name); };
+
+    // --- taptoken= : Sliver Hive's "{5}, {T}: create a 1/1 Sliver. Activate only if you control a
+    // Sliver." Source presence, the ability existing on that card, and the subtype gate.
+    for (const std::string& name : spec.tap_tokens)
+    {
+        if (!live(name))
+        { return "you control no '" + name + "' to activate"; }
+        const CardDefinition* d = def_of(name);
+        if (d && !d->params.tap_token_cost.has_value())
+        { return "'" + name + "' has no token-making activated ability"; }
+        if (d)
+        {
+            for (const std::string& sub : d->params.tap_token_requires_subtypes)
+            {
+                if (!have_subtype(sub))
+                { return "'" + name + "' can only be activated if you control a " + sub +
+                         ", and you control none"; }
+            }
+        }
+    }
+
+    // --- animate= : Mutavault's "{1}: becomes a 2/2". Source presence + the ability existing.
+    for (const std::string& name : spec.animates)
+    {
+        if (!live(name))
+        { return "you control no '" + name + "' to animate"; }
+        const CardDefinition* d = def_of(name);
+        if (d && !d->params.can_animate)
+        { return "'" + name + "' has no animate ability"; }
+    }
+
+    // --- equip= : source presence + it actually being an Equipment. WHICH host it attaches to is
+    // the `equip` sub-decision, so no host test here (that is a choose, not an illegality).
+    for (const std::string& name : spec.equips)
+    {
+        if (!live(name))
+        { return "you control no '" + name + "' to equip"; }
+        const CardDefinition* d = def_of(name);
+        if (d && !d->params.is_equipment)
+        { return "'" + name + "' is not an Equipment"; }
+    }
+
+    // --- jittemode= : a charged Equipment must exist, and it must actually HAVE the named mode.
+    // Charge counters arrive from combat damage, so within a main-phase line their absence is
+    // settled. Mode 3 additionally needs the Equipment attached, but an `equip=` in the same line
+    // can attach it -- so that half is only asserted when the line declares no equip at all.
+    for (int mode : spec.jitte_modes)
+    {
+        bool any_source = false, any_mode = false, any_attached = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != active || p.charge_counters <= 0) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d || !d->params.is_equipment || d->params.equip_combat_damage_charges <= 0) { continue; }
+            any_source = true;
+            const bool has_mode =
+                  mode == 1 ? (d->params.charge_minus_power != 0 || d->params.charge_minus_tough != 0)
+                : mode == 2 ? (d->params.charge_lifegain > 0)
+                : mode == 3 ? (d->params.charge_pump_power != 0 || d->params.charge_pump_tough != 0)
+                : false;
+            if (!has_mode) { continue; }
+            any_mode = true;
+            if (p.equipped_to > 0) { any_attached = true; }
+        }
+        if (!any_source)
+        { return "you control no Equipment with charge counters to spend"; }
+        if (!any_mode)
+        { return "no charged Equipment you control has counter mode " + std::to_string(mode); }
+        if (mode == 3 && !any_attached && spec.equips.empty())
+        { return "the +N/+N mode affects the equipped creature, and the Equipment is attached to "
+                 "nothing (equip it first)"; }
+    }
+
+    // --- gyexile= : Deathrite Shaman. The source must be live, and the graveyards must hold the
+    // card type the mode exiles. A SORCERY cast by this same line lands in the graveyard, so mode 1
+    // is only asserted when the line casts no instant/sorcery.
+    if (!spec.gy_exiles.empty())
+    {
+        bool any_source = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && (d->params.gy_exile_instant_sorcery_drain > 0
+                   || d->params.gy_exile_creature_lifegain > 0)) { any_source = true; break; }
+        }
+        if (!any_source)
+        { return "you control no permanent with a graveyard-exile ability"; }
+        auto gy_has = [&](bool want_creature) {
+            for (const Player& pl : s.players)
+            {
+                for (const Card& c : pl.graveyard)
+                { if (want_creature ? c.IsCreature() : (c.IsInstant() || c.IsSorcery())) { return true; } }
+            }
+            return false;
+        };
+        bool casts_spell = false;
+        for (const std::string& n : spec.casts)
+        { const CardDefinition* d = def_of(n);
+          if (d && (d->card.IsInstant() || d->card.IsSorcery())) { casts_spell = true; break; } }
+        for (int mode : spec.gy_exiles)
+        {
+            if (mode == 1 && !gy_has(false) && !casts_spell)
+            { return "no instant or sorcery in any graveyard to exile"; }
+            if (mode == 2 && !gy_has(true))
+            { return "no creature card in any graveyard to exile"; }
+        }
+    }
+
+    (void)ap;
+    return {};
+}
+
 TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_combat,
                                             const LineSpec& spec)
 {
@@ -27239,6 +27385,30 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                          "' (land drop unavailable, or it is not a land in hand)";
             return out;
         }
+    }
+
+    // BOARD-ACTIVATION legality, before the cast affordability sim below. That sim models
+    // `spec.casts` and `spec.land` and NOTHING ELSE, so until this check existed every declared
+    // activation verb (`taptoken=`, `animate=`, `equip=`, `jittemode=`, `gyexile=`) that the search
+    // had not enumerated fell through to the LegalNotEnumerated returns at the bottom -- reported as
+    // "rules-legal, but the search never enumerated this line" even when it was flatly ILLEGAL.
+    //
+    // That matters because LegalNotEnumerated is the reachability alarm: it is exactly the grade
+    // that exposed the Jitte's pruned modes (see enumerated-but-unplayable-activations.md). An
+    // illegal line wearing the same grade is a FALSE POSITIVE in the one gate that catches real
+    // gaps -- `taptoken=Sliver Hive` with no Sliver in play graded LegalNotEnumerated, which reads
+    // as an engine defect and is not one.
+    //
+    // SOUNDNESS RULE for everything below: assert Illegal only where NO ordering of this line could
+    // make the activation legal. A false Illegal would MASK a real gap, which is the failure this
+    // check exists to prevent, so every test admits the line's own casts as a possible enabler. The
+    // from-hand verbs (`sfput=`, `channel=`, `suspend=`) are deliberately NOT checked: their card
+    // can arrive mid-line off a cantrip, so "not in hand right now" does not settle them.
+    if (const std::string why = BoardActivationIllegalReason(s, spec); !why.empty())
+    {
+        out.verdict = V::Illegal;
+        out.reason  = why;
+        return out;
     }
 
     // Resolve each named cast to a card definition; bail to Unsupported for the action

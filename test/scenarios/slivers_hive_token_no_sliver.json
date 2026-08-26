@@ -1,0 +1,25 @@
+{
+ "_comment": "NEGATIVE control for slivers_hive_token_line.json, and the case that exposed the verdict-classification bug fixed 2026-08-26. Same board minus the Muscle Sliver, so Sliver Hive's 'Activate only if you control a Sliver' clause is UNSATISFIED and the activation is flatly illegal. It must grade `illegal` with a reason the player can act on -- NOT `legal_not_enumerated`. That distinction is the whole point: legal_not_enumerated is the reachability ALARM (it is what exposed the Jitte's pruned modes), so an illegal line wearing that grade is a false positive in the one gate that catches real engine gaps. Before the fix, CheckLine's stage-2 legality simulation modelled only `spec.casts` and `spec.land`, so EVERY unenumerated activation verb fell through to 'rules-legal, but the search never enumerated this line'.",
+ "deck": "decks/slivers_vial/slivers_vial.txt",
+ "turn": 6,
+ "on_the_play": true,
+ "max_turns": 6,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+ "battlefield": [
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Sliver Hive", "controller": 0, "tapped": false },
+  { "name": "Sliver Hive", "controller": 0, "tapped": false }
+ ],
+ "hand": [],
+ "library_filler": "Plated Sliver",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "taptoken=Sliver Hive",
+ "expect_verdict": "illegal"
+}
