@@ -1695,6 +1695,62 @@ static std::uint64_t PayloadReserveMask(const GameState& state)
     return mask;
 }
 
+// SCARCE-COLOR HOLD (MTG_SCARCE_COLOR_HOLD -- see ScarceColorHoldEnabled in SpellEffects.h for the
+// mw326 trace). While a plan apply is paying ONE cast of a multi-cast plan, hold every untapped
+// source that is a SCARCE provider of a colour the plan's OTHER casts still need: if the untapped
+// providers of colour c number no more than the plan's remaining c-pips beyond this payment's own
+// cost, every one of them will be needed, so this payment must route around them if it can. The
+// remaining-need estimate is conservative (already-paid casts still count -- an over-hold costs one
+// extra solve attempt, never a cast, by the held-first/unrestricted-retry contract). Unlike the
+// whole-turn prepay this also protects the shapes the prepay DECLINES -- mw326's joint cost is only
+// payable via the mid-turn mint, so the prepay fails up front and only this per-cast hold can keep
+// the greedy from burning the lone {R} land on a colour-flexible cost.
+static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost& cost)
+{
+    if (!ScarceColorHoldEnabled()) { return 0; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    if (!pt || pt->mana_casts < 2) { return 0; }
+    const int n = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return 0; }                    // bitmask limit, matching ReservableSpecialMask
+    // Pips the plan's OTHER casts need, beyond this payment's own cost.
+    const int cur[5] = { cost.white, cost.blue, cost.black, cost.red, cost.green };
+    int need[5]; bool any = false;
+    for (int c = 0; c < 5; ++c)
+    {
+        need[c] = pt->cast_pips[c] - cur[c];
+        if (need[c] > 0) { any = true; }
+    }
+    if (!any) { return 0; }
+    const int active = state.active_player_index;
+    // Untapped providers per colour (each source counted once per colour it can make).
+    int cnt[5] = {};
+    std::uint64_t prov[5] = {};
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool dork = d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)
+                          && GraveyardFuelLive(state, active, *d);
+        if (!dork && !p.card.IsLand() && !d->params.mana_rock) { continue; }
+        int seen = 0;
+        for (Color c : EffectiveProduces(state, active, *d))
+        {
+            const int ci = static_cast<int>(c);
+            if (ci >= 5 || (seen & (1 << ci))) { continue; }
+            seen |= (1 << ci);
+            ++cnt[ci]; prov[ci] |= (1ull << i);
+        }
+    }
+    std::uint64_t mask = 0;
+    for (int c = 0; c < 5; ++c)
+    {
+        if (need[c] > 0 && cnt[c] > 0 && cnt[c] <= need[c]) { mask |= prov[c]; }
+    }
+    return mask;
+}
+
 // THE public payment entry (C1 unit 5) -- reserved-first retry around TapForCostSharedOnce.
 // Snapshot everything a payment can touch (incl. the executor's `available` accounting pool, when
 // present) so a reserved MISS restores byte-identically before the normal attempt (which must
@@ -1746,7 +1802,8 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     }
 
     const std::uint64_t rmask = ReservableSpecialMask(state) | PlanReserveMask(state)
-                              | OneShotHoldMask(state) | PayloadReserveMask(state);
+                              | OneShotHoldMask(state) | PayloadReserveMask(state)
+                              | ScarceColorHoldMask(state, cost_in);
     if (rmask != 0)
     {
         const int a = state.active_player_index;

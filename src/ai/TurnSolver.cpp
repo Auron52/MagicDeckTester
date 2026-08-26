@@ -6736,6 +6736,53 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { has_land = true; break; }
                 }
                 if (!has_land) { continue; }
+                // CAST-DESIRABILITY GATE (MTG_SAC_SPAWN_CAST_GATE, default OFF -- adoption-config
+                // candidate; overhaul ledger cg30 family). USER doctrine 2026-08-25: it is a
+                // "wasted play to use Crop Rotation when you would have to sacrifice an Orchard"
+                // -- a token-spawn land (taps_spawn_opp_token) is a per-turn damage engine and the
+                // sac destroys it permanently, while the fetched land is at best a sidegrade.
+                // GREEDY SCOPE ONLY (g_search_candidate_enum false = d0 decision + rollout
+                // leaves): those paths take the provider's default sac target with no branch, so
+                // the bad sac is committed unexamined. Searched enumeration keeps the cast -- the
+                // MTG_SAC_AXIS branch prices every victim by simulation and can still take the
+                // line when it genuinely wins. Human play keeps the cast (the chooser decides).
+                // LIVE-SYNERGY REQUIREMENT (load-bearing): the Orchard is an engine only while a
+                // drain payoff is on the battlefield (Suture Priest's enters-loss / Massacre
+                // Wurm's dies-loss); with no payoff out, feeding the opponent Spirits is a
+                // LIABILITY and sacking the Orchard is often the best use of it. A first build
+                // gated unconditionally and measured net-worse on the cg train (d0 ~22 slower /
+                // 13 faster; searched gi158 4->5 via the rollout-leaf policy shift).
+                // RE-FETCH EXCEPTION (load-bearing, second measured refinement): sacking an
+                // Orchard to FETCH ANOTHER ORCHARD is a net-positive engine play -- the fetched
+                // copy spawns its Spirit on entry (see the Crop Rotation card note), which under
+                // a live drain is free damage plus an intact engine. Gate only when the library
+                // holds no spawn land to re-fetch (goldfish-clairvoyant library reads are the
+                // engine's standard, e.g. Turntimber's top-7).
+                static const bool s_spawn_gate = EnvOn("MTG_SAC_SPAWN_CAST_GATE");
+                if (s_spawn_gate && !g_search_candidate_enum && !HumanPlayActive())
+                {
+                    bool all_spawn = true, drain_live = false;
+                    for (const Permanent& p : state.battlefield)
+                    {
+                        if (p.controller_index != state.active_player_index) { continue; }
+                        const CardDefinition* ld = CardDatabase::Instance().LookupCached(p.card);
+                        if (!ld) { if (p.card.IsLand()) { all_spawn = false; } continue; }
+                        if (p.card.IsLand() && !ld->params.taps_spawn_opp_token)
+                        { all_spawn = false; }
+                        if (ld->params.opp_creature_enters_life_loss > 0
+                            || ld->params.opp_dies_life_loss > 0) { drain_live = true; }
+                    }
+                    bool refetchable = false;
+                    if (all_spawn && drain_live)
+                    {
+                        for (const Card& lc : ap.library)
+                        {
+                            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+                            if (ld && ld->params.taps_spawn_opp_token) { refetchable = true; break; }
+                        }
+                    }
+                    if (all_spawn && drain_live && !refetchable) { continue; }
+                }
             }
             // RESOLVE MODE (MTG_TUTOR_AXIS_RESOLVE=1): bind NO name at all. The decision moves to
             // the tutor's own resolution (PerformTutor -> provider at the true mid-plan state), so
@@ -12893,10 +12940,15 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
     // sharing a live scaler's subtype: the scaler's burst grows if it taps after the cast).
     for (const Action& a : acts)
     {
+        if (a.kind == Action::Kind::DigDraw) { t.mid_turn_casts = true; }
         if (a.kind != Action::Kind::CastFromHand
             && a.kind != Action::Kind::CastFromGraveyard) { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         if (!d) { continue; }
+        // Scarce-colour rank-tier gate: a mint opens the deferred breakpoint, a flood engine
+        // draws new castables -- either can add a cast this plan's lists cannot see.
+        if (d->params.creates_treasures > 0 || d->tmpl == CardTemplate::DrawUntilNonland)
+        { t.mid_turn_casts = true; }
         if (d->params.solo_target_trick
             || (d->params.target_own_creature
                 && (d->params.power_bonus > 0 || d->params.tough_bonus > 0)))
@@ -12905,6 +12957,10 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         {
             ++t.mana_casts;
             t.cast_mv_total += a.cost.ManaValue();
+            // Scarce-colour hold input: the plan's coloured pips per colour (W,U,B,R,G order).
+            t.cast_pips[0] += a.cost.white; t.cast_pips[1] += a.cost.blue;
+            t.cast_pips[2] += a.cost.black; t.cast_pips[3] += a.cost.red;
+            t.cast_pips[4] += a.cost.green;
         }
         // M2-payload-reserve inputs: the cast's name (payload exclusion) and, for a PERMANENT,
         // its colours (they widen every domain source's post-cast yield -- see PlanTraits).
@@ -22882,17 +22938,6 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             FSLineStoreWin(lc, key, win, state);
             return win;
         }
-        // FRESH-SPEND admissibility (MTG_FRESH_SPEND_AXIS): a freshmode variant exists ONLY to
-        // realize a this-turn kill -- when the kill is real the win-floor above already took it
-        // (and the committed plan carries the pin for the executor). Anything else is the
-        // speculative spend-vs-bank comparison the fresh-hold doctrine exists to forbid (train:
-        // global release 73 slower / 31 faster), so the variant is discarded before its tail is
-        // ever scored. Deliberate v1 bound: a this-turn kill completed in the SECOND main (crack
-        // the mint post-combat) is not admitted; no observed case yet -- extend by clamping the
-        // tail's cutoff to state.turn_number if one appears.
-        if (p.freshmode_choice == 1)
-        { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
-
         int chose_release = -1;   // -1 not contested / 0 natural / 1 release / 2 hold
         TurnSolver::SearchLine tail =
             FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget,
@@ -22942,6 +22987,19 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (alt_wins)
             { tail = std::move(tail_rel); chose_release = alt_rec; }
         }
+        // FRESH-SPEND admissibility v2 (MTG_FRESH_SPEND_AXIS): a freshmode variant is admitted
+        // ONLY when its simulated line realizes a WIN within the horizon -- a this-turn kill takes
+        // the win-floor above (mw136), and a later-turn win competes below by win_turn, which is an
+        // EXACT comparison (the baseline's banked mint is priced by its own realized win turn).
+        // What stays vetoed is the eval-vs-eval case: a freshmode line that does NOT win within the
+        // lookahead is exactly the speculative spend-vs-bank comparison the fresh-hold doctrine
+        // exists to forbid (train: global release 73 slower / 31 faster), so it is discarded here
+        // rather than scored by the board evaluator. v1 admitted this-turn kills only; mw326 (T4
+        // crack -> Mirrorwing lands -> T5 kill) is the measured case that forced the widening.
+        // Ties still go to the doctrine: variants are appended after the baseline plans and the
+        // best-comparison below is strict (<).
+        if (p.freshmode_choice == 1 && tail.win_turn > max_turns)
+        { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
         // DIG INSTRUMENT (MTG_FSW_TRACE, default off): dump this node's plans + tail win turns
         // for turn MTG_FSW_TURN -- the m1-side companion of MTG_M2T_TRACE above.
         {

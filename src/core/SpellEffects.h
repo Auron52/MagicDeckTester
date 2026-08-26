@@ -7944,12 +7944,34 @@ inline bool ScalerPlanBiasEnabled()
     return v;
 }
 
+// SCARCE-COLOR HOLD (MTG_SCARCE_COLOR_HOLD, default OFF -- adoption-config candidate; overhaul
+// ledger "mw326 DTL"). On a multi-cast plan whose whole-turn prepay DECLINED (the joint combined
+// cost is unpayable up front -- e.g. it needs a mid-turn Treasure mint), the per-cast greedy pays
+// each cast with no view of the NEXT cast's colour needs. mw326 (Mirrorwing s4330 gi326): under
+// MTG_DORK_TAP_LAST's lands-first order, Gold Rush {1}{G} was paid by Gruul Turf -- the board's
+// ONLY {R} source, covering both pips at rank 10 ("fixed-multi: no choice") -- so Mirrorwing
+// Dragon's {R}{R} stranded and the T4 cast (whose second {R} the mint itself would have covered)
+// died, win 5 -> 6. The clean arm dodged it only by index tie-break (the Mystics also rank 10 and
+// sit earlier on the battlefield); the hole is order-independent. The fix is the standard lossless
+// mask shape (held-first attempt, unrestricted retry -- OneShotHoldMask's contract): while a plan
+// apply is paying, hold any untapped source that is a SCARCE provider of a colour the plan's other
+// casts still need (providers <= remaining pips of that colour beyond this payment's own cost).
+// A payment that genuinely needs the held source gets it back on the retry, so no cast is lost --
+// the hold only picks WHICH legal payment is committed. Null traits -> 0 (the MW gi75 rollout
+// contract).
+inline bool ScarceColorHoldEnabled()
+{
+    static const bool v = EnvOn("MTG_SCARCE_COLOR_HOLD");
+    return v;
+}
+
 // Should the apply paths compute PlanTraits at all? One check so the builder costs nothing while
 // every consumer lever is off (and the scope then installs nullptr = today's behaviour).
 inline bool PlanTraitsWanted()
 {
     static const bool v = M2ReleaseEnabled() || PumpTargetHoldEnabled()
                        || OneShotReserveEnabled() || ScalerPlanBiasEnabled()
+                       || ScarceColorHoldEnabled()   // ScarceColorHoldMask (ManaPayment.cpp)
                        || EnvOn("MTG_M2_PAYLOAD_RESERVE");   // PayloadReserveMask (ManaPayment.cpp)
     return v;
 }

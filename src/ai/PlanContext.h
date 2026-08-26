@@ -111,6 +111,24 @@ struct PlanTraits
     int  cast_name_count       = 0;      // casts (payload exclusion: a hand card the plan itself
                                          // casts is not an m2 payload; copies beyond the cast
                                          // count still qualify)
+
+    // --- SCARCE-COLOR HOLD inputs (MTG_SCARCE_COLOR_HOLD; overhaul ledger "mw326 DTL") ---
+    // Summed COLOURED cost pips of the real-mana casts, indexed by Color (W,U,B,R,G). When the
+    // whole-turn prepay declines (e.g. the joint cost is only payable via a mid-turn Treasure
+    // mint), the per-cast greedy pays each cast blind to the NEXT cast's colour needs -- mw326:
+    // DTL's lands-first order paid Gold Rush {1}{G} with Gruul Turf, the board's ONLY {R} source,
+    // stranding Mirrorwing's {R}{R}. ScarceColorHoldMask (ManaPayment.cpp) uses these totals to
+    // hold scarce providers of colours the plan's OTHER casts still need.
+    int  cast_pips[5]          = {};
+    // The plan casts something that can INTRODUCE a new cast mid-turn -- a Treasure mint
+    // (creates_treasures opens the deferred breakpoint) or a flood-engine draw (DigDraw /
+    // DrawUntilNonland, the batch-pay drawsafe class). Those follow-on casts are invisible to
+    // every plan-scope reserve AND to the cast_pips totals above, so the sole-colour-provider
+    // rank tier (ManaSourceRankBase) fires only under this flag: it must protect a colour no
+    // list can name. Everywhere else the rank stays untouched -- the first build applied the
+    // demotion unconditionally and churned slivers/antilife/dragonstorm trains wholesale
+    // (uniform 4->5 blocks) by reordering every payment including rollout interiors.
+    bool mid_turn_casts        = false;
 };
 
 // Null when no plan apply is in scope (or every consumer lever is off -- the builder is not run).

@@ -1854,6 +1854,55 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     if (def.params.is_filter || def.params.ramp_filter) { return 25; }
     const std::vector<Color>& prod = EffectiveProduces(s, active, def);
     const int amt = ManaProducedPerTap(def);
+    // SOLE-COLOUR PROVIDER (MTG_SCARCE_COLOR_HOLD's rank half -- see ScarceColorHoldEnabled in
+    // SpellEffects.h for the mw326 trace): a source that is the ONLY untapped provider of one of
+    // its colours taps LAST of the plain sources (66: past the whole DTL creature band's flat/
+    // grower tiers, before the fuel dork at 67 -- a stranded colour costs this turn, an exiled
+    // fetch is gone forever). This is the same stranding class the colourless-before-mono tier
+    // below fixes one level down: there a GENERIC pip ate a coloured source while colourless sat
+    // untapped; here a colour-FLEXIBLE cost ate the board's lone {R} (mw326: Gruul Turf at the
+    // fixed-multi 10 paid Gold Rush {1}{G} whole, so the breakpoint's Mirrorwing {R}{R} -- a cast
+    // introduced MID-TURN by the mint, invisible to every plan-scope reserve -- stranded). Rank is
+    // ordering, not exclusion: a cost that genuinely needs the colour still taps it. Covers mono
+    // sources too (a lone Mountain should not pay a generic pip while any other source can).
+    //
+    // SCOPE (load-bearing): fires ONLY under a live plan apply whose plan can introduce a
+    // mid-turn cast (PlanTraits::mid_turn_casts -- mint / flood draw). That is the one shape no
+    // plan-scope mechanism can cover (the follow-on cast's pips are unknowable at payment time);
+    // known same-plan casts are covered losslessly by ScarceColorHoldMask. The first build
+    // applied this demotion to EVERY payment (null traits included) and wholesale-churned the
+    // slivers/antilife/dragonstorm trains (uniform 4->5 blocks) by reordering rollout-interior
+    // payments -- the exact MW gi75 distortion the null-traits contract exists to prevent.
+    if (ScarceColorHoldEnabled() && CurrentPlanTraits() != nullptr
+        && CurrentPlanTraits()->mid_turn_casts)
+    {
+        int mine = 0;
+        for (Color c : prod) { if (c != Color::Colorless) { mine |= 1 << static_cast<int>(c); } }
+        if (mine != 0)
+        {
+            int counts[5] = {};
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != active || p.tapped) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (!d) { continue; }
+                const bool dork = d->tmpl == CardTemplate::ManaDork
+                                  && CanTapNow(p, s.battlefield)
+                                  && GraveyardFuelLive(s, active, *d);
+                if (!dork && !p.card.IsLand() && !d->params.mana_rock) { continue; }
+                int seen = 0;
+                for (Color c : EffectiveProduces(s, active, *d))
+                {
+                    const int ci = static_cast<int>(c);
+                    if (ci >= 5 || (seen & (1 << ci))) { continue; }
+                    seen |= (1 << ci);
+                    ++counts[ci];
+                }
+            }
+            for (int ci = 0; ci < 5; ++ci)
+            { if ((mine & (1 << ci)) && counts[ci] <= 1) { return 66; } }
+        }
+    }
     if (amt > 1 && static_cast<int>(prod.size()) > 1) { return 10; }  // bounce/fixed-multi: no choice
     const int ncol = static_cast<int>(prod.size());
     // A COLOURLESS-ONLY source is strictly LESS flexible than a mono-COLOURED one, so scarcity-first

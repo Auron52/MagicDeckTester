@@ -1135,3 +1135,102 @@ no-axis arm BYTE-IDENTICAL to the pre-refactor bundle arm (refactor inert); bund
 arm: 0 faster / 1 slower in-train (d5 s2002 gi48 5→6 — RECOVERABLE: wins 5 at b30 and
 at unbounded, train runs b20; fan-out budget noise, clears the standing rule) plus 3
 fingerprint-only. Open list is now Cluster D (mw326), st993, CR-cast gate, flip.
+
+## Cluster D (mw326) ROOT-CAUSED + FIXED — axis v2 admissibility + MTG_SCARCE_COLOR_HOLD (2026-08-26)
+
+REPRO: Mirrorwing `--seed 4330 --game-index 326 --games 1 --depth 3 --budget-ms 0
+--ignore-play-profile`. Clean 5, bundle 6, UNRECOVERABLE (bundle d5 unbounded still 6).
+
+TWO independent sufficient causes (why no single-lever-off probe ever rescued it: turning either
+lever off leaves the other's 6): single-lever-ON probes show MTG_TREASURE_PAY_SOURCE alone -> 6
+AND MTG_DORK_TAP_LAST alone -> 6; both off + other eight on -> 5.
+
+THE TURN: clean T4 = land + Gold Rush {1}{G} + Mirrorwing Dragon {3}{R}{R}. Mana = 3 Forests +
+Gruul Turf (the board's ONLY {R}) + 2 Elvish Mystics + the Gold Rush mint CRACKED SAME TURN for
+the second {R} (the Treasure is in the T4 graveyard in the clean log). Mirrorwing on T4 is what
+makes T5 lethal.
+
+CAUSE 1 (TPS): the fresh-hold doctrine hides the mint -> the second {R} never exists ->
+enumeration prices the Mirrorwing continuation unaffordable and the solver pivots (casts Impolite
+Entrance instead). A SECOND fresh-hold counterexample, but unlike mw136 the payoff is NOT
+this-turn-lethal (T4 crack -> T5 kill), so the axis's v1 admissibility (this-turn kills only)
+excluded it. FIX: v2 admissibility -- a freshmode variant is admitted whenever its simulated LINE
+realizes a win within the horizon (the discard moved after the tail computation; non-win
+freshmode lines stay vetoed, because eval-vs-eval is the speculative comparison the 73/31
+measurement forbids; win-turn-vs-win-turn is exact). Safety by construction: variants are
+appended after baseline plans, the best-comparison is strict (<), and FSLineWin early-returns on
+any verified in-horizon baseline win before variants are reached -- so a freshmode variant can
+only convert a found-nothing/later-win node into an earlier realized win. No enumeration change
+was needed: the plan exists at pricing; only its APPLY was doctrine-blocked, and the pinned apply
+cracks the mint.
+
+CAUSE 2 (DTL): the whole-turn prepay's combined cost ({4}{R}{R}{G}{G} across both casts) needs
+two {R} but the board has one -- the second {R} IS the mid-turn mint, which the prepay cannot
+credit -- so the prepay declines and the per-cast greedy pays Gold Rush {1}{G} alone. Under DTL's
+lands-first order the cheapest source is Gruul Turf (fixed-multi rank 10, "no choice"), which
+pays BOTH pips in one tap and burns the only {R} on a cost with no {R} pip; the breakpoint's
+Mirrorwing then strands. The clean arm dodges it only by INDEX TIE-BREAK (the Mystics also rank
+10 and sit at battlefield index 0-1) -- the hole is order-dependent luck, latent in every arm.
+FIX: MTG_SCARCE_COLOR_HOLD (default OFF, adoption-config candidate), two layers under one lever:
+ * RANK half (ManaSourceRankBase): a source that is the ONLY untapped provider of one of its
+   colours ranks 66 -- past the DTL band's flat/grower tiers, before the fuel dork at 67 (a
+   stranded colour costs a turn; an exiled fetch is forever). Same stranding class as the
+   colourless-before-mono tier, one level up: there a generic pip ate a coloured source; here a
+   colour-flexible cost ate the lone {R}. Ordering, not exclusion -- a cost that needs the colour
+   still taps it. This is the half that fixes mw326: the breakpoint-introduced cast is invisible
+   to every plan-scope mechanism, so only a plan-blind rank can protect its colour.
+ * MASK half (ScarceColorHoldMask, ManaPayment.cpp; PlanTraits::cast_pips): while a multi-cast
+   plan apply pays one cast, hold untapped sources that are scarce providers (count <= remaining
+   pips) of a colour the plan's OTHER casts need -- the standard lossless held-first/
+   unrestricted-retry mask. Covers the prepay-declined multi-cast shapes the rank alone cannot
+   steer (the backtracker can pick any legal assignment; the mask pins the colour-preserving one).
+
+INSTRUMENT NOTE: MTG_FSW_TRACE on the DTL arm was what separated the two mechanisms -- the T4 d3
+node enumerates only 4 plans, none containing Mirrorwing, proving the miss was pre-plan (payment/
+pricing), not plan selection.
+
+VERIFIED (acid, all d3 unbounded unless noted): TPS-only+axis = 5; DTL-only+SCH = 5; full
+bundle+axis+SCH = 5 (and 5 at d5 unbounded); every closed case re-checked under the widened
+config -- fc341 d3+d5 = 5, fc96 (+payload) = 4, cg30 = 4, mw136 d5 = 5. Clean-env smoke 42/42,
+0 configs changed. Full-suite regression battery (bundle-only arm vs bundle+axis+SCH arm) run
+for the train-level A/B -- results recorded below when landed.
+
+### Cluster D verification battery + a scope lesson (2026-08-26, same session)
+
+FIRST BUILD CHURNED THE SUITE — the sole-colour-provider rank tier initially applied to EVERY
+payment (null traits included). Full-suite A/B (bundle10 arm vs bundle10+axis+SCH arm): slivers /
+antilife / dragonstorm moved wholesale (uniform 4->5 blocks — e.g. eleven slivers searched games,
+nine antilife d0 games), exactly the MW gi75 rollout-distortion class the null-traits contract
+exists to prevent. RE-SCOPED: the rank tier now fires only under a live plan apply whose plan can
+introduce a MID-TURN cast (new PlanTraits::mid_turn_casts — creates_treasures opens the deferred
+breakpoint; DigDraw / DrawUntilNonland draw new castables). That is precisely the shape no
+plan-scope mechanism can cover; known same-plan casts stay with the lossless mask half.
+
+SCOPED RESULT (full-suite bundle10 vs bundle10+axis+SCH): slivers, antilife, dragonstorm,
+goblins, stompy, hinata-searched, treasure_hunt... ALL byte-clean; movement confined to the mint
+decks. Mirrorwing d0: 29 faster (five unwon->won) / 9 slower. Mirrorwing searched: 13 faster /
+5 slower, EVERY searched slower RECOVERABLE under the standing rule (gi6, gi97 x2 recover at
+depth-5 unbounded; gi48 is the known axis budget artifact; gi107's "loss" is a give-back of a
+bundle10-only bonus — CLEAN d3 is also 5, so vs GT it is a wash; bisect: the SCH hold is what
+releases that bonus). FiveColour d0: 3 faster incl. one unwon->won, 0 slower. Hinata d0: one
+unwon->won, 0 slower. Clean-env smoke 42/42, 0 configs changed on the final binary.
+
+### CR cast-desirability gate: MTG_SAC_SPAWN_CAST_GATE (2026-08-26) — built, measured to neutral
+
+USER doctrine 2026-08-25: "wasted play to use Crop Rotation when you would have to sacrifice an
+Orchard" — a d0/rollout gate (searched paths already price the sac via MTG_SAC_AXIS). Site: the
+sacrifice_land branch of CollectActions, greedy scope only (!g_search_candidate_enum,
+!HumanPlayActive). TWO measured refinements were REQUIRED — the blanket doctrine is wrong at the
+edges, and the train said so both times:
+ 1. LIVE-SYNERGY requirement: with no drain payoff on the battlefield (opp_creature_enters_life_
+    loss / opp_dies_life_loss), feeding the opponent Spirits is a LIABILITY and sacking the
+    Orchard is often its best use. The unconditional gate measured d0 ~22 slower / 13 faster and
+    two searched 4->5 (gi158, via the rollout-leaf policy shift).
+ 2. RE-FETCH exception: sac-Orchard -> FETCH-ANOTHER-ORCHARD is a net-positive engine play (the
+    fetched copy spawns its Spirit on entry = free drain damage, engine intact). Still-gated
+    build: d0 3 slower / 1 faster and gi158 persisted. Gate now requires the library to hold no
+    spawn land to re-fetch.
+FINAL SHAPE (all-lands-spawn AND drain-live AND no-refetch): cg train zero win-turn changes,
+3 d0 games fingerprint-only; cg30 recheck 4; smoke 42/42 0 changed. The gate now blocks exactly
+the shape the doctrine named, and that shape is rare enough to be outcome-neutral on the train —
+adoption is a doctrine-consistency call, not a numbers call (default OFF either way).
