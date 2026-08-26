@@ -712,7 +712,10 @@ static bool BpNoGreedyContinuationEnabled()
 
 static bool BpCondemnOrderAwareEnabled()
 {
-    static const bool on = EnvOn("MTG_BP_CONDEMN_ORDER_AWARE");   // default OFF pending measurement
+    // DEFAULT ON. This is the fix for bug 1 and condemnation is UNSOUND without it -- leaving it
+    // off meant any deck flipping its per-deck hook silently got the pre-fix filter. Inert while
+    // condemnation itself is off, so the flip is byte-identical in the shipped engine.
+    static const bool on = EnvOn("MTG_BP_CONDEMN_ORDER_AWARE", true);
     return heurarm::Flag(heurarm::BP_CONDEMN_ORDER, on);
 }
 
@@ -784,13 +787,41 @@ static bool BpCondemnManaExemptEnabled()
 // accelerant to its cast-order rank deletes that line, and no depth or budget reaches it.
 static bool BpCondemnRitualExemptEnabled()
 {
-    static const bool on = EnvOn("MTG_BP_CONDEMN_RITUAL_EXEMPT");   // default OFF pending measurement
+    static const bool on = EnvOn("MTG_BP_CONDEMN_RITUAL_EXEMPT", true);   // DEFAULT ON (bug 4)
     return heurarm::Flag(heurarm::BP_CONDEMN_RITUAL, on);
+}
+
+// COST-REDUCER EXEMPTION (MTG_BP_CONDEMN_REDUCER_EXEMPT) -- bug 6, and the third card in the same
+// family as bugs 3 (mana sources) and 4 (rituals). A permanent that makes your other spells cheaper
+// is an ACCELERANT: it changes what the rest of the turn can afford, which is precisely the property
+// that makes "it was already considered and declined" false, because how much mana the turn needs --
+// and how much it has -- is exactly what a breakpoint draw reveals.
+//
+// ROOT-CAUSED (Hinata, 2026-08-26). With bugs 4 and 5 fixed, condemnation still measured negative on
+// Hinata under the SHIPPED generic tiering (+0.0040, t=3.21 hold). Instrumenting its 10 remaining
+// train regressions gives 8,999 condemnations and ONE victim: Hinata, Dawn-Crowned herself, at
+// Ponder / Preordain / Gamble sites. She is rank 10 (creature) against cantrips at 20, so the
+// order-aware rule sees her as strictly earlier and condemns her.
+//
+// The line that deletes, from the game logs (train gi=1938, a T4 win becoming T5):
+//     T3 cast Ponder -> DRAW Forbidden Orchard -> PLAY that land -> cast Hinata -> T4 Spasm+Crackle
+// The cantrip is what FINDS the land that makes the 4-drop castable this turn. Condemning her in the
+// continuation deletes the whole "cheap selection first, then deploy" line, and the arm instead
+// casts her bare and loses a turn. Measured separately: 22% of this deck's turns that play a land
+// AND a draw spell play the land AFTER the draw spell.
+//
+// Note the ORDER fixes this too -- rank her after the cantrips and the >= rule exempts her -- but
+// measured, that costs more than condemnation saves (the find-promotion arm is +0.0113..0.0120 vs
+// baseline on its own). The exemption gets the same soundness without paying for a re-ordering.
+static bool BpCondemnReducerExemptEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_REDUCER_EXEMPT", true);   // DEFAULT ON (bug 6)
+    return heurarm::Flag(heurarm::BP_CONDEMN_REDUCER, on);
 }
 
 static bool BpCondemnTutorExemptEnabled()
 {
-    static const bool on = EnvOn("MTG_BP_CONDEMN_TUTOR_EXEMPT");    // default OFF pending measurement
+    static const bool on = EnvOn("MTG_BP_CONDEMN_TUTOR_EXEMPT", true);    // DEFAULT ON (bug 5)
     return heurarm::Flag(heurarm::BP_CONDEMN_TUTOR, on);
 }
 
@@ -821,6 +852,11 @@ static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
     // separately because they make different claims: this one says a tutor is never condemnable
     // anywhere, that one says this deck's tutor belongs after its card selection.
     if (BpCondemnTutorExemptEnabled() && cd->params.tutor_to_hand) { return true; }
+    // ...and a COST REDUCER, which is an accelerant that pays in discounts rather than in mana.
+    if (BpCondemnReducerExemptEnabled()
+        && (cd->params.hinata_cost_reducer
+            || !cd->params.reduces_spell_color.empty()
+            || !cd->params.reduces_spell_subtype.empty())) { return true; }
     const DecisionProvider& prov = ResolveProvider(state);
     return prov.CastOrderRank(state, *cd) >= prov.CastOrderRank(state, *g_bp_site_def);
 }

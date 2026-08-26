@@ -37,6 +37,7 @@ not review, and each deleted wins that no depth or budget could recover.
 | 3 | mana sources condemned — an accelerant re-sequences legitimately | train gi=26, seed 300027, **mode 3 only** |
 | 4 | **RITUALS condemned** — bug 3's fix only recognises accelerants that are PERMANENTS | Hinata, 75 regressions, 2026-08-26 |
 | 5 | **TUTORS condemned** — what a tutor fetches is chosen at resolution, so the sibling line gets a different card | Hinata, same run |
+| 6 | **COST REDUCERS condemned** — a reducer is an accelerant that pays in discounts | Hinata, train gi=1938, 2026-08-26 |
 
 Bugs 4 and 5 are in §"Bugs 4 and 5" below. Both were found by root-causing a NEGATIVE measurement
 rather than by review, which is now four for five on this filter.
@@ -191,6 +192,65 @@ ritual or a tutor).
 > control was vacuous for a different reason -- it ran AL and Kitty at their shipped defaults, where
 > condemnation is OFF -- which is the second time in one session that a "0 games differ" was a dead
 > lever rather than a safe one. Always confirm the lever FIRES before reading its null result.
+
+## Bug 6 -- the cost reducer, and the result that unblocks a global default
+
+With bugs 4 and 5 fixed, condemnation STILL measured negative on Hinata under the deck's SHIPPED
+generic tiering: +0.0027 (t=1.89) train, +0.0040 (t=3.21) hold, and 0.9% DEARER in work units.
+Instrumenting its 10 remaining train regressions: 8,999 condemnations, ONE victim -- **Hinata,
+Dawn-Crowned herself**, at Ponder / Preordain / Gamble sites. She is rank 10 (creature) against
+cantrips at 20, so the order-aware rule reads her as strictly earlier.
+
+The line it deletes, straight from the logs (train gi=1938, a T4 win becoming T5):
+
+```
+  OFF (wins T4)                        ON (wins T5)
+  T3 cast Ponder                       T3 cast Hinata
+  T3 DRAW Forbidden Orchard            (Ponder banned in the continuation)
+  T3 PLAY that land   <-- found by the cantrip
+  T3 cast Hinata
+  T4 Reality Spasm + Crackle = lethal  T4 Spasm + Crackle, too small
+```
+
+The cantrip is what FINDS the land that makes the 4-drop castable this turn. This deck plays its
+land AFTER a draw spell in 22% of the turns that do both, so it is not an edge case.
+
+**A cost reducer is an accelerant that pays in discounts rather than in mana**, so bug 3's argument
+-- "how much mana the turn needs is exactly what a breakpoint draw reveals" -- applies to it in full.
+`MTG_BP_CONDEMN_REDUCER_EXEMPT`, DEFAULT ON.
+
+### Result: condemnation is now adoptable GLOBALLY, with no per-deck gating
+
+Probing all 15 suite decks, condemnation only ever FIRES on five (per 8 games): mirrorwing 21,841,
+fivecolour 2,189, hinata 1,249, kitty 254, antilife 39. The other ten are structurally inert -- no
+breakpoint site ever has an already-considered cast. Measured ON vs OFF at play settings,
+n=3000/cell, two blocks, with every correctness fix on:
+
+| deck | quality | search work | note |
+|---|---|---|---|
+| **mirrorwing** | +0.0017 (t=0.73) / +0.0007 (t=0.21) | **-3.60% / -2.49%** | fires most; neutral and genuinely cheaper |
+| kitty | -0.0003 / +0.0000 | -0.19% / -0.16% | ~inert, slightly cheaper |
+| antilife | +0.0000 / +0.0000 | +0.04% | ~inert |
+| fivecolour | +0.0000 / +0.0000 | +0.03% | fires 2,189x and changes 0-2 games: a pure prune |
+| **hinata** | **BYTE-IDENTICAL** | — | after bug 6: 1,249 condemnations -> 0 |
+| other 10 decks | — | — | condemnation never fires |
+
+The reducer exemption is **provably inert** on the other four: a static scan of their decklists finds
+no card with `hinata_cost_reducer` / `reduces_spell_color` / `reduces_spell_subtype`.
+
+So the per-deck opt-in (`CondemnsConsideredAtBreakpoint`, `MTG_AL_BP_CONDEMN`, `MTG_KE_CONDEMN`)
+exists to protect against bugs that are now fixed. Flipping `MTG_BP_CLASSIFY` to default ON is
+quality-neutral everywhere and cheaper where it bites. **It WILL move ground truth on mirrorwing
+(335-344 of 3,000 games change), so it needs a GT rebaseline -- that is the USER's call.**
+
+### The ORDER was the other candidate fix, and it is the worse one
+
+Ranking the cantrips ahead of the engine creature also fixes bug 6's case (the `>=` rule then exempts
+her), and that is what an information-first order does. Measured, it costs more than condemnation
+saves: the find-promotion-only order is **+0.0113 (t=3.41) / +0.0120 (t=3.85)** against baseline on
+its own, and 1.9-2.5% dearer. Under it condemnation does improve (hold t=3.21 -> 0.71), but
+`base -> min_cond` is still +0.0120/+0.0147. The exemption buys the same soundness for free. See
+`hinata-cast-order.md`.
 
 ### What this does NOT fix
 

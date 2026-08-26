@@ -84,6 +84,8 @@ enum Slot : int
     HINATA_GAMBLE_LATE,       // MTG_HINATA_GAMBLE_LATE    tutor AFTER the cantrips (cantrip, then fetch)
     BP_CONDEMN_RITUAL,        // MTG_BP_CONDEMN_RITUAL_EXEMPT  never condemn a RITUAL (mana-exempt hole)
     BP_CONDEMN_TUTOR,         // MTG_BP_CONDEMN_TUTOR_EXEMPT   never condemn a TUTOR (target is info-fixed)
+    HINATA_DORK_TIE,          // MTG_HINATA_DORK_TIE       LOO: dork + engine tied at 10, as generic has them
+    BP_CONDEMN_REDUCER,       // MTG_BP_CONDEMN_REDUCER_EXEMPT never condemn a COST REDUCER
     COUNT
 };
 
@@ -145,6 +147,8 @@ inline const char* Name(int slot)
         "MTG_HINATA_GAMBLE_LATE",
         "MTG_BP_CONDEMN_RITUAL_EXEMPT",
         "MTG_BP_CONDEMN_TUTOR_EXEMPT",
+        "MTG_HINATA_DORK_TIE",
+        "MTG_BP_CONDEMN_REDUCER_EXEMPT",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

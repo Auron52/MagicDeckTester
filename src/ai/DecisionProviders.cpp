@@ -4891,6 +4891,15 @@ static bool HinataGambleLate()
     return heurarm::Flag(heurarm::HINATA_GAMBLE_LATE, on);
 }
 
+// LOO: the generic tiering TIES the mana dork and the engine creature at 10; the full order splits
+// them 10/11. That split is the last unattributed piece of the order's regression, so it gets its
+// own arm -- and tying them back is what makes MIN (find-promotion ONLY) expressible.
+static bool HinataDorkTie()
+{
+    static const bool on = EnvOn("MTG_HINATA_DORK_TIE");
+    return heurarm::Flag(heurarm::HINATA_DORK_TIE, on);
+}
+
 static int HinataFullOrderRank(const CardDefinition& def)
 {
     const CardParams& p = def.params;
@@ -4909,7 +4918,7 @@ static int HinataFullOrderRank(const CardDefinition& def)
     // 10-11: deploy. The dork first: it is summoning-sick (no mana this turn) but it is one more
     // creature for her per-target discount to count.
     if (def.tmpl == CardTemplate::ManaDork) { return 10; }   // Ornithopter of Paradise
-    if (p.hinata_cost_reducer)              { return 11; }   // Hinata herself -- before every payoff
+    if (p.hinata_cost_reducer)              { return HinataDorkTie() ? 10 : 11; }   // Hinata herself
     // 15: the ritual tier. With her discount cancelling the {X}, Spasm is {U}{U} to untap X.
     if (p.untap_x_mana_sources)             { return 15; }   // Reality Spasm
     // 18 or 22: the cast restrictor. The USER's ruling puts it SECOND LAST ("it can only be cast
