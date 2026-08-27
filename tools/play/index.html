@@ -3205,10 +3205,13 @@ function showBetaNote(){
   }
   el.style.display='';
   el.classList.toggle('alpha', d.tier==='alpha');
-  // Chip shows the TIER WORD ONLY -- the full reasons live in the hover tooltip below. The
-  // inlined reasons string used to push the reference-saved badge out of the header (USER
-  // 2026-08-27), and that confirmation outranks this caveat.
-  el.textContent=d.tier;
+  // Chip = tier word + reference progress toward the NEXT count requirement ("beta 20/30"),
+  // shown WHENEVER the count is unmet -- not only when it is a tier reason (USER 2026-08-27: the
+  // progress number was the only useful part of the old inlined reasons string; "always put it
+  // unless we have more references than the requirement"). refGoal is server-owned (null once
+  // past the last requirement); a fixed-width fraction cannot push the reference-saved badge the
+  // way the full string did. Everything else stays in the hover tooltip below.
+  el.textContent=d.tier+(d.refGoal?' '+(d.refs||0)+'/'+d.refGoal:'');
   el.title=(d.tier==='alpha'
       ? 'This deck is playable but part of its apparatus is MISSING, so its numbers may be wrong:'
       : 'This deck is complete but not yet proven, so its numbers are not fully established:')

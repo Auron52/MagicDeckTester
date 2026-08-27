@@ -244,10 +244,15 @@ if (!JSDOM) {
   console.log('--- UI rendering (index.html, jsdom) ---');
   const PLAY = path.join(ROOT, 'tools', 'play');
   const FIXTURE = [
-    { deck: 'Stable.cod', name: 'Stable', hasProfile: true,  tier: 'stable',     tierReasons: [] },
-    { deck: 'Beta.cod',   name: 'Beta',   hasProfile: true,  tier: 'beta',       tierReasons: ['24/30 reference games'] },
-    { deck: 'Alpha.cod',  name: 'Alpha',  hasProfile: true,  tier: 'alpha',      tierReasons: ['0/10 optimal reference games', 'no value-leaf model', 'no completed mulligan profile'] },
-    { deck: 'NoProf.cod', name: 'NoProf', hasProfile: false, tier: 'unplayable', tierReasons: [] },
+    { deck: 'Stable.cod', name: 'Stable', hasProfile: true,  tier: 'stable',     refs: 31, refGoal: null, tierReasons: [] },
+    { deck: 'Beta.cod',   name: 'Beta',   hasProfile: true,  tier: 'beta',       refs: 24, refGoal: 30,   tierReasons: ['24/30 reference games'] },
+    { deck: 'Alpha.cod',  name: 'Alpha',  hasProfile: true,  tier: 'alpha',      refs: 0,  refGoal: 10,   tierReasons: ['0/10 optimal reference games', 'no value-leaf model', 'no completed mulligan profile'] },
+    { deck: 'NoProf.cod', name: 'NoProf', hasProfile: false, tier: 'unplayable', refs: 0,  refGoal: 10,   tierReasons: [] },
+    // The two shapes the "always show progress" rule adds (USER 2026-08-27): a deck whose ref
+    // count is NOT among its tier reasons still shows the fraction while the next requirement is
+    // unmet, and a deck PAST the last count requirement shows the bare tier word.
+    { deck: 'Alpha2.cod', name: 'Alpha2', hasProfile: true,  tier: 'alpha',      refs: 13, refGoal: 30,   tierReasons: ['no value-leaf model'] },
+    { deck: 'Beta2.cod',  name: 'Beta2',  hasProfile: true,  tier: 'beta',       refs: 31, refGoal: null, tierReasons: ['the search is slower than the human on 1 of 31 references'] },
   ];
   let html = fs.readFileSync(path.join(PLAY, 'index.html'), 'utf8');
   const lb = fs.readFileSync(path.join(PLAY, 'linebuild.js'), 'utf8');
@@ -285,7 +290,9 @@ if (!JSDOM) {
     sel.value = 'Alpha.cod'; win.showBetaNote();
     ok(badge.style.display !== 'none', 'the badge is shown for an alpha deck');
     ok(badge.classList.contains('alpha'), 'the alpha badge is styled differently from beta');
-    ok(badge.textContent === 'alpha', 'the visible chip is the tier word ONLY', badge.textContent);
+    ok(badge.textContent === 'alpha 0/10',
+       'the chip is the tier word plus the reference fraction (USER: the count to the next level '
+       + 'was the only useful part of the old inlined string)', badge.textContent);
     for (const r of FIXTURE[2].tierReasons) {
       ok(badge.title.includes(r), 'the tooltip names the reason: ' + r, badge.title);
     }
@@ -293,9 +300,17 @@ if (!JSDOM) {
     ok(badge.style.display !== 'none', 'the badge is shown for a beta deck');
     ok(!badge.classList.contains('alpha'), 'the beta badge drops the alpha styling on re-select',
        badge.className);
-    ok(badge.textContent === 'beta', 'the beta chip is the tier word ONLY', badge.textContent);
+    ok(badge.textContent === 'beta 24/30', 'the beta chip carries its reference fraction',
+       badge.textContent);
     ok(badge.title.includes('24/30 reference games'), 'the beta tooltip names its reason',
        badge.title);
+    sel.value = 'Alpha2.cod'; win.showBetaNote();
+    ok(badge.textContent === 'alpha 13/30',
+       'the fraction shows even when the count is NOT a tier reason (met 10, chasing 30)',
+       badge.textContent);
+    sel.value = 'Beta2.cod'; win.showBetaNote();
+    ok(badge.textContent === 'beta',
+       'past the last count requirement the chip is the bare tier word', badge.textContent);
     sel.value = 'Stable.cod'; win.showBetaNote();
     ok(badge.style.display === 'none', 'the badge is hidden for a stable deck', badge.textContent);
     sel.value = 'NoProf.cod'; win.showBetaNote();

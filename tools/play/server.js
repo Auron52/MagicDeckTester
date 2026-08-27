@@ -548,7 +548,13 @@ function deckMaturity(dir, name, hasProfile) {
   // borrowed-evidence bug this whole ownership rule exists to stop. No references of its own means
   // no bench of its own.
   const bench = owner === key ? benchState(key) : { state: 'unbenched' };
-  return Object.assign({ refs, hasValueLeaf, hasKeepModel, refsOnArchivedList, bench },
+  // The NEXT reference-count requirement, so the chip can always show progress ("beta 20/30")
+  // until the count is met (USER 2026-08-27: "always put it unless we have more references than
+  // the requirement"). Server-owned so the thresholds are never re-stated client-side. Null once
+  // refs >= STABLE_REFS -- past the last count requirement there is no fraction to show.
+  const refGoal = refs < MIN_OPTIMAL_REFS ? MIN_OPTIMAL_REFS
+                : refs < STABLE_REFS      ? STABLE_REFS : null;
+  return Object.assign({ refs, refGoal, hasValueLeaf, hasKeepModel, refsOnArchivedList, bench },
                        tierFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchivedList, bench }));
 }
 
