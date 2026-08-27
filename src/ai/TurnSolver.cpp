@@ -855,20 +855,35 @@ static bool BpCondemnManaSiteExemptEnabled()
     return heurarm::Flag(heurarm::BP_CONDEMN_MANA_SITE, on);
 }
 
-// THE RULE ABOVE, AS SHIPPED, WAS OVER-BROAD -- and this is the correction (USER, 2026-08-27:
-// "Gold Rush does not make mana when not"). `creates_treasures > 0` is not the same claim as "this
-// site added mana": Gold Rush is {1}{G} for ONE Treasure, so a BARE cast is mana-NEGATIVE, and
-// exempting at such a site drops the prune with no affordability change to justify it. The honest
-// test is the net (TreasureSpellNetMana -- see its header for the "adds mana or fixes colours"
-// bar and why it is optimistic about the target choice): net >= 0 is a real mana event, net < 0 is
-// the bare pump spell this deck also plays it as.
+// THE COMMENT ABOVE NAMES THE WRONG MECHANISM, and the correction matters because it sets the bar.
+// USER, 2026-08-27: *"Gold Rush does not make mana when not."* Exactly right -- {1}{G} for ONE
+// Treasure is mana-NEGATIVE bare, and MTG_TREASURE_SITE_PROBE says 15,863 of 16,294 firings of this
+// exemption (97.4%) are at net = -1. So "the site ADDED MANA" is false almost every time it fires.
 //
-// A RITUAL is not gated. ritual_floating_mana / untap_x_mana_sources are accelerants by
+// The rule is still correct; what it actually keys on is that the site changed what the pool can
+// PAY FOR. Even at net -1, Gold Rush converts {1}{G} into a WILD Treasure -- and Mirrorwing is a
+// two-colour deck where that is a live fix (see the scarce-colour rank tier's own motivating case,
+// "mw326: Gold Rush {1}{G} eating the lone {R} source"). A COLOUR FIX is an affordability change,
+// so the pre-breakpoint section's declines were still taken under a pool that could pay for less.
+//
+// That is the USER's "or fix colours" clause, and it sets the bar at MINTS-A-TREASURE-AT-ALL rather
+// than at net >= 0. MEASURED, n=8000 x 2 blocks: the net >= 0 gate below is ~1pp cheaper and
+// aggregate-neutral, but it deletes MORE reachable lines (40 unrecoverable vs condemnation-off
+// against this rule's 29; 12 vs 8 head to head), which the no-lossy-truncation bar rejects. And
+// dropping the exemption entirely costs +0.0101 (t=6.84) / +0.0071 (t=4.20) while suppressing only
+// 5.0% of condemnations -- VOLUME IS NOT HARM, a fourth time.
+//
+// So this stays DEFAULT OFF: built, measured, REJECTED. Do not re-propose it without a new argument
+// -- the arithmetic behind it is not in dispute, only which bar it belongs at. The net >= 0 bar IS
+// right for the CAST ORDER, where the question is whether casting early is a mana gain; that is
+// MTG_MW_GR_LADDER_POSITIVE (DecisionProviders.cpp), and it is provably inert.
+//
+// A RITUAL is not gated either way. ritual_floating_mana / untap_x_mana_sources are accelerants by
 // construction (Irencrag Feat floats 4 for 3; Reality Spasm untaps X sources), so there is no
 // negative case to exclude and no card in the suite where the net test would change the answer.
 static bool BpCondemnTreasureSitePositiveEnabled()
 {
-    static const bool on = EnvOn("MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE");   // default OFF: measuring
+    static const bool on = EnvOn("MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE");   // MEASURED + REJECTED
     return heurarm::Flag(heurarm::BP_CONDEMN_TREASURE_POS, on);
 }
 

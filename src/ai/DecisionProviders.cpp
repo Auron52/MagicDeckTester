@@ -9789,10 +9789,21 @@ const char* MirrorwingProvider::CastOrderTierName(int rank) const
 // Rungs 13 and 6 exist to FUND the rest of the line, and a bare Gold Rush ({1}{G} for one Treasure)
 // funds nothing -- it is net -1, so walking it earlier can only make the line less payable. The
 // gate keeps the ladder at its preferred slot unless the cast is genuinely net >= 0 there
-// (TreasureSpellNetMana). Default OFF pending measurement; the domain is expected to be small
-// because MTG_ORDER_RANGE_PROBE over 40 games shows the IDEAL order paying in 11,074 of 11,133
-// ladder entries -- the early rungs are near-dead in play already, which is itself the evidence
-// that the USER's rule and today's behaviour agree.
+// (TreasureSpellNetMana).
+//
+// MEASURED, and the result is that THE RULE WAS ALREADY THE ENGINE'S BEHAVIOUR. This lever is
+// byte-identical to condemnation-off over 16,000 games AND to the shipped condemnation over another
+// 16,000 -- 32,000 games, zero outcome changes. It is not a DEAD lever (13 games of 8,000 differ in
+// work units): it fires, denies an early rung, and the search picks the same line anyway.
+// Corroborated by MTG_ORDER_RANGE_PROBE over 40 games -- the ladder is entered 11,133 times, the
+// IDEAL order pays 11,074 of them, and "stepped-down order pays" never prints once. The payment
+// layer already encodes the same rule (MintedTreasureSpendable / FreshHoldActive refuse to credit a
+// minted Treasure as same-turn mana without a live magnet).
+//
+// So this is a free correctness guard, not a behaviour change: default OFF, and flipping it on is
+// provably inert. Note the bar here (net >= 0) is NOT the bar at the condemnation SITE, where the
+// question is whether the pool's PAYING POWER changed and any minted Treasure is a colour fix --
+// see MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE in TurnSolver.cpp for that measurement.
 static bool GoldRushLadderPositiveEnabled()
 {
     static const bool on = EnvOn("MTG_MW_GR_LADDER_POSITIVE");   // default OFF: measuring

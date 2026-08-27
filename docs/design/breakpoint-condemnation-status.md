@@ -384,6 +384,82 @@ Note B is not merely a re-spelling of A: A says "this SITE invalidates every dec
 CARD has no single proper slot". B is narrower and more honest about what is actually true of Gold
 Rush, and it leaves condemnation working at mana-adding sites for every other card.
 
+#### THE DECISION, RESOLVED (2026-08-27) -- the rule is right, and it belongs at the ORDER, not the SITE
+
+USER: *"use the 'Gold Rush positive' rule to decide whether we need to consider casting it earlier.
+If it doesn't add mana or fix colours then we hold it. This is true for any point prior to 15."*
+
+Built as **two levers** (a lever spanning two call sites is two levers), predicate
+`TreasureSpellNetMana` in `SpellEffects.h`, both default OFF, byte-identical to HEAD at defaults
+over 5 decks. Measured on Mirrorwing, **n=8000 per cell, two blocks**.
+
+**HOW OVER-BROAD THE SHIPPED RULE IS: 15,863 of 16,294 treasure-site exemption tests (97.4%) are at
+net = -1** (`MTG_TREASURE_SITE_PROBE`, 20 games). The USER's arithmetic is exactly right.
+
+##### The ORDER half is PROVABLY INERT -- and that is the result, not a null
+
+`MTG_MW_GR_LADDER_POSITIVE` (Gold Rush's funding ladder offers rungs 13/6 only at net >= 0):
+
+* **byte-identical to condemnation-off over 16,000 games** (digests `07822de8…` / `45ba25a4…`), and
+* **byte-identical to the shipped condemnation over another 16,000** (`a50ccda5…` / `3a670f11…`).
+
+It is NOT a dead lever -- 13 games of 8,000 differ in *work units* -- it fires, denies an early rung,
+and the search picks the same line anyway. Confirmed independently by `MTG_ORDER_RANGE_PROBE`: over
+40 games the ladder is entered 11,133 times, the **ideal order pays 11,074 of them, and "stepped-down
+order pays" NEVER prints**. The engine already holds Gold Rush at 15 unless it is positive; the lever
+only makes that true by construction. It is also already encoded in the PAYMENT layer --
+`MintedTreasureSpendable` / `FreshHoldActive` (default ON) refuse to credit a minted Treasure as
+same-turn mana without a live magnet. **The USER's rule was already the engine's behaviour.**
+
+##### The SITE half is arithmetically right and measures WORSE -- rejected
+
+| arm | quality vs OFF (hold / train) | search work vs OFF | UNRECOVERABLE vs OFF |
+|---|---|---|---|
+| **shipped** (any minter exempts) | +0.0011 (t=1.29) / +0.0003 (t=0.24) | -1.42% / -1.89% | **29** |
+| **positive** (net >= 0 only) | +0.0016 (t=1.57) / -0.0009 (t=-0.63) | **-2.38% / -3.10%** | **40** |
+| **nosite** (no exemption at all) | +0.0101 (**t=6.84**) / +0.0071 (**t=4.20**) | -1.30% / -2.16% | -- |
+
+Head to head: `positive` deletes **12** lines `shipped` keeps; `shipped` deletes **8** that
+`positive` keeps. So the corrected rule is ~1pp cheaper and aggregate-neutral (+0.0005 t=0.76 /
+-0.0011 t=-1.01) but **deletes more reachable lines**, which the no-lossy-truncation bar rejects.
+*Honest limit: 12-vs-8 is a thin margin on its own; the 40-vs-29 figure against condemnation-off is
+the stronger of the two and points the same way.*
+
+##### Why -- and it is the USER's own "or fix colours" clause
+
+**VOLUME IS NOT HARM, a FOURTH time, and the sharpest instance yet.** The exemption suppresses only
+**938 of 18,609 condemnations (5.0%)**, every one at a Gold Rush site (`MTG_CONDEMN_WHO`, 12 games:
+Fists of Flame 10,648 / Scale the Heights 4,810 / Ancestral Anger 1,190 / Expedite 1,023 / Gold Rush
+938). Removing that 5% costs **+0.0101 and +0.0071 at t=6.84 and t=4.20** -- 5% of the firings carry
+essentially all of the damage.
+
+What makes a Gold Rush site special is **not that it adds mana** -- 97.4% of the time it does not --
+but that it changes **what the pool can PAY FOR**. Even at net -1 it converts `{1}{G}` into a WILD
+Treasure, and Mirrorwing is a two-colour deck where that is a real fix (the engine already carries a
+scarce-colour rank tier motivated by exactly this: *"mw326: Gold Rush {1}{G} eating the lone {R}
+source"*). That is the **"or fix colours"** half of the USER's sentence -- and the `net >= 0` gate
+drew the colour-fix line at *zero cost*, when a colour fix that costs one mana is still a colour fix.
+
+**So the two halves take DIFFERENT bars, and that is the resolution:**
+
+| call site | question it asks | bar | verdict |
+|---|---|---|---|
+| **ORDER** (funding ladder) | is casting it early a net MANA gain? | `net >= 0` | **the USER's rule, and already the behaviour** |
+| **SITE** (condemnation) | did the pool's PAYING POWER change? | mints a Treasure at all | **the shipped rule -- right, for a reason its own comment states wrongly** |
+
+Actions: `MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE` stays **default OFF** -- built, measured, rejected,
+recorded here so it is not re-proposed. Bug 7's comment is corrected to say COLOUR FIX rather than
+"added mana". `MTG_MW_GR_LADDER_POSITIVE` may be flipped on as a free correctness guard (provably
+inert over 32,000 games) or left off; it makes no measurable difference either way.
+
+This also retires arm **B** (expand the range): the range machinery is already live on Mirrorwing via
+`OrderOpaqueCastsByRank`, and the probe shows its early rungs are all-but-dead in play. There is no
+"expansion" left to make -- the ladder is already declining to walk Gold Rush early.
+
+*Correction to the numbers recorded above:* at n=8000 the shipped site rule measures **+0.0011 /
++0.0003 vs condemnation-off**, not the -0.0010 / -0.0040 recorded from n=3000. The earlier
+"improvement" was noise; the rule is quality-NEUTRAL, not positive.
+
 ### Two exemptions built for Mirrorwing and DELETED -- recorded so they are not re-proposed
 
 * **A copy-MAGNET exemption.** By count the magnet looks like the dominant victim (gi=13 turn 4:
