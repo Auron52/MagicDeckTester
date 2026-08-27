@@ -115,6 +115,10 @@ DECKS = {
     # they landed. Any new references/<dir> needs a row the same day.
     "StompySurprise": ("decks/StompySurprise/StompySurprise.cod",
                        "decks/StompySurprise/StompySurprise.profile.json"),
+    # Added 2026-08-27: first hand-played KittyEquipment reference (s31) landed; same-day row per
+    # the StompySurprise lesson above.
+    "KittyEquipment": ("decks/KittyEquipment/KittyEquipment.cod",
+                       "decks/KittyEquipment/KittyEquipment.profile.json"),
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)

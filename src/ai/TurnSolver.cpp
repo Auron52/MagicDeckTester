@@ -19561,32 +19561,15 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
     if (!s_human_play_enum) { return; }
     const Player& ap = state.ActivePlayer();
 
-    // LAND-DROP VARIANTS (USER 2026-08-27, treasure_hunt seed 8: "I can't play the Island and
-    // sacrifice in that order"): a dig's cost is paid by the greedy, so WHICH lands are down when
-    // it fires decides which source is spent -- with a fresh Island unplayed, Fiery Islet's
-    // sac-to-draw {1} killed a last-counter Saprazzan Skerry. Standalone-only digs made the
-    // land-then-dig order unenumerable. So each dig is also offered once per distinct land option
-    // the base plans already fanned over -- harvested from `all` (rather than re-deriving hand
-    // lands) so a dig variant inherits every land-legality rule (fetch targets, MDFC faces, forced
-    // early land, fan cap) for free and can never offer an unplayable drop. ApplyPlanDirect plays
-    // land_to_play before the action loop, so the drop's mana funds the dig's cost.
-    struct LandOpt { std::string land, fetch, face; };
-    std::vector<LandOpt> land_opts;
-    {
-        std::unordered_set<std::string> lseen;
-        for (const TurnSolver::Plan& p : all)
-        {
-            if (p.land_to_play.empty()) { continue; }
-            if (lseen.insert(p.land_to_play + "\x1f" + p.fetch_target + "\x1f" + p.land_face).second)
-            { land_opts.push_back({p.land_to_play, p.fetch_target, p.land_face}); }
-        }
-    }
-
-    auto can_afford = [&](const std::string& name, bool is_sac, const ManaCost& cost,
-                          const LandOpt* lo) -> bool
+    // NO land variants, NO hidden drops (USER 2026-08-27, twice): a first build fanned each dig
+    // over the base plans' land options so land-then-dig was one pick -- and the s11 session showed
+    // why that is wrong: a re-prompt renumbers the menu, the user picks by remembered index, and a
+    // plan silently spends the turn's land drop ("it plays a land for me, which it should never
+    // do"). Digs are standalone lines only; the land-then-dig ORDER is the line chain's job
+    // (cycle=/sacdraw= verbs), where the human sequences the drop and the dig explicitly.
+    auto can_afford = [&](const std::string& name, bool is_sac, const ManaCost& cost) -> bool
     {
         GameState copy = state;
-        if (lo && !PlayLandByName(copy, lo->land, lo->fetch, true, lo->face)) { return false; }
         if (is_sac)
         {
             int idx = -1;
@@ -19599,22 +19582,12 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
             if (idx < 0) { return false; }
             copy.battlefield[idx].tapped = true;   // {T}: source can't pay its own cost
         }
-        else
-        {
-            // Cycling spends the card from HAND; a land variant that consumed the last copy as
-            // the drop (PlayLandByName above) has nothing left to cycle.
-            bool in_hand = false;
-            for (const Card& c : copy.ActivePlayer().hand)
-            { if (c.m_name == name) { in_hand = true; break; } }
-            if (!in_hand) { return false; }
-        }
         return TapForCostDirect(copy, cost, false);
     };
-    auto add_dig = [&](const std::string& name, bool is_sac, const LandOpt* lo)
+    auto add_dig = [&](const std::string& name, bool is_sac)
     {
         TurnSolver::Plan v;
-        v.land_decided = true;   // explicit drop or none; never greedy-play a land
-        if (lo) { v.land_to_play = lo->land; v.fetch_target = lo->fetch; v.land_face = lo->face; }
+        v.land_decided = true;   // a dig spends no land drop; never greedy-play a land
         Action dg;
         dg.kind          = Action::Kind::DigDraw;
         dg.card_name     = name;
@@ -19624,9 +19597,7 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
     };
     auto add_variants = [&](const std::string& name, bool is_sac, const ManaCost& cost)
     {
-        if (can_afford(name, is_sac, cost, nullptr)) { add_dig(name, is_sac, nullptr); }
-        for (const LandOpt& lo : land_opts)
-        { if (can_afford(name, is_sac, cost, &lo)) { add_dig(name, is_sac, &lo); } }
+        if (can_afford(name, is_sac, cost)) { add_dig(name, is_sac); }
     };
 
     std::unordered_set<std::string> seen;

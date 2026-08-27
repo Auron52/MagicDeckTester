@@ -8224,6 +8224,21 @@ inline bool DepletionTapOrderEnabled()
     return v;
 }
 
+// Filter-{C}-first (USER 2026-08-27, treasure_hunt s11 T6): a FILTER land tapping its plain "{T}:
+// Add {C}" mode to pay a GENERIC pip is the least flexible mana on the board -- the same doctrine
+// as the colourless-before-mono tier (rank 5) -- yet the scarcity loop ranked the filter 25 (past
+// the duals), so cycling Remote Isle tapped the REAL dual (Thundering Falls) and left Cascade
+// Bluffs "up on its own": a feeder-less filter that can only ever make {C}. Rank the filter's {C}
+// mode at 6 for generic/{C} pips: after a true {C}-only land (5 -- spending that first keeps the
+// filter's conversion option alive), before every coloured tier. The coloured filter MODE (kind 2)
+// keeps its normal rank; whole-turn "save the filter for a conversion this line needs" remains the
+// prepay's job, not this per-pip order. Default ON; MTG_NO_FILTER_C_FIRST reverts for A/B.
+inline bool FilterCFirstEnabled()
+{
+    static const bool v = !EnvOn("MTG_NO_FILTER_C_FIRST");
+    return v;
+}
+
 // Whole-turn "hold your beater" reservation (BatchPrepayMainCasts): don't tap the controller's
 // GREATEST-power attacker for mana when the turn is payable without it, so it stays untapped to swing
 // (and is the creature a pump would land on -- reserving it makes an own-creature pump's target the

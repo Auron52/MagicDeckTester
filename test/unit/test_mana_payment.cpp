@@ -449,3 +449,31 @@ TEST_CASE("depletion tap order: plain land first, then the depletion land with M
         CHECK(ex.tapped == std::vector<bool>{true, false});   // only the Skerry makes {U}
     }
 }
+
+TEST_CASE("filter {C} mode pays a generic pip first in HUMAN play; the search keeps its order")
+{
+    EnsureCards();
+    // USER 2026-08-27 (treasure_hunt s11 T6): paying a cycling cost tapped the real dual and left
+    // Cascade Bluffs "up on its own" -- a feeder-less filter whose only mana is {C}. In HUMAN play
+    // the filter's plain "{T}: Add {C}" now pays a generic pip first (FilterCFirstEnabled +
+    // HumanPlayActive). AUTONOMOUS play keeps the historical dual-first order: the unconditional
+    // tier measured WORSE on the suite everywhere it moved (regression th/hinata, zero cells
+    // faster) -- the dual-first spend preserves the filter's conversion for the turn's later
+    // casts. This test runs WITHOUT MTG_HUMAN_PLAY, so it pins the autonomous contract; the
+    // human-play behaviour is exercised end-to-end by the viewer protocol sweep.
+    {
+        GameState s = MakeBoard({"Cascade Bluffs", "Island"});
+        const PayEnd ex = RunExecutor(s, Cost(1), false);
+        const PayEnd ro = RunRollout(s, Cost(1), false);
+        CHECK(ex.ok); CHECK(ro.ok); CHECK(ex == ro);
+        CHECK(ex.tapped == std::vector<bool>{false, true});   // autonomous: the mono land pays
+    }
+    // A COLOURED pip: the filter's coloured mode ranks past the direct sources in both worlds.
+    {
+        GameState s = MakeBoard({"Cascade Bluffs", "Island"});
+        const PayEnd ex = RunExecutor(s, Cost(0, 0, /*u=*/1), false);
+        const PayEnd ro = RunRollout(s, Cost(0, 0, /*u=*/1), false);
+        CHECK(ex.ok); CHECK(ro.ok); CHECK(ex == ro);
+        CHECK(ex.tapped == std::vector<bool>{false, true});   // Island pays {U}; Bluffs stays up
+    }
+}

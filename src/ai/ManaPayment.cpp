@@ -199,6 +199,17 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     }
                 }
                 int rank = ResolveProvider(state).ManaSourceRank(state, *def);
+                // Filter {C} mode on a generic/{C} pip: least flexible mana on the board, so it
+                // spends just after a true {C}-only source and BEFORE any coloured land -- see
+                // FilterCFirstEnabled (treasure_hunt s11: the old rank-25 read tapped the real
+                // dual and stranded a feeder-less Cascade Bluffs as the last source up).
+                // HUMAN PLAY ONLY (the human-line-vs-AI-average rule): measured on the suite the
+                // unconditional tier was WORSE everywhere it moved (th +0.015 / hinata +0.011
+                // summed on regression, zero cells faster) -- the dual-first spend preserves the
+                // filter's CONVERSION for the turn's later casts, which the search exploits and a
+                // per-pip flexibility argument cannot see. Rollouts (HumanPlaySuppress) keep the
+                // measured order, so autonomous play and every GT stay byte-identical.
+                if (kind == 3 && FilterCFirstEnabled() && HumanPlayActive()) { rank = 6; }
                 // SAC-FODDER PAYS FIRST (MTG_SAC_FODDER_PAYS; see SacFodderPaysEnabled in
                 // SpellEffects.h for the st993 trace): the exact creature this payment's cast is
                 // about to sacrifice pays before everything -- its body is already spent, so its
