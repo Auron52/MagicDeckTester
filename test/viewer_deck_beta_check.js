@@ -1,13 +1,19 @@
 #!/usr/bin/env node
-// Deck-maturity ("(beta)") check for the play viewer.
+// Deck-maturity (alpha / beta / stable) check for the play viewer.
 // =====================================================================================
-// The viewer marks a deck "(beta)" when its APPARATUS is incomplete -- fewer than 10 optimal
-// reference games, no value leaf, or no completed mulligan profile -- so a user picking a deck can
-// see that its numbers are not yet fully reliable. See deckMaturity/betaFrom in tools/play/server.js.
+// The picker grades every deck so a user choosing one can see how far its numbers can be trusted:
+//
+//   (alpha)  a piece of the apparatus is MISSING -- <10 optimal references, no value leaf, or no
+//            completed mulligan profile. The numbers may simply be wrong.
+//   (beta)   complete but unproven -- fewer than 30 references, or the shipped search does not
+//            match the human win turn on the ones it has.
+//   (none)   30+ references AND green on every one of them.
+//
+// See tierFrom / deckMaturity in tools/play/server.js.
 //
 // WHY THIS NEEDS A TEST AT ALL. Every failure mode here is silent and reads as good news: a rule
-// that stops firing does not error, it just quietly promotes an unfinished deck to "ready". The two
-// specific ways it can rot:
+// that stops firing does not error, it just quietly promotes an unfinished deck to the top tier.
+// The four specific ways it can rot:
 //
 //   * the artifact NAME drifts. The mulligan check probes the same two extensions
 //     MulliganProfileIO.h:967 loads, in the same order, and the value leaf is the same
@@ -17,9 +23,16 @@
 //     and are excluded structurally, not by a filter -- but "count the .json files under the deck"
 //     is the obvious refactor, and it would inflate three decks toward the threshold with games the
 //     user explicitly flagged as NOT the standard.
+//   * references played on an ARCHIVED list start counting (deck_registry.REFERENCE_DECK). That one
+//     already happened: Mirrorwing Dragon read "ready" on 24 games played against a deck it is no
+//     longer, which is the worst version, since the top tier is exactly what references earn.
+//   * the BENCH gate goes soft. A stale, missing or hand-mismatched bench must not read as green --
+//     absence of evidence is not evidence, and this is the only criterion that can move a deck DOWN
+//     after it was fine, so a soft version of it makes the whole scheme monotone and inert.
 //
-// Fast, static, no binary and no jsdom: the policy is a pure function and the rest is directory
-// reads. Run:  node test/viewer_deck_beta_check.js
+// Fast, static, no binary: the policy is a pure function and the rest is directory reads. jsdom, if
+// installed, additionally proves the label actually renders.
+// Run:  node test/viewer_deck_beta_check.js
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -34,36 +47,76 @@ function ok(cond, what, detail) {
 }
 
 // ---- 1) the policy, exhaustively ----------------------------------------------------
-// Every combination of the three criteria, at and around the threshold. Written out rather than
+// Every combination of every criterion, at and around both thresholds. Written out rather than
 // generated so the EXPECTED column is a statement of policy someone can read and disagree with.
-console.log('--- policy (betaFrom) ---');
-const T = srv.MIN_OPTIMAL_REFS;
-ok(T === 10, 'threshold is 10 optimal references', 'MIN_OPTIMAL_REFS=' + T);
+console.log('--- policy (tierFrom) ---');
+const A = srv.MIN_OPTIMAL_REFS;      // below this -> alpha
+const S = srv.STABLE_REFS;           // at or above this (and green) -> stable
+ok(A === 10, 'the alpha floor is 10 optimal references', 'MIN_OPTIMAL_REFS=' + A);
+ok(S === 30, 'the stable bar is 30 reference games', 'STABLE_REFS=' + S);
+ok(A < S, 'the alpha floor is below the stable bar');
 
-for (const refs of [0, T - 1, T, T + 1]) {
+const GREEN = { state: 'green', n: 40 };
+const BENCHES = [GREEN, { state: 'short', short: 1, n: 40 }, { state: 'stale', at: 'abc123', n: 40 },
+                 { state: 'unbenched' }];
+
+for (const refs of [0, A - 1, A, A + 1, S - 1, S, S + 1]) {
   for (const hasValueLeaf of [false, true]) {
     for (const hasKeepModel of [false, true]) {
-      const r = srv.betaFrom({ hasProfile: true, refs, hasValueLeaf, hasKeepModel });
-      const want = refs < T || !hasValueLeaf || !hasKeepModel;
-      ok(r.beta === want,
-         `beta(refs=${refs}, value=${hasValueLeaf}, keep=${hasKeepModel}) === ${want}`,
-         'got ' + r.beta);
-      // A reason per failing criterion -- the badge shows them, so an empty list on a beta deck
-      // would render "beta — " with nothing after it.
-      const wantN = (refs < T ? 1 : 0) + (hasValueLeaf ? 0 : 1) + (hasKeepModel ? 0 : 1);
-      ok(r.betaReasons.length === wantN, `reason count for (${refs},${hasValueLeaf},${hasKeepModel})`,
-         JSON.stringify(r.betaReasons));
-      ok(r.beta === (r.betaReasons.length > 0), 'beta iff there is at least one reason');
+      for (const bench of BENCHES) {
+        const r = srv.tierFrom({ hasProfile: true, refs, hasValueLeaf, hasKeepModel, bench });
+        // The policy, restated independently of the implementation.
+        const missing = refs < A || !hasValueLeaf || !hasKeepModel;
+        const want = missing ? 'alpha'
+                   : (refs >= S && bench.state === 'green') ? 'stable' : 'beta';
+        ok(r.tier === want,
+           `tier(refs=${refs}, value=${hasValueLeaf}, keep=${hasKeepModel}, bench=${bench.state}) === ${want}`,
+           'got ' + r.tier);
+        // A labelled deck must always be able to say why -- the badge renders the reasons, so an
+        // empty list would show "beta — " with nothing after it.
+        ok((r.tierReasons.length > 0) === (r.tier === 'alpha' || r.tier === 'beta'),
+           `${want}: reasons present iff labelled`, JSON.stringify(r.tierReasons));
+        // ALPHA MUST NOT LEAK BETA'S REASONS: an apparatus-missing deck is not also "28/30", which
+        // would read as nearly-done when the truth is that a piece is absent.
+        if (r.tier === 'alpha') {
+          ok(!r.tierReasons.some(x => x.includes('/' + S + ' reference')),
+             'alpha does not also report the 30-reference shortfall', JSON.stringify(r.tierReasons));
+        }
+      }
     }
   }
 }
 
-// A deck with NO profile is unplayable, not beta: the picker already renders "(no profile)" and
-// disables it, which is the strictly stronger statement. Stacking "(beta)" would say less.
-for (const refs of [0, T + 1]) {
-  const r = srv.betaFrom({ hasProfile: false, refs, hasValueLeaf: false, hasKeepModel: false });
-  ok(r.beta === false, 'a profile-less deck is NOT beta (it is already "(no profile)")');
-  ok(r.betaReasons.length === 0, 'a profile-less deck carries no beta reasons');
+// THE GREEN GATE, isolated: identical deck, only the bench differs. This is the criterion the whole
+// three-tier scheme turns on, and the only one that can move a deck DOWN after it was fine.
+for (const bench of BENCHES) {
+  const r = srv.tierFrom({ hasProfile: true, refs: S + 5, hasValueLeaf: true, hasKeepModel: true, bench });
+  ok(r.tier === (bench.state === 'green' ? 'stable' : 'beta'),
+     `a fully-equipped ${S + 5}-reference deck is ${bench.state === 'green' ? 'stable' : 'beta'} when the bench is ${bench.state}`,
+     'got ' + r.tier);
+  if (bench.state !== 'green') {
+    ok(r.tierReasons.length === 1, 'the ONLY thing holding it back is the bench', JSON.stringify(r.tierReasons));
+  }
+}
+// A stale bench is NOT green. Measuring at an engine that no longer exists is the exact way this
+// could hand out a top tier on evidence that has expired.
+ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true,
+                  bench: { state: 'stale', at: 'deadbee', n: 99 } }).tier === 'beta',
+   'a stale bench cannot promote a deck to stable');
+// Neither is a bench that never ran -- absence of evidence must not read as evidence.
+ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true,
+                  bench: { state: 'unbenched' } }).tier === 'beta',
+   'an un-benched deck cannot promote to stable');
+// A missing `bench` argument entirely must fail CLOSED, not throw and not pass.
+ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true }).tier === 'beta',
+   'a missing bench argument fails closed to beta');
+
+// A deck with NO profile is unplayable, not alpha: the picker already renders "(no profile)" and
+// disables it, which is the strictly stronger statement. Stacking a tier on it would say less.
+for (const refs of [0, S + 1]) {
+  const r = srv.tierFrom({ hasProfile: false, refs, hasValueLeaf: false, hasKeepModel: false, bench: GREEN });
+  ok(r.tier === 'unplayable', 'a profile-less deck is "unplayable", not a tier');
+  ok(r.tierReasons.length === 0, 'a profile-less deck carries no tier reasons');
 }
 
 // ---- 2) the artifact names still match the engine's ---------------------------------
@@ -144,9 +197,9 @@ for (const [refKey, ownerKey] of Object.entries(owners)) {
   ok(d.refs === 0, `${d.name}: counts 0 -- its references belong to ${ownerKey}`, 'refs=' + d.refs);
   ok(d.refsOnArchivedList > 0,
      `${d.name}: reports how many saved games are on the archived list`, String(d.refsOnArchivedList));
-  ok(d.beta, `${d.name}: is beta, not ready, on someone else's games`);
-  ok(d.betaReasons.some(r => r.includes('archived list')),
-     `${d.name}: the badge explains WHY the count is 0`, JSON.stringify(d.betaReasons));
+  ok(d.tier === 'alpha', `${d.name}: is ALPHA on someone else's games, not a graded deck`, d.tier);
+  ok(d.tierReasons.some(r => r.includes('archived list')),
+     `${d.name}: the badge explains WHY the count is 0`, JSON.stringify(d.tierReasons));
 }
 
 // ---- 4) the live tree agrees with the policy ----------------------------------------
@@ -157,12 +210,17 @@ console.log('--- listDecks() wiring ---');
 const decks = srv.listDecks();
 ok(decks.length > 0, 'listDecks() found decks');
 for (const d of decks) {
-  for (const f of ['refs', 'hasValueLeaf', 'hasKeepModel', 'beta', 'betaReasons']) {
+  for (const f of ['refs', 'hasValueLeaf', 'hasKeepModel', 'tier', 'tierReasons', 'bench']) {
     ok(f in d, `${d.name}: /api/decks reports "${f}"`);
   }
-  const want = srv.betaFrom(d);
-  ok(d.beta === want.beta, `${d.name}: reported beta matches the policy applied to its own fields`,
-     `beta=${d.beta} refs=${d.refs} value=${d.hasValueLeaf} keep=${d.hasKeepModel}`);
+  const want = srv.tierFrom(d);
+  ok(d.tier === want.tier, `${d.name}: reported tier matches the policy applied to its own fields`,
+     `tier=${d.tier} refs=${d.refs} value=${d.hasValueLeaf} keep=${d.hasKeepModel} bench=${d.bench.state}`);
+  // A deck whose references belong to an archived list must not read the OWNER's bench: lending
+  // that green to the list which replaced it is the borrowed-evidence bug in a second form.
+  if (d.refsOnArchivedList) {
+    ok(d.bench.state === 'unbenched', `${d.name}: does not borrow the archived list's bench`, d.bench.state);
+  }
   // Every saved game in the folder is accounted for as EITHER counted or archived-list -- stronger
   // than "refs == folder size", which stopped being true once ownership mattered, and it catches a
   // game silently vanishing from both columns.
@@ -186,10 +244,10 @@ if (!JSDOM) {
   console.log('--- UI rendering (index.html, jsdom) ---');
   const PLAY = path.join(ROOT, 'tools', 'play');
   const FIXTURE = [
-    { deck: 'Ready.cod',  name: 'Ready',  hasProfile: true,  refs: 12, hasValueLeaf: true,  hasKeepModel: true,  beta: false, betaReasons: [] },
-    { deck: 'Few.cod',    name: 'Few',    hasProfile: true,  refs: 3,  hasValueLeaf: true,  hasKeepModel: true,  beta: true,  betaReasons: ['3/10 optimal reference games'] },
-    { deck: 'Three.cod',  name: 'Three',  hasProfile: true,  refs: 0,  hasValueLeaf: false, hasKeepModel: false, beta: true,  betaReasons: ['0/10 optimal reference games', 'no value-leaf model', 'no completed mulligan profile'] },
-    { deck: 'NoProf.cod', name: 'NoProf', hasProfile: false, refs: 0,  hasValueLeaf: false, hasKeepModel: false, beta: false, betaReasons: [] },
+    { deck: 'Stable.cod', name: 'Stable', hasProfile: true,  tier: 'stable',     tierReasons: [] },
+    { deck: 'Beta.cod',   name: 'Beta',   hasProfile: true,  tier: 'beta',       tierReasons: ['24/30 reference games'] },
+    { deck: 'Alpha.cod',  name: 'Alpha',  hasProfile: true,  tier: 'alpha',      tierReasons: ['0/10 optimal reference games', 'no value-leaf model', 'no completed mulligan profile'] },
+    { deck: 'NoProf.cod', name: 'NoProf', hasProfile: false, tier: 'unplayable', tierReasons: [] },
   ];
   let html = fs.readFileSync(path.join(PLAY, 'index.html'), 'utf8');
   const lb = fs.readFileSync(path.join(PLAY, 'linebuild.js'), 'utf8');
@@ -208,9 +266,9 @@ if (!JSDOM) {
     for (let i = 0; i < 50; i++) await tick();
     const sel = win.document.getElementById('deck');
     const label = n => { const o = [...sel.options].find(o => o.value === n + '.cod'); return o ? o.textContent : '(missing)'; };
-    ok(label('Ready')  === 'Ready',              'a ready deck gets no suffix', label('Ready'));
-    ok(label('Few')    === 'Few (beta)',         'a deck short on references is "(beta)"', label('Few'));
-    ok(label('Three')  === 'Three (beta)',       'a deck failing all three is "(beta)" once', label('Three'));
+    ok(label('Stable') === 'Stable',              'a stable deck gets no suffix', label('Stable'));
+    ok(label('Beta')   === 'Beta (beta)',         'an unproven deck is "(beta)"', label('Beta'));
+    ok(label('Alpha')  === 'Alpha (alpha)',       'an apparatus-missing deck is "(alpha)"', label('Alpha'));
     ok(label('NoProf') === 'NoProf (no profile)', 'a profile-less deck stays "(no profile)"', label('NoProf'));
     const noProfOpt = [...sel.options].find(o => o.value === 'NoProf.cod');
     ok(noProfOpt && noProfOpt.disabled, 'a profile-less deck is still disabled');
@@ -219,13 +277,20 @@ if (!JSDOM) {
     // the badge says why.
     const badge = win.document.getElementById('betanote');
     ok(!!badge, 'the top bar has a #betanote badge');
-    sel.value = 'Three.cod'; win.showBetaNote();
-    ok(badge.style.display !== 'none', 'the badge is shown for a beta deck');
-    for (const r of FIXTURE[2].betaReasons) {
+    sel.value = 'Alpha.cod'; win.showBetaNote();
+    ok(badge.style.display !== 'none', 'the badge is shown for an alpha deck');
+    ok(badge.classList.contains('alpha'), 'the alpha badge is styled differently from beta');
+    for (const r of FIXTURE[2].tierReasons) {
       ok(badge.textContent.includes(r), 'the badge names the reason: ' + r, badge.textContent);
     }
-    sel.value = 'Ready.cod'; win.showBetaNote();
-    ok(badge.style.display === 'none', 'the badge is hidden for a ready deck', badge.textContent);
+    sel.value = 'Beta.cod'; win.showBetaNote();
+    ok(badge.style.display !== 'none', 'the badge is shown for a beta deck');
+    ok(!badge.classList.contains('alpha'), 'the beta badge drops the alpha styling on re-select',
+       badge.className);
+    ok(badge.textContent.includes('24/30 reference games'), 'the beta badge names its reason',
+       badge.textContent);
+    sel.value = 'Stable.cod'; win.showBetaNote();
+    ok(badge.style.display === 'none', 'the badge is hidden for a stable deck', badge.textContent);
     sel.value = 'NoProf.cod'; win.showBetaNote();
     ok(badge.style.display === 'none', 'the badge is hidden for a profile-less deck');
     finish();
@@ -233,11 +298,12 @@ if (!JSDOM) {
 }
 
 function finish() {
-const beta = decks.filter(d => d.beta).map(d => d.name);
-const ready = decks.filter(d => d.hasProfile && !d.beta).map(d => d.name);
 console.log('');
-console.log('  beta  (%d): %s', beta.length, beta.join(', ') || '(none)');
-console.log('  ready (%d): %s', ready.length, ready.join(', ') || '(none)');
+for (const t of ['stable', 'beta', 'alpha']) {
+  const names = decks.filter(d => d.tier === t).map(d => d.name);
+  // padEnd, not '%-7s' -- Node's console.log has no width specifier and prints it literally.
+  console.log('  ' + (t + ' ').padEnd(8) + '(' + names.length + '): ' + (names.join(', ') || '(none)'));
+}
 console.log('');
 if (fails) { console.log('viewer deck-beta check: %d FAILURE(S)', fails); process.exit(1); }
 console.log('viewer deck-beta check: PASS');

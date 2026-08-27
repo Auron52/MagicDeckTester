@@ -107,6 +107,67 @@ def run_one(deck_file, profile, g, depth, max_turns, log_root):
     return win, verdict
 
 
+# ---- the CACHE ----------------------------------------------------------------------------
+#
+# Benching every reference on every question is not on: it is a full game replay per saved game, and
+# the answer only changes when the ENGINE does. So the result is cached in a committed artifact
+# (test/ref_bench.json) and each deck's entry is stamped with the engine state it was measured at.
+#
+# STAMPED PER DECK, not per file, and that is the whole point: it makes the refresh INCREMENTAL.
+# `--stale-only` benches exactly the decks whose stamp no longer matches and leaves the rest alone,
+# so the routine call costs nothing when nothing moved, and costs one deck when one deck's worth of
+# play changed. A single global stamp would force the whole fleet through on any move.
+#
+# THE STAMP IS `git rev-parse HEAD:src` -- the source tree hash, not the commit, so a docs or script
+# commit does not invalidate a measurement it cannot have affected. It still OVER-triggers (a comment
+# under src/ moves it while play is identical), and the value-leaf driver answers that with a smoke
+# play digest. Deliberately NOT copied here: that machinery exists because a value-leaf table costs
+# 60-70 core-hours, where this whole bench is ~140 single games. Paying a re-bench you did not
+# strictly need is cheaper than the apparatus for deciding you did not need it.
+def src_fingerprint():
+    try:
+        return subprocess.run(["git", "rev-parse", "HEAD:src"], capture_output=True, text=True,
+                              check=True).stdout.strip()
+    except Exception:
+        return ""
+
+
+def load_cache(path):
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except Exception:
+        return {"decks": {}}
+
+
+def write_json(path, results, args):
+    """MERGE this run's decks into the cache; never replace it.
+
+    Replacing would make `--deck knights` silently delete every other deck's entry -- and the file
+    still parses, so the viewer would simply report those decks as un-benched. Merging is what makes
+    a per-deck refresh safe, which is what makes the cache usable at all."""
+    src = src_fingerprint()
+    cache = load_cache(path)
+    cache.setdefault("decks", {})
+    for r in results:
+        short = [g["name"] for g in r["games"] if any(f.startswith("SHORTFALL") for f in g["flags"])]
+        bad = [g["name"] for g in r["games"] if g["hand"].startswith("HAND")]
+        cache["decks"][r["deck"]] = {
+            "n": r["n"], "human": round(r["human"], 4), "search": round(r["search"], 4),
+            "short": len(short), "shortfalls": short,
+            # A game whose forced hand did not reconstruct was not a valid comparison, so a deck
+            # carrying one is not "green" -- it is unmeasured, and silently counting it as a pass is
+            # the same failure as an empty parse reading as clean.
+            "hand_mismatch": len(bad), "hand_mismatch_games": bad,
+            "src": src, "max_turns": args.max_turns,
+            "policy": ("depth %d" % args.depth) if args.depth else "committed value_play",
+        }
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w") as fh:
+        json.dump(cache, fh, indent=1, sort_keys=True)
+        fh.write("\n")
+
+
 def bench_deck(slug, refdir, deck, args, log_root):
     games = []
     for path in sorted(glob.glob(os.path.join(refdir, "claude_s*_gi*.json"))):
@@ -168,7 +229,17 @@ def main():
     ap.add_argument("--no-verify-hands", action="store_true",
                     help="skip the forced-hand check (drops the per-game --log-dir)")
     ap.add_argument("--log-root", default=None, help="keep the per-game logs here instead of a temp dir")
+    ap.add_argument("--json", default=None, metavar="PATH",
+                    help="merge the per-deck summary into a cache file (e.g. test/ref_bench.json). "
+                         "Each deck is stamped with `git rev-parse HEAD:src`; the play viewer reads "
+                         "this to decide whether a deck's play is GREEN on its references")
+    ap.add_argument("--stale-only", action="store_true",
+                    help="with --json: bench only decks whose cached stamp differs from the current "
+                         "src tree (and decks with no entry). This is the routine call -- it costs "
+                         "nothing when the engine has not moved")
     args = ap.parse_args()
+    if args.stale_only and not args.json:
+        ap.error("--stale-only needs --json: without a cache there is nothing to compare against")
 
     decks = deck_registry.discover()
     root = "references/suboptimal" if args.suboptimal else "references"
@@ -185,7 +256,9 @@ def main():
     if args.no_verify_hands:
         log_root = None
 
-    results, skipped = [], []
+    results, skipped, fresh = [], [], []
+    cache_src = src_fingerprint()
+    cached = load_cache(args.json)["decks"] if args.json else {}
     for slug, refdir in pairs:
         # The deck a reference folder was PLAYED on, which is not always the one that owns its slug
         # today (see deck_registry.REFERENCE_DECK -- an archived list keeps its references).
@@ -193,7 +266,13 @@ def main():
         if key not in decks:
             skipped.append((slug, refdir, key))
             continue
+        if args.stale_only and cache_src and (cached.get(key) or {}).get("src") == cache_src:
+            fresh.append(key)
+            continue
         results.append(bench_deck(key, refdir, decks[key], args, log_root))
+    if fresh:
+        print("\n--stale-only: %d deck(s) already benched at this src tree, skipped: %s"
+              % (len(fresh), " ".join(sorted(fresh))))
 
     print("\n=== SUMMARY (avg turn-to-win; lower is better; no-win scores %d)" % (args.max_turns + 1))
     print("%-18s %4s %8s %8s   %s" % ("deck", "n", "human", "search", "shortfalls"))
@@ -209,6 +288,19 @@ def main():
         via = "" if key == slug else " (bound to '%s' by deck_registry.REFERENCE_DECK)" % key
         print("SKIPPED %s (%s)%s: no decks/ folder with a decklist AND a profile for '%s' -- these "
               "references are NOT benched" % (slug, refdir, via, key))
+    if args.json:
+        write_json(args.json, results, args)
+        print("\nbench artifact -> %s" % args.json)
+    if tmp:
+        # --stale-only is the ROUTINE call and usually runs nothing, so it would otherwise leave an
+        # empty logs/ref_bench_* directory behind on every invocation. Only mention (and keep) the
+        # directory when something was actually written to it.
+        try:
+            if not os.listdir(tmp):
+                os.rmdir(tmp)
+                tmp = None
+        except OSError:
+            pass
     if tmp:
         print("\nper-game logs: %s" % tmp)
 

@@ -1,0 +1,160 @@
+{
+ "decks": {
+  "anti_lifegain": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.2308,
+   "max_turns": 8,
+   "n": 13,
+   "policy": "committed value_play",
+   "search": 4.0,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "auras": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.2917,
+   "max_turns": 8,
+   "n": 24,
+   "policy": "committed value_play",
+   "search": 4.2083,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "burn": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.625,
+   "max_turns": 8,
+   "n": 16,
+   "policy": "committed value_play",
+   "search": 4.375,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "creature_giving": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 5.4,
+   "max_turns": 8,
+   "n": 10,
+   "policy": "committed value_play",
+   "search": 4.9,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "dragonstorm": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.5385,
+   "max_turns": 8,
+   "n": 39,
+   "policy": "committed value_play",
+   "search": 4.4103,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "fivecolour": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.6,
+   "max_turns": 8,
+   "n": 10,
+   "policy": "committed value_play",
+   "search": 4.5,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "goblins": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 3.9032,
+   "max_turns": 8,
+   "n": 31,
+   "policy": "committed value_play",
+   "search": 3.871,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "hinata2": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 7.6667,
+   "max_turns": 8,
+   "n": 3,
+   "policy": "committed value_play",
+   "search": 5.6667,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "knights": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.3214,
+   "max_turns": 8,
+   "n": 28,
+   "policy": "committed value_play",
+   "search": 4.3214,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "mirrorwing_dragon_v1_twinflame_anger": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 5.0417,
+   "max_turns": 8,
+   "n": 24,
+   "policy": "committed value_play",
+   "search": 4.875,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "slivers_vial": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.2,
+   "max_turns": 8,
+   "n": 10,
+   "policy": "committed value_play",
+   "search": 4.1,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "stompysurprise": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.7273,
+   "max_turns": 8,
+   "n": 11,
+   "policy": "committed value_play",
+   "search": 4.4545,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  },
+  "treasure_hunt": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 5.8,
+   "max_turns": 8,
+   "n": 5,
+   "policy": "committed value_play",
+   "search": 4.2,
+   "short": 0,
+   "shortfalls": [],
+   "src": "3070c6169342831d565543ca93d015e8b5a2fc3a"
+  }
+ }
+}

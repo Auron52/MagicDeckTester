@@ -85,10 +85,13 @@
   /* top-bar badge shown when this (deck,seed,game#) already has a saved reference game */
   .refnote { font-size:12px; font-weight:600; color:#0c1116; background:var(--acc); border-radius:8px;
              padding:2px 9px; white-space:nowrap; }
-  /* top-bar badge for a deck whose apparatus is incomplete (see deckMaturity in server.js). Amber
-     rather than the accent colour: this is a caveat on the numbers, not a confirmation like refnote. */
-  .betanote { font-size:12px; font-weight:600; color:#0c1116; background:#e0a33a; border-radius:8px;
-              padding:2px 9px; white-space:nowrap; cursor:help; }
+  /* top-bar badge for a deck below the top maturity tier (see tierFrom in server.js). Warm colours
+     rather than the accent: these are caveats on the numbers, not confirmations like refnote.
+     Alpha is redder than beta because it is the stronger claim -- a piece of the apparatus is
+     missing outright, so the numbers may simply be wrong, where beta means unproven. */
+  .betanote { font-size:12px; font-weight:600; color:#0c1116; border-radius:8px;
+              padding:2px 9px; white-space:nowrap; cursor:help; background:#e0a33a; }
+  .betanote.alpha { background:#e07a5f; }
 
   .thumb { width:90px; text-align:center; position:relative; }
   .thumb.sm { width:62px; }
@@ -3181,20 +3184,29 @@ async function checkReference() {
 }
 // Deck maturity, keyed by the deck FILE (the <option> value) -- see deckMaturity in server.js.
 const DECK_META={};
-// A "(beta)" deck is fully implemented but its apparatus is not finished: too few hand-played
-// references, no value leaf, or no completed mulligan profile. The suffix is deliberately in the
-// <option> text rather than only a tooltip, so the caveat is visible while CHOOSING a deck --
-// <option title> is unreliable across browsers and invisible once the menu closes. The badge below
-// carries the reasons for whichever deck is selected.
-function betaTag(d){ return !d.hasProfile ? ' (no profile)' : (d.beta ? ' (beta)' : ''); }
+// Three maturity tiers (see tierFrom in server.js): "(alpha)" is missing a piece of its apparatus,
+// "(beta)" has one but has not proven it -- fewer than 30 references, or the search does not match
+// the human win turn on the ones it has -- and the top tier carries no suffix at all.
+//
+// The suffix is deliberately in the <option> text rather than only a tooltip, so the caveat is
+// visible while CHOOSING a deck: <option title> is unreliable across browsers and invisible once the
+// menu closes. The badge below carries the reasons for whichever deck is selected.
+const TIER_TAG={ unplayable:' (no profile)', alpha:' (alpha)', beta:' (beta)', stable:'' };
+function betaTag(d){ return TIER_TAG[d.tier] !== undefined ? TIER_TAG[d.tier] : ''; }
 function showBetaNote(){
   const el=$('betanote'); if(!el) return;
   const d=DECK_META[$('deck').value];
-  if(!d || !d.beta){ el.style.display='none'; el.textContent=''; el.title=''; return; }
+  const reasons=(d && d.tierReasons) || [];
+  if(!d || (d.tier!=='alpha' && d.tier!=='beta') || !reasons.length){
+    el.style.display='none'; el.textContent=''; el.title=''; el.classList.remove('alpha'); return;
+  }
   el.style.display='';
-  el.textContent='beta — '+(d.betaReasons||[]).join(' · ');
-  el.title='This deck is playable but its apparatus is incomplete, so its numbers are not yet '
-          +'fully reliable:\n  · '+(d.betaReasons||[]).join('\n  · ');
+  el.classList.toggle('alpha', d.tier==='alpha');
+  el.textContent=d.tier+' — '+reasons.join(' · ');
+  el.title=(d.tier==='alpha'
+      ? 'This deck is playable but part of its apparatus is MISSING, so its numbers may be wrong:'
+      : 'This deck is complete but not yet proven, so its numbers are not fully established:')
+    +'\n  · '+reasons.join('\n  · ');
 }
 async function loadDecks() {
   const j=await (await fetch('/api/decks')).json();

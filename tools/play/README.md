@@ -60,30 +60,58 @@ No dependencies — `server.js` uses only Node built-ins. Env: `PORT` (default 8
 
 ### What the deck picker's labels mean
 
-A deck is only as trustworthy as the apparatus fitted to it, and three of those pieces arrive late
-and independently of the decklist — so a deck can be fully implemented, pass every gate, and still
-be measuring something you would not quote. The picker says so:
+A deck is only as trustworthy as the apparatus fitted to it, and those pieces arrive late and
+independently of the decklist — so a deck can be fully implemented, pass every gate, and still be
+measuring something you would not quote. The picker grades every deck:
 
 | label | meaning |
 |---|---|
-| *(none)* | profiled, ≥10 optimal reference games, a value leaf, and a completed mulligan profile |
-| **(beta)** | playable, but at least one of those three is missing — the badge in the top bar names which |
+| **(alpha)** | a piece of the apparatus is **missing** — its numbers may simply be wrong |
+| **(beta)** | complete, but **unproven** — not yet enough references, or the search does not match the human on them |
+| *(none)* | 30+ reference games, and the shipped search matches or beats the human win turn on **every one** |
 | **(no profile)** | no `<stem>.profile.json`: never measured at shipped play, so it is disabled outright |
 
-The three beta criteria, and why each alone is enough to withhold confidence:
+Selecting a labelled deck shows a badge naming the specific reasons (amber for beta, red for alpha).
+
+**Alpha** — any one of these is missing:
 
 - **Fewer than 10 optimal reference games** (`references/<Deck>/claude_s*_gi*.json`). These are the
   only human-played ground truth in the repo — the bound the AI's win turn is judged against, and
   the thing that surfaces engine bugs autonomous play cannot; every viewer bug-bash in
   `docs/design/` started as a reference. A deck with three of them has not been looked at.
   Games under `references/suboptimal/<Deck>/` do **not** count — you flagged those as winnable
-  earlier, so they are targets, not standards.
+  earlier, so they are targets, not standards. Neither do games played on a decklist that has since
+  been **archived** (`deck_registry.REFERENCE_DECK`): replaying a recorded human line against cards
+  that were never in the deck is a benchmark that means nothing.
 - **No value leaf** (`<stem>.value.json`).
 - **No completed mulligan profile.** *Completed* means the compiled table exists
   (`<stem>.keepmodel.exhaustive.profile.json[.gz]`, the two names `MulliganProfileIO.h` loads), not
   that generation was started — a lone `.raw.json.journal` is a paused run, not a model.
 
-`node test/viewer_deck_beta_check.js` prints the current beta/ready split and gates the marking.
+**Beta → stable** additionally needs both:
+
+- **30 reference games.** Not a statistical threshold: every deck's references run from seed 1
+  upward at roughly one game per seed, so "30" reads as *the first 30 seeds have been played*.
+  Knights at 28 is not 2 short of a quota — it has two gaps.
+- **Green on the bench.** The shipped search, replayed on each reference's exact opening hand
+  (`--force-mulligan`, so the comparison isolates play rather than mulligan policy), must match or
+  beat the human win turn on **every** reference. This is the criterion that actually matters — 30
+  games nobody compared against is not evidence — and the only one that can move a deck *down*
+  after it was fine.
+
+The bench is **cached**, never run by the viewer:
+
+```bash
+python3 scripts/ref_bench.py --json test/ref_bench.json                # full run (~224 games)
+python3 scripts/ref_bench.py --json test/ref_bench.json --stale-only   # the routine call
+```
+
+Each deck's entry is stamped with the `git rev-parse HEAD:src` it was measured at, so `--stale-only`
+re-benches exactly the decks whose stamp no longer matches and skips the rest in under a second. A
+stamp that no longer matches reads **stale**, which is not green — evidence measured against an
+engine that no longer exists cannot hold up a top tier.
+
+`node test/viewer_deck_beta_check.js` prints the current alpha/beta/stable split and gates the grading.
 
 Pick a profiled deck, set seed / game # / max-turns, hit **New game**. First you drive the
 **mulligan**: each London attempt shows the 7-card hand as art with **Keep** / **Mulligan** buttons

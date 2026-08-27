@@ -332,7 +332,36 @@ function safeStem(s) { return String(s).replace(/[^A-Za-z0-9_-]+/g, '_'); }
 //
 // A deck with NO PROFILE is not beta, it is unplayable -- it already renders "(no profile)" and is
 // disabled, which is the strictly stronger statement. Stacking "(beta)" on it would say less.
+//
+// THREE TIERS, because "has an apparatus" and "the apparatus agrees with a human" are different
+// questions and the second is the one that matters:
+//
+//   (alpha)  a piece of the apparatus is MISSING -- <10 references, no value leaf, or no completed
+//            mulligan profile. Its numbers may simply be wrong.
+//   (beta)   the apparatus is complete, but the deck has not yet earned the top tier: fewer than 30
+//            references, or the search does not match the human on the ones it has.
+//   (none)   30+ references AND the shipped search matches or beats the human win turn on every
+//            single one of them.
+//
+// THE GREEN GATE IS THE POINT (user, 2026-08-27: "ideally beta would be exited only when the play is
+// green on the references -- i.e. we at least match the win turn"). A reference count measures how
+// much work was done; a shortfall measures whether the engine is actually right. Thirty games nobody
+// compared against is not evidence. This is also the only criterion here that can go RED on a deck
+// that was previously fine -- the other three are monotone once earned, so without it the label can
+// never react to a regression.
+//
+// 30 IS NOT A STATISTICAL THRESHOLD, it is the working convention: every deck's references run from
+// seed 1 upward, roughly one game per seed, and none goes past ~33. So "30 references" reads as "the
+// first 30 seeds have been played", and Knights at 28 is not 2 short of a quota -- it has two gaps.
+//
+// The bench is CACHED, never run from here (user, 2026-08-27: "I don't think we should run it
+// manually every time across all decks... maybe we can cache it somehow"). scripts/ref_bench.py
+// writes test/ref_bench.json, stamping each deck with the src tree it was measured at; a stamp that
+// no longer matches reads STALE, which is not green. `ref_bench.py --stale-only --json ...` then
+// re-benches exactly the decks that need it.
 const MIN_OPTIMAL_REFS = 10;
+const STABLE_REFS = 30;
+const REF_BENCH = path.join(ROOT, 'test', 'ref_bench.json');
 const KEEPMODEL_EXTS = ['.keepmodel.exhaustive.profile.json.gz', '.keepmodel.exhaustive.profile.json'];
 const REFS_DIR = path.join(ROOT, 'references');
 
@@ -379,17 +408,66 @@ function referenceOwners() {
 }
 const REF_OWNERS = referenceOwners();
 
+// The CACHED reference bench (scripts/ref_bench.py --json test/ref_bench.json). Read once per
+// request rather than at startup, so re-benching a deck shows up on a browser refresh instead of
+// needing the server restarted -- the file is a few KB and this is a single-user local tool.
+//
+// The current src tree IS resolved once: it cannot change under a running process without the
+// binary being rebuilt underneath us, and shelling out to git per request would be silly.
+// If git is unavailable the fingerprint is empty and staleness is simply not judged -- reporting
+// every deck stale forever would destroy the signal rather than protect it, and a checkout without
+// git is not a case this repo has.
+const SRC_NOW = (() => {
+  try {
+    const r = spawnSync('git', ['rev-parse', 'HEAD:src'], { cwd: ROOT, encoding: 'utf8' });
+    return r.status === 0 ? r.stdout.trim() : '';
+  } catch (e) { return ''; }
+})();
+
+function benchState(key) {
+  let cache;
+  try { cache = JSON.parse(fs.readFileSync(REF_BENCH, 'utf8')); }
+  catch (e) { return { state: 'unbenched' }; }               // never run, or not committed here
+  const e = (cache.decks || {})[key];
+  if (!e) return { state: 'unbenched' };
+  if (SRC_NOW && e.src && e.src !== SRC_NOW) return { state: 'stale', at: e.src.slice(0, 12), n: e.n };
+  // A reference whose forced opening hand did not reconstruct was never a valid comparison, so a
+  // deck carrying one has not been measured -- counting it as a pass is the same failure as an
+  // empty parse reading as clean.
+  if (e.hand_mismatch) return { state: 'unbenched', handMismatch: e.hand_mismatch, n: e.n };
+  if (e.short) return { state: 'short', short: e.short, n: e.n, games: e.shortfalls || [] };
+  return { state: 'green', n: e.n, human: e.human, search: e.search };
+}
+
 // PURE, so the policy is testable without a filesystem (test/viewer_deck_beta_check.js).
-function betaFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchivedList }) {
-  const reasons = [];
-  if (!hasProfile) return { beta: false, betaReasons: reasons };
+// -> { tier: 'unplayable' | 'alpha' | 'beta' | 'stable', tierReasons: [...] }
+function tierFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchivedList, bench }) {
+  if (!hasProfile) return { tier: 'unplayable', tierReasons: [] };
+
+  // ALPHA -- a piece of the apparatus is missing outright.
+  const missing = [];
   if (refs < MIN_OPTIMAL_REFS) {
-    reasons.push(`${refs}/${MIN_OPTIMAL_REFS} optimal reference games`
+    missing.push(`${refs}/${MIN_OPTIMAL_REFS} optimal reference games`
       + (refsOnArchivedList ? ` (the ${refsOnArchivedList} saved games were played on an archived list)` : ''));
   }
-  if (!hasValueLeaf) reasons.push('no value-leaf model');
-  if (!hasKeepModel) reasons.push('no completed mulligan profile');
-  return { beta: reasons.length > 0, betaReasons: reasons };
+  if (!hasValueLeaf) missing.push('no value-leaf model');
+  if (!hasKeepModel) missing.push('no completed mulligan profile');
+  if (missing.length) return { tier: 'alpha', tierReasons: missing };
+
+  // BETA -- complete, but not yet proven at depth or against the human.
+  const short = [];
+  if (refs < STABLE_REFS) short.push(`${refs}/${STABLE_REFS} reference games`);
+  const b = bench || { state: 'unbenched' };
+  if (b.state === 'short') {
+    short.push(`the search is slower than the human on ${b.short} of ${b.n} references`);
+  } else if (b.state === 'stale') {
+    short.push(`reference bench is stale (measured at src ${b.at}) — re-run scripts/ref_bench.py --stale-only`);
+  } else if (b.state !== 'green') {
+    short.push(b.handMismatch
+      ? `${b.handMismatch} reference(s) did not reconstruct, so the bench is not a valid comparison`
+      : 'reference bench has never been run for this deck');
+  }
+  return short.length ? { tier: 'beta', tierReasons: short } : { tier: 'stable', tierReasons: [] };
 }
 
 function deckMaturity(dir, name, hasProfile) {
@@ -402,8 +480,14 @@ function deckMaturity(dir, name, hasProfile) {
   const refs = owner === key ? saved : 0;
   const hasValueLeaf = fs.existsSync(path.join(dir, name + '.value.json'));
   const hasKeepModel = KEEPMODEL_EXTS.some(ext => fs.existsSync(path.join(dir, name + ext)));
-  return Object.assign({ refs, hasValueLeaf, hasKeepModel, refsOnArchivedList },
-                       betaFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchivedList }));
+  // ref_bench.py keys its results by the deck the references were PLAYED on. So a deck whose folder
+  // belongs to an archived list must NOT read that entry: the bench under `owner` describes the
+  // archived list's play, and lending its green to the deck that replaced it is precisely the
+  // borrowed-evidence bug this whole ownership rule exists to stop. No references of its own means
+  // no bench of its own.
+  const bench = owner === key ? benchState(key) : { state: 'unbenched' };
+  return Object.assign({ refs, hasValueLeaf, hasKeepModel, refsOnArchivedList, bench },
+                       tierFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchivedList, bench }));
 }
 
 // ---- routes ----------------------------------------------------------------------
@@ -578,5 +662,5 @@ if (require.main === module) {
 // Exported for the headless jsdom client check so it drives the REAL protocol (not a reimplementation).
 module.exports = { runStep, runValidate, listDecks, resolveDeck, buildArgs, BIN,
                    // deck maturity, for test/viewer_deck_beta_check.js
-                   betaFrom, deckMaturity, countOptimalRefs, MIN_OPTIMAL_REFS, KEEPMODEL_EXTS,
+                   tierFrom, benchState, deckMaturity, countOptimalRefs, MIN_OPTIMAL_REFS, STABLE_REFS, KEEPMODEL_EXTS,
                    pySlug, referenceOwners };

@@ -15,9 +15,9 @@
 #     SUBDECISIONS whitelist against every decision type src/main.cpp can emit. A type missing
 #     there hides the panel outright, so the decision is unanswerable and the game stalls on a
 #     dead board -- how lackey_put/echo/land_entry each shipped inert. Static, milliseconds.
-#   * deck maturity (frontend) -- viewer_deck_beta_check.js pins the "(beta)" marking: a deck with
-#     fewer than 10 optimal references, no value leaf, or no completed mulligan profile must say so
-#     in the picker. Silent when it rots (an unfinished deck simply reads "ready"), hence a gate.
+#   * deck maturity (frontend) -- viewer_deck_beta_check.js pins the alpha/beta/stable grading: a deck
+#     missing a piece of its apparatus, or not yet green on 30+ references, must say so in the picker.
+#     Silent when it rots (an unfinished deck simply reads "stable"), hence a gate.
 #     Static, milliseconds, no binary.
 #   * line-build (frontend) -- viewer_linebuild_check.js drives the REAL browser queue logic
 #     (tools/play/linebuild.js): can the GUI still rebuild every line the user actually played?
@@ -76,14 +76,14 @@ if command -v node >/dev/null 2>&1 && [ -f "$HERE/reveal_log_parity_check.js" ];
   fi
 fi
 
-# 0c) Deck maturity / "(beta)" marking (node). Static, milliseconds, no binary. Every failure mode
-#     here reads as GOOD news -- a rule that stops firing silently promotes an unfinished deck to
-#     "ready" -- so it is a gate rather than an informational print. Also prints the current
-#     beta/ready split, which is the fastest way to see where each deck's apparatus stands.
+# 0c) Deck maturity / alpha-beta-stable grading (node). Static, milliseconds, no binary. Every
+#     failure mode here reads as GOOD news -- a rule that stops firing silently promotes an
+#     unfinished deck to the top tier -- so it is a gate rather than an informational print. Also
+#     prints the current split, which is the fastest way to see where each deck stands.
 if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_deck_beta_check.js" ]; then
-  echo "--- viewer deck maturity / (beta) marking ---"
+  echo "--- viewer deck maturity (alpha / beta / stable) ---"
   if node "$HERE/viewer_deck_beta_check.js"; then :; else
-    echo "FAIL: the viewer's (beta) marking disagrees with the decks' actual artifacts."
+    echo "FAIL: the viewer's alpha/beta/stable grading disagrees with the decks' actual artifacts."
     rc=1
   fi
 fi
