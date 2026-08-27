@@ -9782,7 +9782,24 @@ const char* MirrorwingProvider::CastOrderTierName(int rank) const
     }
 }
 
-std::vector<int> MirrorwingProvider::CastOrderFallbackRanks(const GameState&,
+// The "GOLD RUSH POSITIVE" gate on the funding ladder's EARLY rungs (USER, 2026-08-27): "use the
+// 'Gold Rush positive' rule to decide whether we need to consider casting it earlier. If it doesn't
+// add mana or fix colours then we hold it. This is true for any point prior to 15."
+//
+// Rungs 13 and 6 exist to FUND the rest of the line, and a bare Gold Rush ({1}{G} for one Treasure)
+// funds nothing -- it is net -1, so walking it earlier can only make the line less payable. The
+// gate keeps the ladder at its preferred slot unless the cast is genuinely net >= 0 there
+// (TreasureSpellNetMana). Default OFF pending measurement; the domain is expected to be small
+// because MTG_ORDER_RANGE_PROBE over 40 games shows the IDEAL order paying in 11,074 of 11,133
+// ladder entries -- the early rungs are near-dead in play already, which is itself the evidence
+// that the USER's rule and today's behaviour agree.
+static bool GoldRushLadderPositiveEnabled()
+{
+    static const bool on = EnvOn("MTG_MW_GR_LADDER_POSITIVE");   // default OFF: measuring
+    return heurarm::Flag(heurarm::MW_GR_LADDER_POS, on);
+}
+
+std::vector<int> MirrorwingProvider::CastOrderFallbackRanks(const GameState& s,
                                                             const CardDefinition& def) const
 {
     // Gold Rush's funding ladder (USER 2026-08-18): "Definitely it should go after the Magnets at
@@ -9791,7 +9808,13 @@ std::vector<int> MirrorwingProvider::CastOrderFallbackRanks(const GameState&,
     // late slot pays there is nothing to search. Preferred 15 (after the draws: post-draw bodies
     // widen its fan-out), then 13 (after Twinflame, before the draws), then 6 (after the
     // magnets) -- each earlier rung only while FirstUnpayablePos says the line cannot be paid.
-    if (MirrorwingOrderedEnabled() && def.params.creates_treasures > 0) { return { 15, 13, 6 }; }
+    if (MirrorwingOrderedEnabled() && def.params.creates_treasures > 0)
+    {
+        // ...unless it is not POSITIVE here, in which case there is no early slot to walk to.
+        if (GoldRushLadderPositiveEnabled()
+            && TreasureSpellNetMana(s, s.active_player_index, def) < 0) { return { 15 }; }
+        return { 15, 13, 6 };
+    }
     return {};
 }
 

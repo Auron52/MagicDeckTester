@@ -855,16 +855,47 @@ static bool BpCondemnManaSiteExemptEnabled()
     return heurarm::Flag(heurarm::BP_CONDEMN_MANA_SITE, on);
 }
 
-static bool BpSiteAddedMana()
+// THE RULE ABOVE, AS SHIPPED, WAS OVER-BROAD -- and this is the correction (USER, 2026-08-27:
+// "Gold Rush does not make mana when not"). `creates_treasures > 0` is not the same claim as "this
+// site added mana": Gold Rush is {1}{G} for ONE Treasure, so a BARE cast is mana-NEGATIVE, and
+// exempting at such a site drops the prune with no affordability change to justify it. The honest
+// test is the net (TreasureSpellNetMana -- see its header for the "adds mana or fixes colours"
+// bar and why it is optimistic about the target choice): net >= 0 is a real mana event, net < 0 is
+// the bare pump spell this deck also plays it as.
+//
+// A RITUAL is not gated. ritual_floating_mana / untap_x_mana_sources are accelerants by
+// construction (Irencrag Feat floats 4 for 3; Reality Spasm untaps X sources), so there is no
+// negative case to exclude and no card in the suite where the net test would change the answer.
+static bool BpCondemnTreasureSitePositiveEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE");   // default OFF: measuring
+    return heurarm::Flag(heurarm::BP_CONDEMN_TREASURE_POS, on);
+}
+
+static bool BpSiteAddedMana(const GameState& state)
 {
     if (!BpCondemnManaSiteExemptEnabled() || g_bp_site_def == nullptr) { return false; }
     const CardParams& sp = g_bp_site_def->params;
-    return sp.creates_treasures > 0 || sp.ritual_floating_mana > 0 || sp.untap_x_mana_sources;
+    if (sp.ritual_floating_mana > 0 || sp.untap_x_mana_sources) { return true; }
+    if (sp.creates_treasures <= 0) { return false; }
+    const int net = TreasureSpellNetMana(state, state.active_player_index, *g_bp_site_def);
+    // TEMPORARY DIAGNOSTIC (MTG_TREASURE_SITE_PROBE): one line per treasure-site exemption test,
+    // so "how much of the shipped rule's firing is unjustified" is COUNTED rather than argued.
+    // The condemn-who probe cannot answer it -- when the exemption fires nothing is condemned, so
+    // nothing prints there.
+    static const bool s_probe = EnvOn("MTG_TREASURE_SITE_PROBE");
+    if (s_probe)
+    {
+        std::fprintf(stderr, "[treasure-site] turn=%d site=%s net=%d\n", state.turn_number,
+                     g_bp_site_def->card.m_name.c_str(), net);
+    }
+    if (!BpCondemnTreasureSitePositiveEnabled()) { return true; }   // pre-fix: any minter counted
+    return net >= 0;
 }
 
 static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
 {
-    if (BpSiteAddedMana()) { return true; }   // mana-adding site: nothing here was a real decline
+    if (BpSiteAddedMana(state)) { return true; }   // mana-adding site: nothing here was a decline
     if (!BpCondemnOrderAwareEnabled() || g_bp_site_def == nullptr) { return false; }
     const CardDefinition* cd = CardDatabase::Instance().LookupCached(cand);
     if (cd == nullptr) { return false; }
@@ -6834,11 +6865,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     {
                         const DecisionProvider& p = ResolveProvider(state);
                         std::fprintf(stderr,
-                                     "[condemn-who] turn=%d drop=%s rank=%d site=%s site_rank=%d\n",
+                                     "[condemn-who] turn=%d drop=%s rank=%d site=%s site_rank=%d"
+                                     " site_net=%d\n",
                                      state.turn_number,
                                      def.card.m_name.c_str(), p.CastOrderRank(state, def),
                                      g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)",
-                                     g_bp_site_def ? p.CastOrderRank(state, *g_bp_site_def) : -1);
+                                     g_bp_site_def ? p.CastOrderRank(state, *g_bp_site_def) : -1,
+                                     // "Gold Rush positive": the site's NET mana, so an
+                                     // unjustified mana-site exemption can be counted rather
+                                     // than argued. 0 for any site that mints no Treasure.
+                                     g_bp_site_def ? TreasureSpellNetMana(
+                                         state, state.active_player_index, *g_bp_site_def) : 0);
                     }
                     continue;
                 }

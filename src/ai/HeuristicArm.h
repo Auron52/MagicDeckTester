@@ -87,6 +87,8 @@ enum Slot : int
     HINATA_DORK_TIE,          // MTG_HINATA_DORK_TIE       LOO: dork + engine tied at 10, as generic has them
     BP_CONDEMN_REDUCER,       // MTG_BP_CONDEMN_REDUCER_EXEMPT never condemn a COST REDUCER
     BP_CONDEMN_MANA_SITE,     // MTG_BP_CONDEMN_MANA_SITE_EXEMPT  a MANA-ADDING site condemns nothing
+    BP_CONDEMN_TREASURE_POS,  // MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE  ...only when it NET-added mana
+    MW_GR_LADDER_POS,         // MTG_MW_GR_LADDER_POSITIVE  Gold Rush walks earlier only when positive
     COUNT
 };
 
@@ -151,6 +153,8 @@ inline const char* Name(int slot)
         "MTG_HINATA_DORK_TIE",
         "MTG_BP_CONDEMN_REDUCER_EXEMPT",
         "MTG_BP_CONDEMN_MANA_SITE_EXEMPT",
+        "MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE",
+        "MTG_MW_GR_LADDER_POSITIVE",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

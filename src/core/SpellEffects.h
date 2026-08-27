@@ -8052,6 +8052,46 @@ inline bool CopyMagnetLive(const GameState& state, int controller)
     return false;
 }
 
+// ---- The "GOLD RUSH POSITIVE" rule (USER, 2026-08-27) -----------------------------------------
+//
+// USER: "use the 'Gold Rush positive' rule to decide whether we need to consider casting it
+// earlier. If it doesn't add mana or fix colours then we hold it. This is true for any point prior
+// to 15."
+//
+// A treasure-minting trick is a MANA SOURCE only when the Treasures it mints are worth at least
+// what casting it costs. Gold Rush is {1}{G} for ONE Treasure -- pay 2, get 1, i.e. MANA-NEGATIVE
+// bare. It becomes an engine only once a copy magnet is live, because a solo-target trick aimed at
+// the magnet is copied once per OTHER creature (ResolveSoloTargetTrick's `order`: every other own
+// creature/animated permanent, then the original) and EVERY copy mints its own Treasure. So the
+// resolution count is exactly "own creatures I control" with a magnet out, and 1 without.
+//
+// NET >= 0 is the bar, and it covers both halves of the USER's sentence: net > 0 ADDS mana (magnet
+// + >=2 other bodies), and net == 0 still FIXES COLOURS -- two Treasures for {1}{G} converts a
+// green pip into two WILD at no loss, which is exactly the affordability change a colour-screwed
+// line needs. Net < 0 is the bare pump spell, and it holds.
+//
+// OPTIMISTIC on the target choice, deliberately. Gold Rush is trick_up_to_one, so an UNTARGETED
+// cast is also offered (it mints only the base Treasure and triggers no magnet), and which mode a
+// given cast used is not recoverable from the board afterwards. Both consumers of this predicate
+// are PRUNES -- an early cast-order rung, and a condemnation exemption -- so over-estimating the
+// net only ever offers MORE lines, the safe direction under the no-lossy-truncation bar.
+inline int TreasureSpellNetMana(const GameState& state, int controller, const CardDefinition& def)
+{
+    if (def.params.creates_treasures <= 0) { return 0; }
+    int resolutions = 1;
+    if (def.params.solo_target_trick && CopyMagnetLive(state, controller))
+    {
+        int bodies = 0;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller) { continue; }
+            if (q.card.IsCreature() || q.is_animated) { ++bodies; }
+        }
+        resolutions = std::max(1, bodies);   // magnet + each OTHER body == every body
+    }
+    return def.params.creates_treasures * resolutions - def.card.m_mana_cost.ManaValue();
+}
+
 // FRESH-SPEND AXIS (MTG_FRESH_SPEND_AXIS, default ON, adopted 2026-08-26; =0 disables): make the fresh-hold doctrine above a
 // searched BRANCH for exactly one shape -- a plan that converts the fresh mint into a THIS-TURN
 // kill (mw136: T5 Gold Rush -> crack the mint -> Luxurious Libation X+1 = exact lethal; banking
