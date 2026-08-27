@@ -818,6 +818,11 @@ public:
     // Review-artifact labels for the reviewed tiers (the generic table's names for 14/15/16/18
     // mean unrelated things).
     const char* CastOrderTierName(int rank) const override;
+    // THE LAND DROP GOES FIRST (USER, 2026-08-27: "Land drop can go first in this deck. Because we
+    // can always play a drawn land later (there is no cost to this). And no real advantage to
+    // deferring as a clairvoyant."). Rank 0 -- before the magnets at 5, so it precedes every
+    // breakpoint site this deck has. See DecisionProvider::LandDropCastOrderRank.
+    int LandDropCastOrderRank() const override;
     // Luxurious Libation's {X} (user, 2026-08-17): search exactly X=0 and the X that MAXIMISES
     // ATTACKING BOARD POWER, spending mana dorks only where spending them actually raises that
     // total. The generic prune's single {max_affordable} is "tap every land AND every dork",

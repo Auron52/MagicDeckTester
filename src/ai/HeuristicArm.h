@@ -89,6 +89,8 @@ enum Slot : int
     BP_CONDEMN_MANA_SITE,     // MTG_BP_CONDEMN_MANA_SITE_EXEMPT  a MANA-ADDING site condemns nothing
     BP_CONDEMN_TREASURE_POS,  // MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE  ...only when it NET-added mana
     MW_GR_LADDER_POS,         // MTG_MW_GR_LADDER_POSITIVE  Gold Rush walks earlier only when positive
+    BP_CONDEMN_LAND,          // MTG_BP_CONDEMN_LAND       the LAND DROP is a slot: passing it condemns held lands
+    ROLLOUT_LAND_RANKER,      // MTG_ROLLOUT_LAND_RANKER   rollout drop uses the EXECUTOR's ranker
     COUNT
 };
 
@@ -155,6 +157,8 @@ inline const char* Name(int slot)
         "MTG_BP_CONDEMN_MANA_SITE_EXEMPT",
         "MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE",
         "MTG_MW_GR_LADDER_POSITIVE",
+        "MTG_BP_CONDEMN_LAND",
+        "MTG_ROLLOUT_LAND_RANKER",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

@@ -621,6 +621,70 @@ playing the land at its slot wins just as fast. **Test:** pin the drop, replay t
 whether the win turn moves. If it does not, land condemnation is free and correct, and it TIGHTENS
 the prune rather than loosening it -- the opposite direction from every exemption in this document.
 
+### BUILT (2026-08-27): `MTG_BP_CONDEMN_LAND`, and it is the dominant half of condemnation
+
+Three pieces, all default OFF / byte-identical (verified against a worktree build of the committed
+tree over 12 decks x 40 games at each deck's shipped play settings):
+
+* `DecisionProvider::LandDropCastOrderRank()` -- the drop's slot, `-1` = "no declared slot" for
+  every deck. `MirrorwingProvider` returns **0**.
+* `BpLandDropSlotPassed()` (TurnSolver.cpp) -- composed with the site rank rather than duplicating
+  `BpSlotIsAfterSite`, so the drop obeys the same order law as every cast: strictly-earlier
+  condemns, a TIE does not, and a mana-adding site condemns nothing.
+* The filter itself, in `EnumeratePlansWithLandUncached` where `land_names` is built.
+
+**Keyed on the SIGNATURE GROUP, not the card number and not the name.** That is the equivalence this
+enumeration already uses -- two lands sharing a `land_sig` are interchangeable by construction, only
+one is ever enumerated -- so drawing a second copy of a signature we already declined is not new
+information. It is the cast side's fungibility clause (*"a duplicate copy of X being drawn doesn't
+change anything"*) stated in the lands' own currency, and it is both stricter and more principled
+than a name-keyed rule: the drawn Mountain and the held Forest are the same decision here. Urgency
+dominates it exactly as on the cast side, so a STAGED land (Light Up the Stage) is never condemned by
+a permanent hand copy.
+
+**TWO SOUNDNESS CONDITIONS, both found by asking "when is the defer branch NOT a decline?"**
+
+1. **A forced defer is not a decline.** Treasure Hunt is the live counter-example: the strict flood
+   gate suppresses every "play land THEN cast the draw engine" plan, so `add_for_land("", "")` is the
+   ONLY route to casting it. Condemning off the back of that would delete lines the search never
+   chose to skip. Written into the hook's contract -- a deck with a flood engine, or any other gate
+   that removes the land-first plans, must leave the rank at -1.
+2. **A drop already TAKEN has not been declined.** USER, on extra land drops: *"that is a good point
+   that extra land drops would unlock land plays. We should not condemn lands not played when we are
+   not allowed to play them."* Guarded on `lands_played_this_turn == 0`, which also closes the
+   narrower hole underneath it -- a Karoo the root skipped because no other land was out was never
+   OFFERED at the drop's slot, and a first drop is what would make it enumerable. **Provably inert
+   today:** `LandDropsAvailable()` is `1 + bonus`, the only card in the whole pool that grants a
+   bonus is Scale the Heights, and it is not in the shipped list -- so `drop_available` already
+   implies `lands_played_this_turn == 0`. The guard is a tautology now and a correctness condition
+   the moment a second drop returns.
+
+**A THIRD HOLE, AND IT IS THE ONE THE STATE CANNOT SHOW YOU: a RESERVED drop is not a declined
+one.** `ApplyPlanDirect` reserves the drop for an `etb_bounce_land` (`karoo_deferred`) and plays it
+only after the main casts, so the Karoo must bounce a land this turn's casts have already tapped.
+Through the whole cast section the land is therefore *still in hand* and `lands_played_this_turn` is
+*still 0* -- a breakpoint sees a state **indistinguishable** from "the plan passed on its drop", when
+the plan in fact chose Gruul Turf. Condemning off that reading is a false premise for every other
+land in hand, i.e. bug 8's exact shape. Carried on `CantripOrderScope` (the object BOTH worlds
+already construct at a breakpoint), so `AIEngine::resolve_draw_breakpoint` binds the same fact at the
+same place -- the lockstep-pair discipline that class exists for.
+
+**...and because it is invisible in the state, it must be FOLDED INTO THE BP-ENUM CACHE KEY.** Two
+plans reaching the same breakpoint -- one having reserved Gruul Turf, one having passed on its drop
+-- are byte-identical mid-turn, so without the fold the second is served the first's plan list. Same
+class as the memo's own "enum-memo verify find #4" (live scripted pins steer enumeration and must be
+folded). Checked against the memo's own contract, which is that results are identical with and
+without the cache: `MTG_NO_BP_ENUM_CACHE=1` agrees to 4 decimals in all three arms (defaults 4.6667,
+condemnation 4.6667, +land 4.6733), which also rules out the neighbouring question of whether
+`g_bp_site_def` needs folding.
+
+**IT IS NOT A MARGINAL RULE.** 10 games, `MTG_BP_CLASSIFY=1 MTG_BP_CONDEMN_LAND=1`, MTG_CONDEMN_WHO:
+**6,832 land condemnations against 773 cast condemnations** -- so with the drop pinned, condemnation
+on this deck is ~90% a LAND rule. By site: Oracle's Restoration 4,438, Impolite Entrance 2,178, Fists
+of Flame 216. By land: Game Trail 2,566, Mountain 1,616, Sandstone Needle 1,094, Forest 747, Gruul
+Turf 574, Rootbound Crag 235. Volume is not harm (four times over in this arc), which is why the
+paired per-game measurement is the output and this count is only proof the lever fires.
+
 ### The legitimate excuse looks like ONE rule, not several
 
 Of 23 turns where a trick is cast ahead of a body, 12 play a land immediately afterwards -- the

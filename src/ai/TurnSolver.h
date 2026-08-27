@@ -642,10 +642,18 @@ public:
     class CantripOrderScope
     {
     public:
+    // `land_drop_reserved` carries the apply's karoo_deferred: a Karoo is played AFTER the main
+    // casts (so its mandatory bounce returns an already-tapped land), which leaves the land in hand
+    // and lands_played_this_turn at 0 for the whole cast section. A breakpoint therefore sees a
+    // state indistinguishable from "the plan passed on its drop" when the plan in fact CHOSE that
+    // land -- and MTG_BP_CONDEMN_LAND would condemn every other held land on that false premise.
+    // Bound on the SCOPE rather than around the whole apply so the executor's live fallback binds
+    // the same fact at the same place: the lockstep-pair discipline this class already exists for.
         explicit CantripOrderScope(const CardDefinition* site,
                                    const std::vector<int>* hand_before = nullptr,
                                    const std::vector<std::uint64_t>* plan_casts = nullptr,
-                                   bool classify_active = false);
+                                   bool classify_active = false,
+                                   bool land_drop_reserved = false);
         ~CantripOrderScope();
         CantripOrderScope(const CantripOrderScope&) = delete;
         CantripOrderScope& operator=(const CantripOrderScope&) = delete;
@@ -654,6 +662,7 @@ public:
         const std::vector<int>* m_saved_hand;
         const std::vector<std::uint64_t>* m_saved_casts;
         const CardDefinition*   m_saved_site;   // order-aware condemnation: the breakpoint's site
+        bool                    m_saved_reserved;   // ...and whether the drop was RESERVED, not passed
     };
 
     // Card numbers in the active player's hand, for the breakpoint snapshot above. Cheap (one

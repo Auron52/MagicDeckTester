@@ -563,6 +563,43 @@ public:
                                                     const CardDefinition& def) const
     { (void)s; (void)def; return {}; }
 
+    // LandDropCastOrderRank -- WHERE THE LAND DROP SITS IN THE CAST ORDER, or -1 for "no declared
+    // slot" (every deck by default -> byte-identical). The drop has always been a play the order had
+    // no opinion about; giving it a rank makes it condemnable like any other, which is the whole of
+    // the USER's 2026-08-27 specification:
+    //
+    //   "we condemn if we can play a card in the order and choose not to do so" ... "no land drop is
+    //   a true play the game can make" ... "and this play condemns all lands in hand".
+    //
+    // Declining the drop at its slot is therefore a real decline, and a land that was in hand when
+    // the breakpoint's spell was cast may not be played in the continuation. A land the breakpoint
+    // DRAWS is a new card and stays enumerable under the existing drawn-card exemption -- which is
+    // what makes the rule simple enough to be safe: "there is an advantage to deferring in the case
+    // we draw a better land, but that case is not condemned".
+    //
+    // WHY A RANK RATHER THAN A BOOL. It is condemnable only where the SITE is later in the order, so
+    // this composes with BpSlotIsAfterSite instead of duplicating it: rank 0 (Mirrorwing, "land drop
+    // can go first in this deck") is before every site; a deck that wants the drop after its
+    // accelerants would say so with a number and the same test still holds.
+    //
+    // TWO CONDITIONS A DECK MUST MEET BEFORE IT MAY PIN THE DROP.
+    //
+    //  1. HOLDING THE DROP CAN NEVER PAY -- a land drawn later is still playable later at no loss
+    //     ("we can always play a drawn land later; there is no cost to this"). Deferring is
+    //     otherwise an INFORMATION play, and this search is clairvoyant, so it has nothing left to
+    //     buy. MECHANICAL reasons to defer (a Karoo that must bounce an already-tapped land,
+    //     storage/Land's-Edge timing, landfall) are NOT covered by that argument -- they are handled
+    //     by karoo_deferred / HoldDeferredDropForLethal, which this rule does not touch.
+    //
+    //  2. NOTHING IN THE DECK CAN *FORCE* THE DEFER BRANCH, because a forced defer is not a
+    //     decline and condemning off the back of one would delete lines the search never chose to
+    //     skip. Treasure Hunt is the live counter-example and the reason this is written down: the
+    //     strict flood gate (ShouldCastDrawEngine / MTG_TH_STRICT_FLOOD) suppresses every
+    //     "play land THEN cast the draw engine" plan, so the defer plan is the ONLY route to casting
+    //     it -- see the note at add_for_land("", "") in EnumeratePlansWithLandUncached. A deck with a
+    //     flood engine, or any other gate that removes the land-first plans, must leave this at -1.
+    virtual int LandDropCastOrderRank() const { return -1; }
+
     // CastOrderTierName -- the --cast-order-report's label for a rank TIER this provider defines.
     // nullptr = use the generic tier table (main.cpp). Display only; exists because an archetype's
     // ranks land on generic numbers with unrelated meanings (Mirrorwing's Fists@16 is not the

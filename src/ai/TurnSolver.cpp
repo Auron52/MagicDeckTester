@@ -1025,6 +1025,77 @@ static bool BpClassifyActive(const GameState& state)
     return BpClassifyEnabled() || ResolveProvider(state).CondemnsConsideredAtBreakpoint();
 }
 
+// ---- LAND CONDEMNATION (MTG_BP_CONDEMN_LAND) --------------------------------------------------
+// The land drop as a SLOT IN THE CAST ORDER, which is the piece the USER's specification was
+// missing. Condemnation has always been a CAST-side rule -- CollectActions skips lands outright --
+// so "no land drop", a play the game can genuinely make, was the one decision the order had no
+// opinion about. Measured: ZERO lands condemned in 175,481 firings, because there was no rule to
+// condemn them with.
+//
+// The rule, in the USER's words (2026-08-27):
+//
+//   "we condemn if we can play a card in the order and choose not to do so. This would not condemn
+//   the extra lands, but not emit them until we actually have the option to play them."
+//   "I would expect this to happen because no land drop is a true play the game can make."
+//   "And this play condemns all lands in hand."
+//
+// So: the drop's slot passes; the plan took the DEFER branch (add_for_land("")); therefore every
+// land that was in hand at that moment was offered and declined, and the continuation may not play
+// it. A land the breakpoint DREW is a new card and is exempt under the existing drawn-card rule --
+// which is the whole reason the rule can stay this simple: "there is an advantage to deferring in
+// the case we draw a better land, but that case is not condemned. So, simple rules work here."
+//
+// NOTE THE DIRECTION. Every other rule in this file's condemnation stack LOOSENS the prune (bugs
+// 4-8 are all exemptions). This one TIGHTENS it, and it is the first order-side rule of the
+// programme the USER set out: "I don't want to exempt things from the prune. Instead, I want to
+// figure out an order that works reliably."
+//
+// EMISSION vs CONDEMNATION, which are deliberately different halves. LandDropsAvailable() already
+// gates emission: a land that cannot be played is never offered and so never reads as a decline
+// (that is the "not emit them until we actually have the option to play them" half, and it needed
+// nothing built). This half is about a drop that WAS available and was passed.
+static bool BpCondemnLandEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_LAND");   // DEFAULT OFF -- measuring
+    return heurarm::Flag(heurarm::BP_CONDEMN_LAND, on);
+}
+
+// A DEFERRED KAROO MEANS THE DROP WAS TAKEN, NOT DECLINED -- and the state cannot say so on its own.
+// ApplyPlanDirect RESERVES the drop for an etb_bounce_land (karoo_deferred) and plays it only after
+// the main casts, so the Karoo must bounce a land this turn's casts have already tapped. Through the
+// whole cast section the land is therefore still in hand and lands_played_this_turn is still 0 --
+// i.e. a breakpoint mid-turn sees a state indistinguishable from "the plan passed on its drop", when
+// the plan in fact CHOSE Gruul Turf. Condemning off that reading would be a false premise for every
+// other land in hand, which is exactly the class of defect bug 8 was.
+//
+// Bound by CantripOrderScope, which is the object BOTH worlds already construct at a breakpoint
+// (the rollout's deferred re-solve and AIEngine::resolve_draw_breakpoint) -- so the executor binds
+// the same fact at the same place for free, which is the lockstep. Read only by
+// BpLandDropSlotPassed. Condemnation needs g_bp_hand_before, which only that scope binds, so a site
+// without one condemns nothing anyway and needs no separate guard.
+static thread_local bool g_land_drop_reserved = false;
+
+// Has the land drop's slot already PASSED at this breakpoint? False everywhere the deck declares no
+// slot (LandDropCastOrderRank -1, every deck by default) => byte-identical.
+//
+// Composed with the site rank rather than duplicating BpSlotIsAfterSite's test, so the drop obeys
+// exactly the same order law as every cast: strictly-earlier condemns, a TIE does not (the peer
+// argument at BpCondemnOrderAwareEnabled -- condemning a peer is symmetric and would leave no
+// sibling line alive). The mana-adding-site exemption applies here too and for the same reason: if
+// the site changed what the pool can pay, nothing before it was a settled decline.
+static bool BpLandDropSlotPassed(const GameState& state)
+{
+    if (!BpCondemnLandEnabled()) { return false; }
+    if (g_bp_hand_before == nullptr || g_bp_site_def == nullptr) { return false; }
+    if (g_land_drop_reserved) { return false; }   // Karoo: the drop was TAKEN, not declined
+    if (!BpClassifyActive(state)) { return false; }
+    if (BpSiteAddedMana(state)) { return false; }
+    const DecisionProvider& prov = ResolveProvider(state);
+    const int drop_rank = prov.LandDropCastOrderRank();
+    if (drop_rank < 0) { return false; }                  // no declared slot -> no rule
+    return drop_rank < prov.CastOrderRank(state, *g_bp_site_def);
+}
+
 // Memoized SEARCHED second main (defined after BuildBreakpointKey, far below): under
 // MTG_SEARCH_SECOND_MAIN + MTG_SOLVE_MEMO together, each DISTINCT post-combat state is searched
 // exactly once per decision and every later arrival reuses that searched plan. This is the
@@ -5773,10 +5844,16 @@ static bool CantripOrderBans(const CardDefinition& site, const CardDefinition& c
 TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
                                                  const std::vector<int>* hand_before,
                                                  const std::vector<std::uint64_t>* plan_casts,
-                                                 bool classify_active)
+                                                 bool classify_active,
+                                                 bool land_drop_reserved)
     : m_saved(g_cantrip_order_site), m_saved_hand(g_bp_hand_before),
-      m_saved_casts(g_bp_plan_casts), m_saved_site(g_bp_site_def)
+      m_saved_casts(g_bp_plan_casts), m_saved_site(g_bp_site_def),
+      m_saved_reserved(g_land_drop_reserved)
 {
+    // A reserved (deferred Karoo) drop is NOT a declined one -- see g_land_drop_reserved. Bound
+    // unconditionally: it is read only under MTG_BP_CONDEMN_LAND, which is off by default, so this
+    // is one thread_local store and no observable change.
+    g_land_drop_reserved = land_drop_reserved;
     // classify_active is passed in rather than read here because the provider route needs the STATE
     // and this ctor does not have it. It must NOT default to the env lever: binding the snapshot is
     // itself observable -- BuildBreakpointKey folds g_bp_hand_before when it is non-null -- so
@@ -5800,6 +5877,7 @@ TurnSolver::CantripOrderScope::~CantripOrderScope()
     g_bp_hand_before     = m_saved_hand;
     g_bp_plan_casts      = m_saved_casts;
     g_bp_site_def        = m_saved_site;
+    g_land_drop_reserved = m_saved_reserved;
 }
 
 bool TurnSolver::BreakpointHandSnapshotWanted()
@@ -16618,7 +16696,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
                     {
                         TurnSolver::CantripOrderScope _cos(&def, &hand_at_cast, &plan_cast_names,
-                                                          BpClassifyActive(state));
+                                                          BpClassifyActive(state), karoo_deferred);
                         TurnSolver::Plan extra;
                         if (!bp_searched_plan(6, extra))
                         {
@@ -17372,7 +17450,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // searched list, the greedy fallback, and the continuation's own application). The
         // executor's twin binding is in AIEngine::resolve_draw_breakpoint -- lockstep pair.
         TurnSolver::CantripOrderScope _cos(deferred_cantrip_site, &deferred_hand_before,
-                                           &plan_cast_names, BpClassifyActive(state));
+                                           &plan_cast_names, BpClassifyActive(state),
+                                           karoo_deferred);
         // Mark the continuation for the condemnation filter (MTG_CONDEMN_M1_BP). Same extent as
         // _cos: the searched list, the greedy Solve fallback, and the continuation's application.
         TurnSolver::BpContinuationScope _cbs;
@@ -18092,6 +18171,37 @@ static bool PlayLandByName(GameState& state, const std::string& name,
     return ok;
 }
 
+// ONE RANKER, THREE CALL SITES (MTG_ROLLOUT_LAND_RANKER, default OFF -- measuring).
+//
+// This function is a hand-rolled MIRROR of GreedyLandChoiceIndex (LandPlay.cpp), and it has drifted
+// exactly the way the enumeration's own mirror had drifted before it was deleted (see
+// greedy_land_name in EnumeratePlansWithLandUncached: "the hand-rolled mirror this replaces had
+// drifted three ways"). The executor plays its drop through the shared ranker; the enumeration's
+// last-resort tiebreak names the land the shared ranker would pick; only the ROLLOUT still runs this
+// two-pass copy. The differences are not cosmetic:
+//
+//   * TAPPED-NESS IS IGNORED HERE. The shared ranker's first two passes want an UNTAPPED land; this
+//     one has no such notion, so a rollout turn holding a tapped dual and an untapped basic plays
+//     the dual whenever it is multi-colour and spends the turn with less mana than it had. That
+//     mis-scores every line whose leaf depends on the curve -- which is the whole job of a rollout.
+//   * No Reliquary/flood pre-pass, no fastland closing-window sub-order, no tutor-top combo hold.
+//
+// WHY IT MATTERS DESPITE DECIDING NO COMMITTED DROP. Measured (MTG_LANDDROP_STATS): across ~1,300
+// committed pre-combat plans over 12 decks, this ranker decides the real drop exactly ONCE -- it is
+// the LEAF ESTIMATOR'S PLAYOUT POLICY, not a decision. That is precisely where the breakpoint
+// fan-out found its damage: "root-only is nearly free but recovers NONE of the gain... the greedy
+// continuation's real damage is to the LEAF EVALUATOR: it makes the rollouts mis-score lines, so the
+// root ranks its candidates on bad estimates."
+//
+// This is therefore a CONSISTENCY fix rather than a new heuristic -- there is no ordering to tune,
+// only a duplicate to delete -- but it does change the rollout's playout, so it ships OFF and is
+// measured like any other lever.
+static bool RolloutLandRankerEnabled()
+{
+    static const bool on = EnvOn("MTG_ROLLOUT_LAND_RANKER");   // DEFAULT OFF -- measuring
+    return heurarm::Flag(heurarm::ROLLOUT_LAND_RANKER, on);
+}
+
 // Greedy land play: one land drop per turn, preferring multi-color lands over
 // colorless-only lands (e.g. Mutavault) so colored spells stay castable.
 // Two-pass: multi-color first, then any land. Used as the fallback when a plan did
@@ -18126,6 +18236,23 @@ static std::string SimulateLandPlay(GameState& state)
             seen.insert(c.m_name.str());
         }
         alternatives = static_cast<int>(seen.size()) - 1;   // OTHER names beyond the one picked
+    }
+
+    // The shared ranker (see RolloutLandRankerEnabled). Its four passes prefer an UNTAPPED land
+    // before a multi-colour one, which is the difference the loop below cannot express at all.
+    // `pass` is recorded as 0/1 by whether the pick is multi-colour, so the instrument's columns
+    // keep meaning the same thing across both arms.
+    if (RolloutLandRankerEnabled())
+    {
+        const int idx = GreedyLandChoiceIndex(state);
+        if (idx < 0) { landdrop::Record(std::string(), 0, alternatives); return std::string(); }
+        const std::string name = ap.hand[idx].m_name;
+        const CardDefinition* pdef =
+            LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.hand[idx]));
+        const int pass = (pdef && pdef->params.produces.size() > 1) ? 0 : 1;
+        PlayLandByName(state, name);
+        landdrop::Record(name, pass, alternatives);
+        return name;
     }
 
     for (int pass = 0; pass < 2; ++pass)
@@ -21232,6 +21359,84 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         return !s_karoo_selfbounce && !s_human_play_lands
             && def->params.etb_bounce_land && !has_other_land_enum;
     };
+    // ---- LAND CONDEMNATION (MTG_BP_CONDEMN_LAND; see BpLandDropSlotPassed) --------------------
+    // The drop's slot has passed and this plan took the DEFER branch, so every land that was in
+    // hand at the breakpoint's cast was offered at that slot and declined. Only a land the
+    // breakpoint DREW is a new card, and only it stays enumerable.
+    //
+    // Keyed on the SIGNATURE GROUP, not the card number and not the name, because that is the
+    // equivalence this enumeration itself uses: two lands with one land_sig are interchangeable by
+    // construction here (only one is ever enumerated), so drawing a second copy of a signature we
+    // already declined is not new information. That is the cast side's fungibility clause -- "if we
+    // decided to skip card X in hand, a duplicate copy of X being drawn doesn't change anything" --
+    // stated in the lands' own currency. A name-keyed rule would be strictly weaker AND less
+    // principled: the drawn Mountain and the held Forest are the same decision here.
+    //
+    // URGENCY DOMINATES IT, exactly as on the cast side: a STAGED land (Light Up the Stage) expires
+    // this turn, so declining a permanent hand copy does not imply declining the expiring one. Only
+    // a pre-draw copy at least as urgent as the candidate condemns it.
+    //
+    // HUMAN PLAY IS EXEMPT (the viewer must be able to offer any legal drop -- the same exemption
+    // the free-cast prune and the Karoo self-bounce prune carry), so this reads the state's provider
+    // only on the autonomous path.
+    // ...and ONLY on a turn whose drop has not already been taken. USER, on extra land drops:
+    // "that is a good point that extra land drops would unlock land plays. We should not condemn
+    // lands not played when we are not allowed to play them." A plan that PLAYED its first land did
+    // not decline anything, so a second drop (Scale the Heights' grants_extra_land_drop) is a fresh
+    // slot the order has not yet passed. This also closes the narrower hole underneath it: a land
+    // the ROOT enumeration filtered for a reason that has since lapsed -- a Karoo skipped because no
+    // other land was out, which a first drop then makes enumerable -- was never OFFERED at the
+    // drop's slot, so it cannot have been declined there. With one drop per turn the two conditions
+    // coincide (an open drop implies no land played, so nothing has lapsed), which is why the guard
+    // is stated on the drop count rather than re-deriving the root's board.
+    const bool condemn_lands = !s_human_play_lands
+                            && ap.lands_played_this_turn == 0
+                            && BpLandDropSlotPassed(state);
+    auto land_urgency = [](const Card& c)
+    { return c.m_is_staged ? c.m_staged_expiry : std::numeric_limits<int>::max(); };
+    std::unordered_map<std::string, int> predraw_urgency;   // sig -> most urgent PRE-DRAW copy
+    if (condemn_lands)
+    {
+        for (const Card& c : ap.hand)
+        {
+            if (c.m_impulse_no_land) { continue; }
+            if (!BpCardWasInHandBefore(c.m_number)) { continue; }   // drawn here: not a decline
+            const CardDefinition* front = CardDatabase::Instance().LookupCached(c);
+            const CardDefinition* def = LandFaceDefOf(front);
+            if (!def) { continue; }
+            const std::string sg = land_sig((front && front->card.IsLand() ? def : front)->params);
+            auto it = predraw_urgency.find(sg);
+            const int u = land_urgency(c);
+            if (it == predraw_urgency.end()) { predraw_urgency.emplace(sg, u); }
+            else if (u < it->second)         { it->second = u; }
+        }
+    }
+    // True when this candidate's signature was already offered-and-declined at the drop's slot.
+    auto land_condemned = [&](const Card& c, const std::string& sg)
+    {
+        if (!condemn_lands) { return false; }
+        auto it = predraw_urgency.find(sg);
+        if (it == predraw_urgency.end()) { return false; }
+        if (it->second > land_urgency(c)) { return false; }
+        // Same diagnostic channel as the cast side, with rank=-1 marking the drop's slot, so one
+        // MTG_CONDEMN_WHO run counts casts and lands together.
+        static const bool s_condemn_who = EnvOn("MTG_CONDEMN_WHO");
+        if (s_condemn_who)
+        {
+            const DecisionProvider& p = ResolveProvider(state);
+            std::fprintf(stderr,
+                         "[condemn-who] plan_n=%d tail=%d turn=%d drop=%s rank=%d"
+                         " site=%s site_rank=%d site_net=%d\n",
+                         g_bp_plan_casts ? static_cast<int>(g_bp_plan_casts->size()) : -1, 0,
+                         state.turn_number, c.m_name.c_str(), p.LandDropCastOrderRank(),
+                         g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)",
+                         g_bp_site_def ? p.CastOrderRank(state, *g_bp_site_def) : -1,
+                         g_bp_site_def ? TreasureSpellNetMana(
+                             state, state.active_player_index, *g_bp_site_def) : 0);
+        }
+        return true;
+    };
+
     std::vector<std::string>        land_names;   // representatives, in hand order
     std::unordered_set<std::string> seen_key;
     if (s_human_play_lands || s_legacy_land_sig)
@@ -21245,6 +21450,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             if (karoo_self_bounce(def)) { continue; }
             const std::string key = s_human_play_lands ? c.m_name
                                   : land_sig((front && front->card.IsLand() ? def : front)->params);
+            // s_human_play_lands forces condemn_lands false, so `key` is the signature here.
+            if (land_condemned(c, key)) { continue; }
             if (seen_key.insert(key).second) { land_names.push_back(c.m_name); }
         }
     }
@@ -21268,6 +21475,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             // Signature: a real land keys on its own params; a spell//land keys on the FRONT's
             // (which carries the mdfc_back fields -> a distinct group from every real land).
             const std::string sg = land_sig((front && front->card.IsLand() ? def : front)->params);
+            if (land_condemned(c, sg)) { continue; }   // declined at the drop's slot (MTG_BP_CONDEMN_LAND)
             auto it = slot.find(sg);
             if (it == slot.end())
             {
@@ -27628,6 +27836,13 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
             Fold(key, 0xB17Full);
             for (int num : *g_bp_hand_before) { Fold(key, static_cast<uint64_t>(num)); }
         }
+        // A RESERVED (deferred Karoo) drop is not a declined one, so it changes which lands
+        // MTG_BP_CONDEMN_LAND emits -- and it is NOT visible in the state, which is exactly why it
+        // has to be folded. The two worlds are otherwise byte-identical mid-turn: a plan that
+        // committed Gruul Turf and a plan that passed on its drop both reach the breakpoint with the
+        // Karoo still in hand and lands_played_this_turn == 0. Without this fold they would share a
+        // cache entry and the second would be served the first's plan list.
+        if (g_land_drop_reserved) { Fold(key, 0x1A4Dull); }
         BpEnumMap::const_iterator it = cache.find(key);
         if (it != cache.end())
         {

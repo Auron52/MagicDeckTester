@@ -9766,6 +9766,21 @@ bool MirrorwingProvider::OrderOpaqueCastsByRank() const
     return MirrorwingOrderedEnabled();
 }
 
+int MirrorwingProvider::LandDropCastOrderRank() const
+{
+    // 0: before the magnets (5), so before every breakpoint site this deck has (draws 14, Gold Rush
+    // 15). The pin is safe here for the USER's reason and not merely convenient -- holding the drop
+    // buys nothing, because a land drawn later is still playable later at no loss, and the only
+    // remaining reason to defer is INFORMATION, which a clairvoyant search does not need.
+    //
+    // GRUUL TURF IS NOT AN EXCEPTION TO THIS. A Karoo must be played AFTER the turn's casts so its
+    // mandatory bounce returns an already-tapped land, but that ordering is enforced by the
+    // karoo_deferred reservation in the apply (and by bp_play_searched_land's early-out), not by the
+    // cast order -- so pinning the drop's SLOT does not disturb it. What the pin governs is WHETHER
+    // the drop is taken, not when in the apply it lands.
+    return MirrorwingOrderedEnabled() ? 0 : -1;
+}
+
 const char* MirrorwingProvider::CastOrderTierName(int rank) const
 {
     if (!MirrorwingOrderedEnabled()) { return nullptr; }

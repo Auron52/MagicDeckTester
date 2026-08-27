@@ -2895,8 +2895,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
+        // karoo_deferred: the executor reserves a Karoo drop for after the main cast loop exactly as
+        // ApplyPlanDirect does, so it must tell the breakpoint enumeration the same thing -- a
+        // RESERVED drop is not a declined one (MTG_BP_CONDEMN_LAND). Lockstep pair.
         TurnSolver::CantripOrderScope _cos(rdb_site, &rdb_hand, &rdb_plan_casts,
-                                           ResolveProvider(state).CondemnsConsideredAtBreakpoint());
+                                           ResolveProvider(state).CondemnsConsideredAtBreakpoint(),
+                                           karoo_deferred);
         // Executor twin of the rollout's marker (MTG_CONDEMN_M1_BP) -- the lockstep pair. Without
         // it the executor would re-offer at a breakpoint what the rollout condemned there.
         TurnSolver::BpContinuationScope _cbs;
