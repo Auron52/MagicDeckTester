@@ -1,0 +1,218 @@
+{
+  "seed": 29, "game_index": 28, "win_turn": 4, "won": true,
+  "mulligan": { "count": 2, "bottom": [36, 29] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 27, "name": "Gladecover Scout" }, { "num": 25, "name": "Forest" }, { "num": 3, "name": "Ancestral Mask" }, { "num": 43, "name": "Plains" }, { "num": 54, "name": "Slippery Bogle" }, { "num": 36, "name": "Kor Spiritdancer" }, { "num": 55, "name": "Slippery Bogle" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 7, "name": "Armadillo Cloak" }, { "num": 48, "name": "Rancor" }, { "num": 26, "name": "Forest" }, { "num": 12, "name": "Branchloft Pathway" }, { "num": 22, "name": "Ethereal Armor" }, { "num": 42, "name": "Lion Umbra" }, { "num": 11, "name": "Branchloft Pathway" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 15, "name": "Brushland" }, { "num": 35, "name": "Hyena Umbra" }, { "num": 14, "name": "Brushland" }, { "num": 29, "name": "Gladecover Scout" }, { "num": 58, "name": "Spider Umbra" }, { "num": 40, "name": "Light-Paws, Emperor's Voice" }, { "num": 36, "name": "Kor Spiritdancer" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 15, "name": "Brushland", "win_optimal": true }, { "num": 35, "name": "Hyena Umbra", "win_optimal": true }, { "num": 14, "name": "Brushland", "win_optimal": true }, { "num": 29, "name": "Gladecover Scout", "win_optimal": true }, { "num": 58, "name": "Spider Umbra", "win_optimal": true }, { "num": 40, "name": "Light-Paws, Emperor's Voice", "win_optimal": true }, { "num": 36, "name": "Kor Spiritdancer", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 35, "name": "Hyena Umbra" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 15, "name": "Brushland", "win_optimal": true }, { "num": 35, "name": "Hyena Umbra", "win_optimal": true }, { "num": 14, "name": "Brushland", "win_optimal": true }, { "num": 29, "name": "Gladecover Scout", "win_optimal": true }, { "num": 58, "name": "Spider Umbra", "win_optimal": true }, { "num": 40, "name": "Light-Paws, Emperor's Voice", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 35, "name": "Hyena Umbra" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 15, "name": "Brushland", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Brushland", "cost": "", "mv": 0, "kind": "land" }, { "num": 35, "name": "Hyena Umbra", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 40, "name": "Light-Paws, Emperor's Voice", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Spider Umbra", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Brushland; cast: (nothing)", "land": "Brushland", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Alpha Authority" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Brushland", "idx": 0, "num": 15, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Alpha Authority", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 14, "name": "Brushland", "cost": "", "mv": 0, "kind": "land" }, { "num": 35, "name": "Hyena Umbra", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 40, "name": "Light-Paws, Emperor's Voice", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Spider Umbra", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Brushland; cast: Light-Paws, Emperor's Voice", "land": "Brushland", "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 1, "summary": "land=Plains; cast: Light-Paws, Emperor's Voice", "land": "Plains", "casts": ["Light-Paws, Emperor's Voice"], "actions": [{ "card": "Light-Paws, Emperor's Voice" }] },
+    { "index": 2, "summary": "land=Brushland; cast: (nothing)", "land": "Brushland", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 9, "cast_order": ["Hyena Umbra", "Alpha Authority"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Brushland", "idx": 0, "num": 15, "is_land": true }, { "name": "Light-Paws, Emperor's Voice", "idx": 2, "num": 40, "is_land": false }, { "name": "Plains", "idx": 1, "num": 44, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Alpha Authority", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 14, "name": "Brushland", "cost": "", "mv": 0, "kind": "land" }, { "num": 35, "name": "Hyena Umbra", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 43, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Spider Umbra", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "6/6 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Brushland; cast: Hyena Umbra → Light-Paws, Emperor's Voice, Spider Umbra → Light-Paws, Emperor's Voice", "land": "Brushland", "casts": ["Hyena Umbra", "Spider Umbra"], "cast_order_canonical": ["Hyena Umbra", "Spider Umbra"], "actions": [{ "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 1, "summary": "land=Brushland; cast: Spider Umbra → Light-Paws, Emperor's Voice, Hyena Umbra → Light-Paws, Emperor's Voice", "land": "Brushland", "casts": ["Spider Umbra", "Hyena Umbra"], "cast_order_canonical": ["Spider Umbra", "Hyena Umbra"], "actions": [{ "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 2, "summary": "land=Brushland; cast: Alpha Authority → Light-Paws, Emperor's Voice, Hyena Umbra → Light-Paws, Emperor's Voice", "land": "Brushland", "casts": ["Alpha Authority", "Hyena Umbra"], "cast_order_canonical": ["Alpha Authority", "Hyena Umbra"], "actions": [{ "card": "Alpha Authority", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 3, "summary": "land=Brushland; cast: Hyena Umbra → Light-Paws, Emperor's Voice, Alpha Authority → Light-Paws, Emperor's Voice", "land": "Brushland", "casts": ["Hyena Umbra", "Alpha Authority"], "cast_order_canonical": ["Hyena Umbra", "Alpha Authority"], "actions": [{ "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Alpha Authority", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 4, "summary": "land=Brushland; cast: Alpha Authority → Light-Paws, Emperor's Voice, Spider Umbra → Light-Paws, Emperor's Voice", "land": "Brushland", "casts": ["Alpha Authority", "Spider Umbra"], "cast_order_canonical": ["Alpha Authority", "Spider Umbra"], "actions": [{ "card": "Alpha Authority", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 5, "summary": "land=Brushland; cast: Spider Umbra → Light-Paws, Emperor's Voice, Alpha Authority → Light-Paws, Emperor's Voice", "land": "Brushland", "casts": ["Spider Umbra", "Alpha Authority"], "cast_order_canonical": ["Spider Umbra", "Alpha Authority"], "actions": [{ "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Alpha Authority", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 6, "summary": "land=Plains; cast: Hyena Umbra → Light-Paws, Emperor's Voice, Spider Umbra → Light-Paws, Emperor's Voice", "land": "Plains", "casts": ["Hyena Umbra", "Spider Umbra"], "cast_order_canonical": ["Hyena Umbra", "Spider Umbra"], "actions": [{ "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 7, "summary": "land=Plains; cast: Spider Umbra → Light-Paws, Emperor's Voice, Hyena Umbra → Light-Paws, Emperor's Voice", "land": "Plains", "casts": ["Spider Umbra", "Hyena Umbra"], "cast_order_canonical": ["Spider Umbra", "Hyena Umbra"], "actions": [{ "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 8, "summary": "land=Plains; cast: Alpha Authority → Light-Paws, Emperor's Voice, Hyena Umbra → Light-Paws, Emperor's Voice", "land": "Plains", "casts": ["Alpha Authority", "Hyena Umbra"], "cast_order_canonical": ["Alpha Authority", "Hyena Umbra"], "actions": [{ "card": "Alpha Authority", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 9, "summary": "land=Plains; cast: Hyena Umbra → Light-Paws, Emperor's Voice, Alpha Authority → Light-Paws, Emperor's Voice", "land": "Plains", "casts": ["Hyena Umbra", "Alpha Authority"], "cast_order_canonical": ["Hyena Umbra", "Alpha Authority"], "actions": [{ "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Alpha Authority", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 10, "summary": "land=none; cast: Hyena Umbra → Light-Paws, Emperor's Voice, Spider Umbra → Light-Paws, Emperor's Voice", "land": null, "casts": ["Hyena Umbra", "Spider Umbra"], "cast_order_canonical": ["Hyena Umbra", "Spider Umbra"], "actions": [{ "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 11, "summary": "land=none; cast: Spider Umbra → Light-Paws, Emperor's Voice, Hyena Umbra → Light-Paws, Emperor's Voice", "land": null, "casts": ["Spider Umbra", "Hyena Umbra"], "cast_order_canonical": ["Spider Umbra", "Hyena Umbra"], "actions": [{ "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }, { "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 12, "summary": "land=Brushland; cast: Hyena Umbra → Light-Paws, Emperor's Voice", "land": "Brushland", "casts": ["Hyena Umbra"], "actions": [{ "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 13, "summary": "land=Brushland; cast: Spider Umbra → Light-Paws, Emperor's Voice", "land": "Brushland", "casts": ["Spider Umbra"], "actions": [{ "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 14, "summary": "land=Brushland; cast: Alpha Authority → Light-Paws, Emperor's Voice", "land": "Brushland", "casts": ["Alpha Authority"], "actions": [{ "card": "Alpha Authority", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 15, "summary": "land=Plains; cast: Hyena Umbra → Light-Paws, Emperor's Voice", "land": "Plains", "casts": ["Hyena Umbra"], "actions": [{ "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 16, "summary": "land=Plains; cast: Spider Umbra → Light-Paws, Emperor's Voice", "land": "Plains", "casts": ["Spider Umbra"], "actions": [{ "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 17, "summary": "land=Plains; cast: Alpha Authority → Light-Paws, Emperor's Voice", "land": "Plains", "casts": ["Alpha Authority"], "actions": [{ "card": "Alpha Authority", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 18, "summary": "land=none; cast: Hyena Umbra → Light-Paws, Emperor's Voice", "land": null, "casts": ["Hyena Umbra"], "actions": [{ "card": "Hyena Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 19, "summary": "land=none; cast: Spider Umbra → Light-Paws, Emperor's Voice", "land": null, "casts": ["Spider Umbra"], "actions": [{ "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 20, "summary": "land=none; cast: Alpha Authority → Light-Paws, Emperor's Voice", "land": null, "casts": ["Alpha Authority"], "actions": [{ "card": "Alpha Authority", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 21, "summary": "land=Brushland; cast: (nothing)", "land": "Brushland", "casts": [], "actions": [] },
+    { "index": 22, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 23, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "type": "lightpaws",
+  "source": "Light-Paws, Emperor's Voice",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Brushland", "idx": 0, "num": 15, "tapped": true, "is_land": true }, { "name": "Hyena Umbra", "idx": 6, "num": 35, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 2, "num": 40, "is_land": false }, { "name": "Plains", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Alpha Authority", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 14, "name": "Brushland", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Spider Umbra", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0, "floating_mana": {"G": 1, "wild": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "6/6 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "pool": [{ "index": 0, "legal": true, "name": "Ethereal Armor" }, { "index": 1, "legal": true, "name": "Audacity" }, { "index": 2, "legal": true, "name": "Rancor" }, { "index": 3, "legal": false, "name": "Daybreak Coronet" }, { "index": 4, "legal": false, "name": "Daybreak Coronet" }, { "index": 5, "legal": true, "name": "Ethereal Armor" }, { "index": 6, "legal": false, "name": "Daybreak Coronet" }, { "index": 7, "legal": true, "name": "Ethereal Armor" }, { "index": 8, "legal": false, "name": "Ancestral Mask" }, { "index": 9, "legal": false, "name": "Ancestral Mask" }, { "index": 10, "legal": true, "name": "Ethereal Armor" }, { "index": 11, "legal": false, "name": "All That Glitters" }, { "index": 12, "legal": true, "name": "Gryff's Boon" }, { "index": 13, "legal": true, "name": "Spirit Link" }, { "index": 14, "legal": false, "name": "Ancestral Mask" }, { "index": 15, "legal": false, "name": "Spirit Mantle" }, { "index": 16, "legal": false, "name": "Daybreak Coronet" }, { "index": 17, "legal": true, "name": "Rancor" }, { "index": 18, "legal": true, "name": "Rancor" }, { "index": 19, "legal": false, "name": "Lion Umbra" }, { "index": 20, "legal": false, "name": "Armadillo Cloak" }, { "index": 21, "legal": false, "name": "Ancestral Mask" }, { "index": 22, "legal": true, "name": "Rancor" }],
+  "note": "reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 9,
+  "type": "lightpaws",
+  "source": "Light-Paws, Emperor's Voice",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Alpha Authority", "idx": 8, "num": 2, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Brushland", "idx": 0, "num": 15, "tapped": true, "is_land": true }, { "name": "Ethereal Armor", "idx": 7, "num": 23, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Hyena Umbra", "idx": 6, "num": 35, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 2, "num": 40, "is_land": false }, { "name": "Plains", "idx": 1, "num": 44, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Brushland", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Spider Umbra", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "6/6 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "heuristic_default": 3,
+  "pool": [{ "index": 0, "legal": false, "name": "Ethereal Armor" }, { "index": 1, "legal": true, "name": "Gryff's Boon" }, { "index": 2, "legal": false, "name": "Armadillo Cloak" }, { "index": 3, "legal": true, "name": "All That Glitters" }, { "index": 4, "legal": true, "name": "Rancor" }, { "index": 5, "legal": true, "name": "Daybreak Coronet" }, { "index": 6, "legal": true, "name": "Daybreak Coronet" }, { "index": 7, "legal": true, "name": "Daybreak Coronet" }, { "index": 8, "legal": false, "name": "Ethereal Armor" }, { "index": 9, "legal": true, "name": "Daybreak Coronet" }, { "index": 10, "legal": true, "name": "Rancor" }, { "index": 11, "legal": true, "name": "Rancor" }, { "index": 12, "legal": true, "name": "Spirit Mantle" }, { "index": 13, "legal": true, "name": "Rancor" }, { "index": 14, "legal": false, "name": "Ancestral Mask" }, { "index": 15, "legal": false, "name": "Ancestral Mask" }, { "index": 16, "legal": false, "name": "Ancestral Mask" }, { "index": 17, "legal": true, "name": "Lion Umbra" }, { "index": 18, "legal": false, "name": "Ethereal Armor" }, { "index": 19, "legal": true, "name": "Spirit Link" }, { "index": 20, "legal": true, "name": "Audacity" }, { "index": 21, "legal": false, "name": "Ancestral Mask" }],
+  "note": "reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Forest" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Light-Paws, Emperor's Voice (11) — 11 to opponent (20→9)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "All That Glitters", "idx": 9, "num": 1, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Alpha Authority", "idx": 8, "num": 2, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Brushland", "idx": 0, "num": 15, "is_land": true }, { "name": "Ethereal Armor", "idx": 7, "num": 23, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Hyena Umbra", "idx": 6, "num": 35, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 2, "num": 40, "is_land": false }, { "name": "Plains", "idx": 1, "num": 44, "is_land": true }, { "name": "Plains", "idx": 5, "num": 43, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Brushland", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Spider Umbra", "cost": "{G}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "6/6 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Brushland; cast: Spider Umbra → Light-Paws, Emperor's Voice", "land": "Brushland", "casts": ["Spider Umbra"], "actions": [{ "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 1, "summary": "land=Forest; cast: Spider Umbra → Light-Paws, Emperor's Voice", "land": "Forest", "casts": ["Spider Umbra"], "actions": [{ "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 2, "summary": "land=none; cast: Spider Umbra → Light-Paws, Emperor's Voice", "land": null, "casts": ["Spider Umbra"], "actions": [{ "card": "Spider Umbra", "enchant_target": 40, "enchant_target_name": "Light-Paws, Emperor's Voice" }] },
+    { "index": 3, "summary": "land=Brushland; cast: (nothing)", "land": "Brushland", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "type": "lightpaws",
+  "source": "Light-Paws, Emperor's Voice",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "All That Glitters", "idx": 9, "num": 1, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Alpha Authority", "idx": 8, "num": 2, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Brushland", "idx": 0, "num": 15, "is_land": true }, { "name": "Ethereal Armor", "idx": 7, "num": 23, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Forest", "idx": 10, "num": 25, "tapped": true, "is_land": true }, { "name": "Hyena Umbra", "idx": 6, "num": 35, "is_aura": true, "attached_to": 40, "is_land": false }, { "name": "Light-Paws, Emperor's Voice", "idx": 2, "num": 40, "is_land": false }, { "name": "Plains", "idx": 1, "num": 44, "is_land": true }, { "name": "Plains", "idx": 5, "num": 43, "is_land": true }, { "name": "Spider Umbra", "idx": 11, "num": 58, "is_aura": true, "attached_to": 40, "is_land": false }], "vial_counters": [], "hand": [{ "num": 14, "name": "Brushland", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "6/6 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "heuristic_default": 1,
+  "pool": [{ "index": 0, "legal": false, "name": "Daybreak Coronet" }, { "index": 1, "legal": true, "name": "Rancor" }, { "index": 2, "legal": true, "name": "Spirit Link" }, { "index": 3, "legal": false, "name": "Daybreak Coronet" }, { "index": 4, "legal": false, "name": "Ethereal Armor" }, { "index": 5, "legal": false, "name": "Ethereal Armor" }, { "index": 6, "legal": false, "name": "Lion Umbra" }, { "index": 7, "legal": true, "name": "Audacity" }, { "index": 8, "legal": false, "name": "Ancestral Mask" }, { "index": 9, "legal": false, "name": "Armadillo Cloak" }, { "index": 10, "legal": true, "name": "Rancor" }, { "index": 11, "legal": false, "name": "Spirit Mantle" }, { "index": 12, "legal": false, "name": "Ancestral Mask" }, { "index": 13, "legal": false, "name": "Daybreak Coronet" }, { "index": 14, "legal": false, "name": "Daybreak Coronet" }, { "index": 15, "legal": true, "name": "Gryff's Boon" }, { "index": 16, "legal": false, "name": "Ancestral Mask" }, { "index": 17, "legal": false, "name": "Ethereal Armor" }, { "index": 18, "legal": true, "name": "Rancor" }, { "index": 19, "legal": false, "name": "Ancestral Mask" }, { "index": 20, "legal": true, "name": "Rancor" }],
+  "note": "reply a pool index to fetch that Aura and attach it to Light-Paws, or -1 to fetch nothing. Default = the AI's pick."
+}
+}
+  ]
+}

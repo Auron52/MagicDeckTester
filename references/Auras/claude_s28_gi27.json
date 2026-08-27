@@ -1,0 +1,120 @@
+{
+  "seed": 28, "game_index": 27, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 59, "name": "Spirit Link" }, { "num": 46, "name": "Rancor" }, { "num": 25, "name": "Forest" }, { "num": 21, "name": "Ethereal Armor" }, { "num": 27, "name": "Gladecover Scout" }, { "num": 47, "name": "Rancor" }, { "num": 8, "name": "Audacity" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 8, "name": "Audacity", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 21, "name": "Ethereal Armor", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 25, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Gladecover Scout", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Rancor", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 47, "name": "Rancor", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 59, "name": "Spirit Link", "cost": "{W}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Gladecover Scout", "land": "Forest", "casts": ["Gladecover Scout"], "actions": [{ "card": "Gladecover Scout" }] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 3, "cast_order": ["Rancor", "Ethereal Armor"], "decision": {
+  "decision_index": 2,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 25, "is_land": true }, { "name": "Gladecover Scout", "idx": 1, "num": 27, "is_land": false }], "vial_counters": [], "hand": [{ "num": 8, "name": "Audacity", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 21, "name": "Ethereal Armor", "cost": "{W}", "mv": 1, "kind": "permanent" }, { "num": 43, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 46, "name": "Rancor", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 47, "name": "Rancor", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 59, "name": "Spirit Link", "cost": "{W}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Rancor → Gladecover Scout, Spirit Link → Gladecover Scout", "land": "Plains", "casts": ["Rancor", "Spirit Link"], "cast_order_canonical": ["Rancor", "Spirit Link"], "actions": [{ "card": "Rancor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 1, "summary": "land=Plains; cast: Spirit Link → Gladecover Scout, Rancor → Gladecover Scout", "land": "Plains", "casts": ["Spirit Link", "Rancor"], "cast_order_canonical": ["Spirit Link", "Rancor"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Rancor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 2, "summary": "land=Plains; cast: Ethereal Armor → Gladecover Scout, Rancor → Gladecover Scout", "land": "Plains", "casts": ["Ethereal Armor", "Rancor"], "cast_order_canonical": ["Ethereal Armor", "Rancor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Rancor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 3, "summary": "land=Plains; cast: Rancor → Gladecover Scout, Ethereal Armor → Gladecover Scout", "land": "Plains", "casts": ["Rancor", "Ethereal Armor"], "cast_order_canonical": ["Rancor", "Ethereal Armor"], "actions": [{ "card": "Rancor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Ethereal Armor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 4, "summary": "land=Plains; cast: Audacity → Gladecover Scout, Spirit Link → Gladecover Scout", "land": "Plains", "casts": ["Audacity", "Spirit Link"], "cast_order_canonical": ["Audacity", "Spirit Link"], "actions": [{ "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 5, "summary": "land=Plains; cast: Spirit Link → Gladecover Scout, Audacity → Gladecover Scout", "land": "Plains", "casts": ["Spirit Link", "Audacity"], "cast_order_canonical": ["Spirit Link", "Audacity"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 6, "summary": "land=Plains; cast: Audacity → Gladecover Scout, Ethereal Armor → Gladecover Scout", "land": "Plains", "casts": ["Audacity", "Ethereal Armor"], "cast_order_canonical": ["Audacity", "Ethereal Armor"], "actions": [{ "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Ethereal Armor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 7, "summary": "land=Plains; cast: Ethereal Armor → Gladecover Scout, Audacity → Gladecover Scout", "land": "Plains", "casts": ["Ethereal Armor", "Audacity"], "cast_order_canonical": ["Ethereal Armor", "Audacity"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 8, "summary": "land=Plains; cast: Spirit Link → Gladecover Scout", "land": "Plains", "casts": ["Spirit Link"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 9, "summary": "land=Plains; cast: Rancor → Gladecover Scout", "land": "Plains", "casts": ["Rancor"], "actions": [{ "card": "Rancor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 10, "summary": "land=Plains; cast: Ethereal Armor → Gladecover Scout", "land": "Plains", "casts": ["Ethereal Armor"], "actions": [{ "card": "Ethereal Armor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 11, "summary": "land=Plains; cast: Audacity → Gladecover Scout", "land": "Plains", "casts": ["Audacity"], "actions": [{ "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 12, "summary": "land=none; cast: Rancor → Gladecover Scout", "land": null, "casts": ["Rancor"], "actions": [{ "card": "Rancor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 13, "summary": "land=none; cast: Audacity → Gladecover Scout", "land": null, "casts": ["Audacity"], "actions": [{ "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 14, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 4, "cast_order": ["Rancor", "Spirit Link"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Slippery Bogle" }],
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Gladecover Scout (5) — 5 to opponent (20→15)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ethereal Armor", "idx": 4, "num": 21, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Forest", "idx": 0, "num": 25, "is_land": true }, { "name": "Gladecover Scout", "idx": 1, "num": 27, "is_land": false }, { "name": "Plains", "idx": 2, "num": 43, "is_land": true }, { "name": "Rancor", "idx": 3, "num": 46, "is_aura": true, "attached_to": 27, "is_land": false }], "vial_counters": [], "hand": [{ "num": 8, "name": "Audacity", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 47, "name": "Rancor", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 54, "name": "Slippery Bogle", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Spirit Link", "cost": "{W}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Slippery Bogle, Spirit Link → Gladecover Scout", "land": null, "casts": ["Slippery Bogle", "Spirit Link"], "cast_order_canonical": ["Slippery Bogle", "Spirit Link"], "actions": [{ "card": "Slippery Bogle" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 1, "summary": "land=none; cast: Spirit Link → Gladecover Scout, Slippery Bogle", "land": null, "casts": ["Spirit Link", "Slippery Bogle"], "cast_order_canonical": ["Slippery Bogle", "Spirit Link"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Slippery Bogle" }] },
+    { "index": 2, "summary": "land=none; cast: Slippery Bogle, Spirit Link → Slippery Bogle", "land": null, "casts": ["Slippery Bogle", "Spirit Link"], "cast_order_canonical": ["Slippery Bogle", "Spirit Link"], "actions": [{ "card": "Slippery Bogle" }, { "card": "Spirit Link", "enchant_target": 54, "enchant_target_name": "Slippery Bogle" }] },
+    { "index": 3, "summary": "land=none; cast: Slippery Bogle", "land": null, "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 4, "summary": "land=none; cast: Rancor → Gladecover Scout, Spirit Link → Gladecover Scout", "land": null, "casts": ["Rancor", "Spirit Link"], "cast_order_canonical": ["Rancor", "Spirit Link"], "actions": [{ "card": "Rancor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 5, "summary": "land=none; cast: Spirit Link → Gladecover Scout, Rancor → Gladecover Scout", "land": null, "casts": ["Spirit Link", "Rancor"], "cast_order_canonical": ["Spirit Link", "Rancor"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Rancor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 6, "summary": "land=none; cast: Audacity → Gladecover Scout, Spirit Link → Gladecover Scout", "land": null, "casts": ["Audacity", "Spirit Link"], "cast_order_canonical": ["Audacity", "Spirit Link"], "actions": [{ "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 7, "summary": "land=none; cast: Spirit Link → Gladecover Scout, Audacity → Gladecover Scout", "land": null, "casts": ["Spirit Link", "Audacity"], "cast_order_canonical": ["Spirit Link", "Audacity"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }, { "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 8, "summary": "land=none; cast: Spirit Link → Gladecover Scout", "land": null, "casts": ["Spirit Link"], "actions": [{ "card": "Spirit Link", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 9, "summary": "land=none; cast: Rancor → Gladecover Scout", "land": null, "casts": ["Rancor"], "actions": [{ "card": "Rancor", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 10, "summary": "land=none; cast: Audacity → Gladecover Scout", "land": null, "casts": ["Audacity"], "actions": [{ "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Alpha Authority" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Gladecover Scout (9) — 9 to opponent (15→6)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 29, "battlefield": [{ "name": "Ethereal Armor", "idx": 4, "num": 21, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Forest", "idx": 0, "num": 25, "is_land": true }, { "name": "Gladecover Scout", "idx": 1, "num": 27, "is_land": false }, { "name": "Plains", "idx": 2, "num": 43, "is_land": true }, { "name": "Rancor", "idx": 3, "num": 46, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Rancor", "idx": 6, "num": 47, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Spirit Link", "idx": 7, "num": 59, "is_aura": true, "attached_to": 27, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Alpha Authority", "cost": "{1}{G}", "mv": 2, "kind": "permanent" }, { "num": 8, "name": "Audacity", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 54, "name": "Slippery Bogle", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Slippery Bogle", "land": null, "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] },
+    { "index": 1, "summary": "land=none; cast: Audacity → Gladecover Scout", "land": null, "casts": ["Audacity"], "actions": [{ "card": "Audacity", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 2, "summary": "land=none; cast: Alpha Authority → Gladecover Scout", "land": null, "casts": ["Alpha Authority"], "actions": [{ "card": "Alpha Authority", "enchant_target": 27, "enchant_target_name": "Gladecover Scout" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
