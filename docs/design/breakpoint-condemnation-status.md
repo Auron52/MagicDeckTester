@@ -552,6 +552,71 @@ condemnations are the same table as above (Twinflame at Expedite, the magnets at
 The principled next fix is to stop inferring the decline from a static rank at all: condemn only when
 the plan actually cast something BEFORE the site. Untried.
 
+## THE ORDER PROGRAMME (USER, 2026-08-27) -- the direction this work takes next
+
+Four steers, in the USER's words, which together replace "tune the prune" with "fix the order":
+
+> *"I don't want to exempt things from the prune. Instead, I want to figure out an order that works
+> reliably with occasional cases where a specific card is given a range."*
+> *"Essentially condemnation is all about search declining to play a card in our order without a
+> legitimate excuse for not doing so."*
+> *"And by adjusting the order and rules, we want to make there no legitimate excuses for choosing a
+> different order."*
+> *"So, essentially, we condemn if we can play a card in the order and choose not to do so. This
+> would not condemn the extra lands, but not emit them until we actually have the option to play
+> them."*
+
+So condemnation is not a prune to be tuned but a **detector for order defects**: every line it
+deletes is a case where the declared order disagrees with the line that wins. Exempting where it
+bites suppresses the detector. `MTG_BP_CONDEMN_TAIL_EXEMPT` is therefore back to **default OFF** and
+kept only as a diagnostic (it isolates that 93.4% of firings sit at no-tail plans, carrying ~93% of
+the work saving) and as the fallback if no reliable order exists.
+
+### The land drop is part of the order, and for Mirrorwing it goes FIRST
+
+**USER, 2026-08-27: *"Land drop can go first in this deck."*** That settles the open question and
+makes land condemnation well-defined:
+
+* *"no land drop is a true play the game can make... and this play condemns all lands in hand"* --
+  declining the drop at its slot is a real move, so having declined it, a land already in hand may not
+  be played later in the continuation. A land **drawn** at the breakpoint is a new card and is exempt
+  under the existing rule.
+* The EMISSION half is already correct and needs nothing built: `LandDropsAvailable()` gates land
+  actions, so a land that cannot be played is never offered and never reads as a decline. Confirmed
+  empirically -- **no land is condemned in 175,481 firings**, because condemnation lives in the CAST
+  enumeration only.
+
+**What this predicts, and it is the next measurement.** Of 28 post-trick land plays in winning
+(condemnation-off) turns, **28 were lands already in hand and 0 were drawn by the trick** -- i.e. the
+search routinely defers a held drop past its casts. With the drop pinned first, those deferrals become
+order violations. The USER's position is that they are the search exploiting a missing rule and that
+playing the land at its slot wins just as fast. **Test:** pin the drop, replay those turns, see
+whether the win turn moves. If it does not, land condemnation is free and correct, and it TIGHTENS
+the prune rather than loosening it -- the opposite direction from every exemption in this document.
+
+### The legitimate excuse looks like ONE rule, not several
+
+Of 23 turns where a trick is cast ahead of a body, 12 play a land immediately afterwards -- the
+trick's draw supplied the land drop the rest of the turn needed. Same shape as Gold Rush's Treasure:
+
+> **A card may be cast ahead of its slot only when doing so supplies a RESOURCE the rest of the line
+> needs and cannot otherwise get** -- mana or colour (Gold Rush's Treasure), or a card / land drop (a
+> cantrip's draw; Scale the Heights' `grants_extra_land_drop` states it outright).
+
+One rule, several instances, which is what *"no legitimate excuses"* wants. Note it is the same
+mechanism `CastOrderFallbackRanks` + `FirstUnpayablePos` already implement for Gold Rush -- walk a
+card earlier only while the line cannot otherwise be paid.
+
+### SCOPE WARNING -- the card-level numbers above are on the ARCHIVED decklist
+
+Everything measured in the bug-8 section used `decks/Mirrorwing Dragon/v1-twinflame-anger`, which is
+the archived variant. The shipped list (and the one `test/regression_cases.sh` uses) is the top-level
+deck, which **drops Twinflame, Expedite, Ancestral Anger and Scale the Heights** -- every card in the
+condemnation tables, Twinflame alone being 103,698 of the firings. The STRUCTURAL findings should
+carry (the rank test enforcing an order `OrderingOpaque` refuses to apply; 48.2% of condemnations at
+plans whose only cast is the site; "no land drop" being an unmodelled play). Every card-level number
+must be re-derived on the shipped deck before it is used.
+
 ### Two exemptions built for Mirrorwing and DELETED -- recorded so they are not re-proposed
 
 * **A copy-MAGNET exemption.** By count the magnet looks like the dominant victim (gi=13 turn 4:
