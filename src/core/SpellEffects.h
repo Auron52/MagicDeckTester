@@ -893,6 +893,11 @@ inline bool DripManaWantedLaterThisTurn(const GameState& state, int controller_i
         if (!d) { continue; }
         const bool produces = d->card.IsLand() || !d->params.produces.empty();
         if (!produces) { continue; }
+        // Deliberately counts a summoning-sick dork as available: a CanTapNow-exact count was
+        // tried (2026-08-27) and measured WORSE -- seeing one source fewer tipped this gate into
+        // deferring the drip sweep for a second-main cast greedy play then never made
+        // (antilife regression d0 s2002 gi604/gi652 each lost a turn, +0.002 net). The crude
+        // count's optimism is load-bearing, same lesson as the prepay projection fixes.
         ++untapped;
         if (d->params.tap_opponent_lifegain > 0) { ++drips; }
     }

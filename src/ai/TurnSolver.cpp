@@ -13703,7 +13703,27 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             };
             std::vector<int> cand;
             cand.reserve(static_cast<std::size_t>(newly_n));
-            for (int i = 0; i < lim; ++i) { if (newly & (1ull << i)) { cand.push_back(i); } }
+            // A drip land (tap_opponent_lifegain, e.g. Grove of the Burnwillows) tapped while a
+            // lifegain->loss enabler is live is NOT an over-tap: its "surplus" tap already dealt
+            // 1 damage, and giving it back refunds that damage. The end-of-main sweep cannot
+            // recover it either when the same turn's casts destroy the enabler (Anti-Lifegain
+            // s5/gi4: Reverent Silence kills our own Tainted Remedy, so the two Grove drips are
+            // harvestable only at payment time -- the shrink refunding them cost the recorded T4
+            // kill). Keep such taps; release only genuinely wasted sources. Lazily evaluated:
+            // no drip land among the candidates (every deck but Anti-Lifegain) => unchanged.
+            int drip_useful = -1;   // -1 unknown, else 0/1
+            for (int i = 0; i < lim; ++i)
+            {
+                if (!(newly & (1ull << i))) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(bf_snap[i].card);
+                if (d && d->params.tap_opponent_lifegain > 0)
+                {
+                    if (drip_useful < 0)
+                    { drip_useful = ResolveProvider(state).OpponentLifegainUseful(state, active) ? 1 : 0; }
+                    if (drip_useful == 1) { continue; }
+                }
+                cand.push_back(i);
+            }
             std::stable_sort(cand.begin(), cand.end(),
                              [&](int a, int b) { return flex(a) > flex(b); });
             // Start from the hold the accepted solve ran under, and add to it. Everything the

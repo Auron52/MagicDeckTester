@@ -42,12 +42,22 @@ Pieces (all have per-verb precedents in the same files):
 
 ## Also open from the same session
 
-* **Anti-Lifegain s5/gi4 play-drift (T4→T5)**: the reference protocol gate's one red entry. Proven
-  to be the `MTG_PREPAY_SHRINK` adoption (rebased in from the other machine): the sweep is clean
-  under `MTG_PREPAY_SHRINK=0`. The shrink measured neutral-or-better in aggregate but breaks this
-  one recorded human line's replay. Options: scope the shrink off under human play (the
-  human-line-vs-AI-average precedent), deeper repair of the replay walk, or accept-and-re-save.
-  **USER decision pending.**
+* **Anti-Lifegain s5/gi4 play-drift (T4→T5): RESOLVED (2026-08-27) — engine fixed, reference
+  untouched.** The human line was CORRECT play; the drift exposed three real engine gaps, all
+  fixed: (1) the prepay-shrink give-back was refunding Grove-of-the-Burnwillows taps made while
+  Tainted Remedy was live — under a lifegain→loss enabler a drip tap is 1 free damage, not an
+  over-tap, and on this line it is harvestable ONLY at payment time because the same turn's
+  Reverent Silence destroys our own Remedy (so the end-of-main sweep can never recover it); the
+  shrink now keeps beneficial drip taps (TurnSolver prepay shrink candidate filter). (2) The
+  external-chooser (claude-play human) path returned from TakeTurn before the TapDripLandsIfUseful
+  end-of-main sweep — human play never swept leftover Groves at all; the call is now mirrored
+  there. (3) DripManaWantedLaterThisTurn counted summoning-sick dorks as available mana
+  (CanTapNow is THE predicate), wrongly deferring the sweep for second-main casts the real
+  enumerator refuses. Result: the full 240-reference sweep is 0 play-drift / 0 contract-fail, and
+  the USER'S RULE is now doctrine: index REPAIR is always acceptable; a reference's WIN TURN
+  changing never is — it means the engine got worse (fix the engine), unless the AI can PROVE to
+  the user the recorded line rode an engine bug (then, with the user's sign-off, the reference is
+  marked invalid instead). "Draws diverged" is a symptom, never the verdict.
 * **Deck-version selector** (USER 2026-08-27): a separate viewer selector to play OLD or modified
   deck versions (e.g. `decks/Mirrorwing Dragon/v1-twinflame-anger/` — the archived list whose 24
   references exist), defaulting to the latest stable version; maturity/references/bench resolve

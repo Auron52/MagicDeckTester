@@ -1,4 +1,4 @@
-# Regression ground truth -- commit c46bd443  date 2026-08-27
+# Regression ground truth -- commit 2162933b  date 2026-08-27
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -16,7 +16,7 @@ th_smoke_d5_s1001=4.0000/36ebcbf3bec97263
 knights_smoke_d0_s1001=4.5400/c25cdc82b946acb0
 knights_smoke_d3_s1001=4.3960/bb65a61d4760365d
 knights_smoke_d5_s1001=4.3933/c9d6dfa4735f4d26
-antilife_smoke_d0_s1001=4.8930/98267c57c2c18b7e
+antilife_smoke_d0_s1001=4.8930/ea45a9ecc08bd11a
 antilife_smoke_d3_s1001=4.1840/726a4d9fdd7c7fe1
 antilife_smoke_d5_s1001=4.1800/3ecdd4539cc15180
 hinata_smoke_d0_s1001=6.9690/f070da7e1353ad81
@@ -68,7 +68,7 @@ knights_regression_d3_s2002=4.3033/9a2479408633b3a3
 knights_regression_d3_s3003=4.3667/7f2338b9856e07e1
 knights_regression_d5_s2002=4.2760/cd16b93c6eaf1a86
 knights_regression_d5_s3003=4.3640/40a0ff078cdc76ad
-antilife_regression_d0_s2002=4.9800/217c0b1f37986963
+antilife_regression_d0_s2002=4.9800/a93c57e2f37bd1fe
 antilife_regression_d3_s2002=4.2833/4674c2e35f5abd0d
 antilife_regression_d3_s3003=4.2000/5e817469abb48cdb
 antilife_regression_d5_s2002=4.3000/3fd6eba2dc24247f

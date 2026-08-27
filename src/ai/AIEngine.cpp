@@ -1890,6 +1890,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             prev_inplay = std::move(cur_inplay);
         }
 
+        // Grove of the Burnwillows drip -- the same end-of-pre-combat-main sweep the autonomous
+        // executor (below, ~3716) and the rollout (ApplyPlanDirect) both run. This external-chooser
+        // path returns before reaching that call, so human play never swept leftover drip lands;
+        // the gap was masked while payment over-tapped Groves as a side effect, and surfaced when
+        // MTG_PREPAY_SHRINK removed the over-tap (Anti-Lifegain s5/gi4: the recorded T4 kill needed
+        // the two Grove drips and slipped to T5).
+        if (is_pre_combat_main) { TapDripLandsIfUseful(state, state.active_player_index); }
+
         // Restore unplayed staged cards (mirror the normal end-of-TakeTurn restore):
         // cards cast were removed from hand; the rest, still flagged m_is_staged, go
         // back to staged_cards so they expire correctly (CR 406).
