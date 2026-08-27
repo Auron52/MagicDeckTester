@@ -19553,9 +19553,32 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
     if (!s_human_play_enum) { return; }
     const Player& ap = state.ActivePlayer();
 
-    auto can_afford = [&](const std::string& name, bool is_sac, const ManaCost& cost) -> bool
+    // LAND-DROP VARIANTS (USER 2026-08-27, treasure_hunt seed 8: "I can't play the Island and
+    // sacrifice in that order"): a dig's cost is paid by the greedy, so WHICH lands are down when
+    // it fires decides which source is spent -- with a fresh Island unplayed, Fiery Islet's
+    // sac-to-draw {1} killed a last-counter Saprazzan Skerry. Standalone-only digs made the
+    // land-then-dig order unenumerable. So each dig is also offered once per distinct land option
+    // the base plans already fanned over -- harvested from `all` (rather than re-deriving hand
+    // lands) so a dig variant inherits every land-legality rule (fetch targets, MDFC faces, forced
+    // early land, fan cap) for free and can never offer an unplayable drop. ApplyPlanDirect plays
+    // land_to_play before the action loop, so the drop's mana funds the dig's cost.
+    struct LandOpt { std::string land, fetch, face; };
+    std::vector<LandOpt> land_opts;
+    {
+        std::unordered_set<std::string> lseen;
+        for (const TurnSolver::Plan& p : all)
+        {
+            if (p.land_to_play.empty()) { continue; }
+            if (lseen.insert(p.land_to_play + "\x1f" + p.fetch_target + "\x1f" + p.land_face).second)
+            { land_opts.push_back({p.land_to_play, p.fetch_target, p.land_face}); }
+        }
+    }
+
+    auto can_afford = [&](const std::string& name, bool is_sac, const ManaCost& cost,
+                          const LandOpt* lo) -> bool
     {
         GameState copy = state;
+        if (lo && !PlayLandByName(copy, lo->land, lo->fetch, true, lo->face)) { return false; }
         if (is_sac)
         {
             int idx = -1;
@@ -19568,18 +19591,34 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
             if (idx < 0) { return false; }
             copy.battlefield[idx].tapped = true;   // {T}: source can't pay its own cost
         }
+        else
+        {
+            // Cycling spends the card from HAND; a land variant that consumed the last copy as
+            // the drop (PlayLandByName above) has nothing left to cycle.
+            bool in_hand = false;
+            for (const Card& c : copy.ActivePlayer().hand)
+            { if (c.m_name == name) { in_hand = true; break; } }
+            if (!in_hand) { return false; }
+        }
         return TapForCostDirect(copy, cost, false);
     };
-    auto add_dig = [&](const std::string& name, bool is_sac)
+    auto add_dig = [&](const std::string& name, bool is_sac, const LandOpt* lo)
     {
         TurnSolver::Plan v;
-        v.land_decided = true;   // a dig spends no land drop; never greedy-play a land
+        v.land_decided = true;   // explicit drop or none; never greedy-play a land
+        if (lo) { v.land_to_play = lo->land; v.fetch_target = lo->fetch; v.land_face = lo->face; }
         Action dg;
         dg.kind          = Action::Kind::DigDraw;
         dg.card_name     = name;
         dg.dig_sacrifice = is_sac;
         v.actions.push_back(std::move(dg));
         all.push_back(std::move(v));
+    };
+    auto add_variants = [&](const std::string& name, bool is_sac, const ManaCost& cost)
+    {
+        if (can_afford(name, is_sac, cost, nullptr)) { add_dig(name, is_sac, nullptr); }
+        for (const LandOpt& lo : land_opts)
+        { if (can_afford(name, is_sac, cost, &lo)) { add_dig(name, is_sac, &lo); } }
     };
 
     std::unordered_set<std::string> seen;
@@ -19589,7 +19628,7 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
         if (!d || !d->params.cycling_cost.has_value()) { continue; }
         std::string nm = c.m_name.str();
         if (!seen.insert("c:" + nm).second) { continue; }
-        if (can_afford(nm, false, d->params.cycling_cost.value())) { add_dig(nm, false); }
+        add_variants(nm, false, d->params.cycling_cost.value());
     }
     for (const Permanent& p : state.battlefield)   // sac-to-draw lands in play (Fiery Islet)
     {
@@ -19598,7 +19637,7 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
         if (!d || !d->params.sacrifice_draw_cost.has_value()) { continue; }
         std::string nm = p.card.m_name.str();
         if (!seen.insert("s:" + nm).second) { continue; }
-        if (can_afford(nm, true, d->params.sacrifice_draw_cost.value())) { add_dig(nm, true); }
+        add_variants(nm, true, d->params.sacrifice_draw_cost.value());
     }
 }
 
