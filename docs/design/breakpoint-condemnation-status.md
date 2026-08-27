@@ -348,6 +348,28 @@ special-casing "the site made mana". Two loose ends to pick up with it:
   USER's 2026-08-27 *"spells should go last in the order"*. If the range is ever adopted, that floor
   needs revisiting -- the base order is already spells-last; only the ladder violates it.
 
+#### THE DECISION TO MAKE NEXT (USER, 2026-08-27)
+
+> *"We can decide which approach is better in general, your rule or just expanding the range. We
+> could potentially only allow this if a magnet is already present."*
+
+Three arms, and they are directly comparable because the census above gives an objective scorer:
+**how many regressions survive 100x budget AND +1 depth** (3 today, 10 before the site rule), with
+quality and work units alongside.
+
+| arm | what it is | note |
+|---|---|---|
+| **A. site rule** | `MTG_BP_CONDEMN_MANA_SITE_EXEMPT` (shipped, default ON) | condemns nothing at a mana-adding site; blunt — it drops the prune everywhere Gold Rush fires |
+| **B. range** | turn on `MTG_ORDER_RANGE` and let Gold Rush's declared `[6..15]` ladder express the affordability-dependent slot; condemnation then respects the range | the USER's preferred framing; needs the floor revisited (6 is ahead of the bodies, vs *"spells go last"*) |
+| **C. either, magnet-gated** | apply A or B only while a copy magnet is already on the battlefield | a trick cast before any magnet is out is NOT copied, so those lines are worth deleting — this is what killed the magnet exemption, and it should sharpen A or B the same way |
+
+**Do NOT score these by condemnation counts.** Three times this session the count pointed the wrong
+way (see VOLUME IS NOT HARM below). Score on the unrecoverable census + the paired metric.
+
+Note B is not merely a re-spelling of A: A says "this SITE invalidates every decline", B says "this
+CARD has no single proper slot". B is narrower and more honest about what is actually true of Gold
+Rush, and it leaves condemnation working at mana-adding sites for every other card.
+
 ### Two exemptions built for Mirrorwing and DELETED -- recorded so they are not re-proposed
 
 * **A copy-MAGNET exemption.** By count the magnet looks like the dominant victim (gi=13 turn 4:
