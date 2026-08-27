@@ -819,59 +819,52 @@ static bool BpCondemnReducerExemptEnabled()
     return heurarm::Flag(heurarm::BP_CONDEMN_REDUCER, on);
 }
 
-// COPY-MAGNET EXEMPTION (MTG_BP_CONDEMN_COPY_EXEMPT) -- bug 7, DEFAULT ON.
-//
-// A copy magnet (Zada / Mirrorwing Dragon, `copies_solo_targeted_spells`) copies a solo-target spell
-// once per OTHER creature you control. So a trick's whole value is a function of the creature count
-// -- and the turn changes that count, with every body-maker and every token. "Cast it earlier
-// instead" is therefore NOT equivalent to casting it later; it is a strictly weaker spell.
-//
-// ROOT-CAUSED (Mirrorwing, 2026-08-26), and the damage runs the OPPOSITE way to bugs 4 and 6. There
-// condemnation deleted a cast; here it FORCES ONE EARLY. Banning the trick in the continuation
-// removes "decline now, cast it after the draws have added bodies", leaving only "cast it now" --
-// train gi=13: the baseline holds Gold Rush on T2 and casts it twice on T3/T4 with more creatures
-// out for a T4 win; the condemning arm casts it bare on T2 and wins T5.
-//
-// Gated on a magnet being ON THE BATTLEFIELD, so this is a board-state rule and not a per-deck one:
-// any deck that assembles a copy engine gets it, and a deck without one is untouched. Of the 15
-// suite decks only Mirrorwing contains a magnet at all, so it is provably inert on the other 14.
-//
-// MEASURED (n=3000/cell, two blocks, play settings), against condemnation WITHOUT this exemption:
-//     quality  -0.0023 (t=-2.11) train, -0.0053 (t=-4.01) hold, 16 faster : 0 slower
-//     cost     a further -0.19% / -0.52% work units
-// and against condemnation OFF it turns a mild loss into a wash-or-better (+0.0027/+0.0013 becomes
-// +0.0003/-0.0040) while keeping the full -3.6%/-2.5% saving.
-//
-// VOLUME IS NOT HARM, for the second time on this filter: the exemption removes only 0.7% of
-// Mirrorwing's condemnations (19,265 -> 19,133 per 8 games) and that 0.7% is the entire quality
-// gain. Bug 5 was the mirror case -- 85% of the count, none of the damage. Never rank this filter's
-// bugs by how often they fire.
-static bool BpCondemnCopyExemptEnabled()
-{
-    static const bool on = EnvOn("MTG_BP_CONDEMN_COPY_EXEMPT", true);   // DEFAULT ON (bug 7)
-    return heurarm::Flag(heurarm::BP_CONDEMN_COPY, on);
-}
-
-static bool BpCopyMagnetInPlay(const GameState& state)
-{
-    const int me = state.active_player_index;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != me) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d != nullptr && d->params.copies_solo_targeted_spells) { return true; }
-    }
-    return false;
-}
-
 static bool BpCondemnTutorExemptEnabled()
 {
     static const bool on = EnvOn("MTG_BP_CONDEMN_TUTOR_EXEMPT", true);    // DEFAULT ON (bug 5)
     return heurarm::Flag(heurarm::BP_CONDEMN_TUTOR, on);
 }
 
+// MANA-ADDING SITE (MTG_BP_CONDEMN_MANA_SITE_EXEMPT) -- bug 7, DEFAULT ON. A SITE rule rather than
+// another card-type exemption, and the one the UNRECOVERABLE lines actually point at.
+//
+// Condemnation's premise is that the pre-breakpoint section CONSIDERED a card and declined it. That
+// premise dies wholesale when the breakpoint's own spell ADDS MANA, because every declined decision
+// was taken under a smaller pool. Two distinct ways it bites, both measured on Mirrorwing:
+//   * a card that was UNPAYABLE before is not a decline at all -- gi=1205 turn 4 has 6 mana (Game
+//     Trail 1 + Sandstone Needle 2 + Mountain 1 + Forest 1 + Ignoble Hierarch 1) and the winning
+//     line spends 7, so Gold Rush's Treasure is what pays for Zada;
+//   * an X-SPELL is always "payable" at X=0 so the payability guard never protects it, but its SIZE
+//     scales with the pool -- Luxurious Libation is {X}{G} and wants the Treasures.
+//
+// So the rule keys on the SITE, not the candidate: if the card that opened this breakpoint made
+// mana, condemn nothing here.
+//
+// MEASURED (Mirrorwing, n=3000/cell, two blocks). Of the 28 condemnation regressions, 10 survived
+// 100x budget AND +1 depth -- the standing test for a genuinely deleted line, and the class the
+// no-lossy-truncation bar rejects outright. Gold Rush is the SITE in 8 of those 10, and this rule
+// recovers 9 of the 10 (they stay recovered at 100x/+1 ply). Aggregate vs condemnation OFF:
+// -0.0013 (t=-0.85) train, -0.0037 (t=-1.48) hold, still -2.5%/-1.5% search work. It gives back
+// about a third of the prune saving, which is what condemning less is supposed to cost.
+//
+// It SUBSUMED an earlier copy-magnet exemption, which was deleted: with this rule in, that one
+// measured -0.0003 (t=-0.58) / +0.0003 (t=1.00) -- nothing.
+static bool BpCondemnManaSiteExemptEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_MANA_SITE_EXEMPT", true);   // DEFAULT ON (bug 7)
+    return heurarm::Flag(heurarm::BP_CONDEMN_MANA_SITE, on);
+}
+
+static bool BpSiteAddedMana()
+{
+    if (!BpCondemnManaSiteExemptEnabled() || g_bp_site_def == nullptr) { return false; }
+    const CardParams& sp = g_bp_site_def->params;
+    return sp.creates_treasures > 0 || sp.ritual_floating_mana > 0 || sp.untap_x_mana_sources;
+}
+
 static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
 {
+    if (BpSiteAddedMana()) { return true; }   // mana-adding site: nothing here was a real decline
     if (!BpCondemnOrderAwareEnabled() || g_bp_site_def == nullptr) { return false; }
     const CardDefinition* cd = CardDatabase::Instance().LookupCached(cand);
     if (cd == nullptr) { return false; }
@@ -905,18 +898,6 @@ static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
     // separately because they make different claims: this one says a tutor is never condemnable
     // anywhere, that one says this deck's tutor belongs after its card selection.
     if (BpCondemnTutorExemptEnabled() && cd->params.tutor_to_hand) { return true; }
-    // ...and, under a copy magnet, a solo-target trick or any body-maker feeding it: both are
-    // accelerants for the copy count. See BpCondemnCopyExemptEnabled.
-    if (BpCondemnCopyExemptEnabled()
-        && (// The MAGNET ITSELF is never condemnable: it multiplies every trick cast after it, so it
-            // is an accelerant in exactly bug 6's sense. Not gated on one being in play -- the whole
-            // point is that it is still in HAND. Measured on gi=13 turn 4, the magnets are the
-            // DOMINANT victims: Mirrorwing Dragon 1,798 + Zada 1,158 at Gold Rush sites (rank 5 vs
-            // 15) against 586 for Gold Rush itself.
-            cd->params.copies_solo_targeted_spells
-            || (BpCopyMagnetInPlay(state)
-                && (cd->params.solo_target_trick || cd->params.etb_self_creates_tokens > 0
-                    || cd->params.trick_token_power > 0)))) { return true; }
     // ...and a COST REDUCER, which is an accelerant that pays in discounts rather than in mana.
     if (BpCondemnReducerExemptEnabled()
         && (cd->params.hinata_cost_reducer

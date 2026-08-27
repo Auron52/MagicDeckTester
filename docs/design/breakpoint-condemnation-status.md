@@ -293,44 +293,52 @@ counters at the divergence turn are empty.
 In a Zada / Mirrorwing deck a solo-target trick is copied once per other creature, so a trick cast
 before the turn's bodies arrive is a drastically weaker spell -- that part stands.
 
-**And the dominant victim is the MAGNET ITSELF.** On gi=13 turn 4: Mirrorwing Dragon (rank 5) 1,798
-and Zada (5) 1,158 condemned at Gold Rush sites (15), against 586 for Gold Rush at Fists sites. The
-magnet multiplies every trick cast after it, so it is an accelerant in exactly bug 6's sense, and it
-is exempted unconditionally (NOT gated on one being in play -- the whole point is that it is still in
-hand).
+### The UNRECOVERABLE census, and the rule it produced
 
-Two exemptions follow, both the accelerant argument again:
+Aggregate neutrality is not the bar; the no-lossy-truncation bar is. So all 28 of Mirrorwing's
+condemnation regressions were escalated on BOTH arms at 10x, 100x, and 100x + 1 depth ply:
 
-* **Treasure-makers** (`creates_treasures`) join the RITUAL exemption -- a Treasure is stored mana,
-  so minting one is a ritual that pays later. Gold Rush (rank 15) was condemned at Fists of Flame
-  sites (16). *Honest caveat: this was folded in without its own arm. It removes 12% of the
-  condemnations, and the aggregate moved within noise -- it is kept on the soundness argument, not
-  on a measured win.*
-* **Solo-target tricks and body-makers while a copy magnet is on the battlefield**
-  (`MTG_BP_CONDEMN_COPY_EXEMPT`, default ON). A board-state rule, not a per-deck one; only Mirrorwing
-  contains a magnet at all, so it is provably inert on the other 14 suite decks.
+**10 of 28 survived 100x budget AND +1 depth** -- genuinely deleted lines, the class the bar rejects
+outright. **Gold Rush is the breakpoint SITE in 8 of the 10.**
 
-FINAL numbers, with the magnet exemption in (n=3000/cell, two blocks, play settings):
+That is the clue. Gold Rush mints a Treasure (one per creature when a magnet copies it), so its
+continuation is exactly where the turn's affordability changes -- and condemnation bans everything
+ranked before it there. Two distinct ways it bites:
 
-| contrast | train | hold | work |
-|---|---|---|---|
-| condemnation vs OFF, no copy exemption | +0.0027 (t=1.23) | +0.0013 (t=0.43) | -3.44% / -1.95% |
-| **+ copy exemption vs OFF** | **-0.0003 (t=-0.19)** | **-0.0043 (t=-1.57)** | **-3.29% / -2.21%** |
-| the exemption itself | -0.0030 (t=-2.33) | **-0.0057 (t=-4.13), 17 faster : 0 slower** | +0.16% / -0.26% |
+* a card that was UNPAYABLE before is not a decline at all. gi=1205 turn 4 has 6 mana available
+  (Game Trail 1 + Sandstone Needle 2 + Mountain 1 + Forest 1 + Ignoble Hierarch 1) and the winning
+  line spends 7 ({1}{G} Gold Rush, {3}{R} Zada, {G} Draught) -- the Treasure is what pays for Zada.
+* an X-SPELL is always "payable" at X=0, so the payability guard never protects it, but its SIZE
+  scales with the pool. Luxurious Libation is {X}{G} and wants those Treasures.
 
-So Mirrorwing ends quality-neutral-to-BETTER than condemnation-off on both blocks, and ~3% cheaper.
+So the fix keys on the **SITE, not the candidate**: `MTG_BP_CONDEMN_MANA_SITE_EXEMPT` (default ON) --
+**if the card that opened this breakpoint made mana, condemn nothing here.** Result:
 
-*Honest limit: the MAGNET half of the exemption cannot be separated from the trick half at this n.
-Trick-only measured -0.0023 / -0.0053 and trick+magnet -0.0030 / -0.0057 on the same seeds -- a
-difference well inside the noise. The magnet is exempted on the bug-6 argument and because it is the
-dominant victim by count, not on a measured delta of its own.*
+| | before | after |
+|---|---|---|
+| regressions | 28 | 19 |
+| **UNRECOVERABLE** | **10** | **3** |
+| quality vs OFF (train / hold) | +0.0003 / -0.0040 | -0.0010 (t=-0.60) / -0.0040 (t=-1.60) |
+| search work vs OFF | -3.62% / -2.46% | -2.62% / -1.51% |
 
-### VOLUME IS NOT HARM -- twice, in opposite directions
+It gives back about a third of the prune saving, which is what condemning less is supposed to cost.
+*Honest limit: it is not free -- it fixed 8 of the original worse games and introduced 3 new ones,
+2 of which are among the 3 remaining unrecoverable.* The three that remain are condemned at
+Impolite Entrance / Fists of Flame sites (draw and pump, not mana), so they are a different cause
+and are NOT explained by this rule.
 
-The copy exemption removes **0.7%** of Mirrorwing's condemnations (19,265 -> 19,133) and that 0.7% is
-the entire quality gain. Bug 5 was the mirror image: the tutor exemption removed **85%** of Hinata's
-condemnations and almost none of its damage. A condemnation counter tells you nothing about which
-condemnations matter -- always measure the metric.
+### Two exemptions built for Mirrorwing and DELETED -- recorded so they are not re-proposed
+
+* **A copy-MAGNET exemption.** By count the magnet looks like the dominant victim (gi=13 turn 4:
+  Mirrorwing Dragon 1,798 + Zada 1,158 at Gold Rush sites). Isolated it measures **-0.0007
+  (t=-1.00) / -0.0003 (t=-1.00)** -- 4 games fixed, 1 broken, over 6,000. The USER's question killed
+  it: *"Why would you ever want to cast the magnet after Gold Rush? Unless it is a duplicate magnet
+  or something?"* -- exactly right. Of the 4 it fixes only 2 are the duplicate-magnet case; the other
+  2 cast the FIRST magnet after Gold Rush, and a trick cast before any magnet is out is not copied
+  at all, so that is a line worth deleting.
+* **A copy-magnet TRICK exemption** (don't condemn a solo-target trick while a magnet is in play).
+  It measured well on its own, but once the mana-site rule is in it is **redundant**: -0.0003
+  (t=-0.58) / +0.0003 (t=1.00). Deleted in favour of the single site rule.
 
 ### What this does NOT fix
 
