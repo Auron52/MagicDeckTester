@@ -586,11 +586,21 @@ Deferring a land drop is an INFORMATION play -- hold it until you see what you d
 search already knows. It is the same principle the USER used to justify condemnation in the first
 place (*"'more information' is irrelevant to the clairvoyant player"*), applied to the land drop.
 
-So the only surviving reasons to defer are MECHANICAL, not informational: a Karoo bounce land, a
-storage land, Land's Edge ammo, landfall timing. The engine already carries
-`HoldDeferredDropForLethal` and a `karoo_deferred` reservation for exactly those, which is what the
-pin must continue to respect. The USER scoped the statement to this deck (*"in this deck"*), and the
-mechanical exceptions are why that scoping is right even though the clairvoyance argument is general.
+And the one case where deferring genuinely does pay is **already covered by an existing rule**:
+
+> ***"There is an advantage to deferring in the case we draw a better land, but that case is not
+> condemned. So, simple rules work here."***
+
+A land the breakpoint DRAWS is a new card, and the drawn-card exemption already spares it -- the same
+rule that spares a drawn cantrip. So the pin does not have to carve out the one exception that
+matters; it inherits it. That is the whole argument for keeping the rule simple rather than
+conditional, and it is why "pin the drop, condemn the held lands" is safe here.
+
+The remaining reasons to defer are MECHANICAL, not informational: a Karoo bounce land, a storage
+land, Land's Edge ammo, landfall timing. The engine already carries `HoldDeferredDropForLethal` and a
+`karoo_deferred` reservation for exactly those, which is what the pin must continue to respect. The
+USER scoped the statement to this deck (*"in this deck"*), and those mechanical exceptions are why
+the scoping is right even though the clairvoyance argument is general.
 
 That settles the open question and makes land condemnation well-defined:
 
