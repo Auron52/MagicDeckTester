@@ -272,10 +272,32 @@ mulligan divergence -- the line diff says it plainly (train gi=13, a T4 win beco
   T3/T4 casts it twice, more bodies out
 ```
 
-**Banning a card in the continuation removes "decline now, cast it later this turn", so the only
-remaining options are "now" or "never" -- and the search takes "now".** In a Zada / Mirrorwing deck a
-solo-target trick is copied once per other creature, so a trick cast before the turn's bodies arrive
-is a drastically weaker spell.
+**CORRECTED 2026-08-27 -- the first reading of this was wrong.** The obvious explanation is that
+banning the card in the continuation leaves only "now" or "never" within the turn. That cannot be
+what happens, and the USER caught it: *"why would that happen before the body arrives?"* Instrumented
+by turn on gi=13, **ZERO condemnations fire on turn 2** -- the turn whose decision changes:
+
+| turn | condemnations |
+|---|---|
+| 2 | **0** |
+| 3 | 405 |
+| 4 | 4,521 |
+
+The turn-2 decision moves because the SEARCH PRICES THE FUTURE under condemnation. Its lookahead
+reaches turns 3-4, where the filter bans the lines that make holding Gold Rush worthwhile, so
+"hold it and cast it later" is projected as worse than it is and the search commits the card early.
+**Condemnation's damage is NOT local to the breakpoint: it propagates BACKWARDS through the search's
+valuation into earlier turns**, which is why a line diff alone cannot identify the cause and why the
+counters at the divergence turn are empty.
+
+In a Zada / Mirrorwing deck a solo-target trick is copied once per other creature, so a trick cast
+before the turn's bodies arrive is a drastically weaker spell -- that part stands.
+
+**And the dominant victim is the MAGNET ITSELF.** On gi=13 turn 4: Mirrorwing Dragon (rank 5) 1,798
+and Zada (5) 1,158 condemned at Gold Rush sites (15), against 586 for Gold Rush at Fists sites. The
+magnet multiplies every trick cast after it, so it is an accelerant in exactly bug 6's sense, and it
+is exempted unconditionally (NOT gated on one being in play -- the whole point is that it is still in
+hand).
 
 Two exemptions follow, both the accelerant argument again:
 

@@ -907,9 +907,16 @@ static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
     if (BpCondemnTutorExemptEnabled() && cd->params.tutor_to_hand) { return true; }
     // ...and, under a copy magnet, a solo-target trick or any body-maker feeding it: both are
     // accelerants for the copy count. See BpCondemnCopyExemptEnabled.
-    if (BpCondemnCopyExemptEnabled() && BpCopyMagnetInPlay(state)
-        && (cd->params.solo_target_trick || cd->params.etb_self_creates_tokens > 0
-            || cd->params.trick_token_power > 0)) { return true; }
+    if (BpCondemnCopyExemptEnabled()
+        && (// The MAGNET ITSELF is never condemnable: it multiplies every trick cast after it, so it
+            // is an accelerant in exactly bug 6's sense. Not gated on one being in play -- the whole
+            // point is that it is still in HAND. Measured on gi=13 turn 4, the magnets are the
+            // DOMINANT victims: Mirrorwing Dragon 1,798 + Zada 1,158 at Gold Rush sites (rank 5 vs
+            // 15) against 586 for Gold Rush itself.
+            cd->params.copies_solo_targeted_spells
+            || (BpCopyMagnetInPlay(state)
+                && (cd->params.solo_target_trick || cd->params.etb_self_creates_tokens > 0
+                    || cd->params.trick_token_power > 0)))) { return true; }
     // ...and a COST REDUCER, which is an accelerant that pays in discounts rather than in mana.
     if (BpCondemnReducerExemptEnabled()
         && (cd->params.hinata_cost_reducer
@@ -6845,7 +6852,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (s_condemn_who)
                     {
                         const DecisionProvider& p = ResolveProvider(state);
-                        std::fprintf(stderr, "[condemn-who] drop=%s rank=%d site=%s site_rank=%d\n",
+                        std::fprintf(stderr,
+                                     "[condemn-who] turn=%d drop=%s rank=%d site=%s site_rank=%d\n",
+                                     state.turn_number,
                                      def.card.m_name.c_str(), p.CastOrderRank(state, def),
                                      g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)",
                                      g_bp_site_def ? p.CastOrderRank(state, *g_bp_site_def) : -1);
