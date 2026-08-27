@@ -40,9 +40,28 @@ import subprocess
 import sys
 
 
-def discover_k(deck, cards_json, binary, timeout_note=True):
-    """Run equivalence discovery only, and return the bucket count it finds."""
+def discover_k(deck, cards_json, binary, timeout_note=True, play=None):
+    """Run equivalence discovery only, and return the bucket count it finds.
+
+    THE DISCOVERY DEPTH MUST BE THE DECK'S PLAY DEPTH, and it has to be passed explicitly.
+    `--gen-mulligan` resolves it from value_play.target_depth ("discovery depth: N (source:
+    value_play.target_depth (play))"), but the bare MTG_KEEP_DISCOVERY_ONLY route does not -- it
+    takes the binary's built-in default of 5. So on any deck whose play depth is not 5, Phase F
+    recorded K from a DIFFERENT discovery than the one generation runs, and the K guard then
+    refuses every generation attempt.
+
+    Measured on StompySurprise (play d6/b20): discovery-only gave K=16 at the default depth 5 and
+    K=15 at depth 6, which is what --gen-mulligan finds; the cached fingerprints differ in exactly
+    the `depth` field. The bug hid because the only two decks carrying expected_buckets --
+    KittyEquipment (play d5) and Mirrorwing -- happen to match the default, so their recorded K was
+    right by coincidence.
+    """
     env = dict(os.environ, MTG_KEEP_EXHAUSTIVE="1", MTG_KEEP_DISCOVERY_ONLY="1")
+    if play:
+        if play.get("target_depth"):
+            env["MTG_EQUIV_DEPTH"] = str(play["target_depth"])
+        if play.get("budget_ms"):
+            env["MTG_EQUIV_BUDGET"] = str(play["budget_ms"])
     p = subprocess.run([binary, str(deck), "--cards-json", cards_json],
                        capture_output=True, text=True, env=env)
     blob = p.stdout + p.stderr
@@ -104,7 +123,9 @@ def main():
               "\n   point of recording it, so it is left alone here.)")
         return rc
 
-    k, blob = discover_k(deck, args.cards_json, args.binary)
+    # `vp` is the deck's value_play; pass it so discovery runs at the deck's PLAY depth/budget --
+    # the same settings --gen-mulligan will use. See discover_k's note.
+    k, blob = discover_k(deck, args.cards_json, args.binary, play=vp)
     if k is None:
         print("  could NOT determine K from discovery output -- leaving expected_buckets unset.")
         print("  (A wrong K is worse than none: it would refuse every future generation.)")
