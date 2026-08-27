@@ -139,6 +139,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         {
             const int bn = static_cast<int>(state.battlefield.size());
             int best_i = -1, best_rank = 1 << 30, best_kind = 0;  // 1 direct, 2 filter-colour, 3 filter-{C}
+            int best_dep = -1;   // depletion tiebreak: more counters tap FIRST (DepletionTapOrderEnabled)
             for (int i = 0; i < bn; ++i)
             {
                 Permanent& p = state.battlefield[i];
@@ -208,7 +209,13 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 // outranks every unpinned source. Order bias only -- never legality; among
                 // pinned sources the normal rank still decides.
                 if (g_play_tap_pref_chooser && (*g_play_tap_pref_chooser)(state, p)) { rank -= 100000; }
-                if (rank < best_rank) { best_rank = rank; best_i = i; best_kind = kind; }
+                // Within-rank depletion tiebreak: among equal-rank depletion lands, spend the one
+                // with MORE counters first (preserves per-turn burst -- see DepletionTapOrderEnabled).
+                // Non-depletion sources all read 0, so equal-rank plain sources keep the historical
+                // first-in-battlefield-order winner (byte-identical for every depletion-less board).
+                const int dep = DepletionTapOrderEnabled() ? DepletionCountersOn(p) : 0;
+                if (rank < best_rank || (rank == best_rank && dep > best_dep))
+                { best_rank = rank; best_i = i; best_kind = kind; best_dep = dep; }
             }
             if (best_i < 0) { return false; }
             Permanent& bp = state.battlefield[best_i];
@@ -253,7 +260,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             { ManaPool pr = floating; if (ConsumeFloating(pr, c)) { have_input = true; break; } }
             if (!have_input)
             {
-                int fi = -1, frank = 1 << 30; Color fcol = Color::Colorless;
+                int fi = -1, frank = 1 << 30, fdep = -1; Color fcol = Color::Colorless;
                 for (int i = 0; i < bn; ++i)
                 {
                     Permanent& s = state.battlefield[i];
@@ -267,7 +274,10 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     int r = ResolveProvider(state).ManaSourceRank(state, *sd);
                     // Sac-fodder-first, same bias as the direct-source loop above.
                     if (g_pay_sac_victim != 0 && s.card.m_number == g_pay_sac_victim) { r = -1000; }
-                    if (r < frank) { frank = r; fi = i; fcol = match; }
+                    // Same depletion tiebreak as the direct-source loop above.
+                    const int sdep = DepletionTapOrderEnabled() ? DepletionCountersOn(s) : 0;
+                    if (r < frank || (r == frank && sdep > fdep))
+                    { frank = r; fi = i; fcol = match; fdep = sdep; }
                 }
                 if (fi < 0) { return false; }
                 Permanent& fs = state.battlefield[fi];

@@ -8208,6 +8208,22 @@ inline bool DepletionReserveEnabled()
     return v;
 }
 
+// Depletion tap ORDER (user doctrine 2026-08-27, treasure_hunt seed 8): a depletion land's tap
+// SPENDS a counter (finite -- the last one sacrifices the land), so (1) it taps AFTER a plain land
+// of the same flexibility tier (ManaSourceRankBase +1: mono 10->11, dual 20->21, same shape as the
+// drip-land nudge) and (2) among equal-rank depletion lands the one with MORE counters taps first
+// (TapForCostSharedOnce tiebreak): tapping the 2-counter copy leaves two lands = two taps available
+// next turn, while tapping the 1-counter copy kills it for the same total mana -- the rule
+// preserves per-turn burst, not resources. Motivating board: Fiery Islet's sac-to-draw {1} tapped a
+// last-counter Saprazzan Skerry (2 produced, land dies, {U} wasted) over a fresh Island on a
+// battlefield-order rank tie, which also stranded the [Island, sac Islet, retrace Throes] line the
+// user tried to play. Default ON; off-switch MTG_NO_DEPLETION_TAP_ORDER for A/B.
+inline bool DepletionTapOrderEnabled()
+{
+    static const bool v = !EnvOn("MTG_NO_DEPLETION_TAP_ORDER");
+    return v;
+}
+
 // Whole-turn "hold your beater" reservation (BatchPrepayMainCasts): don't tap the controller's
 // GREATEST-power attacker for mana when the turn is payable without it, so it stays untapped to swing
 // (and is the creature a pump would land on -- reserving it makes an own-creature pump's target the
@@ -9719,6 +9735,17 @@ inline void DecrementDepletionOnTap(Permanent& source)
     {
         if (ctr.type == Counter::Type::Depletion && ctr.count > 0) { --ctr.count; return; }
     }
+}
+
+// Live depletion counters on a permanent (0 for a non-depletion source). Used by the scarcity
+// greedy's within-tier tiebreak -- more counters tap FIRST (see DepletionTapOrderEnabled).
+inline int DepletionCountersOn(const Permanent& source)
+{
+    for (const Counter& ctr : source.counters)
+    {
+        if (ctr.type == Counter::Type::Depletion) { return ctr.count; }
+    }
+    return 0;
 }
 
 // Backtracking mana-payment FALLBACK for filter-heavy boards the per-pip greedy

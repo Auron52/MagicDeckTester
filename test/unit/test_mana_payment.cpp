@@ -388,3 +388,64 @@ TEST_CASE("ramp filter: FLOATING mana feeds it, so the pool credits what the pay
     CHECK(AvailableManaPool(land_fed).Total() == 2);
     CheckTwinsAgree(land_fed, Cost(1, 0, /*u=*/1), false, true);
 }
+
+TEST_CASE("depletion tap order: plain land first, then the depletion land with MORE counters")
+{
+    EnsureCards();
+    // A depletion land's tap SPENDS a counter (finite; the last one sacrifices the land), so
+    // (1) it ranks one slot past its plain-tier peers and (2) among depletion lands the fresher
+    // copy taps first, preserving per-turn burst (see DepletionTapOrderEnabled). Motivating board:
+    // treasure_hunt seed 8 T5, where Fiery Islet's sac-to-draw {1} killed a last-counter Saprazzan
+    // Skerry over a fresh Island on a battlefield-order tie. Under MTG_NO_DEPLETION_TAP_ORDER=1
+    // (whole-binary A/B hatch; the readers cache, so it cannot be toggled in-process) the tapped
+    // patterns below revert to first-in-battlefield-order.
+    auto with_dep = [](Permanent p, int n)
+    {
+        Counter c; c.type = Counter::Type::Depletion; c.count = n;
+        p.counters.push_back(c);
+        return p;
+    };
+
+    // (1) TIER: {1} on [Skerry(1 counter), Island] taps the ISLAND -- exact, keeps the Skerry's
+    // last counter -- even though the Skerry sits earlier on the battlefield.
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number         = 3;
+        s.battlefield.push_back(with_dep(MakeLand("Saprazzan Skerry"), 1));
+        s.battlefield.push_back(MakeLand("Island"));
+        const PayEnd ex = RunExecutor(s, Cost(1), false);
+        const PayEnd ro = RunRollout(s, Cost(1), false);
+        CHECK(ex.ok); CHECK(ro.ok); CHECK(ex == ro);
+        CHECK(ex.tapped == std::vector<bool>{false, true});   // Island pays; Skerry spared
+        CHECK(ex.floating_total == 0);                         // and nothing over-produced
+    }
+
+    // (2) TIEBREAK: two Skerries, the battlefield-earlier one on its LAST counter. {1}{U} taps the
+    // FRESHER copy (2 counters): both lands stay alive = two taps available next turn, where the
+    // old first-in-order winner died for the same total mana.
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number         = 3;
+        s.battlefield.push_back(with_dep(MakeLand("Saprazzan Skerry"), 1));
+        s.battlefield.push_back(with_dep(MakeLand("Saprazzan Skerry"), 2));
+        const PayEnd ex = RunExecutor(s, Cost(1, 0, /*u=*/1), false);
+        const PayEnd ro = RunRollout(s, Cost(1, 0, /*u=*/1), false);
+        CHECK(ex.ok); CHECK(ro.ok); CHECK(ex == ro);
+        CHECK(ex.tapped == std::vector<bool>{false, true});   // the 2-counter copy pays
+    }
+
+    // (3) The nudge is ORDERING, not exclusion: a cost only the depletion land can pay still taps it.
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number         = 3;
+        s.battlefield.push_back(with_dep(MakeLand("Saprazzan Skerry"), 2));
+        s.battlefield.push_back(MakeLand("Mountain"));
+        const PayEnd ex = RunExecutor(s, Cost(0, 0, /*u=*/1), false);
+        const PayEnd ro = RunRollout(s, Cost(0, 0, /*u=*/1), false);
+        CHECK(ex.ok); CHECK(ro.ok); CHECK(ex == ro);
+        CHECK(ex.tapped == std::vector<bool>{true, false});   // only the Skerry makes {U}
+    }
+}

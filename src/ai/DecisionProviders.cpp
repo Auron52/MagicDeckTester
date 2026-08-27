@@ -1873,9 +1873,11 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // must stay past EVERY band member. Behaviour-identical for every existing deck (no deck holds
     // both a Lodge and a fuel dork; nothing else occupies 67/68).
     { return DorkTapLastEnabled() ? kGrowableManaCreatureTapRank + 3 : 63; }
-    // Depletion lands (Saprazzan Skerry, Sandstone Needle) are deliberately NOT reserved: they are
-    // RAMP you normally want to spend, so blanket-conserving them via the ordering would misfire far
-    // more often than the rare "wasted a counter" case helps. They rank by colour like any land.
+    // Depletion lands (Saprazzan Skerry, Sandstone Needle) are deliberately NOT reserved (they are
+    // RAMP you normally want to spend, so a blanket hold would misfire far more often than the rare
+    // "wasted a counter" case helps) -- but they DO get a +1 nudge past their plain-land tier at the
+    // bottom of this function (DepletionTapOrderEnabled), so a plain land of the same colour count
+    // pays first and the counter is only spent when the cost needs it.
     if (def.params.is_filter || def.params.ramp_filter) { return 25; }
     const std::vector<Color>& prod = EffectiveProduces(s, active, def);
     const int amt = ManaProducedPerTap(def);
@@ -1979,6 +1981,16 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // sometimes better tapped first), which a static rank can't capture -- left to future search.
     // Inert for every deck without a drip land.
     if (def.params.tap_opponent_lifegain > 0) { rank += 1; }
+    // Depletion land (Saprazzan Skerry, Sandstone Needle): its tap SPENDS a counter -- finite, and
+    // the last one sacrifices the land -- so it taps one slot past its plain-tier peers (mono 10->11,
+    // dual 20->21), same shape as the drip-land nudge above. Without this, a fresh basic and a
+    // last-counter Skerry tie at 10 and battlefield order decides: treasure_hunt seed 8 T5 paid Fiery
+    // Islet's sac-to-draw {1} by killing the Skerry (2 produced for 1 needed, {U} wasted) with an
+    // untapped Island on the board, which then stranded the [Island, sac Islet, retrace Throes] line.
+    // The within-tier "more counters first" half lives in TapForCostSharedOnce (per-permanent; this
+    // ranking is per-DEFINITION and cannot see counters). USER 2026-08-27: "We should prefer those
+    // with more counters before those with less." MTG_NO_DEPLETION_TAP_ORDER disables both halves.
+    if (DepletionTapOrderEnabled() && def.params.enters_tapped_with_depletion > 0) { rank += 1; }
     return rank;
 }
 
