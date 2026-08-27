@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 8669e325  date 2026-08-27
+# Regression ground truth -- commit c46bd443  date 2026-08-27
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -28,8 +28,8 @@ dragonstorm_smoke_d5_s1001=4.4667/4248104898fb9d6c
 auras_smoke_d0_s1001=4.3800/af248eb3d121bc72
 auras_smoke_d3_s1001=4.1400/617c5caa7c4fb02d
 auras_smoke_d5_s1001=4.1320/5d0803667eea1b7f
-goblins_smoke_d0_s1001=4.0700/d46f8aeae5deccf0
-goblins_smoke_d3_s1001=3.6467/50602e8107354743
+goblins_smoke_d0_s1001=4.0680/851c0506a04bd568
+goblins_smoke_d3_s1001=3.6467/e0a721637d1f14a7
 goblins_smoke_d5_s1001=3.5867/dbe15f21f0cca5d2
 creature_giving_smoke_d0_s1001=5.5160/dbd1edeb6f3ec1b8
 creature_giving_smoke_d3_s1001=4.7133/9d90e407eda5d8f2
@@ -43,9 +43,9 @@ fivecolour_smoke_d5_s1001=5.1333/f6d7ed5a947b839a
 stompy_smoke_d0_s1001=5.8570/8313043ad2b89fb1
 stompy_smoke_d3_s1001=4.6933/2eb28e67d6eaae1f
 stompy_smoke_d5_s1001=4.6933/95390166f7af550b
-minotaur_smoke_d0_s1001=5.5070/0879e55559b8832e
-minotaur_smoke_d3_s1001=4.9920/cf2145b7c657f298
-minotaur_smoke_d5_s1001=5.0067/161a9186592451b6
+minotaur_smoke_d0_s1001=5.4990/7c134c0ec9c56a71
+minotaur_smoke_d3_s1001=4.9880/89f53e57abbae7cb
+minotaur_smoke_d5_s1001=5.0067/72ab5c587d2dddc5
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/91abd0b536a1c263
@@ -88,11 +88,11 @@ auras_regression_d3_s2002=4.1080/40d0a1769567f46d
 auras_regression_d3_s3003=4.2060/cb6c84395b1fc8db
 auras_regression_d5_s2002=4.1020/b05194a8e292177b
 auras_regression_d5_s3003=4.1940/223990a9848130c1
-goblins_regression_d0_s2002=4.1050/7dcb6aa3f9150a56
-goblins_regression_d3_s2002=3.8200/29503d1c50a208a2
-goblins_regression_d3_s3003=3.8400/44d9e06445f1d4a5
-goblins_regression_d5_s2002=3.8440/4a8ae3dc83c72c96
-goblins_regression_d5_s3003=3.8160/9911b525b19490e5
+goblins_regression_d0_s2002=4.1040/5629ee7ea94ddd09
+goblins_regression_d3_s2002=3.8167/937be80de15ad021
+goblins_regression_d3_s3003=3.8400/7ea3e0088bbdd4a3
+goblins_regression_d5_s2002=3.8400/6251f738642053e3
+goblins_regression_d5_s3003=3.8160/a0b3197ec6bc15a3
 creature_giving_regression_d0_s2002=5.5810/196c4668d4d7e170
 creature_giving_regression_d3_s2002=4.6533/92df7bfb366239f4
 creature_giving_regression_d3_s3003=4.6800/619afcd304afa26a
@@ -113,11 +113,11 @@ stompy_regression_d3_s2002=4.7567/c065949daae08e58
 stompy_regression_d3_s3003=4.8433/00ee80000cab0eea
 stompy_regression_d5_s2002=4.7640/99a00b04e6ff0c98
 stompy_regression_d5_s3003=4.8120/0b2beee97d4044dd
-minotaur_regression_d0_s2002=5.5090/acda52e017080c31
-minotaur_regression_d3_s2002=5.0167/6d3abe76132c4ae2
-minotaur_regression_d3_s3003=4.9633/af9f1f635a42b49a
-minotaur_regression_d5_s2002=5.0320/1eb78a0d2ea6a263
-minotaur_regression_d5_s3003=4.9480/f478d7780bcf1e6f
+minotaur_regression_d0_s2002=5.4990/ad3f5b185d9147ea
+minotaur_regression_d3_s2002=5.0033/85406051f3ad3149
+minotaur_regression_d3_s3003=4.9567/6827184746b88c6c
+minotaur_regression_d5_s2002=5.0200/ee85242c2872b4c6
+minotaur_regression_d5_s3003=4.9400/29adde4f8a4275c5
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/b53c1150b0bd6df6
