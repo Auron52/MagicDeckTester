@@ -448,8 +448,11 @@
   <button id="nextgame" title="increment Seed + Game# and start a fresh game">Next game ▸</button>
   <button id="undo" disabled>Undo</button>
   <button id="optbtn" title="Decision options — pick which decisions to surface vs. let the AI decide">⚙ Options</button>
-  <span id="betanote" class="betanote" style="display:none"></span>
+  <!-- refnote FIRST: the reference-saved confirmation is the badge that matters (USER 2026-08-27:
+       the beta note "is pushing the 'Reference saved' message which is 1000 times more important");
+       the maturity chip sits after it and is text-compact (tier word only, reasons on hover). -->
   <span id="refnote" class="refnote" style="display:none"></span>
+  <span id="betanote" class="betanote" style="display:none"></span>
   <span class="hint">no clairvoyance — your win-turn is a ground-truth bound</span>
 </header>
 
@@ -3202,7 +3205,10 @@ function showBetaNote(){
   }
   el.style.display='';
   el.classList.toggle('alpha', d.tier==='alpha');
-  el.textContent=d.tier+' — '+reasons.join(' · ');
+  // Chip shows the TIER WORD ONLY -- the full reasons live in the hover tooltip below. The
+  // inlined reasons string used to push the reference-saved badge out of the header (USER
+  // 2026-08-27), and that confirmation outranks this caveat.
+  el.textContent=d.tier;
   el.title=(d.tier==='alpha'
       ? 'This deck is playable but part of its apparatus is MISSING, so its numbers may be wrong:'
       : 'This deck is complete but not yet proven, so its numbers are not fully established:')

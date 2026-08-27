@@ -412,17 +412,73 @@ const REF_OWNERS = referenceOwners();
 // request rather than at startup, so re-benching a deck shows up on a browser refresh instead of
 // needing the server restarted -- the file is a few KB and this is a single-user local tool.
 //
-// The current src tree IS resolved once: it cannot change under a running process without the
-// binary being rebuilt underneath us, and shelling out to git per request would be silly.
+// The current src tree is re-resolved (with a short memo) rather than frozen at startup: HEAD:src
+// moves with every commit while the server keeps running, and a startup-frozen hash had this
+// long-lived server calling a freshly-measured bench "stale" against yesterday's tree (2026-08-27).
 // If git is unavailable the fingerprint is empty and staleness is simply not judged -- reporting
 // every deck stale forever would destroy the signal rather than protect it, and a checkout without
 // git is not a case this repo has.
-const SRC_NOW = (() => {
+let srcNowCache = { at: 0, val: '' };
+function srcNow() {
+  const now = Date.now();
+  if (now - srcNowCache.at < 3000) return srcNowCache.val;
+  let val = '';
   try {
     const r = spawnSync('git', ['rev-parse', 'HEAD:src'], { cwd: ROOT, encoding: 'utf8' });
-    return r.status === 0 ? r.stdout.trim() : '';
-  } catch (e) { return ''; }
-})();
+    val = r.status === 0 ? r.stdout.trim() : '';
+  } catch (e) { /* val stays '' */ }
+  srcNowCache = { at: now, val };
+  return val;
+}
+
+// SELF-HEALING bench (user, 2026-08-27: "It should just run something on the side to remove the
+// staleness if it is stale... I don't want it to redo any work on the regular, but if it needs to
+// update the cache, then it should do so in the background... Probably deck by deck so it finishes
+// and writes work units relatively quickly."): when a deck's bench stamp genuinely mismatches the
+// current src tree, re-bench in the background instead of asking the user to -- ONE DECK PER RUN,
+// sequentially, so each deck's row merges into the cache (`--json` merges) the moment it lands and
+// its badge clears on the next browser refresh while later decks are still queued. No work on the
+// regular: the trigger only fires from a real stamp mismatch, at most one queue per src tree (a
+// failing bench must not respawn per request), and each child also passes --stale-only so a deck
+// healed in the meantime costs zero games. Output goes under logs/ per the repo rule.
+const benchRefresh = { running: false, attemptedSrc: '', queue: [] };
+function benchRunNext(log) {
+  const key = benchRefresh.queue.shift();
+  if (!key) {
+    benchRefresh.running = false;
+    try { fs.closeSync(log); } catch (e) {}
+    return;
+  }
+  try {
+    fs.writeSync(log, `--- re-benching ${key} (${new Date().toISOString()}) ---\n`);
+    const child = spawn('python3',
+      ['scripts/ref_bench.py', '--deck', key, '--stale-only',
+       '--json', path.join('test', 'ref_bench.json')],
+      { cwd: ROOT, stdio: ['ignore', log, log], detached: false });
+    child.on('close', () => benchRunNext(log));
+    child.on('error', () => benchRunNext(log));
+  } catch (e) { benchRefresh.running = false; try { fs.closeSync(log); } catch (e2) {} }
+}
+function maybeStartBenchRefresh(src) {
+  if (!src || benchRefresh.running || benchRefresh.attemptedSrc === src) return;
+  let staleKeys = [];
+  try {
+    const cache = JSON.parse(fs.readFileSync(REF_BENCH, 'utf8'));
+    staleKeys = Object.entries(cache.decks || {})
+      .filter(([, e]) => e && e.src && e.src !== src)
+      .map(([k]) => k);
+  } catch (e) { return; }
+  if (!staleKeys.length) return;
+  benchRefresh.running = true;
+  benchRefresh.attemptedSrc = src;
+  benchRefresh.queue = staleKeys;
+  try {
+    fs.mkdirSync(path.join(ROOT, 'logs'), { recursive: true });
+    const log = fs.openSync(path.join(ROOT, 'logs', 'ref_bench_auto.log'), 'a');
+    fs.writeSync(log, `\n=== auto re-bench at src ${src}: ${staleKeys.length} stale deck(s) ===\n`);
+    benchRunNext(log);
+  } catch (e) { benchRefresh.running = false; }
+}
 
 function benchState(key) {
   let cache;
@@ -430,7 +486,11 @@ function benchState(key) {
   catch (e) { return { state: 'unbenched' }; }               // never run, or not committed here
   const e = (cache.decks || {})[key];
   if (!e) return { state: 'unbenched' };
-  if (SRC_NOW && e.src && e.src !== SRC_NOW) return { state: 'stale', at: e.src.slice(0, 12), n: e.n };
+  const now = srcNow();
+  if (now && e.src && e.src !== now) {
+    maybeStartBenchRefresh(now);
+    return { state: 'stale', at: e.src.slice(0, 12), n: e.n, refreshing: benchRefresh.running };
+  }
   // A reference whose forced opening hand did not reconstruct was never a valid comparison, so a
   // deck carrying one has not been measured -- counting it as a pass is the same failure as an
   // empty parse reading as clean.
@@ -461,7 +521,9 @@ function tierFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchived
   if (b.state === 'short') {
     short.push(`the search is slower than the human on ${b.short} of ${b.n} references`);
   } else if (b.state === 'stale') {
-    short.push(`reference bench is stale (measured at src ${b.at}) — re-run scripts/ref_bench.py --stale-only`);
+    short.push(b.refreshing
+      ? `reference bench is stale (measured at src ${b.at}) — re-benching on the side, refresh in a minute`
+      : `reference bench is stale (measured at src ${b.at}) — auto re-bench did not clear it, see logs/ref_bench_auto.log`);
   } else if (b.state !== 'green') {
     short.push(b.handMismatch
       ? `${b.handMismatch} reference(s) did not reconstruct, so the bench is not a valid comparison`

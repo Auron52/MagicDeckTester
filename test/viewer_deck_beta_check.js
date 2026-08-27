@@ -273,22 +273,29 @@ if (!JSDOM) {
     const noProfOpt = [...sel.options].find(o => o.value === 'NoProf.cod');
     ok(noProfOpt && noProfOpt.disabled, 'a profile-less deck is still disabled');
 
-    // The badge follows the SELECTED deck and names every reason -- the option suffix says "beta",
-    // the badge says why.
+    // The badge follows the SELECTED deck. It is a COMPACT CHIP -- visible text is the tier word
+    // only, with every reason in the hover tooltip (USER 2026-08-27: the inlined reasons string
+    // pushed the reference-saved badge out of the header, and that confirmation "is 1000 times
+    // more important"; also "the 'reference bench is stale...' is long and unnecessary").
     const badge = win.document.getElementById('betanote');
     ok(!!badge, 'the top bar has a #betanote badge');
+    const refBadge = win.document.getElementById('refnote');
+    ok(refBadge && badge.compareDocumentPosition(refBadge) & 2 /* PRECEDING */,
+       'the reference-saved badge comes BEFORE the maturity chip, so it can never be pushed by it');
     sel.value = 'Alpha.cod'; win.showBetaNote();
     ok(badge.style.display !== 'none', 'the badge is shown for an alpha deck');
     ok(badge.classList.contains('alpha'), 'the alpha badge is styled differently from beta');
+    ok(badge.textContent === 'alpha', 'the visible chip is the tier word ONLY', badge.textContent);
     for (const r of FIXTURE[2].tierReasons) {
-      ok(badge.textContent.includes(r), 'the badge names the reason: ' + r, badge.textContent);
+      ok(badge.title.includes(r), 'the tooltip names the reason: ' + r, badge.title);
     }
     sel.value = 'Beta.cod'; win.showBetaNote();
     ok(badge.style.display !== 'none', 'the badge is shown for a beta deck');
     ok(!badge.classList.contains('alpha'), 'the beta badge drops the alpha styling on re-select',
        badge.className);
-    ok(badge.textContent.includes('24/30 reference games'), 'the beta badge names its reason',
-       badge.textContent);
+    ok(badge.textContent === 'beta', 'the beta chip is the tier word ONLY', badge.textContent);
+    ok(badge.title.includes('24/30 reference games'), 'the beta tooltip names its reason',
+       badge.title);
     sel.value = 'Stable.cod'; win.showBetaNote();
     ok(badge.style.display === 'none', 'the badge is hidden for a stable deck', badge.textContent);
     sel.value = 'NoProf.cod'; win.showBetaNote();
