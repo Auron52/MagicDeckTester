@@ -574,8 +574,25 @@ the work saving) and as the fallback if no reliable order exists.
 
 ### The land drop is part of the order, and for Mirrorwing it goes FIRST
 
-**USER, 2026-08-27: *"Land drop can go first in this deck."*** That settles the open question and
-makes land condemnation well-defined:
+**USER, 2026-08-27: *"Land drop can go first in this deck."*** — and the reason, which is what makes
+the pin safe rather than merely convenient: ***"Because we can always play a drawn land later (there
+is no cost to this)."*** Deferring the drop buys option value only if holding it can ever pay; here it
+cannot, because a land the turn later reveals is playable on a subsequent turn at no loss. With
+nothing to gain from holding, playing the held land at slot 0 dominates, and declining it is a
+genuine decline rather than a deferral.
+
+And the argument that generalises: ***"And no real advantage to deferring as a clairvoyant."***
+Deferring a land drop is an INFORMATION play -- hold it until you see what you draw -- and this
+search already knows. It is the same principle the USER used to justify condemnation in the first
+place (*"'more information' is irrelevant to the clairvoyant player"*), applied to the land drop.
+
+So the only surviving reasons to defer are MECHANICAL, not informational: a Karoo bounce land, a
+storage land, Land's Edge ammo, landfall timing. The engine already carries
+`HoldDeferredDropForLethal` and a `karoo_deferred` reservation for exactly those, which is what the
+pin must continue to respect. The USER scoped the statement to this deck (*"in this deck"*), and the
+mechanical exceptions are why that scoping is right even though the clairvoyance argument is general.
+
+That settles the open question and makes land condemnation well-defined:
 
 * *"no land drop is a true play the game can make... and this play condemns all lands in hand"* --
   declining the drop at its slot is a real move, so having declined it, a land already in hand may not
