@@ -310,11 +310,20 @@ Two exemptions follow, both the accelerant argument again:
   (`MTG_BP_CONDEMN_COPY_EXEMPT`, default ON). A board-state rule, not a per-deck one; only Mirrorwing
   contains a magnet at all, so it is provably inert on the other 14 suite decks.
 
+FINAL numbers, with the magnet exemption in (n=3000/cell, two blocks, play settings):
+
 | contrast | train | hold | work |
 |---|---|---|---|
 | condemnation vs OFF, no copy exemption | +0.0027 (t=1.23) | +0.0013 (t=0.43) | -3.44% / -1.95% |
-| **+ copy exemption vs OFF** | **+0.0003 (t=0.18)** | **-0.0040 (t=-1.43)** | **-3.62% / -2.46%** |
-| the exemption itself | -0.0023 (t=-2.11) | **-0.0053 (t=-4.01), 16 faster : 0 slower** | a further -0.19% / -0.52% |
+| **+ copy exemption vs OFF** | **-0.0003 (t=-0.19)** | **-0.0043 (t=-1.57)** | **-3.29% / -2.21%** |
+| the exemption itself | -0.0030 (t=-2.33) | **-0.0057 (t=-4.13), 17 faster : 0 slower** | +0.16% / -0.26% |
+
+So Mirrorwing ends quality-neutral-to-BETTER than condemnation-off on both blocks, and ~3% cheaper.
+
+*Honest limit: the MAGNET half of the exemption cannot be separated from the trick half at this n.
+Trick-only measured -0.0023 / -0.0053 and trick+magnet -0.0030 / -0.0057 on the same seeds -- a
+difference well inside the noise. The magnet is exempted on the bug-6 argument and because it is the
+dominant victim by count, not on a measured delta of its own.*
 
 ### VOLUME IS NOT HARM -- twice, in opposite directions
 
