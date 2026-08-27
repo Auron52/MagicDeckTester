@@ -940,7 +940,29 @@ def run_incremental(args):
                           "per-game ceiling is DISARMED for it -- these games are the distribution, "
                           "not a tail" % (dname, c["seed"], len(skipped.get((dname,c["seed"]),())),
                                           100*args.max_skip_frac, args.target), flush=True)
-                nm="%s%d_s%d_off%d" % (c["arm"], c["depth"], c["seed"], ch["off"])
+                # THE DECK IS PART OF THE JOB NAME, and it is load-bearing three times over: the
+                # pool's result line is matched back with `by_name[nm]`, and the per-game files are
+                # `<winsdir>/<nm>.wins` and `.abandoned`. Without it, TWO decks in one pool -- which
+                # is the whole point of this driver taking `--decks` -- collide on every one of the
+                # three: `by_name[nm]=ch` keeps only the deck written last, both decks' result lines
+                # match that one chunk, and each deck's .wins file overwrites the other's.
+                #
+                # It fails SILENTLY and it looks like data. Measured on the first two-deck run
+                # (Dragons + Minotaur, 2026-08-26): all 52 Dragons cells reported games=0 while every
+                # Minotaur cell held 774 games at a 400 target -- each of its 387 offsets present
+                # TWICE, once per deck, e.g. offset 0 carrying win turns [6, 5]. The rows then read
+                # H1=5.3301..H5=5.3134, which is neither deck but the midpoint of the two (Minotaur
+                # 4.97, Dragons 5.73), and the derived table came out non-monotonic in seven places.
+                # Phase D's "SKIP (log block missing H or V rows)" for the vanished deck returns
+                # SUCCESS, so the pipeline ran to completion and produced a table for nobody.
+                #
+                # The fleet path has always passed every deck at once, so this was latent there too;
+                # it had simply never been run (there is no logs/vlq/matrix.txt.cells.json on disk).
+                nm="%s_%s%d_s%d_off%d" % (dname, c["arm"], c["depth"], c["seed"], ch["off"])
+                if nm in by_name:
+                    raise SystemExit("duplicate job name %r in one pool -- results are matched back "
+                                     "by name, so this would silently attribute one chunk's games to "
+                                     "another cell (see the comment above)" % nm)
                 by_name[nm]=ch
                 job={"name":nm, "deck":deck_file, "profile":PROFILES.get(dname),
                      "games":ch["n"],
