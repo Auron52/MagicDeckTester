@@ -355,3 +355,36 @@ TEST_CASE("twin equivalence matrix: mixed board, sweep of costs")
         CHECK(ex == ro);
     }
 }
+
+TEST_CASE("ramp filter: FLOATING mana feeds it, so the pool credits what the payer can really make")
+{
+    EnsureCards();
+    // Ferrous Lake is "{1},{T}: Add {U}{R}" -- a filter that needs a mana INPUT. The payment path
+    // has always spent floating mana on that {1} ("use floating if any, else feed one mana from a
+    // non-ramp source"), but AddSourceToPool only looked for another untapped PERMANENT, so on a
+    // board whose sole feeder was the floating reserve the pool credited the Lake ZERO and every
+    // cast needing it was pruned before enumeration. Found from a saved viewer artifact
+    // (treasure_hunt s3/gi2 T3, verdict legal_not_enumerated): floating {R} + an untapped Ferrous
+    // Lake casts Treasure Hunt {1}{U}, and none of the 24 enumerated plans contained it.
+    GameState fed = MakeBoard({"Ferrous Lake"});
+    fed.floating_mana.Add(Color::Red, 1);
+    // NET accounting, so this cannot double-count: the floating {R} is added once by the caller and
+    // the Lake contributes only its +1 net. Two total is exactly what the board makes -- spend the
+    // {R}, receive {U}{R}.
+    CHECK(AvailableManaPool(fed).Total() == 2);
+
+    // And the pool is not merely optimistic here: both payment twins really can cast {1}{U} off it.
+    CheckTwinsAgree(fed, Cost(1, 0, /*u=*/1), false, true);
+
+    // With NOTHING to feed it the Lake still credits zero -- it has no free mode, so this stays a
+    // credit for a real conversion rather than a phantom mana.
+    const GameState starved = MakeBoard({"Ferrous Lake"});
+    CHECK(AvailableManaPool(starved).Total() == 0);
+    CheckTwinsAgree(starved, Cost(1, 0, /*u=*/1), false, false);
+
+    // A PERMANENT feeder is the case that always worked; pin it beside the new one so a future
+    // refactor cannot fix one by breaking the other.
+    const GameState land_fed = MakeBoard({"Ferrous Lake", "Island"});
+    CHECK(AvailableManaPool(land_fed).Total() == 2);
+    CheckTwinsAgree(land_fed, Cost(1, 0, /*u=*/1), false, true);
+}

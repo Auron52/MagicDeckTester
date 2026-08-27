@@ -64,6 +64,47 @@ inline bool RockRampEnumEnabled()
     return on;
 }
 
+// ADOPTED 2026-08-27 -- default ON, opt-out MTG_NO_FLOAT_FEEDS_FILTER=1. Let FLOATING mana feed a
+// ramp filter in the accounting pool, as it already does in the payment path.
+//
+// Ferrous Lake is "{1},{T}: Add {U}{R}" -- it needs a mana INPUT. AddSourceToPool credits its net
+// +1 only when HasUntappedRampFeeder finds another untapped SOURCE, and that scan never looks at
+// the floating reserve. TapForCostSharedOnce does the opposite: "Pay the {1}: use floating if any,
+// else feed one mana from a non-ramp source." So on a board whose only feeder is floating mana, the
+// payer can execute the line and the pool says the mana does not exist -- the cast is pruned before
+// it is ever enumerated.
+//
+// Found from a saved viewer artifact (treasure_hunt s3/gi2 T3, verdict legal_not_enumerated):
+// floating {R}, Ferrous Lake untapped, Frostboil Snarl tapped, Treasure Hunt {1}{U} in hand. The
+// {R} pays the Lake's {1}, the Lake makes {U}{R}, the Hunt casts. None of the 24 enumerated plans
+// contained it.
+//
+// The accounting stays NET, so this cannot double-count: the pool adds the floating {R} once and
+// the Lake's +1 net once = 2, which is exactly what the board makes (spend {R}, receive {U}{R}).
+// With no floating and no other untapped source the Lake still credits 0, as today.
+//
+// MEASURED BEFORE ADOPTING, because the precedent said to. This repo had already measured three
+// "make the mana projection more accurate" fixes and ALL THREE lost, with zero games better in any
+// arm -- the pessimistic projection was acting as a tempo prior
+// (docs/design/goblins-enabler-worse-games.md). Those re-ranked two legal lines; this one restores a
+// legal line the search could not see at all, which is the distinction that turned out to matter:
+//
+//   * held-out, 16,000 paired games on 8 fresh seeds disjoint from every tier seed, at the deck's
+//     SHIPPED play policy: 4.07619 -> 4.07581 (-0.00038 turns), paired t = -2.450,
+//     6 games better / 0 worse / 15,994 tied, 5 seeds better / 3 tied / 0 worse.
+//   * regression tier: 5 configs changed, ALL treasure_hunt, every one at an identical average --
+//     slower=0 faster=0 play-changed=20. Hinata2 (Izzet Signet, the only other ramp filter in any
+//     deck) came back digest-identical, which bounds the blast radius to the Ferrous Lake deck.
+//
+// Not one game got worse across either measurement. The effect is tiny because the position is rare
+// (a ramp filter untapped, NO other untapped source, and floating mana in the pool) -- rare and
+// strictly non-negative is the expected profile of a correctness fix, not of a tuning knob.
+inline bool FloatFeedsRampFilterEnabled()
+{
+    static const bool on = !EnvOn("MTG_NO_FLOAT_FEEDS_FILTER");
+    return on;
+}
+
 // A/B hatch (default OFF): restore the legacy canonical cast order, i.e. provider RANK only, with plan order
 // breaking every tie. Set MTG_LEGACY_CAST_TIER_ORDER=1 to disable the cheapest-first ordering of same-tier
 // mana accelerants (DecisionProvider::CastCheapestFirstWithinTier) globally -> byte-identical to the
@@ -8440,7 +8481,15 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     {
         // {1},{T}: Add (each produces colour). Net +1 mana iff a feeder pays the {1};
         // no free mode, so contributes nothing when nothing else is untapped to feed it.
-        if (HasUntappedRampFeeder(state)) { ++pool.wild; }
+        //
+        // FLOATING MANA IS ALSO A FEEDER (opt-out MTG_NO_FLOAT_FEEDS_FILTER) -- the payment path
+        // already spends it that way ("use floating if any, else feed one mana from a non-ramp
+        // source"), so without this the pool under-credits a board the payer can actually pay from
+        // and the cast is pruned before enumeration. Net accounting, so no double count: the
+        // floating mana is added once by the caller and this contributes only the +1 net.
+        const bool float_feed = FloatFeedsRampFilterEnabled() && FloatLeftoverManaEnabled()
+                             && state.floating_mana.Total() > 0;
+        if (HasUntappedRampFeeder(state) || float_feed) { ++pool.wild; }
         return;
     }
     // Three Tree City scaled ability: "{2},{T}: add N of a chosen colour", N = creatures you control
