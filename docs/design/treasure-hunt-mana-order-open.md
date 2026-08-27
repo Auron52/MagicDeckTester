@@ -1,10 +1,10 @@
-# treasure_hunt mana ordering — one fix landed, three things still open
+# treasure_hunt mana ordering — two fixes landed, what remains
 
-Written 2026-08-27 from a viewer session on `decks/treasure_hunt`. One defect is fixed and adopted;
-the rest is **deferred work**, recorded here rather than in any agent's memory (CLAUDE.md) so it is
-available to whoever picks it up.
+Written 2026-08-27 from a viewer session on `decks/treasure_hunt`; REWRITTEN 2026-08-27 after the
+seed-8 investigation below overturned the first version's central claim. Recorded here rather than
+in any agent's memory (CLAUDE.md) so it is available to whoever picks it up.
 
-## Landed: floating mana may feed a ramp filter (adopted 2026-08-27)
+## Landed 1: floating mana may feed a ramp filter (adopted 2026-08-27)
 
 Ferrous Lake is `{1}, {T}: Add {U}{R}` — a filter that needs a mana *input*. The payment path has
 always spent floating mana on that `{1}`; `AddSourceToPool` only looked for another untapped
@@ -19,20 +19,58 @@ plans contained it. Rationale and the measurement live in the code
 one assertion under `MTG_NO_FLOAT_FEEDS_FILTER=1` — the *pool* assertion, not the payment ones,
 which is the asymmetry in one line.
 
-### OPEN 1 — the OVERNIGHT tier's ground truth is STALE for treasure_hunt
+## Landed 2: depletion tap order (2026-08-27) — and the CORRECTED seed-8 diagnosis
 
-Smoke and regression were rebaselined with the fix (`--accept`, treasure_hunt keys only, both
-tiers). **Overnight was deliberately not run** (user, 2026-08-27: *"We don't need to do overnight
-yet"*). Until it is, an overnight run will report treasure_hunt failures that are this adopted
-change, not a regression:
+The first version of this doc mis-transcribed Throes of Chaos's cost as `{2}{R}` (it is **`{3}{R}`**)
+and, from that, derived a phantom defect — "three sources tapped for a 3-mana cost with `{U}`
+floating", flagged as an unexplained over-tap. With the real cost there was **no over-tap**: the
+retrace needs 4 mana, and every observed board paid it with normal depletion over-produce. A
+payment-path trace (temporary `MTG_TAP_TRACE`) established what actually happens on seed 8:
+
+* The engine's T5 retrace payment was **exact**: Sandstone Needle (`{R}{R}`) + Saprazzan Skerry
+  (`{U}{U}`) = 4 for `{3}{R}`, zero leftover. Not the defect.
+* The real defect fired on **Fiery Islet's sac-to-draw `{1}`**: with a fresh Island available, the
+  greedy tapped the last-counter Skerry instead — 2 produced for 1 needed, the land sacrificed, the
+  spare `{U}` wasted. Cause: `ManaSourceRankBase` ranked a basic Island and a mono depletion land
+  identically (10), and the strict `<` broke the tie by battlefield position (Skerry at index 0).
+* That same tie is what made the user's line — *"play the Island and sacrifice in that order"* —
+  unreachable: paying the `{1}` with the Skerry killed it, stranding the retrace that needed its
+  mana, so the whole line dropped from enumeration.
+
+What shipped (`DepletionTapOrderEnabled`, `src/core/SpellEffects.h`; off-switch
+`MTG_NO_DEPLETION_TAP_ORDER` reverts both halves):
+
+1. **Tier** (`ManaSourceRankBase`): a depletion land taps one slot past its plain-tier peers
+   (mono 10→11, dual 20→21), same shape as the drip-land nudge. Ordering, not exclusion — a cost
+   only it can pay still taps it.
+2. **Tiebreak** (`TapForCostSharedOnce`, direct + feeder loops): among equal-rank depletion lands,
+   **more counters tap first** (USER doctrine 2026-08-27). This preserves per-turn burst, not total
+   mana: tapping the 2-counter copy leaves two lands = two taps next turn; tapping the 1-counter
+   copy kills it for the same total.
+3. **Viewer** (`AppendHumanPlayDigPlans`, human-play only, autonomous byte-identical): dig plans
+   now fan over the land-drop options the base plans already carry, so
+   `land=Island; sacrifice Fiery Islet to draw` is one pickable plan and the drop's mana funds the
+   dig's cost. Verified on the seed-8 repro: Island pays the `{1}`, the draw fires, and the retrace
+   is then paid exactly by Needle + Skerry.
+
+Pinned by `test/unit/test_mana_payment.cpp` ("depletion tap order: …"), whose three tapped-pattern
+assertions revert under the hatch. Structural blast radius: only decks holding a depletion land can
+move — treasure_hunt, Dragonstorm, Mirrorwing Dragon (Sandstone Needle). Measurement is recorded in
+the adopting commit.
+
+### OPEN 1 — the OVERNIGHT tier's ground truth is STALE for treasure_hunt (now 3 decks)
+
+Smoke and regression were rebaselined for the ramp-filter fix, and again for the depletion tap
+order. **Overnight was deliberately not run** (user, 2026-08-27: *"We don't need to do overnight
+yet"*). Until it is, an overnight run will report failures on treasure_hunt / dragonstorm /
+mirrorwing that are these adopted changes, not regressions:
 
 ```
-bash test/regression.sh --overnight            # inspect: expect th_* digest-only diffs
+bash test/regression.sh --overnight            # inspect: expect diffs on the 3 depletion decks only
 bash test/regression.sh --overnight --accept   # only after inspecting
 ```
 
-Expect the same shape the other two tiers showed — **identical averages, digests only,
-`slower=0 faster=0`**. Anything else is a real finding and should not be accepted.
+Anything moving outside those three decks is a real finding and should not be accepted.
 
 ## OPEN 2 — a whole class of turn gets NO mana-source reservation
 
@@ -49,103 +87,32 @@ if (possible < 2) { return Pp(PP_FEW_CASTS); }
 ```
 
 A **retrace** cast is from the graveyard and a **Land's Edge** discard is an activation, so a turn
-made of those scores **zero**, the prepay declines, and payment falls through to the unreserved
-greedy.
+made of those scores **zero**, the prepay declines, and payment falls through to the per-cast greedy.
 
-**Reproduction** (user-reported, seed 8, reproduced exactly):
-
-```
-build/Release/mtg decks/treasure_hunt/treasure_hunt.txt \
-  --profile decks/treasure_hunt/treasure_hunt.profile.json \
-  --cards-json src/cards/data/cards.json --claude-play --seed 8 --game-index 7 \
-  --max-turns 8 --depth 0 --choices 0,0,1,2,0,0,4,0,4,0,5,41,0,0,6
-```
-
-T5 board is Fiery Islet, Land's Edge, Sandstone Needle, Saprazzan Skerry with an Island in hand.
-Plan 6 plays the Island — the land drop *is* applied before payment — and then pays Throes of
-Chaos's retrace `{2}{R}` by tapping **Sandstone Needle + Saprazzan Skerry**, leaving the fresh
-Island *and* Fiery Islet untapped. That is 4 mana produced for a 3-mana cost, and it spends the
-Skerry's last depletion counter, sacrificing it. `Sandstone Needle {R}{R} + Island {U}` pays it
-exactly, for free.
-
-**Proof the reservation is inert rather than wrong:** `MTG_NO_DEPLETION_RESERVE=1` produces a
-byte-identical board.
-
-On this deck the shape is routine, not exotic — Throes of Chaos retrace plus Land's Edge is a normal
-treasure_hunt turn. Fixing it means widening the prepay's eligibility test (or giving the
-reservations a home outside it), which touches **every deck's** payment path, so it needs the full
-suite rather than a treasure_hunt-only sample.
-
-## OPEN 3 — the tap order cannot tell two depletion lands apart
-
-User, 2026-08-27: *"we misorder depletion lands. We should prefer those with more counters before
-those with less."*
-
-`ManaSourceRank` takes a **`CardDefinition`**, not a `Permanent`:
-
-```cpp
-int rank = ResolveProvider(state).ManaSourceRank(state, *def);
-...
-if (rank < best_rank) { best_rank = rank; best_i = i; }
-```
-
-Two Saprazzan Skerries with different counter counts are indistinguishable to it, and the strict `<`
-means the winner is whichever sits earlier on the battlefield. There is no counter-aware tiebreak
-anywhere in the tap loop; the counters live on `Permanent.counters` as `Counter::Type::Depletion`.
-
-**Why "more counters first" is right, and it is not about total mana.** Tapping the 2-counter copy
-leaves A(1) + B(1): two lands, two taps available *in the same turn*. Tapping the 1-counter copy
-sacrifices it and leaves A(2): the same total mana, but only one tap per turn. The rule preserves
-per-turn burst, not resources.
-
-Any fix is a per-permanent tiebreak in the greedy tap loop (`TapForCostSharedOnce`, the path both
-executor and rollout call, so one change keeps them in lockstep) — not a change to
-`ManaSourceRank`'s signature.
-
-### What was tried, and what it proved (2026-08-27)
-
-Two prototypes were built against the seed-8 T5 board, measured on the repro, and **reverted**. Both
-results are worth having before anyone starts again.
-
-**Prototype 1 — lift the prepay's two-cast gate (`MTG_RESERVE_SINGLE_CAST`).** Counted
-`CastFromGraveyard` toward the eligibility test and dropped the threshold to one cast, scoped to
-boards holding an untapped reservable source. It *worked* — `MTG_PREPAY_PROBE` went from
-`declined: <2 casts 8 (100%)` to `PREPAID 2 (25%)` — and the board did **not** change.
-
-The reason is the one thing the OPEN 2 write-up above does not say: the depletion reserve is
-**all-or-nothing** ("hold EVERY untapped depletion land"). On that board *both* Sandstone Needle and
-Saprazzan Skerry are depletion lands, the turn genuinely cannot be paid while holding both, so the
-held attempt fails and falls through to the unrestricted greedy — which is where it started. So
-OPEN 2 is real but is **not** the cause of this particular board. Fixing OPEN 2 alone will not fix
-seed 8; it needs a reserve that can hold a *subset*, or the ordering rule below.
-
-**Prototype 2 — give depletion lands a tap-order tier (`MTG_DEPLETION_TAP_ORDER`).** `rank += 1` for
-`enters_tapped_with_depletion` (matching the drip land's nudge) plus a per-permanent
-more-counters-first tiebreak in the greedy. This **did** change the choice: the freshly-played Island
-went from untapped to paying. It is the right direction and it confirms the diagnosis — the tie was
-being broken by battlefield position.
-
-It is still **not enough**. The final board taps Island + Sandstone Needle + Saprazzan Skerry with
-`{U}` left floating: the Skerry is *still* tapped for a cost that no longer needs it. Coloured pips
-are paid before generic ones (`greedy()` in `TapForCostSharedOnce`), so Sandstone Needle's
-over-produced second `{R}` should already be covering a generic pip — and something is tapping a
-third source anyway. **That over-tap is a distinct defect and should be understood before either
-prototype is finished**, because a rank change that leaves the wasted counter in place has bought
-nothing on the board that motivated it.
-
-Neither prototype was committed: both are default-off levers that do not fix their own motivating
-case, which is exactly the shape that reads as "done" six weeks later.
+**Status after the seed-8 correction: real, but demoted.** The board that motivated this item was
+proven to be entirely the tap-order tie above — `MTG_NO_DEPLETION_RESERVE=1` produced a
+byte-identical board (the reserve was inert, not wrong), and a prototype that lifted the gate
+(`MTG_RESERVE_SINGLE_CAST`: count `CastFromGraveyard`, threshold 1) moved the probe histogram
+(`declined: <2 casts` 100% → `PREPAID` 25%) while changing **nothing** on the board, because the
+depletion hold is all-or-nothing per class: the turn genuinely cannot be paid holding BOTH depletion
+lands, so the held attempt fails and falls through to the same greedy. The remaining exposure is the
+narrow inter-cast shape: ≥2 casts where at least one is a retrace/activation, plus a cross-cast
+colour conflict the (now depletion-aware) per-cast greedy misorders. A complete fix must **fold the
+retrace cast's cost into `combined`** (the eligibility loop currently `continue`s past
+`CastFromGraveyard`, so widening the gate alone would prepay only part of the turn) and/or give the
+depletion class a partial-hold rung (the ladder has one for creatures — `MTG_DORK_HOLD_PARTIAL` —
+but not for depletion). Measure on the full suite; it touches every deck's payment path.
 
 ## Sequencing note
 
-OPEN 2 and OPEN 3 are both play changes and both want their own measurement; do **not** bundle them
-into one ground-truth rebaseline or neither is attributable. OPEN 2 is the bigger prize — a missing
-class of turn rather than a tiebreak — and is likely to subsume many of the cases where OPEN 3 would
-otherwise bite, so measure it first and re-check whether OPEN 3 still moves anything.
+The tap-order fix (Landed 2) was measured on its own before any OPEN 2 work, per the original
+version's rule: two play changes bundled into one rebaseline are unattributable. OPEN 2, if picked
+up, gets its own measurement — and should be re-scoped first, since the case that motivated it is
+now closed.
 
-Standing caution for both: this repo has measured three *"make the mana projection more accurate"*
-fixes that ALL lost, with zero games better in any arm — the pessimistic projection was acting as a
-tempo prior (`goblins-enabler-worse-games.md`). The fix landed above went the other way (6 better /
-0 worse over 16,000 held-out games), and the distinction that seems to matter is *restoring a line
-the search could not see at all* versus *re-ranking two lines it could*. OPEN 2 and OPEN 3 are both
-re-ranking changes, i.e. the side that lost last time. Measure before believing.
+Standing caution: this repo has measured three *"make the mana projection more accurate"* fixes that
+ALL lost, with zero games better in any arm (`goblins-enabler-worse-games.md`). The two landed fixes
+here are the other shape — restoring lines the search could not reach at all (a pruned cast; an
+unenumerable dig order) — plus a user-doctrine ordering with a measured-neutral-or-better suite
+result. OPEN 2 remains a re-ranking change, i.e. the side that lost last time. Measure before
+believing.
