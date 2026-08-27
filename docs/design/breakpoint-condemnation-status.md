@@ -361,7 +361,21 @@ quality and work units alongside.
 |---|---|---|
 | **A. site rule** | `MTG_BP_CONDEMN_MANA_SITE_EXEMPT` (shipped, default ON) | condemns nothing at a mana-adding site; blunt — it drops the prune everywhere Gold Rush fires |
 | **B. range** | turn on `MTG_ORDER_RANGE` and let Gold Rush's declared `[6..15]` ladder express the affordability-dependent slot; condemnation then respects the range | the USER's preferred framing; needs the floor revisited (6 is ahead of the bodies, vs *"spells go last"*) |
-| **C. either, magnet-gated** | apply A or B only while a copy magnet is already on the battlefield | a trick cast before any magnet is out is NOT copied, so those lines are worth deleting — this is what killed the magnet exemption, and it should sharpen A or B the same way |
+| **C. either, magnet-gated** | apply A or B only while a copy magnet is already on the battlefield | **NOT a refinement -- this is the CORRECT form of A**, see below |
+
+**C is mandatory, because A's premise is FALSE without a magnet.** USER, 2026-08-27: *"Gold Rush
+does not make mana when not."* Exactly right, and it invalidates the rule as shipped: Gold Rush costs
+`{1}{G}` and mints ONE Treasure, so bare it is **mana-NEGATIVE (-1)**. It only becomes a mana engine
+when a magnet copies it once per other creature. So "the site added mana" -- the whole justification
+for condemning nothing there -- is simply untrue whenever no magnet is out, and the rule is dropping
+the prune on games where there was never an affordability change to protect.
+
+**So `MTG_BP_CONDEMN_MANA_SITE_EXEMPT` as committed (default ON) is OVER-BROAD** and its measured
+numbers include those unjustified firings. The gate to add is net-mana-positive-IN-CONTEXT, which for
+a treasure-maker means a copy magnet on the battlefield; `ritual_floating_mana` /
+`untap_x_mana_sources` sites are unconditionally mana-positive and need no gate. Re-measure the
+census after gating -- the ~third of the prune saving currently given up should come back without
+losing the recovered lines.
 
 **Do NOT score these by condemnation counts.** Three times this session the count pointed the wrong
 way (see VOLUME IS NOT HARM below). Score on the unrecoverable census + the paired metric.
