@@ -102,6 +102,40 @@ Any fix is a per-permanent tiebreak in the greedy tap loop (`TapForCostSharedOnc
 executor and rollout call, so one change keeps them in lockstep) — not a change to
 `ManaSourceRank`'s signature.
 
+### What was tried, and what it proved (2026-08-27)
+
+Two prototypes were built against the seed-8 T5 board, measured on the repro, and **reverted**. Both
+results are worth having before anyone starts again.
+
+**Prototype 1 — lift the prepay's two-cast gate (`MTG_RESERVE_SINGLE_CAST`).** Counted
+`CastFromGraveyard` toward the eligibility test and dropped the threshold to one cast, scoped to
+boards holding an untapped reservable source. It *worked* — `MTG_PREPAY_PROBE` went from
+`declined: <2 casts 8 (100%)` to `PREPAID 2 (25%)` — and the board did **not** change.
+
+The reason is the one thing the OPEN 2 write-up above does not say: the depletion reserve is
+**all-or-nothing** ("hold EVERY untapped depletion land"). On that board *both* Sandstone Needle and
+Saprazzan Skerry are depletion lands, the turn genuinely cannot be paid while holding both, so the
+held attempt fails and falls through to the unrestricted greedy — which is where it started. So
+OPEN 2 is real but is **not** the cause of this particular board. Fixing OPEN 2 alone will not fix
+seed 8; it needs a reserve that can hold a *subset*, or the ordering rule below.
+
+**Prototype 2 — give depletion lands a tap-order tier (`MTG_DEPLETION_TAP_ORDER`).** `rank += 1` for
+`enters_tapped_with_depletion` (matching the drip land's nudge) plus a per-permanent
+more-counters-first tiebreak in the greedy. This **did** change the choice: the freshly-played Island
+went from untapped to paying. It is the right direction and it confirms the diagnosis — the tie was
+being broken by battlefield position.
+
+It is still **not enough**. The final board taps Island + Sandstone Needle + Saprazzan Skerry with
+`{U}` left floating: the Skerry is *still* tapped for a cost that no longer needs it. Coloured pips
+are paid before generic ones (`greedy()` in `TapForCostSharedOnce`), so Sandstone Needle's
+over-produced second `{R}` should already be covering a generic pip — and something is tapping a
+third source anyway. **That over-tap is a distinct defect and should be understood before either
+prototype is finished**, because a rank change that leaves the wasted counter in place has bought
+nothing on the board that motivated it.
+
+Neither prototype was committed: both are default-off levers that do not fix their own motivating
+case, which is exactly the shape that reads as "done" six weeks later.
+
 ## Sequencing note
 
 OPEN 2 and OPEN 3 are both play changes and both want their own measurement; do **not** bundle them
