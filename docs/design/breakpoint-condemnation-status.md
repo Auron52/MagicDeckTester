@@ -327,6 +327,27 @@ It gives back about a third of the prune saving, which is what condemning less i
 Impolite Entrance / Fists of Flame sites (draw and pump, not mana), so they are a different cause
 and are NOT explained by this rule.
 
+### USER STEER (2026-08-27): this is really a RANGE statement, not a condemnation rule
+
+> *"I don't totally disagree with that statement, but it's more of a Gold Rush range type statement
+> in reality."*
+
+Read the mana-site rule as a stopgap, not the destination. What it actually encodes is that **Gold
+Rush has no single proper position** -- its slot depends on whether the line can pay -- and this repo
+already has the mechanism for exactly that: the cast-order RANGE and its funding ladder
+(`CastOrderFallbackRanks`, `docs/design/cast-order-ideal-with-ranges.md`). Mirrorwing already
+declares `[6..15]` for it, from the USER's 2026-08-18 review.
+
+So the next move is NOT another condemnation predicate. It is to express Gold Rush's
+affordability-dependent position as a RANGE and let condemnation respect that range, instead of
+special-casing "the site made mana". Two loose ends to pick up with it:
+
+* `MTG_ORDER_RANGE` is **default OFF**, so the declared `[6..15]` ladder is inert today. The probe
+  on gi=13 confirms it never walks (`[order-range] ideal order pays`).
+* The ladder's floor of 6 puts Gold Rush ahead of every body (creatures at 10), which contradicts the
+  USER's 2026-08-27 *"spells should go last in the order"*. If the range is ever adopted, that floor
+  needs revisiting -- the base order is already spells-last; only the ladder violates it.
+
 ### Two exemptions built for Mirrorwing and DELETED -- recorded so they are not re-proposed
 
 * **A copy-MAGNET exemption.** By count the magnet looks like the dominant victim (gi=13 turn 4:
