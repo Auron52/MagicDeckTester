@@ -65,8 +65,18 @@ def read(path):
                 acts.setdefault(n, []).append((ty, a.get("cardName", "")))
         if t.get("boardAfter"):
             board[n] = t["boardAfter"]
-    return dict(win=(g.get("result") or {}).get("turn"), keep=keep, mulls=mulls,
+    return dict(win=win_turn(g), keep=keep, mulls=mulls,
                 acts=acts, draws=draws, board=board)
+
+
+def win_turn(g):
+    """THE metric's turn for a logged game: an UNWON game logs `"turn": null` and scores
+    max_turns+1 = 9, exactly as the batch's .wins encodes it (-1 -> 9). Reading the raw null
+    made --verify report a false REPRO MISMATCH on every unwon game, which reads as an
+    unfaithful repro and blocks classification -- the one thing this script exists to prevent
+    being done by inference."""
+    t = (g.get("result") or {}).get("turn")
+    return 9 if t is None else t
 
 
 def untapped_sources(board):
@@ -158,7 +168,7 @@ def verify(root, batchdir, armjob):
         gi = int(gi)
         for arm, job in (("base", "base"), ("arm", armjob)):
             ref = wins(f"{batchdir}/{job}.{blk}.wins")
-            got = (json.load(open(sole(d / arm))).get("result") or {}).get("turn")
+            got = win_turn(json.load(open(sole(d / arm))))
             if ref.get(gi) != got:
                 print(f"  REPRO MISMATCH {d.name} {arm}: batch={ref.get(gi)} repro={got}")
                 bad += 1

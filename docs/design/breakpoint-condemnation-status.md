@@ -1,4 +1,4 @@
-# Breakpoint condemnation: SIX bugs fixed; now globally adoptable -- the flip is a USER call
+# Breakpoint condemnation: EIGHT bugs; bug 8 was the big one -- the rank test infers a decline that never happened
 
 **Status: the engine work is DONE and committed. As of 2026-08-26 the correctness fixes are DEFAULT
 ON and condemnation is quality-neutral on every deck it can fire on, so the remaining decision is
@@ -459,6 +459,98 @@ This also retires arm **B** (expand the range): the range machinery is already l
 *Correction to the numbers recorded above:* at n=8000 the shipped site rule measures **+0.0011 /
 +0.0003 vs condemnation-off**, not the -0.0010 / -0.0040 recorded from n=3000. The earlier
 "improvement" was noise; the rule is quality-NEUTRAL, not positive.
+
+## BUG 8 (2026-08-27) -- the rank test infers a decline that never happened
+
+> USER: *"My take here is that condemnation should not produce worse results almost ever. Since it
+> reduces the overall work. So, the data may be hiding an actual issue."*
+
+**That is the correct test, and it was hiding one.** A prune that removes only genuinely
+considered-and-declined casts **cannot** lose at 100x budget -- there is no dilution left to blame.
+So every survivor of the escalation census is a FALSE PREMISE, not the price of pruning. 29 survivors
+meant 29 false premises.
+
+### The specimen: hold gi=5259, identical hands and draws, ONE difference
+
+| | base (condemnation off) | condemnation |
+|---|---|---|
+| T1 | Forest, Ignoble Hierarch | same |
+| T2 | Sandstone Needle, **hold** | Sandstone Needle, **CAST Gold Rush** |
+| T3 | Kazandu Refuge, Zada | same |
+| T4 | Forest, **Expedite, Elvish Mystic, Twinflame, Gold Rush -> WIN T4** | Forest, nothing |
+| T5 | -- | Twinflame, Expedite, Elvish Mystic, Fists -> win T5 |
+
+`MTG_CONDEMN_WHO` on that game: **`T4 drop=Twinflame rank=12 site=Expedite site_rank=14` x3,309.**
+
+Twinflame is exactly the card base's winning T4 line needs. The order-aware rule condemns it because
+its RANK (12) precedes the site's RANK (14) -- *"its slot already passed"*. It had not. The plan was
+**the cantrip ALONE**, cast first to draw before committing, with the rest of the turn deliberately
+deferred to the continuation. Nothing preceded it, so nothing was declined.
+
+**Why the rank test is unsound here.** `OrderingOpaque()` (ManaPayment.cpp) returns true for any set
+containing a draw / stage / cascade / retrace / `solo_target_trick` card -- *"that set keeps its
+canonical plan/breakpoint order (**the search owns the ambiguous ordering**)"*. That is precisely the
+class that opens breakpoints, and on Mirrorwing it is every trick in the deck. So condemnation is
+enforcing a cast order the engine deliberately refuses to apply.
+
+### The damage propagates BACKWARDS, and it is NOT budget
+
+With the T4 line deleted, "hold Gold Rush" prices worse than it truly is, so the arm dumps it on T2
+with no magnet out -- where a solo-target trick is worth ONE copy instead of N. **There are ZERO
+condemnations on T2**, the turn whose decision actually changed. And no budget recovers it: a pruned
+continuation is not under-searched, it is *smaller*. That is why 100x + 1 ply changes nothing.
+
+Across all 29 the shape is identical -- a BODY or a MAGNET condemned at a TRICK site:
+
+| condemned (rank) | at site (rank) | count over the 29 |
+|---|---|---|
+| Twinflame (12) | Fists 16 / Anger 14 / Expedite 14 / Scale 14 | 103,698 |
+| Expedite / Anger / Scale (14) | Fists of Flame (16) | 28,114 |
+| Goblin Instigator (10) | trick sites | 25,071 |
+| **Zada / Mirrorwing Dragon (5) -- the MAGNETS** | trick sites | 16,166 |
+
+The magnets are the tell: this deck's whole engine is *"bodies first: more copies for the fan-outs"*,
+and condemnation was banning the magnet in the continuation of a trick.
+
+### The fix was already in the tree, built and never measured
+
+`MTG_BP_CONDEMN_TAIL_EXEMPT` -- root-caused on KittyEquipment 2026-08-25, default OFF *"pending
+measurement"*: skip condemnation when the plan has no cast LEFT to make, because *"the base plan is
+ONE plan, not an exhaustive verdict on every card in hand"*. That is exactly the cantrip-alone plan.
+**It recovers 24 of the 29.**
+
+| arm (vs condemnation OFF) | quality hold / train | regressions | **UNRECOVERABLE** | work hold / train |
+|---|---|---|---|---|
+| bug 8 present (shipped) | +0.0011 (t=1.29) / +0.0003 (t=0.24) | 26 + 26 | **29** | -1.42% / -1.89% |
+| **+ tail exemption** | +0.0003 (t=1.00) / -0.0001 (t=-0.22) | 3 + 4 | **5** | -0.09% / -0.19% |
+| + tail + treasure-positive | -0.0003 (t=-0.50) / -0.0001 (t=-0.14) | 4 + 4 | **5** | -0.27% / -0.21% |
+
+Condemnation also RECOVERS one line base loses (train gi=2647), unchanged by the fix.
+
+**Now DEFAULT ON.** Byte-identical at shipped defaults over 5 decks (condemnation is off everywhere
+by default), so it moves no ground truth.
+
+### The honest cost, and it is the real finding
+
+**Condemnation's work saving was coming almost entirely from the unsound prune.** -1.42%/-1.89%
+becomes -0.09%/-0.19% once the false premise is removed. Done correctly, condemnation is ~free on
+both axes rather than a win on work. That is worth stating plainly before anyone flips
+`MTG_BP_CLASSIFY` globally expecting a perf return.
+
+It also **rehabilitates the Gold Rush net>=0 site gate**: `tail_pos` is the best arm measured (both
+blocks directionally faster than condemnation-off, 5 unrecoverable, -0.27%/-0.21% work), and
+`tail_pos` vs `tail` is 0 unrecoverable in BOTH directions. The gate was only harmful because it
+compounded bug 8's damage.
+
+### What remains: 5 games, and it is the same bug in its pure form
+
+train 2039 / 6433, hold 1485 / 2804 / 5407. All five are one shape -- **the arm dumps tricks EARLY,
+before the magnet lands.** The tail exemption does not fire because those plans DO have a tail, yet
+the rank comparison is still invalid for the same reason (search-owned order). The residual
+condemnations are the same table as above (Twinflame at Expedite, the magnets at trick sites).
+
+The principled next fix is to stop inferring the decline from a static rank at all: condemn only when
+the plan actually cast something BEFORE the site. Untried.
 
 ### Two exemptions built for Mirrorwing and DELETED -- recorded so they are not re-proposed
 

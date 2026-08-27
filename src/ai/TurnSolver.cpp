@@ -670,9 +670,42 @@ static bool BpPlanHasTail(const Player& ap)
     return false;
 }
 
+// MEASURED 2026-08-27 ON MIRRORWING, AND IT IS BUG 8 -- the largest condemnation defect found so far.
+// USER: *"condemnation should not produce worse results almost ever, since it reduces the overall
+// work. So the data may be hiding an actual issue."* It was. A prune that only removes genuinely
+// considered-and-declined casts CANNOT lose at 100x budget -- there is no dilution left to blame --
+// so every survivor of the escalation census is a false premise, not a tuning cost.
+//
+// Root-caused per game (hold gi=5259 is the clean specimen, identical hands and draws in both arms,
+// one single difference): base wins T4 with "Expedite -> [breakpoint draw] -> Elvish Mystic,
+// Twinflame, Gold Rush". Condemnation bans TWINFLAME in that continuation -- 3,309 times at exactly
+// that site -- because Twinflame ranks 12 and Expedite ranks 14, so the order-aware rule reads it as
+// "its slot already passed". It had not: the plan was the cantrip ALONE, cast first to draw before
+// committing, with the whole rest of the turn deliberately deferred to the continuation. Nothing
+// preceded it, so nothing was declined.
+//
+// The damage then propagates BACKWARDS. With the T4 line deleted, holding Gold Rush prices worse
+// than it is, so the arm dumps it on T2 with no magnet out -- where a solo-target trick is worth one
+// copy instead of N. There are ZERO condemnations on T2, the turn whose decision actually changed.
+//
+// Across all 29 unrecoverable Mirrorwing regressions the shape is identical: a BODY or a MAGNET
+// (Twinflame 12, Goblin Instigator 10, Zada/Mirrorwing Dragon 5) condemned at a TRICK site
+// (Fists 16, Ancestral Anger / Expedite / Scale 14). This exemption recovers 24 of the 29.
+//
+// MEASURED, n=8000 x 2 blocks, vs condemnation OFF:
+//                     quality (hold / train)        regressions   UNRECOVERABLE   work
+//   without (bug 8):  +0.0011 (t=1.29) / +0.0003     26 + 26           29         -1.42% / -1.89%
+//   with (this fix):  +0.0003 (t=1.00) / -0.0001      3 +  4            5         -0.09% / -0.19%
+//
+// HONEST COST, and it is the real finding: condemnation's work saving was coming almost ENTIRELY
+// from the unsound prune. Done correctly it is ~free on both axes rather than a win on work.
+//
+// DEFAULT ON as a correctness fix, in the same class as bugs 4-7; =0 restores the false premise.
+// Byte-identical at shipped defaults over 5 decks x 60 games (condemnation is off everywhere by
+// default), so this moves no ground truth.
 static bool BpCondemnTailExemptEnabled()
 {
-    static const bool on = EnvOn("MTG_BP_CONDEMN_TAIL_EXEMPT");   // default OFF pending measurement
+    static const bool on = EnvOn("MTG_BP_CONDEMN_TAIL_EXEMPT", true);   // DEFAULT ON (bug 8)
     return heurarm::Flag(heurarm::BP_CONDEMN_TAIL, on);
 }
 

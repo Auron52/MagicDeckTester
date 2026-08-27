@@ -48,6 +48,12 @@ COND     = {"MTG_BP_CLASSIFY": True, "MTG_BP_CONDEMN_ORDER_AWARE": True}
 POSITIVE = {"MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE": True}
 NO_SITE  = {"MTG_BP_CONDEMN_MANA_SITE_EXEMPT": False}
 LADDER   = {"MTG_MW_GR_LADDER_POSITIVE": True}
+# BUG 8 (2026-08-27): condemnation infers "already considered and declined" from a static cast-order
+# RANK, but the plan that opens a breakpoint is very often the cantrip ALONE -- nothing preceded it,
+# so nothing was declined, and the rest of the turn is deliberately deferred to the continuation.
+# MTG_BP_CONDEMN_TAIL_EXEMPT (built 2026-08-25 on KittyEquipment, never measured) is exactly that
+# guard: skip condemnation when the plan has no pending cast still in hand.
+TAIL     = {"MTG_BP_CONDEMN_TAIL_EXEMPT": True}
 
 ARMS = {
     # The quality baseline: condemnation OFF, i.e. what Mirrorwing actually ships today.
@@ -59,6 +65,11 @@ ARMS = {
     # The order half, isolated (no condemnation) and combined.
     "ladder":     {**LADDER},
     "pos_ladder": {**COND, **POSITIVE, **LADDER},
+    # Bug 8 and its combinations.
+    "tail":        {**COND, **TAIL},
+    "tail_pos":    {**COND, **TAIL, **POSITIVE},
+    "tail_nosite": {**COND, **TAIL, **NO_SITE},
+    "ship_ladder": {**COND, **LADDER},
 }
 
 BLOCKS = {"train": 500001, "hold": 1050001}
