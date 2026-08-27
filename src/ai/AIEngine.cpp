@@ -2437,6 +2437,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 PerformEtbDig(state, state.active_player_index, copt->params,
                               &state.battlefield.back());
             }
+            // UNIVERSAL ETB cascade (USER 2026-08-27, Minotaur seed 1: a Vial-put Fanatic of
+            // Mogis dealt NO devotion damage, missing a T5 lethal). A Vial put IS an
+            // enters-the-battlefield event -- every ETB trigger fires (CR 603.6a); only CAST
+            // triggers don't. This path fired only the dig + legend rule, silently skipping the
+            // whole ETB suite (devotion burn, ETB burn, tokens, tutors, debuffs) -- and the
+            // per-deck audit missed it because it hand-checked CASTS. Same pair the attack-dig
+            // put path calls; lockstep twin in TurnSolver's apply_vial.
+            {
+                const int slot = static_cast<int>(state.battlefield.size()) - 1;
+                OnDragonEnters(state, state.active_player_index, slot);
+                OnGoblinEnters(state, state.active_player_index, slot);
+            }
             if (copt->card.HasSupertype(Supertype::Legendary))
             {
                 EnforceLegendRule(state, state.active_player_index);

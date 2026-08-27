@@ -14197,6 +14197,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 PerformEtbDig(state, state.active_player_index, copt->params,
                               &state.battlefield.back());
             }
+            // UNIVERSAL ETB cascade -- lockstep twin of AIEngine's deploy_via_vial (see the
+            // comment there: a Vial-put Fanatic of Mogis fired no devotion burn, so the search
+            // could never SEE a vial line's ETB value either).
+            {
+                const int slot = static_cast<int>(state.battlefield.size()) - 1;
+                OnDragonEnters(state, state.active_player_index, slot);
+                OnGoblinEnters(state, state.active_player_index, slot);
+            }
             if (copt->card.HasSupertype(Supertype::Legendary))
             {
                 EnforceLegendRule(state, state.active_player_index);
