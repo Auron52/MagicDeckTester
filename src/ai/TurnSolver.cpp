@@ -13523,6 +13523,93 @@ static bool PlayLandByName(GameState& state, const std::string& name,
                            const std::string& land_face = "");
 static std::string SimulateLandPlay(GameState& state);
 
+// ---- GREEDY LAND-DROP INSTRUMENT (MTG_LANDDROP_STATS, default off, zero cost when off) --------
+//
+// The USER's standing directive is that no greedy component may sit inside the searched window, and
+// this ranker is one: it takes the FIRST multi-colour land in HAND ORDER, blind to yield and to
+// what the turn needs. The pre-combat drop is searched (EnumeratePlansWithLand); this fires only
+// for a DEFERRED drop, and the call site's own comment records that "no depth or budget can reach a
+// different drop" because the post-dig continuation is resolved by greedy Solve.
+//
+// So the question that scopes the fix is HOW OFTEN it actually decides a drop, per deck -- and this
+// repo's standing lesson is to INSTRUMENT rather than read the call graph for that. Counts the
+// decisions and which pass made them: pass 0 is the multi-colour preference (a real, if blind,
+// judgement), pass 1 is "first land in hand order" (no judgement at all).
+namespace landdrop
+{
+    inline bool Enabled() { static const bool v = EnvOn("MTG_LANDDROP_STATS"); return v; }
+    inline std::atomic<uint64_t> g_calls{0}, g_none{0}, g_pass0{0}, g_pass1{0}, g_choice_forced{0};
+    // SPLIT BY SITE, because these are TWO levers and this repo has read a merged count wrongly
+    // before (see MTG_SSM_SITE): `real` is the committed executor decision, `rollout` is the leaf
+    // estimator's playout. Do NOT assume the rollout half is harmless -- the breakpoint fan-out's
+    // own note records the opposite result: "root-only is nearly free but recovers NONE of the
+    // gain... the greedy continuation's real damage is to the LEAF EVALUATOR: it makes the rollouts
+    // mis-score lines, so the root ranks its candidates on bad estimates."
+    // g_real_resolution is declared DIAGNOSTIC USE ONLY in GameLogger.h -- which is what this is;
+    // no game logic branches on it here.
+    inline std::atomic<uint64_t> g_real_play{0}, g_real_choice{0};
+    // POSITIVE CONTROL for the split above. A uniform zero in the `real` column is exactly the
+    // shape of a vacuous instrument, and this session has already produced two nulls from levers
+    // that never fired. These count EVERY land play by the same discriminator, greedy or searched,
+    // so a nonzero `real` here proves the flag is live and the greedy zero means what it says.
+    inline std::atomic<uint64_t> g_all_real{0}, g_all_rollout{0};
+    inline void RecordAnyLandPlay()
+    {
+        if (!Enabled()) { return; }
+        (g_real_resolution ? g_all_real : g_all_rollout).fetch_add(1, std::memory_order_relaxed);
+    }
+    inline std::mutex g_mtx;
+    inline std::map<std::string, uint64_t> g_by_card;
+
+    // `alternatives` = how many OTHER land names the hand also held. 0 means the greedy pick was
+    // the only legal drop, so it decided nothing -- that share is what separates "greedy fires a
+    // lot" from "greedy CHOOSES a lot", and they are very different sizes of problem.
+    inline void Record(const std::string& played, int pass, int alternatives)
+    {
+        if (!Enabled()) { return; }
+        g_calls.fetch_add(1, std::memory_order_relaxed);
+        if (played.empty()) { g_none.fetch_add(1, std::memory_order_relaxed); return; }
+        (pass == 0 ? g_pass0 : g_pass1).fetch_add(1, std::memory_order_relaxed);
+        if (alternatives <= 0) { g_choice_forced.fetch_add(1, std::memory_order_relaxed); }
+        if (g_real_resolution)
+        {
+            g_real_play.fetch_add(1, std::memory_order_relaxed);
+            if (alternatives > 0) { g_real_choice.fetch_add(1, std::memory_order_relaxed); }
+        }
+        std::lock_guard<std::mutex> lk(g_mtx);
+        ++g_by_card[played];
+    }
+
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            const uint64_t c = g_calls.load(), n = g_none.load();
+            const uint64_t p0 = g_pass0.load(), p1 = g_pass1.load(), f = g_choice_forced.load();
+            const uint64_t played = p0 + p1;
+            std::fprintf(stderr,
+                "\n=== GREEDY LAND DROP: %llu calls, %llu played a land, %llu no-op ===\n"
+                "=== pass0 multi-colour %llu | pass1 hand-order %llu | "
+                "FORCED (no alternative in hand) %llu (%.1f%% of plays) ===\n"
+                "=== SITE: committed/real %llu (of which a real CHOICE %llu) | "
+                "rollout %llu ===\n"
+                "=== CONTROL, ALL land plays (greedy or searched): real %llu | rollout %llu ===\n",
+                (unsigned long long)c, (unsigned long long)played, (unsigned long long)n,
+                (unsigned long long)p0, (unsigned long long)p1, (unsigned long long)f,
+                played ? 100.0 * static_cast<double>(f) / static_cast<double>(played) : 0.0,
+                (unsigned long long)g_real_play.load(), (unsigned long long)g_real_choice.load(),
+                (unsigned long long)(played - g_real_play.load()),
+                (unsigned long long)g_all_real.load(), (unsigned long long)g_all_rollout.load());
+            std::lock_guard<std::mutex> lk(g_mtx);
+            for (const auto& kv : g_by_card)
+            { std::fprintf(stderr, "    %8llu  %s\n", (unsigned long long)kv.second, kv.first.c_str()); }
+        }
+    };
+    inline Dumper g_dumper;
+}
+
+
 // MTG_FORCE_LAND="<turn>:<land name>[,<turn>:<name>...]" (inert by default): the land to force as
 // that turn's drop. Diagnostic only -- there is otherwise no way to ask "what would the engine do
 // from THIS land drop?", which is needed whenever a reference's human line diverges at a land
@@ -18000,7 +18087,9 @@ static bool PlayLandByName(GameState& state, const std::string& name,
     // keeps the old model.
     static const bool s_orchard_onplay = !EnvOn("MTG_LEGACY_SEARCH");
     o.spawn_orchard_spirit = s_orchard_onplay;
-    return PlayLandFromHand(state, static_cast<std::size_t>(pick - ap.hand.begin()), *def, o);
+    const bool ok = PlayLandFromHand(state, static_cast<std::size_t>(pick - ap.hand.begin()), *def, o);
+    if (ok) { landdrop::RecordAnyLandPlay(); }   // instrument's positive control (see the namespace)
+    return ok;
 }
 
 // Greedy land play: one land drop per turn, preferring multi-color lands over
@@ -18010,7 +18099,8 @@ static bool PlayLandByName(GameState& state, const std::string& name,
 static std::string SimulateLandPlay(GameState& state)
 {
     Player& ap = state.ActivePlayer();
-    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return std::string(); }
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable())
+    { landdrop::Record(std::string(), 0, 0); return std::string(); }
 
     // Does the active player control another land (one a Karoo could bounce)?
     const int active = state.active_player_index;
@@ -18018,6 +18108,24 @@ static std::string SimulateLandPlay(GameState& state)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index == active && p.card.IsLand()) { has_other_land = true; break; }
+    }
+
+    // Instrument only (MTG_LANDDROP_STATS): how many DISTINCT land names the hand could legally
+    // drop. Computed under the same filters the loop below uses, and only when the counter is on,
+    // so the shipped path is untouched.
+    int alternatives = 0;
+    if (landdrop::Enabled())
+    {
+        std::set<std::string> seen;
+        for (const Card& c : ap.hand)
+        {
+            if (c.m_impulse_no_land) { continue; }
+            const CardDefinition* d = LandFaceDefOf(CardDatabase::Instance().LookupCached(c));
+            if (!d) { continue; }
+            if (d->params.etb_bounce_land && !has_other_land) { continue; }
+            seen.insert(c.m_name.str());
+        }
+        alternatives = static_cast<int>(seen.size()) - 1;   // OTHER names beyond the one picked
     }
 
     for (int pass = 0; pass < 2; ++pass)
@@ -18039,9 +18147,11 @@ static std::string SimulateLandPlay(GameState& state)
 
             std::string name = c.m_name;
             PlayLandByName(state, name);
+            landdrop::Record(name, pass, alternatives);
             return name;
         }
     }
+    landdrop::Record(std::string(), 0, 0);
     return std::string();
 }
 

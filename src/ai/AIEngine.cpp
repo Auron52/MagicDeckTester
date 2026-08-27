@@ -2391,6 +2391,44 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Zero for every plan with no hand cast, and inert for every deck with no mid-line sink.
             LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
 
+            // MTG_LANDDROP_STATS (diagnostic): does the COMMITTED plan carry a searched land drop?
+            // TurnSolver's counter cannot answer this -- every land play it sees is search-internal
+            // by construction, so splitting it on g_real_resolution reads 100% rollout on every
+            // deck and means nothing. m_in_rollout is the executor's own committed/rollout flag and
+            // is the discriminator that actually separates the two.
+            //
+            // A committed plan with land_decided=false, while a playable land sits in hand, is the
+            // case where the greedy ranker (SimulateLandPlay: first multi-colour land in HAND
+            // ORDER, blind to yield) decides the real drop. That is the number that scopes the
+            // USER's "no greedy in the searched window" directive for the land drop.
+            if (is_pre_combat_main && !m_in_rollout && EnvOn("MTG_LANDDROP_STATS"))
+            {
+                static std::atomic<unsigned long long> s_committed{0}, s_searched{0}, s_greedy{0};
+                struct Dump
+                {
+                    ~Dump()
+                    {
+                        if (!EnvOn("MTG_LANDDROP_STATS")) { return; }
+                        std::fprintf(stderr,
+                            "=== COMMITTED m1 plans: %llu | land SEARCHED %llu | "
+                            "no searched land WITH one playable in hand %llu ===\n",
+                            s_committed.load(), s_searched.load(), s_greedy.load());
+                    }
+                };
+                static Dump s_dump;
+                s_committed.fetch_add(1, std::memory_order_relaxed);
+                if (plan.land_decided && !plan.land_to_play.empty())
+                { s_searched.fetch_add(1, std::memory_order_relaxed); }
+                else
+                {
+                    const Player& lap = state.ActivePlayer();
+                    bool playable = lap.lands_played_this_turn < lap.LandDropsAvailable()
+                        && std::any_of(lap.hand.begin(), lap.hand.end(), [](const Card& c)
+                           { return !c.m_impulse_no_land && c.IsLand(); });
+                    if (playable) { s_greedy.fetch_add(1, std::memory_order_relaxed); }
+                }
+            }
+
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
