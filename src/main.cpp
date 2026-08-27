@@ -290,12 +290,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 { jm = ": -1/-1 \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id); }
                 else if (a.gy_exile_mode == 3)
                 {
-                    int host = 0;
-                    for (const Permanent& jp : s.battlefield)
-                    { if (jp.card.m_number == a.sac_source_id) { host = jp.equipped_to; break; } }
+                    // No "-> <host>": the pump has no target -- it is ALWAYS the equipped creature
+                    // (USER 2026-08-27: naming one read as an allocation choice that doesn't exist).
                     const int reps = std::max(1, a.chosen_x);
-                    jm = ": +2/+2 \xE2\x86\x92 " + EnchantTargetName(s, host)
-                       + (reps > 1 ? " x" + std::to_string(reps) : "");
+                    jm = ": +2/+2" + (reps > 1 ? " x" + std::to_string(reps) : std::string{});
                 }
                 tag = a.card_name + jm;
                 break;

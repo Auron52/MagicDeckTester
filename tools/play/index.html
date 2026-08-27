@@ -2950,7 +2950,19 @@ function landEntryLabel(d, v){
 // int without surfacing the modal. Returns true if it handled (and re-stepped) the decision. Behaves
 // exactly like the user instantly clicking the AI default, so the checkpoint/steps stay 1:1.
 function autoResolveDecision(dec){
-  if (!dec || !(dec.type in AUTO_RESOLVABLE)) return false;
+  if (!dec) return false;
+  // A ONE-option attach-host dialog is not a choice (USER 2026-08-27, kitty s31 T5: "That
+  // shouldn't exist") -- auto-take the AI's pick silently, whatever the surfacing toggles say.
+  // The answer still rides the positional --choices stream, so replays of recorded games (which
+  // answered the old dialog) stay cursor-aligned. Two+ hosts keep the real choice.
+  if (dec.type==='attach_host' && (dec.options||[]).length<=1){
+    const def=(dec.heuristic_default==null?-1:dec.heuristic_default);
+    const o=(dec.options||[])[0];
+    dec._autoStep = true;
+    pushChoice(dec, def, `${dec.source||'Equipment'}: attach${o?' → '+o.name:' (none)'} · auto`);
+    return true;
+  }
+  if (!(dec.type in AUTO_RESOLVABLE)) return false;
   if (surfaceEnabled(dec.type)) return false;
   const def = (dec.heuristic_default==null ? 0 : dec.heuristic_default);
   // Firebreathe rides the turn-keyed side-channel, not --choices, so it auto-resolves via its own

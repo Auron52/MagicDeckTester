@@ -105,6 +105,13 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
                 int r = (*g_play_jitte_chooser)(state, active, atk_idx, je.charge_counters);
                 if (r >= 0) { req = r; }
             }
+            // HUMAN play with no recorded answer: BANK the counters (spend 0). USER 2026-08-27:
+            // no dialog on attack -- the human's pumps are explicit main-phase JitteModeAbility
+            // activations (until-EOT, so they carry through combat), and an auto-greedy here
+            // would spend the very counters a main-phase-banking line is saving. Replays with a
+            // recorded --jitte answer take the chooser branch above; autonomous play (env unset)
+            // and search rollouts (HumanPlaySuppress) keep the greedy default -- byte-identical.
+            else if (HumanPlayActive()) { req = 0; }
             const auto [jdmg, jafter] = JitteDamageMath(
                 base_pw, ds, je.charge_counters, jd->params.charge_pump_power, req);
             power             = jdmg;
