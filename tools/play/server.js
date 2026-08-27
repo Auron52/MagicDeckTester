@@ -350,22 +350,60 @@ function countOptimalRefs(name) {
   } catch (e) { return 0; }                                  // no folder = no references
 }
 
+// A deck's references belong to the LIST they were played on, not to the folder name.
+//
+// When a deck's shipping decklist is replaced, its existing references keep resolving to the folder
+// -- and so, silently, to the NEW list. A recorded human line replayed against cards that were never
+// in that deck is a benchmark that means nothing and reports no error, which is why
+// scripts/deck_registry.py carries REFERENCE_DECK: an explicit map from a reference folder to the
+// deck key its games were actually played on. Today it has one entry, Mirrorwing Dragon, whose 24
+// references were played on the Twinflame/Ancestral Anger list archived on 2026-08-22.
+//
+// Without this, the maturity check counted those 24 and called the deck READY on the strength of
+// games played against a deck it no longer is -- the exact failure the registry exists to end, and
+// the worst version of it, because "ready" is precisely the claim references are supposed to earn.
+//
+// PARSED, not re-stated. The dict is Python and this is Node, and the viewer is deliberately
+// dependency-free (node + the binary, no python3 -- it has to run on Windows), so shelling out is
+// not free. A second hand-maintained copy is exactly the failure mode the registry's own docstring
+// describes, so the test cross-checks this parse against Python's real dict.
+function pySlug(s) { return String(s).replace(/[^A-Za-z0-9]/g, '_').toLowerCase(); }
+function referenceOwners() {
+  try {
+    const src = fs.readFileSync(path.join(ROOT, 'scripts', 'deck_registry.py'), 'utf8');
+    const m = src.match(/^REFERENCE_DECK\s*=\s*\{([\s\S]*?)^\}/m);
+    const out = {};
+    if (m) for (const e of m[1].matchAll(/^\s*"([^"]+)"\s*:\s*"([^"]+)"/gm)) out[e[1]] = e[2];
+    return out;
+  } catch (e) { return {}; }
+}
+const REF_OWNERS = referenceOwners();
+
 // PURE, so the policy is testable without a filesystem (test/viewer_deck_beta_check.js).
-function betaFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel }) {
+function betaFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchivedList }) {
   const reasons = [];
   if (!hasProfile) return { beta: false, betaReasons: reasons };
-  if (refs < MIN_OPTIMAL_REFS) reasons.push(`${refs}/${MIN_OPTIMAL_REFS} optimal reference games`);
+  if (refs < MIN_OPTIMAL_REFS) {
+    reasons.push(`${refs}/${MIN_OPTIMAL_REFS} optimal reference games`
+      + (refsOnArchivedList ? ` (the ${refsOnArchivedList} saved games were played on an archived list)` : ''));
+  }
   if (!hasValueLeaf) reasons.push('no value-leaf model');
   if (!hasKeepModel) reasons.push('no completed mulligan profile');
   return { beta: reasons.length > 0, betaReasons: reasons };
 }
 
 function deckMaturity(dir, name, hasProfile) {
-  const refs = countOptimalRefs(name);
+  const key = pySlug(name);
+  const owner = REF_OWNERS[key] || key;
+  const saved = countOptimalRefs(name);
+  // Someone else's games do not count toward this deck. Reported separately so the badge can say
+  // WHY a deck with a full folder reads zero -- otherwise it looks like the count is broken.
+  const refsOnArchivedList = owner === key ? 0 : saved;
+  const refs = owner === key ? saved : 0;
   const hasValueLeaf = fs.existsSync(path.join(dir, name + '.value.json'));
   const hasKeepModel = KEEPMODEL_EXTS.some(ext => fs.existsSync(path.join(dir, name + ext)));
-  return Object.assign({ refs, hasValueLeaf, hasKeepModel },
-                       betaFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel }));
+  return Object.assign({ refs, hasValueLeaf, hasKeepModel, refsOnArchivedList },
+                       betaFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchivedList }));
 }
 
 // ---- routes ----------------------------------------------------------------------
@@ -540,4 +578,5 @@ if (require.main === module) {
 // Exported for the headless jsdom client check so it drives the REAL protocol (not a reimplementation).
 module.exports = { runStep, runValidate, listDecks, resolveDeck, buildArgs, BIN,
                    // deck maturity, for test/viewer_deck_beta_check.js
-                   betaFrom, deckMaturity, countOptimalRefs, MIN_OPTIMAL_REFS, KEEPMODEL_EXTS };
+                   betaFrom, deckMaturity, countOptimalRefs, MIN_OPTIMAL_REFS, KEEPMODEL_EXTS,
+                   pySlug, referenceOwners };

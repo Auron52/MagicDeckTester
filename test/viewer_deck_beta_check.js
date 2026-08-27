@@ -103,6 +103,52 @@ ok(checkedSub > 0, 'at least one deck has a suboptimal reference to check exclus
 // references/<Deck>/ at all, and that is the single most common beta case.
 ok(srv.countOptimalRefs('NoSuchDeckAnywhere') === 0, 'a missing references folder counts 0');
 
+// ---- 3b) references played on an ARCHIVED list do not count -------------------------
+// scripts/deck_registry.py's REFERENCE_DECK maps a reference folder to the deck key its games were
+// actually played on. server.js PARSES that dict (it is Python, the viewer is dependency-free Node),
+// so the parse is cross-checked against Python's own value here -- a silently-empty parse would
+// restore the bug it exists to fix, and would do it in the direction that reads as "ready".
+console.log('--- references vs the list they were played on ---');
+const owners = srv.referenceOwners();
+const py = require('child_process').spawnSync('python3',
+  ['-c', 'import sys; sys.path.insert(0,"scripts"); import deck_registry as r; import json;'
+       + ' print(json.dumps(r.REFERENCE_DECK))'], { cwd: ROOT, encoding: 'utf8' });
+if (py.status === 0) {
+  const want = JSON.parse(py.stdout.trim());
+  ok(JSON.stringify(owners) === JSON.stringify(want),
+     'the JS parse of REFERENCE_DECK matches Python exactly',
+     JSON.stringify(owners) + ' vs ' + JSON.stringify(want));
+  // Cheap but load-bearing: an empty parse silently disables the whole rule.
+  ok(Object.keys(owners).length === Object.keys(want).length, 'the parse is not silently empty');
+  // pySlug must agree with deck_registry.slug for the keys to line up at all.
+  const py2 = require('child_process').spawnSync('python3',
+    ['-c', 'import sys; sys.path.insert(0,"scripts"); import deck_registry as r; import json;'
+         + ' print(json.dumps([r.slug(s) for s in ["Mirrorwing Dragon","Anti-Lifegain","Creature Giving","burn","slivers_vial"]]))'],
+    { cwd: ROOT, encoding: 'utf8' });
+  if (py2.status === 0) {
+    const wantSlugs = JSON.parse(py2.stdout.trim());
+    const gotSlugs = ['Mirrorwing Dragon', 'Anti-Lifegain', 'Creature Giving', 'burn', 'slivers_vial'].map(srv.pySlug);
+    ok(JSON.stringify(gotSlugs) === JSON.stringify(wantSlugs),
+       'pySlug agrees with deck_registry.slug', JSON.stringify(gotSlugs) + ' vs ' + JSON.stringify(wantSlugs));
+  }
+} else {
+  console.log('  (python3 unavailable -- REFERENCE_DECK cross-check skipped)');
+}
+
+// Every deck the map re-points must report 0 of its own, and say why. Driven off the map rather
+// than naming Mirrorwing, so this keeps working as decklists are archived and replaced.
+for (const [refKey, ownerKey] of Object.entries(owners)) {
+  if (refKey === ownerKey) continue;
+  const d = srv.listDecks().find(x => srv.pySlug(x.name) === refKey);
+  if (!d) continue;                                          // the folder was renamed away
+  ok(d.refs === 0, `${d.name}: counts 0 -- its references belong to ${ownerKey}`, 'refs=' + d.refs);
+  ok(d.refsOnArchivedList > 0,
+     `${d.name}: reports how many saved games are on the archived list`, String(d.refsOnArchivedList));
+  ok(d.beta, `${d.name}: is beta, not ready, on someone else's games`);
+  ok(d.betaReasons.some(r => r.includes('archived list')),
+     `${d.name}: the badge explains WHY the count is 0`, JSON.stringify(d.betaReasons));
+}
+
 // ---- 4) the live tree agrees with the policy ----------------------------------------
 // listDecks() is what /api/decks serves. Recompute beta from the fields it reports and require the
 // two to agree, so a wiring mistake in listDecks (stale field, wrong argument order) is caught even
@@ -117,7 +163,13 @@ for (const d of decks) {
   const want = srv.betaFrom(d);
   ok(d.beta === want.beta, `${d.name}: reported beta matches the policy applied to its own fields`,
      `beta=${d.beta} refs=${d.refs} value=${d.hasValueLeaf} keep=${d.hasKeepModel}`);
-  ok(d.refs === srv.countOptimalRefs(d.name), `${d.name}: reference count matches its folder`);
+  // Every saved game in the folder is accounted for as EITHER counted or archived-list -- stronger
+  // than "refs == folder size", which stopped being true once ownership mattered, and it catches a
+  // game silently vanishing from both columns.
+  ok(d.refs + d.refsOnArchivedList === srv.countOptimalRefs(d.name),
+     `${d.name}: every saved game is either counted or attributed to an archived list`,
+     `refs=${d.refs} archived=${d.refsOnArchivedList} folder=${srv.countOptimalRefs(d.name)}`);
+  ok(!(d.refs > 0 && d.refsOnArchivedList > 0), `${d.name}: a folder belongs to ONE list, not both`);
 }
 
 // ---- 5) the UI actually SHOWS it ----------------------------------------------------
