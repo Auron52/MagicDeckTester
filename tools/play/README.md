@@ -58,6 +58,33 @@ node tools/play/server.js                 # then open http://localhost:8080
 No dependencies — `server.js` uses only Node built-ins. Env: `PORT` (default 8080),
 `MTG_BIN` (default: the first of `build/Release/mtg`, `build/Release/mtg.exe` that exists).
 
+### What the deck picker's labels mean
+
+A deck is only as trustworthy as the apparatus fitted to it, and three of those pieces arrive late
+and independently of the decklist — so a deck can be fully implemented, pass every gate, and still
+be measuring something you would not quote. The picker says so:
+
+| label | meaning |
+|---|---|
+| *(none)* | profiled, ≥10 optimal reference games, a value leaf, and a completed mulligan profile |
+| **(beta)** | playable, but at least one of those three is missing — the badge in the top bar names which |
+| **(no profile)** | no `<stem>.profile.json`: never measured at shipped play, so it is disabled outright |
+
+The three beta criteria, and why each alone is enough to withhold confidence:
+
+- **Fewer than 10 optimal reference games** (`references/<Deck>/claude_s*_gi*.json`). These are the
+  only human-played ground truth in the repo — the bound the AI's win turn is judged against, and
+  the thing that surfaces engine bugs autonomous play cannot; every viewer bug-bash in
+  `docs/design/` started as a reference. A deck with three of them has not been looked at.
+  Games under `references/suboptimal/<Deck>/` do **not** count — you flagged those as winnable
+  earlier, so they are targets, not standards.
+- **No value leaf** (`<stem>.value.json`).
+- **No completed mulligan profile.** *Completed* means the compiled table exists
+  (`<stem>.keepmodel.exhaustive.profile.json[.gz]`, the two names `MulliganProfileIO.h` loads), not
+  that generation was started — a lone `.raw.json.journal` is a paused run, not a model.
+
+`node test/viewer_deck_beta_check.js` prints the current beta/ready split and gates the marking.
+
 Pick a profiled deck, set seed / game # / max-turns, hit **New game**. First you drive the
 **mulligan**: each London attempt shows the 7-card hand as art with **Keep** / **Mulligan** buttons
 (tagging what the engine's `KeepHand` would do), and on a keep you click which card(s) to put on the

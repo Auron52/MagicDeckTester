@@ -311,6 +311,63 @@ function runValidate(p, line) {
 // Sanitise a deck stem for use in an artifact filename.
 function safeStem(s) { return String(s).replace(/[^A-Za-z0-9_-]+/g, '_'); }
 
+// ---- deck maturity: which decks are still (beta) ----------------------------------
+//
+// A deck is only as trustworthy as the apparatus fitted to it, and three of those pieces arrive
+// LATE and INDEPENDENTLY of the decklist -- so a deck can be fully implemented, pass every gate, and
+// still be measuring something we would not quote. The viewer had no way to say so: every profiled
+// deck rendered identically in the picker.
+//
+// The three, and why each one alone is enough to withhold confidence:
+//
+//   * FEWER THAN 10 OPTIMAL REFERENCE GAMES. References are the only human-played ground truth in
+//     the repo -- the bound the AI's win turn is judged against, and the thing that surfaces engine
+//     bugs autonomous play cannot (every viewer bug-bash in docs/design/ started as a reference).
+//     A deck with three of them has not been looked at.
+//   * NO VALUE-LEAF (`<stem>.value.json`, the path AttachValueSidecar resolves).
+//   * NO COMPLETED MULLIGAN PROFILE. "Completed" means the COMPILED table exists, not that
+//     generation was started: FiveColour holds a `.raw.json.journal` and no compiled profile, which
+//     is a paused run, not a model. The extension list mirrors MulliganProfileIO.h:967 exactly, in
+//     the same order, so the check cannot drift from what the engine actually loads.
+//
+// A deck with NO PROFILE is not beta, it is unplayable -- it already renders "(no profile)" and is
+// disabled, which is the strictly stronger statement. Stacking "(beta)" on it would say less.
+const MIN_OPTIMAL_REFS = 10;
+const KEEPMODEL_EXTS = ['.keepmodel.exhaustive.profile.json.gz', '.keepmodel.exhaustive.profile.json'];
+const REFS_DIR = path.join(ROOT, 'references');
+
+// Saved references are `claude_s<seed>_gi<gi>.json`; anything else in the folder is not a game.
+// Matching the NAME rather than counting *.json keeps a stray file (references/ has one at top
+// level) from inflating a deck past the threshold.
+const REF_FILE_RE = /^claude_s\d+_gi\d+\.json$/;
+
+// SUBOPTIMAL references do not count, and are excluded structurally rather than by a filter:
+// references/suboptimal/<Deck>/ sits one level deeper than references/<Deck>/, so reading the
+// deck's own folder never sees them (references/suboptimal/README.md).
+function countOptimalRefs(name) {
+  try {
+    return fs.readdirSync(path.join(REFS_DIR, safeStem(name))).filter(f => REF_FILE_RE.test(f)).length;
+  } catch (e) { return 0; }                                  // no folder = no references
+}
+
+// PURE, so the policy is testable without a filesystem (test/viewer_deck_beta_check.js).
+function betaFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel }) {
+  const reasons = [];
+  if (!hasProfile) return { beta: false, betaReasons: reasons };
+  if (refs < MIN_OPTIMAL_REFS) reasons.push(`${refs}/${MIN_OPTIMAL_REFS} optimal reference games`);
+  if (!hasValueLeaf) reasons.push('no value-leaf model');
+  if (!hasKeepModel) reasons.push('no completed mulligan profile');
+  return { beta: reasons.length > 0, betaReasons: reasons };
+}
+
+function deckMaturity(dir, name, hasProfile) {
+  const refs = countOptimalRefs(name);
+  const hasValueLeaf = fs.existsSync(path.join(dir, name + '.value.json'));
+  const hasKeepModel = KEEPMODEL_EXTS.some(ext => fs.existsSync(path.join(dir, name + ext)));
+  return Object.assign({ refs, hasValueLeaf, hasKeepModel },
+                       betaFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel }));
+}
+
 // ---- routes ----------------------------------------------------------------------
 
 function listDecks() {
@@ -326,7 +383,8 @@ function listDecks() {
     }
     if (!deckFile) continue;                                 // folder without a matching decklist
     const hasProfile = fs.existsSync(path.join(dir, name + '.profile.json'));
-    out.push({ deck: deckFile, name, hasProfile });
+    out.push(Object.assign({ deck: deckFile, name, hasProfile },
+                           deckMaturity(dir, name, hasProfile)));
   }
   // playable (profiled) decks first, then alpha
   out.sort((a, b) => (b.hasProfile - a.hasProfile) || a.name.localeCompare(b.name));
@@ -480,4 +538,6 @@ if (require.main === module) {
 }
 
 // Exported for the headless jsdom client check so it drives the REAL protocol (not a reimplementation).
-module.exports = { runStep, runValidate, listDecks, resolveDeck, buildArgs, BIN };
+module.exports = { runStep, runValidate, listDecks, resolveDeck, buildArgs, BIN,
+                   // deck maturity, for test/viewer_deck_beta_check.js
+                   betaFrom, deckMaturity, countOptimalRefs, MIN_OPTIMAL_REFS, KEEPMODEL_EXTS };

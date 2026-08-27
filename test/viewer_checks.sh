@@ -15,6 +15,10 @@
 #     SUBDECISIONS whitelist against every decision type src/main.cpp can emit. A type missing
 #     there hides the panel outright, so the decision is unanswerable and the game stalls on a
 #     dead board -- how lackey_put/echo/land_entry each shipped inert. Static, milliseconds.
+#   * deck maturity (frontend) -- viewer_deck_beta_check.js pins the "(beta)" marking: a deck with
+#     fewer than 10 optimal references, no value leaf, or no completed mulligan profile must say so
+#     in the picker. Silent when it rots (an unfinished deck simply reads "ready"), hence a gate.
+#     Static, milliseconds, no binary.
 #   * line-build (frontend) -- viewer_linebuild_check.js drives the REAL browser queue logic
 #     (tools/play/linebuild.js): can the GUI still rebuild every line the user actually played?
 #     Sub-second, needs node, no binary.
@@ -68,6 +72,18 @@ if command -v node >/dev/null 2>&1 && [ -f "$HERE/reveal_log_parity_check.js" ];
   echo "--- reveal/log parity (engine) ---"
   if node "$HERE/reveal_log_parity_check.js"; then :; else
     echo "FAIL: a reveal can reach the viewer without reaching the saved game log."
+    rc=1
+  fi
+fi
+
+# 0c) Deck maturity / "(beta)" marking (node). Static, milliseconds, no binary. Every failure mode
+#     here reads as GOOD news -- a rule that stops firing silently promotes an unfinished deck to
+#     "ready" -- so it is a gate rather than an informational print. Also prints the current
+#     beta/ready split, which is the fastest way to see where each deck's apparatus stands.
+if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_deck_beta_check.js" ]; then
+  echo "--- viewer deck maturity / (beta) marking ---"
+  if node "$HERE/viewer_deck_beta_check.js"; then :; else
+    echo "FAIL: the viewer's (beta) marking disagrees with the decks' actual artifacts."
     rc=1
   fi
 fi

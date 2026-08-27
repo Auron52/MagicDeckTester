@@ -85,6 +85,10 @@
   /* top-bar badge shown when this (deck,seed,game#) already has a saved reference game */
   .refnote { font-size:12px; font-weight:600; color:#0c1116; background:var(--acc); border-radius:8px;
              padding:2px 9px; white-space:nowrap; }
+  /* top-bar badge for a deck whose apparatus is incomplete (see deckMaturity in server.js). Amber
+     rather than the accent colour: this is a caveat on the numbers, not a confirmation like refnote. */
+  .betanote { font-size:12px; font-weight:600; color:#0c1116; background:#e0a33a; border-radius:8px;
+              padding:2px 9px; white-space:nowrap; cursor:help; }
 
   .thumb { width:90px; text-align:center; position:relative; }
   .thumb.sm { width:62px; }
@@ -441,6 +445,7 @@
   <button id="nextgame" title="increment Seed + Game# and start a fresh game">Next game ▸</button>
   <button id="undo" disabled>Undo</button>
   <button id="optbtn" title="Decision options — pick which decisions to surface vs. let the AI decide">⚙ Options</button>
+  <span id="betanote" class="betanote" style="display:none"></span>
   <span id="refnote" class="refnote" style="display:none"></span>
   <span class="hint">no clairvoyance — your win-turn is a ground-truth bound</span>
 </header>
@@ -3174,10 +3179,29 @@ async function checkReference() {
     else { el.style.display='none'; el.textContent=''; el.title=''; }
   } catch(e){ el.style.display='none'; }
 }
+// Deck maturity, keyed by the deck FILE (the <option> value) -- see deckMaturity in server.js.
+const DECK_META={};
+// A "(beta)" deck is fully implemented but its apparatus is not finished: too few hand-played
+// references, no value leaf, or no completed mulligan profile. The suffix is deliberately in the
+// <option> text rather than only a tooltip, so the caveat is visible while CHOOSING a deck --
+// <option title> is unreliable across browsers and invisible once the menu closes. The badge below
+// carries the reasons for whichever deck is selected.
+function betaTag(d){ return !d.hasProfile ? ' (no profile)' : (d.beta ? ' (beta)' : ''); }
+function showBetaNote(){
+  const el=$('betanote'); if(!el) return;
+  const d=DECK_META[$('deck').value];
+  if(!d || !d.beta){ el.style.display='none'; el.textContent=''; el.title=''; return; }
+  el.style.display='';
+  el.textContent='beta — '+(d.betaReasons||[]).join(' · ');
+  el.title='This deck is playable but its apparatus is incomplete, so its numbers are not yet '
+          +'fully reliable:\n  · '+(d.betaReasons||[]).join('\n  · ');
+}
 async function loadDecks() {
   const j=await (await fetch('/api/decks')).json();
-  $('deck').innerHTML=j.decks.map(d=>`<option value="${esc(d.deck)}"${d.hasProfile?'':' disabled'}>${esc(d.name)}${d.hasProfile?'':' (no profile)'}</option>`).join('');
+  j.decks.forEach(d=>{ DECK_META[d.deck]=d; });
+  $('deck').innerHTML=j.decks.map(d=>`<option value="${esc(d.deck)}"${d.hasProfile?'':' disabled'}>${esc(d.name)}${betaTag(d)}</option>`).join('');
   if(!j.binExists) showError('Simulator binary not found — build it first:\n  Linux/macOS:  ./build.sh\n  Windows:      build.cmd\n\nOr start the viewer with ./play.sh (play.cmd on Windows), which builds it for you.');
+  showBetaNote();     // reflect the initially-selected deck
   checkReference();   // reflect the initial deck/seed/game# on load
 }
 
@@ -3216,7 +3240,7 @@ $('newgame').onclick=newGame; $('nextgame').onclick=nextGame; $('undo').onclick=
 $('optbtn').onclick=toggleOptMenu;
 $('saveref').onclick=()=>saveRef(false); $('saveref-sub').onclick=()=>saveRef(true);
 // Refresh the reference badge whenever the game selector changes.
-$('deck').addEventListener('change', checkReference);
+$('deck').addEventListener('change', ()=>{ showBetaNote(); checkReference(); });
 $('seed').addEventListener('input', checkReference);
 
 // Scryfall hover popover
