@@ -700,12 +700,22 @@ static bool BpPlanHasTail(const Player& ap)
 // HONEST COST, and it is the real finding: condemnation's work saving was coming almost ENTIRELY
 // from the unsound prune. Done correctly it is ~free on both axes rather than a win on work.
 //
-// DEFAULT ON as a correctness fix, in the same class as bugs 4-7; =0 restores the false premise.
-// Byte-identical at shipped defaults over 5 decks x 60 games (condemnation is off everywhere by
-// default), so this moves no ground truth.
+// DEFAULT OFF -- AND THAT IS A DELIBERATE USER DECISION, not an oversight. USER, 2026-08-27:
+// *"I don't want to exempt things from the prune. Instead, I want to figure out an order that works
+// reliably with occasional cases where a specific card is given a range."*
+//
+// The steer is right and it reframes everything above. Condemnation enforces the DECLARED cast
+// order. So every line it deletes is a case where the declared order disagrees with the line that
+// actually wins -- which makes condemnation not a prune to be tuned but a DETECTOR for order
+// defects. Exempting the cases where it bites suppresses the detector and leaves the order wrong;
+// the 29 games are the evidence for what Mirrorwing's order should have been.
+//
+// This lever therefore stays as a DIAGNOSTIC (it isolates how much of the damage is at no-tail
+// plans: 93.4% of all firings, and ~93% of the work saving) and as the fallback if no reliable
+// order exists. It is not the fix.
 static bool BpCondemnTailExemptEnabled()
 {
-    static const bool on = EnvOn("MTG_BP_CONDEMN_TAIL_EXEMPT", true);   // DEFAULT ON (bug 8)
+    static const bool on = EnvOn("MTG_BP_CONDEMN_TAIL_EXEMPT");   // DEFAULT OFF (USER: fix the ORDER)
     return heurarm::Flag(heurarm::BP_CONDEMN_TAIL, on);
 }
 
@@ -6912,9 +6922,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (s_condemn_who)
                     {
                         const DecisionProvider& p = ResolveProvider(state);
+                        // plan_n = how many casts the breakpoint's PLAN makes in total, and tail =
+                        // whether any of them is still pending in hand. Together they say whether
+                        // anything actually PRECEDED the site: plan_n==1 with no tail means the
+                        // plan was the site alone, so nothing was considered-and-declined at its
+                        // slot and the condemnation has no premise at all. plan_n>1 means the plan
+                        // did cast something first, which is a materially different (arguable)
+                        // case -- the point of separating them is that "no tail" alone lumps both.
                         std::fprintf(stderr,
-                                     "[condemn-who] turn=%d drop=%s rank=%d site=%s site_rank=%d"
+                                     "[condemn-who] plan_n=%d tail=%d "
+                                     "turn=%d drop=%s rank=%d site=%s site_rank=%d"
                                      " site_net=%d\n",
+                                     g_bp_plan_casts ? static_cast<int>(g_bp_plan_casts->size()) : -1,
+                                     BpPlanHasTail(ap) ? 1 : 0,
                                      state.turn_number,
                                      def.card.m_name.c_str(), p.CastOrderRank(state, def),
                                      g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)",
