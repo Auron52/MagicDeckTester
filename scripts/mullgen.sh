@@ -55,19 +55,45 @@ OUT=logs/${STEM}_mullgen; mkdir -p "$OUT"
 REPORT=$OUT/VALIDATION.txt
 BIN=build/Release/mtg-analyze
 
-# Seeds. The regen A/B is the "significant test" the accept rule names, so it gets a wider, DISJOINT
-# seed set than the first-version checks -- an adoption decision should not be read off the same
-# seeds twice.
-FIRST_SEEDS=${MULLGEN_FIRST_SEEDS:-"4004 5005 6006 7007 8008 9009 10010 11011 12012 13013 14014 15015 16016 17017 18018 19019"}
-# 32 seeds, DISJOINT from FIRST_SEEDS. Sized to match the first-version validation's TOTAL weight
-# (user, 2026-08-28: the profile-comparison A/B should be "in the same ballpark as the lookahead
-# bottoming and keep tests"): first version runs TWO A/Bs at 16 seeds x 2 arms = 64k games, so the
-# regen A/B runs 32 seeds x 2 arms = 64k. It is the sole evidence for replacing a shipped table, so
-# it cannot be the cheapest measurement in the pipeline.
-VS_SEEDS=${MULLGEN_VS_SEEDS:-"21021 22022 23023 24024 25025 26026 27027 28028 29029 30030 31031 32032 33033 34034 35035 36036 37037 38038 39039 40040 41041 42042 43043 44044 45045 46046 47047 48048 49049 50050 51051 52052"}
+# SEEDS, allocated in per-round blocks. Every check draws from its own base so no two checks -- and
+# no two ROUNDS of a check -- ever share a seed: pooling rounds is only valid over disjoint games,
+# and re-reading a decision off seeds it was already made on is how a tie gets confirmed by its own
+# noise. keepmodel_pool_ab.py drops a duplicate loudly rather than double-counting, but the
+# allocation is what makes duplicates impossible in the first place.
+KEEP_BASE=4004; BOTTOM_BASE=1004004; VS_BASE=2004004; SEED_STEP=1001
+# The regen A/B is sized to match the first-version validation's TOTAL weight (user: it should be
+# "in the same ballpark as the lookahead bottoming and keep tests"): first version runs TWO A/Bs at
+# 16 seeds x 2 arms = 64k games, so the regen A/B runs 32 seeds x 2 arms = 64k. It is the sole
+# evidence for replacing a shipped table, so it cannot be the cheapest measurement in the pipeline.
+KEEP_PER_ROUND=${MULLGEN_PER_ROUND:-16}
+VS_PER_ROUND=${MULLGEN_VS_PER_ROUND:-32}
+
+# ESCALATION ON A TIE. The accept bar is "at all worse on average" with NO significance margin, so a
+# delta of +0.0001 rejects -- which is only sound if the delta is real. When a round lands too close
+# to call, another round of FRESH seeds is run and the rounds are POOLED (user, 2026-08-28: "we might
+# want to run another set of 64000 if the result is less than some low threshold. We want to be
+# fairly confident in the result either way"). Applied to all three checks; in practice keep and
+# confounded bottoming "win handily" (measured on StompySurprise: mean/se -46 and -16, nowhere near a
+# tie), so this is really for the profile comparison, where two tables of the same deck genuinely can
+# be near-identical.
+#
+# "Too close to call" is BOTH an absolute floor and a confidence test: a delta under TIE_ABS is too
+# small to care about either way, and one under 2 standard errors is not distinguishable from zero.
+MAX_ROUNDS=${MULLGEN_MAX_ROUNDS:-3}
+TIE_ABS=${MULLGEN_TIE_ABS:-0.005}
+
+# seed_block <base> <count> <round0> -- disjoint block of `count` seeds for round `round0` (0-based).
+seed_block(){
+  local base=$1 count=$2 round=$3 i out=""
+  for ((i = 0; i < count; i++)); do out+="$(( base + (round * count + i) * SEED_STEP )) "; done
+  echo "$out"
+}
 
 stamp(){ date -u +%Y-%m-%dT%H:%M:%SZ; }
 log(){ echo "$*" | tee -a "$REPORT"; }
+# Same, but never touches stdout: run_ab is called inside $( ), where stdout IS the return value, so
+# a plain log() there gets captured into the delta instead of being printed.
+rlog(){ echo "$*" >> "$REPORT"; echo "$*" >&2; }
 
 # MINIMUM SAMPLE, enforced before anything can be quarantined. Found the hard way: a 2-seed x
 # 40-game plumbing smoke test deactivated a real 3.9 h profile on +0.0375t of pure noise. The gate
@@ -78,7 +104,7 @@ log(){ echo "$*" | tee -a "$REPORT"; }
 MIN_SEEDS=${MULLGEN_MIN_SEEDS:-12}
 MIN_GAMES=${MULLGEN_MIN_GAMES:-500}
 check_power(){
-  local seeds="$1" n; n=$(echo $seeds | wc -w)
+  local n="$1"
   local games=${KM_AB_GAMES:-1000}
   if [ "${MULLGEN_ALLOW_SMALL:-0}" = 1 ]; then
     log "NOTE: MULLGEN_ALLOW_SMALL=1 -- running $n seeds x $games games for PLUMBING ONLY; the"
@@ -103,17 +129,40 @@ status_report(){
   if [ -e "$REPORT" ]; then echo "--- last validation ---"; tail -20 "$REPORT"; fi
 }
 
-# run_ab <mode> <tag> <seeds> [extra env assignments...] -> echoes the mean delta (B-A), turns.
+# run_ab <mode> <tag> <base> <per-round> <a-tag> <b-tag> [extra env...] -> echoes the POOLED mean
+# delta (B-A) in turns, escalating on a tie. Round dirs are <abdir>_r<N>; POOLED.txt holds the final
+# pooled table and is what inline_ab shows.
 run_ab(){
-  local mode="$1" tag="$2" seeds="$3"; shift 3
+  local mode="$1" tag="$2" base="$3" per="$4" atag="$5" btag="$6"; shift 6
   local abdir=logs/keepmodel_exh_${mode}_${STEM}
-  rm -f "$abdir/delta.txt"
-  env "$@" \
-    KM_DECK="$DECK" KM_MODE="$mode" KM_STATIC="$BASE" KM_EXH_PROFILE="$PROF" \
-    KM_AB_SEEDS="$seeds" \
-    bash test/keepmodel_exhaustive_ab.sh > "$OUT/ab_${tag}.log" 2>&1
-  [ -s "$abdir/delta.txt" ] || { echo "ERR"; return 1; }
-  cat "$abdir/delta.txt"
+  local dirs=() r delta se
+  for (( r = 0; r < MAX_ROUNDS; r++ )); do
+    local rd="${abdir}_r$((r+1))"
+    rm -rf "$rd"
+    local seeds; seeds=$(seed_block "$base" "$per" "$r")
+    env "$@" \
+      KM_DECK="$DECK" KM_MODE="$mode" KM_STATIC="$BASE" KM_EXH_PROFILE="$PROF" \
+      KM_AB_SEEDS="$seeds" KM_OUT="$rd" \
+      bash test/keepmodel_exhaustive_ab.sh > "$OUT/ab_${tag}_r$((r+1)).log" 2>&1
+    [ -s "$rd/delta.txt" ] || { echo "ERR"; return 1; }
+    dirs+=("$rd")
+    python3 test/keepmodel_pool_ab.py --a-tag "$atag" --b-tag "$btag" "${dirs[@]}" \
+      > "${abdir}_POOLED.txt" 2>&1
+    delta=$(cat "${dirs[-1]}/pooled_delta.txt" 2>/dev/null) || return 1
+    se=$(cat "${dirs[-1]}/pooled_se.txt" 2>/dev/null || echo 0)
+    # Resolved? |delta| must clear BOTH the absolute floor and 2 standard errors.
+    if awk -v d="$delta" -v s="$se" -v t="$TIE_ABS" \
+         'BEGIN{ ad = (d<0?-d:d); exit !(ad >= t && ad >= 2*s) }'; then
+      break
+    fi
+    if [ $((r+1)) -lt "$MAX_ROUNDS" ]; then
+      rlog "  round $((r+1)): delta ${delta}t (se ${se}) -- too close to call, escalating to round $((r+2))"
+    else
+      rlog "  round $((r+1)): delta ${delta}t (se ${se}) -- still within the tie band at MAX_ROUNDS=$MAX_ROUNDS;"
+      rlog "                  ruling on the pooled mean anyway (the bar has no significance margin)."
+    fi
+  done
+  echo "$delta"
 }
 
 # Fold an A/B's full report into VALIDATION.txt. Called for EVERY check, whatever the verdict (user,
@@ -124,10 +173,12 @@ inline_ab(){
   local mode="$1" title="$2" abdir=logs/keepmodel_exh_${1}_${STEM}
   log ""
   log "########## $title ##########"
-  if [ -e "$abdir/REPORT.txt" ]; then
-    sed 's/^/  /' "$abdir/REPORT.txt" | tee -a "$REPORT"
+  # The POOLED table covers every round that was run; each round's own REPORT.txt is kept beside it
+  # in <abdir>_r<N>/ for anyone who wants the round-by-round view.
+  if [ -e "${abdir}_POOLED.txt" ]; then
+    sed 's/^/  /' "${abdir}_POOLED.txt" | tee -a "$REPORT"
   else
-    log "  (no REPORT.txt at $abdir -- see $OUT/ab_*.log)"
+    log "  (no pooled report at ${abdir}_POOLED.txt -- see $OUT/ab_*.log)"
   fi
 }
 
@@ -157,9 +208,24 @@ run_regression(){
   grep -E '^Result:|^ALL PASS|^REGRESSION DETECTED' "$OUT/regression.log" | while read -r l; do log "  $l"; done
   grep -E '^\s+\[(searched|d0)\s*\]' "$OUT/regression.log" | while read -r l; do log "  $l"; done
   if [ "$rc" -ne 0 ]; then
-    log "  GT moved. This is EXPECTED when a mulligan profile is adopted and is NOT a rejection:"
-    log "  the standard metric still rewards lookahead's peek, so a better BLIND policy reads as a"
-    log "  small win-turn increase on mulligan games. The confounded A/B above is the real verdict."
+    # Report the direction MEASURED, not an assumed one. The first version of this text asserted
+    # that GT would look like a slowdown (the standard metric still rewards lookahead's peek, so a
+    # better BLIND policy can read as a win-turn increase). On StompySurprise it was the opposite:
+    # all 5 cases moved FASTER, mean -0.26t, faster=285/slower=104 -- because the keep policy
+    # dominates and swamps the bottoming effect. Asserting a direction the run then contradicts is
+    # how a report stops being trusted, so derive it from the audit line instead.
+    local faster slower
+    faster=$(grep -oE 'faster=[0-9]+' "$OUT/regression.log" | head -1 | cut -d= -f2)
+    slower=$(grep -oE 'slower=[0-9]+' "$OUT/regression.log" | head -1 | cut -d= -f2)
+    log "  GT moved -- EXPECTED when a mulligan profile is adopted, and NOT a rejection."
+    if [ -n "${faster:-}" ] && [ -n "${slower:-}" ] && [ "$faster" -ge "$slower" ]; then
+      log "  Direction: net FASTER (faster=$faster slower=$slower). The new policy is simply better"
+      log "  on this metric too -- nothing to reconcile."
+    else
+      log "  Direction: net slower (faster=${faster:-?} slower=${slower:-?}). Expected when BOTTOMING"
+      log "  dominates: the standard metric is unconfounded, so it still rewards lookahead's peek and"
+      log "  a better BLIND policy reads as a win-turn increase. The confounded A/B is the verdict."
+    fi
     log "  Accepting the new GT is a separate, deliberate call: bash test/regression.sh --accept"
   fi
   log "  full output: $OUT/regression.log"
@@ -202,8 +268,8 @@ PY
   if [ -e "$PREV" ]; then
     log "=== REGENERATION: significant A/B, old vs new ($(stamp)) deck=$STEM ==="
     log "bar: new must not be worse ON AVERAGE than old (any amount is a reject)"
-    check_power "$VS_SEEDS" || gated=0
-    local d; d=$(KM_EXH_A="$PREV" KM_EXH_B="$PROF" run_ab versus versus "$VS_SEEDS") || {
+    check_power "$VS_PER_ROUND" || gated=0
+    local d; d=$(KM_EXH_A="$PREV" KM_EXH_B="$PROF" run_ab versus versus "$VS_BASE" "$VS_PER_ROUND" old new) || {
       log "A/B did not produce a delta -- see $OUT/ab_versus.log"
       [ "$gated" = 1 ] && { quarantine "versus A/B failed to run"; return 1; }; return 1; }
     log "new-vs-old delta: ${d}t  (negative = new wins)"
@@ -219,12 +285,12 @@ PY
   else
     log "=== FIRST VERSION: keep + confounded bottoming ($(stamp)) deck=$STEM ==="
     log "bar: neither check may be worse ON AVERAGE (any amount is a reject)"
-    check_power "$FIRST_SEEDS" || gated=0
+    check_power "$KEEP_PER_ROUND" || gated=0
     local dk db
-    dk=$(run_ab keep keep "$FIRST_SEEDS") || { log "keep A/B failed to run"
+    dk=$(run_ab keep keep "$KEEP_BASE" "$KEEP_PER_ROUND" static exh) || { log "keep A/B failed to run"
       [ "$gated" = 1 ] && { quarantine "keep A/B failed to run"; return 1; }; return 1; }
     log "keep (exhaustive vs static) delta: ${dk}t  (negative = exhaustive wins)"
-    db=$(run_ab bottom bottom_confounded "$FIRST_SEEDS" MTG_CONFOUND_BOTTOM=1) || {
+    db=$(run_ab bottom bottom_confounded "$BOTTOM_BASE" "$KEEP_PER_ROUND" lookahead exhbottom MTG_CONFOUND_BOTTOM=1) || {
       log "confounded bottoming A/B failed to run"
       [ "$gated" = 1 ] && { quarantine "bottoming A/B failed to run"; return 1; }; return 1; }
     log "bottoming (blind vs lookahead, CONFOUNDED) delta: ${db}t  (negative = blind wins)"

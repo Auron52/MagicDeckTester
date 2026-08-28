@@ -40,7 +40,10 @@ SEEDS=${KM_AB_SEEDS:-"4004 5005 6006 7007 8008 9009 10010 11011 12012 13013 1401
 GAMES=${KM_AB_GAMES:-1000}
 BUDGET=${KM_AB_BUDGET:-20}
 
-OUT=logs/keepmodel_exh_${MODE}_$STEM; mkdir -p "$OUT"
+# KM_OUT lets a caller give each ROUND its own directory, which is what makes escalation poolable:
+# the default path is per-(mode,deck), so a second round would otherwise overwrite the first's batch
+# logs and there would be nothing left to pool. See scripts/mullgen.sh.
+OUT=${KM_OUT:-logs/keepmodel_exh_${MODE}_$STEM}; mkdir -p "$OUT"
 REPORT=$OUT/REPORT.txt
 stamp(){ date -u +%Y-%m-%dT%H:%M:%SZ; }
 log(){ echo "$*" | tee -a "$REPORT"; }
