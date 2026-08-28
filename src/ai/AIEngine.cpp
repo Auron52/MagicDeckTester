@@ -2900,7 +2900,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // RESERVED drop is not a declined one (MTG_BP_CONDEMN_LAND). Lockstep pair.
         TurnSolver::CantripOrderScope _cos(rdb_site, &rdb_hand, &rdb_plan_casts,
                                            ResolveProvider(state).CondemnsConsideredAtBreakpoint(),
-                                           karoo_deferred);
+                                           karoo_deferred,
+                                           TurnSolver::ManaSourceCount(state));
         // Executor twin of the rollout's marker (MTG_CONDEMN_M1_BP) -- the lockstep pair. Without
         // it the executor would re-offer at a breakpoint what the rollout condemned there.
         TurnSolver::BpContinuationScope _cbs;

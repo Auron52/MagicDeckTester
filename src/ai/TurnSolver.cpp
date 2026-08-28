@@ -742,6 +742,52 @@ static bool BpCondemnTailExemptEnabled()
     return heurarm::Flag(heurarm::BP_CONDEMN_TAIL, on);
 }
 
+// Mana sources the active player controlled when the breakpoint's spell was cast, or -1 outside a
+// continuation. Bound by CantripOrderScope alongside the hand snapshot; see BpTurnManaSettled.
+static thread_local int g_bp_mana_sources_before = -1;
+
+// THE TURN'S MANA MUST BE SETTLED BEFORE A DECLINE COUNTS (MTG_BP_CONDEMN_LAND_SETTLED, DEFAULT ON).
+//
+// USER 2026-08-28: "we need to avoid condemning until our land is played. Because Reality Spasm
+// scales based on the number of lands."
+//
+// This is a SOUNDNESS guard, in the same class as the order-aware rule (bug 1), so it defaults ON
+// and only ever RE-ADMITS candidates. Condemnation's whole premise is "this card was offered and
+// declined". That premise is false while the land drop is still available: the turn's mana is not
+// final, so a card passed over now may be the right play once the drop lands, and the pass was
+// never a settled decision. Reality Spasm is the sharp case -- it untaps X mana sources and X
+// scales with the sources on board, so its value literally changes with the drop -- but the
+// argument is general and card-agnostic: it is about WHEN a decline is settled, not about which
+// card was declined.
+//
+// Note this composes with the land drop's own slot (LandDropCastOrderRank = 0 on Hinata): with the
+// drop ranked first, a plan that takes it settles the mana before any breakpoint site is reached,
+// so the guard costs nothing on the plans the order intends. It bites only where the drop is still
+// outstanding, which is exactly where the premise fails.
+//
+// Three ways the mana IS settled: the drop was taken; the drop is RESERVED (a Karoo deferred by
+// karoo_deferred lands later in the same apply -- taken, not declined); or no land is in hand, so
+// there is nothing left to wait for and condemnation must not be suppressed forever.
+static bool BpCondemnLandSettledEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_LAND_SETTLED", true);
+    return heurarm::Flag(heurarm::BP_CONDEMN_LAND_SETTLED, on);
+}
+
+static bool BpTurnManaSettled(const GameState& state)
+{
+    if (!BpCondemnLandSettledEnabled()) { return true; }
+    if (g_bp_mana_sources_before < 0)   { return true; }   // no snapshot -> rule does not apply
+    // THE MANA BASE GREW SINCE THE DECLINE, so the decline is stale and the card is re-admitted.
+    // Counting SOURCES rather than testing "was a land played" is the USER's own correction:
+    // "a new rock can also add to its total ... uncondemn on land drop or rock played. It remains
+    // condemned until one of these is played." A land drop and a Sol Ring are the same event to
+    // Reality Spasm -- both raise the X it can untap -- so the rule counts what they have in common
+    // instead of naming either. It is card-agnostic for the same reason: any future accelerant is
+    // covered without a new clause, which is what keeps this from becoming another type exemption.
+    return TurnSolver::ManaSourceCount(state) <= g_bp_mana_sources_before;
+}
+
 // DECISION-SPACE GATE for the BREAKPOINT filter (MTG_BP_CONDEMN_SEARCHED_ONLY, default OFF).
 //
 // The main-phase filter has carried this rule since 2026-08-21 and ships it DEFAULT ON, with its
@@ -5952,11 +5998,17 @@ TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
                                                  const std::vector<int>* hand_before,
                                                  const std::vector<std::uint64_t>* plan_casts,
                                                  bool classify_active,
-                                                 bool land_drop_reserved)
+                                                 bool land_drop_reserved,
+                                                 int mana_sources_before)
     : m_saved(g_cantrip_order_site), m_saved_hand(g_bp_hand_before),
       m_saved_casts(g_bp_plan_casts), m_saved_site(g_bp_site_def),
-      m_saved_reserved(g_land_drop_reserved)
+      m_saved_reserved(g_land_drop_reserved),
+      m_saved_mana_before(g_bp_mana_sources_before)
 {
+    // Mana sources at the moment of the cast, so a later land drop or rock can re-admit a declined
+    // card (BpTurnManaSettled). Bound unconditionally for the same reason as the reservation: it is
+    // read only while condemnation is live, so this is one thread_local store off that path.
+    g_bp_mana_sources_before = mana_sources_before;
     // A reserved (deferred Karoo) drop is NOT a declined one -- see g_land_drop_reserved. Bound
     // unconditionally: it is read only under MTG_BP_CONDEMN_LAND, which is off by default, so this
     // is one thread_local store and no observable change.
@@ -5985,6 +6037,7 @@ TurnSolver::CantripOrderScope::~CantripOrderScope()
     g_bp_plan_casts      = m_saved_casts;
     g_bp_site_def        = m_saved_site;
     g_land_drop_reserved = m_saved_reserved;
+    g_bp_mana_sources_before = m_saved_mana_before;
 }
 
 bool TurnSolver::BreakpointHandSnapshotWanted()
@@ -6110,6 +6163,23 @@ int TurnSolver::ClassifyCastMainPhase(const GameState& state, const CardDefiniti
 }
 
 // Defined after the classifier helpers it uses (HasteAccessThisTurn / BoardHasScalingAttacker).
+
+// Every permanent the active player controls that can be TAPPED FOR MANA, which is both what
+// Reality Spasm's X counts and what determines whether a decline is still binding. Lands, mana
+// rocks and mana dorks; nothing else contributes mana in this apparatus.
+int TurnSolver::ManaSourceCount(const GameState& state)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        if (p.card.IsLand()) { ++n; continue; }
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(p.card);
+        if (cd == nullptr) { continue; }
+        if (cd->params.mana_rock || cd->tmpl == CardTemplate::ManaDork) { ++n; }
+    }
+    return n;
+}
 
 std::vector<int> TurnSolver::HandCardNumbers(const GameState& state)
 {
@@ -7082,6 +7152,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         const bool bp_decision_space = g_search_candidate_enum || g_condemn_root_turn < 0;
         if (BpClassifyActive(state) && g_bp_hand_before != nullptr
             && (!BpCondemnSearchedOnlyEnabled() || bp_decision_space)
+            && BpTurnManaSettled(state)
             && !BpPlanCasts(ap.hand[i].m_name_hash)
             && !(BpCondemnTailExemptEnabled() && !BpPlanHasTail(ap))
             && !BpSlotIsAfterSite(state, ap.hand[i]))
@@ -16826,7 +16897,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
                     {
                         TurnSolver::CantripOrderScope _cos(&def, &hand_at_cast, &plan_cast_names,
-                                                          BpClassifyActive(state), karoo_deferred);
+                                                          BpClassifyActive(state), karoo_deferred,
+                                                          TurnSolver::ManaSourceCount(state));
                         TurnSolver::Plan extra;
                         if (!bp_searched_plan(6, extra))
                         {
@@ -17583,7 +17655,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // executor's twin binding is in AIEngine::resolve_draw_breakpoint -- lockstep pair.
         TurnSolver::CantripOrderScope _cos(deferred_cantrip_site, &deferred_hand_before,
                                            &plan_cast_names, BpClassifyActive(state),
-                                           karoo_deferred);
+                                           karoo_deferred,
+                                           TurnSolver::ManaSourceCount(state));
         // Mark the continuation for the condemnation filter (MTG_CONDEMN_M1_BP). Same extent as
         // _cos: the searched list, the greedy Solve fallback, and the continuation's application.
         TurnSolver::BpContinuationScope _cbs;
@@ -27987,6 +28060,9 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
         // Karoo still in hand and lands_played_this_turn == 0. Without this fold they would share a
         // cache entry and the second would be served the first's plan list.
         if (g_land_drop_reserved) { Fold(key, 0x1A4Dull); }
+    // Same reason as the reservation: two continuations identical mid-turn but snapshotted at
+    // DIFFERENT mana-source counts condemn different sets, so they must not share a cache entry.
+    if (g_bp_mana_sources_before >= 0) { Fold(key, 0x2B71ull + static_cast<unsigned long long>(g_bp_mana_sources_before)); }
         BpEnumMap::const_iterator it = cache.find(key);
         if (it != cache.end())
         {

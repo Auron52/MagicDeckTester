@@ -4917,14 +4917,41 @@ static int HinataFullOrderRank(const CardDefinition& def)
     // >= the site's, so two rocks on ONE rank are mutually un-condemnable. Splitting them is the
     // order doing the work that an exemption was doing before.
     if (p.mana_rock)              { return p.ramp_filter ? 5 : 4; }
+    // 6: THE ENGINE, moved up from 11 (USER 2026-08-28: "Hinata should be higher in the list. It
+    // should be right after Izzet Signet, since a drawn Hinata can still be played later"). The
+    // clause after "since" is the safety argument and it is the same one that pins the land drop:
+    // pinning her early forecloses nothing, because a Hinata the breakpoint DRAWS is a new card
+    // under the drawn-card exemption and stays enumerable. What the pin removes is only holding a
+    // Hinata already in hand to cast her after seeing what a cantrip revealed.
+    //
+    // She belongs above the find tier on her own merits too: every spell after her is cheaper for
+    // each target it has, so a cantrip cast before her is a cantrip that paid full price.
+    if (p.hinata_cost_reducer)    { return 6; }   // Hinata, Dawn-Crowned
+    // 7: THE UNTAP RITUAL, moved up from 15 (USER 2026-08-28: "you want to consider it as soon as
+    // you have your full mana out + Hinata for the turn. So, once mana rocks, land and Hinata are
+    // out it is fair game. But, this doesn't mean it needs to be cast after all of our cantrips").
+    //
+    // Reality Spasm untaps X target permanents and her discount cancels the {X} (one {1} off per
+    // target), so with her online it is {U}{U} to untap every mana source that paid for her. That
+    // makes it an ACCELERANT whose output funds the cantrips and the payoff, not something that
+    // waits behind them -- ranking it at 15 had the cantrips spending un-doubled mana first.
+    //
+    // Its prerequisites are exactly the three things now ranked above it: the land drop (slot 0),
+    // the rocks (4-5) and her (6). That is not a coincidence of numbering -- "X scales based on the
+    // number of lands" (USER), so every mana source that lands before it raises its ceiling, and
+    // every one that lands after is one it could not untap. See BpTurnManaSettled in TurnSolver.cpp
+    // for the condemnation half of that same fact.
+    if (p.untap_x_mana_sources)   { return 7; }   // Reality Spasm
+    // 8-12: FIND -- tutor, then card selection, then the dig. MTG_HINATA_FIND_LATE puts the whole
+    // tier back at 20 (after her), which is the generic tiering's position.
     if (p.tutor_to_hand)          { return find_base ? find_base
-                                                     : (HinataGambleLate() ? 8 : 6); }   // Gamble
-    // 7-8: the two top-of-library manipulators. PEERS unless MTG_HINATA_PP_STRICT.
-    if (p.cast_reorder > 0)       { return find_base ? find_base : 7; }   // Ponder -- reorder 3
+                                                     : (HinataGambleLate() ? 13 : 8); }   // Gamble
+    // 10-11: the two top-of-library manipulators. PEERS unless MTG_HINATA_PP_STRICT.
+    if (p.cast_reorder > 0)       { return find_base ? find_base : 10; }   // Ponder -- reorder 3
     if (p.cast_scry > 0)          { return find_base ? find_base
-                                                     : (HinataPonderPreordainStrict() ? 8 : 7); }
-    if (p.expressive_iteration)   { return find_base ? find_base : 9; }   // EI -- use-or-lose exile
-    // 11-12: deploy, ENGINE FIRST then the dork (USER 2026-08-28: "Ornithopter can go after Hinata,
+                                                     : (HinataPonderPreordainStrict() ? 11 : 10); }
+    if (p.expressive_iteration)   { return find_base ? find_base : 12; }   // EI -- use-or-lose exile
+    // 14: the dork (USER 2026-08-28: "Ornithopter can go after Hinata,
     // but before Soulfire Eruption"; "It can't get haste, so it only matters as a target for
     // Soulfire and Crackle"). Ornithopter of Paradise is summoning-sick and this deck has no haste
     // enabler, so the turn it lands it neither taps for mana nor attacks. Its ONLY same-turn value
@@ -4933,16 +4960,16 @@ static int HinataFullOrderRank(const CardDefinition& def)
     // route by which Hinata's per-target discount is realised. So it is worthless before those two
     // exist as a plan, and must be on the board before either resolves.
     //
-    // Why 12 and not 16-19 (the other slot the ruling permits, after the ritual): the ritual tier
-    // exists to "float online before the payoff", and Ornithopter costs {2}. Ranking it after
-    // Reality Spasm invites that {2} to be paid out of ritual float reserved for the payoff. Ahead
-    // of the ritual it is paid from lands. Flagged for review -- the ruling allows either.
-    if (p.hinata_cost_reducer)              { return 11; }   // Hinata herself
-    // MTG_HINATA_DORK_TIE now prices the PRE-RULING position (dork at 10, AHEAD of her) rather than
-    // the generic tiering's 10/10 tie -- the tie arm measured play-inert over 6,000 games.
-    if (def.tmpl == CardTemplate::ManaDork) { return HinataDorkTie() ? 10 : 12; }   // Ornithopter
-    // 15: the ritual tier. With her discount cancelling the {X}, Spasm is {U}{U} to untap X.
-    if (p.untap_x_mana_sources)             { return 15; }   // Reality Spasm
+    // It now sits after the ritual (7) rather than before it. The earlier worry -- that its {2}
+    // would be paid out of ritual float reserved for the payoff -- is answered by the ritual moving
+    // UP rather than by the dork moving down: Spasm's untap is what pays for the rest of the turn,
+    // so spending some of that on an extra Soulfire/Crackle target is the intended use, not a leak.
+    //
+    // MTG_HINATA_DORK_TIE restores the generic tiering's TIE (dork on her rank), which is the arm
+    // worth keeping now that ties are the thing under review: two cards on one rank are mutually
+    // un-condemnable under BpSlotIsAfterSite. It measured play-inert over 6,000 games at its old
+    // 10/10 position.
+    if (def.tmpl == CardTemplate::ManaDork) { return HinataDorkTie() ? 6 : 14; }   // Ornithopter
     // 18 or 22: the cast restrictor. The USER's ruling puts it SECOND LAST ("it can only be cast
     // before Crackle"), which forecloses Irencrag -> Soulfire and Irencrag -> Opus; the generic
     // tiering had it at 18, ahead of every payoff. MTG_HINATA_IREN_EARLY prices that narrowing.

@@ -653,7 +653,8 @@ public:
                                    const std::vector<int>* hand_before = nullptr,
                                    const std::vector<std::uint64_t>* plan_casts = nullptr,
                                    bool classify_active = false,
-                                   bool land_drop_reserved = false);
+                                   bool land_drop_reserved = false,
+                                   int mana_sources_before = -1);
         ~CantripOrderScope();
         CantripOrderScope(const CantripOrderScope&) = delete;
         CantripOrderScope& operator=(const CantripOrderScope&) = delete;
@@ -663,11 +664,16 @@ public:
         const std::vector<std::uint64_t>* m_saved_casts;
         const CardDefinition*   m_saved_site;   // order-aware condemnation: the breakpoint's site
         bool                    m_saved_reserved;   // ...and whether the drop was RESERVED, not passed
+        int                     m_saved_mana_before;   // ...and the mana-source count at the cast
     };
 
     // Card numbers in the active player's hand, for the breakpoint snapshot above. Cheap (one
     // small vector per armed breakpoint) and taken BEFORE the draw resolves.
     static std::vector<int> HandCardNumbers(const GameState& state);
+
+    // Lands + mana rocks + mana dorks the active player controls. Snapshotted at a breakpoint so a
+    // decline can be re-admitted once the mana base grows (BpTurnManaSettled).
+    static int ManaSourceCount(const GameState& state);
 
     // Stamp the ORDER-CONDEMNATION snapshot (GameState::m1_hand) from the active player's
     // current hand. Called at the pre-combat main decision in BOTH worlds -- AIEngine::TakeTurn
