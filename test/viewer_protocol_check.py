@@ -119,6 +119,11 @@ DECKS = {
     # the StompySurprise lesson above.
     "KittyEquipment": ("decks/KittyEquipment/KittyEquipment.cod",
                        "decks/KittyEquipment/KittyEquipment.profile.json"),
+    # Added 2026-08-28: references/Minotaur/claude_s2_gi1.json was sitting UNTRACKED in the working
+    # tree -- saved from the viewer, never committed, so the row was never added and the gate went
+    # red exactly as designed. Committed with this row (references/ is commit-only; an untracked
+    # reference is user work waiting to be lost, not a stray file).
+    "Minotaur":      ("decks/Minotaur/Minotaur.cod",           "decks/Minotaur/Minotaur.profile.json"),
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)
