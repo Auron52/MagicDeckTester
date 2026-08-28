@@ -110,9 +110,29 @@ static std::atomic<long long> g_condemn_drops_greedy{0};
 // a drop with it false removes the only line a greedy playout was going to take (no pruning at
 // all, and a quality loss). bp_condemn_seen counts every candidate the filter is CONSULTED about,
 // so "rarely applicable" and "applicable but off the expensive path" are distinguishable.
+//
+// THREE-WAY, not two. USER 2026-08-28: "the executor needs to follow the search when it is
+// available", and "the rollouts are where this doesn't make sense". The two-bucket split above
+// cannot express that, because `!g_search_candidate_enum` is TRUE in the rollout leaf AND in the
+// executor -- so the 29.8% it reported as leaf drops is really rollout PLUS executor, and only the
+// rollout half is the nonsense. The three readers are genuinely different:
+//
+//   SEARCHED collect  -- deletes a plan-space branch. Real pruning. Keep.
+//   EXECUTOR          -- committed play. It decides only where it has NO searched continuation to
+//                        follow (AIEngine's `if (!bp_searched_here) ... TurnSolver::Solve(...)`);
+//                        with plan.bp_choice >= 0 it replays candidate k and re-deciding there
+//                        would realise a turn the search never scored. Keep.
+//   ROLLOUT leaf      -- estimating, not deciding. No sibling branch exists for the permutation
+//                        argument to point at, so the drop deletes a real line and saves nothing.
+//
+// The executor bucket therefore doubles as a GREEDY DETECTOR for the deletion programme: a drop
+// there means the executor had to solve for itself, i.e. a searched continuation was unavailable.
+// If MTG_BP_SITE3 + MTG_BP_NO_GREEDY_CONT do what they are meant to, this bucket tends to zero and
+// condemnation becomes a pure search-side prune.
 static std::atomic<long long> g_bp_condemn_seen{0};
 static std::atomic<long long> g_bp_condemn_drops{0};
 static std::atomic<long long> g_bp_condemn_drops_greedy{0};
+static std::atomic<long long> g_bp_condemn_drops_exec{0};
 // Per-plan state REUSE (DEFAULT ON; MTG_NO_STATE_REUSE=1 restores per-plan construction).
 // Every plan loop applies its plan to a COPY of the SAME parent state. Copy-CONSTRUCTING that copy
 // inside the loop frees the previous plan's buffers and mallocs new ones of nearly identical size,
@@ -172,10 +192,13 @@ namespace
             const long long bs = g_bp_condemn_seen.load();
             const long long bd = g_bp_condemn_drops.load();
             const long long bg = g_bp_condemn_drops_greedy.load();
+            const long long be = g_bp_condemn_drops_exec.load();
             std::cerr << "[rollout-stats] bp_condemn_seen=" << bs << " drops=" << bd
                       << " drop_rate=" << (bs ? static_cast<double>(bd) / bs : 0.0)
-                      << " (greedy=" << bg << " searched=" << (bd - bg)
-                      << " greedy_frac=" << (bd ? static_cast<double>(bg) / bd : 0.0) << ")\n";
+                      << " (searched=" << (bd - bg) << " exec=" << be
+                      << " rollout=" << (bg - be)
+                      << " rollout_frac=" << (bd ? static_cast<double>(bg - be) / bd : 0.0)
+                      << ")\n";
         }
     };
     RolloutStatsReporter g_rollout_stats_reporter;
@@ -7108,7 +7131,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     {
                         g_bp_condemn_drops.fetch_add(1, std::memory_order_relaxed);
                         if (!g_search_candidate_enum)
-                        { g_bp_condemn_drops_greedy.fetch_add(1, std::memory_order_relaxed); }
+                        {
+                            g_bp_condemn_drops_greedy.fetch_add(1, std::memory_order_relaxed);
+                            // Same clause the gate admits, counted separately so ROLLOUT (the
+                            // nonsense) and EXECUTOR (committed play with no searched continuation
+                            // to follow) stop sharing one bucket.
+                            if (g_condemn_root_turn < 0)
+                            { g_bp_condemn_drops_exec.fetch_add(1, std::memory_order_relaxed); }
+                        }
                     }
                     continue;
                 }
