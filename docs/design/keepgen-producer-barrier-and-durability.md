@@ -554,14 +554,28 @@ own measurement (3,410 of 37,706 at 9 kills). Nothing here touches the vg schedu
 producer's state, so the fix is neutral on it. **A paired baseline kill-twin was not run**, so this
 is a check that resume still behaves as documented, not a before/after comparison of resume drift.
 
-Two follow-ups deliberately NOT taken, both of which would move every generated profile:
+Three follow-ups deliberately NOT taken:
 * **Chunk the wave dispatch too.** `sub_refine_step()` pushes a whole wave (9,043 tasks on Slivers)
   through the same QCAP throttle before returning, so it is a producer-side barrier of exactly the
   same shape as the one just fixed — it is simply bounded by wave size rather than by `NC`. It did
   not need fixing for correctness and prioritising waves over filler is the right order anyway.
+* **Chunk `feed_sub()` too — the THIRD instance of the shape.** Observed live on the StompySurprise
+  gen (2026-08-28): `feed_sub()` walks `sub_cursor` over all `fused_sub_tasks` in one unbounded
+  QCAP-throttled loop, and it sits ABOVE both `sub_refine_step()` and the speculation filler, so
+  until every sub-batch is queued neither runs. On Stompy that is 75,912 batches and the monitor
+  reads `roll7=… (0/s)` for hours with `frozen=0`.
+
+  **This one is benign and should probably stay that way.** The sub-tables are required work that
+  gates the phase flip (`compute_refs` cannot fix refs until `sub_remaining == 0`), so the producer
+  is saturating the box on the critical path while starving pure filler — which is the correct
+  priority, and the opposite of Defect 1 (where the filler starved the critical path). Recorded
+  because the *symptom* is identical to Defect 1 and a future reader watching `roll7=0/s, frozen=0`
+  will otherwise re-diagnose it as a regression of this fix. The discriminator: check whether
+  `sub=` is advancing. If it is, the box is on the critical path and nothing is wrong.
 * **Let refs fix as soon as sub-refine converges, abandoning the rest of the sweep.** This would skip
   the sweep tail outright (a real saving), but it makes the reconcile's input schedule-dependent by
-  construction — the opposite of what `spec_active` is for.
+  construction — the opposite of what `spec_active` is for. This one *would* move every generated
+  profile; the two above would not.
 
 ---
 
