@@ -2191,12 +2191,17 @@ function aiDiscardSet(d){
        : (d.heuristic_default!=null ? [d.heuristic_default] : []);
 }
 function discardPanelHtml(d){
-  const over=d.over_by||1;
+  // A COST discard (Burning-Fist's activation, Neheb's trigger) reuses this decision type but is
+  // exactly ONE card and not a hand-size shed — the cleanup framing read "Select -5 cards" there.
+  const costCtx=d.discard_context==='cost';
+  const over=costCtx?1:(d.over_by||1);
   // Initialize the selection ONCE per decision (re-renders on toggle must not wipe the user's picks).
   if (S._discardFor !== d.decision_index){ S._discardFor=d.decision_index; S.discardSel=new Set(aiDiscardSet(d)); }
   const sel=S.discardSel, aiSet=new Set(aiDiscardSet(d));
-  let h=`<h3>Discard to hand size</h3>`;
-  h+=`<div class="sub">Your hand is over the maximum (7). Select <b>${over}</b> card${over===1?'':'s'} to discard — the rest stay. The AI’s picks are preselected.</div>`;
+  let h=`<h3>${costCtx?'Discard a card':'Discard to hand size'}</h3>`;
+  h+= costCtx
+    ? `<div class="sub">${esc(d.source||'Ability')}: discard <b>1</b> card as part of the cost. The AI’s pick is preselected.</div>`
+    : `<div class="sub">Your hand is over the maximum (7). Select <b>${over}</b> card${over===1?'':'s'} to discard — the rest stay. The AI’s picks are preselected.</div>`;
   h+=`<div class="tutgrid">`;
   (d.options||[]).forEach(o=>{
     const isSel=sel.has(o.index), isAI=aiSet.has(o.index);

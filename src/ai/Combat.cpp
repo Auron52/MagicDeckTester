@@ -175,7 +175,8 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         Player& ap = state.players[active];
         for (int k = 0; k < nd->params.combat_damage_each_discards && !ap.hand.empty(); ++k)
         {
-            const int hi = ChooseNonCleanupDiscardIndex(state, active);   // surfaced as `discard`
+            const int hi = ChooseNonCleanupDiscardIndex(state, active,    // surfaced as `discard`
+                                                        state.battlefield[idx].card.m_name.str());
             if (hi < 0) { break; }
             ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(hi)]);
             ap.hand.erase(ap.hand.begin() + hi);

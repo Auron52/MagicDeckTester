@@ -1729,6 +1729,90 @@ static int SameTurnReducerGenericCredit(const GameState& state, const std::vecto
     return credit;
 }
 
+// ---- Same-turn COLOURED-pip reducer credit (Ragemonger) ----------------------------------------
+// The Medallion/Warchief credits above are GENERIC-only; Ragemonger ("Minotaur spells you cast
+// cost {B}{R} less... reduces only the amount of colored mana") takes COLOURED pips off, so its
+// same-turn effect needs a ManaCost-level credit against the subset's combined bill. Two entry
+// routes both count: a Ragemonger CAST in the subset, and one PUT by Aether Vial in the subset --
+// the Vial activation resolves before the hand casts in both apply worlds (canonical order:
+// ActivateVial -> hand casts), so a vialed reducer discounts every cast (viewer rejection
+// Minotaur s3/gi2 t4: vial=Ragemonger + cast Ragemonger{1} + Neheb{1} + Slaughter-Priest{1} is a
+// legal 4-Minotaur turn the pre-state pricing rejected). The credit is OPTIMISTIC for cast-entry
+// reducers (it assumes the reducer precedes what it discounts; the tier-8 CastOrderRank makes
+// that the canonical order) -- sound for the standard reason: the apply reprices every cast on
+// the LIVE battlefield, an unpayable cast drops, and the rollout scores what really happened.
+static const CardDefinition* ActionColoredReducerDef(const Action& a)
+{
+    const CardDefinition* d = a.def;
+    if (d == nullptr && a.kind == Action::Kind::ActivateVial)
+    { d = CardDatabase::Instance().Lookup(a.card_name); }
+    if (d == nullptr || d->params.reduces_subtype_colored_subtype.empty()
+                     || !d->params.reduces_subtype_colored_cost.has_value()) { return nullptr; }
+    return d;
+}
+
+static ManaCost SameTurnColoredReducerPipCredit(const std::vector<Action>& cands,
+                                                const std::vector<int>& sel)
+{
+    // Reducer ENTRIES this subset puts onto the battlefield, split by route because the credit
+    // must be ORDER-AWARE: a reducer discounts only what resolves AFTER it. A naive
+    // "everything discounts everything else" let two hand Ragemongers on two lands mutually
+    // discount each other to {1}+{1} -- a plan no ordering can pay (whichever casts first pays
+    // {1}{B}{R} in full). Vial entries resolve before every cast (canonical order:
+    // ActivateVial -> hand casts) so they discount all casts; cast-entry reducers rank tier 8
+    // (before what they discount) and, among themselves, only LATER ordinals enjoy earlier
+    // ones' reductions -- the first cast reducer of a subtype is discounted by vial entries only.
+    struct Entry { const CardDefinition* d; };
+    std::vector<Entry> vial_entries;
+    std::vector<int>   cast_entry_sel;   // selection indices of cast-entry reducers, in sel order
+    for (int j : sel)
+    {
+        const CardDefinition* d = ActionColoredReducerDef(cands[j]);
+        if (!d) { continue; }
+        if (cands[j].kind == Action::Kind::ActivateVial) { vial_entries.push_back({ d }); }
+        else                                             { cast_entry_sel.push_back(j); }
+    }
+    ManaCost credit{};
+    if (vial_entries.empty() && cast_entry_sel.empty()) { return credit; }
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        // Only real CASTS pay a cost a reduction can shrink; a vial deploy pays nothing.
+        if (a.kind == Action::Kind::ActivateVial || a.def == nullptr) { continue; }
+        ManaCost reduced = a.cost;
+        auto apply_if_match = [&](const CardDefinition* rd)
+        {
+            bool match = false;
+            for (const std::string& cs : a.def->card.m_subtypes)
+            { if (cs == rd->params.reduces_subtype_colored_subtype) { match = true; break; } }
+            if (match) { ApplyColoredPipReduction(reduced, rd->params.reduces_subtype_colored_cost.value()); }
+        };
+        for (const Entry& e : vial_entries) { apply_if_match(e.d); }
+        for (int rj : cast_entry_sel)
+        {
+            if (rj == j) { break; }   // a cast reducer is discounted only by EARLIER cast entries
+            apply_if_match(ActionColoredReducerDef(cands[rj]));
+        }
+        // FLAT pips only (hybrid retirement already decrements the flat): the combined bill's
+        // hybrid metadata is left alone, which can only under-credit -- conservative.
+        credit.white += a.cost.white - reduced.white;
+        credit.blue  += a.cost.blue  - reduced.blue;
+        credit.black += a.cost.black - reduced.black;
+        credit.red   += a.cost.red   - reduced.red;
+        credit.green += a.cost.green - reduced.green;
+    }
+    return credit;
+}
+
+static void SubtractPipCredit(ManaCost& bill, const ManaCost& credit)
+{
+    bill.white = std::max(0, bill.white - credit.white);
+    bill.blue  = std::max(0, bill.blue  - credit.blue);
+    bill.black = std::max(0, bill.black - credit.black);
+    bill.red   = std::max(0, bill.red   - credit.red);
+    bill.green = std::max(0, bill.green - credit.green);
+}
+
 // Same-turn METALCRAFT credit (Puresteel Paladin) -- the Ruby Medallion precedent applied to the
 // EQUIP cost. The Equip candidate block bakes EquipCostGenericNow(state) into Action::cost, i.e.
 // the artifact count as it stands at ENUMERATION. So a subset that casts artifact #3 and then
@@ -10422,6 +10506,10 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     // scalar bound cannot see (like a same-turn affinity enabler), so bail when one is among the cands.
     for (const Action& a : cands)
     { if (a.def && !a.def->params.reduces_spell_color.empty()) { return std::numeric_limits<int>::max(); } }
+    // A Ragemonger cast/vialed THIS turn takes coloured pips off later Minotaur casts -- the same
+    // per-subset discount shape as the Medallion bail above (pip credit, not generic).
+    for (const Action& a : cands)
+    { if (ActionColoredReducerDef(a)) { return std::numeric_limits<int>::max(); } }
     long long b = pool.Total() + extra_credit;
     int gy = 0;
     for (const Action& a : cands)
@@ -10559,8 +10647,9 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         t.cost = a.cost.ManaValue();
         t.gain = a.ritual_float + a.rock_mana.Total();
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
-        t.block = (a.def && (a.def->params.affinity_for_subtype
-                             || !a.def->params.reduces_spell_color.empty())) ? 1 : 0;
+        t.block = ((a.def && (a.def->params.affinity_for_subtype
+                              || !a.def->params.reduces_spell_color.empty()))
+                   || ActionColoredReducerDef(a) != nullptr) ? 1 : 0;   // Ragemonger pip credit
     }
     out.pool_total   = pool.Total();
     out.ind_gain_all = 0;
@@ -17848,6 +17937,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // (mirrors Solve). Inert unless a reducer is a candidate -> every non-reducer deck byte-identical.
     bool any_reducer = false;
     for (const Action& ra : cands) { if (ra.def && !ra.def->params.reduces_spell_color.empty()) { any_reducer = true; break; } }
+    // Same-turn COLOURED-pip reducer castable/vialable this turn (Ragemonger)? Gates the pip
+    // credit below. Inert unless one is a candidate -> every non-Ragemonger deck byte-identical.
+    bool any_col_reducer = false;
+    for (const Action& ra : cands) { if (ActionColoredReducerDef(ra)) { any_col_reducer = true; break; } }
     // Same-turn METALCRAFT scan (EnumeratePlans ONLY -- see the credit below). True only when BOTH
     // a metalcraft reducer is present-or-castable AND some Equip candidate is still priced above
     // {0}; so a deck without Puresteel, and this deck once metalcraft is already on, skip the
@@ -18460,6 +18553,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - rcred);
             }
         }
+        // Same-turn COLOURED-pip reducer (Ragemonger, cast OR vialed in this subset): subtract the
+        // coloured pips its entry takes off the later Minotaur casts, so the multi-Minotaur line
+        // enumerates (see SameTurnColoredReducerPipCredit for both rejection repros + soundness).
+        if (any_col_reducer)
+        {
+            const ManaCost ccred = SameTurnColoredReducerPipCredit(cands, sel);
+            SubtractPipCredit(combined, ccred);
+            SubtractPipCredit(noncreature_combined, ccred);
+        }
         // Same-turn METALCRAFT (Puresteel Paladin): this subset's own artifact casts can flip the
         // equip cost to {0} before the trailing equip pass pays it, so credit the equips' baked
         // generic. See SameTurnMetalcraftEquipCredit for the order + optimism soundness argument.
@@ -18585,7 +18687,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 const Action& c = cands[j];
                 if (c.ritual_float > 0 || c.rock_mana.Total() > 0
                     || (c.def && c.def->params.affinity_for_subtype)
-                    || (c.def && !c.def->params.reduces_spell_color.empty())) { interacts = true; break; }
+                    || (c.def && !c.def->params.reduces_spell_color.empty())
+                    || ActionColoredReducerDef(c) != nullptr) { interacts = true; break; }
             }
             if (interacts)
             {
@@ -18598,6 +18701,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                + SameTurnReducerGenericCredit(state, cands, sel);
                 ManaCost oc    = combined;              oc.generic    = std::max(0, combined.generic - disc);
                 ManaCost oc_nc = noncreature_combined;  oc_nc.generic = std::max(0, noncreature_combined.generic - disc);
+                const ManaCost ccred = SameTurnColoredReducerPipCredit(cands, sel);   // Ragemonger pips
+                SubtractPipCredit(oc, ccred);
+                SubtractPipCredit(oc_nc, ccred);
                 const ManaPool& opt    = credited ? eff    : pool;
                 const ManaPool& opt_nc = credited ? eff_nc : pool_noncreature;
                 if (opt.CanPay(oc) && opt_nc.CanPay(oc_nc)) { mana_reject = false; }
@@ -18606,11 +18712,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (mana_reject) { return; }
         if (sacrifice_count > total_lands)                   { return; }
         if (discard_lands_used > lands_in_hand)              { return; }
+        // A selection whose own entries include a COLOURED-pip reducer (Ragemonger cast or vialed)
+        // pays FEWER coloured pips than Action::cost records, so the exact per-colour gates below
+        // over-demand and reject the legal multi-Minotaur line (s3/gi2 t4). Skip them for such
+        // selections -- the standard optimism trade: the apply reprices every cast on the live
+        // battlefield and the rollout scores what really resolves.
+        bool sel_col_reducer = false;
+        if (any_col_reducer)
+        { for (int j : sel) { if (ActionColoredReducerDef(cands[j])) { sel_col_reducer = true; break; } } }
         // Accurate per-color payability (rejects wild-pool phantoms; see SubsetPayable).
-        if (!SubsetPayable(have_colors, cands, sel))         { return; }
+        if (!sel_col_reducer && !SubsetPayable(have_colors, cands, sel)) { return; }
         // ... and the COUNT it does not model (see the twin in Solve::consider). Flat-pool path
         // only: the filter fallback and the cost reframe both judge by other means.
-        if (mana_ok
+        if (mana_ok && !sel_col_reducer
             && ((colour_feas.usable
                  && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff)))
              || (colour_feas_nc.usable
@@ -27909,11 +28023,28 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // If the declared order does NOT pay, fall through to the greedy (order-tolerant). CheckLine is
     // viewer-only (sole caller --validate-line), so this is GT-neutral and only ever ACCEPTS more.
     {
+        const LineSpec& line_spec = spec;    // `spec` is shadowed by the spectacle bool below
         ManaPool p = AvailableManaPool(s);
         p.wild += sac_wild;                  // Lotus Bloom & co. (see sac_wild above)
         bool spec = s.opponent_lost_life_this_turn;
         std::vector<std::string> reducers;   // reduces_spell_color of Medallions cast so far in-line
         std::vector<std::string> sub_reducers; // reduces_spell_subtype of Warchiefs cast so far in-line
+        // COLOURED-pip subtype reducers live for this line (Ragemonger). Vial deploys resolve
+        // BEFORE the hand casts in both apply worlds (canonical order: ActivateVial -> casts), so
+        // a reducer entering by Vial discounts every cast -- seed it up front; ones CAST in-line
+        // join as the walk passes them. Vialed GENERIC reducers (a vialed Warchief) seed the
+        // existing lists for the same reason. full_cost already credits reducers on the
+        // battlefield (EffectiveSpellCost), so only this line's own entries are added here.
+        std::vector<const CardDefinition*> col_reducers;
+        for (const std::string& vn : line_spec.vial_deploys)
+        {
+            const CardDefinition* vd = CardDatabase::Instance().Lookup(vn);
+            if (!vd) { continue; }
+            if (!vd->params.reduces_subtype_colored_subtype.empty()
+                && vd->params.reduces_subtype_colored_cost.has_value()) { col_reducers.push_back(vd); }
+            if (!vd->params.reduces_spell_color.empty())   { reducers.push_back(vd->params.reduces_spell_color); }
+            if (!vd->params.reduces_spell_subtype.empty()) { sub_reducers.push_back(vd->params.reduces_spell_subtype); }
+        }
         bool ok = true;
         for (const PendingCast& pc : pending)
         {
@@ -27942,6 +28073,19 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                 }
                 cost.generic = std::max(0, cost.generic - disc);
             }
+            // Ragemonger same-turn COLOURED reduction: one application per live in-line reducer
+            // (vialed up front, or cast earlier in the walk) whose subtype this spell carries.
+            if (!cost.has_x && pc.def)
+            {
+                for (const CardDefinition* rd : col_reducers)
+                {
+                    bool match = false;
+                    for (const std::string& cs : pc.def->card.m_subtypes)
+                    { if (cs == rd->params.reduces_subtype_colored_subtype) { match = true; break; } }
+                    if (match)
+                    { ApplyColoredPipReduction(cost, rd->params.reduces_subtype_colored_cost.value()); }
+                }
+            }
             if (!p.CanPay(cost)) { ok = false; break; }
             DeductPayable(p, cost);
             if (pc.rock && pc.def) { AddSourceToPool(p, s, *pc.def); }
@@ -27957,6 +28101,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             if (pc.def && !pc.def->params.reduces_spell_subtype.empty())
             {
                 sub_reducers.push_back(pc.def->params.reduces_spell_subtype);
+            }
+            if (pc.def && !pc.def->params.reduces_subtype_colored_subtype.empty()
+                && pc.def->params.reduces_subtype_colored_cost.has_value())
+            {
+                col_reducers.push_back(pc.def);
             }
             if (pc.def && deals_opponent_damage(*pc.def)) { spec = true; }
         }

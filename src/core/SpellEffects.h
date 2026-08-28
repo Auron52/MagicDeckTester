@@ -4504,7 +4504,18 @@ inline void ApplyUntapCreature(GameState& state, int controller, int source_id,
 // discard doctrine, applied to a cost instead of a hand-size shed. The chooser is nulled by
 // RevealLogPause in every search/rollout scope, so the search is byte-identical and the human only
 // sees the decision on a REAL resolution. Returns a hand index, or -1 when the hand is empty.
-inline int ChooseNonCleanupDiscardIndex(const GameState& state, int controller)
+// Set while a COST/TRIGGER discard decision is being surfaced (the ability's source name), so the
+// decision writer can frame it correctly. The cleanup-step shed leaves it empty; without this the
+// shared `discard` decision rendered with the cleanup framing and a 2-card hand read
+// "Select -5 cards to discard" (Minotaur seed 1, Burning-Fist activation).
+inline std::string& NonCleanupDiscardContext()
+{
+    static thread_local std::string v;
+    return v;
+}
+
+inline int ChooseNonCleanupDiscardIndex(const GameState& state, int controller,
+                                        const std::string& source_name)
 {
     const Player& ap = state.players[controller];
     if (ap.hand.empty()) { return -1; }
@@ -4515,7 +4526,9 @@ inline int ChooseNonCleanupDiscardIndex(const GameState& state, int controller)
     {
         std::vector<int> idxs(ap.hand.size());
         for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i) { idxs[i] = i; }
+        NonCleanupDiscardContext() = source_name;
         const int chosen = (*g_play_discard_chooser)(state, controller, idxs, pick);
+        NonCleanupDiscardContext().clear();
         if (chosen >= 0 && chosen < static_cast<int>(ap.hand.size())) { pick = chosen; }
     }
     return pick;
@@ -4555,7 +4568,8 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
         {
             Player& ap = state.players[controller];
             if (ap.hand.empty()) { break; }                       // unpayable additional cost
-            const int hi = ChooseNonCleanupDiscardIndex(state, controller);   // surfaced as `discard`
+            const int hi = ChooseNonCleanupDiscardIndex(state, controller,    // surfaced as `discard`
+                                                        state.battlefield[src].card.m_name.str());
             if (hi < 0) { break; }
             const std::string shed = ap.hand[static_cast<std::size_t>(hi)].m_name.str();
             ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(hi)]);

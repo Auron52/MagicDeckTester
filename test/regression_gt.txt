@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 1692cd88  date 2026-08-28
+# Regression ground truth -- commit 30603aed  date 2026-08-28
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -40,12 +40,12 @@ mirrorwing_smoke_d5_s1001=4.7467/7d1e94a7fe75886e
 fivecolour_smoke_d0_s1001=5.7830/26299104ad40b026
 fivecolour_smoke_d3_s1001=4.9667/e78c58adbad71403
 fivecolour_smoke_d5_s1001=5.1333/f6d7ed5a947b839a
-stompy_smoke_d0_s1001=5.8570/8313043ad2b89fb1
-stompy_smoke_d3_s1001=4.6933/2eb28e67d6eaae1f
-stompy_smoke_d5_s1001=4.6933/95390166f7af550b
-minotaur_smoke_d0_s1001=5.4890/813aeaa9570df6ea
-minotaur_smoke_d3_s1001=4.9800/bf4549f43f54c307
-minotaur_smoke_d5_s1001=4.9933/a555d2b85d21a1ff
+stompy_smoke_d0_s1001=5.4420/dc78a74c3af62737
+stompy_smoke_d3_s1001=4.4933/6523a1bb1be7ca91
+stompy_smoke_d5_s1001=4.4400/926ddaaa248ad176
+minotaur_smoke_d0_s1001=5.4890/3f7bfb5f13c384b7
+minotaur_smoke_d3_s1001=4.9680/2b4edf96526e55fc
+minotaur_smoke_d5_s1001=4.9733/25f54fe9d7c57a6f
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/91abd0b536a1c263
@@ -113,11 +113,11 @@ stompy_regression_d3_s2002=4.5300/ce46dcff525d59e1
 stompy_regression_d3_s3003=4.6067/fa7420b23649150d
 stompy_regression_d5_s2002=4.5360/616feeab0c5de220
 stompy_regression_d5_s3003=4.5960/54024371bb7c0348
-minotaur_regression_d0_s2002=5.4890/08d0824cf1db292e
-minotaur_regression_d3_s2002=4.9967/9230ee66aa69e592
-minotaur_regression_d3_s3003=4.9500/f416ae4ec579b9ed
-minotaur_regression_d5_s2002=5.0080/563a6a0859f0de59
-minotaur_regression_d5_s3003=4.9360/eb93538f5bccd88f
+minotaur_regression_d0_s2002=5.4890/7485fb9e3979df4e
+minotaur_regression_d3_s2002=4.9633/66a8931ec033c276
+minotaur_regression_d3_s3003=4.9233/2d3184c3b0235586
+minotaur_regression_d5_s2002=4.9640/2fddfaf55a956f08
+minotaur_regression_d5_s3003=4.9080/e27a28b39dcc1511
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/b53c1150b0bd6df6

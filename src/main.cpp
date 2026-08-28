@@ -1710,8 +1710,19 @@ static void WriteDiscardDecisionJson(std::ostream& os, const GameState& s,
 {
     const Player& ap = s.players[s.active_player_index];
     DecisionJson d(os, decision_index);
+    // A COST/TRIGGER discard (Burning-Fist's activation, Neheb's combat trigger) reuses this
+    // decision type but is NOT a hand-size shed: it is always exactly ONE card, and the cleanup
+    // framing's over_by (hand - 7) goes negative on a small hand ("Select -5 cards", Minotaur
+    // seed 1). The context carries the ability's source so the viewer can title it honestly.
+    const bool cost_discard = !NonCleanupDiscardContext().empty();
     d.Type("discard").Turn(s.turn_number)
-     .Int("over_by", static_cast<int>(ap.hand.size()) - 7).Board(s);
+     .Int("over_by", cost_discard ? 1 : static_cast<int>(ap.hand.size()) - 7);
+    if (cost_discard)
+    {
+        d.Word("discard_context", "cost");
+        d.Str("source", NonCleanupDiscardContext());
+    }
+    d.Board(s);
     // AI's FULL cleanup-discard set (original hand indices), by simulating the shared selector forward
     // on a state copy: record the pick, erase it from the copy's hand, repeat until at max hand size.
     // Lets the viewer pre-select and commit the whole set in ONE step instead of one card per engine

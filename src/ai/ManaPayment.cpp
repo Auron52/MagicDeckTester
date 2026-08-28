@@ -524,6 +524,46 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     return false;
 }
 
+// See ManaPayment.h. HYBRID handling: a colour's flat int already includes hybrid pips baked into
+// their first colour (see ManaCost), so a naive `--cost.red` on {R/W}{R/W}{R/W} would leave red=2
+// with hybrid_count=3 -- an inconsistent cost ExpandHybrids would mis-expand. Consume a PLAIN pip
+// first and only then retire a hybrid entry, which is also the strictly better choice for the
+// player: {R}{R/W} minus one red should leave the FLEXIBLE {R/W}, not the rigid {R}.
+void ApplyColoredPipReduction(ManaCost& cost, const ManaCost& reduction)
+{
+    auto reduce_colored_pip = [](ManaCost& c, Color col)
+    {
+        int* flat = nullptr;
+        switch (col)
+        {
+            case Color::White: flat = &c.white; break;
+            case Color::Blue:  flat = &c.blue;  break;
+            case Color::Black: flat = &c.black; break;
+            case Color::Red:   flat = &c.red;   break;
+            case Color::Green: flat = &c.green; break;
+            default: return;                     // {C} is not coloured mana
+        }
+        if (*flat <= 0) { return; }
+        int baked = 0;                            // hybrid pips whose FIRST colour is `col`
+        for (int i = 0; i < c.hybrid_count; ++i)
+        { if (static_cast<Color>(c.hybrid_pair[i] >> 4) == col) { ++baked; } }
+        if (*flat - baked > 0) { --*flat; return; }             // a plain pip exists: take it
+        for (int i = 0; i < c.hybrid_count; ++i)                // else retire one hybrid entry
+        {
+            if (static_cast<Color>(c.hybrid_pair[i] >> 4) != col) { continue; }
+            for (int j = i; j + 1 < c.hybrid_count; ++j) { c.hybrid_pair[j] = c.hybrid_pair[j + 1]; }
+            c.hybrid_pair[--c.hybrid_count] = 0;
+            --*flat;
+            return;
+        }
+    };
+    for (int k = 0; k < reduction.white; ++k) { reduce_colored_pip(cost, Color::White); }
+    for (int k = 0; k < reduction.blue;  ++k) { reduce_colored_pip(cost, Color::Blue);  }
+    for (int k = 0; k < reduction.black; ++k) { reduce_colored_pip(cost, Color::Black); }
+    for (int k = 0; k < reduction.red;   ++k) { reduce_colored_pip(cost, Color::Red);   }
+    for (int k = 0; k < reduction.green; ++k) { reduce_colored_pip(cost, Color::Green); }
+}
+
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies)
 {
     if (def.params.spectacle_cost.has_value() && state.opponent_lost_life_this_turn)
@@ -635,32 +675,6 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
     // red should leave the FLEXIBLE {R/W}, not the rigid {R}.
     if (!def.card.m_subtypes.empty())
     {
-        auto reduce_colored_pip = [](ManaCost& c, Color col)
-        {
-            int* flat = nullptr;
-            switch (col)
-            {
-                case Color::White: flat = &c.white; break;
-                case Color::Blue:  flat = &c.blue;  break;
-                case Color::Black: flat = &c.black; break;
-                case Color::Red:   flat = &c.red;   break;
-                case Color::Green: flat = &c.green; break;
-                default: return;                     // {C} is not coloured mana
-            }
-            if (*flat <= 0) { return; }
-            int baked = 0;                            // hybrid pips whose FIRST colour is `col`
-            for (int i = 0; i < c.hybrid_count; ++i)
-            { if (static_cast<Color>(c.hybrid_pair[i] >> 4) == col) { ++baked; } }
-            if (*flat - baked > 0) { --*flat; return; }             // a plain pip exists: take it
-            for (int i = 0; i < c.hybrid_count; ++i)                // else retire one hybrid entry
-            {
-                if (static_cast<Color>(c.hybrid_pair[i] >> 4) != col) { continue; }
-                for (int j = i; j + 1 < c.hybrid_count; ++j) { c.hybrid_pair[j] = c.hybrid_pair[j + 1]; }
-                c.hybrid_pair[--c.hybrid_count] = 0;
-                --*flat;
-                return;
-            }
-        };
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index) { continue; }
@@ -671,12 +685,7 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
             for (const std::string& cs : def.card.m_subtypes)
             { if (cs == pd->params.reduces_subtype_colored_subtype) { subtype_match = true; break; } }
             if (!subtype_match) { continue; }
-            const ManaCost& r = pd->params.reduces_subtype_colored_cost.value();
-            for (int k = 0; k < r.white; ++k) { reduce_colored_pip(cost, Color::White); }
-            for (int k = 0; k < r.blue;  ++k) { reduce_colored_pip(cost, Color::Blue);  }
-            for (int k = 0; k < r.black; ++k) { reduce_colored_pip(cost, Color::Black); }
-            for (int k = 0; k < r.red;   ++k) { reduce_colored_pip(cost, Color::Red);   }
-            for (int k = 0; k < r.green; ++k) { reduce_colored_pip(cost, Color::Green); }
+            ApplyColoredPipReduction(cost, pd->params.reduces_subtype_colored_cost.value());
         }
     }
     // Hinata's per-target cost reduction (fixed-cost spells; {X} spells apply it at the X-cost

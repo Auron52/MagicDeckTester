@@ -1559,6 +1559,16 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     if (def.params.lifegain_to_loss)             { return 0; }
     if (def.params.max_casts_after >= 0)         { return 18; }
     if (!def.params.reduces_spell_color.empty()) { return 16; }
+    //    8 a COLOURED-pip subtype cost reducer that is itself a creature (Ragemonger): before the
+    //      other creatures (tier 10), because the tier-10 tiebreak is cheapest-first and would cast
+    //      the 1-drops it discounts AHEAD of it -- the executor reprices every cast on the live
+    //      battlefield, so the reducer resolving first is what realises the discounted line the
+    //      same-turn pip credit enumerated (Minotaur s4/gi3 t3: Ragemonger then Gnarled Scarhide
+    //      for {0}; cheapest-first cast Scarhide first at {B} and stranded the line). Warchief's
+    //      generic twin (reduces_spell_subtype) deliberately keeps its historical tier -- moving it
+    //      would reorder measured Goblins lines, a separate adoption if ever wanted.
+    if (!def.params.reduces_subtype_colored_subtype.empty()
+        && def.params.reduces_subtype_colored_cost.has_value()) { return 8; }
     if (IsManaRitual(def))                       { return 15; }
     if (def.params.verse_damage)                 { return 19; }
     if (def.params.on_cast_trigger_damage > 0) { return 30; }

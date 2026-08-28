@@ -37,6 +37,13 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
 // (AIEngine::EffectiveCost / TurnSolver's file-static EffectiveCost); both now delegate here.
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies = 1);
 
+// Apply a Ragemonger-style COLOURED pip reduction to `cost`: one plain pip of each of the
+// reduction's coloured pips comes off (floored at 0, generic untouched), consuming a PLAIN pip
+// before retiring a hybrid entry (see the hybrid note at the EffectiveSpellCost call site). Shared
+// by EffectiveSpellCost (reducer already on the battlefield), the enumerator's same-turn credit
+// (reducer entering in the same subset, by cast or by Vial), and CheckLine's declared-order walk.
+void ApplyColoredPipReduction(ManaCost& cost, const ManaCost& reduction);
+
 // THE cast-order comparator and its opaque-set guard (C1 unit 3): provider RANK first, then
 // cheapest-first among mana accelerants by the action's ACTUAL cost; the reorder is skipped
 // entirely for sets containing a mid-turn re-solve breakpoint (OrderingOpaque -- the search owns
