@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a1b4af3c  date 2026-08-28
+# Regression ground truth -- commit d0dd4588  date 2026-08-28
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -25,9 +25,9 @@ hinata_smoke_d5_s1001=5.8533/93c190529aa9d86b
 dragonstorm_smoke_d0_s1001=5.3940/ed95a590b37d910f
 dragonstorm_smoke_d3_s1001=4.5133/a55d73a0d738832d
 dragonstorm_smoke_d5_s1001=4.4667/4248104898fb9d6c
-auras_smoke_d0_s1001=4.3800/af248eb3d121bc72
-auras_smoke_d3_s1001=4.1400/617c5caa7c4fb02d
-auras_smoke_d5_s1001=4.1320/5d0803667eea1b7f
+auras_smoke_d0_s1001=4.3750/678a116bb0800d47
+auras_smoke_d3_s1001=4.1367/226626886717c74e
+auras_smoke_d5_s1001=4.1280/3694465ace1640ec
 goblins_smoke_d0_s1001=4.0680/851c0506a04bd568
 goblins_smoke_d3_s1001=3.6467/e0a721637d1f14a7
 goblins_smoke_d5_s1001=3.5867/dbe15f21f0cca5d2
@@ -83,11 +83,11 @@ dragonstorm_regression_d3_s2002=4.3400/0532ca6720862b2e
 dragonstorm_regression_d3_s3003=4.4767/000fed777d5a52fe
 dragonstorm_regression_d5_s2002=4.3080/8698861405c3c443
 dragonstorm_regression_d5_s3003=4.4760/aa7ac4a7cde0a0bb
-auras_regression_d0_s2002=4.3630/009236a4f5896e6c
-auras_regression_d3_s2002=4.1080/40d0a1769567f46d
-auras_regression_d3_s3003=4.2060/cb6c84395b1fc8db
-auras_regression_d5_s2002=4.1020/b05194a8e292177b
-auras_regression_d5_s3003=4.1940/223990a9848130c1
+auras_regression_d0_s2002=4.3620/110277a3fe9f8f73
+auras_regression_d3_s2002=4.1000/0fdcd6dc8b13e154
+auras_regression_d3_s3003=4.1980/fb3d706ed1cb5209
+auras_regression_d5_s2002=4.0940/d8f7af5f78d44b34
+auras_regression_d5_s3003=4.1860/46a080df33d07082
 goblins_regression_d0_s2002=4.1040/5629ee7ea94ddd09
 goblins_regression_d3_s2002=3.8167/937be80de15ad021
 goblins_regression_d3_s3003=3.8400/7ea3e0088bbdd4a3

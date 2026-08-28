@@ -1,0 +1,235 @@
+{
+  "seed": 28, "game_index": 27, "win_turn": 5, "won": true,
+  "mulligan": { "count": 2, "bottom": [30, 46] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 33, "name": "Plague Drone" }, { "num": 41, "name": "Skyshroud Cutter" }, { "num": 5, "name": "Birds of Paradise" }, { "num": 26, "name": "Invigorate" }, { "num": 6, "name": "Birds of Paradise" }, { "num": 42, "name": "Skyshroud Cutter" }, { "num": 37, "name": "Reverent Silence" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 29, "name": "Invigorate" }, { "num": 2, "name": "Aria of Flame" }, { "num": 21, "name": "Idyllic Tutor" }, { "num": 18, "name": "Grove of the Burnwillows" }, { "num": 28, "name": "Invigorate" }, { "num": 49, "name": "Tainted Remedy" }, { "num": 24, "name": "Ignoble Hierarch" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 46, "name": "Swords to Plowshares" }, { "num": 25, "name": "Ignoble Hierarch" }, { "num": 14, "name": "Fiery Justice" }, { "num": 16, "name": "Forest" }, { "num": 30, "name": "Marsh Flats" }, { "num": 36, "name": "Plague Drone" }, { "num": 12, "name": "Bloodstained Mire" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 46, "name": "Swords to Plowshares", "win_optimal": true }, { "num": 25, "name": "Ignoble Hierarch", "win_optimal": true }, { "num": 14, "name": "Fiery Justice", "win_optimal": true }, { "num": 16, "name": "Forest", "win_optimal": true }, { "num": 30, "name": "Marsh Flats", "win_optimal": true }, { "num": 36, "name": "Plague Drone", "win_optimal": true }, { "num": 12, "name": "Bloodstained Mire", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 36, "name": "Plague Drone" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 46, "name": "Swords to Plowshares", "win_optimal": true }, { "num": 25, "name": "Ignoble Hierarch", "win_optimal": true }, { "num": 14, "name": "Fiery Justice", "win_optimal": true }, { "num": 16, "name": "Forest", "win_optimal": true }, { "num": 36, "name": "Plague Drone", "win_optimal": true }, { "num": 12, "name": "Bloodstained Mire", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 36, "name": "Plague Drone" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 12, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 16, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: Ignoble Hierarch", "land": "Bloodstained Mire", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: Ignoble Hierarch", "land": "Bloodstained Mire", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 2, "summary": "land=Forest; cast: Ignoble Hierarch", "land": "Forest", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 3, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Windswept Heath" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 16, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 25, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 36, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Tainted Remedy" }],
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Ignoble Hierarch (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "Forest", "idx": 0, "num": 16, "is_land": true }, { "name": "Godless Shrine", "idx": 2, "num": 17, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 25, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 36, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Windswept Heath"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: Plague Drone", "land": "Bloodstained Mire", "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: Plague Drone", "land": "Bloodstained Mire", "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
+    { "index": 2, "summary": "land=Bloodstained Mire; cast: Plague Drone", "land": "Bloodstained Mire", "casts": ["Plague Drone"], "actions": [{ "card": "Plague Drone" }] },
+    { "index": 3, "summary": "land=Bloodstained Mire; cast: Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 4, "summary": "land=Bloodstained Mire; cast: Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 5, "summary": "land=Bloodstained Mire; cast: Tainted Remedy", "land": "Bloodstained Mire", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 6, "summary": "land=none; cast: Tainted Remedy", "land": null, "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 7, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Fiery Justice" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 14, "battlefield": [{ "name": "Blood Crypt", "idx": 4, "num": 9, "is_land": true }, { "name": "Forest", "idx": 0, "num": 16, "is_land": true }, { "name": "Godless Shrine", "idx": 2, "num": 17, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 25, "is_land": false }, { "name": "Plague Drone", "idx": 5, "num": 36, "is_land": false }], "vial_counters": [], "hand": [{ "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 15, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 52, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Bloodstained Mire", "Windswept Heath"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Fiery Justice", "land": null, "casts": ["Fiery Justice"], "actions": [{ "card": "Fiery Justice" }] },
+    { "index": 1, "summary": "land=none; cast: Tainted Remedy", "land": null, "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": [5, 0, 0, 0, 0], "decision": {
+  "decision_index": 9,
+  "type": "divide",
+  "source": "Fiery Justice",
+  "turn": 4,
+  "total_damage": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 14, "battlefield": [{ "name": "Blood Crypt", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 16, "tapped": true, "is_land": true }, { "name": "Godless Shrine", "idx": 2, "num": 17, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 25, "is_land": false }, { "name": "Plague Drone", "idx": 5, "num": 36, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 52, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Bloodstained Mire", "Windswept Heath"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)", "default": 5 }, { "kind": "permanent", "index": 3, "label": "4/4 Creature (opponent)", "default": 0 }, { "kind": "permanent", "index": 1, "label": "Ignoble Hierarch (yours)", "default": 0 }, { "kind": "permanent", "index": 5, "label": "Plague Drone (yours)", "default": 0 }, { "kind": "player", "index": 0, "label": "You (face)", "default": 0 }],
+  "note": "reply one integer per legal target (in this order), each >= 0 and summing to 5 -- the damage assigned to each. Default = all to the opponent face."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Overgrown Tomb" }],
+  "events": [{ "turn": 4, "kind": "damage", "text": "🔥 Fiery Justice: 5 to opponent (19→14)" }, { "turn": 4, "kind": "lifeloss", "text": "🩸 opponent −5 life (via Tainted Remedy)" }, { "turn": 4, "kind": "combat", "text": "⚔ attacked: Plague Drone (4) — 4 to opponent (9→5)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 14, "battlefield": [{ "name": "Blood Crypt", "idx": 4, "num": 9, "is_land": true }, { "name": "Forest", "idx": 0, "num": 16, "is_land": true }, { "name": "Godless Shrine", "idx": 2, "num": 17, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 25, "is_land": false }, { "name": "Plague Drone", "idx": 5, "num": 36, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 32, "name": "Overgrown Tomb", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Bloodstained Mire", "Fiery Justice", "Windswept Heath"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Overgrown Tomb; cast: Fiery Justice", "land": "Overgrown Tomb", "casts": ["Fiery Justice"], "actions": [{ "card": "Fiery Justice" }] },
+    { "index": 1, "summary": "land=none; cast: Fiery Justice", "land": null, "casts": ["Fiery Justice"], "actions": [{ "card": "Fiery Justice" }] },
+    { "index": 2, "summary": "land=Overgrown Tomb; cast: Tainted Remedy", "land": "Overgrown Tomb", "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 3, "summary": "land=none; cast: Tainted Remedy", "land": null, "casts": ["Tainted Remedy"], "actions": [{ "card": "Tainted Remedy" }] },
+    { "index": 4, "summary": "land=Overgrown Tomb; cast: (nothing)", "land": "Overgrown Tomb", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 15,
+  "type": "land_entry",
+  "source": "Overgrown Tomb",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 14, "battlefield": [{ "name": "Blood Crypt", "idx": 4, "num": 9, "is_land": true }, { "name": "Forest", "idx": 0, "num": 16, "is_land": true }, { "name": "Godless Shrine", "idx": 2, "num": 17, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 25, "is_land": false }, { "name": "Plague Drone", "idx": 5, "num": 36, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 32, "name": "Overgrown Tomb", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Bloodstained Mire", "Fiery Justice", "Windswept Heath"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": [5, 0, 0, 0, 0], "decision": {
+  "decision_index": 16,
+  "type": "divide",
+  "source": "Fiery Justice",
+  "turn": 5,
+  "total_damage": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 12, "battlefield": [{ "name": "Blood Crypt", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 0, "num": 16, "tapped": true, "is_land": true }, { "name": "Godless Shrine", "idx": 2, "num": 17, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 25, "is_land": false }, { "name": "Overgrown Tomb", "idx": 6, "num": 32, "is_land": true }, { "name": "Plague Drone", "idx": 5, "num": 36, "is_land": false }], "vial_counters": [], "hand": [{ "num": 52, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Bloodstained Mire", "Fiery Justice", "Windswept Heath"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)", "default": 5 }, { "kind": "permanent", "index": 3, "label": "4/4 Creature (opponent)", "default": 0 }, { "kind": "permanent", "index": 1, "label": "Ignoble Hierarch (yours)", "default": 0 }, { "kind": "permanent", "index": 5, "label": "Plague Drone (yours)", "default": 0 }, { "kind": "player", "index": 0, "label": "You (face)", "default": 0 }],
+  "note": "reply one integer per legal target (in this order), each >= 0 and summing to 5 -- the damage assigned to each. Default = all to the opponent face."
+}
+}
+  ]
+}

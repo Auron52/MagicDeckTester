@@ -3030,6 +3030,31 @@ std::vector<int> AntiLifegainProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
+// ---- AurasProvider ----------------------------------------------------------
+
+bool AurasProvider::HasAnyDigSource (const GameState& s) const { return ::HasAnyDigSource(s); }
+bool AurasProvider::ShouldConsiderDig(const GameState& s) const
+{
+    // Sac a Horizon Canopy only when the land is genuinely SURPLUS: with >= 4 lands controlled,
+    // the post-sac board (>= 3) still casts everything in the deck (the curve tops at Ancestral
+    // Mask, MV 3), so the Canopy's body is worth strictly less than a card. Below that the sac
+    // can strand the curve -- the human reference line (s21/gi20) follows exactly this shape:
+    // dig on T4/T5 only after the FOURTH land drop, keeping three behind each time. The dig
+    // loops themselves already require the {1} to be affordable AFTER the turn's casts (surplus
+    // mana), so this gate only encodes the land-count judgement.
+    if (DecisionUnpruned(UnprunedGate::Dig)) { return ::HasAnyDigSource(s); }
+    int lands = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == s.active_player_index && p.card.IsLand()) { ++lands; }
+    }
+    return lands >= 4;
+}
+std::string AurasProvider::SelectDigSource(const GameState& s, const ManaPool& pool, bool& out_is_sac) const
+{
+    return ::SelectDigSource(s, pool, out_is_sac);
+}
+
 // ---- TreasureHuntProvider ---------------------------------------------------
 
 bool TreasureHuntProvider::HasAnyDigSource (const GameState& s) const { return ::HasAnyDigSource(s); }
@@ -8699,6 +8724,7 @@ namespace
     const MirrorwingProvider     g_mirrorwing;
     const EquipmentProvider      g_equipment;
     const StompyProvider         g_stompy;
+    const AurasProvider          g_auras;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -8714,6 +8740,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
     bool stompy = false;   // StompySurprise (elf ramp) -- routes to Generic BEFORE the anti check
     bool minotaur = false; // Minotaur tribal -- routes to Generic BEFORE the goblin check
+    bool aura = false;     // Bogle Auras -- Light-Paws' aura_cast_tutor_attach is unique to it
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -8771,6 +8798,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // to GoblinsProvider. Routes to GenericProvider (no archetype hooks yet) -- the trick
         // TARGET is a searched plan variant, not a provider decision, so Generic is exactly right.
         if (p.copies_solo_targeted_spells) { mirrorwing = true; }
+
+        // Bogle Auras: Light-Paws' cast-an-Aura tutor-attach is unique to this deck. The provider
+        // exists for the Horizon Canopy dig hooks (see AurasProvider); everything else is Generic.
+        if (p.aura_cast_tutor_attach) { aura = true; }
 
         // Dragonstorm (Storm ritual-storm): the tutor-to-battlefield put IS the archetype signature
         // (a {8}{R} that puts a wave of Dragons in). Owns the put-order / selection heuristic.
@@ -8889,6 +8920,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // FiveColour; must WIN OVER anti (its fetchlands set that signature on their own -- see the
     // domain_mana detection above). No other deck has domain_mana, so exclusivity is preserved.
     if (fivec) { return g_fivecolour; }
+    // Bogle Auras: only the dig hooks differ from Generic (Horizon Canopy sac-draw). No other
+    // deck carries aura_cast_tutor_attach, so exclusivity is preserved; the deck trips no other
+    // signature (verified: it routed to Generic before this provider existed).
+    if (aura) { return g_auras; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     if (vial) { return g_vial; }

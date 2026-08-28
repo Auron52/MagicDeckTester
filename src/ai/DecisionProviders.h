@@ -946,6 +946,21 @@ public:
     int  ExtraLethalDamage(const GameState&, const std::vector<const CardDefinition*>&) const override;
 };
 
+// Bogle Auras (hexproof voltron): signature is Light-Paws' aura_cast_tutor_attach (unique to
+// this deck). Exists to give the deck the DIG hooks: it runs 4x Horizon Canopy
+// ("{1}, {T}, Sacrifice: draw a card") and GenericProvider's dig gate is a hard false, so the
+// autonomous search structurally could not consider the sac-draw the deck is built around --
+// found by the reference bench (auras s21/gi20: the human sacs Canopy on T4 AND T5, finds
+// Ethereal Armor + Light-Paws, wins T5; the search sat on both Canopies and won T6).
+class AurasProvider : public GenericProvider
+{
+public:
+    const char* Name() const override { return "Auras"; }
+    bool        HasAnyDigSource (const GameState& s) const override;
+    bool        ShouldConsiderDig(const GameState& s) const override;
+    std::string SelectDigSource(const GameState& s, const ManaPool& pool, bool& out_is_sac) const override;
+};
+
 // Process-lifetime default provider (stateless, shared across threads). Used as the
 // nullptr fallback so any raw-GameState path stays valid.
 const DecisionProvider& DefaultProvider();
