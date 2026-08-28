@@ -89,19 +89,36 @@ because it replaces a fact with a distribution and then averages away the very t
 a card to establish. A normal player is not uncertain about the card they just scried to the top.
 
 Note the state is NOT Hinata-specific and not cantrip-specific, so the field belongs on the player
-rather than on a provider. But "library manipulation" is not one category here -- it splits by what
-it does to the ORDER, and only one half creates knowledge:
+rather than on a provider. "Library manipulation" is not one category: what matters is what each
+effect leaves on TOP, and shuffling does not by itself destroy the prefix -- what matters is whether
+anything known is placed after the shuffle.
 
-* **Creates a known prefix:** scry, surveil, a Ponder/Brainstorm-style reorder that KEEPS, a reveal
-  that leaves cards on top. Also the top card exiled-and-playable by Soulfire Eruption, already
-  modelled separately as a staged card with an expiry.
-* **RESETS the prefix to zero:** anything that shuffles. That includes **fetchlands** (USER: "they
-  don't help with that. They just shuffle") -- searching the library tells you what is *in* it, but
-  the shuffle destroys any knowledge of the ORDER, which is the only thing this field tracks. A
-  Ponder that takes its shuffle branch is the same event, which is that branch's whole meaning.
+| effect | modelled as | prefix afterwards |
+|---|---|---|
+| scry N | `cast_scry` / `etb_scry` | up to N (the cards kept on top) |
+| surveil N | `etb_surveil` | up to N |
+| Ponder, KEEP branch | `cast_reorder: 3` | 3, less the card it draws |
+| Ponder, SHUFFLE branch | same, other branch | **0** -- that is the branch's whole meaning |
+| Preordain | `cast_scry: 2` | up to 2, less the card it draws |
+| Worldly / Enlightened Tutor | `tutor_to_top` | **exactly 1** -- shuffles, THEN puts a known card on top |
+| Gamble | `tutor_to_hand` | 0 (the card goes to hand; nothing is placed) |
+| fetchland | land search | **0** -- shuffles, and the card goes to the BATTLEFIELD |
+| Soulfire Eruption's exile | staged card + expiry | n/a -- already modelled separately |
 
-The distinction matters for the model's correctness, not just its wording: a fetch must clear the
-prefix, so getting this backwards would have NC treating a shuffled library as known.
+The tutor rows are the point the crude "anything that shuffles resets it" rule got wrong. USER
+2026-08-28: fetchlands *"don't help with that. They just shuffle"*, but **"worldly tutor, enlightened
+tutor effects do impact the library and can leave cards that we know on top."** Both shuffle; the
+difference is where the found card goes. A fetchland puts it into play, leaving the library
+genuinely unknown; a tutor-to-top puts it back on top, so the prefix is 1 and that one card is the
+single most valuable thing the player knows. The engine already distinguishes these --
+`tutor_to_top` and `tutor_to_hand` are separate `CardParams` fields -- so no new card modelling is
+needed, only the state.
+
+**Bottom knowledge is out of scope.** USER: *"cards on the bottom are pretty much irrelevant except
+in very rare cases."* So a scry that bottoms cards records only what it kept on TOP; the bottomed
+cards are simply forgotten rather than tracked as known-at-the-bottom. That keeps the model to a
+single prefix length instead of a full per-card knowledge map -- a materially smaller thing to build,
+and the rare cases it gives up (decking, a bottom-of-library tutor) are not live in these decks.
 
 ### What the model needs to be
 
