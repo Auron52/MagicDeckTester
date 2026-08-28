@@ -88,11 +88,20 @@ Averaging over the known prefix is not a conservative approximation of it -- it 
 because it replaces a fact with a distribution and then averages away the very thing the player paid
 a card to establish. A normal player is not uncertain about the card they just scried to the top.
 
-Note the state is NOT Hinata-specific and not cantrip-specific. Any library manipulation leaves a
-known prefix: scry, surveil, a Ponder/Brainstorm-style reorder, a fetchland's search, a reveal, and
-the top card exiled-and-playable by Soulfire Eruption (already modelled separately as a staged card
-with an expiry). Whatever this deck does with `cast_reorder` / `cast_scry`, the field belongs on the
-player, not on a provider.
+Note the state is NOT Hinata-specific and not cantrip-specific, so the field belongs on the player
+rather than on a provider. But "library manipulation" is not one category here -- it splits by what
+it does to the ORDER, and only one half creates knowledge:
+
+* **Creates a known prefix:** scry, surveil, a Ponder/Brainstorm-style reorder that KEEPS, a reveal
+  that leaves cards on top. Also the top card exiled-and-playable by Soulfire Eruption, already
+  modelled separately as a staged card with an expiry.
+* **RESETS the prefix to zero:** anything that shuffles. That includes **fetchlands** (USER: "they
+  don't help with that. They just shuffle") -- searching the library tells you what is *in* it, but
+  the shuffle destroys any knowledge of the ORDER, which is the only thing this field tracks. A
+  Ponder that takes its shuffle branch is the same event, which is that branch's whole meaning.
+
+The distinction matters for the model's correctness, not just its wording: a fetch must clear the
+prefix, so getting this backwards would have NC treating a shuffled library as known.
 
 ### What the model needs to be
 
