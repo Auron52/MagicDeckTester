@@ -9,6 +9,11 @@
 #                              exhaustive (=1). The only difference is the BOTTOMING policy.
 #                              Set MTG_CONFOUND_BOTTOM=1 in the environment for the confounded A/B
 #                              (reshuffle after the decision -> nullifies the lookahead peek).
+#   KM_MODE=versus             KM_EXH_A (old table) vs KM_EXH_B (new table), BOTH in the shipping
+#                              condition (exhaustive keep + blind bottoming). The REGENERATION
+#                              question. Driven automatically by scripts/mullgen.sh on a regen.
+#
+# Writes $OUT/delta.txt (mean B-A, turns) alongside the human REPORT.txt, so a caller can gate on it.
 #
 # Plays with the deck's REAL PLAY PROFILE: the manifest omits "depth" so the deck's enabled value_play
 # block owns the play depth (the shipping condition), with budget_ms as the CLI knob. Each arm runs as
@@ -63,6 +68,17 @@ run_arm(){ local tag="$1" prof="$2" exb="$3"
 if [ "$MODE" = keep ]; then
   A_TAG=static;   A_PROF=none;  A_EXB=0     # static keep,      lookahead bottoming
   B_TAG=exh;      B_PROF=$EXH;  B_EXB=0     # exhaustive keep,  lookahead bottoming
+elif [ "$MODE" = versus ]; then
+  # PROFILE-vs-PROFILE: the REGENERATION question ("is the new table better than the one we ship?"),
+  # which neither other mode can ask -- both of those compare a policy against a NON-exhaustive
+  # baseline. Both arms run in the SHIPPING condition (exhaustive keep + blind exhaustive bottoming,
+  # since generation bakes bottoming_enabled=true), so the ONLY difference is which table is loaded.
+  A_TAG=old; A_PROF=${KM_EXH_A:?versus mode needs KM_EXH_A=<old profile>}; A_EXB=1
+  B_TAG=new; B_PROF=${KM_EXH_B:?versus mode needs KM_EXH_B=<new profile>}; B_EXB=1
+  [ -e "$A_PROF" ] || { echo "missing KM_EXH_A: $A_PROF"; exit 1; }
+  [ -e "$B_PROF" ] || { echo "missing KM_EXH_B: $B_PROF"; exit 1; }
+  log "versus: A(old)=$A_PROF"
+  log "versus: B(new)=$B_PROF"
 else
   A_TAG=lookahead; A_PROF=$EXH; A_EXB=0     # exhaustive keep,  lookahead bottoming
   B_TAG=exhbottom; B_PROF=$EXH; B_EXB=1     # exhaustive keep,  blind exhaustive bottoming
@@ -89,5 +105,8 @@ print(f"\n=== A/B ({B} vs {A}; negative delta = {B} wins earlier) — avg win tu
 print(f"{A:>14}{B:>14}{'delta B-A':>14}{'seeds B<A':>14}")
 print(f"{mA:>14.4f}{mB:>14.4f}{mB-mA:>+14.4f}{str(nlt)+'/'+str(len(per)):>14}")
 print(f"\noverall delta {mB-mA:+.4f}t  ({B+' BEATS '+A if mB-mA < -1e-4 else (B+' loses to '+A if mB-mA > 1e-4 else 'tie (within noise)')})")
+# MACHINE-READABLE, for scripts/mullgen.sh's gate. The mean delta is the whole verdict: the accept
+# bar is "not worse ON AVERAGE" (user, 2026-08-28), so a caller must not have to re-parse prose.
+open(f"{OUT}/delta.txt", "w").write(f"{mB-mA:.6f}\n")
 PY
 log "=== EXHAUSTIVE A/B DONE ($(stamp)) ==="
