@@ -331,6 +331,100 @@ Use ~36–42% of `total_cells * 2 * r_max` to size a new deck's total rollout co
   So a scheduling or instrumentation fix can land without stranding a journal — but a **play-logic**
   change would be silently accepted and mixed with samples rolled under the old engine. That
   asymmetry should become an enforced check, not a convention.
-* Generation boxes run near their memory ceiling (this one: 7.45 GB peak RSS in a 10 GB WSL2 VM,
+* Generation boxes run near their memory ceiling (this one: **8.42 GB peak RSS in a 10 GB WSL2 VM**,
   `memory.events: oom_kill 1`). Diagnose with `tail`, `ls`, and `/proc` reads — never a whole-file
   sort over the journal.
+
+---
+
+## 9. Live-run handoff — FiveColour, state as of 2026-08-28 08:42 UTC
+
+The run this document was written from is **still going**. Everything below is what a new operator
+needs; nothing here lives anywhere else.
+
+### Identity
+
+```
+pid        1566929   (build/Release/mtg-analyze decks/FiveColour/FiveColour.cod
+                      --cards-json src/cards/data/cards.json --gen-mulligan fast)
+started    2026-08-21 13:32 UTC
+frozen at  commit 2f7822a2   HEAD:src e196e432de177b116125a05904deff0da8232090
+           (recorded in logs/FiveColour_gen/freeze.commit / freeze.src)
+log        logs/FiveColour_gen/gen.log
+journal    decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json.journal
+resume     bash logs/FiveColour_gen/run.sh      # same command; journal replayed; no resume flag
+```
+
+### State
+
+| | |
+|---|---|
+| elapsed | 163.1 h |
+| phase | `floor`, `frozen=0/3955796` |
+| `fed` | 19,518,133 |
+| floor | **100% complete** — all 7 tables, 5,273,162 / 5,273,162 cell-sides, took ~83 h |
+| speculation | 10,308,905 / 15,823,184 = **65.2%** |
+| rate | 26.1/s (24 h), 18.6/s (6 h) |
+| expected flip | **40–77 h** from the timestamp above |
+
+**It is not wedged — this is Defect 1 (§3).** Do not diagnose it again from scratch; §2 has the
+one-query confirmation if you want to re-verify.
+
+The journal has been silent since 2026-08-25 00:29 and that is **expected on this binary**, which
+predates the `jprog` fix (§4). ~330+ core-hours of speculation are unbanked. The 83 h floor is
+safe on disk.
+
+### Hazards — all of these have already cost something
+
+1. **Do NOT `kill`/`TaskStop`/Ctrl-C this run.** User-requested, far past the CLAUDE.md 10-minute
+   line. Only the user stops it.
+2. **Do NOT rebase, pull, or checkout in this working tree.** It is deliberately parked at
+   `2f7822a2` while `origin` is 227 commits ahead with heavy `src/` changes. To push docs anyway,
+   use the object-database recipe below — it never writes the working tree.
+3. **Do NOT rebuild `build/Release`.** Crash-resume must use the binary the run started with
+   (`continuous-only-keepgen.md` says so explicitly).
+4. **Keep the box quiet.** 8.42 GB peak RSS against a 10 GB VM, and the cgroup has already recorded
+   `oom_kill 1`. No builds, no regression runs, no whole-file scans of the 271 MB journal — an
+   earlier `sort -u` over 3.96M journal lines during diagnosis was a real OOM risk and is exactly
+   what not to do.
+5. **A reboot costs the whole pass, not a day.** `fed[]` reseeds from `cnt = r0` (`:2791`), so
+   speculation restarts from zero and the producer re-enters the same barrier. The run only
+   completes given one uninterrupted window longer than the remaining pass. Windows Update is
+   paused and sleep is disabled on the host.
+6. **Implementation of fixes 1, 2 and 4 is deferred by the user** until this run lands. Do not start
+   them on this box.
+
+### Pushing without touching the working tree
+
+```sh
+BLOB=$(git hash-object -w <file>)
+export GIT_INDEX_FILE=/tmp/x.idx; rm -f "$GIT_INDEX_FILE"
+git read-tree origin/<branch>
+git update-index --add --cacheinfo 100644,$BLOB,<path-in-repo>
+TREE=$(git write-tree)
+COMMIT=$(git commit-tree "$TREE" -p origin/<branch> -m "...")
+git push origin "$COMMIT":<branch>
+unset GIT_INDEX_FILE
+```
+
+Afterwards verify `git rev-parse HEAD:src` still equals `logs/FiveColour_gen/freeze.src`. The local
+branch ends up 0 ahead / N behind, so catching the checkout up later is a plain fast-forward.
+
+### Light monitoring only
+
+```sh
+grep 'monitor:' logs/FiveColour_gen/gen.log | tail -2
+ls -la decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json.journal
+grep -E 'VmRSS|VmHWM' /proc/1566929/status
+```
+
+Watch, in priority order: (1) `frozen` moving off 0 — the flip, at which point the generator prints
+its own floor projection, which beats any extrapolation; (2) journal mtime moving; (3) `fed`
+stalling near 25,052,142 — would mean something really is wedged rather than barriered;
+(4) `VmHWM` past ~9 GB.
+
+### What still has to happen after the flip
+
+Refinement, R=2 → cap 30, which is the larger half. Size it from §7: **57.5M–67.2M total rollouts**
+(36–42% of `2,636,581 x 2 x 30`), mean final R ≈ 10. `fed` is a throughput counter, **not** progress
+— see fix 4.
