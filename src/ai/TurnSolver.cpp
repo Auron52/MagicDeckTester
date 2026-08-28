@@ -1499,6 +1499,18 @@ namespace greedysite
 inline bool Enabled() { static const bool v = EnvOn("MTG_M2_YIELD_STATS"); return v; }
 inline std::atomic<unsigned long long> g[100] = {};
 inline void Record(int site) { if (Enabled() && site >= 0 && site < 100) { g[site].fetch_add(1, std::memory_order_relaxed); } }
+// ...and whether that greedy Solve DECIDED ANYTHING. A count alone cannot distinguish "greedy is
+// still choosing plays" from "greedy is called on a state with no legal option and returns an empty
+// plan" -- and after MTG_BP_NO_GREEDY_CONT the residual is exactly the cands.empty() path, i.e. the
+// second kind by construction. VOLUME IS NOT HARM (five times in this arc), so the number that
+// matters for "is greedy deleted" is this one, not g[].
+inline std::atomic<unsigned long long> act[100] = {};
+// WHY a continuation still fell to greedy under MTG_BP_NO_GREEDY_CONT. Only two reasons exist and
+// they need different fixes: the class is masked off (MTG_BP_SITES), or the enumeration returned an
+// EMPTY candidate list so there was nothing canonical to continue with.
+inline std::atomic<unsigned long long> why_class{0}, why_empty{0};
+inline void RecordOutcome(int site, bool acted)
+{ if (Enabled() && acted && site >= 0 && site < 100) { act[site].fetch_add(1, std::memory_order_relaxed); } }
 struct Dumper
 {
     ~Dumper()
@@ -1507,9 +1519,10 @@ struct Dumper
         std::fprintf(stderr, "=== GREEDY SITES inside search:");
         bool any = false;
         for (int i = 0; i < 100; ++i)
-        { if (g[i].load()) { std::fprintf(stderr, "  s%d=%llu", i, g[i].load()); any = true; } }
+        { if (g[i].load()) { std::fprintf(stderr, "  s%d=%llu(acted %llu)", i, g[i].load(), act[i].load()); any = true; } }
         if (!any) { std::fprintf(stderr, "  NONE"); }
-        std::fprintf(stderr, "  ===\n");
+        std::fprintf(stderr, "  | fell-to-greedy: class-masked %llu, empty-cands %llu  ===\n",
+                     why_class.load(), why_empty.load());
     }
 };
 inline Dumper g_dumper;
@@ -5195,6 +5208,25 @@ static int BpSearchDepth()
 // bit, again for site 5's reason -- chaining a new class to the pruned plain-cantrip bit is what
 // made the Gold Rush continuation permanently greedy. The CLASS is additionally gated on
 // MTG_EQUIP_DRAW_BP while it is measured, so this default bit is inert until that lever is adopted.
+// MTG_BP_SITE3 -- make the PLAIN-CANTRIP deferred continuation (site 3) SEARCHABLE. Default OFF.
+//
+// Site 3 is the ONE class BpSiteMask's 0x77 default masks out, and it is the largest greedy
+// DECISION site left in the engine: measured with MTG_M2_YIELD_STATS, hinata takes it 164,313 times
+// per 15 games and greedy actually chooses a play in 72,661 of them. Because class_on is false
+// there, MTG_BP_NO_GREEDY_CONT cannot reach it -- so "delete the greedy continuation" is a no-op on
+// exactly the deck that needs it most until this is on.
+//
+// A SEPARATE BOOLEAN rather than just documenting MTG_BP_SITES=127, for two reasons. (1) The
+// manifest's per-job "flags" block is boolean-only (heurarm slots), so a value-carrying int cannot
+// vary per job -- and measuring this by running one batch per arm is precisely the pattern CLAUDE.md
+// forbids. (2) MTG_BP_SITES is parsed with atoi, so the natural-looking MTG_BP_SITES=0x7F reads as
+// ZERO and silently disables EVERY site; a boolean has no such foot-gun.
+static bool BpPlainCantripSiteEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_SITE3");
+    return heurarm::Flag(heurarm::BP_SITE3, on);
+}
+
 static int BpSiteMask()
 {
     static const int m = []() -> int
@@ -5203,7 +5235,9 @@ static int BpSiteMask()
         if (v == nullptr || *v == '\0') { return 0x77; }
         return std::atoi(v) & 0x7F;
     }();
-    return m;
+    // OR'd, not overridden: an explicit MTG_BP_SITES stays authoritative for every other class, and
+    // with the lever off this returns exactly the old value (byte-identical).
+    return BpPlainCantripSiteEnabled() ? (m | 0x08) : m;
 }
 
 // A/B hatch for the NESTING axis alone (MTG_BP_NEST_DISCOVER=0). The wave walker learns how many
@@ -15219,6 +15253,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Cost should be near-free rather than a new enumeration: the variants of this same base
         // plan already enumerated this exact breakpoint state, so this is an enum-memo HIT and a
         // vector index in place of a greedy Solve. That is the measurement, not the assumption.
+        if (!resolved && !class_on && BpNoGreedyContinuationEnabled() && greedysite::Enabled())
+        { greedysite::why_class.fetch_add(1, std::memory_order_relaxed); }
         if (!resolved && class_on && BpNoGreedyContinuationEnabled())
         {
             const std::vector<TurnSolver::Plan> cands =
@@ -15228,6 +15264,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 out      = cands.front();
                 resolved = true;
             }
+            else if (greedysite::Enabled())
+            { greedysite::why_empty.fetch_add(1, std::memory_order_relaxed); }
             // cands EMPTY means the enumeration offers nothing here; the greedy Solve below is then
             // the only remaining answer and is left in place rather than emitting an empty plan.
         }
@@ -16091,6 +16129,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     play_breakpoint_land(my_bp_sink);
                     greedysite::Record(0);
                     extra = TurnSolver::Solve(state, is_pre_combat);
+                    greedysite::RecordOutcome(0, !extra.actions.empty()
+                        || (extra.land_decided && !extra.land_to_play.empty()));
                 }
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
@@ -16130,6 +16170,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     play_drawn_flood_keep_land(my_bp_sink);
                     greedysite::Record(1);
                     extra = TurnSolver::Solve(state, is_pre_combat);
+                    greedysite::RecordOutcome(1, !extra.actions.empty()
+                        || (extra.land_decided && !extra.land_to_play.empty()));
                 }
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
@@ -16466,6 +16508,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     play_breakpoint_land(my_bp_sink);
                     greedysite::Record(2);
                     extra = TurnSolver::Solve(state, is_pre_combat);
+                    greedysite::RecordOutcome(2, !extra.actions.empty()
+                        || (extra.land_decided && !extra.land_to_play.empty()));
                 }
                 bp_play_searched_land(extra, my_bp_sink);
                 // Lotus Bloom: the staged Dragonstorm/rituals grew this pre-pass first (the
@@ -16524,6 +16568,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         play_breakpoint_land(my_bp_sink);
                         greedysite::Record(0);
                         extra = TurnSolver::Solve(state, is_pre_combat);
+                        greedysite::RecordOutcome(0, !extra.actions.empty()
+                            || (extra.land_decided && !extra.land_to_play.empty()));
                     }
                     bp_play_searched_land(extra, my_bp_sink);
                     apply_continuation_precasts(extra);
@@ -16704,6 +16750,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             play_breakpoint_land(my_bp_sink);
                             greedysite::Record(6);
                             extra = TurnSolver::Solve(state, is_pre_combat);
+                            greedysite::RecordOutcome(6, !extra.actions.empty()
+                                || (extra.land_decided && !extra.land_to_play.empty()));
                         }
                         bp_play_searched_land(extra, my_bp_sink);
                         apply_continuation_precasts(extra);
@@ -17468,6 +17516,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             play_breakpoint_land(out_breakpoint);
             greedysite::Record(8);
             extra = TurnSolver::Solve(state, is_pre_combat);
+            greedysite::RecordOutcome(8, !extra.actions.empty()
+                || (extra.land_decided && !extra.land_to_play.empty()));
         }
         // Diagnostic (default off): what the deferred continuation solved, and from which arm.
         {
@@ -17627,6 +17677,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     greedysite::Record(4);
                     extra = TurnSolver::Solve(state, is_pre_combat);
+                    greedysite::RecordOutcome(4, !extra.actions.empty()
+                        || (extra.land_decided && !extra.land_to_play.empty()));
                 }
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
