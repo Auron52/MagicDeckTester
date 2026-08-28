@@ -24,6 +24,7 @@ THE ARMS BELOW ARE THE MISSING RUNGS OF THE LADDER, so every step isolates ONE l
   ng                   + delete the greedy continuation      -> prices greedy deletion
   s3_ng                + open the plain-cantrip class        -> prices the site-3 OPENING (pure cost)
   cond_ng     (have)   + condemnation                        -> prices CONDEMNATION ALONE
+  cond_ng_so           + restrict it to DECISION SPACE       -> prices the 30% leaf drops
 
 and the same four again with MTG_HINATA_MANA_FLOAT_RANK, because that lever measurably recovered
 most of the order's deficit (ordv4: the order costs 0.0225 on hold, the float fix recovers 0.0125 of
@@ -51,13 +52,24 @@ H = ("decks/Hinata2/Hinata2.cod", "decks/Hinata2/Hinata2.profile.json")
 ORD   = {"MTG_HINATA_ORDER_FULL": True}
 NG    = {"MTG_BP_NO_GREEDY_CONT": True}
 S3    = {"MTG_BP_SITE3": True}
+COND  = {"MTG_BP_CLASSIFY": True}
+SO    = {"MTG_BP_CONDEMN_SEARCHED_ONLY": True}
 FLOAT = {"MTG_HINATA_MANA_FLOAT_RANK": True}
 
+# THE SEARCHED-ONLY ARMS, added after the telemetry above was read properly. Of the 86,225 drops,
+# 25,676 (30%) still fire with g_search_candidate_enum FALSE -- the rollout leaf. A drop there
+# prunes NOTHING (there is no plan-space branch to remove; the leaf is estimating, not deciding) and
+# deletes the only line the playout was going to take, so it is pure quality loss at zero saving.
+# That is the standing candidate cause of cond_ng's quality regression (-0.0525 on hold), and
+# MTG_BP_CONDEMN_SEARCHED_ONLY is the gate that removes exactly those 30% while keeping the 70% that
+# are genuine decision-space prunes. It is the same discriminator the MAIN-PHASE filter has shipped
+# default-ON since 2026-08-21 -- whose own comment calls the ungated arm "the BROKEN arm".
 ARMS = {
-    "ng":          {**ORD, **NG},
-    "ng_float":    {**ORD, **NG, **FLOAT},
-    "s3_ng":       {**ORD, **NG, **S3},
-    "s3_ng_float": {**ORD, **NG, **S3, **FLOAT},
+    "ng":                {**ORD, **NG},
+    "s3_ng":             {**ORD, **NG, **S3},
+    "cond_ng_so":        {**ORD, **NG, **S3, **COND, **SO},
+    "s3_ng_float":       {**ORD, **NG, **S3, **FLOAT},
+    "cond_ng_so_float":  {**ORD, **NG, **S3, **COND, **SO, **FLOAT},
 }
 
 # Same blocks and seeds as ordv4 -- that is what makes the pairing exact rather than approximate.
