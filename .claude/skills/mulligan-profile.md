@@ -85,13 +85,16 @@ not change this deck's play at gen settings, the labels are current, and nothing
 - **Kill the probe by pid from `ps`, not `$!`** — see the wrapper-pid trap; a probe believed dead once
   held ~6 cores against the user's generation.
 
-**The related hazard, which the fingerprints do NOT cover:** the journal's resume gate checks
-`bucket_fp`/`deck_fp`/`seed_base`/`K`/`max_mull`/`equiv_seed`/cap `R` and the rollout depth+budget —
-but **neither `commit` nor `play_digest`**. So a rebuilt binary carrying engine changes will resume an
-in-flight journal silently and mix rollouts from two engines, which is precisely the skew Rule 0
-exists to prevent. Before any long run, `cp build/Release/mtg-analyze <logdir>/mtg-analyze.frozen` and
-resume with that copy. (`RunKeepMerge` is the opposite and is correct: it PREFERS `play_digest` and
-treats `commit` as advisory, so chunks still pool across commits that left the deck's play alone.)
+**The related hazard — FIXED 2026-08-28 (`6fa7dba0`), but keep freezing the binary anyway.** The
+journal's resume gate used to check `bucket_fp`/`deck_fp`/`seed_base`/`K`/`max_mull`/`equiv_seed`/cap
+`R` and the rollout depth+budget but **neither `commit` nor `play_digest`** — so a rebuilt binary
+carrying engine changes would resume an in-flight journal silently and mix rollouts from two engines,
+precisely the skew Rule 0 exists to prevent. Both resume paths now gate on play identity
+(`PlayIdentityAllows`, preferring `play_digest` and falling back to `commit`), so that resume is
+REFUSED loudly instead. Still `cp build/Release/mtg-analyze <logdir>/mtg-analyze.frozen` before a long
+run and resume with that copy: a refusal costs you the run's remaining resumability, and the frozen
+copy means the question never arises. (`RunKeepMerge` always did this correctly, which is where the
+prefer-digest rule came from.)
 
 ## The three mulligan tiers over a deck's life
 
@@ -152,11 +155,37 @@ one, ASK. Full rationale: `.claude/skills/deck-screening.md` Rule 0a.
 
 ## Generating a profile
 
-### The normal path — one flag (`--gen-mulligan`)
+### The normal path — ONE COMMAND (`scripts/mullgen.sh run`)
 
-For almost every deck, don't hand-set the `MTG_KEEP_*`/`MTG_EQUIV_*` knobs — use the recipe flag. It
-takes **no parameters but the recipe**, pulls the rollout depth/budget from the deck's **play profile**
-(`value_play`), and prints its effective settings so a run is self-documenting.
+```bash
+bash scripts/mullgen.sh run decks/<Deck> [complete|fast]   # generate, THEN validate + gate
+bash scripts/mullgen.sh status decks/<Deck>                # where is it up to
+```
+
+**Use this, not the bare binary.** Generation and validation are one operation because separating
+them does not work: this skill has always prescribed the A/B below, and on 2026-08-28 a 3.9 h
+StompySurprise generation still landed a profile that was **LIVE** — keep is presence-gated, so the
+file existing IS adoption — with zero games ever played against it. An instruction an agent has to
+remember is not a gate. The driver runs, per case:
+
+* **first version** — keep (exhaustive vs static) **and** confounded bottoming, both hard gates;
+* **regeneration** — one significant A/B, old table vs new, both arms in the shipping condition;
+* then the **regression suite**, reported and *never* a rejection (see the GT note under Bottoming).
+
+The bar is **"at all worse on average"** — no significance margin. A check that lands too close to
+call escalates: another round of fresh, disjoint seeds, pooled. On failure the profile is
+**quarantined** to `<stem>.keepmodel.exhaustive.profile.DISABLED.json` (renaming is what actually
+deactivates a presence-gated artifact), and a failed regen additionally restores the incumbent. A
+sample below 12 seeds × 500 games is REFUSED rather than ruled on — an under-powered reject is not a
+conservative failure, it is a wrong one (a 2-seed probe once quarantined a good profile on noise of
+the opposite sign to the real answer).
+
+### The underlying flag (`--gen-mulligan`) — what the driver calls
+
+Reach for this directly only when you are deliberately generating *without* validating (a scout, a
+chunk for cross-machine pooling). Don't hand-set the `MTG_KEEP_*`/`MTG_EQUIV_*` knobs — the recipe
+takes **no parameters but the recipe**, pulls the rollout depth/budget from the deck's **play
+profile** (`value_play`), and prints its effective settings so a run is self-documenting.
 
 ```bash
 # 1) SCOUT first (cheap, bounded): one rollout of every cell -> a wall-clock estimate + the slowest cells.
@@ -409,6 +438,10 @@ and re-emits a merged sidecar listing all `pooled_seed_bases`, so merges chain.
 one already resolved.
 
 ## Validating a profile (A/B)
+
+**`scripts/mullgen.sh` runs all of this for you** — see "The normal path" above. What follows is the
+underlying harness, for when you want to re-run one check by hand or diagnose a failure. `KM_MODE=versus`
+(with `KM_EXH_A`/`KM_EXH_B`) compares two profiles; `test/keepmodel_pool_ab.py` pools rounds.
 
 ```bash
 # KEEP: exhaustive keep vs static; bottoming held to lookahead both sides (isolates the keep decision).
