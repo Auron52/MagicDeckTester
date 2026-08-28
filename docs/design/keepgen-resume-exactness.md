@@ -57,6 +57,19 @@ Per hand size, both resumed runs:
 
 1. **An uninterrupted run is byte-reproducible.** A == A2 exactly, across 32 threads and
    ~123 k rollouts whose completion order is nondeterministic. The fold order is fixed and it holds.
+
+   > **CORRECTION (2026-08-28): this is true of burn and does NOT generalise.** Two uninterrupted
+   > runs of the unmodified binary on slivers_vial differ — 280,539 vs 280,543 rollouts, 2 of 46,100
+   > cell-sides, all at H=7. The cause is `compute_refs`' reconcile, which reads `S7.cnt` at whatever
+   > the in-flight state happens to be when sub-refine converges and truncates from there. On burn
+   > the cells are fast enough that speculation has always fully folded by then, so the reconcile's
+   > input is stable *by luck*, not by construction — the same "lagged safe margin holding by luck"
+   > this document already identified for the vg schedule (defect 3), in a second place.
+   >
+   > Consequence for anyone using this harness: **`cmp` is not a usable gate above burn's scale.**
+   > Use the same-count-different-value assertion (point 2 below) — that is the property that is
+   > actually claimed and it holds everywhere. `logs/resume_proof/compare_raw.py` implements it.
+   > See `keepgen-producer-barrier-and-durability.md` §10.
 2. **No completed rollout is ever lost or corrupted by a kill.** Across 75,864 cell-side
    comparisons in the two experiments, the number of cell-sides that both runs sampled to the same
    depth but that carry a different `sum`/`sumsq` is **zero**.

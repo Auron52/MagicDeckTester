@@ -197,6 +197,50 @@ bool RolloutCfgAllows(const RolloutCfg& mine, const RolloutCfg& theirs, const ch
     return true;
 }
 
+// PLAY IDENTITY, for the RESUME paths. Same rule the merge gate applies (prefer the rollout-config
+// play_digest; fall back to the commit hash only when a side predates it), factored out because
+// RESUME was the one consumer that made no such check AT ALL. The journal header stamps `commit`
+// and `play_digest` deliberately -- "so a journal merged as a partial chunk is checked exactly like
+// a finished raw" -- and the replay compared neither, so a gen restarted after a play-logic change
+// silently continued into the same accumulators: one raw sidecar holding rollouts from two
+// different engines, under fingerprints asserting they are poolable. Every REUSE route (prior-raw,
+// probe-carry, equiv-cache, merge) already gates this; resume is the hole.
+//
+// Distinct from RolloutCfgAllows, which gates depth/budget/max_turns -- a run can match on those and
+// still play differently. Returns false when the caller must refuse.
+bool PlayIdentityAllows(const std::string& mine_digest, const std::string& mine_commit,
+                        const std::string& theirs_digest, const std::string& theirs_commit,
+                        const char* what, const std::string& path)
+{
+    // The digest is the sharper test whenever both sides carry one: a doc-only / other-deck /
+    // GUI-only commit bumps `commit` but leaves this deck's play (hence the digest) unchanged, and
+    // stranding a multi-day journal over such a commit would be its own defect. This is also what
+    // lets a SCHEDULING or INSTRUMENTATION fix land mid-run without invalidating a live journal.
+    if (!mine_digest.empty() && !theirs_digest.empty())
+    {
+        if (mine_digest == theirs_digest) { return true; }
+        std::cerr << "[keepgen] " << what << ": PLAY-DIGEST MISMATCH -- " << path << " was rolled by play "
+                  << theirs_digest << ", this run plays " << mine_digest
+                  << " -- REFUSING (its rollouts are not this run's rollouts; resuming would pool two"
+                     " engines into one sidecar)\n" << std::flush;
+        return false;
+    }
+    if (!mine_commit.empty() && !theirs_commit.empty())
+    {
+        if (mine_commit == theirs_commit) { return true; }
+        std::cerr << "[keepgen] " << what << ": COMMIT MISMATCH -- " << path << " was rolled at commit "
+                  << theirs_commit << ", this run is " << mine_commit
+                  << " (one side carries no play_digest, so the commit is the only play identity"
+                     " available) -- REFUSING\n" << std::flush;
+        return false;
+    }
+    // Same posture as CfgVerdict::Unverifiable: an artifact predating the stamp stays usable, loudly.
+    std::cerr << "[keepgen] " << what << ": " << path << " records no play identity (neither play_digest"
+                 " nor commit) -- CANNOT VERIFY it was rolled by this engine; proceeding as before\n"
+              << std::flush;
+    return true;
+}
+
 // Enumerate every composition of `total` over K buckets with per-bucket cap `cap`.
 void EnumComps(int i, int rem, std::vector<int>& cur, const std::vector<int>& cap,
                std::vector<std::vector<int>>& out)
@@ -1542,6 +1586,29 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // 32 busy cores. That is what made a healthy Mirrorwing run look dead for 4.5 h.
         std::atomic<long long> sub_done{ 0 };
         std::atomic<long long> sub_total{ 0 };
+        // JOURNAL LIVENESS. Every counter above measures BUSYNESS; none measures whether the run is
+        // banking anything. "Resumable at any point" is a claim about the journal ADVANCING, and the
+        // two are separable: measured on FiveColour 2026-08-21, rollouts fed climbed at 25-65/s for
+        // 27.6 h while the journal's mtime never moved (the producer-side barrier, see
+        // docs/design/keepgen-producer-barrier-and-durability.md). The stall was found a day later,
+        // by hand, off a stale mtime. Record count + age since the last write is the direct read-out,
+        // and feeding work while the journal is silent is a violation of the stated guarantee -- so
+        // the monitor says so in those words rather than leaving it to be inferred.
+        std::atomic<long long> jrecs{ 0 };   // journal records written this process
+        std::atomic<long long> jms{ 0 };     // steady-clock ms (from t0) of the last journal write
+        const std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+        long long now_ms() const
+        {
+            return std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - t0).count();
+        }
+        // Called from the fold path (per record, under journal_mtx) and from the two producer-side
+        // writers. Relaxed: this is a diagnostic read-out, never a decision input -> byte-identical.
+        void note_journal_write()
+        {
+            jrecs.fetch_add(1, std::memory_order_relaxed);
+            jms.store(now_ms(), std::memory_order_relaxed);
+        }
     } gen_prog;
 
     struct SlowMonitor
@@ -1564,6 +1631,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             {
                 std::unique_lock<std::mutex> lk(mx);
                 long long prev_7 = 0, prev_rs = 0, prev_sd = 0; double prev_el = 0.0;
+                long long prev_fed_seen = 0;   // rollouts enqueued as of the previous wake (unbanked-work warning)
                 while (!cv.wait_for(lk, std::chrono::seconds(period), [this] { return stop; }))
                 {
                     const double el = std::chrono::duration<double>(
@@ -1609,7 +1677,25 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                                 << "x" << gp.subwsz.load(std::memory_order_relaxed); }
                     else if (gp.subwave.load(std::memory_order_relaxed) > 0)
                     { std::cerr << "  subwave=" << gp.subwave.load(std::memory_order_relaxed) << " conv"; }
+                    // PROGRESS, next to busyness. jrecs is what a kill would keep; its age is how much
+                    // of the work above is currently unbanked.
+                    const long long jn  = gp.jrecs.load(std::memory_order_relaxed);
+                    const long long jage = (gp.now_ms() - gp.jms.load(std::memory_order_relaxed)) / 1000;
+                    std::cerr << "  journal=" << jn << " (" << jage << "s ago)";
                     std::cerr << "  cap=" << gp.cap.load(std::memory_order_relaxed) << "\n" << std::flush;
+                    // Feeding work while the journal is silent IS the violation of "resumable at any
+                    // point", so name it rather than leaving the operator to infer it from an mtime.
+                    // Threshold is two monitor periods: one quiet wake is ordinary (slow cells commit
+                    // in bursts), two in a row while rollouts are still being enqueued is not.
+                    if ((r7 + rs) > prev_fed_seen && jage > 2 * period)
+                    {
+                        std::cerr << "[keepgen]   WARNING: " << (r7 + rs) - prev_fed_seen << " rollouts fed in the"
+                                     " last " << static_cast<long long>(dt) << "s but the journal has not been"
+                                     " written for " << jage << "s -- that work is UNBANKED and a kill would"
+                                     " discard it. \"Resumable at any point\" is not currently holding; see"
+                                     " docs/design/keepgen-producer-barrier-and-durability.md\n" << std::flush;
+                    }
+                    prev_fed_seen = r7 + rs;
                     Slow().Dump(std::cerr, "so far", 3);
                     lk.lock();
                 }
@@ -1944,6 +2030,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         journal_f << "}\n";
         journal_f.flush();   // push to the OS page cache -> a process kill (not power loss) keeps it
+        gen_prog.note_journal_write();
     };
 
     auto run_batch = [&](AIEngine& ai, int w, int pd, long long r0, long long r1)
@@ -2388,6 +2475,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                    && m.value("max_mull", -1) == cfg.max_mull
                    && m.value("equiv_seed", 0ULL) == cfg.equiv_seed
                    && m.value("R", -1LL) == static_cast<long long>(cfg.rollouts)
+                   // A restart after a PLAY-LOGIC change is likewise a different run, not a
+                   // continuation of this one. The header has carried both fields since it was
+                   // first written; until now nothing read them.
+                   && PlayIdentityAllows(play_digest, cfg.commit,
+                                         m.value("play_digest", std::string()),
+                                         m.value("commit", std::string()),
+                                         "RESUME(journal)", journal_path)
                    // A restart at another depth is a different run, not a continuation of this one.
                    && RolloutCfgAllows(RolloutCfgOf(cfg), RolloutCfgFromMeta(m), "RESUME(journal)",
                                        journal_path);
@@ -2509,6 +2603,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                             && rm.value("max_mull", -1) == cfg.max_mull
                             && rm.value("equiv_seed", 0ULL) == cfg.equiv_seed
                             && rm.value("R", -1LL) == static_cast<long long>(cfg.rollouts)
+                            // Same reason as the journal: a raw from a run that PLAYED differently is
+                            // not this run's raw, however well its fingerprints match. This path fires
+                            // when a COMPLETED gen's raw is still present (the journal is deleted at
+                            // completion), so without this a re-run after a play change tops up a
+                            // finished profile with rollouts from a different engine.
+                            && PlayIdentityAllows(play_digest, cfg.commit,
+                                                  rm.value("play_digest", std::string()),
+                                                  rm.value("commit", std::string()),
+                                                  "RESUME", cfg.out_raw)
                             // Same reason as the journal: a checkpoint from a run at another depth is
                             // not this run's checkpoint, however well its fingerprints match.
                             && RolloutCfgAllows(RolloutCfgOf(cfg), RolloutCfgFromMeta(rm), "RESUME",
@@ -3233,6 +3336,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             r["dopt0"] = Dopt_ref[0]; r["dopt1"] = Dopt_ref[1];
             r["vg"] = { vg_ref[0], vg_ref[1] };
             journal_f << r.dump() << "\n"; journal_f.flush();
+            gen_prog.note_journal_write();
         };
 
         // ROLLING vg: re-derive the freeze shrink target from the CURRENT accumulators (each live cell's
@@ -3269,6 +3373,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     nlohmann::json r;
                     r["vgroll"] = { vg[0], vg[1] }; r["vgbase"] = completed_level;
                     journal_f << r.dump() << "\n"; journal_f.flush();
+                    gen_prog.note_journal_write();
                 }
             }
             vg_roll = vg; vg_base = completed_level;
@@ -3313,9 +3418,24 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         bool sub_converged = !sub_refine_on;
         // Change-detection classification is a one-shot that must observe the COMPLETE fused sub-floor.
         bool cd_classified = !pc.change_detect;
-        auto feed_upto = [&](int i, int pd, long long limit)   // enqueue size-7 rollouts [fed, limit)
+        // Floor-speculation sweep state (see the filler below). The sweep is bounded per producer
+        // iteration so the sub-refine wave clock keeps ticking; the cursor is what makes it resumable
+        // in place across iterations, and spec_active is the interlock that keeps compute_refs from
+        // firing mid-sweep.
+        std::size_t spec_cursor = 0;        // next cell-side index (i*2+pd) the sweep will visit
+        bool        spec_active = false;    // a sweep has started and has not yet saturated
+        bool        spec_resweep = false;   // this sweep skipped a not-yet-floored cell -> sweep again
+        bool        spec_saturated = false; // every live cell-side has been fed to r0+spec_budget
+        // Feeds per producer iteration during the sweep. A few QCAP's worth: big enough that the queue
+        // never drains between iterations (the workers see one continuous stream), small enough that
+        // sub_refine_step() runs on a seconds-scale clock rather than a per-sweep one.
+        const long long spec_chunk = static_cast<long long>(QCAP) * 4;
+        // Returns the number of rollouts actually enqueued, so a caller can spend a bounded FEED budget
+        // (feeds are QCAP-throttled and thus the unit of producer wall-clock; cells scanned are not).
+        auto feed_upto = [&](int i, int pd, long long limit) -> long long   // enqueue size-7 rollouts [fed, limit)
         {
             long long& f = fed[static_cast<std::size_t>(i) * 2 + pd];
+            const long long f0 = f;
             while (f < limit)
             {
                 { std::unique_lock<std::mutex> lk(qmtx);
@@ -3325,6 +3445,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 ++f; in_flight.fetch_add(1); ++fed_total; any_fed = true;
                 gen_prog.roll7.fetch_add(1, std::memory_order_relaxed);
             }
+            return f - f0;
         };
         // FUSION: drain the sub-table batch tasks into the same queue (kind 1). This is what removes the
         // Pass-A -> size-7 barrier: the sub-tables are sampled by the SAME pool that is filling the size-7
@@ -3416,15 +3537,51 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // yet converged) -> feed already-floored size-7 cells up to r0+spec_budget so idle cores
                 // stay busy. No freezing yet; compute_refs reconciles this speculation. This is what keeps
                 // cores full during the sub-cap / sub-refine tail.
+                //
+                // BOUNDED, and it must be. This filler used to run the WHOLE NC*2 sweep inline, above a
+                // sub_refine_step() reachable only once per sweep -- so on a large deck the sub-refine
+                // wave clock stopped for the length of a full sweep (FiveColour: 3,955,796 cell-sides x
+                // spec_budget 4 = 15.8M QCAP-throttled feeds, 140-230 h at the observed rate) while every
+                // core stayed 100% busy and `frozen` sat at 0. A filler that can outrun the progress step
+                // it fills for is a barrier in disguise, and worse than the worker-side barriers this
+                // design removed, because those were visible as idle cores. See
+                // docs/design/keepgen-producer-barrier-and-durability.md.
+                //
+                // The sweep is a single linear pass (fed[] is monotone and the limit is the CONSTANT
+                // r0+spec_budget), so a persistent cursor + a per-iteration feed budget is all it takes:
+                // the producer returns to sub_refine_step() every spec_chunk feeds instead of every
+                // sweep, and the waves overlap the speculation instead of queueing behind it.
+                // Scheduling only -- run_one is a pure function of (seed_base, r, w, pd) and the fold is
+                // deterministic, so reordering feeds cannot move a value.
                 const bool floor_incomplete = any_below_floor || sub_remaining.load() > 0 || !sub_converged;
-                if (floor_spec && floor_incomplete)
+                // LATCHED on entry, deliberately. The old unbounded pass tested floor_incomplete ONCE and
+                // then ran to completion, so once speculation started, every live cell reached the bound
+                // before refs could fix. Chunking must preserve that: re-testing the condition mid-sweep
+                // would let compute_refs fire on a half-speculated state, and its reconcile (which
+                // truncates at the first freeze hit over (r0, cnt]) would then depend on where the sweep
+                // happened to be -- a different answer per run. spec_active is the gate's interlock below.
+                if (floor_spec && !spec_saturated && (spec_active || floor_incomplete))
                 {
-                    for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
+                    spec_active = true;
+                    const std::size_t NS = static_cast<std::size_t>(NC) * 2;
+                    long long budget = spec_chunk;
+                    while (budget > 0 && spec_cursor < NS)
                     {
-                        if (afroze[static_cast<std::size_t>(i) * 2 + pd].load()) { continue; }
+                        const std::size_t k = spec_cursor++;
+                        const int i = static_cast<int>(k >> 1), pd = static_cast<int>(k & 1);
+                        if (afroze[k].load()) { continue; }
                         const long long c = S7.cnt[i][pd];
-                        if (c >= r0 && c < r_max)
-                        { feed_upto(i, pd, std::min<long long>(r_max, r0 + spec_budget)); }
+                        // Below the floor: pass 1 is driving it there, but it may not have FOLDED yet.
+                        // The old sweep re-scanned every iteration and so caught it later; the monotone
+                        // cursor would walk past it forever, so remember to sweep once more.
+                        if (c < r0)    { spec_resweep = true; continue; }
+                        if (c >= r_max) { continue; }
+                        budget -= feed_upto(i, pd, std::min<long long>(r_max, r0 + spec_budget));
+                    }
+                    if (spec_cursor >= NS)   // sweep complete
+                    {
+                        if (spec_resweep) { spec_cursor = 0; spec_resweep = false; }   // stragglers
+                        else              { spec_saturated = true; spec_active = false; }
                     }
                 }
             }
@@ -3453,7 +3610,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             // final). -> fix refs + reconcile floor-tail speculation + publish refs_ready (inside
             // compute_refs, under fold_mtx). NO size-7 in_flight wait: speculation still in flight is
             // harmless (reconcile handles it).
-            if (!refine && !any_below_floor && sub_remaining.load() == 0 && sub_converged && cd_classified)
+            // !spec_active: never fix refs while a speculation sweep is mid-flight. Under the old
+            // unbounded filler this held incidentally (a started sweep always ran to completion inside
+            // one iteration, so by the time this line was reached every live cell sat at the constant
+            // r0+spec_budget); chunking makes it something that has to be stated. Without it the
+            // reconcile below would truncate from wherever the sweep had got to, which is neither the
+            // same state as an uninterrupted run nor the same state twice.
+            if (!refine && !any_below_floor && sub_remaining.load() == 0 && sub_converged && cd_classified
+                && !spec_active)
             {
                 compute_refs();     // fixes Dopt/vg, reconciles speculation, sets refs_ready
                 journal_refs();     // persist the fixed refs (byte-identical resume marker)
