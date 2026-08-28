@@ -788,7 +788,7 @@ static bool BpTurnManaSettled(const GameState& state)
     return TurnSolver::ManaSourceCount(state) <= g_bp_mana_sources_before;
 }
 
-// DECISION-SPACE GATE for the BREAKPOINT filter (MTG_BP_CONDEMN_SEARCHED_ONLY, default OFF).
+// DECISION-SPACE GATE for the BREAKPOINT filter (MTG_BP_CONDEMN_SEARCHED_ONLY, DEFAULT ON).
 //
 // The main-phase filter has carried this rule since 2026-08-21 and ships it DEFAULT ON, with its
 // own comment calling the `=0` hatch "the BROKEN arm, not a neutral one". The breakpoint filter was
@@ -796,7 +796,14 @@ static bool BpTurnManaSettled(const GameState& state)
 //
 //     bp_condemn_seen=978735 drops=1202 (greedy=1080 searched=122 greedy_frac=0.8985)
 //
-// 90% of drops land in the GREEDY collector -- the rollout leaf. Per the rule the main-phase filter
+// 90% of drops land in the GREEDY collector -- the rollout leaf. Re-measured 2026-08-28 under the
+// USER's revised cast order with the four type exemptions deleted and MTG_BP_NO_GREEDY_CONT on, the
+// filter's reach is transformed but the leak is NOT closed by that alone:
+//
+//     bp_condemn_seen=1615710 drops=86225 drop_rate=0.0534 (greedy=25676 searched=60549 frac=0.298)
+//
+// i.e. 43x the drop rate and 496x the decision-space drops, yet 25,676 drops (29.8%) still fire in
+// the leaf. Per the rule the main-phase filter
 // states: a drop under g_search_candidate_enum deletes a branch the ranker would have expanded,
 // which is real pruning; a drop in the greedy pass deletes the only line the playout was going to
 // take, which prunes NOTHING and only makes the leaf's estimate pessimistic. "Restricting an
@@ -809,9 +816,27 @@ static bool BpTurnManaSettled(const GameState& state)
 // Same two qualifying readers as the main-phase gate, and for the same reasons: a SEARCHED collect
 // (real pruning) and the EXECUTOR (g_condemn_root_turn < 0 -- committed play, the decision the
 // condemnation list exists to bind). The rollout leaf is neither.
+//
+// DEFAULT ON. USER, 2026-08-28, asked "condemnation doesn't make any sense in the leaf, am I missing
+// anything?" and then stated the design directly: "it is intended for search." Nothing was missing --
+// this is a BUG, not a lever, and it was wrong to have queued it as an arm to be measured. The
+// premise condemnation rests on is "a SIBLING BRANCH already covers this line, so re-offering the
+// card is a permutation duplicate". That is a statement about a search tree. A leaf playout has no
+// siblings, so there is no duplicate to delete: the drop removes a real line and saves nothing.
+//
+// It ships ON rather than being A/B'd because the measurement cannot overturn the argument -- a
+// favourable number would mean the leaf's pessimism happened to cancel some other error, which is
+// not a reason to keep an estimator lying. `=0` is the BROKEN arm, kept only to reproduce the
+// finding (and expressible per-job: heurarm::Flag takes an explicit manifest false over this true).
+//
+// BYTE-IDENTICAL ON EVERY SHIPPED CONFIGURATION, which is why this needs no GT rebaseline. The gate
+// can only fire where BpClassifyActive is true, and today that is nowhere by default: MTG_BP_CLASSIFY
+// is off, and both provider routes are env-gated off too (AntiLifegainProvider's MTG_AL_BP_CONDEMN,
+// "kept as an instrument; NOT adopted"; EquipmentProvider's MTG_KE_CONDEMN). It changes only the
+// measurement arms that turn condemnation on explicitly.
 static bool BpCondemnSearchedOnlyEnabled()
 {
-    static const bool on = EnvOn("MTG_BP_CONDEMN_SEARCHED_ONLY");
+    static const bool on = EnvOn("MTG_BP_CONDEMN_SEARCHED_ONLY", true);
     return heurarm::Flag(heurarm::BP_CONDEMN_SEARCHED_ONLY, on);
 }
 
