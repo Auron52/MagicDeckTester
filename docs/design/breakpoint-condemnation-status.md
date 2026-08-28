@@ -685,6 +685,69 @@ of Flame 216. By land: Game Trail 2,566, Mountain 1,616, Sandstone Needle 1,094,
 Turf 574, Rootbound Crag 235. Volume is not harm (four times over in this arc), which is why the
 paired per-game measurement is the output and this count is only proof the lever fires.
 
+### MEASURED (2026-08-27) -- REJECTED as specified, and the reason is NOT land timing
+
+Shipped Mirrorwing, 12,000 games x 2 disjoint blocks, play settings (d5/b20), pooled with the
+rollout-ranker sweep in one queue. Paired per-game, baseline = what the deck ships:
+
+| arm | train delta (t) | hold delta (t) | faster/slower |
+|---|---|---|---|
+| `cond` (cast condemnation) | -0.0010 (-1.17) | -0.0013 (-1.53) | 46/35, 43/31 |
+| **`ng` (MTG_BP_NO_GREEDY_CONT alone)** | **-0.0008 (-2.67)** | **-0.0006 (-2.11)** | **12/2, 9/2** |
+| `cond_ng` | -0.0014 (-1.60) | -0.0019 (-2.09) | 52/36, 52/33 |
+| `cond_land` | +0.0008 (0.66) | +0.0014 (1.16) | 60/73, 62/72 |
+| `cond_land_ng` | +0.0005 (0.39) | +0.0013 (1.05) | 77/84, 76/87 |
+| `cond_tail` | -0.0003 (-0.77) | +0.0001 (0.30) | 9/6, 5/6 |
+| `cond_land_tail` | +0.0021 (2.12) | +0.0022 (2.01) | 37/62, 41/57 |
+
+**Isolated (baseline = `cond`, so this is what the LAND rule adds): +0.0018 (t=2.15) train,
++0.0027 (t=3.19) hold, 23 faster / 46 slower on BOTH blocks.** A 2:1 loss ratio reproduced exactly
+across disjoint seeds is not noise. The rule is REJECTED; `MTG_BP_CONDEMN_LAND` stays default OFF.
+
+Two collateral results worth more than the rejection:
+
+* **`cond_tail` is now ~INERT on the shipped list** (92/99 games changed, t under 1), where on the
+  archived variant it was the lever that recovered 24 of 29 unrecoverable lines. The SCOPE WARNING
+  below was right to insist every card-level number be re-derived.
+* **`ng` is a clean adoption CANDIDATE** and it is the USER's "delete all greedy" direction measuring
+  *better*, not merely neutral: 12 faster : 2 slower and 9 faster : 2 slower, t = -2.67 / -2.11.
+
+#### The escalation census, and what it actually says
+
+138 disagreeing games, 552 single-game jobs at 100x budget and at 100x budget + 1 ply, BOTH arms
+escalated. Of the 92 games `cond_land` loses at shipped settings, only **6 survive both cells**; 86
+are budget/depth churn. So the rule is NOT deleting reachable lines wholesale -- which is what makes
+the residual interesting rather than damning.
+
+#### ROOT CAUSE (hold gi=1293, cond wins T5, cond_land T6, survives 100x AND +1 ply)
+
+Repro: `--seed 1051294 --game-index 1293`. T3 diverges, and the two lines are:
+
+* `cond`: Impolite Entrance -> **Fists of Flame** -> *Mountain* -> Goblin Instigator. Win T5.
+* `cond_land`: Impolite Entrance -> *Mountain* -> Fists of Flame -> Fists of Flame. Win T6.
+
+**The rule fired exactly as specified and the land moved earlier. That is the problem.** Both lines
+play the same Mountain on the same turn; the only difference is that the pin forces it BEFORE Fists,
+which makes one more mana available earlier -- and the search spends it on a second Fists of Flame
+instead of the Goblin Instigator. In a Zada deck a body is worth more than a second pump, because
+every later solo-target trick is copied once per creature.
+
+So the failure is not land timing at all. **The pin exposes a weakness in the CAST ORDER**: with the
+extra mana the search casts a rank-16 payoff twice in preference to a rank-10 creature it holds. The
+USER's premise ("playing the land at its slot wins just as fast") is false here for a reason that
+lives one layer away from the land rule, and the next order-side question is that, not the drop.
+
+#### A HYPOTHESIS THAT WAS WRONG, recorded so it is not re-proposed
+
+Before instrumenting I inferred a "bug 9": that a land DRAWN at one breakpoint reads as
+already-in-hand at a NESTED breakpoint, since the drawn-card exemption is per-breakpoint while the
+drop's slot passes once a turn. It was built (a turn-level snapshot inherited by nested scopes) and
+it is a **provable no-op** -- identical to four decimals over 2,000 games -- because the nested inline
+path does not rebind `CantripOrderScope` at all, so the bound snapshot is *already* the outermost
+one. Reverted rather than shipped as a dormant guard: the comment would have asserted a defect the
+engine does not have. `MTG_CONDEMN_WHO` on gi=1293 is what settled it (the Mountain was in hand from
+turn start, so the rule was firing correctly) -- INSTRUMENT, don't read call graphs, a fourth time.
+
 ### The legitimate excuse looks like ONE rule, not several
 
 Of 23 turns where a trick is cast ahead of a body, 12 play a land immediately afterwards -- the

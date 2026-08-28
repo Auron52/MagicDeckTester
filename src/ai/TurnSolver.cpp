@@ -1075,6 +1075,7 @@ static bool BpCondemnLandEnabled()
 // without one condemns nothing anyway and needs no separate guard.
 static thread_local bool g_land_drop_reserved = false;
 
+
 // Has the land drop's slot already PASSED at this breakpoint? False everywhere the deck declares no
 // slot (LandDropCastOrderRank -1, every deck by default) => byte-identical.
 //
@@ -21418,8 +21419,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         auto it = predraw_urgency.find(sg);
         if (it == predraw_urgency.end()) { return false; }
         if (it->second > land_urgency(c)) { return false; }
-        // Same diagnostic channel as the cast side, with rank=-1 marking the drop's slot, so one
-        // MTG_CONDEMN_WHO run counts casts and lands together.
+        // Same diagnostic channel as the cast side, so one MTG_CONDEMN_WHO run counts casts and
+        // lands together; `rank` is the DROP's declared slot (0 on Mirrorwing), which is what
+        // separates a land line from a cast line in the output.
         static const bool s_condemn_who = EnvOn("MTG_CONDEMN_WHO");
         if (s_condemn_who)
         {
