@@ -61,8 +61,10 @@ NG   = {"MTG_BP_NO_GREEDY_CONT": True}
 #   2. does the floating-mana fix explain the Spasm/cantrip coupling? -> ord_float
 #   3. does condemnation do real work now the exemptions are gone?  -> cond_ng
 # Kitty and Mirrorwing carry their own baselines because they are cheap and are the regression check.
-QUICK_HINATA = ("ord", "ord_float", "cond_ng")
-QUICK_GAMES = {"hinata": 1200, "kitty": 2000, "mirrorwing": 2000}
+QUICK_HINATA = ("ord", "ord_float", "cond_ng", "cond_ng_float")
+# HINATA IS THE PRIMARY FOCUS (USER 2026-08-28); Kitty and Mirrorwing are a SMOKE TEST only --
+# enough to catch a gross regression from the deleted exemptions, not a statistical measurement.
+QUICK_GAMES = {"hinata": 1200, "kitty": 400, "mirrorwing": 400}
 
 DECKS = {
     "hinata": (H, {
