@@ -16614,10 +16614,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // a dig source enter the loop, so burn/slivers stay byte-identical. ShouldConsiderDig
     // encodes when NOT to dig (a draw engine already in hand, a retrace engine in the
     // graveyard, fewer than two lands, or Land's Edge already lethal from the hand).
-    if (!s_human_play && is_pre_combat && ResolveProvider(state).HasAnyDigSource(state))
+    // Plan::dig_choice (searched dig axis): 0 suppresses this plan's dig loop outright, 1 runs it
+    // gated only on affordability, -1 (default, and every non-opted deck) keeps the heuristic.
+    if (!s_human_play && is_pre_combat && plan.dig_choice != 0
+        && ResolveProvider(state).HasAnyDigSource(state))
     {
         int dig_guard = 0;
-        while (dig_guard++ < 16 && ResolveProvider(state).ShouldConsiderDig(state) && !ap.library.empty())
+        while (dig_guard++ < 16
+               && (plan.dig_choice == 1 || ResolveProvider(state).ShouldConsiderDig(state))
+               && !ap.library.empty())
         {
             ManaPool pool = AvailableManaPool(state);
             bool is_sac = false;
@@ -21323,6 +21328,44 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
+    }
+
+    // SEARCHED CYCLE/SAC-DRAW DIG (Plan::dig_choice; USER 2026-08-28: "searched with heuristics
+    // is the way to go"). Same post-dedup additive fan-out as the axes above: emit a
+    // never-dig (0) and a dig-while-affordable (1) variant per base plan and let the rollout
+    // score them -- the base plan carries the heuristic, so one variant duplicates whatever it
+    // resolves to and tie-breaks away (the Vial-charge axis's accepted cost). Provider opt-in
+    // (DigDecisionSearched: Auras) so Treasure Hunt's measured greedy gate and every digless
+    // deck stay byte-identical; gated on a source being payable BEFORE the casts, since a turn
+    // that cannot afford any dig makes all three worlds identical.
+    if (!HumanPlayActive() && ResolveProvider(state).DigDecisionSearched()
+        && ResolveProvider(state).HasAnyDigSource(state))
+    {
+        ManaPool dig_pool = AvailableManaPool(state);
+        bool dig_is_sac = false;
+        if (!ResolveProvider(state).SelectDigSource(state, dig_pool, dig_is_sac).empty())
+        {
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                // Base plans only -- one axis at a time, so cost stays additive (tutor's rule).
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
+                    || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                    || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                    || !p.sac_pins.empty() || p.tapmode_choice != 0
+                    || p.freshmode_choice != 0) { continue; }
+                for (int k = 0; k <= 1; ++k)
+                {
+                    TurnSolver::Plan v = p;
+                    v.dig_choice = k;
+                    extra.push_back(std::move(v));
+                }
+            }
+            TRACE("digaxis", "T%d %zu plan(s) -> %zu dig variant(s)",
+                  state.turn_number, all.size(), extra.size());
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
     }
 
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",

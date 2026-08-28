@@ -959,6 +959,9 @@ public:
     bool        HasAnyDigSource (const GameState& s) const override;
     bool        ShouldConsiderDig(const GameState& s) const override;
     std::string SelectDigSource(const GameState& s, const ManaPool& pool, bool& out_is_sac) const override;
+    // The dig is a SEARCHED decision here (USER 2026-08-28): ShouldConsiderDig is only the
+    // default/horizon heuristic; the enumerator fans dig/no-dig variants and the rollout decides.
+    bool        DigDecisionSearched() const override { return true; }
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

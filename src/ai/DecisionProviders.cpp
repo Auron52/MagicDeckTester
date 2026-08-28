@@ -3035,20 +3035,34 @@ std::vector<int> AntiLifegainProvider::CleanupDiscardCandidates(
 bool AurasProvider::HasAnyDigSource (const GameState& s) const { return ::HasAnyDigSource(s); }
 bool AurasProvider::ShouldConsiderDig(const GameState& s) const
 {
-    // Sac a Horizon Canopy only when the land is genuinely SURPLUS: with >= 4 lands controlled,
-    // the post-sac board (>= 3) still casts everything in the deck (the curve tops at Ancestral
-    // Mask, MV 3), so the Canopy's body is worth strictly less than a card. Below that the sac
-    // can strand the curve -- the human reference line (s21/gi20) follows exactly this shape:
-    // dig on T4/T5 only after the FOURTH land drop, keeping three behind each time. The dig
-    // loops themselves already require the {1} to be affordable AFTER the turn's casts (surplus
-    // mana), so this gate only encodes the land-count judgement.
+    // The DEFAULT/HORIZON heuristic only -- at the committed turn the dig is a searched axis
+    // (DigDecisionSearched: the enumerator fans dig/no-dig variants and the rollout decides;
+    // USER 2026-08-28: "we can certainly have a heuristic to help make the decision... but it
+    // should be searched otherwise"). Two shapes where the sac is worth a card by default:
+    //   * the land is genuinely SURPLUS: with >= 4 lands controlled the post-sac board (>= 3)
+    //     still casts everything in the deck (the curve tops at Ancestral Mask, MV 3) -- the
+    //     human reference line s21/gi20 exactly (dig on T4/T5 after the fourth drop);
+    //   * the hand is EMPTY OF GAS (no castable nonland): with nothing to cast, drawing toward
+    //     action is the only line, so dig from 2 lands up (the generic >= 2 don't-strand floor;
+    //     USER: the surplus-only gate is "a little too restrictive for cases where your hand is
+    //     completely empty of gas").
+    // The dig loops already require the cost to be affordable AFTER the turn's casts (surplus
+    // mana); this gate only encodes the land-count / gas judgement.
     if (DecisionUnpruned(UnprunedGate::Dig)) { return ::HasAnyDigSource(s); }
     int lands = 0;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index == s.active_player_index && p.card.IsLand()) { ++lands; }
     }
-    return lands >= 4;
+    if (lands >= 4) { return true; }
+    if (lands < 2)  { return false; }
+    for (const Card& c : s.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->card.IsLand()) { continue; }
+        if (d->card.m_mana_cost.ManaValue() <= lands) { return false; }   // castable gas in hand
+    }
+    return true;
 }
 std::string AurasProvider::SelectDigSource(const GameState& s, const ManaPool& pool, bool& out_is_sac) const
 {

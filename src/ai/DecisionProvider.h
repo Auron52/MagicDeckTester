@@ -175,6 +175,12 @@ public:
     virtual bool        ShouldConsiderDig(const GameState& s) const = 0;
     virtual std::string SelectDigSource (const GameState& s, const ManaPool& pool,
                                          bool& out_is_sac) const = 0;
+    // DigDecisionSearched -- opt this deck's dig gate into the SEARCHED axis (Plan::dig_choice):
+    // the enumerator emits never-dig / dig-while-affordable variants per base plan and the
+    // rollout scores them, with ShouldConsiderDig as the base plan's default and the horizon
+    // behaviour (USER 2026-08-28: "searched with heuristics is the way to go"). False keeps the
+    // heuristic-only gate (Treasure Hunt's measured greedy; every digless deck trivially).
+    virtual bool        DigDecisionSearched() const { return false; }
 
     // LandsEdgeFireCount -- how many lands to discard to a Land's Edge this activation.
     virtual int LandsEdgeFireCount(const GameState& s, int rate) const = 0;

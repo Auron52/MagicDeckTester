@@ -553,6 +553,18 @@ public:
         // as discard_choice -- and one turn further out, since the upkeep is next turn's.
         int vial_charge_choice = -1;
 
+        // SEARCHED CYCLE/SAC-DRAW DIG (Horizon Canopy class; USER 2026-08-28: "we want that
+        // decision to be searched to some degree... searched with heuristics is the way to go").
+        // -1 (default) == the provider's dig heuristic decides, exactly as before -- and the
+        // rollout HORIZON (future turns, depth-0, non-opted decks) always stays heuristic.
+        // 0 == this plan's end-of-casts dig loop is SUPPRESSED; 1 == it runs gated only on
+        // affordability (the provider's land-count judgement overridden). Emitted as post-dedup
+        // plan variants for providers opting in via DigDecisionSearched() (Auras), so the rollout
+        // scores the dig and no-dig lines and the SEARCH decides; the heuristic is the branch's
+        // default, not a substitute for search. The executor needs no handling -- a committed dig
+        // line rides breakpoint_actions verbatim, and a committed no-dig line records none.
+        int dig_choice = -1;
+
         // Commit-the-line (MTG_FULL_DEPTH): the casts the search's draw-breakpoint
         // re-solve(s) made this phase, after a main `actions` draw engine revealed new
         // cards. Top-level (triggered by the main plan); each entry nests its own

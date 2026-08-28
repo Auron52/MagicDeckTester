@@ -19,10 +19,10 @@
    "max_turns": 8,
    "n": 30,
    "policy": "committed value_play",
-   "search": 4.2667,
+   "search": 4.2333,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "ffb3f2358edc6136054388aa2654b59f09748ab9"
   },
   "burn": {
    "hand_mismatch": 0,
