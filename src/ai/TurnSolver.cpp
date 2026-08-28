@@ -858,112 +858,6 @@ static bool BpCondemnOrderAwareEnabled()
     return heurarm::Flag(heurarm::BP_CONDEMN_ORDER, on);
 }
 
-// True when the candidate's cast slot is NOT STRICTLY EARLIER than the breakpoint site's, i.e. it
-// has not already had its turn and must not be condemned. False (condemn as before) whenever the
-// comparison cannot be made, so the exemption only ever re-admits candidates.
-//
-// The comparison is >=, and the tie case is the whole point rather than a rounding choice. The
-// USER's rule condemns a card that is "earlier in the order", and its justification is that a
-// SIBLING line already casts it at its proper position -- so condemning it here loses nothing. That
-// argument holds only for a STRICT predecessor. Two cards at the SAME rank are peers with no
-// enumerated order between them, and condemning a peer is symmetric: whichever one the plan casts
-// first, the other is condemned in the continuation, so NO sibling line survives and the pair can
-// never both be cast in one turn.
-//
-// Measured, not reasoned (hold gi=1325, seed 901326): Puresteel Paladin out, Bonesplitter and
-// Lightning Greaves both Equipment at rank 8. Baseline casts Greaves, draws a Plains off the
-// Paladin trigger, PLAYS that Plains as its land drop, and the extra mana affords Bonesplitter for a
-// second draw -- T4 win. Under strict > the second Equipment is condemned either way round, so the
-// turn gets one draw instead of two and the game is a T5 win. That is a line no depth or budget can
-// reach, which is the class the no-lossy-truncation bar rejects outright.
-//
-// This is also exactly the case the USER flagged when specifying equipment ordering: "I don't think
-// we have any equipment that particularly care about order, though I may be wrong. It does matter
-// that we can process the draw we get off it, though." Peers at one rank ARE the no-order-between-
-// them case, and processing the draw is what strict > was deleting.
-// MANA-SOURCE EXEMPTION (MTG_BP_CONDEMN_MANA_EXEMPT). A mana source is never "considered and
-// declined" in the sense the sibling-line argument needs.
-//
-// Condemnation is sound only because a strictly-earlier card is assumed to be cast at its proper
-// position in some SIBLING line, so banning it in the continuation loses nothing. That argument
-// silently assumes the card's placement does not change what else is castable. For a mana source it
-// always does: an accelerant is cast when the rest of the turn needs the mana, and how much mana the
-// turn needs is exactly what a breakpoint draw reveals.
-//
-// Measured, not reasoned (train gi=26, seed 300027, mode 3): a diagnostic at the drop site
-// (MTG_CONDEMN_WHO) reported 70,805 condemnations in that one game and EVERY ONE of them was
-// Sol Ring (rank 5) at an Equipment site (rank 8) -- nothing else was ever condemned. The baseline's
-// winning line casts Shadowspear, draws, casts O-Naginata, draws Lightning Greaves, and only THEN
-// casts Sol Ring to afford the Greaves: a T5 win that becomes T6 once the accelerant is nailed to
-// rank 5. Sol Ring is {1} for {C}{C}, so re-sequencing it is a pure mana decision the cast order
-// cannot express.
-static bool BpCondemnManaExemptEnabled()
-{
-    static const bool on = EnvOn("MTG_BP_CONDEMN_MANA_EXEMPT", true);
-    return heurarm::Flag(heurarm::BP_CONDEMN_MANA, on);
-}
-
-// RITUAL EXEMPTION (MTG_BP_CONDEMN_RITUAL_EXEMPT) -- the hole in the exemption above.
-//
-// The mana exemption's argument is verbatim: "an accelerant is cast when the rest of the turn needs
-// the mana, and how much mana the turn needs is exactly what a breakpoint draw reveals." That is a
-// statement about MANA, not about permanents -- but the test it ships with is `mana_rock ||
-// ManaDork`, which only recognises accelerants that are PERMANENTS. A ritual is an accelerant that
-// is a spell, and every word of the argument applies to it unchanged.
-//
-// ROOT-CAUSED, not reasoned (Hinata, 2026-08-26). Condemnation measured NEGATIVE on Hinata in every
-// configuration (+0.033 on the generic order, +0.052 on the full order, +0.007..0.008 even with
-// order-awareness). Instrumenting five of the losing games with MTG_CONDEMN_WHO gives 4,541
-// condemnations and exactly two victims: Gamble 3,869 and REALITY SPASM 665. Reality Spasm
-// (untap_x_mana_sources) is a ritual -- with Hinata's discount cancelling its {X} it is {U}{U} to
-// untap X mana sources -- and it was condemned at the Soulfire Eruption breakpoint (rank 15 < 20)
-// in every one. Across the 75 regressions it is the single most common cast the baseline makes and
-// the condemnation arm does not (33 of them). Irencrag Feat (ritual_floating_mana) falls through the
-// same hole and accounts for 6 more.
-//
-// The failure mode is precisely the one the Sol Ring measurement documents: the winning line casts
-// the payoff FIRST and the accelerant afterwards, funded by what the payoff revealed. Nailing the
-// accelerant to its cast-order rank deletes that line, and no depth or budget reaches it.
-static bool BpCondemnRitualExemptEnabled()
-{
-    static const bool on = EnvOn("MTG_BP_CONDEMN_RITUAL_EXEMPT", true);   // DEFAULT ON (bug 4)
-    return heurarm::Flag(heurarm::BP_CONDEMN_RITUAL, on);
-}
-
-// COST-REDUCER EXEMPTION (MTG_BP_CONDEMN_REDUCER_EXEMPT) -- bug 6, and the third card in the same
-// family as bugs 3 (mana sources) and 4 (rituals). A permanent that makes your other spells cheaper
-// is an ACCELERANT: it changes what the rest of the turn can afford, which is precisely the property
-// that makes "it was already considered and declined" false, because how much mana the turn needs --
-// and how much it has -- is exactly what a breakpoint draw reveals.
-//
-// ROOT-CAUSED (Hinata, 2026-08-26). With bugs 4 and 5 fixed, condemnation still measured negative on
-// Hinata under the SHIPPED generic tiering (+0.0040, t=3.21 hold). Instrumenting its 10 remaining
-// train regressions gives 8,999 condemnations and ONE victim: Hinata, Dawn-Crowned herself, at
-// Ponder / Preordain / Gamble sites. She is rank 10 (creature) against cantrips at 20, so the
-// order-aware rule sees her as strictly earlier and condemns her.
-//
-// The line that deletes, from the game logs (train gi=1938, a T4 win becoming T5):
-//     T3 cast Ponder -> DRAW Forbidden Orchard -> PLAY that land -> cast Hinata -> T4 Spasm+Crackle
-// The cantrip is what FINDS the land that makes the 4-drop castable this turn. Condemning her in the
-// continuation deletes the whole "cheap selection first, then deploy" line, and the arm instead
-// casts her bare and loses a turn. Measured separately: 22% of this deck's turns that play a land
-// AND a draw spell play the land AFTER the draw spell.
-//
-// Note the ORDER fixes this too -- rank her after the cantrips and the >= rule exempts her -- but
-// measured, that costs more than condemnation saves (the find-promotion arm is +0.0113..0.0120 vs
-// baseline on its own). The exemption gets the same soundness without paying for a re-ordering.
-static bool BpCondemnReducerExemptEnabled()
-{
-    static const bool on = EnvOn("MTG_BP_CONDEMN_REDUCER_EXEMPT", true);   // DEFAULT ON (bug 6)
-    return heurarm::Flag(heurarm::BP_CONDEMN_REDUCER, on);
-}
-
-static bool BpCondemnTutorExemptEnabled()
-{
-    static const bool on = EnvOn("MTG_BP_CONDEMN_TUTOR_EXEMPT", true);    // DEFAULT ON (bug 5)
-    return heurarm::Flag(heurarm::BP_CONDEMN_TUTOR, on);
-}
-
 // MANA-ADDING SITE (MTG_BP_CONDEMN_MANA_SITE_EXEMPT) -- bug 7, DEFAULT ON. A SITE rule rather than
 // another card-type exemption, and the one the UNRECOVERABLE lines actually point at.
 //
@@ -1053,41 +947,20 @@ static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
     if (!BpCondemnOrderAwareEnabled() || g_bp_site_def == nullptr) { return false; }
     const CardDefinition* cd = CardDatabase::Instance().LookupCached(cand);
     if (cd == nullptr) { return false; }
-    // A mana source re-sequences legitimately; exempt it before the rank comparison.
-    if (BpCondemnManaExemptEnabled()
-        && (cd->params.mana_rock || cd->tmpl == CardTemplate::ManaDork)) { return true; }
-    // ...and so does a ritual, which is the same accelerant argument for a card that is a SPELL
-    // rather than a permanent. See BpCondemnRitualExemptEnabled.
-    if (BpCondemnRitualExemptEnabled()
-        && (cd->params.ritual_floating_mana > 0 || cd->params.untap_x_mana_sources
-            // A TREASURE is stored mana, so a card that mints one is a ritual that pays later.
-            // Root-caused on Mirrorwing (2026-08-26): Gold Rush (creates_treasures, rank 15) is
-            // condemned at Fists of Flame sites (16) -- and the damage is the MIRROR of the Hinata
-            // case. Banning it in the continuation removes "decline now, cast it after the draws",
-            // leaving only "cast it now", so the arm casts Gold Rush a turn EARLY with fewer
-            // creatures out -- and in a Zada deck a solo-target trick is copied once per creature,
-            // so early is drastically weaker (train gi=13: a T4 win becomes T5).
-            || cd->params.creates_treasures > 0)) { return true; }
-    // TUTOR EXEMPTION (MTG_BP_CONDEMN_TUTOR_EXEMPT). The sibling-line argument needs the earlier
-    // line to cast the card AT ITS PROPER POSITION and get the same thing. For a tutor that is
-    // false: WHAT IT FETCHES is chosen at resolution from the state, so "Gamble then Ponder" and
-    // "Ponder then Gamble" fetch different cards. HinataProvider::TutorCandidates is explicitly
-    // combo-aware (fetch Hinata while she is missing, else the missing piece), so a tutor declined
-    // before a breakpoint was declined under strictly less information -- which is the same reason
-    // a card the breakpoint DREW is never condemned.
+    // NO TYPE EXEMPTIONS. Four used to sit here -- mana source, ritual/Treasure, tutor, cost
+    // reducer -- each added to patch one measured regression (bugs 4, 5, 6). They are DELETED
+    // (USER 2026-08-28: "I don't want any general exemptions"; "Those need to be deleted").
     //
-    // ROOT-CAUSED (Hinata, 2026-08-26): Gamble is 3,869 of the 4,541 condemnations across five
-    // losing games, every one of them at a Ponder or Preordain site. Note this is only reachable
-    // because the reviewed order ranks Gamble (6) AHEAD of the cantrips (7) -- see
-    // MTG_HINATA_GAMBLE_LATE for the order-side fix of the same finding. The two are measured
-    // separately because they make different claims: this one says a tutor is never condemnable
-    // anywhere, that one says this deck's tutor belongs after its card selection.
-    if (BpCondemnTutorExemptEnabled() && cd->params.tutor_to_hand) { return true; }
-    // ...and a COST REDUCER, which is an accelerant that pays in discounts rather than in mana.
-    if (BpCondemnReducerExemptEnabled()
-        && (cd->params.hinata_cost_reducer
-            || !cd->params.reduces_spell_color.empty()
-            || !cd->params.reduces_spell_subtype.empty())) { return true; }
+    // What replaces them is not another special case but the fact they were all approximating.
+    // Every one of the accelerant exemptions said the same thing -- "casting this later changes
+    // what else is castable" -- so the honest test is whether the mana available actually CHANGED,
+    // which BpTurnManaSettled now asks directly and card-agnostically: a candidate is re-admitted
+    // the moment the mana-source count exceeds its breakpoint snapshot. A rock, a ritual, a
+    // Treasure and a land are one event to that rule, and a future accelerant needs no new clause.
+    //
+    // The tutor was the one genuine outlier (Gamble changes what it FETCHES, not what is
+    // affordable), so it is the order's job rather than the filter's -- MTG_HINATA_GAMBLE_LATE
+    // measured play-inert over 6,000 games, so moving a tutor in the order is free.
     const DecisionProvider& prov = ResolveProvider(state);
     return prov.CastOrderRank(state, *cd) >= prov.CastOrderRank(state, *g_bp_site_def);
 }

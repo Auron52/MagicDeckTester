@@ -71,7 +71,6 @@ enum Slot : int
     KE_CONDEMN,               // MTG_KE_CONDEMN            re-enable Kitty's breakpoint condemnation
     BP_CONDEMN_TAIL,          // MTG_BP_CONDEMN_TAIL_EXEMPT  don't condemn when the plan has no cast left
     BP_CONDEMN_ORDER,         // MTG_BP_CONDEMN_ORDER_AWARE  don't condemn a slot AFTER the bp site
-    BP_CONDEMN_MANA,          // MTG_BP_CONDEMN_MANA_EXEMPT  never condemn a mana source
     SF_PUT_BP,                // MTG_SF_PUT_BP             site 6 fires off a Stoneforge PUT too
     M2_D0_SEARCHED,           // MTG_M2_D0_SEARCHED        branch-site interior m2 at d<=0 is SEARCHED
     KE_ORDER_FULL,            // MTG_KE_ORDER_FULL         KittyEquipment FULL (total) cast order
@@ -82,10 +81,7 @@ enum Slot : int
     HINATA_FIND_LATE,         // MTG_HINATA_FIND_LATE      LOO: tutor/cantrips/dig back to 20 (after her)
     HINATA_PAY_TIE,           // MTG_HINATA_PAY_TIE        LOO: the three payoffs tied at 20 again
     HINATA_GAMBLE_LATE,       // MTG_HINATA_GAMBLE_LATE    tutor AFTER the cantrips (cantrip, then fetch)
-    BP_CONDEMN_RITUAL,        // MTG_BP_CONDEMN_RITUAL_EXEMPT  never condemn a RITUAL (mana-exempt hole)
-    BP_CONDEMN_TUTOR,         // MTG_BP_CONDEMN_TUTOR_EXEMPT   never condemn a TUTOR (target is info-fixed)
     HINATA_DORK_TIE,          // MTG_HINATA_DORK_TIE       LOO: dork + engine tied at 10, as generic has them
-    BP_CONDEMN_REDUCER,       // MTG_BP_CONDEMN_REDUCER_EXEMPT never condemn a COST REDUCER
     BP_CONDEMN_MANA_SITE,     // MTG_BP_CONDEMN_MANA_SITE_EXEMPT  a MANA-ADDING site condemns nothing
     BP_CONDEMN_TREASURE_POS,  // MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE  ...only when it NET-added mana
     MW_GR_LADDER_POS,         // MTG_MW_GR_LADDER_POSITIVE  Gold Rush walks earlier only when positive
@@ -143,7 +139,6 @@ inline const char* Name(int slot)
         "MTG_KE_CONDEMN",
         "MTG_BP_CONDEMN_TAIL_EXEMPT",
         "MTG_BP_CONDEMN_ORDER_AWARE",
-        "MTG_BP_CONDEMN_MANA_EXEMPT",
         "MTG_SF_PUT_BP",
         "MTG_M2_D0_SEARCHED",
         "MTG_KE_ORDER_FULL",
@@ -154,10 +149,7 @@ inline const char* Name(int slot)
         "MTG_HINATA_FIND_LATE",
         "MTG_HINATA_PAY_TIE",
         "MTG_HINATA_GAMBLE_LATE",
-        "MTG_BP_CONDEMN_RITUAL_EXEMPT",
-        "MTG_BP_CONDEMN_TUTOR_EXEMPT",
         "MTG_HINATA_DORK_TIE",
-        "MTG_BP_CONDEMN_REDUCER_EXEMPT",
         "MTG_BP_CONDEMN_MANA_SITE_EXEMPT",
         "MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE",
         "MTG_MW_GR_LADDER_POSITIVE",
