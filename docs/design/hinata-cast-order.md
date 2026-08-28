@@ -206,33 +206,69 @@ deck (30-52 of 3,000 games differ), because Hinata's breakpoint sites are its CA
 near the front of the order -- so almost nothing is ever "already considered". That is structural,
 not a defect in the order.
 
-#### PROVEN INERT, not merely small (2026-08-28), and why -- in BOTH orders
+#### CORRECTED 2026-08-28: it is INERT UNDER THE GENERIC ORDER ONLY. Under the USER's order it FIRES.
 
-Asked whether condemnation could pay for the plain-cantrip class's fan-out instead of deferring it
-(USER: *"Can we not address the same problem using condemnation?"*). It cannot, and the answer is a
-digest rather than an estimate. 400 games, paired:
+An earlier revision of this section claimed condemnation was "proven inert on Hinata **in both
+orders**", on the strength of the four digests below. **That generalisation was wrong**, and the
+error is worth naming because it is a repeat: every one of those arms was measured under the GENERIC
+tiering, so the table says nothing whatever about the full order.
 
-| arm | avg | digest |
+| arm (all under the GENERIC tiering) | avg | digest |
 |---|---|---|
 | base | 5.7475 | `426a9d78...` |
 | + condemnation | 5.7475 | `426a9d78...` **identical** |
 | + site 3 eager | 5.7650 | `85d70bab...` |
 | + site 3 eager + condemnation | 5.7650 | `85d70bab...` **identical** |
 
-Byte-identical WITH the class opened as well as without, so this is not the old "it never had a
-surface to act on" objection. The mechanism, and it bites in both orders for different reasons --
-`BpSlotIsAfterSite` exempts any candidate whose rank is `>=` the site's (the peer rule), so only a
-STRICTLY earlier card is condemnable:
+Under the generic tiering the null is real and the mechanism is as described: `BpSlotIsAfterSite`
+exempts any candidate whose rank is `>=` the site's (the peer rule), and ELEVEN cards sit tied at
+rank 20 (both cantrips, Gamble, Expressive Iteration, all three payoffs, the four never-cast
+spells), so at a cantrip site nothing is strictly earlier and the condemnable set is empty by
+construction.
 
-* **generic tiering** -- ELEVEN cards sit tied at rank 20 (both cantrips, Gamble, Expressive
-  Iteration, all three payoffs, the four never-cast spells). At a cantrip site nothing is strictly
-  earlier, so the condemnable set is empty by construction.
-* **the full order** -- the only cards ahead of the cantrips (448) are Sol Ring (320) and Gamble
-  (384), and both are exempt: the MANA-SOURCE exemption (bug 4) and the TUTOR exemption (bug 5).
+**Re-measured with `MTG_HINATA_ORDER_FULL` and `MTG_BP_SITE3` armed TOGETHER, condemnation fires 113
+times in 8 games and changes the digest.** Both flags are required: the order supplies the strict
+ranks, and site 3 opens the class the rule acts in. The real cases, from `MTG_CONDEMN_WHO`:
 
-So "put the deck on a total order and condemnation starts working" is false here specifically: the
-total order's front is made entirely of cards the exemptions protect. Any future attempt to make
-condemnation bite on Hinata has to change one of those two facts, not the order's shape.
+| dropped | rank | site | site rank | n |
+|---|---|---|---|---|
+| Preordain | 448 (r7) | Soulfire Eruption | 1280 (r20) | 58 |
+| Ponder | 448 (r7) | Soulfire Eruption | 1280 (r20) | 47 |
+| Expressive Iteration | 576 (r9) | Soulfire Eruption | 1280 (r20) | 8 |
+
+That is exactly the draws-before-deploys rule the order was authored to encode: the plan cast the
+payoff without first casting Ponder, so Ponder was considered and declined, and the continuation off
+Soulfire's dig must not re-offer it having seen what was revealed. **This is the USER's order giving
+condemnation a surface it provably did not have before** -- which is the point of authoring one.
+
+#### THE SURFACE IS RANK-SHAPED, which is why it still cannot fund the eager class
+
+Condemnation's condemnable set at a site of rank R is "cards ranked strictly < R", so **its power
+scales with how LATE in the order the breakpoint site sits.** That single fact explains both the
+success on other decks and the shortfall here. Measured, n=40, paired, deterministic work units,
+every arm relative to the full-order base:
+
+| arm | units | avg |
+|---|---|---|
+| site 3 EAGER | **1.2419** | 5.7000 (base 5.6500) |
+| + condemnation | 1.2413 -- **repays 0.04%** | 5.7000 |
+| + `MTG_BP_NO_GREEDY_CONT` | 1.2669 -- **repays nothing, 2.5% dearer** | 5.6750 |
+
+Hinata's *cost* is at the CANTRIP sites (rank 7, the earliest non-mana slot, cast constantly), where
+the only earlier cards are Sol Ring (320) and Gamble (384) -- both soundly exempt under the
+mana-source (bug 4) and tutor (bug 5) exemptions. So the surface is **empty exactly where the work
+is**, while the rich surface sits on Soulfire Eruption, a rare and expensive card. Mirrorwing and
+KittyEquipment work because their sites are LATE (Fists of Flame r16, the equipment ETB draw).
+
+One further measured result, and it constrains any combined design: **with `MTG_BP_NO_GREEDY_CONT`
+on, condemnation is SUBSUMED** -- `f_s3_ng` and `f_s3_ng_cond` are byte-identical (`814b5a34`). The
+canonical continuation already takes the order's own answer, so there is nothing left for the rule
+to remove. The two mechanisms are not additive.
+
+**What this leaves for future work.** Making condemnation bite at Hinata's *frequent* sites needs a
+premise other than "earlier in the order", because at a rank-7 site the later cards genuinely have
+not been considered yet and banning them is lossy truncation. It is not a matter of narrowing the
+exemptions: both are sound, and the order's front is made entirely of cards they protect.
 
 #### The Irencrag pin is a RULES point, not a tuning one
 

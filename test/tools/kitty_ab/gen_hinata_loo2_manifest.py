@@ -22,12 +22,24 @@ forecloses Irencrag -> Soulfire Eruption ({6}{R}{R}{R}) and Irencrag -> Magma Op
 with seven red floating Crackle only reaches X=1 (5 damage) while Soulfire is castable off the seven
 plus two lands. That is a real line the pin deletes.
 
-CONDEMNATION IS NOT THE ANSWER HERE AND THIS RUN DOES NOT PURSUE IT. Measured 2026-08-28, 400 games:
-condemnation is BYTE-IDENTICAL to baseline on this deck (digest 426a9d78 either way), and still
-byte-identical with the plain-cantrip class opened (85d70bab either way). Structural, and visible in
-both orders: condemnation only fires on a card STRICTLY earlier than the site, generic ties eleven
-cards at rank 20 so nothing is ever strictly earlier, and under the full order the only cards ahead
-of the cantrips are Sol Ring (mana rock) and Gamble (tutor) -- both exempt by bugs 4 and 5.
+CONDEMNATION *DOES* FIRE HERE AND THIS RUN NOW PRICES IT -- correcting an earlier wrong null. The
+byte-identical digests recorded on 2026-08-28 (426a9d78 with and without condemnation; 85d70bab with
+and without, class opened) were ALL measured under the GENERIC tiering, where the null is real:
+eleven cards tie at rank 20 and only a STRICTLY earlier card is condemnable, so the set is empty.
+Generalising that to "inert on Hinata" was the error. With MTG_HINATA_ORDER_FULL and MTG_BP_SITE3
+armed TOGETHER it fires 113 times in 8 games and changes the digest -- 58 Preordain, 47 Ponder, 8
+Expressive Iteration (r7/r7/r9), every one of them at a SOULFIRE ERUPTION site (r20). That is the
+draws-before-deploys rule working: the plan cast the payoff without first casting Ponder, so Ponder
+was declined and the dig continuation must not re-offer it knowing what was revealed.
+
+WHAT THE n=40 PROBE SAYS IT COSTS, and why the arms below are shaped this way. Condemnation repays
+only 0.04% of eager site 3's 1.2419x work units, because the surface is RANK-SHAPED: the condemnable
+set at a site of rank R is "cards ranked < R", so the rule's power scales with how LATE the site is.
+Hinata's COST is at the cantrip sites (r7, cast constantly), where only Sol Ring (r5) and Gamble (r6)
+precede and both are soundly exempt -- empty surface exactly where the work is. Two claims below are
+therefore under test at scale rather than assumed: that the surface needs the dig class open (f_cond
+alone should stay inert), and that MTG_BP_NO_GREEDY_CONT SUBSUMES condemnation (f_s3_ng and
+f_s3_ng_cond were byte-identical at n=40, digest 814b5a34).
 
 THE ARMS. Single-factor leave-one-out off the FULL order, so each position is priced alone, plus the
 two- and three-factor stacks for the positions that pay. Every LOO lever moves a tier BACK toward the
@@ -58,6 +70,18 @@ ARMS = {
     "iren_dork_ng": {**FULL, "MTG_HINATA_IREN_EARLY": True, "MTG_HINATA_DORK_TIE": True,
                      "MTG_BP_SITE3": True, "MTG_BP_SITE3_DEFER": True,
                      "MTG_BP_NO_GREEDY_CONT": True},
+    # CONDEMNATION UNDER THE USER'S ORDER -- the surface that the generic tiering never had. The
+    # standing goal is to SEARCH the dig class rather than defer it (USER: "we absolutely cannot be
+    # re-evaluating everything at every breakpoint"), so these price the eager class and the two
+    # candidate ways of paying for it.
+    "f_cond":       {**FULL, "MTG_BP_CLASSIFY": True},                    # no dig class: expect inert
+    "f_s3":         {**FULL, "MTG_BP_SITE3": True},                       # the eager class, unpaid
+    "f_s3_cond":    {**FULL, "MTG_BP_SITE3": True, "MTG_BP_CLASSIFY": True},
+    "f_s3_ng":      {**FULL, "MTG_BP_SITE3": True, "MTG_BP_NO_GREEDY_CONT": True},
+    # Claim under test: the canonical continuation already obeys the order, so condemnation removes
+    # nothing further. Byte-identical to f_s3_ng at n=40; this is the scaled confirmation.
+    "f_s3_ng_cond": {**FULL, "MTG_BP_SITE3": True, "MTG_BP_NO_GREEDY_CONT": True,
+                     "MTG_BP_CLASSIFY": True},
 }
 
 # Disjoint blocks, spaced far wider than games-per-job.
