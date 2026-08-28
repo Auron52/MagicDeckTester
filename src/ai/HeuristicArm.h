@@ -91,6 +91,7 @@ enum Slot : int
     MW_GR_LADDER_POS,         // MTG_MW_GR_LADDER_POSITIVE  Gold Rush walks earlier only when positive
     BP_CONDEMN_LAND,          // MTG_BP_CONDEMN_LAND       the LAND DROP is a slot: passing it condemns held lands
     ROLLOUT_LAND_RANKER,      // MTG_ROLLOUT_LAND_RANKER   rollout drop uses the EXECUTOR's ranker
+    BP_CONDEMN_SEARCHED_ONLY, // MTG_BP_CONDEMN_SEARCHED_ONLY  condemn only in the DECISION SPACE
     BP_SITE3,                 // MTG_BP_SITE3              make the PLAIN-CANTRIP continuation searchable
     BP_SITE3_DEFER,           // MTG_BP_SITE3_DEFER        ...and keep it OUT OF WAVE 0 (cost only)
     COUNT
@@ -161,6 +162,7 @@ inline const char* Name(int slot)
         "MTG_MW_GR_LADDER_POSITIVE",
         "MTG_BP_CONDEMN_LAND",
         "MTG_ROLLOUT_LAND_RANKER",
+        "MTG_BP_CONDEMN_SEARCHED_ONLY",
         "MTG_BP_SITE3",
         "MTG_BP_SITE3_DEFER",
     };

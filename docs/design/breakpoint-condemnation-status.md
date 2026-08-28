@@ -806,3 +806,64 @@ of the order sits BEFORE the sites that fire.
   `cast-order-rankings.md`. If condemnation is ever turned on for a deck whose order is less
   carefully reviewed than Kitty's, expect the same class of loss — and note that the GENERIC order
   ranks all non-creatures at 20, so ties are the common case, not the exotic one.
+
+## 2026-08-28: THE BREAKPOINT FILTER NEVER GOT THE DECISION-SPACE GATE
+
+USER, on being told condemnation was worth only 0.04% of Hinata's eager-site-3 cost: *"No matter
+what the result of condemnation on Hinata it should reduce the overall work significantly. If it's
+not doing that, we already have a bug."* That was right, and the bug is a missing gate.
+
+### The measurement that could not previously be taken
+
+`g_condemn_drops_total` / `g_condemn_drops_greedy` belong to the **main-phase** filter
+(`MainPhaseFilterActive`), so a breakpoint-condemnation run reported `condemn_drops=0` and the
+question "is this pruning the search, or just deleting the playout's line?" could not be asked of the
+breakpoint filter at all. Adding the counters (`MTG_ROLLOUT_STATS` -> `[rollout-stats] bp_condemn_*`)
+answers it immediately -- Hinata, full order + site 3, 40 games:
+
+    bp_condemn_seen=978735 drops=1202 drop_rate=0.0012 (greedy=1080 searched=122 greedy_frac=0.8985)
+
+**90% of drops land in the GREEDY collector**, i.e. the rollout leaf.
+
+### Why that is backwards, in the words of the filter that already knows
+
+The main-phase filter has carried `MTG_CONDEMN_SEARCHED_ONLY` since 2026-08-21 and ships it DEFAULT
+ON, with its own comment calling the `=0` hatch *"the BROKEN arm, not a neutral one"*. Its rule:
+
+> condemn only in the DECISION SPACE. Two readers qualify -- a SEARCHED collect
+> (`g_search_candidate_enum`): a drop deletes a branch the ranker would have expanded, which is real
+> pruning; and the EXECUTOR (`g_condemn_root_turn < 0`): committed play. The rollout LEAF is
+> neither: it is not deciding, it is ESTIMATING. Restricting an estimator cannot improve the
+> decision -- it only makes the value pessimistic.
+
+Its measured cost when that gate was off: 96.6% of drops in the greedy pass, buying turn_steps +4.0%
+and rollout calls +4.4% for a 0.2% candidate reduction. The breakpoint filter has the same disease at
+89.9%, which is why its saving is ~0 and why it can be a quality loss at the same time.
+
+`MTG_BP_CONDEMN_SEARCHED_ONLY` (default OFF, heurarm-poolable) applies the identical two-reader rule.
+
+### Corollary: this reframes "condemnation is nearly inert on Hinata"
+
+The section above attributes the inertness entirely to rank structure (sites at rank 7, near the
+front of the order). That remains true of the *surface*, but it is not the whole story: of the drops
+the rule DID find, ~90% were spent where they could not prune anything. Rank structure caps how many
+drops exist; the missing gate wasted most of the ones that did.
+
+## 2026-08-28: `MTG_BP_SITE3_DEFER` IS INERT, AND NOT BECAUSE OF THE DIG BYPASS
+
+Digest proof (ga2, 2,500 games x 2 disjoint blocks): `s3` and `s3_eager` are identical,
+`43e12252f5347b5c` on train. The lever does nothing, so the recorded "open site 3 DEFERRED, not
+eager" recipe is void -- site 3 costs +0.0228 hold / +0.0268 train at 1.51x work units with no
+working mitigation.
+
+**Cause: two different masks.** Site 3's cost is `class_on` in `bp_searched_plan`, which reads the
+FULL `BpSiteMask()` and gates the expensive `EnumerateBreakpointPlans`. `MTG_BP_SITE3_DEFER` clears
+bit 3 from `BpWave0SiteMask()`, which selects only WHICH BASE PLANS GET VARIANTS APPENDED in wave 0.
+The lever never touched the mechanism that costs. A real deferral has to make the class eligible only
+in the deferred wave phase -- a design change, not a flag.
+
+**A hypothesis built and reverted:** that the `dig_bp` bypass in `AppendBreakpointVariants`
+(`if (!dig_bp && (opens & sites) == 0) continue;`) overrode the wave-0 mask. It cannot:
+`BpDigFanoutPending` returns false unless bit 4 is already in `sites`, so rewriting it as
+`opens |= 1<<4` is a PROVABLE no-op -- confirmed byte-identical, then reverted rather than left in
+the tree as dormant code. A comment at the site records this so it is not re-derived.

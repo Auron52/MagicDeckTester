@@ -97,6 +97,22 @@ static std::atomic<long long> g_condemn_drops_total{0};
 // docs/design/condemnation-decision-space.md. The discriminator is g_search_candidate_enum,
 // which is already false for exactly that collect.
 static std::atomic<long long> g_condemn_drops_greedy{0};
+// ...and the BREAKPOINT filter's own copy of exactly that split, which it never had. The counters
+// above belong to the MAIN-PHASE filter (MainPhaseFilterActive), so a breakpoint-condemnation run
+// reported zeroes and the question "is this pruning the search or just deleting the playout's line?"
+// could not be asked of it at all.
+//
+// USER, 2026-08-28: "No matter what the result of condemnation on Hinata it should reduce the
+// overall work significantly. If it's not doing that, we already have a bug." Measured Hinata
+// repayment was 0.04% of work units, which is not consistent with a rule that deletes 113 actions
+// per 8 games -- so the split below is the diagnosis, on the SAME discriminator the main-phase
+// filter uses: a drop under g_search_candidate_enum removes a plan-space BRANCH (a real saving);
+// a drop with it false removes the only line a greedy playout was going to take (no pruning at
+// all, and a quality loss). bp_condemn_seen counts every candidate the filter is CONSULTED about,
+// so "rarely applicable" and "applicable but off the expensive path" are distinguishable.
+static std::atomic<long long> g_bp_condemn_seen{0};
+static std::atomic<long long> g_bp_condemn_drops{0};
+static std::atomic<long long> g_bp_condemn_drops_greedy{0};
 // Per-plan state REUSE (DEFAULT ON; MTG_NO_STATE_REUSE=1 restores per-plan construction).
 // Every plan loop applies its plan to a COPY of the SAME parent state. Copy-CONSTRUCTING that copy
 // inside the loop frees the previous plan's buffers and mallocs new ones of nearly identical size,
@@ -153,6 +169,13 @@ namespace
                       << " condemn_drops=" << dt
                       << " (greedy=" << dg << " searched=" << (dt - dg)
                       << " greedy_frac=" << (dt ? static_cast<double>(dg) / dt : 0.0) << ")\n";
+            const long long bs = g_bp_condemn_seen.load();
+            const long long bd = g_bp_condemn_drops.load();
+            const long long bg = g_bp_condemn_drops_greedy.load();
+            std::cerr << "[rollout-stats] bp_condemn_seen=" << bs << " drops=" << bd
+                      << " drop_rate=" << (bs ? static_cast<double>(bd) / bs : 0.0)
+                      << " (greedy=" << bg << " searched=" << (bd - bg)
+                      << " greedy_frac=" << (bd ? static_cast<double>(bg) / bd : 0.0) << ")\n";
         }
     };
     RolloutStatsReporter g_rollout_stats_reporter;
@@ -717,6 +740,33 @@ static bool BpCondemnTailExemptEnabled()
 {
     static const bool on = EnvOn("MTG_BP_CONDEMN_TAIL_EXEMPT");   // DEFAULT OFF (USER: fix the ORDER)
     return heurarm::Flag(heurarm::BP_CONDEMN_TAIL, on);
+}
+
+// DECISION-SPACE GATE for the BREAKPOINT filter (MTG_BP_CONDEMN_SEARCHED_ONLY, default OFF).
+//
+// The main-phase filter has carried this rule since 2026-08-21 and ships it DEFAULT ON, with its
+// own comment calling the `=0` hatch "the BROKEN arm, not a neutral one". The breakpoint filter was
+// never given the same gate, and the new bp_condemn telemetry says it has exactly the same disease:
+//
+//     bp_condemn_seen=978735 drops=1202 (greedy=1080 searched=122 greedy_frac=0.8985)
+//
+// 90% of drops land in the GREEDY collector -- the rollout leaf. Per the rule the main-phase filter
+// states: a drop under g_search_candidate_enum deletes a branch the ranker would have expanded,
+// which is real pruning; a drop in the greedy pass deletes the only line the playout was going to
+// take, which prunes NOTHING and only makes the leaf's estimate pessimistic. "Restricting an
+// estimator cannot improve the decision." That is why condemnation repaid 0.04% of eager site 3's
+// 1.51x work units on Hinata instead of the large saving the mechanism implies.
+//
+// USER, 2026-08-28: "No matter what the result of condemnation on Hinata it should reduce the
+// overall work significantly. If it's not doing that, we already have a bug."
+//
+// Same two qualifying readers as the main-phase gate, and for the same reasons: a SEARCHED collect
+// (real pruning) and the EXECUTOR (g_condemn_root_turn < 0 -- committed play, the decision the
+// condemnation list exists to bind). The rollout leaf is neither.
+static bool BpCondemnSearchedOnlyEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_SEARCHED_ONLY");
+    return heurarm::Flag(heurarm::BP_CONDEMN_SEARCHED_ONLY, on);
 }
 
 // The breakpoint's own site definition, bound whenever the classifier is live. Needed because
@@ -7026,7 +7076,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // outlets, spectacle/alt costs, free casts -- see OptimisticTurnMana's bail-out list) makes
         // it say "not payable", which KEEPS the action, and a cast that needs the new land is not
         // payable here by construction. See docs/design/breakpoint-phase-classification.md.
+        if (s_rollout_stats && BpClassifyActive(state) && g_bp_hand_before != nullptr)
+        { g_bp_condemn_seen.fetch_add(1, std::memory_order_relaxed); }
+        // Decision space: a SEARCHED collect, or the executor (outside any solve). Not the leaf.
+        const bool bp_decision_space = g_search_candidate_enum || g_condemn_root_turn < 0;
         if (BpClassifyActive(state) && g_bp_hand_before != nullptr
+            && (!BpCondemnSearchedOnlyEnabled() || bp_decision_space)
             && !BpPlanCasts(ap.hand[i].m_name_hash)
             && !(BpCondemnTailExemptEnabled() && !BpPlanHasTail(ap))
             && !BpSlotIsAfterSite(state, ap.hand[i]))
@@ -7079,6 +7134,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                      // than argued. 0 for any site that mints no Treasure.
                                      g_bp_site_def ? TreasureSpellNetMana(
                                          state, state.active_player_index, *g_bp_site_def) : 0);
+                    }
+                    if (s_rollout_stats)
+                    {
+                        g_bp_condemn_drops.fetch_add(1, std::memory_order_relaxed);
+                        if (!g_search_candidate_enum)
+                        { g_bp_condemn_drops_greedy.fetch_add(1, std::memory_order_relaxed); }
                     }
                     continue;
                 }
@@ -20908,6 +20969,13 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
     int fanned = 0;
     for (TurnSolver::Plan& p : plans)
     {
+        // NOTE: the dig bypass below does NOT override the site mask, and cannot. BpDigFanoutPending
+        // returns false unless bit 4 is already in `sites`, so every plan it lets through would pass
+        // the mask test on bit 4 anyway. Rewriting it as `opens |= 1<<4` is a PROVABLE no-op -- built
+        // and reverted 2026-08-28. If a wave-0 class deferral (MTG_BP_SITE3_DEFER,
+        // MTG_EQUIP_DRAW_BP_DEFER) measures inert, this is not the reason: look at `class_on` in
+        // bp_searched_plan, which gates the EnumerateBreakpointPlans cost off the FULL BpSiteMask
+        // and is not reached by this mask at all.
         if (!dig_bp && (PlanOpensBreakpoint(state, p) & sites) == 0) { continue; }
         if (s_max_base > 0 && fanned++ >= s_max_base) { break; }
         p.bp_wave0 = true;   // covered by wave 0; the wave phase starts this plan at rank W, not 0
