@@ -81,6 +81,7 @@ enum Slot : int
     HINATA_FIND_LATE,         // MTG_HINATA_FIND_LATE      LOO: tutor/cantrips/dig back to 20 (after her)
     HINATA_PAY_TIE,           // MTG_HINATA_PAY_TIE        LOO: the three payoffs tied at 20 again
     HINATA_GAMBLE_LATE,       // MTG_HINATA_GAMBLE_LATE    tutor AFTER the cantrips (cantrip, then fetch)
+    HINATA_MANA_FLOAT_RANK,   // MTG_HINATA_MANA_FLOAT_RANK  cantrip rank counts MANA + floating
     HINATA_DORK_TIE,          // MTG_HINATA_DORK_TIE       LOO: dork + engine tied at 10, as generic has them
     BP_CONDEMN_MANA_SITE,     // MTG_BP_CONDEMN_MANA_SITE_EXEMPT  a MANA-ADDING site condemns nothing
     BP_CONDEMN_TREASURE_POS,  // MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE  ...only when it NET-added mana
@@ -149,6 +150,7 @@ inline const char* Name(int slot)
         "MTG_HINATA_FIND_LATE",
         "MTG_HINATA_PAY_TIE",
         "MTG_HINATA_GAMBLE_LATE",
+        "MTG_HINATA_MANA_FLOAT_RANK",
         "MTG_HINATA_DORK_TIE",
         "MTG_BP_CONDEMN_MANA_SITE_EXEMPT",
         "MTG_BP_CONDEMN_TREASURE_SITE_POSITIVE",

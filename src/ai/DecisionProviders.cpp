@@ -5466,6 +5466,26 @@ int HinataProvider::SituationalCardRank(const GameState& s, const Card& card) co
     };
 
     // Mana sources in play and this turn's land-drop need.
+    //
+    // MTG_HINATA_MANA_FLOAT_RANK (default OFF) -- ADD FLOATING MANA, and change nothing else.
+    // USER 2026-08-28: "we would need to change the heuristic to essentially check the total mana
+    // including floating" ... "if there is no floating mana we might be able to leave it as-is."
+    //
+    // The problem this fixes is created by the REVISED order. Reality Spasm moved to rank 7, ahead
+    // of the cantrips at 10, so by the time this ranking runs its refloat is sitting in
+    // state.floating_mana rather than in an untapped permanent -- and a permanent count reads that
+    // position as no richer than before the ritual, which is exactly backwards, since funding what
+    // follows is why the ritual was moved ahead of them.
+    //
+    // Deliberately NOT the larger rewrite. Counting produces_amount (Sol Ring as 2) or projecting
+    // the untap a Spasm STILL IN HAND would supply were both drafted and dropped, because both
+    // change the no-float case -- and the thresholds this feeds (source_target 7/4, can_cast_hinata
+    // >= 4) were calibrated as permanent counts and validated on held-out seeds. The USER's own
+    // simplification keeps the change to the case that is actually wrong: with no floating mana this
+    // is a literal no-op, so every early turn -- where the projection would have been speculative
+    // anyway, since lands and accelerators are still to be deployed -- behaves exactly as before.
+    static const bool s_mana_float_rank = EnvOn("MTG_HINATA_MANA_FLOAT_RANK");
+    const bool mana_units = heurarm::Flag(heurarm::HINATA_MANA_FLOAT_RANK, s_mana_float_rank);
     int sources = 0;
     for (const Permanent& p : s.battlefield)
     {
@@ -5473,6 +5493,7 @@ int HinataProvider::SituationalCardRank(const GameState& s, const Card& card) co
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && (p.card.IsLand() || d->params.mana_rock)) { ++sources; }
     }
+    if (mana_units) { sources += s.floating_mana.Total(); }
     // The combo wants a lot of mana once Hinata is online (more sources = more Reality Spasm
     // refloat); before her we just need enough to cast her ({1}{U}{R}{W} = four sources).
     const int  source_target  = have_hinata ? 7 : 4;
