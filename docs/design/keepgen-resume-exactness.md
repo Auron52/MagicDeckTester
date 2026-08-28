@@ -68,7 +68,7 @@ Per hand size, both resumed runs:
    >
    > Consequence for anyone using this harness: **`cmp` is not a usable gate above burn's scale.**
    > Use the same-count-different-value assertion (point 2 below) — that is the property that is
-   > actually claimed and it holds everywhere. `logs/resume_proof/compare_raw.py` implements it.
+   > actually claimed and it holds everywhere. `test/keepgen_compare_raw.py` implements it.
    > See `keepgen-producer-barrier-and-durability.md` §10.
 2. **No completed rollout is ever lost or corrupted by a kill.** Across 75,864 cell-side
    comparisons in the two experiments, the number of cell-sides that both runs sampled to the same

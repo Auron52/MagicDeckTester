@@ -500,7 +500,7 @@ has always fully folded by the time the gate fires, so the input is stable by lu
 The property that actually has to hold is the one that doc calls **same-count-different-value == 0**:
 a rollout is a pure function of `(seed_base, cell, pd, r)`, so a cell's `sum` is fully determined by
 its final `count`. A cell that ends at a different count is schedule drift; a cell that ends at the
-SAME count with a different sum is a real defect. `logs/resume_proof/compare_raw.py` asserts it.
+SAME count with a different sum is a real defect. `test/keepgen_compare_raw.py` asserts it.
 
 ### Result (slivers_vial, `MTG_EQUIV_DEPTH=1 MTG_EQUIV_BUDGET=1`, R=16, adaptive bottoming, 24 cores)
 
