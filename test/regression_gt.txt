@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 9fbd47a2  date 2026-08-28
+# Regression ground truth -- commit 1692cd88  date 2026-08-28
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -108,11 +108,11 @@ fivecolour_regression_d3_s2002=4.8700/7bc29bdf0de4e17f
 fivecolour_regression_d3_s3003=4.9500/3a9202c780ee2d3f
 fivecolour_regression_d5_s2002=4.8200/94157bf77df11e72
 fivecolour_regression_d5_s3003=4.8900/97ce5224e181f1f1
-stompy_regression_d0_s2002=5.7920/8acf36cc9453cfac
-stompy_regression_d3_s2002=4.7567/c065949daae08e58
-stompy_regression_d3_s3003=4.8433/00ee80000cab0eea
-stompy_regression_d5_s2002=4.7640/99a00b04e6ff0c98
-stompy_regression_d5_s3003=4.8120/0b2beee97d4044dd
+stompy_regression_d0_s2002=5.3940/1652a5da86acc514
+stompy_regression_d3_s2002=4.5300/ce46dcff525d59e1
+stompy_regression_d3_s3003=4.6067/fa7420b23649150d
+stompy_regression_d5_s2002=4.5360/616feeab0c5de220
+stompy_regression_d5_s3003=4.5960/54024371bb7c0348
 minotaur_regression_d0_s2002=5.4890/08d0824cf1db292e
 minotaur_regression_d3_s2002=4.9967/9230ee66aa69e592
 minotaur_regression_d3_s3003=4.9500/f416ae4ec579b9ed
