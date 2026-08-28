@@ -1,12 +1,40 @@
 # Keepgen: the producer-side barrier and the size-7 durability gap
 
-Status: **DIAGNOSED, NOT FIXED** (2026-08-26). Found live on the FiveColour generation.
-Both defects are in `src/analyzer/ExhaustiveKeep.cpp`, on the continuous path — which is the
-only path (see `continuous-only-keepgen.md`).
+Status (2026-08-28):
+* **Defect 1 (producer-side barrier) — DIAGNOSED, OPEN at HEAD.** Verified still present:
+  `sub_refine_step()` is called once per outer iteration above an unbounded speculation pass
+  (`ExhaustiveKeep.cpp:3413`, `:3420-3427` at `9fbd47a2`).
+* **Defect 2 (size-7 durability gap) — FIXED UPSTREAM 2026-08-23 (`a47f75dd`)**, independently, by
+  the work written up in `keepgen-resume-exactness.md`. HEAD has a third journal case `jprog`
+  (`:3127`, `:3141`) carrying `sv` — the per-rollout speculative values for `[r0, n)`. §4 below is
+  retained because it is the analysis of *why* the gap existed and what it costs, and because it is
+  the state of any run frozen before 2026-08-23.
+
+Found live on the FiveColour generation (frozen at `2f7822a2`, 2026-08-21 — **two days before the
+Defect 2 fix**, which is exactly why that run's journal is silent). Both defects are in
+`src/analyzer/ExhaustiveKeep.cpp`, on the continuous path — which is the only path (see
+`continuous-only-keepgen.md`).
 
 This document is self-contained: the symptom, the evidence that identifies it (cheaply), the two
 defects, why the existing validation could not have caught either, the fixes, and the tests that
 would catch them next time.
+
+## Related documents — read this first if you are diagnosing a stalled gen
+
+`keepgen-cost-concentration.md` (Mirrorwing) describes a run with **the same surface symptom** —
+`phase=floor` and `frozen=0` forever, cores 100% busy, throughput collapsing ~22x — attributed to
+*cost concentration* (a deck whose search cost sits in a tiny tail of go-off hands). This document
+describes the same symptom caused by the *producer barrier*. **They are different defects and can
+coexist**, so do not assume either diagnosis without the discriminator:
+
+| observation | cost concentration | producer barrier |
+|---|---|---|
+| journal mtime | still advancing | **frozen** |
+| SLOW-ROLLOUT `size<7` entries | still appearing | **zero** |
+| per-rollout core-seconds | greatly elevated | ~normal |
+
+`keepgen-resume-exactness.md` is the authoritative reference for what kill/resume does and does not
+guarantee, and it supersedes §4's "not fixed" framing as of `a47f75dd`.
 
 ---
 
@@ -131,7 +159,14 @@ lever that could have rescued a live run without a code change no longer exists.
 
 ---
 
-## 4. Defect 2 — the size-7 durability gap
+## 4. Defect 2 — the size-7 durability gap (FIXED UPSTREAM 2026-08-23, `a47f75dd`)
+
+> **Fixed at HEAD.** The fold now has a third case, `jprog` (`:3127`, `:3141`), which appends a
+> mid-cell progress record carrying `sv` — the per-rollout speculative values over `[r0, n)` — so a
+> resumed `compute_refs` can replay the reconcile. See `keepgen-resume-exactness.md`, which found
+> and fixed this (plus two replay defects) independently. The analysis below is retained because it
+> explains *why* the gap existed, what it costs, and because it is the live state of **any run
+> frozen before 2026-08-23** — including the FiveColour run this document was written from.
 
 ### Mechanism
 
@@ -208,10 +243,9 @@ work*. Those agree only when the live-cell population is small.
    deterministic, so reordering feeds cannot change any value.
 2. **Make the filler preemptible by what it fills for.** Call `sub_refine_step()` from *inside* the
    speculation loop, not only above it.
-3. **Journal size-7 on progress, not only on events.** Append a record whenever a cell's `cnt`
-   advances past a checkpoint (at minimum, at the speculation cap). This is making the `run_one`
-   path do what `run_batch` (`:1918`) already does, and it is what makes "resumable at any point"
-   literally true.
+3. ~~**Journal size-7 on progress, not only on events.**~~ **DONE upstream** (`a47f75dd`, the `jprog`
+   case). Left here for the record: the fix is to make the `run_one` path do what `run_batch`
+   (`:1918`) already did, which is what makes "resumable at any point" literally true.
 4. **Instrument progress, not busyness.** The monitor (`:1550-1552`) prints `fed`, `frozen`, `phase`
    — all of which read healthy here. Add:
    * `sub_waves=N pending=N remaining=N converged=0|1`
@@ -225,8 +259,12 @@ work*. Those agree only when the live-cell population is small.
    exceeds the tail it covers — the scale rule in §3, checked at startup where all the inputs are
    already known.
 
-Fixes 1–2 address Defect 1; fix 3 addresses Defect 2; fix 4 makes both self-reporting. Fix 4 alone
-would have surfaced this within minutes instead of a day later via a stale mtime.
+Fixes 1–2 address Defect 1 and are **still outstanding**; fix 3 addressed Defect 2 and is done; fix
+4 makes both self-reporting and is the highest-value remaining item — it alone would have surfaced
+this within minutes instead of a day later via a stale mtime. Note that after fix 3 the journal now
+advances during speculation, so **"journal mtime frozen" is no longer the tell for Defect 1 on a
+post-`a47f75dd` binary** — use the SLOW-ROLLOUT `size<7` histogram (§2) and the `sub_*` counters that
+fix 4 would expose.
 
 ---
 
@@ -244,6 +282,13 @@ resume test covers only the third.
 3. **Run both on Slivers.** Slivers can reproduce both defects — the whole run is 452 s. It never
    failed because the assertions measured the wrong properties, not because the deck is too small.
    A deliberate kill inside the speculation window covers regime 2.
+
+**Build on the existing apparatus, do not start fresh.** `keepgen-resume-exactness.md` already
+established a control-vs-SIGKILLed-twin harness (`logs/resume_proof/`, regenerable in ~5 min) which
+proved data recovery exact and caught three replay defects. It asserts `cmp` on the final raw. The
+two assertions above — **rollouts re-executed after resume** and **journal advances while work is
+fed** — are additions to that harness, not a replacement for it. Its residual known gap (a
+non-deterministic `recompute_vg` trigger, deliberately left) is unrelated to either defect here.
 
 ---
 
