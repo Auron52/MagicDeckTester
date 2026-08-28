@@ -120,6 +120,32 @@ cards are simply forgotten rather than tracked as known-at-the-bottom. That keep
 single prefix length instead of a full per-card knowledge map -- a materially smaller thing to build,
 and the rare cases it gives up (decking, a bottom-of-library tutor) are not live in these decks.
 
+### A shuffle is a PLAY, not just a loss of information
+
+USER 2026-08-28: *"this is also a legitimate non-clairvoyant usage of shuffle effects like
+fetchlands. If you know the cards on top aren't useful, shuffling is a good bet. Hence, the
+well-known Brainstorm + Fetch trick to throw away your least useful 2 cards."*
+
+This is the second half of the same missing model, and it cuts the opposite way from everything
+above. A known prefix is not only something to PRESERVE -- knowing the top is BAD is what makes
+shuffling it away worth a card. Today NC cannot see either direction:
+
+* it cannot value KEEPING a good top, because the reshuffle deletes the prefix (above); and
+* it cannot value SHUFFLING a bad top, because it has already assumed the library is random -- a
+  shuffle effect changes nothing in a model where everything is permanently shuffled.
+
+So Brainstorm-plus-fetch is invisible to NC in both directions, and so is the far more ordinary
+decision of WHEN to crack a fetchland, which for a real player is largely a question about the top
+of their library. The prefix is what makes both evaluable at all.
+
+Worth noting the engine already has the decision structure and only lacks the state: Ponder's
+keep-vs-shuffle is exactly this choice in miniature, and it is already SEARCHED rather than guessed
+(`Plan::ponder_keep` emits both branches as mutually exclusive variants). What it cannot do is carry
+the resulting knowledge to the next decision. Neither Hinata nor its manabase has a fetchland
+(Cascade Bluffs, Forbidden Orchard, Island, Izzet Boilerworks, Mountain, Mystic Monastery,
+Reflecting Pool), so the Brainstorm+fetch pattern is not live on THIS deck -- but Anti-Lifegain's
+Windswept Heath is exactly the case `nc-land-selection-color.md` is already stuck on.
+
 ### What the model needs to be
 
 A **persistent known-top count**, not the turn-scoped field an earlier draft of this note proposed:
