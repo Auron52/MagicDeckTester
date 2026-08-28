@@ -68,7 +68,7 @@ DECKS = {
 }
 
 NG   = {"MTG_BP_NO_GREEDY_CONT": True}
-S3   = {"MTG_BP_SITE3": True}
+S3   = {"MTG_BP_SITE3": True, "MTG_BP_SITE3_DEFER": True}   # reachable, DEFERRED out of wave 0
 COND = {"MTG_BP_CLASSIFY": True, "MTG_BP_CONDEMN_ORDER_AWARE": True}
 
 # Every deck gets these four: the baseline, each axis alone, and the full greedy deletion.
@@ -77,6 +77,11 @@ GLOBAL_ARMS = {
     "ng":   {**NG},
     "s3":   {**S3},
     "nogreedy": {**S3, **NG},          # the recipe that reaches zero greedy decisions
+    # The EAGER site-3 form, kept as the record: measured +0.0228 (t=3.12) and 1.51x work units on
+    # hinata, byte-identical everywhere else. That regression is what MTG_BP_SITE3_DEFER fixes, and
+    # keeping the arm is how "the deferral is what helped" stays a measurement rather than a claim.
+    "s3_eager":       {"MTG_BP_SITE3": True},
+    "nogreedy_eager": {"MTG_BP_SITE3": True, **NG},
 }
 
 # ...and the per-deck reviewed orders / condemnation, alone and on top of the deletion.

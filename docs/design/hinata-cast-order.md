@@ -206,6 +206,44 @@ deck (30-52 of 3,000 games differ), because Hinata's breakpoint sites are its CA
 near the front of the order -- so almost nothing is ever "already considered". That is structural,
 not a defect in the order.
 
+#### PROVEN INERT, not merely small (2026-08-28), and why -- in BOTH orders
+
+Asked whether condemnation could pay for the plain-cantrip class's fan-out instead of deferring it
+(USER: *"Can we not address the same problem using condemnation?"*). It cannot, and the answer is a
+digest rather than an estimate. 400 games, paired:
+
+| arm | avg | digest |
+|---|---|---|
+| base | 5.7475 | `426a9d78...` |
+| + condemnation | 5.7475 | `426a9d78...` **identical** |
+| + site 3 eager | 5.7650 | `85d70bab...` |
+| + site 3 eager + condemnation | 5.7650 | `85d70bab...` **identical** |
+
+Byte-identical WITH the class opened as well as without, so this is not the old "it never had a
+surface to act on" objection. The mechanism, and it bites in both orders for different reasons --
+`BpSlotIsAfterSite` exempts any candidate whose rank is `>=` the site's (the peer rule), so only a
+STRICTLY earlier card is condemnable:
+
+* **generic tiering** -- ELEVEN cards sit tied at rank 20 (both cantrips, Gamble, Expressive
+  Iteration, all three payoffs, the four never-cast spells). At a cantrip site nothing is strictly
+  earlier, so the condemnable set is empty by construction.
+* **the full order** -- the only cards ahead of the cantrips (448) are Sol Ring (320) and Gamble
+  (384), and both are exempt: the MANA-SOURCE exemption (bug 4) and the TUTOR exemption (bug 5).
+
+So "put the deck on a total order and condemnation starts working" is false here specifically: the
+total order's front is made entirely of cards the exemptions protect. Any future attempt to make
+condemnation bite on Hinata has to change one of those two facts, not the order's shape.
+
+#### The Irencrag pin is a RULES point, not a tuning one
+
+Verified against `cards.json` rather than recalled: **Irencrag Feat {1}{R}{R}{R} Sorcery -- "Add
+seven {R}. You can cast only one more spell this turn."** (`ritual_floating_mana: 7`,
+`max_casts_after: 1`). "One more spell" is ANY one spell, so the ruling *"it can only be cast before
+Crackle"* forecloses Irencrag -> Soulfire Eruption ({6}{R}{R}{R}) and Irencrag -> Magma Opus
+({6}{U}{R}). With seven red floating, Crackle reaches only X=1 (5 damage), while Soulfire is
+castable off the seven plus two lands -- so the pin deletes the strictly better follow-up. That is
+why reverting this ONE position recovers about half the regression.
+
 ### CORRECTION -- Reality Spasm is NOT a dead card
 
 §2 above repeats the claim in `cards.json` that Reality Spasm is never cast in the current model.

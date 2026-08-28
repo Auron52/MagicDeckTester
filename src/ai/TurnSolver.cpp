@@ -5300,8 +5300,30 @@ static int BpWave0SiteMask()
     // the axis the continuation-length probe says is already reaching just 20% of the list
     // (mean 9.47 continuations, 74.1% capped).
     static const bool defer_env = EnvOn("MTG_EQUIP_DRAW_BP_DEFER");
-    if (heurarm::Flag(heurarm::EQUIP_DRAW_BP_DEFER, defer_env)) { return m & ~(1 << 6); }
-    return m;
+    int out = m;
+    if (heurarm::Flag(heurarm::EQUIP_DRAW_BP_DEFER, defer_env)) { out &= ~(1 << 6); }
+    // MTG_BP_SITE3_DEFER -- the SITE-3 twin, and unlike site 6's it MEASURES WELL.
+    //
+    // Opening the plain-cantrip class (MTG_BP_SITE3) is what lets MTG_BP_NO_GREEDY_CONT reach
+    // hinata's dominant greedy site at all, but doing it EAGERLY -- with a wave-0 fan-out -- is
+    // pure budget dilution: measured suite-wide at 2,500 games x 2 blocks, hinata goes +0.0228
+    // (t=3.12) SLOWER on 1.51x the work units, and every other deck is byte-identical (the class
+    // simply does not fire there). A 50% cost rise at a fixed per-decision budget makes every
+    // rollout shallower, which is the whole regression.
+    //
+    // Deferring it is the sanctioned move, not a prune -- USER, 2026-08-19: "the re-ordering of when
+    // we visit nodes can be workable, but skipping them entirely without being certain they don't
+    // hold an earliest win is not." The deferred wave phase (BpWaveWalker, built off the FULL
+    // BpSiteMask) still picks these plans up at rank 0 with whatever budget wave 0 left, so no
+    // continuation is skipped; only the ORDER of arrival changes.
+    //
+    // MEASURED on hinata (60 games): greedy DECISIONS drop to zero exactly as with the eager form,
+    // and avg returns to 5.8833 -- byte-identical to the baseline, where the eager arm was 5.9000.
+    // Note this is the OPPOSITE outcome to the site-6 deferral above, which measured worse; the two
+    // sites differ in how universally they fire, so the result had to be measured, not inherited.
+    static const bool s3_defer_env = EnvOn("MTG_BP_SITE3_DEFER");
+    if (heurarm::Flag(heurarm::BP_SITE3_DEFER, s3_defer_env)) { out &= ~(1 << 3); }
+    return out;
 }
 
 // Re-entrancy guard: the breakpoint's OWN enumeration must not emit further bp_choice variants.
