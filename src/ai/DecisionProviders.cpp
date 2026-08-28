@@ -4907,7 +4907,16 @@ static int HinataFullOrderRank(const CardDefinition& def)
     // i.e. AFTER her -- the generic tiering's position -- to price the draws-before-deploys move.
     const int find_base = HinataFindLate() ? 20 : 0;
     // 5-9: mana, then FIND before deploy (the draws-before-deploys rule condemnation needs).
-    if (p.mana_rock)              { return 5; }   // Sol Ring -- untapped {C}{C} the same turn
+    // 4-5: the mana rocks, SPLIT rather than tied (USER 2026-08-28: "Sol Ring should rank before
+    // Izzet Signet, not in the same group"). The distinction is already in the card data and is not
+    // a name check: Sol Ring is {1} with produces_amount 2 and NO activation cost, so it nets +2 the
+    // turn it lands; Izzet Signet is {2} with ramp_filter, which needs a {1} feeder and nets +1.
+    // Strictly worse on both halves -- costs more, produces less -- so it is strictly later.
+    //
+    // The tie mattered for more than tidiness: BpSlotIsAfterSite exempts any candidate whose rank is
+    // >= the site's, so two rocks on ONE rank are mutually un-condemnable. Splitting them is the
+    // order doing the work that an exemption was doing before.
+    if (p.mana_rock)              { return p.ramp_filter ? 5 : 4; }
     if (p.tutor_to_hand)          { return find_base ? find_base
                                                      : (HinataGambleLate() ? 8 : 6); }   // Gamble
     // 7-8: the two top-of-library manipulators. PEERS unless MTG_HINATA_PP_STRICT.
@@ -4915,10 +4924,23 @@ static int HinataFullOrderRank(const CardDefinition& def)
     if (p.cast_scry > 0)          { return find_base ? find_base
                                                      : (HinataPonderPreordainStrict() ? 8 : 7); }
     if (p.expressive_iteration)   { return find_base ? find_base : 9; }   // EI -- use-or-lose exile
-    // 10-11: deploy. The dork first: it is summoning-sick (no mana this turn) but it is one more
-    // creature for her per-target discount to count.
-    if (def.tmpl == CardTemplate::ManaDork) { return 10; }   // Ornithopter of Paradise
-    if (p.hinata_cost_reducer)              { return HinataDorkTie() ? 10 : 11; }   // Hinata herself
+    // 11-12: deploy, ENGINE FIRST then the dork (USER 2026-08-28: "Ornithopter can go after Hinata,
+    // but before Soulfire Eruption"; "It can't get haste, so it only matters as a target for
+    // Soulfire and Crackle"). Ornithopter of Paradise is summoning-sick and this deck has no haste
+    // enabler, so the turn it lands it neither taps for mana nor attacks. Its ONLY same-turn value
+    // is being one more legal target for the two spells that target a variable number of things --
+    // Soulfire Eruption (any number) and Crackle with Power (up to X) -- which is also the only
+    // route by which Hinata's per-target discount is realised. So it is worthless before those two
+    // exist as a plan, and must be on the board before either resolves.
+    //
+    // Why 12 and not 16-19 (the other slot the ruling permits, after the ritual): the ritual tier
+    // exists to "float online before the payoff", and Ornithopter costs {2}. Ranking it after
+    // Reality Spasm invites that {2} to be paid out of ritual float reserved for the payoff. Ahead
+    // of the ritual it is paid from lands. Flagged for review -- the ruling allows either.
+    if (p.hinata_cost_reducer)              { return 11; }   // Hinata herself
+    // MTG_HINATA_DORK_TIE now prices the PRE-RULING position (dork at 10, AHEAD of her) rather than
+    // the generic tiering's 10/10 tie -- the tie arm measured play-inert over 6,000 games.
+    if (def.tmpl == CardTemplate::ManaDork) { return HinataDorkTie() ? 10 : 12; }   // Ornithopter
     // 15: the ritual tier. With her discount cancelling the {X}, Spasm is {U}{U} to untap X.
     if (p.untap_x_mana_sources)             { return 15; }   // Reality Spasm
     // 18 or 22: the cast restrictor. The USER's ruling puts it SECOND LAST ("it can only be cast
@@ -4939,6 +4961,36 @@ static int HinataFullOrderRank(const CardDefinition& def)
     // 30+: never cast against a passive opponent. Positions exist only so the order is TOTAL.
     if (p.goldfish_inert)                   { return 30; }
     return 40;
+}
+
+int HinataProvider::LandDropCastOrderRank() const
+{
+    // 0: ahead of the mana rocks (4/5), so ahead of every breakpoint site this deck has -- the
+    // cantrips at 7/9 and Soulfire Eruption at 20. USER 2026-08-28, verbatim: "Land should be placed
+    // at the start"; "If we find a better land with cantrips we can play that. Otherwise we can play
+    // whatever we have in hand to start."
+    //
+    // The second sentence is the soundness argument, not a caveat to it. The ONE reason to hold the
+    // drop is that a cantrip might find a better land -- and that case is not condemned, because a
+    // land the breakpoint DREW is a new card under the drawn-card exemption and stays enumerable.
+    // What the pin removes is only "decline the drop while holding a land, then play that SAME land
+    // after seeing what the cantrip revealed", which is the clairvoyant re-sequencing the rule
+    // exists to delete.
+    //
+    // BOTH CONTRACT CONDITIONS CHECKED against this deck rather than assumed:
+    //  1. Holding cannot pay: the deck has no landfall, no storage, and no Land's-Edge-style
+    //     sacrifice outlet, so a land played later is worth exactly what it is worth now.
+    //     IZZET BOILERWORKS is a Karoo (etb_bounce_land + enters_tapped) and IS a mechanical reason
+    //     to defer -- but that is handled by the karoo_deferred reservation (g_land_drop_reserved),
+    //     which makes a deferred Karoo read as the drop TAKEN rather than declined. The pin governs
+    //     WHETHER the drop is taken, not where in the apply it lands.
+    //  2. Nothing can force the defer branch: HinataProvider does not override ShouldCastDrawEngine
+    //     (only Generic and TreasureHunt do), so no flood gate removes the land-first plans the way
+    //     Treasure Hunt's does. Verified, because TH is exactly why this condition is written down.
+    //
+    // Inert unless MTG_BP_CONDEMN_LAND is on (default OFF), so this is byte-identical today and is
+    // a declaration to be measured, not a behaviour change.
+    return HinataOrderFullEnabled() ? 0 : -1;
 }
 
 int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const

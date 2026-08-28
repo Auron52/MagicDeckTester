@@ -361,6 +361,10 @@ public:
     // card-parameter tiering, shared with every ritual deck, and the full order preserves it.
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
+    // The LAND DROP as slot 0 (USER 2026-08-28: "Land should be placed at the start"; "If we find a
+    // better land with cantrips we can play that. Otherwise we can play whatever we have in hand to
+    // start."). See DecisionProvider::LandDropCastOrderRank for the two conditions and the check.
+    int  LandDropCastOrderRank() const override;
     // Archetype gates relocated out of the solver (audit B1/B2): the untap-ritual cast variant and
     // Soulfire's own-target branch only earn their keep with Hinata's discount online.
     bool ShouldEmitUntapRitual(const GameState&) const override;
