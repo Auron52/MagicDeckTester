@@ -61,7 +61,17 @@ Two design choices worth the user's attention:
   lord-buffed Minotaur that triggers Sethron; the aura mode costs more but its +2 power lands on a
   creature that can attack *this* turn. Neither dominates, so the search picks.
 
-## PENDING USER APPROVAL — proposed deferrals
+## Deferrals — D1–D11 USER-APPROVED (2026-08-28), D12 FIXED
+
+USER (2026-08-28): *"the rest of the deferrals seem okay as they are only relevant with an
+opponent"* — D1–D11 stand approved as-is. D12 is FIXED the same day: Secluded Courtyard gained
+`colored_creature_ability_ok` (its coloured mana is payment-legal for an activated ability of a
+creature source, per its oracle text), threaded via the `CreatureAbilityPayScope` context the
+`ActivatePump` payment sites install — so Burning-Fist's and Sethron's activations now pay off the
+tribal lands. Cast-only lands (Cavern of Souls / Unclaimed Territory / Sliver Hive) are unchanged,
+pinned by unit test. Measured: Minotaur FASTER in every arm (smoke d0 −0.0100 / d3 −0.0080 /
+d5 −0.0134; regression 5 rows −0.0040..−0.0120, searched slower=0), all other decks byte-identical,
+247-reference sweep 0 play-drift. Original proposal table kept below for the record.
 
 Per the skill, every deferral needs explicit sign-off. The user was asleep, so each is implemented
 as an inert collapse and listed here for review — **not** treated as approved. All belong to the one
@@ -211,7 +221,8 @@ victim as `sacrifice`, and both non-cleanup discards (Burning-Fist's cost, Neheb
 
 ## Open items for the user
 
-1. **Approve or amend deferrals D1–D11**, and schedule D12 (the Secluded Courtyard ability-mana gap).
+1. ~~Approve or amend deferrals D1–D11, and schedule D12~~ — DONE 2026-08-28: D1–D11 approved
+   ("only relevant with an opponent"), D12 fixed (see the deferrals section above).
 2. **The Karoo mulligan rule** — the most valuable finding for play quality. Regression seed 1001
    gi=27 mulliganed to 5, kept two Rakdos Carnarium and no other land, and played **zero lands in
    eight turns**. A Karoo with no other land must bounce itself, so a hand whose only lands are

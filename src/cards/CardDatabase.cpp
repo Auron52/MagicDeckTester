@@ -547,6 +547,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.grants_replicate_to_subtypes   = params.value("grants_replicate_to_subtypes", false);
     p.creature_mana_only             = params.value("creature_mana_only", false);
     p.colored_creature_only          = params.value("colored_creature_only", false);
+    p.colored_creature_ability_ok    = params.value("colored_creature_ability_ok", false);
     if (params.contains("gy_return_cost"))
         p.gy_return_cost = ManaCostFromString(params["gy_return_cost"].get<std::string>());
     p.gy_return_requires_subtype  = params.value("gy_return_requires_subtype", std::string());

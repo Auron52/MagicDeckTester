@@ -509,7 +509,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type. [Simplified: modelled as producing all five colors; ETB choice and restriction not modelled]",
+   "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type. [Modelled as producing all five colors; the ETB type choice is simplified to \"any creature\" (exact for the mono-tribal decks that run it). colored_creature_only restricts the coloured mana to creature spells; colored_creature_ability_ok additionally permits it for an ACTIVATED ABILITY whose source is a creature (D12 fix: Burning-Fist / Sethron activations, paid under the CreatureAbilityPayScope guard). Ability sources are simplified to battlefield creatures -- the oracle's any-zone \"source\" (e.g. cycling a creature card) is not modelled.]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -520,7 +520,8 @@
      "G",
      "C"
     ],
-    "colored_creature_only": true
+    "colored_creature_only": true,
+    "colored_creature_ability_ok": true
    }
   },
   {

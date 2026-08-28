@@ -3534,6 +3534,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             // Burning-Fist discard-pump / Sethron team-pump-with-haste (executor mirror of the
             // rollout's trailing pass -- same shared ApplyActivatePump, so the two worlds agree).
+            // The pay scope marks this as a creature-source ability payment (ActivatePump sources
+            // are always creatures -- the params only exist on them), so Secluded Courtyard's
+            // coloured mana is legal here (D12).
+            CreatureAbilityPayScope pump_pay_scope;
             ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             {

@@ -8007,6 +8007,28 @@ inline const std::vector<Color>& EffectiveProduces(const GameState& state, int c
     return ReflectedColors(state, controller, in_hand);
 }
 
+// D12 payment context: the current TapForCost* call is paying the activation cost of an ability
+// whose SOURCE is a battlefield creature of the chosen type (Burning-Fist / Sethron pumps; the
+// engine's "chosen type" is simplified to "any creature", exact for the mono-tribal decks that
+// run these lands). Secluded Courtyard's oracle text permits its restricted coloured mana for
+// exactly this case, where Cavern of Souls / Unclaimed Territory / Sliver Hive permit casts only
+// -- so this cannot ride the for_creature bool (that would over-permit the cast-only lands) and
+// is a per-card param (colored_creature_ability_ok) plus this scoped context flag. thread_local
+// RAII (the g_search_candidate_enum pattern) rather than threading a third bool through every
+// TapForCost signature. False everywhere except inside an ActivatePump payment -> byte-identical
+// for every deck without a colored_creature_ability_ok land.
+inline bool& PayingCreatureAbility()
+{
+    static thread_local bool v = false;
+    return v;
+}
+struct CreatureAbilityPayScope
+{
+    bool prev;
+    CreatureAbilityPayScope()  : prev(PayingCreatureAbility()) { PayingCreatureAbility() = true; }
+    ~CreatureAbilityPayScope() { PayingCreatureAbility() = prev; }
+};
+
 // Colours a source may produce to pay for THIS spell (payment context -> for_creature is known).
 // Identical to EffectiveProduces for every source EXCEPT a colored_creature_only source (Unclaimed
 // Territory / Cavern of Souls: {C} free, coloured only for a creature spell of the chosen type,
@@ -8021,6 +8043,8 @@ inline const std::vector<Color>& ProducesForPayment(const GameState& state, int 
 {
     const std::vector<Color>& base = EffectiveProduces(state, controller, def);
     if (!def.params.colored_creature_only || for_creature) { return base; }
+    // D12: Secluded Courtyard's clause also covers activated abilities of creature sources.
+    if (def.params.colored_creature_ability_ok && PayingCreatureAbility()) { return base; }
     static thread_local std::vector<Color> only_c;
     only_c.clear();
     for (Color c : base) { if (c == Color::Colorless) { only_c.push_back(c); } }
@@ -8047,7 +8071,9 @@ inline void CcoAuditTap(const CardDefinition& def, Color col, bool for_creature)
 {
     if (!CcoAuditOn() || !def.params.colored_creature_only) { return; }
     CcoAuditTaps().fetch_add(1, std::memory_order_relaxed);
-    if (col != Color::Colorless && !for_creature)
+    if (col != Color::Colorless && !for_creature
+        // D12: a coloured tap paying a creature-source ability is LEGAL for Secluded Courtyard.
+        && !(def.params.colored_creature_ability_ok && PayingCreatureAbility()))
     {
         CcoAuditViolations().fetch_add(1, std::memory_order_relaxed);
     }

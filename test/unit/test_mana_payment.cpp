@@ -17,6 +17,7 @@
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/EnvFlags.h"            // EnvPut -- portable setenv (MSVC has only _putenv_s)
+#include "core/SpellEffects.h"        // CreatureAbilityPayScope (D12 payment context)
 #include "core/HeuristicDefaults.h"   // ResolveHeuristicDefaultsPath: exe-relative path walk
 
 #include <string>
@@ -476,4 +477,30 @@ TEST_CASE("filter {C} mode pays a generic pip first in HUMAN play; the search ke
         CHECK(ex.ok); CHECK(ro.ok); CHECK(ex == ro);
         CHECK(ex.tapped == std::vector<bool>{false, true});   // Island pays {U}; Bluffs stays up
     }
+}
+
+TEST_CASE("D12: Secluded Courtyard's coloured mana pays a creature-source ABILITY, cast-only lands do not")
+{
+    EnsureCards();
+    // Burning-Fist's "{1}{R}, Discard a card" / Sethron's "{2}{B/R}" are activated abilities of
+    // creature sources of the chosen type -- Secluded Courtyard's oracle text allows its restricted
+    // coloured mana there; Unclaimed Territory's clause covers CASTS only. The payment context is
+    // the CreatureAbilityPayScope guard the ActivatePump sites install.
+    const GameState courtyard = MakeBoard({"Secluded Courtyard"});
+    const GameState territory = MakeBoard({"Unclaimed Territory"});
+    const ManaCost  red       = Cost(0, 0, 0, 0, /*r=*/1);
+
+    // Outside the scope (a plain non-creature payment): both lands are {C}-only for the pip.
+    CheckTwinsAgree(courtyard, red, /*for_creature=*/false, /*expect_ok=*/false);
+    CheckTwinsAgree(territory, red, /*for_creature=*/false, /*expect_ok=*/false);
+
+    {   // Inside the scope: Courtyard's colours become payment-legal...
+        CreatureAbilityPayScope scope;
+        CheckTwinsAgree(courtyard, red, /*for_creature=*/false, /*expect_ok=*/true);
+        // ...but a cast-only land is unchanged (the clause is per-card, not per-context).
+        CheckTwinsAgree(territory, red, /*for_creature=*/false, /*expect_ok=*/false);
+    }
+
+    // Scope is RAII: legality reverts once the activation payment ends.
+    CheckTwinsAgree(courtyard, red, /*for_creature=*/false, /*expect_ok=*/false);
 }

@@ -9204,6 +9204,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             { probe.hybrid_pair[probe.hybrid_count++] = per.hybrid_pair[hi]; }
                         }
                         GameState scratch = state;
+                        // Same creature-source ability payment scope as the real apply (D12), so
+                        // the probe and the trailing payment agree on Courtyard colour legality.
+                        CreatureAbilityPayScope probe_pay_scope;
                         if (!TapForCostDirect(scratch, probe, /*for_creature=*/false)) { continue; }
                     }
                     Action a;
@@ -16324,6 +16327,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             // Burning-Fist discard-pump / Sethron team-pump-with-haste: pay K x cost, then apply K
             // activations. Stranded (cost unpayable, or the source left) -> full no-op, both worlds.
+            // Creature-source ability payment scope: Secluded Courtyard's coloured mana is legal (D12).
+            CreatureAbilityPayScope pump_pay_scope;
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             {
                 ApplyActivatePump(state, state.active_player_index, a.sac_source_id,
@@ -20215,6 +20220,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // Restricted-colour mana (Cavern of Souls / Unclaimed Territory / Secluded Courtyard):
         // coloured mana for CREATURE spells only -- same reasoning as creature_mana_only above.
         if (pp.colored_creature_only)         { s += "cco"; }
+        if (pp.colored_creature_ability_ok)   { s += "ccoa"; }
         // Reflecting Pool: colours are the runtime UNION of the other lands, not this static list.
         if (pp.reflecting)                    { s += "rp"; }
         // Forbidden Orchard: every tap hands the opponent a 1/1 Spirit -- a real cost.

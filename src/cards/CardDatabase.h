@@ -174,6 +174,11 @@ struct CardParams
     // lands are played in single-tribe decks, so type == any-creature for every deck tested). See
     // docs/design/unclaimed-territory-restricted-mana.md.
     bool colored_creature_only = false;
+    // D12 (Secluded Courtyard): the restricted coloured mana is ALSO legal for an activated
+    // ability whose source is a creature of the chosen type (Cavern of Souls / Unclaimed
+    // Territory / Sliver Hive lack this clause -- casts only). Consulted by ProducesForPayment
+    // under the CreatureAbilityPayScope payment context.
+    bool colored_creature_ability_ok = false;
 
     // Upkeep token creation: at the beginning of upkeep, create N creature tokens
     // with the given power/toughness/subtypes (e.g. Thrumming Hivepool: 2 × 1/1 Sliver).
