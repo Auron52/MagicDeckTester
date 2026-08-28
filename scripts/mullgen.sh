@@ -59,7 +59,12 @@ BIN=build/Release/mtg-analyze
 # seed set than the first-version checks -- an adoption decision should not be read off the same
 # seeds twice.
 FIRST_SEEDS=${MULLGEN_FIRST_SEEDS:-"4004 5005 6006 7007 8008 9009 10010 11011 12012 13013 14014 15015 16016 17017 18018 19019"}
-VS_SEEDS=${MULLGEN_VS_SEEDS:-"21021 22022 23023 24024 25025 26026 27027 28028 29029 30030 31031 32032 33033 34034 35035 36036 37037 38038 39039 40040 41041 42042 43043 44044"}
+# 32 seeds, DISJOINT from FIRST_SEEDS. Sized to match the first-version validation's TOTAL weight
+# (user, 2026-08-28: the profile-comparison A/B should be "in the same ballpark as the lookahead
+# bottoming and keep tests"): first version runs TWO A/Bs at 16 seeds x 2 arms = 64k games, so the
+# regen A/B runs 32 seeds x 2 arms = 64k. It is the sole evidence for replacing a shipped table, so
+# it cannot be the cheapest measurement in the pipeline.
+VS_SEEDS=${MULLGEN_VS_SEEDS:-"21021 22022 23023 24024 25025 26026 27027 28028 29029 30030 31031 32032 33033 34034 35035 36036 37037 38038 39039 40040 41041 42042 43043 44044 45045 46046 47047 48048 49049 50050 51051 52052"}
 
 stamp(){ date -u +%Y-%m-%dT%H:%M:%SZ; }
 log(){ echo "$*" | tee -a "$REPORT"; }
@@ -114,6 +119,38 @@ run_ab(){
 # worse <delta> -> true when the B arm is worse ON AVERAGE by any amount (the accept bar).
 worse(){ awk -v d="$1" 'BEGIN{ exit !(d > 0) }'; }
 
+# REGRESSION, run for VISIBILITY and never as a rejection. Adopting a mulligan profile moves the
+# deck's GT, and it is EXPECTED to look like a slowdown: the standard goldfish metric is
+# unconfounded, so it still rewards the lookahead bottomer's peek at the library. A blind policy
+# that is genuinely better (which the confounded A/B above is what actually establishes) therefore
+# scores slightly WORSE on that metric. Rejecting on it would be rejecting a profile for failing a
+# test we already know is biased against it (user, 2026-08-28: "We don't reject if those succeed,
+# because lookahead bottoming has clairvoyance bias").
+run_regression(){
+  local key
+  key=$(awk -v d="$DECK" '/^[[:space:]]*\[[a-z0-9_]+\]=/ {
+          line=$0; sub(/^[[:space:]]*\[/, "", line); split(line, a, "\\]=");
+          if (a[2] == d) { print a[1]; exit } }' test/regression_cases.sh)
+  log ""
+  if [ -z "$key" ]; then
+    log "--- regression: $STEM is not in test/regression_cases.sh -- skipping (nothing to move) ---"
+    return 0
+  fi
+  log "--- regression (deck=$key), for VISIBILITY -- cannot reject ($(stamp)) ---"
+  bash test/regression.sh --deck="$key" > "$OUT/regression.log" 2>&1
+  local rc=$?
+  grep -E '^Result:|^ALL PASS|^REGRESSION DETECTED' "$OUT/regression.log" | while read -r l; do log "  $l"; done
+  grep -E '^\s+\[(searched|d0)\s*\]' "$OUT/regression.log" | while read -r l; do log "  $l"; done
+  if [ "$rc" -ne 0 ]; then
+    log "  GT moved. This is EXPECTED when a mulligan profile is adopted and is NOT a rejection:"
+    log "  the standard metric still rewards lookahead's peek, so a better BLIND policy reads as a"
+    log "  small win-turn increase on mulligan games. The confounded A/B above is the real verdict."
+    log "  Accepting the new GT is a separate, deliberate call: bash test/regression.sh --accept"
+  fi
+  log "  full output: $OUT/regression.log"
+  return 0
+}
+
 quarantine(){
   local why="$1"
   mv -f "$PROF" "$DIS"
@@ -159,6 +196,7 @@ PY
     if worse "$d"; then quarantine "new profile is worse than the old by ${d}t on average"; return 1; fi
     log "ACCEPTED: new profile is not worse than the old. Keeping it."
     rm -f "$PREV"
+    run_regression
   else
     log "=== FIRST VERSION: keep + confounded bottoming ($(stamp)) deck=$STEM ==="
     log "bar: neither check may be worse ON AVERAGE (any amount is a reject)"
@@ -185,6 +223,7 @@ PY
       return 1
     fi
     log "ACCEPTED: keep and confounded bottoming both clear the bar."
+    run_regression
   fi
   log "=== VALIDATION PASSED ($(stamp)) -- $PROF is live ==="
 }
