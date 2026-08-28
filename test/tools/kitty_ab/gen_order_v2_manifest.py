@@ -45,10 +45,33 @@ ORD  = {"MTG_HINATA_ORDER_FULL": True}
 COND = {"MTG_BP_CLASSIFY": True, "MTG_BP_SITE3": True}
 NG   = {"MTG_BP_NO_GREEDY_CONT": True}
 
+# QUICK MODE (argv[2] == "quick") -- the FIRST DIRECTIONAL READ, and the default way to run this.
+#
+# The full arm set below is confirmation-grade (3,000 games x 2 blocks x 11 arms) and takes ~5 hours.
+# That is the wrong instrument for a design that is still moving: a first run of it was launched and
+# KILLED an hour in, because it omitted MTG_HINATA_MANA_FLOAT_RANK -- the prime suspect for a
+# coupling in the very order being measured -- so a regression in `ord` would have invalidated all
+# twelve Hinata jobs. Lesson: size the run to the QUESTION, and never omit the arm that would explain
+# the most likely failure.
+#
+# Quick mode keeps only the three live questions and pairs them against the salvaged 3,000-game
+# baselines (a game is seeded base_seed + game_index, so game i is identical at any job size and the
+# report pairs on the index intersection):
+#   1. is the REVISED order better than the generic tiering?        -> ord
+#   2. does the floating-mana fix explain the Spasm/cantrip coupling? -> ord_float
+#   3. does condemnation do real work now the exemptions are gone?  -> cond_ng
+# Kitty and Mirrorwing carry their own baselines because they are cheap and are the regression check.
+QUICK_HINATA = ("ord", "ord_float", "cond_ng")
+QUICK_GAMES = {"hinata": 1200, "kitty": 2000, "mirrorwing": 2000}
+
 DECKS = {
     "hinata": (H, {
         "base":      {},                                   # shipped generic tiering
         "ord":       {**ORD},                              # the REVISED order alone
+        # The suspected coupling: Reality Spasm at rank 7 floats mana BEFORE the cantrips rank it,
+        # and SituationalCardRank counts permanents, so it under-reads the post-ritual position.
+        "ord_float": {**ORD, "MTG_HINATA_MANA_FLOAT_RANK": True},
+        "cond_ng_float": {**ORD, **COND, **NG, "MTG_HINATA_MANA_FLOAT_RANK": True},
         "ord_iren":  {**ORD, "MTG_HINATA_IREN_EARLY": True},   # price the Irencrag position again
         "cond":      {**ORD, **COND},                      # + condemnation, no type exemptions
         "cond_ng":   {**ORD, **COND, **NG},                # + greedy-free: the DECISION-SPACE arm
@@ -78,12 +101,16 @@ GAMES = 3000
 
 def main():
     scale = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
+    quick = len(sys.argv) > 2 and sys.argv[2] == "quick"
     jobs = []
     for deck, ((path, prof), arms) in DECKS.items():
         for arm, flags in arms.items():
+            if quick and deck == "hinata" and arm not in QUICK_HINATA:
+                continue          # base is reused from the salvaged 3,000-game run
+            games = QUICK_GAMES[deck] if quick else GAMES
             for block, seed in BLOCKS.items():
                 job = {"name": f"{arm}.{deck}.{block}", "deck": path, "profile": prof,
-                       "games": max(1, int(GAMES * scale)), "seed": seed}
+                       "games": max(1, int(games * scale)), "seed": seed}
                 if flags:
                     job["flags"] = dict(flags)
                 jobs.append(job)
