@@ -32,17 +32,80 @@ no-op -- and simply draws a card known to be wanted. A second Ponder into the sa
 its look re-examining an arrangement it just made. Conversely, into an unarranged top, Ponder sees
 three cards and can shuffle a bad top away, which Preordain cannot do at all.
 
-## THE OBSTACLE: half of it is not expressible, and the naive form silently never fires
+## THE OBSTACLE, and why it is worth fixing properly rather than working around
 
-**"When we don't know what the top 1-2 cards are" has no referent in this engine.** The search is
-clairvoyant -- it can see the library -- so there is no uncertainty state to condition a rank on. A
-rule written as "we don't know the top" evaluates to "we always know", so it either never fires or
-fires always, and either way it is not measuring what the ruling intends. This is the same class of
-mistake as the recorded lesson that a lever must be verified to FIRE before a null result is read.
+**"When we don't know what the top 1-2 cards are" has no referent in the CLAIRVOYANT search.** That
+search can see the library, so there is no uncertainty to condition a rank on: a rule written as "we
+don't know the top" evaluates to "we always know" and never fires as intended -- the same class of
+mistake as reading a null from a lever nobody verified fires.
 
-**The expressible form is the deliberate-arrangement fact, not the knowledge fact.** "Was the top of
-the library deliberately arranged this turn (a keep, not a shuffle)?" is a property of the game, not
-of an agent's information, and it captures exactly the case the ruling names.
+A *proxy* is available and would work today: "was the top deliberately ARRANGED (a keep, not a
+shuffle)?" is a property of the game rather than of an agent's information. But the USER's ruling
+(2026-08-28) is not to reach for the proxy: **"frankly we'll need to implement this at some point
+anyway, for non-clairvoyant players."** That is correct, and the reason is stronger than this one
+cast-order rule.
+
+### The non-clairvoyant search DESTROYS knowledge the player legitimately has
+
+`MTG_NC_SEARCH` / `TurnSolver::ReshuffleAvgChoosePlan` models non-clairvoyance by reshuffle
+averaging: per sample it does
+
+```cpp
+GameState s = state;
+s.ActivePlayer().library.Shuffle(rs);      // the WHOLE library -- no preserved known prefix
+```
+
+Shuffling the whole library is right for the unknown remainder and WRONG for any prefix the player
+has legitimately seen. A scry that puts a known card on top, or a Ponder that KEPT its three, is
+real information a real player carries into the next decision -- and NC deletes it before evaluating
+anything. Consequences, in rough order of severity:
+
+* NC cannot see the payoff of its own card selection ACROSS turns. Arrange the top now, and by the
+  next decision the arrangement is gone, so the benefit never appears in a sampled future.
+* It therefore systematically under-values scry / reorder / keep effects -- on a deck whose engine is
+  sixteen cantrips.
+* Any heuristic conditioned on "the top is known" is unmeasurable under NC until this is fixed,
+  which is exactly why the ruling above sequences the knowledge model FIRST.
+
+(Within a single sample NC does still value *casting* a cantrip -- it shuffles, then applies the
+plan, so the keep/shuffle choice operates on that sample's top. The defect is about knowledge held
+BEFORE the decision, not about the cantrip's own draw.)
+
+### The principle: MONTE CARLO IS FOR UNCERTAINTY ONLY
+
+USER, 2026-08-28: *"there are always some cards that are known by a normal player, due to library
+manipulation. Those should not be treated using monte-carlo, because we know what they are."*
+
+That is the whole specification, and it is a correctness statement rather than a tuning one. The
+library splits into two parts and they need opposite treatment:
+
+| part | what it is | correct treatment |
+|---|---|---|
+| KNOWN prefix | cards this player has legitimately seen and not yet drawn | evaluated EXACTLY -- never resampled |
+| unknown remainder | everything else | reshuffle-averaged over K samples, as today |
+
+Averaging over the known prefix is not a conservative approximation of it -- it is strictly wrong,
+because it replaces a fact with a distribution and then averages away the very thing the player paid
+a card to establish. A normal player is not uncertain about the card they just scried to the top.
+
+Note the state is NOT Hinata-specific and not cantrip-specific. Any library manipulation leaves a
+known prefix: scry, surveil, a Ponder/Brainstorm-style reorder, a fetchland's search, a reveal, and
+the top card exiled-and-playable by Soulfire Eruption (already modelled separately as a staged card
+with an expiry). Whatever this deck does with `cast_reorder` / `cast_scry`, the field belongs on the
+player, not on a provider.
+
+### What the model needs to be
+
+A **persistent known-top count**, not the turn-scoped field an earlier draft of this note proposed:
+knowledge from a scry survives until those cards are drawn, or until something shuffles the library
+(a Ponder that SHUFFLES resets it to zero -- that is the branch's whole meaning). Then:
+
+* `ReshuffleAvgChoosePlan` shuffles only BELOW the prefix, per the table above.
+* `CastOrderRank` -- which already takes `GameState` -- can finally ask "is the top known?", making
+  the interleave rule at the top of this note expressible as stated rather than by proxy.
+
+One field, two consumers, and the NC one is a correctness fix independent of any cast order. That is
+the argument for building it once and properly instead of proxying it here.
 
 ## What it would take
 

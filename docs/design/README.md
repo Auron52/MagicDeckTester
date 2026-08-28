@@ -104,6 +104,7 @@ the answer to compile time.
 | [fallback-budget-renewal-handoff.md](fallback-budget-renewal-handoff.md) | `DEFERRED` | Escalation fallback tuning: budget renewal + single-depth fallback. Set up, never measured. |
 | [mana-source-reservation.md](mana-source-reservation.md) | `DEFERRED` | "Leaving sources up." Largely superseded by whole-turn batch payment. |
 | [nc-land-selection-color.md](nc-land-selection-color.md) | `DEFERRED` | The non-clairvoyant search drops lands on curve but still picks the *wrong* land when colour matters. |
+| [hinata-ponder-preordain-interleave.md](hinata-ponder-preordain-interleave.md) | `DEFERRED` | Ponder-vs-Preordain by library state — and the KNOWN-TOP model it needs, which NC reshuffle-averaging currently destroys. |
 | [searched-scry-disposition.md](searched-scry-disposition.md) | `SPEC` | User direction: scry/surveil disposition must be a **search branch**, not a policy hook. Two TH investigations dead-ended on "no fixed rule can express this". |
 | [searched-cleanup-discard.md](searched-cleanup-discard.md) | `DEFERRED` | Searched cleanup discard, built behind `MTG_SEARCHED_DISCARD` — **ships OFF**. |
 | [model-performance-levers.md](model-performance-levers.md) | `DEFERRED` | Menu of performance techniques (same play quality, less compute) for the NC policy / value leaf. |
