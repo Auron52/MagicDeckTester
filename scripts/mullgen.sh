@@ -116,6 +116,21 @@ run_ab(){
   cat "$abdir/delta.txt"
 }
 
+# Fold an A/B's full report into VALIDATION.txt. Called for EVERY check, whatever the verdict (user,
+# 2026-08-28: "either way, it should be reporting the results exhaustively so we can decide what to
+# do next"). A rejected profile is precisely when the detail matters most -- the mean is the gate,
+# but deciding what to DO next (raise R? fix the heuristic? one bad seed?) needs the spread.
+inline_ab(){
+  local mode="$1" title="$2" abdir=logs/keepmodel_exh_${1}_${STEM}
+  log ""
+  log "########## $title ##########"
+  if [ -e "$abdir/REPORT.txt" ]; then
+    sed 's/^/  /' "$abdir/REPORT.txt" | tee -a "$REPORT"
+  else
+    log "  (no REPORT.txt at $abdir -- see $OUT/ab_*.log)"
+  fi
+}
+
 # worse <delta> -> true when the B arm is worse ON AVERAGE by any amount (the accept bar).
 worse(){ awk -v d="$1" 'BEGIN{ exit !(d > 0) }'; }
 
@@ -192,6 +207,10 @@ PY
       log "A/B did not produce a delta -- see $OUT/ab_versus.log"
       [ "$gated" = 1 ] && { quarantine "versus A/B failed to run"; return 1; }; return 1; }
     log "new-vs-old delta: ${d}t  (negative = new wins)"
+    inline_ab versus "PROFILE COMPARISON: old table vs new (both in the shipping condition)"
+    log ""
+    log "########## VERDICT ##########"
+    log "  new-vs-old ${d}t   $(worse "$d" && echo 'WORSE -> reject, keep the old' || echo 'ok -> adopt the new')"
     [ "$gated" = 1 ] || { log "UNGATED run -- verdict recorded, profile left as-is."; return 0; }
     if worse "$d"; then quarantine "new profile is worse than the old by ${d}t on average"; return 1; fi
     log "ACCEPTED: new profile is not worse than the old. Keeping it."
@@ -209,6 +228,13 @@ PY
       log "confounded bottoming A/B failed to run"
       [ "$gated" = 1 ] && { quarantine "bottoming A/B failed to run"; return 1; }; return 1; }
     log "bottoming (blind vs lookahead, CONFOUNDED) delta: ${db}t  (negative = blind wins)"
+    # Exhaustive detail BEFORE the gate decides, so a rejection ships with its evidence attached.
+    inline_ab keep   "KEEP: exhaustive vs static (bottoming held identical)"
+    inline_ab bottom "BOTTOMING: blind exhaustive vs lookahead, CONFOUNDED (peek nullified)"
+    log ""
+    log "########## VERDICT ##########"
+    log "  keep      ${dk}t   $(worse "$dk" && echo 'WORSE -> reject' || echo 'ok')"
+    log "  bottoming ${db}t   $(worse "$db" && echo 'WORSE -> reject' || echo 'ok')"
     [ "$gated" = 1 ] || { log "UNGATED run -- verdicts recorded, profile left as-is."; return 0; }
     if worse "$dk"; then quarantine "exhaustive keep is worse than static by ${dk}t"; return 1; fi
     if worse "$db"; then

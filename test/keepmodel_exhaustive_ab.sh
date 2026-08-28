@@ -104,6 +104,22 @@ nlt = sum(1 for _, x, y in per if y - x < -1e-9)
 print(f"\n=== A/B ({B} vs {A}; negative delta = {B} wins earlier) — avg win turn (loss-penalized) ===")
 print(f"{A:>14}{B:>14}{'delta B-A':>14}{'seeds B<A':>14}")
 print(f"{mA:>14.4f}{mB:>14.4f}{mB-mA:>+14.4f}{str(nlt)+'/'+str(len(per)):>14}")
+
+# PER-SEED, always. The mean is the verdict but it is not the whole story: an adopt/reject decision
+# needs to see whether a delta is broad or is one outlier seed dragging the average, and a rejected
+# profile is exactly when you most need the detail to decide what to do next.
+print(f"\n--- per seed ---")
+print(f"{'seed':>10}{A:>14}{B:>14}{'delta':>12}")
+for s, x, y in sorted(per, key=lambda r: r[2] - r[1]):
+    print(f"{s:>10}{x:>14.4f}{y:>14.4f}{y-x:>+12.4f}")
+if per:
+    ds = sorted(y - x for _, x, y in per)
+    n = len(ds)
+    med = ds[n // 2] if n % 2 else 0.5 * (ds[n // 2 - 1] + ds[n // 2])
+    sd = (sum((d - (mB - mA)) ** 2 for d in ds) / (n - 1)) ** 0.5 if n > 1 else 0.0
+    se = sd / (n ** 0.5) if n > 1 else 0.0
+    print(f"\nspread: min {ds[0]:+.4f}  median {med:+.4f}  max {ds[-1]:+.4f}"
+          f"   sd {sd:.4f}  se {se:.4f}  mean/se {((mB-mA)/se if se else 0):+.2f}")
 print(f"\noverall delta {mB-mA:+.4f}t  ({B+' BEATS '+A if mB-mA < -1e-4 else (B+' loses to '+A if mB-mA > 1e-4 else 'tie (within noise)')})")
 # MACHINE-READABLE, for scripts/mullgen.sh's gate. The mean delta is the whole verdict: the accept
 # bar is "not worse ON AVERAGE" (user, 2026-08-28), so a caller must not have to re-parse prose.
