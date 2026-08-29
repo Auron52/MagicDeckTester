@@ -1,0 +1,246 @@
+{
+  "seed": 2, "game_index": 1, "win_turn": -1, "won": false,
+  "mulligan": { "count": 3, "bottom": [27, 18, 28] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 21, "name": "Lathliss, Dragon Queen" }, { "num": 53, "name": "Sol Ring" }, { "num": 31, "name": "Mountain" }, { "num": 24, "name": "Lightning Bolt" }, { "num": 11, "name": "Glorybringer" }, { "num": 58, "name": "Utvara Hellkite" }, { "num": 4, "name": "Dragon Tempest" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 48, "name": "Mountain" }, { "num": 31, "name": "Mountain" }, { "num": 14, "name": "Gruul Turf" }, { "num": 38, "name": "Mountain" }, { "num": 24, "name": "Lightning Bolt" }, { "num": 52, "name": "Scourge of Valkas" }, { "num": 37, "name": "Mountain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 16, "name": "Haven of the Spirit Dragon" }, { "num": 22, "name": "Lathliss, Dragon Queen" }, { "num": 46, "name": "Mountain" }, { "num": 13, "name": "Gruul Turf" }, { "num": 40, "name": "Mountain" }, { "num": 36, "name": "Mountain" }, { "num": 41, "name": "Mountain" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 3,
+  "on_the_play": true,
+  "to_bottom": 3,
+  "hand": [{ "num": 55, "name": "Urza's Incubator" }, { "num": 28, "name": "Lightning Greaves" }, { "num": 18, "name": "Inferno of the Star Mounts" }, { "num": 27, "name": "Lightning Bolt" }, { "num": 43, "name": "Mountain" }, { "num": 4, "name": "Dragon Tempest" }, { "num": 39, "name": "Mountain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 3 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 3,
+  "hand": [{ "num": 55, "name": "Urza's Incubator", "win_optimal": true }, { "num": 28, "name": "Lightning Greaves", "win_optimal": true }, { "num": 18, "name": "Inferno of the Star Mounts", "win_optimal": true }, { "num": 27, "name": "Lightning Bolt", "win_optimal": true }, { "num": 43, "name": "Mountain", "win_optimal": true }, { "num": 4, "name": "Dragon Tempest", "win_optimal": true }, { "num": 39, "name": "Mountain", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 18, "name": "Inferno of the Star Mounts" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 3)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 5,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 3,
+  "hand": [{ "num": 55, "name": "Urza's Incubator", "win_optimal": true }, { "num": 28, "name": "Lightning Greaves", "win_optimal": true }, { "num": 18, "name": "Inferno of the Star Mounts", "win_optimal": true }, { "num": 43, "name": "Mountain", "win_optimal": true }, { "num": 4, "name": "Dragon Tempest", "win_optimal": true }, { "num": 39, "name": "Mountain", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 18, "name": "Inferno of the Star Mounts" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 3)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 2,
+  "bottom_total": 3,
+  "hand": [{ "num": 55, "name": "Urza's Incubator", "win_optimal": true }, { "num": 28, "name": "Lightning Greaves", "win_optimal": true }, { "num": 43, "name": "Mountain", "win_optimal": true }, { "num": 4, "name": "Dragon Tempest", "win_optimal": true }, { "num": 39, "name": "Mountain", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 55, "name": "Urza's Incubator" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 3 of 3)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 4, "name": "Dragon Tempest", "cost": "{1}{R}", "mv": 2, "kind": "permanent" }, { "num": 43, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Urza's Incubator", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 56, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Atsushi, the Blazing Sky" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 0, "num": 43, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Atsushi, the Blazing Sky", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 4, "name": "Dragon Tempest", "cost": "{1}{R}", "mv": 2, "kind": "permanent" }, { "num": 39, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Urza's Incubator", "cost": "{3}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Dragon Tempest", "land": "Mountain", "casts": ["Dragon Tempest"], "actions": [{ "card": "Dragon Tempest" }] },
+    { "index": 1, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Utvara Hellkite" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Dragon Tempest", "idx": 2, "num": 4, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 43, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 39, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Atsushi, the Blazing Sky", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Urza's Incubator", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Utvara Hellkite", "cost": "{6}{R}{R}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Dragon Tempest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Dragon Tempest", "idx": 2, "num": 4, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 43, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 39, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Atsushi, the Blazing Sky", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 7, "name": "Dragon Tempest", "cost": "{1}{R}", "mv": 2, "kind": "permanent" }, { "num": 55, "name": "Urza's Incubator", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Utvara Hellkite", "cost": "{6}{R}{R}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Dragon Tempest", "land": null, "casts": ["Dragon Tempest"], "actions": [{ "card": "Dragon Tempest" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Dragonspeaker Shaman" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Dragon Tempest", "idx": 2, "num": 4, "is_land": false }, { "name": "Dragon Tempest", "idx": 3, "num": 7, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 43, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 39, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Atsushi, the Blazing Sky", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Dragonspeaker Shaman", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Urza's Incubator", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Utvara Hellkite", "cost": "{6}{R}{R}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 6, "card": "Urza's Incubator" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Dragon Tempest", "idx": 2, "num": 4, "is_land": false }, { "name": "Dragon Tempest", "idx": 3, "num": 7, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 43, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 39, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Atsushi, the Blazing Sky", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Dragonspeaker Shaman", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Urza's Incubator", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 57, "name": "Urza's Incubator", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Utvara Hellkite", "cost": "{6}{R}{R}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 7, "card": "Atsushi, the Blazing Sky" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Dragon Tempest", "idx": 2, "num": 4, "is_land": false }, { "name": "Dragon Tempest", "idx": 3, "num": 7, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 43, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 39, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Atsushi, the Blazing Sky", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 3, "name": "Atsushi, the Blazing Sky", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Dragonspeaker Shaman", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Urza's Incubator", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 57, "name": "Urza's Incubator", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Utvara Hellkite", "cost": "{6}{R}{R}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 8,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 8, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Dragon Tempest", "idx": 2, "num": 4, "is_land": false }, { "name": "Dragon Tempest", "idx": 3, "num": 7, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 43, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 39, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Atsushi, the Blazing Sky", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 3, "name": "Atsushi, the Blazing Sky", "cost": "{2}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Dragonspeaker Shaman", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Urza's Incubator", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 57, "name": "Urza's Incubator", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 58, "name": "Utvara Hellkite", "cost": "{6}{R}{R}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Urza's Incubator", "land": "Mountain", "casts": ["Urza's Incubator"], "actions": [{ "card": "Urza's Incubator" }] },
+    { "index": 1, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Mountain; cast: Dragonspeaker Shaman", "land": "Mountain", "casts": ["Dragonspeaker Shaman"], "actions": [{ "card": "Dragonspeaker Shaman" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}

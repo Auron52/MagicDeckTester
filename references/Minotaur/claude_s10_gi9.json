@@ -1,0 +1,296 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 6, "won": true,
+  "mulligan": { "count": 1, "bottom": [27] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 29, "name": "Mountain" }, { "num": 25, "name": "Kragma Warcaller" }, { "num": 7, "name": "Boros Reckoner" }, { "num": 14, "name": "Deathbellow Raider" }, { "num": 18, "name": "Fanatic of Mogis" }, { "num": 41, "name": "Ragemonger" }, { "num": 42, "name": "Ragemonger" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 31, "name": "Mountain" }, { "num": 15, "name": "Deathbellow Raider" }, { "num": 53, "name": "Slaughter-Priest of Mogis" }, { "num": 10, "name": "Burning-Fist Minotaur" }, { "num": 5, "name": "Bloodstained Mire" }, { "num": 48, "name": "Secluded Courtyard" }, { "num": 27, "name": "Kragma Warcaller" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 31, "name": "Mountain", "win_optimal": true }, { "num": 15, "name": "Deathbellow Raider", "win_optimal": true }, { "num": 53, "name": "Slaughter-Priest of Mogis", "win_optimal": true }, { "num": 10, "name": "Burning-Fist Minotaur", "win_optimal": true }, { "num": 5, "name": "Bloodstained Mire", "win_optimal": true }, { "num": 48, "name": "Secluded Courtyard", "win_optimal": true }, { "num": 27, "name": "Kragma Warcaller", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 48, "name": "Secluded Courtyard" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 10, "name": "Burning-Fist Minotaur", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Deathbellow Raider", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Slaughter-Priest of Mogis", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 8, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Secluded Courtyard", "idx": 1, "num": 48, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 10, "name": "Burning-Fist Minotaur", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Deathbellow Raider", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Slaughter-Priest of Mogis", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: Deathbellow Raider", "land": "Bloodstained Mire", "casts": ["Deathbellow Raider"], "actions": [{ "card": "Deathbellow Raider" }] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: Slaughter-Priest of Mogis", "land": "Bloodstained Mire", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 2, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur" }] },
+    { "index": 3, "summary": "land=Bloodstained Mire; cast: Deathbellow Raider", "land": "Bloodstained Mire", "casts": ["Deathbellow Raider"], "actions": [{ "card": "Deathbellow Raider" }] },
+    { "index": 4, "summary": "land=Bloodstained Mire; cast: Slaughter-Priest of Mogis", "land": "Bloodstained Mire", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 5, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur" }] },
+    { "index": 6, "summary": "land=Mountain; cast: Deathbellow Raider", "land": "Mountain", "casts": ["Deathbellow Raider"], "actions": [{ "card": "Deathbellow Raider" }] },
+    { "index": 7, "summary": "land=Mountain; cast: Slaughter-Priest of Mogis", "land": "Mountain", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 8, "summary": "land=Mountain; cast: Burning-Fist Minotaur", "land": "Mountain", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur" }] },
+    { "index": 9, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Secluded Courtyard" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Burning-Fist Minotaur", "idx": 4, "num": 10, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 31, "is_land": true }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Deathbellow Raider", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Slaughter-Priest of Mogis", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: Deathbellow Raider", "land": "Bloodstained Mire", "casts": ["Deathbellow Raider"], "actions": [{ "card": "Deathbellow Raider" }] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: Slaughter-Priest of Mogis", "land": "Bloodstained Mire", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 2, "summary": "land=Bloodstained Mire; cast: Deathbellow Raider", "land": "Bloodstained Mire", "casts": ["Deathbellow Raider"], "actions": [{ "card": "Deathbellow Raider" }] },
+    { "index": 3, "summary": "land=Bloodstained Mire; cast: Slaughter-Priest of Mogis", "land": "Bloodstained Mire", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Deathbellow Raider", "land": "Mountain", "casts": ["Deathbellow Raider"], "actions": [{ "card": "Deathbellow Raider" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Slaughter-Priest of Mogis", "land": "Mountain", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: Deathbellow Raider", "land": "Secluded Courtyard", "casts": ["Deathbellow Raider"], "actions": [{ "card": "Deathbellow Raider" }] },
+    { "index": 7, "summary": "land=Secluded Courtyard; cast: Slaughter-Priest of Mogis", "land": "Secluded Courtyard", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 8, "summary": "land=none; cast: Deathbellow Raider", "land": null, "casts": ["Deathbellow Raider"], "actions": [{ "card": "Deathbellow Raider" }] },
+    { "index": 9, "summary": "land=none; cast: Slaughter-Priest of Mogis", "land": null, "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 10, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 11, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 12, "summary": "land=Mountain; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Mountain", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 13, "summary": "land=Secluded Courtyard; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Secluded Courtyard", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 14, "summary": "land=none; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 15, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Fanatic of Mogis" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Burning-Fist Minotaur (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Burning-Fist Minotaur", "idx": 4, "num": 10, "is_land": false }, { "name": "Deathbellow Raider", "idx": 7, "num": 15, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 31, "is_land": true }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "is_land": true }, { "name": "Secluded Courtyard", "idx": 6, "num": 49, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Fanatic of Mogis", "cost": "{3}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Slaughter-Priest of Mogis", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: Fanatic of Mogis", "land": "Bloodstained Mire", "casts": ["Fanatic of Mogis"], "actions": [{ "card": "Fanatic of Mogis" }] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: Fanatic of Mogis", "land": "Bloodstained Mire", "casts": ["Fanatic of Mogis"], "actions": [{ "card": "Fanatic of Mogis" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Fanatic of Mogis", "land": "Mountain", "casts": ["Fanatic of Mogis"], "actions": [{ "card": "Fanatic of Mogis" }] },
+    { "index": 3, "summary": "land=Bloodstained Mire; cast: Slaughter-Priest of Mogis, Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Bloodstained Mire", "casts": ["Slaughter-Priest of Mogis", "Burning-Fist Minotaur"], "actions": [{ "card": "Slaughter-Priest of Mogis" }, { "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 4, "summary": "land=Bloodstained Mire; cast: Slaughter-Priest of Mogis, Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Bloodstained Mire", "casts": ["Slaughter-Priest of Mogis", "Burning-Fist Minotaur"], "actions": [{ "card": "Slaughter-Priest of Mogis" }, { "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 5, "summary": "land=Mountain; cast: Slaughter-Priest of Mogis, Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Mountain", "casts": ["Slaughter-Priest of Mogis", "Burning-Fist Minotaur"], "actions": [{ "card": "Slaughter-Priest of Mogis" }, { "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 6, "summary": "land=Bloodstained Mire; cast: Slaughter-Priest of Mogis", "land": "Bloodstained Mire", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 7, "summary": "land=Bloodstained Mire; cast: Slaughter-Priest of Mogis", "land": "Bloodstained Mire", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 8, "summary": "land=Mountain; cast: Slaughter-Priest of Mogis", "land": "Mountain", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 9, "summary": "land=none; cast: Slaughter-Priest of Mogis", "land": null, "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 10, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur: pump +4/+0 (discard 2 cards)", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 2 }] },
+    { "index": 11, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur: pump +4/+0 (discard 2 cards)", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 2 }] },
+    { "index": 12, "summary": "land=Mountain; cast: Burning-Fist Minotaur: pump +4/+0 (discard 2 cards)", "land": "Mountain", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 2 }] },
+    { "index": 13, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 14, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 15, "summary": "land=Mountain; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Mountain", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 16, "summary": "land=none; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 17, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "type": "discard",
+  "turn": 4,
+  "over_by": 1,
+  "discard_context": "cost",
+  "source": "Burning-Fist Minotaur",
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Burning-Fist Minotaur", "idx": 4, "num": 10, "is_land": false }, { "name": "Deathbellow Raider", "idx": 7, "num": 15, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 32, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Slaughter-Priest of Mogis", "idx": 9, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Fanatic of Mogis", "cost": "{3}{R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "ai_set": [],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "name": "Bloodstained Mire" }, { "index": 1, "name": "Fanatic of Mogis" }],
+  "note": "reply a hand index -- the card to discard. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Unclaimed Territory" }],
+  "events": [{ "turn": 4, "kind": "ability", "text": "Burning-Fist Minotaur: +2/+0 (discarded Bloodstained Mire)" }, { "turn": 4, "kind": "combat", "text": "⚔ attacked: Burning-Fist Minotaur (4), Deathbellow Raider (2) — 6 to opponent (18→12)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Burning-Fist Minotaur", "idx": 4, "num": 10, "is_land": false }, { "name": "Deathbellow Raider", "idx": 7, "num": 15, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 31, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 32, "is_land": true }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "is_land": true }, { "name": "Secluded Courtyard", "idx": 6, "num": 49, "is_land": true }, { "name": "Slaughter-Priest of Mogis", "idx": 9, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Fanatic of Mogis", "cost": "{3}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Bloodstained Mire"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Fanatic of Mogis", "land": "Unclaimed Territory", "casts": ["Fanatic of Mogis"], "actions": [{ "card": "Fanatic of Mogis" }] },
+    { "index": 1, "summary": "land=none; cast: Fanatic of Mogis", "land": null, "casts": ["Fanatic of Mogis"], "actions": [{ "card": "Fanatic of Mogis" }] },
+    { "index": 2, "summary": "land=none; cast: Burning-Fist Minotaur: pump +4/+0 (discard 2 cards)", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 2 }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Unclaimed Territory", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 4, "summary": "land=Unclaimed Territory; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card), Slaughter-Priest of Mogis: sac 1 creature", "land": "Unclaimed Territory", "casts": ["Burning-Fist Minotaur", "Slaughter-Priest of Mogis"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }, { "card": "Slaughter-Priest of Mogis", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card), Slaughter-Priest of Mogis: sac 1 creature", "land": null, "casts": ["Burning-Fist Minotaur", "Slaughter-Priest of Mogis"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }, { "card": "Slaughter-Priest of Mogis", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Unclaimed Territory; cast: Slaughter-Priest of Mogis: sac 1 creature", "land": "Unclaimed Territory", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: Slaughter-Priest of Mogis: sac 1 creature", "land": null, "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis", "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "damage", "text": "🔥 Fanatic of Mogis (devotion to R = 4): 4 to opponent (12→8)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Burning-Fist Minotaur", "idx": 4, "num": 10, "is_land": false }, { "name": "Deathbellow Raider", "idx": 7, "num": 15, "is_land": false }, { "name": "Fanatic of Mogis", "idx": 10, "num": 20, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 32, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Slaughter-Priest of Mogis", "idx": 9, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 58, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Bloodstained Mire"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Burning-Fist Minotaur (2), Deathbellow Raider (2), Slaughter-Priest of Mogis (2) — 6 to opponent (8→2)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Burning-Fist Minotaur", "idx": 4, "num": 10, "tapped": true, "is_land": false }, { "name": "Deathbellow Raider", "idx": 7, "num": 15, "tapped": true, "is_land": false }, { "name": "Fanatic of Mogis", "idx": 10, "num": 20, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 32, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Slaughter-Priest of Mogis", "idx": 9, "num": 53, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 58, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Bloodstained Mire"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 7, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 6, "card": "Boros Reckoner" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Burning-Fist Minotaur", "idx": 4, "num": 10, "is_land": false }, { "name": "Deathbellow Raider", "idx": 7, "num": 15, "is_land": false }, { "name": "Fanatic of Mogis", "idx": 10, "num": 20, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 31, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 32, "is_land": true }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "is_land": true }, { "name": "Secluded Courtyard", "idx": 6, "num": 49, "is_land": true }, { "name": "Slaughter-Priest of Mogis", "idx": 9, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 7, "name": "Boros Reckoner", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Bloodstained Mire"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Burning-Fist Minotaur: pump +4/+0 (discard 2 cards)", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 2 }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Unclaimed Territory", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card), Slaughter-Priest of Mogis: sac 1 creature", "land": "Unclaimed Territory", "casts": ["Burning-Fist Minotaur", "Slaughter-Priest of Mogis"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }, { "card": "Slaughter-Priest of Mogis", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Boros Reckoner, Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Unclaimed Territory", "casts": ["Boros Reckoner", "Burning-Fist Minotaur"], "actions": [{ "card": "Boros Reckoner" }, { "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card), Slaughter-Priest of Mogis: sac 1 creature", "land": null, "casts": ["Burning-Fist Minotaur", "Slaughter-Priest of Mogis"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }, { "card": "Slaughter-Priest of Mogis", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=Unclaimed Territory; cast: Slaughter-Priest of Mogis: sac 1 creature", "land": "Unclaimed Territory", "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: Boros Reckoner", "land": "Unclaimed Territory", "casts": ["Boros Reckoner"], "actions": [{ "card": "Boros Reckoner" }] },
+    { "index": 8, "summary": "land=Unclaimed Territory; cast: Boros Reckoner, Slaughter-Priest of Mogis: sac 1 creature", "land": "Unclaimed Territory", "casts": ["Boros Reckoner", "Slaughter-Priest of Mogis"], "actions": [{ "card": "Boros Reckoner" }, { "card": "Slaughter-Priest of Mogis", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Slaughter-Priest of Mogis: sac 1 creature", "land": null, "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 10, "summary": "land=none; cast: Boros Reckoner", "land": null, "casts": ["Boros Reckoner"], "actions": [{ "card": "Boros Reckoner" }] },
+    { "index": 11, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boros Reckoner", "idx": 12, "num": 7, "is_land": false }, { "name": "Burning-Fist Minotaur", "idx": 4, "num": 10, "is_land": false }, { "name": "Deathbellow Raider", "idx": 7, "num": 15, "is_land": false }, { "name": "Fanatic of Mogis", "idx": 10, "num": 20, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 31, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 32, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 6, "num": 49, "is_land": true }, { "name": "Slaughter-Priest of Mogis", "idx": 9, "num": 53, "is_land": false }, { "name": "Unclaimed Territory", "idx": 11, "num": 58, "is_land": true }], "vial_counters": [], "hand": [], "graveyard": ["Bloodstained Mire"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Slaughter-Priest of Mogis: sac 1 creature", "land": null, "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis", "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}

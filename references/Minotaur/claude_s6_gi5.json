@@ -1,0 +1,235 @@
+{
+  "seed": 6, "game_index": 5, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [53] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 25, "name": "Kragma Warcaller" }, { "num": 53, "name": "Slaughter-Priest of Mogis" }, { "num": 29, "name": "Mountain" }, { "num": 1, "name": "Aether Vial" }, { "num": 41, "name": "Ragemonger" }, { "num": 51, "name": "Sethron, Hurloon General" }, { "num": 26, "name": "Kragma Warcaller" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 9, "name": "Burning-Fist Minotaur" }, { "num": 12, "name": "Burning-Fist Minotaur" }, { "num": 5, "name": "Bloodstained Mire" }, { "num": 53, "name": "Slaughter-Priest of Mogis" }, { "num": 36, "name": "Neheb, the Worthy" }, { "num": 60, "name": "Unclaimed Territory" }, { "num": 48, "name": "Secluded Courtyard" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 9, "name": "Burning-Fist Minotaur", "win_optimal": true }, { "num": 12, "name": "Burning-Fist Minotaur", "win_optimal": true }, { "num": 5, "name": "Bloodstained Mire", "win_optimal": true }, { "num": 53, "name": "Slaughter-Priest of Mogis", "win_optimal": true }, { "num": 36, "name": "Neheb, the Worthy", "win_optimal": true }, { "num": 60, "name": "Unclaimed Territory", "win_optimal": true }, { "num": 48, "name": "Secluded Courtyard", "win_optimal": true }],
+  "ai_choice": { "index": 6, "num": 48, "name": "Secluded Courtyard" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 9, "name": "Burning-Fist Minotaur", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Burning-Fist Minotaur", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Neheb, the Worthy" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Secluded Courtyard", "idx": 1, "num": 48, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 9, "name": "Burning-Fist Minotaur", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Burning-Fist Minotaur", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 60, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur" }] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Burning-Fist Minotaur", "land": "Unclaimed Territory", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur" }] },
+    { "index": 3, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "cast_order": ["Aether Vial", "Burning-Fist Minotaur"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Aether Vial" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Burning-Fist Minotaur", "idx": 3, "num": 9, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "is_land": true }, { "name": "Unclaimed Territory", "idx": 2, "num": 60, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 5, "name": "Bloodstained Mire", "cost": "", "mv": 0, "kind": "land" }, { "num": 12, "name": "Burning-Fist Minotaur", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Bloodstained Mire; cast: Aether Vial, Burning-Fist Minotaur", "land": "Bloodstained Mire", "casts": ["Aether Vial", "Burning-Fist Minotaur"], "cast_order_canonical": ["Burning-Fist Minotaur", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Burning-Fist Minotaur" }] },
+    { "index": 1, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur, Aether Vial", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur", "Aether Vial"], "cast_order_canonical": ["Burning-Fist Minotaur", "Aether Vial"], "actions": [{ "card": "Burning-Fist Minotaur" }, { "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=Bloodstained Mire; cast: Aether Vial, Burning-Fist Minotaur", "land": "Bloodstained Mire", "casts": ["Aether Vial", "Burning-Fist Minotaur"], "cast_order_canonical": ["Burning-Fist Minotaur", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Burning-Fist Minotaur" }] },
+    { "index": 3, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur, Aether Vial", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur", "Aether Vial"], "cast_order_canonical": ["Burning-Fist Minotaur", "Aether Vial"], "actions": [{ "card": "Burning-Fist Minotaur" }, { "card": "Aether Vial" }] },
+    { "index": 4, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur" }] },
+    { "index": 5, "summary": "land=Bloodstained Mire; cast: Neheb, the Worthy", "land": "Bloodstained Mire", "casts": ["Neheb, the Worthy"], "actions": [{ "card": "Neheb, the Worthy" }] },
+    { "index": 6, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur" }] },
+    { "index": 7, "summary": "land=Bloodstained Mire; cast: Neheb, the Worthy", "land": "Bloodstained Mire", "casts": ["Neheb, the Worthy"], "actions": [{ "card": "Neheb, the Worthy" }] },
+    { "index": 8, "summary": "land=none; cast: Burning-Fist Minotaur", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur" }] },
+    { "index": 9, "summary": "land=Bloodstained Mire; cast: Aether Vial, Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Bloodstained Mire", "casts": ["Aether Vial", "Burning-Fist Minotaur"], "actions": [{ "card": "Aether Vial" }, { "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 10, "summary": "land=Bloodstained Mire; cast: Aether Vial, Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Bloodstained Mire", "casts": ["Aether Vial", "Burning-Fist Minotaur"], "actions": [{ "card": "Aether Vial" }, { "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 11, "summary": "land=Bloodstained Mire; cast: Aether Vial", "land": "Bloodstained Mire", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 12, "summary": "land=Bloodstained Mire; cast: Aether Vial", "land": "Bloodstained Mire", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 13, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 14, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 15, "summary": "land=Bloodstained Mire; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": "Bloodstained Mire", "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 16, "summary": "land=none; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 17, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=Bloodstained Mire; cast: (nothing)", "land": "Bloodstained Mire", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "type": "vial_charge",
+  "turn": 4,
+  "vial": "Aether Vial", "current_counters": 0,
+  "perm_index": 5,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "Aether Vial", "idx": 5, "num": 1, "is_land": false }, { "name": "Blood Crypt", "idx": 4, "num": 4, "is_land": true }, { "name": "Burning-Fist Minotaur", "idx": 3, "num": 9, "is_land": false }, { "name": "Burning-Fist Minotaur", "idx": 6, "num": 12, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "is_land": true }, { "name": "Unclaimed Territory", "idx": 2, "num": 60, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 36, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Slaughter-Priest of Mogis" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Burning-Fist Minotaur (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "Aether Vial", "idx": 5, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Blood Crypt", "idx": 4, "num": 4, "is_land": true }, { "name": "Burning-Fist Minotaur", "idx": 3, "num": 9, "is_land": false }, { "name": "Burning-Fist Minotaur", "idx": 6, "num": 12, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "is_land": true }, { "name": "Unclaimed Territory", "idx": 2, "num": 60, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 36, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Slaughter-Priest of Mogis", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Neheb, the Worthy", "land": null, "casts": ["Neheb, the Worthy"], "actions": [{ "card": "Neheb, the Worthy" }] },
+    { "index": 1, "summary": "land=none; cast: Slaughter-Priest of Mogis", "land": null, "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 2, "summary": "land=none; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "type": "vial_charge",
+  "turn": 5,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 5,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "Aether Vial", "idx": 5, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Blood Crypt", "idx": 4, "num": 4, "is_land": true }, { "name": "Burning-Fist Minotaur", "idx": 3, "num": 9, "is_land": false }, { "name": "Burning-Fist Minotaur", "idx": 6, "num": 12, "is_land": false }, { "name": "Neheb, the Worthy", "idx": 7, "num": 36, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "is_land": true }, { "name": "Unclaimed Territory", "idx": 2, "num": 60, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 35, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Slaughter-Priest of Mogis", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Ragemonger" }],
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Burning-Fist Minotaur (2), Burning-Fist Minotaur (2) — 4 to opponent (18→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "Aether Vial", "idx": 5, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Blood Crypt", "idx": 4, "num": 4, "is_land": true }, { "name": "Burning-Fist Minotaur", "idx": 3, "num": 9, "is_land": false }, { "name": "Burning-Fist Minotaur", "idx": 6, "num": 12, "is_land": false }, { "name": "Neheb, the Worthy", "idx": 7, "num": 36, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "is_land": true }, { "name": "Unclaimed Territory", "idx": 2, "num": 60, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 35, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Ragemonger", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Slaughter-Priest of Mogis", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ragemonger, Slaughter-Priest of Mogis", "land": null, "casts": ["Ragemonger", "Slaughter-Priest of Mogis"], "cast_order_canonical": ["Ragemonger", "Slaughter-Priest of Mogis"], "actions": [{ "card": "Ragemonger" }, { "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 1, "summary": "land=none; cast: Slaughter-Priest of Mogis, Ragemonger", "land": null, "casts": ["Slaughter-Priest of Mogis", "Ragemonger"], "cast_order_canonical": ["Ragemonger", "Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }, { "card": "Ragemonger" }] },
+    { "index": 2, "summary": "land=none; cast: Slaughter-Priest of Mogis (vial), Ragemonger", "land": null, "casts": ["Slaughter-Priest of Mogis", "Ragemonger"], "actions": [{ "card": "Slaughter-Priest of Mogis" }, { "card": "Ragemonger" }] },
+    { "index": 3, "summary": "land=none; cast: Slaughter-Priest of Mogis (vial), Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": null, "casts": ["Slaughter-Priest of Mogis", "Burning-Fist Minotaur"], "actions": [{ "card": "Slaughter-Priest of Mogis" }, { "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Slaughter-Priest of Mogis (vial), Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": null, "casts": ["Slaughter-Priest of Mogis", "Burning-Fist Minotaur"], "actions": [{ "card": "Slaughter-Priest of Mogis" }, { "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Slaughter-Priest of Mogis", "land": null, "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 6, "summary": "land=none; cast: Slaughter-Priest of Mogis (vial)", "land": null, "casts": ["Slaughter-Priest of Mogis"], "actions": [{ "card": "Slaughter-Priest of Mogis" }] },
+    { "index": 7, "summary": "land=none; cast: Ragemonger", "land": null, "casts": ["Ragemonger"], "actions": [{ "card": "Ragemonger" }] },
+    { "index": 8, "summary": "land=none; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Burning-Fist Minotaur: pump +2/+0 (discard 1 card)", "land": null, "casts": ["Burning-Fist Minotaur"], "actions": [{ "card": "Burning-Fist Minotaur", "activate": true, "x": 1 }] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "discard",
+  "turn": 5,
+  "over_by": 1,
+  "discard_context": "cost",
+  "source": "Burning-Fist Minotaur",
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "Aether Vial", "idx": 5, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Blood Crypt", "idx": 4, "num": 4, "tapped": true, "is_land": true }, { "name": "Burning-Fist Minotaur", "idx": 3, "num": 9, "is_land": false }, { "name": "Burning-Fist Minotaur", "idx": 6, "num": 12, "is_land": false }, { "name": "Neheb, the Worthy", "idx": 7, "num": 36, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "tapped": true, "is_land": true }, { "name": "Slaughter-Priest of Mogis", "idx": 8, "num": 55, "is_land": false }, { "name": "Unclaimed Territory", "idx": 2, "num": 60, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 35, "name": "Neheb, the Worthy", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Ragemonger", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "ai_set": [],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Neheb, the Worthy" }, { "index": 1, "name": "Ragemonger" }],
+  "note": "reply a hand index -- the card to discard. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
+  "type": "discard",
+  "turn": 5,
+  "over_by": 1,
+  "discard_context": "cost",
+  "source": "Neheb, the Worthy",
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "Aether Vial", "idx": 5, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Blood Crypt", "idx": 4, "num": 4, "tapped": true, "is_land": true }, { "name": "Burning-Fist Minotaur", "idx": 3, "num": 9, "tapped": true, "is_land": false }, { "name": "Burning-Fist Minotaur", "idx": 6, "num": 12, "tapped": true, "is_land": false }, { "name": "Neheb, the Worthy", "idx": 7, "num": 36, "tapped": true, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "num": 48, "tapped": true, "is_land": true }, { "name": "Slaughter-Priest of Mogis", "idx": 8, "num": 55, "is_land": false }, { "name": "Unclaimed Territory", "idx": 2, "num": 60, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 43, "name": "Ragemonger", "cost": "{1}{B}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Bloodstained Mire", "Neheb, the Worthy"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 0, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "ai_set": [],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Ragemonger" }],
+  "note": "reply a hand index -- the card to discard. Default = the AI's pick."
+}
+}
+  ]
+}
