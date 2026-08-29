@@ -24,18 +24,22 @@ inline bool Main2DropEnabled()
     return v;
 }
 
-// MTG_M2_RECONSIDER=1 -- measurement lever (default OFF): main 2 RECONSIDERS newly-available
-// cards, including the land drop (USER rule 2026-08-26: "all we need to do is allow for
+// MTG_M2_RECONSIDER -- ADOPTED DEFAULT-ON 2026-08-29 (USER: "okay iff it is a strict
+// improvement"; =0 restores the old behaviour): main 2 RECONSIDERS newly-available cards,
+// including the land drop (USER rule 2026-08-26: "all we need to do is allow for
 // reconsideration of drawn/staged cards including the land drop" -- NOT a spectacle/deck
 // special case). Unlike MTG_MAIN2_DROP (blanket m2 land dimension, measured to bloat hinata's
 // plan space), this opens the m2 land drop ONLY at states where a STAGED land sits in hand --
 // a land main-1 could not have planned around, e.g. impulse-exiled by a post-combat spectacle
-// Light Up the Stage (the measured burn mechanism: 12/12 cells faster). Read by the search
-// (M2DropLive in TurnSolver) and the executor (AIEngine fold_land + ApplyPlanDirect's
-// plan.land_decided follow) -- shared reader per the lockstep rule.
+// Light Up the Stage. Adoption evidence met the strict bar: train regression -- only burn
+// moved, every mover faster (incl. two wins the blanket flag never found), zero slower;
+// held-out overnight -- burn faster in 8/8 cells (incl. an unwon game -> T8 win), zero slower
+// anywhere, every other deck byte-identical. Read by the search (M2DropLive in TurnSolver)
+// and the executor (AIEngine fold_land + ApplyPlanDirect's plan.land_decided follow) --
+// shared reader per the lockstep rule.
 inline bool M2ReconsiderEnabled()
 {
-    static const bool v = EnvOn("MTG_M2_RECONSIDER");
+    static const bool v = EnvOn("MTG_M2_RECONSIDER", true);
     return v;
 }
 
