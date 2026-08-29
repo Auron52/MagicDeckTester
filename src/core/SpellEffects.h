@@ -6353,6 +6353,11 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     // to the lowest-index one deterministically. Reached only from the no-own-creature enumeration.
     if (target_number == kTrickOpponentTarget)
     {
+        // "Target creature you control" can never resolve on their creature (CR 115.4 -- an illegal
+        // target makes the spell fizzle). The enumeration no longer offers this variant for such a
+        // card, so this is unreachable in a fresh plan; it guards a STALE one, the same way the
+        // "declared target gone" returns below do.
+        if (def.params.trick_own_target_only) { return false; }
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             const Permanent& p = state.battlefield[i];

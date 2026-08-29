@@ -842,6 +842,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.copies_solo_targeted_spells = params.value("copies_solo_targeted_spells", false);
     p.solo_target_trick           = params.value("solo_target_trick", false);
     p.trick_up_to_one             = params.value("trick_up_to_one", false);
+    p.trick_own_target_only       = params.value("trick_own_target_only", false);
     p.pump_per_cards_drawn_power  = params.value("pump_per_cards_drawn_power", 0);
     p.gy_self_power_bonus         = params.value("gy_self_power_bonus", 0);
     p.pump_per_treasure_power     = params.value("pump_per_treasure_power", 0);

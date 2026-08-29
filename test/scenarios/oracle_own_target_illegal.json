@@ -1,0 +1,20 @@
+{
+ "_comment": "Oracle's Restoration reads 'Target creature YOU CONTROL gets +1/+1 until end of turn. You draw a card and gain 1 life.' With no creature of our own it has NO legal target and cannot be cast at all (CR 601.2c) -- the cantrip and the life are riders on a spell that never resolves, not a mode available on an empty board. TurnSolver's no-own-target branch used to emit an OPPONENT-target variant to cash exactly those riders, justified in-comment by 'the spell says target CREATURE, not target creature you control' -- true for Ancestral Anger / Fists of Flame / Impolite Entrance / Expedite, FALSE here; `trick_own_target_only` is what now separates the two. Found via reference game s27/gi26, where the search burned Oracle on T1 off an empty board for the cantrip and won a turn later than the human line that saved it for the T5 Zada+Mirrorwing fan. WHY expect_active_life IS THE ASSERTION: the illegal cast never wins and never touches the opponent, so expect_no_win and expect_opponent_life both pass whether or not the bug is present -- only our own life total moves (20 -> 21 via cast_lifegain). Board: one untapped Forest and NO creature of ours; the opponent has one, which is what opened the branch. Hand is Oracle's Restoration alone, so the correct play is to cast nothing.",
+ "deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+ "turn": 1,
+ "on_the_play": true,
+ "max_turns": 1,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  { "name": "Forest", "controller": 0, "tapped": false },
+  { "name": "Skyshroud Cutter", "controller": 1 }
+ ],
+ "hand": [ "Oracle's Restoration" ],
+ "library_filler": "Forest",
+ "library_size": 40,
+ "depth": 5,
+ "budget_ms": 200,
+ "expect_active_life": 20,
+ "expect_no_win": true
+}

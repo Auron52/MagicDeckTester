@@ -7533,7 +7533,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
             }
             }
-            // No legal OWN target anywhere (empty board, or every creature filtered out) -- but the
+            // No legal OWN target anywhere (empty board, or every creature filtered out) -- and the
             // spell says "target CREATURE", not "target creature you control", so the opponent's is
             // legal and the cast is still worth its RIDER (the cantrip draw / Treasure / life /
             // bonus land drop). Without this a hand of Mountain + Ancestral Anger on turn 1 could
@@ -7550,7 +7550,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // delivers the rider with no target at all, so an opponent-target variant would be a
             // duplicate line -- and one that shares its plan signature, since the signature only
             // records a POSITIVE enchant_target.
-            if (others == 0 && !def.params.trick_up_to_one
+            // `trick_own_target_only` is excluded because the premise above is FALSE for it: those
+            // spells DO say "target creature you control" (Oracle's Restoration, Twinflame), so with
+            // no own creature there is no legal target and the spell cannot be cast at all -- the
+            // rider is not available on its own. Emitting it anyway invented a mode the card does
+            // not have; see the flag's note in CardDatabase.h for why that matters beyond legality.
+            if (others == 0 && !def.params.trick_up_to_one && !def.params.trick_own_target_only
                 && (def.params.cast_draw > 0 || def.params.creates_treasures > 0
                     || def.params.cast_lifegain > 0 || def.params.grants_extra_land_drop > 0))
             {

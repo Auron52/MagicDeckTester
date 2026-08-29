@@ -1200,6 +1200,21 @@ struct CardParams
     // (enchant_target 0) -- the untargeted payloads (treasure/life/land-drop/draw) still resolve,
     // and an untargeted cast never triggers a copy magnet ("targets only" requires a target).
     bool trick_up_to_one = false;
+    // "target creature YOU CONTROL" (Oracle's Restoration, Twinflame) vs the bare "target creature"
+    // every other solo_target_trick prints. The distinction only bites in ONE place -- the
+    // no-own-target opponent-target fallback in CollectActions -- which exists so a rider-carrying
+    // trick can still cash its cantrip/Treasure/life on an empty board by pointing the inert pump
+    // at the opponent's creature. That is legal for "target creature" and ILLEGAL here, and the
+    // difference is not cosmetic: it invents a castable mode the real card does not have (a {G}
+    // "draw a card, gain 1 life" with no board requirement), which OVERVALUES the card wherever it
+    // is measured -- in a deck screen, every arm holding more copies gets more of the phantom mode.
+    // Resolution was never wrong (ResolveSoloTargetTrick has always filtered to own creatures), so
+    // the mana was simply paid for a pump that did nothing; only the ENUMERATION offered the line.
+    //
+    // Set from card data, NOT derived from oracle_text: the engine never reads oracle_text (it is
+    // stripped from the canonical form in CardDatabase.cpp). Drift is caught instead by
+    // audit_card_fields.py, which cross-checks this flag against the authoritative Scryfall text.
+    bool trick_own_target_only = false;
     // Fists of Flame: "+N/+0 for each card you've drawn this turn", computed AT RESOLUTION per
     // copy, after that copy's own cast_draw (draw first, then count -- oracle order), off
     // Player::cards_drawn_this_turn. 0 = no drawn-count pump.

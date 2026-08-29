@@ -230,6 +230,44 @@ def load_allowlist():
     return {k: v for k, v in raw.items() if not k.startswith("_")}  # drop _README
 
 
+# "target creature you control" vs the bare "target creature". Adjacent words, so Gold Rush's
+# "...+2/+2 for each Treasure you control" (a COUNT clause, not a target restriction) does not match.
+OWN_TARGET_RE = re.compile(r"target creatures? you control", re.I)
+
+
+def check_trick_target_scope(cards, ref):
+    """Every solo_target_trick's `trick_own_target_only` must agree with its printed target clause.
+
+    This is the ONLY thing tying that flag to reality. It is a param, not derived text, because the
+    engine never reads oracle_text -- so nothing in the build would notice a card whose printed
+    "target creature you control" was entered without the flag. That gap is not cosmetic: the
+    no-own-target fallback in CollectActions then offers an opponent-target cast the real card
+    cannot make, inventing a rider-only mode (a {G} cantrip + lifegain off an empty board) that
+    OVERVALUES the card in every measurement it appears in. Oracle's Restoration shipped that way
+    and cost a reference game a full turn before it was caught.
+
+    Checked against the SNAPSHOT's text, not cards.json's, so hand-authored drift cannot hide it.
+    -> [(name, detail)] hard mismatches.
+    """
+    out = []
+    for c in cards:
+        if not (c.get("parameters") or {}).get("solo_target_trick"):
+            continue
+        name = c.get("name")
+        if name not in ref:
+            continue                       # already reported as unfetched (fails closed)
+        printed = OWN_TARGET_RE.search(ref[name].get("oracle_text") or "") is not None
+        flagged = bool((c.get("parameters") or {}).get("trick_own_target_only"))
+        if printed and not flagged:
+            out.append((name, 'prints "target creature(s) you control" but '
+                              'trick_own_target_only is not set -- the engine will offer an '
+                              'ILLEGAL opponent-target cast for its rider'))
+        elif flagged and not printed:
+            out.append((name, 'trick_own_target_only is set but the printed text does not '
+                              'restrict the target to creatures you control'))
+    return out
+
+
 def do_audit(cards, as_json):
     if not REFERENCE.exists():
         msg = (f"Scryfall snapshot missing: {REFERENCE.relative_to(ROOT)}. "
@@ -270,12 +308,14 @@ def do_audit(cards, as_json):
     # Stale allowlist entries: a card+field is allowlisted but no longer mismatches
     # (e.g. cards.json was fixed). Report so the ledger stays honest -- non-blocking.
     stale = [(n, f) for n, fields in allow.items() for f in fields if (n, f) not in used_allow]
+    scope = check_trick_target_scope(cards, ref)
 
     if as_json:
         print(json.dumps({
-            "ok": not mismatches and not unfetched,
+            "ok": not mismatches and not unfetched and not scope,
             "checked": checked,
             "mismatches": [{"name": n, "issues": h} for n, h in mismatches],
+            "trick_target_scope": [{"name": n, "detail": d} for n, d in scope],
             "unfetched": unfetched,
             "allowlisted": [{"name": n, "field": f, "detail": d, "reason": r}
                             for n, f, d, r in allowed_all],
@@ -283,7 +323,7 @@ def do_audit(cards, as_json):
             "token_definitions_skipped": token_defs,
             "oracle_advisories": [{"name": n, "detail": a} for n, a in advisories],
         }, indent=2))
-        return 1 if (mismatches or unfetched) else 0
+        return 1 if (mismatches or unfetched or scope) else 0
 
     print(f"Checked {checked} cards against the Scryfall snapshot.\n")
     if mismatches:
@@ -295,6 +335,11 @@ def do_audit(cards, as_json):
     else:
         print("All hard fields (cost, P/T, types, keywords) match the snapshot "
               "(after systematic + allowlisted divergences).")
+    if scope:
+        print(f"\nTRICK TARGET SCOPE ({len(scope)}) -- solo_target_trick target restriction "
+              f"disagrees with the printed text:")
+        for n, d in scope:
+            print(f"  {n}: {d}")
     if allowed_all:
         print(f"\nALLOWLISTED DIVERGENCES ({len(allowed_all)}) -- intentional, "
               f"see {DIVERGENCES.relative_to(ROOT)}:")
@@ -318,7 +363,7 @@ def do_audit(cards, as_json):
         print(f"\nORACLE-TEXT ADVISORIES ({len(advisories)}) -- verbatim divergence (fuzzy; verify):")
         for n, a in advisories:
             print(f"  {n}: {a}")
-    return 1 if (mismatches or unfetched) else 0
+    return 1 if (mismatches or unfetched or scope) else 0
 
 
 def main():

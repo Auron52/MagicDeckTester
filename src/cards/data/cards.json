@@ -4214,6 +4214,7 @@
    "template": "custom",
    "parameters": {
     "solo_target_trick": true,
+    "trick_own_target_only": true,
     "power_bonus": 1,
     "tough_bonus": 1,
     "cast_draw": 1,
@@ -4285,6 +4286,7 @@
    "template": "custom",
    "parameters": {
     "solo_target_trick": true,
+    "trick_own_target_only": true,
     "token_copy_of_target": true,
     "strive_cost": "{2}{R}"
    }

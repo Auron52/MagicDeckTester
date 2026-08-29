@@ -3941,6 +3941,8 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "expect_win_turn": 4,          // optional: nonzero exit if the actual win turn is later (a FAIL)
 //     "expect_no_win": true,         // optional: nonzero exit if the engine DID win (negative guard)
 //     "expect_opponent_life": 13,    // optional: pin the exact damage a non-lethal payoff dealt
+//     "expect_active_life": 20,      // optional: pin OUR life (incidental lifegain / pain taps) --
+//                                    // the only assertion that sees a rider-only illegal cast
 //     "validate_line": "land=X;cast=A;cast=B",   // optional: run TurnSolver::CheckLine on this board
 //     "expect_verdict": "accept",    // ... and fail unless the verdict matches (default "accept").
 //                                    // Guards a line the SEARCH would not pick on its own (a
@@ -4170,6 +4172,25 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             return 1;
         }
         std::cout << "scenario: PASS (opponent_life " << exp << ")\n";
+    }
+
+    // Optional OWN-life assertion, the mirror of the above. Pins what the line did to US -- an
+    // incidental lifegain (cast_lifegain), a Fastland/painland tap, a phyrexian pay. Some defects
+    // are visible ONLY here: an ILLEGALLY-castable rider spell gains life without ever winning or
+    // touching the opponent, so both expect_no_win and expect_opponent_life pass unchanged whether
+    // the bug is present or not (Oracle's Restoration cast off an empty board -- see
+    // scenarios/oracle_own_target_illegal.json). Deliberately placed BEFORE expect_no_win, which
+    // returns early on success.
+    if (j.contains("expect_active_life"))
+    {
+        const int exp = j.at("expect_active_life").get<int>();
+        const int got = state.players[0].life;
+        if (got != exp)
+        {
+            std::cout << "scenario: FAIL expected active_life " << exp << ", got " << got << "\n";
+            return 1;
+        }
+        std::cout << "scenario: PASS (active_life " << exp << ")\n";
     }
 
     // Optional NEGATIVE assertion: fail (exit 1) if the engine DID win, when the fixture asserts it
