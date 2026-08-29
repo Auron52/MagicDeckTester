@@ -1,0 +1,405 @@
+{
+  "seed": 25, "game_index": 24, "win_turn": 7, "won": true,
+  "mulligan": { "count": 2, "bottom": [38, 5] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 23, "name": "Goblin Instigator" }, { "num": 9, "name": "Forest" }, { "num": 31, "name": "Gruul Turf" }, { "num": 10, "name": "Forest" }, { "num": 17, "name": "Fortifying Draught" }, { "num": 11, "name": "Forest" }, { "num": 41, "name": "Luxurious Libation" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 38, "name": "Impolite Entrance" }, { "num": 22, "name": "Game Trail" }, { "num": 9, "name": "Forest" }, { "num": 30, "name": "Gold Rush" }, { "num": 60, "name": "Zada, Hedron Grinder" }, { "num": 46, "name": "Mirrorwing Dragon" }, { "num": 14, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 21, "name": "Game Trail" }, { "num": 5, "name": "Fists of Flame" }, { "num": 38, "name": "Impolite Entrance" }, { "num": 24, "name": "Goblin Instigator" }, { "num": 44, "name": "Mirrorwing Dragon" }, { "num": 10, "name": "Forest" }, { "num": 13, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 21, "name": "Game Trail", "win_optimal": true }, { "num": 5, "name": "Fists of Flame", "win_optimal": true }, { "num": 38, "name": "Impolite Entrance", "win_optimal": true }, { "num": 24, "name": "Goblin Instigator", "win_optimal": true }, { "num": 44, "name": "Mirrorwing Dragon", "win_optimal": true }, { "num": 10, "name": "Forest", "win_optimal": true }, { "num": 13, "name": "Forest", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 10, "name": "Forest" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 21, "name": "Game Trail", "win_optimal": true }, { "num": 5, "name": "Fists of Flame", "win_optimal": true }, { "num": 24, "name": "Goblin Instigator", "win_optimal": true }, { "num": 44, "name": "Mirrorwing Dragon", "win_optimal": true }, { "num": 10, "name": "Forest", "win_optimal": true }, { "num": 13, "name": "Forest", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 10, "name": "Forest" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Mirrorwing Dragon" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 10, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Game Trail", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Goblin Instigator", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Game Trail; cast: (nothing)", "land": "Game Trail", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Goblin Instigator" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 10, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Game Trail", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Goblin Instigator", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Goblin Instigator", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Game Trail; cast: Goblin Instigator", "land": "Game Trail", "casts": ["Goblin Instigator"], "actions": [{ "card": "Goblin Instigator" }] },
+    { "index": 1, "summary": "land=Game Trail; cast: (nothing)", "land": "Game Trail", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 7,
+  "type": "land_entry",
+  "source": "Game Trail",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 10, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Game Trail", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Goblin Instigator", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Goblin Instigator", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "pay_life": 0,
+  "reveal_types": ["Mountain", "Forest"],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (reveal a matching land), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "cast_order": ["Goblin Instigator", "Ignoble Hierarch"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Ignoble Hierarch" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Goblin Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "Forest", "idx": 1, "num": 10, "is_land": true }, { "name": "Game Trail", "idx": 2, "num": 21, "is_land": true }, { "name": "Goblin Instigator", "idx": 3, "num": 24, "is_land": false }], "vial_counters": [], "hand": [{ "num": 13, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Goblin Instigator", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Goblin Instigator, Ignoble Hierarch", "land": "Forest", "casts": ["Goblin Instigator", "Ignoble Hierarch"], "cast_order_canonical": ["Goblin Instigator", "Ignoble Hierarch"], "actions": [{ "card": "Goblin Instigator" }, { "card": "Ignoble Hierarch" }] },
+    { "index": 1, "summary": "land=Forest; cast: Ignoble Hierarch, Goblin Instigator", "land": "Forest", "casts": ["Ignoble Hierarch", "Goblin Instigator"], "cast_order_canonical": ["Ignoble Hierarch", "Goblin Instigator"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Goblin Instigator" }] },
+    { "index": 2, "summary": "land=Forest; cast: Ignoble Hierarch", "land": "Forest", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 3, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 4, "summary": "land=Forest; cast: Goblin Instigator", "land": "Forest", "casts": ["Goblin Instigator"], "actions": [{ "card": "Goblin Instigator" }] },
+    { "index": 5, "summary": "land=none; cast: Goblin Instigator", "land": null, "casts": ["Goblin Instigator"], "actions": [{ "card": "Goblin Instigator" }] },
+    { "index": 6, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Gold Rush" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Goblin Instigator (1), 1/1 Goblin Token (1) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Goblin Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "1/1 Goblin Token", "idx": 7, "num": 1001, "is_land": false }, { "name": "Forest", "idx": 1, "num": 10, "is_land": true }, { "name": "Forest", "idx": 5, "num": 13, "is_land": true }, { "name": "Game Trail", "idx": 2, "num": 21, "is_land": true }, { "name": "Goblin Instigator", "idx": 3, "num": 24, "is_land": false }, { "name": "Goblin Instigator", "idx": 6, "num": 26, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 8, "num": 36, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Gold Rush", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 1, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 4, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 5, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 6, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Goblin Instigator (1), 1/1 Goblin Token (1), Goblin Instigator (1), 1/1 Goblin Token (1) — 4 to opponent (18→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Goblin Token", "idx": 4, "num": 1000, "tapped": true, "is_land": false }, { "name": "1/1 Goblin Token", "idx": 7, "num": 1001, "tapped": true, "is_land": false }, { "name": "Forest", "idx": 1, "num": 10, "is_land": true }, { "name": "Forest", "idx": 5, "num": 13, "is_land": true }, { "name": "Game Trail", "idx": 2, "num": 21, "is_land": true }, { "name": "Goblin Instigator", "idx": 3, "num": 24, "tapped": true, "is_land": false }, { "name": "Goblin Instigator", "idx": 6, "num": 26, "tapped": true, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 8, "num": 36, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Gold Rush", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Gold Rush → Ignoble Hierarch", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 36, "enchant_target_name": "Ignoble Hierarch", "trick": true }] },
+    { "index": 1, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: Gold Rush → Ignoble Hierarch", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 36, "enchant_target_name": "Ignoble Hierarch", "trick": true }] },
+    { "index": 4, "summary": "land=none; cast: Gold Rush → Ignoble Hierarch", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 36, "enchant_target_name": "Ignoble Hierarch", "trick": true }] },
+    { "index": 5, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 6, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Ignoble Hierarch" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Goblin Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "1/1 Goblin Token", "idx": 7, "num": 1001, "is_land": false }, { "name": "Forest", "idx": 1, "num": 10, "is_land": true }, { "name": "Forest", "idx": 5, "num": 13, "is_land": true }, { "name": "Game Trail", "idx": 2, "num": 21, "is_land": true }, { "name": "Goblin Instigator", "idx": 3, "num": 24, "is_land": false }, { "name": "Goblin Instigator", "idx": 6, "num": 26, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 8, "num": 36, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Gold Rush", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 35, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Gold Rush → Goblin Instigator, Ignoble Hierarch", "land": null, "casts": ["Gold Rush", "Ignoble Hierarch"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }, { "card": "Ignoble Hierarch" }] },
+    { "index": 1, "summary": "land=none; cast: Ignoble Hierarch, Gold Rush → Goblin Instigator", "land": null, "casts": ["Ignoble Hierarch", "Gold Rush"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 2, "summary": "land=none; cast: Gold Rush, Ignoble Hierarch", "land": null, "casts": ["Gold Rush", "Ignoble Hierarch"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }, { "card": "Ignoble Hierarch" }] },
+    { "index": 3, "summary": "land=none; cast: Ignoble Hierarch, Gold Rush", "land": null, "casts": ["Ignoble Hierarch", "Gold Rush"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Gold Rush", "trick": true }] },
+    { "index": 4, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 5, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 6, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: Gold Rush → Goblin Instigator, Ignoble Hierarch", "land": null, "casts": ["Gold Rush", "Ignoble Hierarch"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }, { "card": "Ignoble Hierarch" }] },
+    { "index": 9, "summary": "land=none; cast: Gold Rush → Goblin Instigator, Ignoble Hierarch", "land": null, "casts": ["Gold Rush", "Ignoble Hierarch"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }, { "card": "Ignoble Hierarch" }] },
+    { "index": 10, "summary": "land=none; cast: Ignoble Hierarch, Gold Rush → Goblin Instigator", "land": null, "casts": ["Ignoble Hierarch", "Gold Rush"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 11, "summary": "land=none; cast: Ignoble Hierarch, Gold Rush → Goblin Instigator", "land": null, "casts": ["Ignoble Hierarch", "Gold Rush"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 12, "summary": "land=none; cast: Gold Rush, Ignoble Hierarch", "land": null, "casts": ["Gold Rush", "Ignoble Hierarch"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }, { "card": "Ignoble Hierarch" }] },
+    { "index": 13, "summary": "land=none; cast: Gold Rush, Ignoble Hierarch", "land": null, "casts": ["Gold Rush", "Ignoble Hierarch"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }, { "card": "Ignoble Hierarch" }] },
+    { "index": 14, "summary": "land=none; cast: Ignoble Hierarch, Gold Rush", "land": null, "casts": ["Ignoble Hierarch", "Gold Rush"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Gold Rush", "trick": true }] },
+    { "index": 15, "summary": "land=none; cast: Ignoble Hierarch, Gold Rush", "land": null, "casts": ["Ignoble Hierarch", "Gold Rush"], "cast_order_canonical": ["Ignoble Hierarch", "Gold Rush"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Gold Rush", "trick": true }] },
+    { "index": 16, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 17, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 18, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 19, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Goblin Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "1/1 Goblin Token", "idx": 7, "num": 1001, "is_land": false }, { "name": "Forest", "idx": 1, "num": 10, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 13, "is_land": true }, { "name": "Game Trail", "idx": 2, "num": 21, "is_land": true }, { "name": "Goblin Instigator", "idx": 3, "num": 24, "is_land": false }, { "name": "Goblin Instigator", "idx": 6, "num": 26, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 8, "num": 36, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 9, "num": 35, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Gold Rush", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 1, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 4, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 5, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 6, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Goblin Instigator (1), 1/1 Goblin Token (1), Goblin Instigator (1), 1/1 Goblin Token (1) — 4 to opponent (14→10)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Goblin Token", "idx": 4, "num": 1000, "tapped": true, "is_land": false }, { "name": "1/1 Goblin Token", "idx": 7, "num": 1001, "tapped": true, "is_land": false }, { "name": "Forest", "idx": 1, "num": 10, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 13, "is_land": true }, { "name": "Game Trail", "idx": 2, "num": 21, "is_land": true }, { "name": "Goblin Instigator", "idx": 3, "num": 24, "tapped": true, "is_land": false }, { "name": "Goblin Instigator", "idx": 6, "num": 26, "tapped": true, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 8, "num": 36, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 9, "num": 35, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Gold Rush", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Gold Rush → Ignoble Hierarch", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 36, "enchant_target_name": "Ignoble Hierarch", "trick": true }] },
+    { "index": 1, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: Gold Rush → Ignoble Hierarch", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 36, "enchant_target_name": "Ignoble Hierarch", "trick": true }] },
+    { "index": 4, "summary": "land=none; cast: Gold Rush → Ignoble Hierarch", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 36, "enchant_target_name": "Ignoble Hierarch", "trick": true }] },
+    { "index": 5, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 6, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 6, "card": "Gold Rush" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Goblin Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "1/1 Goblin Token", "idx": 7, "num": 1001, "is_land": false }, { "name": "Forest", "idx": 1, "num": 10, "is_land": true }, { "name": "Forest", "idx": 5, "num": 13, "is_land": true }, { "name": "Game Trail", "idx": 2, "num": 21, "is_land": true }, { "name": "Goblin Instigator", "idx": 3, "num": 24, "is_land": false }, { "name": "Goblin Instigator", "idx": 6, "num": 26, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 8, "num": 36, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 9, "num": 35, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Gold Rush", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 28, "name": "Gold Rush", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 44, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Gold Rush → Goblin Instigator, Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }, { "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 1, "summary": "land=none; cast: Gold Rush, Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }, { "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 2, "summary": "land=none; cast: Gold Rush, Gold Rush", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }, { "card": "Gold Rush", "trick": true }] },
+    { "index": 3, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 4, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: Mirrorwing Dragon", "land": null, "casts": ["Mirrorwing Dragon"], "actions": [{ "card": "Mirrorwing Dragon" }] },
+    { "index": 7, "summary": "land=none; cast: Gold Rush → Goblin Instigator, Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }, { "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 8, "summary": "land=none; cast: Gold Rush → Goblin Instigator, Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }, { "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 9, "summary": "land=none; cast: Gold Rush, Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }, { "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 10, "summary": "land=none; cast: Gold Rush, Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }, { "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 11, "summary": "land=none; cast: Gold Rush, Gold Rush", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }, { "card": "Gold Rush", "trick": true }] },
+    { "index": 12, "summary": "land=none; cast: Gold Rush, Gold Rush", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }, { "card": "Gold Rush", "trick": true }] },
+    { "index": 13, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 14, "summary": "land=none; cast: Gold Rush → Goblin Instigator", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 24, "enchant_target_name": "Goblin Instigator", "trick": true }] },
+    { "index": 15, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] },
+    { "index": 16, "summary": "land=none; cast: Gold Rush", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "trick": true }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["Gold Rush", "Gold Rush"], "decision": {
+  "decision_index": 15,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 7, "card": "Elvish Mystic" }],
+  "events": [{ "turn": 6, "kind": "combat", "text": "⚔ attacked: Goblin Instigator (1), 1/1 Goblin Token (1), Goblin Instigator (1), 1/1 Goblin Token (1) — 4 to opponent (10→6)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Goblin Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "1/1 Goblin Token", "idx": 7, "num": 1001, "is_land": false }, { "name": "Forest", "idx": 1, "num": 10, "is_land": true }, { "name": "Forest", "idx": 5, "num": 13, "is_land": true }, { "name": "Game Trail", "idx": 2, "num": 21, "is_land": true }, { "name": "Goblin Instigator", "idx": 3, "num": 24, "is_land": false }, { "name": "Goblin Instigator", "idx": 6, "num": 26, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 8, "num": 36, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 9, "num": 35, "is_land": false }, { "name": "Mirrorwing Dragon", "idx": 10, "num": 44, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Elvish Mystic", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Gold Rush", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 28, "name": "Gold Rush", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 1, "summary": "land=none; cast: Elvish Mystic, Gold Rush → Mirrorwing Dragon, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "actions": [{ "card": "Elvish Mystic" }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 2, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Elvish Mystic, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Gold Rush", "Elvish Mystic", "Gold Rush"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Elvish Mystic" }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 3, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Gold Rush → Mirrorwing Dragon, Elvish Mystic", "land": null, "casts": ["Gold Rush", "Gold Rush", "Elvish Mystic"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Elvish Mystic" }] },
+    { "index": 4, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 5, "summary": "land=none; cast: Elvish Mystic, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Elvish Mystic", "Gold Rush"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush"], "actions": [{ "card": "Elvish Mystic" }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 6, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Elvish Mystic", "land": null, "casts": ["Gold Rush", "Elvish Mystic"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Elvish Mystic" }] },
+    { "index": 7, "summary": "land=none; cast: Mirrorwing Dragon", "land": null, "casts": ["Mirrorwing Dragon"], "actions": [{ "card": "Mirrorwing Dragon" }] },
+    { "index": 8, "summary": "land=none; cast: Elvish Mystic", "land": null, "casts": ["Elvish Mystic"], "actions": [{ "card": "Elvish Mystic" }] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 11, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Gold Rush", "Gold Rush"], "cast_order_canonical": ["Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 12, "summary": "land=none; cast: Elvish Mystic, Gold Rush → Mirrorwing Dragon, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "actions": [{ "card": "Elvish Mystic" }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 13, "summary": "land=none; cast: Elvish Mystic, Gold Rush → Mirrorwing Dragon, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "actions": [{ "card": "Elvish Mystic" }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 14, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Elvish Mystic, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Gold Rush", "Elvish Mystic", "Gold Rush"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Elvish Mystic" }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 15, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Elvish Mystic, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Gold Rush", "Elvish Mystic", "Gold Rush"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Elvish Mystic" }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 16, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Gold Rush → Mirrorwing Dragon, Elvish Mystic", "land": null, "casts": ["Gold Rush", "Gold Rush", "Elvish Mystic"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Elvish Mystic" }] },
+    { "index": 17, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Gold Rush → Mirrorwing Dragon, Elvish Mystic", "land": null, "casts": ["Gold Rush", "Gold Rush", "Elvish Mystic"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Elvish Mystic" }] },
+    { "index": 18, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 19, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 20, "summary": "land=none; cast: Elvish Mystic, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Elvish Mystic", "Gold Rush"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush"], "actions": [{ "card": "Elvish Mystic" }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 21, "summary": "land=none; cast: Elvish Mystic, Gold Rush → Mirrorwing Dragon", "land": null, "casts": ["Elvish Mystic", "Gold Rush"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush"], "actions": [{ "card": "Elvish Mystic" }, { "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }] },
+    { "index": 22, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Elvish Mystic", "land": null, "casts": ["Gold Rush", "Elvish Mystic"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Elvish Mystic" }] },
+    { "index": 23, "summary": "land=none; cast: Gold Rush → Mirrorwing Dragon, Elvish Mystic", "land": null, "casts": ["Gold Rush", "Elvish Mystic"], "cast_order_canonical": ["Elvish Mystic", "Gold Rush"], "actions": [{ "card": "Gold Rush", "enchant_target": 44, "enchant_target_name": "Mirrorwing Dragon", "trick": true }, { "card": "Elvish Mystic" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 7, "decision": {
+  "decision_index": 16,
+  "type": "target",
+  "source": "Gold Rush",
+  "turn": 7,
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 0,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Goblin Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "1/1 Goblin Token", "idx": 7, "num": 1001, "is_land": false }, { "name": "Forest", "idx": 1, "num": 10, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 5, "num": 13, "tapped": true, "is_land": true }, { "name": "Game Trail", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Goblin Instigator", "idx": 3, "num": 24, "is_land": false }, { "name": "Goblin Instigator", "idx": 6, "num": 26, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 8, "num": 36, "tapped": true, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 9, "num": 35, "is_land": false }, { "name": "Mirrorwing Dragon", "idx": 10, "num": 44, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Elvish Mystic", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Gold Rush", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1, "floating_mana": {"G": 1, "wild": 1} },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "legal_targets": [{ "kind": "permanent", "index": 3, "label": "Goblin Instigator (yours)" }, { "kind": "permanent", "index": 4, "label": "1/1 Goblin Token (yours)" }, { "kind": "permanent", "index": 6, "label": "Goblin Instigator (yours)" }, { "kind": "permanent", "index": 7, "label": "1/1 Goblin Token (yours)" }, { "kind": "permanent", "index": 8, "label": "Ignoble Hierarch (yours)" }, { "kind": "permanent", "index": 9, "label": "Ignoble Hierarch (yours)" }, { "kind": "permanent", "index": 10, "label": "Mirrorwing Dragon (yours)" }],
+  "heuristic_default": 7,
+  "options": [{ "index": 0, "label": "(no target)", "targets": [] }, { "index": 1, "label": "Goblin Instigator (yours)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 2, "label": "1/1 Goblin Token (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 3, "label": "Goblin Instigator (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 4, "label": "1/1 Goblin Token (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 5, "label": "Ignoble Hierarch (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 6, "label": "Ignoble Hierarch (yours)", "targets": [{ "kind": "permanent", "index": 9 }] }, { "index": 7, "label": "Mirrorwing Dragon (yours)", "targets": [{ "kind": "permanent", "index": 10 }] }],
+  "note": "reply an option index. Each chosen target takes 0 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 7, "decision": {
+  "decision_index": 17,
+  "type": "target",
+  "source": "Gold Rush",
+  "turn": 7,
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 0,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Goblin Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "1/1 Goblin Token", "idx": 7, "num": 1001, "is_land": false }, { "name": "Forest", "idx": 5, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 10, "tapped": true, "is_land": true }, { "name": "Game Trail", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Goblin Instigator", "idx": 3, "num": 24, "is_land": false }, { "name": "Goblin Instigator", "idx": 6, "num": 26, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 9, "num": 35, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 8, "num": 36, "tapped": true, "is_land": false }, { "name": "Mirrorwing Dragon", "idx": 10, "num": 44, "is_land": false }, { "name": "Treasure Token", "idx": 11, "num": 1002, "is_land": false }, { "name": "Treasure Token", "idx": 12, "num": 1003, "is_land": false }, { "name": "Treasure Token", "idx": 13, "num": 1004, "is_land": false }, { "name": "Treasure Token", "idx": 14, "num": 1005, "is_land": false }, { "name": "Treasure Token", "idx": 15, "num": 1006, "is_land": false }, { "name": "Treasure Token", "idx": 16, "num": 1007, "is_land": false }, { "name": "Treasure Token", "idx": 17, "num": 1008, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Elvish Mystic", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Gold Rush"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "legal_targets": [{ "kind": "permanent", "index": 3, "label": "Goblin Instigator (yours)" }, { "kind": "permanent", "index": 4, "label": "1/1 Goblin Token (yours)" }, { "kind": "permanent", "index": 6, "label": "Goblin Instigator (yours)" }, { "kind": "permanent", "index": 7, "label": "1/1 Goblin Token (yours)" }, { "kind": "permanent", "index": 8, "label": "Ignoble Hierarch (yours)" }, { "kind": "permanent", "index": 9, "label": "Ignoble Hierarch (yours)" }, { "kind": "permanent", "index": 10, "label": "Mirrorwing Dragon (yours)" }],
+  "heuristic_default": 7,
+  "options": [{ "index": 0, "label": "(no target)", "targets": [] }, { "index": 1, "label": "Goblin Instigator (yours)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 2, "label": "1/1 Goblin Token (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 3, "label": "Goblin Instigator (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 4, "label": "1/1 Goblin Token (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 5, "label": "Ignoble Hierarch (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 6, "label": "Ignoble Hierarch (yours)", "targets": [{ "kind": "permanent", "index": 9 }] }, { "index": 7, "label": "Mirrorwing Dragon (yours)", "targets": [{ "kind": "permanent", "index": 10 }] }],
+  "note": "reply an option index. Each chosen target takes 0 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Goblin Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "1/1 Goblin Token", "idx": 7, "num": 1001, "is_land": false }, { "name": "Forest", "idx": 5, "num": 13, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 10, "tapped": true, "is_land": true }, { "name": "Game Trail", "idx": 2, "num": 21, "tapped": true, "is_land": true }, { "name": "Goblin Instigator", "idx": 3, "num": 24, "is_land": false }, { "name": "Goblin Instigator", "idx": 6, "num": 26, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 9, "num": 35, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 8, "num": 36, "tapped": true, "is_land": false }, { "name": "Mirrorwing Dragon", "idx": 10, "num": 44, "is_land": false }, { "name": "Treasure Token", "idx": 24, "num": 1015, "is_land": false }, { "name": "Treasure Token", "idx": 23, "num": 1014, "is_land": false }, { "name": "Treasure Token", "idx": 22, "num": 1013, "is_land": false }, { "name": "Treasure Token", "idx": 21, "num": 1012, "is_land": false }, { "name": "Treasure Token", "idx": 20, "num": 1011, "is_land": false }, { "name": "Treasure Token", "idx": 19, "num": 1010, "is_land": false }, { "name": "Treasure Token", "idx": 18, "num": 1009, "is_land": false }, { "name": "Treasure Token", "idx": 17, "num": 1008, "is_land": false }, { "name": "Treasure Token", "idx": 16, "num": 1007, "is_land": false }, { "name": "Treasure Token", "idx": 15, "num": 1006, "is_land": false }, { "name": "Treasure Token", "idx": 14, "num": 1005, "is_land": false }, { "name": "Treasure Token", "idx": 13, "num": 1004, "is_land": false }, { "name": "Treasure Token", "idx": 12, "num": 1003, "is_land": false }, { "name": "Treasure Token", "idx": 11, "num": 1002, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Elvish Mystic", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Mirrorwing Dragon", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Gold Rush", "Gold Rush"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Mirrorwing Dragon", "land": null, "casts": ["Mirrorwing Dragon"], "actions": [{ "card": "Mirrorwing Dragon" }] },
+    { "index": 1, "summary": "land=none; cast: Elvish Mystic", "land": null, "casts": ["Elvish Mystic"], "actions": [{ "card": "Elvish Mystic" }] },
+    { "index": 2, "summary": "land=none; cast: Elvish Mystic, Mirrorwing Dragon", "land": null, "casts": ["Elvish Mystic", "Mirrorwing Dragon"], "cast_order_canonical": ["Mirrorwing Dragon", "Elvish Mystic"], "actions": [{ "card": "Elvish Mystic" }, { "card": "Mirrorwing Dragon" }] },
+    { "index": 3, "summary": "land=none; cast: Mirrorwing Dragon, Elvish Mystic", "land": null, "casts": ["Mirrorwing Dragon", "Elvish Mystic"], "cast_order_canonical": ["Mirrorwing Dragon", "Elvish Mystic"], "actions": [{ "card": "Mirrorwing Dragon" }, { "card": "Elvish Mystic" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
