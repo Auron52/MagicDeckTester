@@ -4990,6 +4990,25 @@ static int HinataFullOrderRank(const CardDefinition& def)
     return 40;
 }
 
+// EVERYTHING IS A SECOND-MAIN CAST. See the declaration in DecisionProviders.h for the USER's
+// reasoning, the 2026-08-16 failure this supersedes, and why MTG_MAIN2_DROP is a prerequisite.
+bool HinataProvider::ClassifiesMainPhases() const
+{
+    static const bool s_env = EnvOn("MTG_HINATA_ALL_MAIN2");
+    return heurarm::Flag(heurarm::HINATA_ALL_MAIN2, s_env);
+}
+
+std::optional<DecisionProvider::MainPhase>
+HinataProvider::MainPhaseOverride(const GameState& s, const CardDefinition& def) const
+{
+    (void)s; (void)def;
+    // Unconditional: no card in this 60 helps the attack, so there is no per-card carve-out to
+    // make. Consulted only while ClassifiesMainPhases() is true (MainPhaseFilterActive gates on
+    // it), so the lever's default-off state keeps this inert.
+    if (!ClassifiesMainPhases()) { return std::nullopt; }
+    return MainPhase::Main2;
+}
+
 int HinataProvider::LandDropCastOrderRank() const
 {
     // 0: ahead of the mana rocks (4/5), so ahead of every breakpoint site this deck has -- the

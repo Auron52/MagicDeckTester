@@ -20,8 +20,11 @@
 // default-ON with an MTG_NO_MAIN2_DROP hatch + GT rebaseline.
 inline bool Main2DropEnabled()
 {
-    static const bool v = EnvOn("MTG_MAIN2_DROP");
-    return v;
+    // Per-job override (see HeuristicArm.h) so ONE pooled batch can carry both arms of the A/B --
+    // required to attribute the Hinata all-main-2 arm, which needs this flag, against a control
+    // that must not have it. -1 = unset => the env static => byte-identical off the batch path.
+    static const bool env_on = EnvOn("MTG_MAIN2_DROP");
+    return heurarm::Flag(heurarm::MAIN2_DROP, env_on);
 }
 
 // MTG_M2_RECONSIDER -- ADOPTED DEFAULT-ON 2026-08-29 (USER: "okay iff it is a strict

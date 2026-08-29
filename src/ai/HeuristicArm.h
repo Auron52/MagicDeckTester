@@ -93,6 +93,8 @@ enum Slot : int
     BP_SITE3,                 // MTG_BP_SITE3              make the PLAIN-CANTRIP continuation searchable
     BP_SITE3_DEFER,           // MTG_BP_SITE3_DEFER        ...and keep it OUT OF WAVE 0 (cost only)
     BP_PARTITION_CANTRIP,     // MTG_BP_PARTITION_CANTRIP  THE PARTITION SHAPE for plain cantrips
+    HINATA_ALL_MAIN2,         // MTG_HINATA_ALL_MAIN2      every cast is a SECOND-MAIN cast
+    MAIN2_DROP,               // MTG_MAIN2_DROP            the land drop is offered POST-combat too
     COUNT
 };
 
@@ -163,6 +165,8 @@ inline const char* Name(int slot)
         "MTG_BP_SITE3",
         "MTG_BP_SITE3_DEFER",
         "MTG_BP_PARTITION_CANTRIP",
+        "MTG_HINATA_ALL_MAIN2",
+        "MTG_MAIN2_DROP",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

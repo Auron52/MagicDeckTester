@@ -316,6 +316,32 @@ class HinataProvider : public GenericProvider
 public:
     const char* Name() const override { return "Hinata"; }
     bool OpponentPlaysLands() const override { return true; }
+    // EVERYTHING IS A SECOND-MAIN CAST (USER, 2026-08-29: "Everything can be classified as 2nd
+    // main in Hinata. This is because the only attacker is Hinata itself and there are no pumps
+    // [or haste or anything else of that type]"). The classification question is "does this help
+    // THIS turn's attack?", and on this list nothing does: the only body that attacks is Hinata
+    // herself (summoning-sick the turn she lands), Ornithopter of Paradise is a 0/2 mana dork,
+    // and there is no pump, anthem, haste or haste-granter in the 60. The X payoffs and the
+    // cantrips are all strictly >= as good after combat, which is the dominance the Main2 class
+    // asserts.
+    //
+    // WHY THIS FAILED BEFORE, AND WHY IT IS DIFFERENT NOW. MTG_PHASE_CLASSIFY was measured as
+    // "hinata's blocker" (+0.1331, 12 win->losses, classify-stack 2026-08-16) and the recorded
+    // root cause was NOT the phase split: with cantrips classified Main2 the pre-combat main
+    // collapsed to land-drops-only, but this deck's cantrips are what FIND the land and the drop
+    // was MAIN-1-ONLY -- base played a land every turn T1-T6, the lever made 3 drops in 8 turns
+    // (exemplar hinata_regression_d3_s2002 gi=188). That missing dependency edge is exactly what
+    // Main2DropEnabled (MTG_MAIN2_DROP, EngineFlags.h) was built to close -- it was added for
+    // this deck ("a deck can draw into a land in main 2 and must be able to play it", hinata
+    // gi=99). So this arm is only meaningful WITH MTG_MAIN2_DROP=1, and measuring it without is
+    // measuring the 2026-08-16 bug again.
+    //
+    // DEFAULT OFF (measurement lever) -> byte-identical until the A/B is accepted.
+    bool ClassifiesMainPhases() const override;
+    // ...and the per-card doctrine that makes "everything" literal, rather than leaving it to the
+    // base template classifier (which sends Draw* to Both and Tier-3 `None` to Main1-by-doubt).
+    std::optional<MainPhase> MainPhaseOverride(const GameState&,
+                                              const CardDefinition&) const override;
     // Cleanup discard: the deck's USER-AUTHORED KEEP PRIORITY (2026-08-07), assigned as ranks
     // and shed in reverse. Keep hardest -> shed first: Hinata #1, Reality Spasm #1, Crackle #1,
     // Sol Ring (never shed), Spasm #2 or Irencrag, mana up to 5 with colours (2U/1R/1W,
