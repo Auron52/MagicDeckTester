@@ -1,8 +1,8 @@
-# Regression ground truth -- commit 986cfaef  date 2026-08-29
+# Regression ground truth -- commit dcbd2b8d  date 2026-08-29
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-08-29): duplicate-legend prune: casting a legendary you already control is NOT a tie when a hand-size anthem is unmet -- Neheb, the Worthy gives Minotaurs +2/+0 only at <=1 card in hand, so shedding the spare copy IS the payoff and the legend rule killing it is the point. Param-driven (hand_size_anthem_max), inert for every other deck. SCOPED (user 2026-08-29): relaxed only where something can weigh it -- HumanPlayActive() or g_searched_play -- so autonomous greedy d0 keeps the original prune and is byte-identical. Overnight: 184 pass / 8 fail, all minotaur d3+d5; searched 0 SLOWER, 6 faster (all T6->T5), 109 play-changed at same score, net -0.00100 t/game over 6000 searched games; d0 0/0/0. Oracle over the 8 searched cells: nonconv=0, fd-diverge=0. Motivating game reproduced: d3_s4004 gi272 T5 old ATTACK -> opp 3 (win T6); new casts the duplicate Neheb, anthem on, ATTACK -> opp -3 (win T5), kept hand and draws identical.
-# accepted-with-regressions (smoke, 2026-08-29): Dragons value-leaf sidecar adopted (first model). The 2 moving smoke keys are ONE turn each (d3 +0.0040 x 250g, d5 +0.0066 x 150g); the phase E A/B over 8 held-out seeds x 1000 games reads -0.00212 t=-4.43 7/0/1 at 0.87x search cost. d0 is untouched, as a leaf sidecar can only affect searched play.
-# accepted-with-regressions (regression, 2026-08-29): Dragons value-leaf sidecar adopted (first model). Both moving regression keys are digest-only: d5_s2002 5.7560 and d5_s3003 5.6560 are UNCHANGED averages, so the leaf shifted the decision stream without costing a win turn; the d3 keys are byte-identical. Phase E A/B over 8 held-out seeds x 1000 games: -0.00212 t=-4.43 7/0/1 at 0.87x search cost.
+# accepted-with-regressions (smoke, 2026-08-29): Minotaur value-leaf sidecar adopted (first model, trust d5). Both moving keys are BETTER-or-equal: d3 4.9680->4.9640 (-1 turn over 250g), d5 digest-only at an unchanged 4.9733. d0 untouched, the correct signature for a leaf sidecar. Phase E A/B: -0.00375 t=-3.00 6/1/1 at 0.63x cost; trust re-verified on 16 FRESH seeds x 2500 games at exactly +0.00000.
+# accepted-with-regressions (regression, 2026-08-29): Minotaur value-leaf sidecar adopted (first model, trust d5). 4 keys move, 3 better / 1 worse, NET -3 turns over 1100 searched games: d3_s2002 -2, d3_s3003 +1, d5_s2002 -1, d5_s3003 -1. Across smoke+regression the suite reads -0.00264 turns/game over 1500 searched games, which independently reproduces the phase E A/B's -0.00375 on fully disjoint seeds. Trust d5 re-verified on 16 FRESH seeds x 2500 games: exactly +0.00000 on every seed.
+# accepted-with-regressions (overnight, 2026-08-29): THREE separate causes, all inspected. (1) MINOTAUR value-leaf sidecar adopted (trust d5): 8 keys, NET -5 turns over 6000 searched games (9 games faster / 2 slower), d0 untouched. (2) DRAGONS value-leaf sidecar (adopted in e9b8a6b6, whose overnight cells were never rebaselined): 5 keys, NET -4 turns over 3000 searched games, 4 faster / 0 slower, d0 untouched. (3) MIRRORWING: the other agent's Oracle's Restoration legality fix (995c1daf), whose commit explicitly deferred the overnight tier; 12 keys, +7 turns over 10800 games. That deck's d0 cells churn heavily (18/16/18/18 games) because the removed cast was an ILLEGAL turn-1 CANTRIP, so deleting it shifts the whole draw sequence and those are different physical games, not worse decisions -- and a correctness fix that removes a free card SHOULD cost a little tempo. Pass 2a legality sweep over the 16 minotaur+dragons searched cells (12000 games): 0 nonconv, 0 fd-diverge. classify_turn_later: 3 minotaur slower games PERSIST at 4x and 16x budget; d5_s5005 gi431 (7 -> unwon) was traced to a DECISION at turn 2 -- both arms draw the same card, the new line plays Bloodstained Mire and casts the Raider while the old line wastes its turn-2 land drop entirely. The fetch re-permutes the library, so every draw after T2 is incomparable; the new line then missed four straight land drops. Fetch-reshuffle variance with an identified cause, not a same-draws decision loss, and the aggregate is net better.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -47,8 +47,8 @@ stompy_smoke_d0_s1001=5.4420/dc78a74c3af62737
 stompy_smoke_d3_s1001=4.4933/6523a1bb1be7ca91
 stompy_smoke_d5_s1001=4.4400/926ddaaa248ad176
 minotaur_smoke_d0_s1001=5.4890/3f7bfb5f13c384b7
-minotaur_smoke_d3_s1001=4.9680/38a1cb1de2fdd86f
-minotaur_smoke_d5_s1001=4.9733/a8e62b11789add45
+minotaur_smoke_d3_s1001=4.9640/497df7d818df4b95
+minotaur_smoke_d5_s1001=4.9733/5e5e13389ec6cfbd
 kitty_smoke_d0_s1001=5.1600/96c5f848c59bf0fa
 kitty_smoke_d3_s1001=4.4520/002553def2c14e66
 kitty_smoke_d5_s1001=4.4667/406aa8496dde2301
@@ -123,10 +123,10 @@ stompy_regression_d3_s3003=4.6067/fa7420b23649150d
 stompy_regression_d5_s2002=4.5360/616feeab0c5de220
 stompy_regression_d5_s3003=4.5960/54024371bb7c0348
 minotaur_regression_d0_s2002=5.4890/7485fb9e3979df4e
-minotaur_regression_d3_s2002=4.9633/e4789a2358e207c0
-minotaur_regression_d3_s3003=4.9233/a20c096c07153819
-minotaur_regression_d5_s2002=4.9640/4eca48404d5b0d12
-minotaur_regression_d5_s3003=4.9080/d97f514c15b3f38e
+minotaur_regression_d3_s2002=4.9567/7f4016028817498e
+minotaur_regression_d3_s3003=4.9267/d2145fa5e2d44157
+minotaur_regression_d5_s2002=4.9600/52937a4626b089b6
+minotaur_regression_d5_s3003=4.9040/8ec3f5ad5d923ca2
 kitty_regression_d0_s2002=5.1150/bab62942b2bf6e26
 kitty_regression_d3_s2002=4.3300/b50e06087e633c1d
 kitty_regression_d3_s3003=4.3800/f3792be1bb75e242
@@ -259,18 +259,18 @@ creature_giving_overnight_d5_s4004=4.6380/1711b4855023c06d
 creature_giving_overnight_d5_s5005=4.6280/a2949a95d6e036e5
 creature_giving_overnight_d5_s6006=4.6760/c559bceec26594ad
 creature_giving_overnight_d5_s7007=4.6440/c9cd88ecd4da5c2f
-mirrorwing_overnight_d0_s4004=5.8380/f3663a70b7e768e8
-mirrorwing_overnight_d0_s6006=5.8275/8d3f6b7f8bca5003
-mirrorwing_overnight_d0_s8008=5.8575/711be1b9a277a6e8
-mirrorwing_overnight_d0_s10010=5.9380/d816e8b6995ed880
-mirrorwing_overnight_d3_s4004=4.7175/313151ef4222bd68
-mirrorwing_overnight_d3_s5005=4.7475/f49d6fbc2d992ab4
-mirrorwing_overnight_d3_s6006=4.7400/86cc020591320304
-mirrorwing_overnight_d3_s7007=4.7325/43783380784879cf
-mirrorwing_overnight_d5_s4004=4.7033/b43315a7363bf49a
-mirrorwing_overnight_d5_s5005=4.7867/2f66feb95576f36f
-mirrorwing_overnight_d5_s6006=4.7200/8054b369d47455d1
-mirrorwing_overnight_d5_s7007=4.7167/9fb234b94fd8286a
+mirrorwing_overnight_d0_s4004=5.8375/1272afd14fe39dbd
+mirrorwing_overnight_d0_s6006=5.8305/535c1f7e2c522753
+mirrorwing_overnight_d0_s8008=5.8580/964ce6fc35103c7e
+mirrorwing_overnight_d0_s10010=5.9365/bb26e95f1c80a198
+mirrorwing_overnight_d3_s4004=4.7175/254d9a777373d76c
+mirrorwing_overnight_d3_s5005=4.7475/cfc0637a7c2720a2
+mirrorwing_overnight_d3_s6006=4.7425/483fdd70d6ddb476
+mirrorwing_overnight_d3_s7007=4.7300/a9f701c61eab52cf
+mirrorwing_overnight_d5_s4004=4.7033/919fb39e4467d44c
+mirrorwing_overnight_d5_s5005=4.7867/42f2fe8c4055e097
+mirrorwing_overnight_d5_s6006=4.7233/e42a8708f05fce70
+mirrorwing_overnight_d5_s7007=4.7267/ae6a42e3a1a11578
 fivecolour_overnight_d0_s4004=5.7480/fe96f63262524489
 fivecolour_overnight_d0_s6006=5.7815/b8a2ef8452a68525
 fivecolour_overnight_d0_s8008=5.7575/35aafd57228e0c09
@@ -299,14 +299,14 @@ minotaur_overnight_d0_s4004=5.5175/8f78da388a1c8c40
 minotaur_overnight_d0_s6006=5.4875/7d6354d9c831d6e2
 minotaur_overnight_d0_s8008=5.4755/2a3839fe6ee06c60
 minotaur_overnight_d0_s10010=5.4600/63e0c3697bbea0bd
-minotaur_overnight_d3_s4004=4.9410/22cd9dca1d7260a0
-minotaur_overnight_d3_s5005=4.9620/58b5ef88f2adac08
-minotaur_overnight_d3_s6006=4.9500/cf68b4b048b48797
-minotaur_overnight_d3_s7007=4.9400/c739386853d00143
-minotaur_overnight_d5_s4004=4.9200/24e06bcc9a99e0b0
-minotaur_overnight_d5_s5005=4.9480/e9f88bc1216ac455
-minotaur_overnight_d5_s6006=4.9220/aca4713abfd381c5
-minotaur_overnight_d5_s7007=4.9260/6452aab576f792d5
+minotaur_overnight_d3_s4004=4.9390/062e752146fd0e34
+minotaur_overnight_d3_s5005=4.9600/e37b00348861453c
+minotaur_overnight_d3_s6006=4.9500/f83a30825533f16a
+minotaur_overnight_d3_s7007=4.9390/ea6e6f7306f8d9d3
+minotaur_overnight_d5_s4004=4.9200/35b9e6156679764c
+minotaur_overnight_d5_s5005=4.9460/263ea077a94a6e23
+minotaur_overnight_d5_s6006=4.9220/efa477b8f54aa1ac
+minotaur_overnight_d5_s7007=4.9280/b6ef866d4a8b04e1
 kitty_overnight_d0_s4004=5.1285/c8893be16f654177
 kitty_overnight_d0_s6006=5.1495/95f35c02ff615a77
 kitty_overnight_d0_s8008=5.1265/caa2b62dc7c94977
@@ -325,9 +325,9 @@ dragons_overnight_d0_s8008=6.2640/514a9110611afa0d
 dragons_overnight_d0_s10010=6.2785/bc82a122143a336b
 dragons_overnight_d3_s4004=5.7540/14bbd78e44224dbb
 dragons_overnight_d3_s5005=5.7570/f15a92756c84d832
-dragons_overnight_d3_s6006=5.7170/7c2770586993ca52
+dragons_overnight_d3_s6006=5.7170/ca1f9b56478163e0
 dragons_overnight_d3_s7007=5.7350/6582b41b8af19b73
-dragons_overnight_d5_s4004=5.7540/d085ea3016d7379f
-dragons_overnight_d5_s5005=5.7160/e19107a627d36ac7
-dragons_overnight_d5_s6006=5.6920/d67a79c4f26552cb
-dragons_overnight_d5_s7007=5.7120/eba108f6e82b70b3
+dragons_overnight_d5_s4004=5.7520/d2bdbc7926000e0b
+dragons_overnight_d5_s5005=5.7140/a69a6052d4ea88c3
+dragons_overnight_d5_s6006=5.6880/4de6507bb581b0a5
+dragons_overnight_d5_s7007=5.7120/8e54563b58ab9fd3
