@@ -5292,6 +5292,40 @@ static bool BpPlainCantripSiteEnabled()
     return heurarm::Flag(heurarm::BP_SITE3, on);
 }
 
+// THE PARTITION SHAPE FOR PLAIN CANTRIPS (MTG_BP_PARTITION_CANTRIP, default OFF).
+//
+// USER 2026-08-29: "It doesn't make much sense to derive part of the turn and then rederive it
+// after the breakpoint." Correct, and today the plain-cantrip class does exactly that. Its two
+// existing shapes both derive the turn's tail against a hand that has not seen the draw yet:
+//
+//   DEFERRED (s_defer_cantrip, the default) -- the base plan applies its ENTIRE tail, and only then
+//     does the continuation re-solve on top. So every cast after the cantrip was chosen without the
+//     drawn card, and the plan space is |base tails| x |continuations|.
+//   INLINE (MTG_NO_DEFER_CANTRIP=1)         -- the continuation runs mid-plan but does NOT truncate,
+//     so the base plan's pre-committed tail is applied afterwards anyway. Strictly worse.
+//
+// The partition is the third shape, and it is not new code: site 6 (the equipment-ETB draw) already
+// implements it behind MTG_EQUIP_DRAW_BP_INLINE, and its comment states the rule -- "this cast
+// ended our section; the continuation owns the rest of the phase, so resolve it HERE, with the
+// drawn card in hand and this turn's remaining mana still unspent, and then truncate." That
+// collapses the product to |prefixes ending at the cantrip| x |continuations|.
+//
+// It also makes condemnation's premise EXACT rather than approximate. Today a base tail casts cards
+// the continuation is then asked to re-offer, which is precisely the permutation duplicate the
+// filter exists to delete; under the partition the tail is never derived, so there is nothing to
+// re-offer and nothing to condemn. Condemnation should therefore get CHEAPER, not more effective --
+// the work it was clawing back at ~1% is work the partition never does.
+//
+// LOCKSTEP IS NOT OPTIONAL HERE. The deferred shape was chosen to match "the executor's post-loop
+// replay" (AIEngine's deferred_cantrip twin), so a rollout that truncates inline while the executor
+// replays post-loop would commit a line the search never scored -- the recurring divergence class.
+// Both sides read THIS function; there is deliberately no second flag.
+static bool BpPartitionCantripEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_PARTITION_CANTRIP");
+    return heurarm::Flag(heurarm::BP_PARTITION_CANTRIP, on);
+}
+
 static int BpSiteMask()
 {
     static const int m = []() -> int
@@ -6056,6 +6090,8 @@ bool TurnSolver::EquipmentDrawBreakpointEnabled()
     static const bool on = EnvOn("MTG_EQUIP_DRAW_BP", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::EQUIP_DRAW_BP, on);
 }
+
+bool TurnSolver::PartitionCantrip() { return BpPartitionCantripEnabled(); }
 
 bool TurnSolver::EquipmentDrawBreakpointInline()
 {
@@ -16257,6 +16293,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // the executor's post-loop replay (see deferred_cantrip_resolve). Everything
             // else (EI/staging, or a cantrip already inside a re-solve) re-solves inline.
             const bool plain_cantrip = !is_ei && !def.params.stages_cards;
+            // THE PARTITION (MTG_BP_PARTITION_CANTRIP): this cast ended our section, so the
+            // continuation resolves HERE -- with the drawn card in hand and the turn's remaining
+            // mana unspent -- and everything still unapplied in this plan belongs to it.
+            const bool partition_here =
+                BpPartitionCantripEnabled() && plain_cantrip && sink_stack.empty();
             if (s_human_play)
             {
                 // Human play: the cantrip drew; STOP here. The chooser re-fires so the human
@@ -16267,6 +16308,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 deferred_cantrip_resolve = true;
                 deferred_cantrip_site    = &def;
                 deferred_hand_before     = hand_at_cast;
+                // THE PARTITION IS *DEFER* + TRUNCATE, NOT INLINE + TRUNCATE. Measured on Hinata,
+                // 60 games: deferred 5.7000; inline without truncation 6.0333; inline WITH
+                // truncation 7.0333. So moving the resolve inline is itself worth +0.33 before
+                // truncation is even considered -- the deferred re-solve runs after the trailing
+                // passes (Hinata's reserved Karoo drop among them), so an inline continuation sees
+                // less mana and lands the two worlds at different points in the turn. That is
+                // exactly the hazard the site-6 comment warns about, and it is why the default is
+                // deferred. Truncating here keeps the continuation's TIMING and removes only the
+                // thing the USER objected to: a tail derived against a hand that has not seen the
+                // draw. Everything after this cast is the continuation's to decide.
+                if (partition_here) { bp_truncate = true; }
             }
             else
             {
@@ -28045,7 +28097,52 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
         if (g_bp_hand_before != nullptr)
         {
             Fold(key, 0xB17Full);
-            for (int num : *g_bp_hand_before) { Fold(key, static_cast<uint64_t>(num)); }
+            // NARROWED TO THE INTERSECTION WITH THE CURRENT HAND (MTG_BP_KEY_WIDE=1 restores the
+            // whole-snapshot fold). Folding the ENTIRE pre-draw hand splits the key on cards that
+            // cannot affect the answer: every consumer of the snapshot -- the condemnation filter's
+            // BpCardWasInHandBefore and the drawn-card exemption -- only ever asks about cards that
+            // are in hand AT THIS ENUMERATION. A snapshot entry already cast, discarded or bottomed
+            // is unreachable by all of them, so two states differing only in such entries emit an
+            // IDENTICAL list and were being denied a shared entry for nothing.
+            //
+            // This is not a micro-optimisation. The fold is armed only when the snapshot exists,
+            // i.e. only when condemnation (or the cantrip order) is live, so turning condemnation
+            // ON was itself fragmenting the cache: measured 218,586 -> 240,439 full
+            // EnumeratePlansWithLand derivations (+10.0%) over 60 Hinata games. That enumeration is
+            // NOT a search node and never appears in interior_nodes, which is exactly why the tree
+            // read flat while the work did not fall -- the prune's saving was being handed back as
+            // cache misses.
+            //
+            // DEFAULT OFF (MTG_BP_KEY_NARROW=1), and the reason is a hazard, not caution for its
+            // own sake. "Not in hand now" is NOT the same as "unreachable": a card can COME BACK.
+            // Hinata alone plays Distorting Wake (returns permanents to hand), Memory Lapse and
+            // Remand (return the spell to hand), and Izzet Boilerworks (bounces a land). If a
+            // snapshot entry leaves the hand and later returns, BpCardWasInHandBefore becomes
+            // reachable for it again -- so two states identical NOW but differing in that entry
+            // would emit different lists later while sharing one cache entry. The base key is
+            // mid-turn exact, so both worlds agree on every ZONE; what they can disagree on is
+            // membership of the pre-draw snapshot, which is precisely what this fold carries.
+            //
+            // That makes the narrowing sound only for snapshot entries that can never re-enter the
+            // hand, which is a per-deck question this fold has no business answering. So it stays
+            // behind a flag until digest-identity over a large sample says otherwise -- the same
+            // standard MTG_NO_BP_ENUM_CACHE is held to ("results must be identical either way, and
+            // the smoke digests are the check").
+            static const bool s_narrow = EnvOn("MTG_BP_KEY_NARROW");
+            if (s_narrow)
+            {
+                // Order-stable: walked in CURRENT-hand order, and the current hand is already part
+                // of the key, so both worlds walk the same sequence.
+                for (const Card& c : state.ActivePlayer().hand)
+                {
+                    if (BpCardWasInHandBefore(c.m_number))
+                    { Fold(key, static_cast<uint64_t>(c.m_number)); }
+                }
+            }
+            else
+            {
+                for (int num : *g_bp_hand_before) { Fold(key, static_cast<uint64_t>(num)); }
+            }
         }
         // A RESERVED (deferred Karoo) drop is not a declined one, so it changes which lands
         // MTG_BP_CONDEMN_LAND emits -- and it is NOT visible in the state, which is exactly why it

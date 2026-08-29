@@ -3107,9 +3107,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // watcher are both on the battlefield.
     auto equip_bp_truncates = [&](const std::string& nm) -> bool
     {
-        if (!TurnSolver::EquipmentDrawBreakpointInline()) { return false; }
         const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
-        return d != nullptr && TurnSolver::EquipmentDrawBreakpoint(state, *d);
+        if (d == nullptr) { return false; }
+        // THE PARTITION SHAPE for plain cantrips (MTG_BP_PARTITION_CANTRIP) -- the executor half.
+        // ApplyPlanDirect truncates its section the moment a plain cantrip's continuation has run;
+        // if the executor kept casting the plan's tail here it would realise a turn the search
+        // never scored, which is the divergence the deferred shape was originally chosen to avoid.
+        // Same discriminator as the rollout's `plain_cantrip`: draws, not Expressive Iteration,
+        // not a stager.
+        if (TurnSolver::PartitionCantrip()
+            && !d->params.expressive_iteration && !d->params.stages_cards)
+        { return true; }
+        if (!TurnSolver::EquipmentDrawBreakpointInline()) { return false; }
+        return TurnSolver::EquipmentDrawBreakpoint(state, *d);
     };
 
     // Order trace (MTG_ORDER_TRACE, inert by default): print the committed hand-cast

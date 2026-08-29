@@ -92,6 +92,7 @@ enum Slot : int
     BP_CONDEMN_SEARCHED_ONLY, // MTG_BP_CONDEMN_SEARCHED_ONLY  condemn only in the DECISION SPACE
     BP_SITE3,                 // MTG_BP_SITE3              make the PLAIN-CANTRIP continuation searchable
     BP_SITE3_DEFER,           // MTG_BP_SITE3_DEFER        ...and keep it OUT OF WAVE 0 (cost only)
+    BP_PARTITION_CANTRIP,     // MTG_BP_PARTITION_CANTRIP  THE PARTITION SHAPE for plain cantrips
     COUNT
 };
 
@@ -161,6 +162,7 @@ inline const char* Name(int slot)
         "MTG_BP_CONDEMN_SEARCHED_ONLY",
         "MTG_BP_SITE3",
         "MTG_BP_SITE3_DEFER",
+        "MTG_BP_PARTITION_CANTRIP",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

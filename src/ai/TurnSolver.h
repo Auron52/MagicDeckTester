@@ -722,6 +722,10 @@ public:
     // every point, making the breakpoints fully distinct from each other." A sub-mode of the class
     // rather than a replacement so one pooled batch can measure it against the deferred shape.
     static bool EquipmentDrawBreakpointInline();
+    // THE PARTITION SHAPE for the plain-cantrip class (MTG_BP_PARTITION_CANTRIP). Exposed because
+    // the executor MUST take the same shape as the rollout -- one reader, no second flag, or the
+    // committed line diverges from the searched one.
+    static bool PartitionCantrip();
     // The same question WITHOUT the lever: does resolving `def` draw off an equipment-ETB watcher?
     // The draw happens whether or not the search is allowed to plan around it, so anything
     // REPORTING the draw (the game log's draw reporter) must ask this one, not the gated one --
