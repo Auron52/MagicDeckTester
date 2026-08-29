@@ -3113,9 +3113,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // ApplyPlanDirect truncates its section the moment a plain cantrip's continuation has run;
         // if the executor kept casting the plan's tail here it would realise a turn the search
         // never scored, which is the divergence the deferred shape was originally chosen to avoid.
-        // Same discriminator as the rollout's `plain_cantrip`: draws, not Expressive Iteration,
-        // not a stager.
+        // EXACT mirror of the rollout's `plain_cantrip`, and all three clauses are load-bearing.
+        // The rollout reaches that branch only inside `def.tmpl == CardTemplate::DrawSpell`; an
+        // earlier version of this predicate dropped that clause and so returned true for EVERY
+        // cast, because equip_bp_truncates is consulted for every action in the executor's cast
+        // loop rather than only for draws. The executor then truncated after the FIRST cast of any
+        // kind: measured on hold gi=18, T1 cast Sol Ring and dropped Ornithopter, T2 cast Preordain
+        // and dropped Hinata, turning a turn-3 win into a turn-6 one, with 46 of 60 games worse.
         if (TurnSolver::PartitionCantrip()
+            && d->tmpl == CardTemplate::DrawSpell
             && !d->params.expressive_iteration && !d->params.stages_cards)
         { return true; }
         if (!TurnSolver::EquipmentDrawBreakpointInline()) { return false; }

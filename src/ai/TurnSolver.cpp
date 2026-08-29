@@ -17668,7 +17668,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // scoring mode must NOT loop (see the deferred_top_rearm declaration).
     int  top_reset_passes = 0;
     bool top_first_pass   = true;
-    while (deferred_cantrip_resolve && (top_first_pass || deferred_top_rearm)
+    // THE PARTITION NEEDS THE LOOP (MTG_BP_PARTITION_CANTRIP). USER 2026-08-29: "We have to
+    // re-evaluate at breakpoints anyway?" -- yes, but historically exactly ONCE, and that is
+    // precisely why apply-time truncation lost 1.33 turns. Without truncation the single pass is a
+    // top-up: the base plan casts the whole cantrip chain itself, so nothing needs to chain. With
+    // truncation the base plan stops at the FIRST cantrip, so the chain has to come from the
+    // continuations -- and a cantrip cast inside pass 1 re-arms deferred_cantrip_resolve only for
+    // that re-arm to be discarded, breaking the line at the second cantrip. Truncating the tail and
+    // refusing to re-resolve it are contradictory; the partition has to carry both halves.
+    const bool partition_loop = BpPartitionCantripEnabled();
+    while (deferred_cantrip_resolve && (top_first_pass || deferred_top_rearm || partition_loop)
            && top_reset_passes++ <= 4)
     {
         top_first_pass    = false;
