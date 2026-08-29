@@ -494,9 +494,14 @@ const MAX_TURNS = 8;
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
           plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{}, castOrder:{}, jitte:{} };
 
+// The SELECTED deck entry (see /api/decks): carries the decklist file name and, for an
+// archived list, the version folder it lives in. Both travel on every request.
+const selDeck = () => (typeof DECK_META!=='undefined' && DECK_META[$('deck').value]) || { deck:$('deck').value, version:null };
+
 function cfg(extra) {
   return Object.assign({
-    deck:$('deck').value, seed:+$('seed').value, gameIndex:Math.max(0,(+$('seed').value||0)-1),
+    deck:selDeck().deck, version:selDeck().version||null,
+    seed:+$('seed').value, gameIndex:Math.max(0,(+$('seed').value||0)-1),
     maxTurns:MAX_TURNS, depth:0, choices:S.choices,
     firebreathe:S.firebreathe||{},   // #4 turn-keyed side-channel (separate from the positional choices)
     jitte:S.jitte||{},               // Umezawa's Jitte counter-spend, turn-keyed like firebreathe
@@ -3192,11 +3197,12 @@ async function saveRef(suboptimal) {
 // only -- the user can still start it. Refreshed whenever the deck/seed/game# changes.
 async function checkReference() {
   const el=$('refnote'); if(!el) return;
-  const deck=$('deck').value;
+  const sel=selDeck(); const deck=sel.deck;
   if(!deck){ el.style.display='none'; return; }
   const seed=+$('seed').value||0, gi=Math.max(0,seed-1);
+  const vq = sel.version ? `&version=${encodeURIComponent(sel.version)}` : '';
   try {
-    const j=await (await fetch(`/api/reference-exists?deck=${encodeURIComponent(deck)}&seed=${seed}&gi=${gi}`)).json();
+    const j=await (await fetch(`/api/reference-exists?deck=${encodeURIComponent(deck)}${vq}&seed=${seed}&gi=${gi}`)).json();
     if (j && j.exists){ el.style.display=''; el.title=j.path||''; el.textContent=`✓ reference saved for seed ${seed} — skip, or play again`; }
     else if (j && j.suboptimal){ el.style.display=''; el.title=j.suboptimalPath||''; el.textContent=`⚠ suboptimal target saved for seed ${seed} · game ${gi} — try to win it faster`; }
     else { el.style.display='none'; el.textContent=''; el.title=''; }
@@ -3236,8 +3242,12 @@ function showBetaNote(){
 }
 async function loadDecks() {
   const j=await (await fetch('/api/decks')).json();
-  j.decks.forEach(d=>{ DECK_META[d.deck]=d; });
-  $('deck').innerHTML=j.decks.map(d=>`<option value="${esc(d.deck)}"${d.hasProfile?'':' disabled'}>${esc(d.name)}${betaTag(d)}</option>`).join('');
+  j.decks.forEach(d=>{ DECK_META[d.id||d.deck]=d; });
+  // value is the entry ID, not the FILENAME: an archived list lives at
+  // decks/<Deck>/<Version>/<Deck>.cod and so shares its parent's filename. Keying the option (and
+  // DECK_META) by filename collapsed all of a deck's lists onto one entry, and selecting the
+  // archived one silently played the shipping list.
+  $('deck').innerHTML=j.decks.map(d=>`<option value="${esc(d.id||d.deck)}"${d.hasProfile?'':' disabled'}>${esc(d.label||d.name)}${betaTag(d)}</option>`).join('');
   if(!j.binExists) showError('Simulator binary not found — build it first:\n  Linux/macOS:  ./build.sh\n  Windows:      build.cmd\n\nOr start the viewer with ./play.sh (play.cmd on Windows), which builds it for you.');
   showBetaNote();     // reflect the initially-selected deck
   checkReference();   // reflect the initial deck/seed/game# on load

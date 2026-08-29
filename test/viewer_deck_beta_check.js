@@ -242,10 +242,14 @@ for (const d of decks) {
   // Every saved game in the folder is accounted for as EITHER counted or archived-list -- stronger
   // than "refs == folder size", which stopped being true once ownership mattered, and it catches a
   // game silently vanishing from both columns.
-  ok(d.refs + d.refsOnArchivedList === srv.countOptimalRefs(d.name),
-     `${d.name}: every saved game is either counted or attributed to an archived list`,
-     `refs=${d.refs} archived=${d.refsOnArchivedList} folder=${srv.countOptimalRefs(d.name)}`);
-  ok(!(d.refs > 0 && d.refsOnArchivedList > 0), `${d.name}: a folder belongs to ONE list, not both`);
+  // Scoped to the ENTRY'S OWN folder. A deck may now offer several lists -- the one that ships plus
+  // any archived list under decks/<Deck>/<Version>/ -- and each keeps its references in its own
+  // references/<Deck>[/<Version>]/ folder. Counting the deck NAME here compared a variant's refs
+  // against the shipping list's folder and failed for every variant.
+  ok(d.refs + d.refsOnArchivedList === srv.countOptimalRefs(d.name, d.version),
+     `${d.label || d.name}: every saved game is either counted or attributed to an archived list`,
+     `refs=${d.refs} archived=${d.refsOnArchivedList} folder=${srv.countOptimalRefs(d.name, d.version)}`);
+  ok(!(d.refs > 0 && d.refsOnArchivedList > 0), `${d.label || d.name}: a folder belongs to ONE list, not both`);
 }
 
 // ---- 5) the UI actually SHOWS it ----------------------------------------------------

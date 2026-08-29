@@ -78,11 +78,28 @@ function extractBlock(text, startMarker, endMarker) {
 // Resolve a user-supplied deck name to a safe path inside its per-deck folder plus the sibling
 // profile. Per-deck folder layout: decks/<stem>/<stem>.{txt,cod} + decks/<stem>/<stem>.profile.json
 // (docs/design/per-deck-folder-layout.md). The folder name equals the decklist stem.
-function resolveDeck(deckName) {
+// `version` (optional) selects an ARCHIVED list: decks/<stem>/<version>/<stem>.<ext>, the layout
+// deck_registry.discover() already treats as a real addressable deck. Empty/absent = the list that
+// currently ships, byte-identical to the old single-argument behaviour.
+//
+// The traversal guard is kept intact rather than widened: `version` must be a SINGLE path segment
+// matching a strict allowlist (no dot-dot, no separator), and the resolved directory is re-checked
+// to be an immediate child of the deck folder. path.basename() still strips components off the
+// deck name itself, exactly as before.
+const VERSION_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+function resolveDeck(deckName, version) {
   if (typeof deckName !== 'string' || !deckName) throw new Error('deck required');
   const base = path.basename(deckName);                    // strip any path components
   const stem = base.replace(/\.[^.]+$/, '');
-  const dir = path.join(DECKS_DIR, stem);                  // per-deck folder
+  const deckDir = path.join(DECKS_DIR, stem);              // per-deck folder
+  let dir = deckDir;
+  if (version) {
+    if (!VERSION_RE.test(version) || version === '.' || version === '..') {
+      throw new Error('bad version: ' + version);
+    }
+    dir = path.join(deckDir, version);
+    if (path.dirname(dir) !== deckDir) throw new Error('version must be one folder under the deck');
+  }
   const deckPath = path.join(dir, base);
   if (path.dirname(deckPath) !== dir) throw new Error('deck must be under decks/<name>/');
   if (!fs.existsSync(deckPath)) throw new Error('deck not found: ' + base);
@@ -91,7 +108,7 @@ function resolveDeck(deckName) {
   // pre-game keep/bottom suggestions come from the table (see runStep) rather than the live heuristic.
   const sidecarPath = path.join(dir, stem + '.keepmodel.exhaustive.profile.json.gz');
   return { deckPath, profilePath: fs.existsSync(profilePath) ? profilePath : null, stem,
-           hasSidecar: fs.existsSync(sidecarPath) };
+           version: version || null, hasSidecar: fs.existsSync(sidecarPath) };
 }
 
 function intParam(v, dflt) {
@@ -108,7 +125,7 @@ function intParam(v, dflt) {
 // must never be on the per-turn hot path. This is the VIEWER opting in; default --claude-play (the
 // engine-test sweep/oracle) deliberately stays table-less (see main.cpp AttachExhaustiveSidecar).
 function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
-  const { deckPath, profilePath } = resolveDeck(p.deck);
+  const { deckPath, profilePath } = resolveDeck(p.deck, p.version);
   const args = [deckPath];
   if (profilePath) args.push('--profile', profilePath);
   args.push('--cards-json', CARDS_JSON);
@@ -227,7 +244,7 @@ function spawnAsyncCollect(bin, args, opts) {
 // Viewer-scoped; the engine's default --claude-play stays table-less (see main.cpp AttachExhaustiveSidecar).
 async function runKeepHint(p) {
   let hasSidecar = false;
-  try { hasSidecar = resolveDeck(p.deck).hasSidecar; } catch (e) { /* table-less */ }
+  try { hasSidecar = resolveDeck(p.deck, p.version).hasSidecar; } catch (e) { /* table-less */ }
   if (!hasSidecar) return { kind: 'keep-hint', hasSidecar: false };
   const args = buildArgs(p, null, null, true);   // WITH --exhaustive-keep
   const r = await spawnAsyncCollect(BIN, args, { cwd: ROOT, timeout: STEP_TIMEOUT_MS });
@@ -383,9 +400,19 @@ const REF_FILE_RE = /^claude_s\d+_gi\d+\.json$/;
 // SUBOPTIMAL references do not count, and are excluded structurally rather than by a filter:
 // references/suboptimal/<Deck>/ sits one level deeper than references/<Deck>/, so reading the
 // deck's own folder never sees them (references/suboptimal/README.md).
-function countOptimalRefs(name) {
+// `version` counts an ARCHIVED list's own references, which live one level deeper --
+// references/<Deck>/<Version>/ mirroring decks/<Deck>/<Version>/ (see ref_bench.ref_dirs).
+//
+// This is why the shipping list's count is right without a filter: a variant folder is a
+// DIRECTORY, and REF_FILE_RE only matches the claude_s<seed>_gi<gi>.json file name, so reading the
+// deck's own folder never sees another list's games -- structurally, exactly as suboptimal/ is
+// excluded. Before the split those games sat loose in the same folder and every one of them
+// counted toward whichever list was being played.
+function countOptimalRefs(name, version) {
+  const dir = version ? path.join(REFS_DIR, safeStem(name), version)
+                      : path.join(REFS_DIR, safeStem(name));
   try {
-    return fs.readdirSync(path.join(REFS_DIR, safeStem(name))).filter(f => REF_FILE_RE.test(f)).length;
+    return fs.readdirSync(dir).filter(f => REF_FILE_RE.test(f)).length;
   } catch (e) { return 0; }                                  // no folder = no references
 }
 
@@ -568,10 +595,13 @@ function tierFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchived
   return short.length ? { tier: 'beta', tierReasons: short } : { tier: 'stable', tierReasons: [] };
 }
 
-function deckMaturity(dir, name, hasProfile) {
-  const key = pySlug(name);
+// `version` describes an ARCHIVED list. Its key is the COMPOUND key deck_registry.discover()
+// assigns a variant folder (`<deck>_<variant>`), so it reads its OWN bench row and counts its OWN
+// references -- never the shipping list's, and never the reverse.
+function deckMaturity(dir, name, hasProfile, version) {
+  const key = version ? pySlug(name) + '_' + pySlug(version) : pySlug(name);
   const owner = REF_OWNERS[key] || key;
-  const saved = countOptimalRefs(name);
+  const saved = countOptimalRefs(name, version);
   // Someone else's games do not count toward this deck. Reported separately so the badge can say
   // WHY a deck with a full folder reads zero -- otherwise it looks like the count is broken.
   const refsOnArchivedList = owner === key ? 0 : saved;
@@ -609,11 +639,31 @@ function listDecks() {
     }
     if (!deckFile) continue;                                 // folder without a matching decklist
     const hasProfile = fs.existsSync(path.join(dir, name + '.profile.json'));
-    out.push(Object.assign({ deck: deckFile, name, hasProfile },
-                           deckMaturity(dir, name, hasProfile)));
+    out.push(Object.assign({ id: deckFile, deck: deckFile, name, version: null, label: name, hasProfile },
+                           deckMaturity(dir, name, hasProfile, null)));
+    // ARCHIVED / VARIANT lists: decks/<Name>/<Variant>/<Name>.cod, kept beside the shipping list
+    // with the artifacts fitted to it. Offered as their own selectable entries so an older list can
+    // still be played and replayed -- its references are inputs to the system and still catch bugs,
+    // which they cannot do if the list itself is unreachable from the UI. Files inside a variant
+    // are named after the PARENT deck (the engine resolves sidecars directory-relative off the
+    // profile), so the lookup is the parent's stem inside the subfolder.
+    for (const sub of fs.readdirSync(dir)) {
+      const subdir = path.join(dir, sub);
+      if (!fs.statSync(subdir).isDirectory()) continue;
+      let vFile = null;
+      for (const ext of ['.cod', '.txt']) {
+        if (fs.existsSync(path.join(subdir, name + ext))) { vFile = name + ext; break; }
+      }
+      if (!vFile) continue;
+      const vProfile = fs.existsSync(path.join(subdir, name + '.profile.json'));
+      out.push(Object.assign({ id: vFile + '@' + sub, deck: vFile, name, version: sub,
+                              label: name + '  \u2014  ' + sub, hasProfile: vProfile },
+                             deckMaturity(subdir, name, vProfile, sub)));
+    }
   }
-  // playable (profiled) decks first, then alpha
-  out.sort((a, b) => (b.hasProfile - a.hasProfile) || a.name.localeCompare(b.name));
+  // shipping lists first, then archived variants, then alpha by label
+  out.sort((a, b) => (b.hasProfile - a.hasProfile) || (!!a.version - !!b.version)
+                     || String(a.label).localeCompare(String(b.label)));
   return out;
 }
 
@@ -641,12 +691,16 @@ const server = http.createServer(async (req, res) => {
       // Does a saved reference game already exist for this (deck, seed, game#)? The top bar shows a
       // note so the user can skip replaying a game they've already saved (they can still play it).
       try {
-        const { stem } = resolveDeck(url.searchParams.get('deck'));
+        const { stem, version } = resolveDeck(url.searchParams.get('deck'), url.searchParams.get('version'));
         const seed = intParam(url.searchParams.get('seed'), 1);
         const gi = intParam(url.searchParams.get('gi'), 0);
-        const rel = path.join('references', safeStem(stem), `claude_s${seed}_gi${gi}.json`);
+        // Scoped to the LIST being played. Un-scoped, this reported "reference saved" for a seed
+        // whose game was played on a DIFFERENT list -- telling the user to skip a game they have
+        // never actually played on the deck in front of them.
+        const vseg = version ? [version] : [];
+        const rel = path.join('references', safeStem(stem), ...vseg, `claude_s${seed}_gi${gi}.json`);
         const exists = fs.existsSync(path.join(ROOT, rel));
-        const relSub = path.join('references', 'suboptimal', safeStem(stem), `claude_s${seed}_gi${gi}.json`);
+        const relSub = path.join('references', 'suboptimal', safeStem(stem), ...vseg, `claude_s${seed}_gi${gi}.json`);
         const suboptimal = fs.existsSync(path.join(ROOT, relSub));
         return sendJson(res, 200, { exists, path: exists ? rel : null,
                                     suboptimal, suboptimalPath: suboptimal ? relSub : null });
@@ -688,9 +742,10 @@ const server = http.createServer(async (req, res) => {
       const dir = path.join(ROOT, 'logs', 'play', 'rejections');
       fs.mkdirSync(dir, { recursive: true });
       const seed = intParam(p.seed, 1), gi = intParam(p.gameIndex, 0), turn = intParam(p.turn, 0);
-      const fn = `${safeStem(p.deck || 'deck')}_s${seed}_gi${gi}_t${turn}.json`;
+      const vtag = p.version ? '_' + safeStem(p.version) : '';
+      const fn = `${safeStem(p.deck || 'deck')}${vtag}_s${seed}_gi${gi}_t${turn}.json`;
       const artifact = {
-        savedFrom: 'tools/play', deck: p.deck, seed, gameIndex: gi, turn,
+        savedFrom: 'tools/play', deck: p.deck, version: p.version || null, seed, gameIndex: gi, turn,
         phase: p.phase || null,
         priorChoices: Array.isArray(p.choices) ? p.choices : [],
         attemptedLine: p.attemptedLine || null,     // {land, casts[]}
@@ -715,10 +770,15 @@ const server = http.createServer(async (req, res) => {
       // target (you believe the win is reachable EARLIER), kept out of the verified benchmark the
       // checker gates on (see references/suboptimal/README.md).
       const p = await readBody(req);
-      const { stem } = resolveDeck(p.deck);
+      const { stem, version } = resolveDeck(p.deck, p.version);
+      // A reference belongs to the LIST it was played on, so an archived list's games are saved
+      // one level deeper -- references/<Deck>/<Version>/ mirroring decks/<Deck>/<Version>/. This is
+      // the root-cause fix: previously every game landed in references/<Deck>/ whatever list was
+      // being played, so replacing a deck's shipping list silently mixed two lists' games in one
+      // folder, and each was then benched against whichever list the folder was bound to.
       const dir = p.suboptimal
-        ? path.join(ROOT, 'references', 'suboptimal', safeStem(stem))
-        : path.join(ROOT, 'references', safeStem(stem));
+        ? path.join(ROOT, 'references', 'suboptimal', safeStem(stem), ...(version ? [version] : []))
+        : path.join(ROOT, 'references', safeStem(stem), ...(version ? [version] : []));
       fs.mkdirSync(dir, { recursive: true });
       const r = runStep(p, dir);
       const seed = intParam(p.seed, 1), gi = intParam(p.gameIndex, 0);
