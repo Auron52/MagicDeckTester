@@ -95,6 +95,7 @@ enum Slot : int
     BP_PARTITION_CANTRIP,     // MTG_BP_PARTITION_CANTRIP  THE PARTITION SHAPE for plain cantrips
     HINATA_ALL_MAIN2,         // MTG_HINATA_ALL_MAIN2      every cast is a SECOND-MAIN cast
     MAIN2_DROP,               // MTG_MAIN2_DROP            the land drop is offered POST-combat too
+    BP_NODE,                  // MTG_BP_NODE               plain-cantrip breakpoint = REAL SEARCH NODE
     COUNT
 };
 
@@ -167,6 +168,7 @@ inline const char* Name(int slot)
         "MTG_BP_PARTITION_CANTRIP",
         "MTG_HINATA_ALL_MAIN2",
         "MTG_MAIN2_DROP",
+        "MTG_BP_NODE",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

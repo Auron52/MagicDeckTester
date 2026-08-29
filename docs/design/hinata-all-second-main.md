@@ -106,6 +106,13 @@ If that lands, this doc's arm becomes worth re-measuring immediately: the collap
 (+0.23 plies over the control) is real and is currently being spent on a truncated continuation
 search.
 
+**RE-MEASURED 2026-08-29 (same day): the node landed (`MTG_BP_NODE`, `bp-node-partition.md`) and
+the all-main-2 arm got WORSE with it** — node+all-main-2 is −0.0483 hold (t −3.42) / −0.0675
+train (t −5.25) vs s3m2's −0.0175/−0.0308, the same monotone-worse direction as the W=4/8
+widening. Full breakpoint hosting in `FSLineTail` does not rescue the collapse; every form of
+extra continuation breadth in the second main loses at 20 ms. **The all-main-2 idea is now
+refuted on its merits, not on missing machinery — do not re-raise without new evidence.**
+
 ## Levers this added (all default OFF, byte-identical unset: 150 games, digest 0deb791369e50e31)
 
 | flag | what it does |

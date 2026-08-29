@@ -1,10 +1,18 @@
 # The plain-cantrip breakpoint class: why it is worth having and why nothing has made it affordable
 
-**Status: DIAGNOSED 2026-08-29 (was OPEN).** The USER's framing was *"I'm looking to figure out why
-this falls short in either quality or performance. The latter is especially confusing."* It is
-answered below, and the answer is that **the premise of the last seven attempts was wrong**: at play
-settings the class does not cost more work at all. Read "THE DIAGNOSIS" first; the historical
-attempt table is kept because it now has an explanation.
+**Status: SUPERSEDED 2026-08-29 (was DIAGNOSED, was OPEN) — see `bp-node-partition.md`.** The
+USER declined the budget-raise route and directed a return to PARTITIONING the turn; the
+resulting `MTG_BP_NODE` (plan ends at its first cantrip; the plan loop hosts the continuation as
+a real search node) is the first form of the class that does not lose at 20 ms: hold +0.0142
+(t +1.21), train 0.0000, vs the s3 rank form's −0.0233/−0.0292. The diagnosis below still
+explains WHY every rank-machinery form lost (starved, not expensive), and its crossover/units
+methodology is what the node was measured with.
+
+The USER's original framing was *"I'm looking to figure out why this falls short in either
+quality or performance. The latter is especially confusing."* It is answered below, and the
+answer is that **the premise of the last seven attempts was wrong**: at play settings the class
+does not cost more work at all. Read "THE DIAGNOSIS" first; the historical attempt table is kept
+because it now has an explanation.
 
 ## THE DIAGNOSIS (2026-08-29)
 

@@ -726,6 +726,11 @@ public:
     // the executor MUST take the same shape as the rollout -- one reader, no second flag, or the
     // committed line diverges from the searched one.
     static bool PartitionCantrip();
+    // THE PLAIN-CANTRIP BREAKPOINT AS A REAL SEARCH NODE (MTG_BP_NODE; see BpNodeEnabled in the
+    // .cpp). Exposed for the executor's truncation twin: a COMMITTED plan's casts past its first
+    // plain cantrip were truncated by the search's partition, so the executor must drop them too
+    // (the recorded continuation owns that section). Same one-reader rule as PartitionCantrip.
+    static bool BpNodeSearch();
     // The same question WITHOUT the lever: does resolving `def` draw off an equipment-ETB watcher?
     // The draw happens whether or not the search is allowed to plan around it, so anything
     // REPORTING the draw (the game log's draw reporter) must ask this one, not the gated one --

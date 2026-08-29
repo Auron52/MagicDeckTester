@@ -3123,7 +3123,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // loop rather than only for draws. The executor then truncated after the FIRST cast of any
         // kind: measured on hold gi=18, T1 cast Sol Ring and dropped Ornithopter, T2 cast Preordain
         // and dropped Hinata, turning a turn-3 win into a turn-6 one, with 46 of 60 games worse.
-        if (TurnSolver::PartitionCantrip()
+        // MTG_BP_NODE truncates the SAME cast, but only for a plan CARRYING a continuation
+        // choice (bp_choice >= 0, incl. the empty sentinel) -- the exact mirror of the rollout's
+        // shape-(2) condition. A committed plan WITHOUT a choice (a tranche/group-wave plan the
+        // search scored full-tail-greedy) must execute its tail, and a non-committed greedy plan
+        // (bp_choice < 0 always) is untouched.
+        if ((TurnSolver::PartitionCantrip() || (TurnSolver::BpNodeSearch() && plan.bp_choice >= 0))
             && d->tmpl == CardTemplate::DrawSpell
             && !d->params.expressive_iteration && !d->params.stages_cards)
         { return true; }

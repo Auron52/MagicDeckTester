@@ -218,11 +218,12 @@ enum Site
     kLookaheadBpWave,      // SolveWithLookahead: breakpoint wave walker
     kLookaheadGroupWave,   // SolveWithLookahead: group-wave scorer
     kEscEval,              // SolveWithLookahead: condemnation escalation re-evaluation
+    kFsBpNode,             // FullSearchLine: breakpoint-NODE continuation children (MTG_BP_NODE)
     kSiteCount
 };
 static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
-    "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval"
+    "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -5450,6 +5451,78 @@ static bool BpPartitionCantripEnabled()
     return heurarm::Flag(heurarm::BP_PARTITION_CANTRIP, on);
 }
 
+// THE PLAIN-CANTRIP BREAKPOINT AS A REAL SEARCH NODE (MTG_BP_NODE, default OFF).
+//
+// USER 2026-08-29: "I would like to return to partitioning the turn ... Enumerating ahead without
+// the drawn or staged cards doesn't make sense either way." This is the enumeration/search-node
+// layer the two prior attempts missed (MTG_BP_PARTITION_CANTRIP truncated at APPLY time but the
+// enumerator still derived every tail, +15% work; per-candidate condemnation clawed back ~1%).
+//
+// WHAT IT CHANGES. With the plain-cantrip class open (MTG_BP_SITE3), a base plan that casts a
+// plain cantrip PARTITIONS: its blind tail is truncated (bp_truncate -- the defer+truncate shape
+// already measured as the right timing), the apply STOPS at the deferred re-solve with a
+// BpPrefixSnap capture (state, sink, pins -- the prefix-resume cache's own snapshot), and the
+// PLAN LOOP hosts the continuation as a search node: it enumerates EnumerateBreakpointPlans on
+// the post-draw state -- the FULL drawn-card-aware list, uncapped -- and resumes each candidate
+// from the snapshot (bp_resume: a state copy, no prefix re-derivation), scoring each through the
+// normal combat/EOT + tail recursion under normal B&B cutoffs. Plus one explicit EMPTY
+// continuation (see kBpEmptyChoice), so "stop here" is in the option set and nothing is a lossy
+// truncation.
+//
+// WHAT IT DELETES for this class: the wave-0 (base x k) fan-out -- every variant re-applied the
+// whole prefix AND a blind tail -- and the deferred wave phase, whose only job was reaching the
+// ranks the width W hid. Under the node there is no rank and no W: completeness comes from
+// enumerating the continuation node in full. Sites 0/5/6 keep their machinery untouched.
+//
+// SCOPE: the partition fires only where the CALLER can host the node (bp_capture provided --
+// FSLineWin's pre loop / FSLineTail's m2 loop). Every other apply (rollout leaves, enumeration
+// probes, the executor) keeps today's behaviour, exactly as leaves are greedy by design. A
+// nested cantrip INSIDE a continuation keeps the inline site-0 path for now (canonical under
+// MTG_BP_NO_GREEDY_CONT) -- the L*W-not-W^L trade, one searched link per line, unchanged.
+static bool BpNodeEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_NODE");
+    return heurarm::Flag(heurarm::BP_NODE, on);
+}
+
+// The node's explicit EMPTY continuation: resume the prefix and cast nothing more (no drop, no
+// casts -- the trailing passes still run). bp_choice >= 0 keeps the bp_seen counting/eligibility
+// machinery identical to a ranked resume; bp_searched_plan special-cases the value BEFORE the
+// cands enumeration, so the empty arm costs no enumeration at all.
+static constexpr int kBpEmptyChoice = 1 << 20;
+
+// [bp-node] anatomy probe (under MTG_ROLLOUT_STATS, like the units buckets): where does the
+// node's cost live -- how many base plans pend, how many collapse on the prefix dedup (the
+// duplicate-tails waste the enumeration filter would delete), how many children run, how many of
+// those the child dedup kills, and how often the search PREFERS the empty continuation. The
+// pends/prefix_dupes ratio is the enumeration-filter sizing number.
+namespace bpnode
+{
+    inline std::atomic<uint64_t> g_pends{0};         // base plans that stopped at the partition
+    inline std::atomic<uint64_t> g_prefix_dupes{0};  // ... whose partition state was already seen
+    inline std::atomic<uint64_t> g_children{0};      // continuation children applied
+    inline std::atomic<uint64_t> g_child_dupes{0};   // ... killed by the post-apply state dedup
+    inline std::atomic<uint64_t> g_adopted{0};       // children that improved the node incumbent
+    inline std::atomic<uint64_t> g_empty_adopted{0}; // ... of those, the EMPTY continuation
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            const uint64_t p = g_pends.load();
+            if (p == 0) { return; }
+            std::fprintf(stderr,
+                         "[bp-node] pends=%llu prefix_dupes=%llu children=%llu child_dupes=%llu"
+                         " adopted=%llu empty_adopted=%llu\n",
+                         (unsigned long long)p, (unsigned long long)g_prefix_dupes.load(),
+                         (unsigned long long)g_children.load(),
+                         (unsigned long long)g_child_dupes.load(),
+                         (unsigned long long)g_adopted.load(),
+                         (unsigned long long)g_empty_adopted.load());
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 static int BpSiteMask()
 {
     static const int m = []() -> int
@@ -5460,7 +5533,9 @@ static int BpSiteMask()
     }();
     // OR'd, not overridden: an explicit MTG_BP_SITES stays authoritative for every other class, and
     // with the lever off this returns exactly the old value (byte-identical).
-    return BpPlainCantripSiteEnabled() ? (m | 0x08) : m;
+    // MTG_BP_NODE implies the class is open: the node arm is ONE flag, so a node run can never
+    // land in the truncate-without-node shape a MTG_BP_NODE=1/MTG_BP_SITE3=0 split would be.
+    return (BpPlainCantripSiteEnabled() || BpNodeEnabled()) ? (m | 0x08) : m;
 }
 
 // A/B hatch for the NESTING axis alone (MTG_BP_NEST_DISCOVER=0). The wave walker learns how many
@@ -5546,7 +5621,20 @@ static int BpWave0SiteMask()
     // sites differ in how universally they fire, so the result had to be measured, not inherited.
     static const bool s3_defer_env = EnvOn("MTG_BP_SITE3_DEFER");
     if (heurarm::Flag(heurarm::BP_SITE3_DEFER, s3_defer_env)) { out &= ~(1 << 3); }
+    // MTG_BP_NODE: the plain-cantrip continuation is a real search node, so the (base x k) wave-0
+    // fan-out for site 3 would only duplicate the node's own children. Unlike the DEFER form this
+    // is not a re-ordering -- the wave walker is excluded too (see BpWaveSiteMask).
+    if (BpNodeEnabled()) { out &= ~(1 << 3); }
     return out;
+}
+
+// The site mask the DEFERRED WAVE machinery walks (BpWaveWalker slots + nested discovery). The
+// full BpSiteMask, minus site 3 when the node lever owns that class: a site-3 slot would start
+// the node-hosted plans at rank 0 and re-search continuations the node already searched in full.
+static int BpWaveSiteMask()
+{
+    const int m = BpSiteMask();
+    return BpNodeEnabled() ? (m & ~(1 << 3)) : m;
 }
 
 // Re-entrancy guard: the breakpoint's OWN enumeration must not emit further bp_choice variants.
@@ -6216,6 +6304,7 @@ bool TurnSolver::EquipmentDrawBreakpointEnabled()
 }
 
 bool TurnSolver::PartitionCantrip() { return BpPartitionCantripEnabled(); }
+bool TurnSolver::BpNodeSearch()     { return BpNodeEnabled(); }
 
 bool TurnSolver::EquipmentDrawBreakpointInline()
 {
@@ -15055,6 +15144,11 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
 struct BpPrefixSnap
 {
     bool valid = false;
+    // MTG_BP_NODE: this apply STOPPED at a site-3 deferred re-solve with the continuation
+    // UNRESOLVED -- the state handed back is the partition point (post-draw, post-Karoo), not a
+    // completed turn, and the caller must resume it (see BpNodeEnabled). Only ever set for a BASE
+    // plan (bp_choice < 0) applied with a capture pointer by a node-hosting plan loop.
+    bool pending = false;
     GameState state;                 // at the deferred re-solve, pre-continuation
     std::vector<Action> sink;        // *out_breakpoint content at the snapshot
     int  bp_seen      = 0;           // enabled-class breakpoints the prefix walked past
@@ -15516,7 +15610,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const bool nested_blocked = plan.bp_choice >= 0 && class_on
                                  && seen_before >= BpSearchDepth();
         bool resolved = false;
-        if (eligible)
+        if (eligible && plan.bp_choice == kBpEmptyChoice)
+        {
+            // MTG_BP_NODE's explicit EMPTY continuation: cast nothing more, play no land (the
+            // land-carrying continuations are their own cands entries), let the trailing passes
+            // run. land_decided so nothing downstream greedy-plays a drop the node declined.
+            out              = TurnSolver::Plan{};
+            out.land_decided = true;
+            resolved         = true;
+        }
+        else if (eligible)
         {
             // Shared with the executor (AIEngine::resolve_draw_breakpoint): both index the SAME list.
             std::vector<TurnSolver::Plan> cands =
@@ -16420,8 +16523,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // THE PARTITION (MTG_BP_PARTITION_CANTRIP): this cast ended our section, so the
             // continuation resolves HERE -- with the drawn card in hand and the turn's remaining
             // mana unspent -- and everything still unapplied in this plan belongs to it.
+            // MTG_BP_NODE partitions too, in exactly two shapes of apply: (1) where the CALLER
+            // can host the node (bp_capture provided), and (2) a plan CARRYING a continuation
+            // choice (bp_choice >= 0) -- a node child being re-applied WITHOUT resume (committed-
+            // line replay, rollout re-application), which must realise the same truncated prefix
+            // + chosen continuation the search scored, or the line diverges (the fd-diverge
+            // class). Every other apply -- greedy Solve, enumeration probes, rollout leaves --
+            // keeps the full-tail greedy shape, exactly as before.
             const bool partition_here =
-                BpPartitionCantripEnabled() && plain_cantrip && sink_stack.empty();
+                (BpPartitionCantripEnabled()
+                 || (BpNodeEnabled() && (bp_capture != nullptr || plan.bp_choice >= 0)))
+                && plain_cantrip && sink_stack.empty();
             if (s_human_play)
             {
                 // Human play: the cantrip drew; STOP here. The chooser re-fires so the human
@@ -17827,6 +17939,33 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
+        }
+        // MTG_BP_NODE pend (see BpNodeEnabled): a BASE plan applied by a node-hosting caller stops
+        // HERE -- the partition point, post-draw and post-Karoo, its blind tail already truncated
+        // (partition_here) -- with the continuation UNRESOLVED. Snapshot everything the resume
+        // needs (the same capture as above, plus `pending`) and hand control back: the plan loop
+        // enumerates the continuations on snap.state and resumes each as its own search-node
+        // child (bp_choice = k / kBpEmptyChoice, bp_at = snap.bp_seen). Site 3 only -- the
+        // site-5/6 deferred re-solves keep their rank machinery untouched.
+        if (BpNodeEnabled() && bp_capture != nullptr && plan.bp_choice < 0
+            && deferred_site_index() == 3)
+        {
+            bp_capture->valid        = true;
+            bp_capture->pending      = true;
+            bp_capture->state        = state;
+            bp_capture->sink         = out_breakpoint ? *out_breakpoint : std::vector<Action>{};
+            bp_capture->bp_seen      = bp_seen;
+            bp_capture->trick_armed  = deferred_trick_armed;
+            bp_capture->equip_armed  = deferred_equip_armed;
+            bp_capture->cascade_free = cascade_free;
+            bp_capture->pin_top      = g_scripted_top_choice;
+            bp_capture->pin_etbdig   = g_scripted_etbdig_choice;
+            bp_capture->pin_tutor    = g_scripted_tutor_choice;
+            bp_capture->pin_reorder  = g_scripted_reorder_choice;
+            bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
+            bp_capture->deferred_site = deferred_cantrip_site;
+            bp_capture->deferred_hand = deferred_hand_before;
+            return;
         }
         deferred_cantrip_resolve = false;
         // MTG_CANTRIP_ORDER: bind the continuation to its site for the whole re-solve (the
@@ -21454,10 +21593,12 @@ public:
     // stay inside whatever the loop looked at.
     // Uses the FULL BpSiteMask, not wave 0's selection mask: a class kept out of wave 0
     // (BpWave0SiteMask) is a cost prune precisely because its plans are picked up here at rank 0.
+    // (BpWaveSiteMask == BpSiteMask except under MTG_BP_NODE, where site 3 is the node's, not
+    // the walker's -- its continuations were already searched in full at the node.)
     BpWaveWalker(const GameState& state, const std::vector<TurnSolver::Plan>& plans,
                  std::size_t limit)
     {
-        const int  sites  = BpSiteMask();
+        const int  sites  = BpWaveSiteMask();
         const bool dig_bp = BpDigFanoutPending(state, sites);
         if (limit > plans.size()) { limit = plans.size(); }
         for (std::size_t i = 0; i < limit; ++i)
@@ -24491,6 +24632,22 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
             return s.empty() ? std::string("(pass)") : s;
         };
+        // BREAKPOINT NODE hosting (MTG_BP_NODE; see BpNodeEnabled): can any plan of this second
+        // main pend at a plain-cantrip partition point? Decides whether the apply gets a capture
+        // pointer at all -- off (the default), every apply below is byte-identical to before.
+        bool node_host_here = false;
+        if (BpNodeEnabled())
+        {
+            for (const TurnSolver::Plan& q : post)
+            { if ((PlanOpensBreakpoint(state, q) & (1 << 3)) != 0) { node_host_here = true; break; } }
+        }
+        // Node dedup, two levels. PREFIX: every base plan sharing one truncated prefix reaches the
+        // same partition state, so only the first hosts a node (this is where the old apply-time
+        // partition's duplicate-tails waste dies). CHILD: a continuation landing on a state some
+        // earlier plan (ordinary or child) already reached is redundant -- ordinary plans only
+        // RECORD, never skip, exactly like FSLineWin's bp_seen_states.
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> node_prefix_seen;
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> node_child_seen;
         // Hoisted per-plan scratch board -- see LoadPlanState (capacity reuse across plans).
         const bool reuse_s2 = s_state_reuse;
         GameState  s2_buf;
@@ -24502,7 +24659,76 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             LoadPlanState(s2_buf, state, reuse_s2);
             GameState& s2 = s2_buf;
             std::vector<Action> bp;
-            ApplyPlanDirect(s2, q, false, &bp);
+            BpPrefixSnap node_snap;
+            ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
+            if (node_snap.pending)
+            {
+                // ---- THE BREAKPOINT NODE (MTG_BP_NODE) -------------------------------------
+                // The apply stopped at the partition point (post-draw, post-Karoo, blind tail
+                // truncated). Host the continuation as a real search node: enumerate the FULL
+                // drawn-card-aware continuation list once, resume each candidate from the
+                // snapshot (plus the explicit EMPTY continuation), and score each through the
+                // normal EOT + next-turn recursion under the node's own B&B cutoff. No rank
+                // width, no waves -- completeness is the enumeration itself.
+                if (s_rollout_stats) { bpnode::g_pends.fetch_add(1, std::memory_order_relaxed); }
+                if (!node_prefix_seen.insert(BuildDedupKey(node_snap.state)).second)
+                { if (s_rollout_stats) { bpnode::g_prefix_dupes.fetch_add(1, std::memory_order_relaxed); } continue; }
+                // The continuation-list LENGTH is only knowable at APPLY time (the walker's own
+                // lesson): the in-apply enumeration runs under CantripOrderScope / the
+                // condemnation marker, so a host-side enumeration could disagree and silently
+                // strand tail ranks. Child k=0 measures it via g_bp_cands_last; k == n is the
+                // explicit EMPTY continuation.
+                int node_n = -1;
+                for (int k = 0; node_n < 0 || k <= node_n; ++k)
+                {
+                    // Mid-pass overrun: same abort the recursion's entry guards take.
+                    if (budget != nullptr && budget->Overrun())
+                    { ++g_fs_trunc_events; break; }
+                    ConsumeAt(budget, unitsite::kFsBpNode);
+                    TurnSolver::Plan v = q;
+                    v.bp_choice = (node_n >= 0 && k == node_n) ? kBpEmptyChoice : k;
+                    v.bp_at     = node_snap.bp_seen;
+                    GameState s3 = node_snap.state;
+                    std::vector<Action> bp3;
+                    g_bp_cands_last = 0;
+                    ApplyPlanDirect(s3, v, false, &bp3, nullptr, &node_snap);
+                    if (node_n < 0) { node_n = g_bp_cands_last < 0 ? 0 : g_bp_cands_last; }
+                    if (s_rollout_stats) { bpnode::g_children.fetch_add(1, std::memory_order_relaxed); }
+                    if (!node_child_seen.insert(BuildDedupKey(s3)).second)
+                    { if (s_rollout_stats) { bpnode::g_child_dupes.fetch_add(1, std::memory_order_relaxed); } continue; }
+                    if (s3.ActivePlayer().life <= 0) { continue; }
+                    if (s3.Opponent().life <= 0)
+                    {
+                        TurnSolver::Plan q_rec = std::move(v);
+                        q_rec.breakpoint_actions = std::move(bp3);
+                        return { state.turn_number, { { false, std::move(q_rec) } } };
+                    }
+                    if (!SimulateEndAndStartNextTurn(s3)) { continue; }
+                    ExpireStagedCards(s3);
+                    TurnSolver::SearchLine sub =
+                        FSLineWin(s3, depth, max_turns, std::min(cutoff, best.win_turn),
+                                  second_main, tt, lc, budget);
+                    if (sub.win_turn < best.win_turn)
+                    {
+                        if (s_rollout_stats)
+                        {
+                            bpnode::g_adopted.fetch_add(1, std::memory_order_relaxed);
+                            if (v.bp_choice == kBpEmptyChoice)
+                            { bpnode::g_empty_adopted.fetch_add(1, std::memory_order_relaxed); }
+                        }
+                        best.win_turn = sub.win_turn;
+                        best.phases.clear();
+                        TurnSolver::Plan q_rec = std::move(v);
+                        q_rec.breakpoint_actions = std::move(bp3);
+                        best.phases.push_back({ false, std::move(q_rec) });
+                        best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
+                        // First VERIFIED win -- the m2 loop's own shortcut, same horizon edge.
+                        if (sub.win_turn <= state.turn_number + depth) { return best; }
+                    }
+                }
+                continue;   // the pending base plan itself is never scored -- its children were
+            }
+            if (node_host_here) { node_child_seen.insert(BuildDedupKey(s2)); }
             // Self-lethal second main (Eidolon on-cast self-damage) -> we die to the
             // triggers before the spell resolves; not a viable line. See FSLineWin.
             if (s2.ActivePlayer().life <= 0) { continue; }
@@ -24897,6 +25123,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     bool bp_variants_here = false;
     for (const TurnSolver::Plan& p : pre) { if (p.bp_choice >= 0) { bp_variants_here = true; break; } }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
+    // BREAKPOINT NODE hosting (MTG_BP_NODE; see BpNodeEnabled): may any plan of this node pend at
+    // a plain-cantrip partition point? Off (default) => no capture pointer is ever passed and the
+    // loop below is byte-identical. When hosting, ordinary plans RECORD into bp_seen_states (never
+    // skip) so node children dedup against them too -- same contract as the variant dedup above.
+    bool node_host_here = false;
+    if (BpNodeEnabled())
+    {
+        for (const TurnSolver::Plan& p : pre)
+        { if ((PlanOpensBreakpoint(state, p) & (1 << 3)) != 0) { node_host_here = true; break; } }
+    }
+    std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> node_prefix_seen;
 
     TurnSolver::SearchLine best;
     best.win_turn = max_turns + 1;
@@ -24944,7 +25181,97 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         LoadPlanState(s_buf, state, reuse_s);
         GameState& s = s_buf;
         std::vector<Action> bp;
-        ApplyPlanDirect(s, p, true, &bp);
+        BpPrefixSnap node_snap;
+        ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
+        if (node_snap.pending)
+        {
+            // ---- THE BREAKPOINT NODE (MTG_BP_NODE) -------------------------------------------
+            // The apply stopped at the plain-cantrip partition point with its blind tail
+            // truncated. Host the continuation as a real search node: the FULL drawn-card-aware
+            // continuation list plus the explicit EMPTY continuation, each resumed from the
+            // snapshot (no prefix re-derivation) and scored through the wave body's own
+            // combat + tail sequence under this node's B&B cutoff. Prefixes sharing one
+            // partition state collapse (node_prefix_seen); children dedup against everything
+            // scored at this node (bp_seen_states, ordinary plans recording below).
+            int node_best_val = max_turns + 1;   // node_vals alignment for the probe/beam pair
+            if (s_rollout_stats) { bpnode::g_pends.fetch_add(1, std::memory_order_relaxed); }
+            const bool node_fresh = node_prefix_seen.insert(BuildDedupKey(node_snap.state)).second;
+            if (s_rollout_stats && !node_fresh) { bpnode::g_prefix_dupes.fetch_add(1, std::memory_order_relaxed); }
+            if (node_fresh)
+            {
+                // Continuation-list length measured by child k=0's apply (g_bp_cands_last) --
+                // the walker's own pattern; a host-side enumeration would run OUTSIDE
+                // CantripOrderScope and could disagree, stranding tail ranks. k == n is the
+                // explicit EMPTY continuation.
+                int node_n = -1;
+                for (int k = 0; node_n < 0 || k <= node_n; ++k)
+                {
+                    // Mid-pass overrun: same abort the recursion's entry guards take.
+                    if (budget != nullptr && budget->Overrun()) { ++g_fs_trunc_events; break; }
+                    ConsumeAt(budget, unitsite::kFsBpNode);
+                    if (s_rollout_stats)
+                    {
+                        g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
+                        if (g_force_heuristic_leaf) { g_interior_nodes_esc.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                    TurnSolver::Plan v = p;
+                    v.bp_choice = (node_n >= 0 && k == node_n) ? kBpEmptyChoice : k;
+                    v.bp_at     = node_snap.bp_seen;
+                    GameState s3 = node_snap.state;
+                    std::vector<Action> bp3;
+                    g_bp_cands_last = 0;
+                    ApplyPlanDirect(s3, v, true, &bp3, nullptr, &node_snap);
+                    if (node_n < 0) { node_n = g_bp_cands_last < 0 ? 0 : g_bp_cands_last; }
+                    if (s_rollout_stats) { bpnode::g_children.fetch_add(1, std::memory_order_relaxed); }
+                    if (!bp_seen_states.insert(BuildDedupKey(s3)).second)
+                    { if (s_rollout_stats) { bpnode::g_child_dupes.fetch_add(1, std::memory_order_relaxed); } continue; }
+                    if (s3.ActivePlayer().life <= 0) { continue; }   // self-kill guard, as above
+                    AnimateLandsShared(s3, nullptr);
+                    ActivateTapTokensShared(s3, nullptr);
+                    SimulateCombat(s3);
+                    if (s3.Opponent().life <= 0)   // wins THIS turn -> the earliest possible
+                    {
+                        TurnSolver::Plan p_rec = std::move(v);
+                        p_rec.breakpoint_actions = std::move(bp3);
+                        TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+                        FSLineStoreWin(lc, key, win, state);
+                        return win;
+                    }
+                    TurnSolver::SearchLine tail =
+                        FSLineTail(s3, depth - 1, max_turns, std::min(cutoff, best.win_turn),
+                                   second_main, tt, lc, budget);
+                    if (tail.win_turn < node_best_val) { node_best_val = tail.win_turn; }
+                    if (tail.win_turn < best.win_turn)
+                    {
+                        if (s_rollout_stats)
+                        {
+                            bpnode::g_adopted.fetch_add(1, std::memory_order_relaxed);
+                            if (v.bp_choice == kBpEmptyChoice)
+                            { bpnode::g_empty_adopted.fetch_add(1, std::memory_order_relaxed); }
+                        }
+                        best.win_turn = tail.win_turn;
+                        best.phases.clear();
+                        TurnSolver::Plan p_rec = std::move(v);
+                        p_rec.breakpoint_actions = std::move(bp3);
+                        best.phases.push_back({ true, std::move(p_rec) });
+                        best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
+                        // In-horizon win: same COMPLETE-NODES deferral as the main loop below.
+                        if (tail.win_turn <= state.turn_number + depth - 1)
+                        {
+                            if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
+                            FSLineStoreWin(lc, key, best, state);
+                            return best;
+                        }
+                    }
+                }
+            }
+            if (rec_vals) { node_vals.push_back(node_best_val); }
+            if (deferred_win) { break; }
+            continue;   // the pending base plan itself is never scored -- its children were
+        }
+        // Record for node-child dedup -- but only when the variant block below will not (its own
+        // insert must stay FIRST for a variant plan, or it would see its own key and self-skip).
+        if (node_host_here && !bp_variants_here) { bp_seen_states.insert(BuildDedupKey(s)); }
         // Breakpoint-variant dedup (see bp_seen_states): a variant whose continuation lands on an
         // already-scored state is redundant -- skip its rollout. Ordinary plans only RECORD.
         if (bp_variants_here)
