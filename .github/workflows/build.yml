@@ -33,6 +33,19 @@ on:
       - 'play.cmd'
       - 'tools/play/**'
       - '.github/workflows/**'
+      # A job that RUNS a file must be triggered by that file changing. The viewer checks below are
+      # `node test/viewer_*.js`, and the line-build check reads every saved game under references/ --
+      # but neither path was listed, so both could BREAK this workflow without STARTING it.
+      #
+      # That is not hypothetical (2026-08-29): committing 19 hand-played references turned the
+      # line-build check red, no run fired, and the failure first appeared on the next unrelated
+      # src commit -- where it read as "the minotaur engine fix broke the build". The fix to the
+      # check itself then also failed to trigger a run, so the branch sat on a red status for a
+      # defect that was already repaired. A trigger set narrower than the job set turns a clean
+      # signal into a misattributed one.
+      - 'test/viewer_*.js'
+      - 'test/viewer_*.py'
+      - 'references/**'
   workflow_dispatch:
 
 # A newer push to the same branch supersedes an in-flight run.
