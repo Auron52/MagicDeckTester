@@ -224,3 +224,79 @@ trusting any comparison against these figures.
 **Not yet done:** primary `.cod` swap and archiving the current list as `v2-instigator-libation`;
 ground-truth rebaseline; mulligan profile and value leaf for the new list. Two fixtures need
 repointing at the archived v2 on swap (`draught_magnet_escalation`, `libation_x_lands_not_dorks`).
+
+---
+
+# WHERE EACH CARD EARNS ITS SLOT — from replayed game logs
+
+Deltas say *that* a list is better. These come from replaying individual games with full logs under
+both decklists and slicing the result. Every pair below was verified against its recorded win turn
+and dropped on mismatch (**500/500** and **300/300** faithful); the samples are `--sample random`,
+because a divergence-selected pool is balanced across both tails by construction and its
+conditional means are selected rather than estimated.
+
+## The unusual thing: Luxurious Libation is a TRAP before turn 4
+
+Splitting the 110 games in which Libation was actually cast by the turn it was first cast:
+
+```
+first cast T2-T3      n=34    A-B = +0.382   se 0.125   t = +3.06     <- casting it LOSES
+first cast T4+        n=76    A-B = -0.171   se 0.096   t = -1.79     <- casting it wins
+difference                            +0.553   se 0.157   t = +3.52
+```
+
+**Casting Libation on turn 2 or 3 costs roughly a third of a turn.** The mechanism is plain from
+the card: X is paid from whatever mana is left, so a turn-2 Libation buys +1/+1 and a 1/1 Citizen
+for the entire turn — a rate the all-Anger list beats trivially by casting a 1-mana cantrip trick
+and continuing to develop. Held to turn 4 or later, the same card is mildly positive.
+
+This is consistent across the neighbouring cards, and the differences track the mechanism:
+
+```
+Ancestral Anger   first cast T2 +0.000   T3 +0.091   T4 -0.136     flat +1/+1 cantrip: early is cheap
+Impolite Entrance first cast T2 +0.200 (n=5)                       haste is dead with no board
+Luxurious Libation first cast T2/T3 +0.333/+0.462                  X-scaling: early is near-worthless
+```
+
+Only the X-spell shows a large early penalty, which is what the mechanism predicts.
+
+**Caveat, stated plainly: the T4 boundary was chosen after seeing the per-turn buckets.** The
+mechanism motivates it independently (X is tiny before turn 4), but a post-hoc split on a
+ten-bucket table is not the same as a pre-registered test. Treat `t = +3.52` as a strong hypothesis
+that deserves a confirmation run, not a settled finding.
+
+It does not change the recommendation — Libation is cut regardless. What it *may* indicate is a
+**play-heuristic issue rather than a card-quality one**: the search appears willing to spend an
+early turn on an X spell whose X is not yet worth paying. If that generalises to other X spells in
+other decks it is worth a look on its own terms.
+
+## Impolite Entrance is not bad — it is ABSENT
+
+`or4_ie0_an3` (Anger 3 / Entrance 0) vs `or4_ie1_an2` (Anger 2 / Entrance 1), 300 unbiased pairs:
+
+```
+ALL                            300 pairs   -0.003   t = -0.3      (the established tie)
+  fast games (<=T4)            123 pairs   -0.033   t = -2.0      Anger-only is better
+  T6                            40 pairs   +0.100   t = +1.7      the Entrance list is better
+  T7+                           38 pairs    0.000                  identical
+
+cast Impolite Entrance          54 pairs   -0.074   t = -1.4      when cast, it HELPS
+never cast it                  246 pairs   +0.012   t = +1.1
+```
+
+Two things fall out. First, **Entrance appears in only 18% of games** (54/300) while Anger appears
+in 45% (136/300) — a single copy simply does not show up. Second, in the games where it *is* cast
+it is mildly positive. The card is not being measured as weak; it is being measured as **rare**,
+and the aggregate tie is dominated by the 82% of games where it never appears and the two lists are
+near-identical.
+
+There is also a crossover worth noting rather than over-reading: the Anger-heavy list wins the fast
+games (t = −2.0) and the Entrance list wins the T6 bucket (t = +1.7). Neither survives a
+multiple-comparison correction across five buckets on its own, but the direction is consistent with
+Anger being the cheaper, more frequently-castable card and Entrance mattering only once there is a
+board worth hasting.
+
+**This is the strongest support yet for the deck owner's instinct.** The engine cannot see
+Entrance's trample, and the log evidence shows the card is positive when it actually gets cast. A
+measured aggregate cost of 0.005–0.009 turns is what you get when a mildly-positive card is drawn
+too rarely to matter — not what you get from a bad card.
