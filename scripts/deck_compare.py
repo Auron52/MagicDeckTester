@@ -155,8 +155,21 @@ def inherit_numbering(base_nums, base_counts, new_counts, pairs=None):
     for src, dst in (pairs or {}).items():
         need = new_counts.get(dst, 0) - len(out.get(dst, []))
         take = freed_of.get(src, [])
+        # Inherit from the END of the freed run. A card cut to k copies keeps its FIRST k numbers,
+        # so the freed run is a SUFFIX -- and suffixes NEST: the arm keeping 1 Libation frees
+        # {34,35}, the arm keeping 0 frees {33,34,35}. Taking from the end gives the replacement the
+        # SAME numbers ({34,35}) in both, leaving 33 -- the number whose CARD actually differs -- as
+        # the only difference. Taking from the front handed the replacement {33,34} in the 0-copy
+        # arm, so a ONE-card difference moved TWO numbers and needlessly decorrelated the pair.
+        #
+        # The number SET stays {1..60} either way, which is the load-bearing invariant: ShuffleByKey
+        # sorts by key(seed, m_number), so two arms with the same number set sort them into the SAME
+        # order and position p holds the same number in both. Only the card AT a number can differ.
+        # (Giving arms different number sets -- e.g. canonical per-card numbers out of a union pool
+        # -- breaks that and measures far worse: 80.2% opening-hand alignment vs 95.8%. Tried and
+        # rejected 2026-08-29.)
         for _ in range(min(need, len(take))):
-            out.setdefault(dst, []).append(take.pop(0))
+            out.setdefault(dst, []).append(take.pop())
     freed = sorted(n for v in freed_of.values() for n in v)
     for name in sorted(new_counts):
         need = new_counts[name] - len(out.get(name, []))
