@@ -3,14 +3,14 @@
   "anti_lifegain": {
    "hand_mismatch": 0,
    "hand_mismatch_games": [],
-   "human": 4.5833,
+   "human": 4.5333,
    "max_turns": 8,
-   "n": 24,
+   "n": 30,
    "policy": "committed value_play",
    "search": 4.1667,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "auras": {
    "hand_mismatch": 0,
@@ -22,7 +22,7 @@
    "search": 4.2333,
    "short": 0,
    "shortfalls": [],
-   "src": "ffb3f2358edc6136054388aa2654b59f09748ab9"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "burn": {
    "hand_mismatch": 0,
@@ -34,7 +34,7 @@
    "search": 4.375,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "creature_giving": {
    "hand_mismatch": 0,
@@ -46,7 +46,7 @@
    "search": 4.9,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "dragonstorm": {
    "hand_mismatch": 0,
@@ -58,7 +58,7 @@
    "search": 4.4103,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "fivecolour": {
    "hand_mismatch": 0,
@@ -70,7 +70,7 @@
    "search": 4.5,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "goblins": {
    "hand_mismatch": 0,
@@ -82,7 +82,7 @@
    "search": 3.871,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "hinata2": {
    "hand_mismatch": 0,
@@ -94,7 +94,7 @@
    "search": 5.6667,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "kittyequipment": {
    "hand_mismatch": 0,
@@ -106,7 +106,7 @@
    "search": 5.0,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "knights": {
    "hand_mismatch": 0,
@@ -118,7 +118,7 @@
    "search": 4.3548,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "mirrorwing_dragon_v1_twinflame_anger": {
    "hand_mismatch": 0,
@@ -142,7 +142,7 @@
    "search": 4.1,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "stompysurprise": {
    "hand_mismatch": 0,
@@ -154,7 +154,7 @@
    "search": 4.4545,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   },
   "treasure_hunt": {
    "hand_mismatch": 0,
@@ -166,7 +166,7 @@
    "search": 3.9091,
    "short": 0,
    "shortfalls": [],
-   "src": "8f0b94c49b0681bafa9e2e98b039b81a342d5a72"
+   "src": "bf9912bbdcc91b3d5ec69067e2bd2bfe6243fa94"
   }
  }
 }

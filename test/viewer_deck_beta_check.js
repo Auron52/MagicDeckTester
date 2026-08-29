@@ -57,8 +57,14 @@ ok(S === 30, 'the stable bar is 30 reference games', 'STABLE_REFS=' + S);
 ok(A < S, 'the alpha floor is below the stable bar');
 
 const GREEN = { state: 'green', n: 40 };
-const BENCHES = [GREEN, { state: 'short', short: 1, n: 40 }, { state: 'stale', at: 'abc123', n: 40 },
+// A stale bench carries the LAST verdict forward (user, 2026-08-29), so there are two of them and
+// they must land on opposite sides: stale-was-green keeps the top tier, stale-was-short does not.
+const STALE_GREEN = { state: 'stale', at: 'abc123', n: 40, wasGreen: true };
+const STALE_SHORT = { state: 'stale', at: 'abc123', n: 40, wasGreen: false, short: 3 };
+const BENCHES = [GREEN, { state: 'short', short: 1, n: 40 }, STALE_GREEN, STALE_SHORT,
                  { state: 'unbenched' }];
+// Does this bench count as proof of green play? The policy, restated independently of tierFrom.
+const benchProves = b => b.state === 'green' || (b.state === 'stale' && b.wasGreen);
 
 for (const refs of [0, A - 1, A, A + 1, S - 1, S, S + 1]) {
   for (const hasValueLeaf of [false, true]) {
@@ -68,7 +74,7 @@ for (const refs of [0, A - 1, A, A + 1, S - 1, S, S + 1]) {
         // The policy, restated independently of the implementation.
         const missing = refs < A || !hasValueLeaf || !hasKeepModel;
         const want = missing ? 'alpha'
-                   : (refs >= S && bench.state === 'green') ? 'stable' : 'beta';
+                   : (refs >= S && benchProves(bench)) ? 'stable' : 'beta';
         ok(r.tier === want,
            `tier(refs=${refs}, value=${hasValueLeaf}, keep=${hasKeepModel}, bench=${bench.state}) === ${want}`,
            'got ' + r.tier);
@@ -91,18 +97,30 @@ for (const refs of [0, A - 1, A, A + 1, S - 1, S, S + 1]) {
 // three-tier scheme turns on, and the only one that can move a deck DOWN after it was fine.
 for (const bench of BENCHES) {
   const r = srv.tierFrom({ hasProfile: true, refs: S + 5, hasValueLeaf: true, hasKeepModel: true, bench });
-  ok(r.tier === (bench.state === 'green' ? 'stable' : 'beta'),
-     `a fully-equipped ${S + 5}-reference deck is ${bench.state === 'green' ? 'stable' : 'beta'} when the bench is ${bench.state}`,
+  ok(r.tier === (benchProves(bench) ? 'stable' : 'beta'),
+     `a fully-equipped ${S + 5}-reference deck is ${benchProves(bench) ? 'stable' : 'beta'} when the bench is ${bench.state}`
+       + (bench.state === 'stale' ? ` (wasGreen=${!!bench.wasGreen})` : ''),
      'got ' + r.tier);
-  if (bench.state !== 'green') {
+  if (!benchProves(bench)) {
     ok(r.tierReasons.length === 1, 'the ONLY thing holding it back is the bench', JSON.stringify(r.tierReasons));
   }
 }
-// A stale bench is NOT green. Measuring at an engine that no longer exists is the exact way this
-// could hand out a top tier on evidence that has expired.
+// STALENESS ALONE IS NOT A DEMOTION (user, 2026-08-29: "they should be marked as beta only if they
+// were not stable before"). Every src commit stales every deck at once, so a stale-means-beta rule
+// re-labelled the entire picker on every commit -- signalling nothing about any individual deck.
+// The carried-forward verdict is the last REAL measurement, so this is not "assume green": a deck
+// that was short stays beta, and a re-bench that finds a genuine shortfall still demotes it.
 ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true,
-                  bench: { state: 'stale', at: 'deadbee', n: 99 } }).tier === 'beta',
-   'a stale bench cannot promote a deck to stable');
+                  bench: { state: 'stale', at: 'deadbee', n: 99, wasGreen: true } }).tier === 'stable',
+   'a stale bench whose last verdict was GREEN keeps the deck stable');
+ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true,
+                  bench: { state: 'stale', at: 'deadbee', n: 99, wasGreen: false, short: 2 } }).tier === 'beta',
+   'a stale bench whose last verdict was SHORT still holds the deck at beta');
+// The demotion path still works end-to-end: stale-and-green today, genuinely short after the
+// re-bench lands => beta. This is the property the old stale-is-never-green rule existed to protect.
+ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true,
+                  bench: { state: 'short', short: 4, n: 99 } }).tier === 'beta',
+   'a completed re-bench that finds a shortfall still demotes a formerly-stable deck');
 // Neither is a bench that never ran -- absence of evidence must not read as evidence.
 ok(srv.tierFrom({ hasProfile: true, refs: 99, hasValueLeaf: true, hasKeepModel: true,
                   bench: { state: 'unbenched' } }).tier === 'beta',

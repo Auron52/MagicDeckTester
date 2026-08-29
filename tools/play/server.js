@@ -360,8 +360,15 @@ function safeStem(s) { return String(s).replace(/[^A-Za-z0-9_-]+/g, '_'); }
 // The bench is CACHED, never run from here (user, 2026-08-27: "I don't think we should run it
 // manually every time across all decks... maybe we can cache it somehow"). scripts/ref_bench.py
 // writes test/ref_bench.json, stamping each deck with the src tree it was measured at; a stamp that
-// no longer matches reads STALE, which is not green. `ref_bench.py --stale-only --json ...` then
-// re-benches exactly the decks that need it.
+// no longer matches reads STALE. `ref_bench.py --stale-only --json ...` then re-benches exactly the
+// decks that need it.
+//
+// STALE CARRIES THE LAST VERDICT FORWARD; IT IS NOT ITSELF A DEMOTION (user, 2026-08-29:
+// "everything is marked as beta for a period. That is not a good idea. They should be marked as
+// beta only if they were not stable before"). Every src commit stales EVERY deck at once, so
+// treating stale as not-green re-labelled the whole picker on every commit -- a badge that fires on
+// all decks simultaneously says nothing about any of them. A stale deck now keeps the tier its last
+// real bench earned: previously green stays green, previously short stays beta. See tierFrom.
 const MIN_OPTIMAL_REFS = 10;
 const STABLE_REFS = 30;
 const REF_BENCH = path.join(ROOT, 'test', 'ref_bench.json');
@@ -492,7 +499,12 @@ function benchState(key) {
   const now = srcNow();
   if (now && e.src && e.src !== now) {
     maybeStartBenchRefresh(now);
-    return { state: 'stale', at: e.src.slice(0, 12), n: e.n, refreshing: benchRefresh.running };
+    // Carry the PREVIOUS verdict through the stale window (see "STALE DOES NOT DEMOTE" above).
+    // The cache entry still holds what the deck last measured; throwing it away is what made a
+    // single src commit re-label every deck at once.
+    const wasGreen = !e.short && !e.hand_mismatch;
+    return { state: 'stale', at: e.src.slice(0, 12), n: e.n, refreshing: benchRefresh.running,
+             wasGreen, short: e.short, handMismatch: e.hand_mismatch };
   }
   // A reference whose forced opening hand did not reconstruct was never a valid comparison, so a
   // deck carrying one has not been measured -- counting it as a pass is the same failure as an
@@ -524,9 +536,30 @@ function tierFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchived
   if (b.state === 'short') {
     short.push(`the search is slower than the human on ${b.short} of ${b.n} references`);
   } else if (b.state === 'stale') {
-    short.push(b.refreshing
-      ? `reference bench is stale (measured at src ${b.at}) — re-benching on the side, refresh in a minute`
-      : `reference bench is stale (measured at src ${b.at}) — auto re-bench did not clear it, see logs/ref_bench_auto.log`);
+    // STALE DOES NOT DEMOTE A DECK THAT WAS ALREADY GREEN (user, 2026-08-29: "everything is marked
+    // as beta for a period. That is not a good idea. They should be marked as beta only if they
+    // were not stable before").
+    //
+    // Staleness is not a measurement -- it says the cached bench was taken at a different src tree,
+    // which EVERY src commit causes for EVERY deck simultaneously. Treating that as a beta reason
+    // made the label track "did anyone commit recently", not "is this deck proven", and a badge
+    // that lights up on all decks at once carries no information.
+    //
+    // What the old rule was protecting is kept: this is still the only criterion that can move a
+    // deck DOWN after it was fine, because the carried-forward verdict is the LAST REAL
+    // MEASUREMENT, not an assumption of green. A deck whose last bench was short stays beta while
+    // stale, and when the auto re-bench lands a genuine shortfall the deck demotes then. The only
+    // thing that changed is the interim: a previously-green deck is no longer accused of being
+    // unproven simply because the clock moved.
+    //
+    // Residual, stated rather than hidden: during the stale window a REGRESSION introduced by the
+    // new src is not yet visible. That is a re-bench latency (minutes, auto-started above), and it
+    // is the cost the user chose over labelling every deck beta after every commit.
+    if (!b.wasGreen) {
+      short.push(b.handMismatch
+        ? `${b.handMismatch} reference(s) did not reconstruct as of the last bench (src ${b.at}), so the bench is not a valid comparison`
+        : `the search was slower than the human on ${b.short} of ${b.n} references as of the last bench (src ${b.at})`);
+    }
   } else if (b.state !== 'green') {
     short.push(b.handMismatch
       ? `${b.handMismatch} reference(s) did not reconstruct, so the bench is not a valid comparison`
