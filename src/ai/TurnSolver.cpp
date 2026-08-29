@@ -61,6 +61,10 @@ static const int   s_fd_leaf_depth     = s_fd_leaf_depth_env ? std::atoi(s_fd_le
 // machine load), so truncated-rollout (MTG_ROLLOUT_HORIZON) speedups can be read as a step-count ratio.
 // Flag-gated so the shared counters never touch the rollout hot loop (cross-thread atomic contention) when off.
 static const bool             s_rollout_stats = EnvOn("MTG_ROLLOUT_STATS");
+// Separate from s_rollout_stats: the why-not histogram re-evaluates several gate predicates per
+// consultation (BpTurnManaSettled, BpSlotIsAfterSite -> a provider CastOrderRank lookup), which is
+// far too expensive to carry on every stats run. Diagnostic only; counters, no behaviour.
+static const bool             s_bp_whynot     = EnvOn("MTG_BP_CONDEMN_WHYNOT");
 static std::atomic<long long> g_rollout_calls{0};
 static std::atomic<long long> g_rollout_steps{0};
 // Two-stage-split fallback telemetry (MTG_ODO_FALLBACK_STATS). EnumeratePlanPositions abandons the
@@ -133,6 +137,20 @@ static std::atomic<long long> g_bp_condemn_seen{0};
 static std::atomic<long long> g_bp_condemn_drops{0};
 static std::atomic<long long> g_bp_condemn_drops_greedy{0};
 static std::atomic<long long> g_bp_condemn_drops_exec{0};
+// WHY-NOT histogram (MTG_BP_CONDEMN_WHYNOT). Each consultation that did not drop is charged to its
+// FIRST blocking gate, which turns "what is condemnation's ceiling?" from a trial-and-error
+// question into a read: g_wn_peer is what a FINER CAST ORDER could still recover (two cards at one
+// rank are mutually un-condemnable), while the soundness gates above it are unavailable at any
+// order. g_wn_reached passed every gate and was then rejected by the dominance/payability tests.
+static std::atomic<long long> g_wn_notdecision{0};   // rollout leaf (correctly excluded)
+static std::atomic<long long> g_wn_managrew{0};      // mana base grew -> decline is stale
+static std::atomic<long long> g_wn_plancasts{0};     // the plan casts it -> never declined
+static std::atomic<long long> g_wn_notail{0};        // tail exemption (diagnostic lever, off)
+static std::atomic<long long> g_wn_manasite{0};      // site added mana (the surviving exemption)
+static std::atomic<long long> g_wn_peer{0};          // rank >= site -- THE ORDER'S CEILING
+static std::atomic<long long> g_wn_reached{0};       // passed all gates; dominance/payability next
+static std::atomic<long long> g_wn_notdominated{0};  // no earlier copy declined it
+static std::atomic<long long> g_wn_unpayable{0};     // could not have been cast anyway
 // Per-plan state REUSE (DEFAULT ON; MTG_NO_STATE_REUSE=1 restores per-plan construction).
 // Every plan loop applies its plan to a COPY of the SAME parent state. Copy-CONSTRUCTING that copy
 // inside the loop frees the previous plan's buffers and mallocs new ones of nearly identical size,
@@ -199,6 +217,36 @@ namespace
                       << " rollout=" << (bg - be)
                       << " rollout_frac=" << (bd ? static_cast<double>(bg - be) / bd : 0.0)
                       << ")\n";
+            if (s_bp_whynot)
+            {
+                const long long peer = g_wn_peer.load();
+                std::cerr << "[rollout-stats] bp_whynot"
+                          << " notdecision=" << g_wn_notdecision.load()
+                          << " managrew="    << g_wn_managrew.load()
+                          << " plancasts="   << g_wn_plancasts.load()
+                          << " notail="      << g_wn_notail.load()
+                          << " manasite="    << g_wn_manasite.load()
+                          << " PEER="        << peer
+                          << " reached="     << g_wn_reached.load()
+                          << " notdominated=" << g_wn_notdominated.load()
+                          << " unpayable="   << g_wn_unpayable.load()
+                          << "\n";
+                // Two ceilings, because drops + peer is an OVERSTATEMENT and saying so is the
+                // point. A peer-blocked consultation that the order admitted would still have to
+                // survive dominance and payability, and those reject ~80% of everything that
+                // reaches them today. So the honest estimate scales peer by the OBSERVED
+                // drops-among-reached rate; the raw sum is quoted only as a hard upper bound.
+                const long long reached = g_wn_reached.load();
+                const double    yield   = reached ? static_cast<double>(bd) / reached : 0.0;
+                const double    est     = bd + peer * yield;
+                std::cerr << "[rollout-stats] bp_whynot CEILING: today=" << bd
+                          << "  peer-blocked=" << peer
+                          << "  yield(drops/reached)=" << yield
+                          << "  => realistic max ~" << static_cast<long long>(est)
+                          << " (" << (bd ? est / bd : 0.0) << "x today)"
+                          << ", hard upper bound " << (bd + peer)
+                          << " (" << (bd ? static_cast<double>(bd + peer) / bd : 0.0) << "x)\n";
+            }
         }
     };
     RolloutStatsReporter g_rollout_stats_reporter;
@@ -7071,6 +7119,22 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         { g_bp_condemn_seen.fetch_add(1, std::memory_order_relaxed); }
         // Decision space: a SEARCHED collect, or the executor (outside any solve). Not the leaf.
         const bool bp_decision_space = g_search_candidate_enum || g_condemn_root_turn < 0;
+        // WHY-NOT HISTOGRAM (MTG_BP_CONDEMN_WHYNOT, default off, counters only).
+        // "What is the MAXIMUM for condemnation?" (USER 2026-08-29) is a ceiling question, and
+        // trying rank splits one at a time answers it only by exhaustion. Attributing every
+        // consultation that did NOT drop to its FIRST blocking gate answers it directly: whatever
+        // the peer rule blocks is exactly what a finer cast order could still recover, and whatever
+        // the soundness gates block is not available at any order.
+        if (s_bp_whynot && BpClassifyActive(state) && g_bp_hand_before != nullptr)
+        {
+            if      (BpCondemnSearchedOnlyEnabled() && !bp_decision_space) { ++g_wn_notdecision; }
+            else if (!BpTurnManaSettled(state))                            { ++g_wn_managrew; }
+            else if (BpPlanCasts(ap.hand[i].m_name_hash))                  { ++g_wn_plancasts; }
+            else if (BpCondemnTailExemptEnabled() && !BpPlanHasTail(ap))   { ++g_wn_notail; }
+            else if (BpSiteAddedMana(state))                               { ++g_wn_manasite; }
+            else if (BpSlotIsAfterSite(state, ap.hand[i]))                 { ++g_wn_peer; }
+            else                                                           { ++g_wn_reached; }
+        }
         if (BpClassifyActive(state) && g_bp_hand_before != nullptr
             && (!BpCondemnSearchedOnlyEnabled() || bp_decision_space)
             && BpTurnManaSettled(state)
@@ -7090,10 +7154,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (!BpCardWasInHandBefore(c.m_number)) { continue; }   // not declined: it is new
                 if (urgency(c) <= u_cand) { dominated = true; break; }
             }
+            if (s_bp_whynot && !dominated) { ++g_wn_notdominated; }
             if (dominated)
             {
                 ManaPool now = AvailableManaPool(state);
                 now.AddPool(state.floating_mana);
+                if (s_bp_whynot && !now.CanPay(EffectiveCost(def, state))) { ++g_wn_unpayable; }
                 if (now.CanPay(EffectiveCost(def, state)))
                 {
                     // TEMPORARY DIAGNOSTIC (MTG_CONDEMN_WHO): name the card each condemnation
