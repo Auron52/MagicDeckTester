@@ -83,3 +83,32 @@ see" rather than "audited clean", and Hinata is the least settled deck in the se
 Related: [`prepay-payment-path-recheck.md`](prepay-payment-path-recheck.md) (the ledger and its
 honest limits), [`reality-spasm-phase2.md`](reality-spasm-phase2.md) (cause 2's blocker),
 [`mana-source-reservation.md`](mana-source-reservation.md) (the neighbouring deferred mana item).
+
+## 2026-08-29: the split, measured (step 1 done) — with a stability caveat
+
+`legality_one` re-run over all 418 rows (engine at the M2_RECONSIDER adoption tree, legacy
+levers pinned + `MTG_M2_RECONSIDER=0`; driver bypassed the tsv write-back deliberately —
+the committed `spend` column remains the 2026-08-26 truth). Detail:
+`logs/mana_robust/prepay_legality_rerun.json` (gitignored; regenerate with the same driver).
+
+**The split of today's 183 UNPRICED rows by abstain cause:**
+
+| cause | rows | share |
+|---|---|---|
+| sources short on raw count (cause 3) | 111 | 61% (106 pure + 5 mixed) |
+| unresolved `{X}` in a cost (cause 1) | 77 | 42% (72 pure + 5 mixed) |
+| Reality Spasm refloat (cause 2) | — | not separately visible: Spasm is itself an `{X}` spell, so its rows land in the `{X}` bucket |
+
+By deck: hinata 149, mirrorwing 20, dragonstorm 9, others 5. **Short-count dominates**, so per
+this doc's own ordering the next action is №2: audit the pricing model's production table
+against hinata's board states — each missing production path retires a batch of rows at once.
+Threading the resolved `{X}` (№3) is second.
+
+**Caveat that must travel with these numbers:** the re-run drifted from the committed 2026-08-26
+classification on 64 of 418 rows (LAUNDERED 118 -> 68, LEGAL 132 -> 167, UNPRICED 168 -> 183).
+The legacy-lever env restores only the six pinned behaviours; the rest of the engine has moved
+(minotaur exact-discount, auras searched dig, M2R-era plumbing), so the control replays are not
+the 2026-08-26 games. This confirms the parent doc's commit-bound warning empirically: the
+ledger is a measurement of (engine, env), not a stable property of the seed list. Any future
+pricing work should regenerate its own snapshot first and diff against the tsv before trusting
+either.
