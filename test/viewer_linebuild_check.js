@@ -68,7 +68,33 @@ function checkReference(p) {
     const plans = d.plans || [];
     if (typeof ch !== 'number' || ch < 0 || ch >= plans.length) continue;  // pass (-1) / drift: nothing to build
     const plan = plans[ch];
-    const casts = plan.casts || [];
+    // `plan.casts` names a card once per plan ENTRY, and an ACTIVATION of a permanent already on
+    // the battlefield appears there under the same name as a hand cast of another copy. Minotaur
+    // s11/gi10 T5 is exactly that shape: one Burning-Fist Minotaur in hand, one already in play --
+    // cast the first and pump the second, and `casts` reads ["Burning-Fist Minotaur",
+    // "Burning-Fist Minotaur"] for a line with ONE hand cast.
+    //
+    // Replaying both through queueCard asked the GUI to queue two hand casts off a single hand
+    // card, which it CORRECTLY refuses (castableCount counts copies in hand) -- so this check
+    // reported "the GUI cannot rebuild a line the user actually played" about a line the GUI
+    // builds fine, and the human had in fact played it. The activation reaches the plan by a board
+    // click, not a hand-thumb double-click: a different GUI path, and out of scope here exactly
+    // like the Retrace/Vial casts skipped below.
+    //
+    // `plan.actions` is the field that distinguishes them (`activate: true`), so SUBTRACT the
+    // activations from `casts` rather than rebuilding the list out of `actions`. Rebuilding was
+    // tried first and is wrong: a cycling / sac-draw land (Fiery Islet, Lonely Sandbar, Horizon
+    // Canopy) is an action WITHOUT `activate` that `casts` deliberately omits, so deriving the list
+    // from `actions` turned one false failure into five. `casts` stays the source of truth; the
+    // only correction is dropping the entries that are activations of a permanent already in play.
+    const actCount = {};
+    for (const a of (Array.isArray(plan.actions) ? plan.actions : [])) {
+      if (a && a.activate) { actCount[a.card] = (actCount[a.card] || 0) + 1; }
+    }
+    const casts = (plan.casts || []).filter(nm => {
+      if (actCount[nm]) { actCount[nm]--; return false; }                 // this entry is the activation
+      return true;
+    });
 
     // A cast not backed by a hand card (Retrace from yard / Vial deploy) uses a different GUI
     // path than queueCard -> out of scope for the line-build check. Skip the whole plan.
