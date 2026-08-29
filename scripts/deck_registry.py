@@ -96,19 +96,23 @@ def discover(root="decks"):
 
 # Which LIST a folder of hand-played references was played on.
 #
-# This CANNOT be derived. A reference JSON records seeds, mulligans and decisions but no decklist,
-# and the folder name slugs the deck FAMILY, not the version -- so when a deck's shipping list is
-# replaced, its existing references silently start resolving to the new list. Replaying a recorded
-# human line against cards that were never in that deck produces a benchmark that means nothing and
-# reports no error, which is exactly the failure this module was written to end.
+# EMPTY BY DESIGN -- superseded by the reference folder LAYOUT (see ref_bench.ref_dirs).
+# `references/<Deck>/` holds the games played on the list that currently ships and
+# `references/<Deck>/<Variant>/` holds the games played on an archived list, mirroring
+# `decks/<Deck>/<Variant>/`, so the folder itself names the deck and nothing has to be mapped.
 #
-# Only exceptions need an entry; anything absent resolves to its own slug.
-REFERENCE_DECK = {
-    # The 24 Mirrorwing references were hand-played on the Twinflame / Ancestral Anger / Scale the
-    # Heights / Expedite list, archived 2026-08-22 when the tournament-winning suite (Oracle /
-    # Draught / Impolite Entrance / Luxurious Libation) took over the shipping slot.
-    "mirrorwing_dragon": "mirrorwing_dragon_v1_twinflame_anger",
-}
+# This dict was the previous answer and it could only ever name ONE list per folder. That is what
+# broke: after a shipping list is replaced, new references accumulate in the same folder beside the
+# old ones, and no folder->deck binding can describe a MIXTURE. Mirrorwing hit it exactly -- 9 games
+# played on the shipping list sat in a folder bound to the archived v1 list, so each was replayed
+# against cards that were never in the deck it was played on. Those rows did report HAND-MISMATCH,
+# but as a per-game flag rather than an error, and the deck-level summary still printed a shortfall
+# count computed from them.
+#
+# Kept as an empty dict (not deleted) because it is the documented escape hatch for a folder whose
+# layout genuinely cannot express its owner, and because tools/play/server.js parses this symbol.
+# Anything absent resolves to its own slug.
+REFERENCE_DECK = {}
 
 
 def reference_deck_key(ref_slug):

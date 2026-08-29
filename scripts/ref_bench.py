@@ -35,13 +35,37 @@ MTG = "build/Release/mtg"
 
 
 def ref_dirs(root):
-    """-> [(slug, refdir)] for every one-level reference folder holding claude_s*_gi*.json."""
+    """-> [(slug, refdir)] for every reference folder holding claude_s*_gi*.json.
+
+    MIRRORS THE DECK LAYOUT. `references/<Deck>/` holds the games played on the list that currently
+    ships, and `references/<Deck>/<Variant>/` holds the games played on an archived list -- exactly
+    as `decks/<Deck>/<Variant>/` holds that list itself, and keyed the same way
+    (`<deck>_<variant>`), so a variant reference folder resolves to its own deck through ordinary
+    discovery with nothing to hand-maintain.
+
+    This REPLACES deck_registry.REFERENCE_DECK, which could only name ONE list per folder. That was
+    the defect: when a deck's shipping list is replaced, its folder keeps accumulating references
+    for the NEW list beside the old ones, and no single folder->deck binding can describe a mixture.
+    Mirrorwing hit exactly that -- 9 games on the shipping list sat in a folder bound to the
+    archived v1 list, so every one of them benched against cards that were never in the deck they
+    were played on, and the rows silently reported as HAND-MISMATCH shortfalls.
+
+    `references/suboptimal/` is a ROOT, not a deck, so it is skipped here: its decks live one level
+    deeper and are reached by passing it as `root` (--suboptimal)."""
     out = []
     for d in sorted(glob.glob(os.path.join(root, "*"))):
         if not os.path.isdir(d):
             continue
+        base = deck_registry.slug(os.path.basename(d))
+        if os.path.basename(d) == "suboptimal":
+            continue
         if glob.glob(os.path.join(d, "claude_s*_gi*.json")):
-            out.append((deck_registry.slug(os.path.basename(d)), d))
+            out.append((base, d))
+        for sub in sorted(glob.glob(os.path.join(d, "*"))):
+            if not os.path.isdir(sub):
+                continue
+            if glob.glob(os.path.join(sub, "claude_s*_gi*.json")):
+                out.append(("%s_%s" % (base, deck_registry.slug(os.path.basename(sub))), sub))
     return out
 
 
