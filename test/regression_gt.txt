@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 29000fa0  date 2026-08-29
+# Regression ground truth -- commit c6c54c8b  date 2026-08-29
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -8,8 +8,8 @@ slivers_smoke_d0_s1001=4.6400/ee49fd86141aeb03
 slivers_smoke_d3_s1001=4.2680/7a78d3d5966c6eea
 slivers_smoke_d5_s1001=4.1933/a372404a197c230e
 burn_smoke_d0_s1001=4.4620/e667d678badfdd47
-burn_smoke_d3_s1001=4.3467/651787c2f14b8ed9
-burn_smoke_d5_s1001=4.3600/e7bcf0bf6d8b656b
+burn_smoke_d3_s1001=4.3400/c5915abf6d2fe278
+burn_smoke_d5_s1001=4.3520/b054df365b212677
 th_smoke_d0_s1001=5.4470/232a8a16decbcbcd
 th_smoke_d3_s1001=4.0800/b8b5486b83944a0b
 th_smoke_d5_s1001=4.0000/36ebcbf3bec97263
@@ -60,10 +60,10 @@ slivers_regression_d3_s3003=4.2775/48a2f8525f0de626
 slivers_regression_d5_s2002=4.2267/2d11769ba9ccb3a2
 slivers_regression_d5_s3003=4.2533/7606b2fcacc99bcc
 burn_regression_d0_s2002=4.4250/83822e9fb2cf158f
-burn_regression_d3_s2002=4.3440/e693c357a77ce752
-burn_regression_d3_s3003=4.2500/9a06f392ceb0cf08
-burn_regression_d5_s2002=4.3440/e693c357a77ce752
-burn_regression_d5_s3003=4.2500/45f8bdca178efbbc
+burn_regression_d3_s2002=4.3400/0014ef75fb37a9f4
+burn_regression_d3_s3003=4.2460/30355fbd2387db15
+burn_regression_d5_s2002=4.3400/7c2aa4ad200d012f
+burn_regression_d5_s3003=4.2460/509fa1e9cdd81aa2
 th_regression_d0_s2002=5.4500/052760de7de785a0
 th_regression_d3_s2002=4.1380/31a0f250824ca338
 th_regression_d3_s3003=3.9760/29fecf75a66248bb
@@ -152,14 +152,14 @@ burn_overnight_d0_s4004=4.4825/e8e265b78ef4c976
 burn_overnight_d0_s6006=4.4795/d00c68b156f13cf9
 burn_overnight_d0_s8008=4.4465/12842dde47cc4699
 burn_overnight_d0_s10010=4.5105/60dc7219aff177e8
-burn_overnight_d3_s4004=4.3470/ff10fb759c3cea5e
-burn_overnight_d3_s5005=4.3330/7da30d7378668548
-burn_overnight_d3_s6006=4.3500/58ed06b812505681
-burn_overnight_d3_s7007=4.3720/5b2b66532d8320cb
-burn_overnight_d5_s4004=4.3470/d52272b69f412057
-burn_overnight_d5_s5005=4.3330/93df071786edc42f
-burn_overnight_d5_s6006=4.3500/a7ebedd2d7cbcf77
-burn_overnight_d5_s7007=4.3720/5c1a814441715c14
+burn_overnight_d3_s4004=4.3370/eea7ac12c60b94f7
+burn_overnight_d3_s5005=4.3270/564afa697d7ef990
+burn_overnight_d3_s6006=4.3420/afc2564d80e63ca8
+burn_overnight_d3_s7007=4.3660/891781b337fabdf4
+burn_overnight_d5_s4004=4.3370/bfd24f3fd285d542
+burn_overnight_d5_s5005=4.3270/2ba059a86a196cbf
+burn_overnight_d5_s6006=4.3420/9863ba1a72b7c716
+burn_overnight_d5_s7007=4.3660/fb72042eda30695f
 th_overnight_d0_s4004=5.4390/6e6ff6c85c5f08a9
 th_overnight_d0_s6006=5.4005/75ac5e81b1ccd4c2
 th_overnight_d0_s8008=5.4220/d83c337b9ae8e121
