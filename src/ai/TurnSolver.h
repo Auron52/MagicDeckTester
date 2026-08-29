@@ -779,6 +779,11 @@ public:
     // on which the abandon ceiling and cross-machine skip lists rest.
     static void ClearPerGameCaches();
 
+    // Committed-depth telemetry (MTG_ROLLOUT_STATS; counters only, no behaviour). Called once per
+    // top-level main-phase decision with the depth iterative deepening actually COMMITTED. See the
+    // g_cdepth_hist comment in TurnSolver.cpp for why a units total cannot show this.
+    static void RecordCommittedDepth(int committed_sub_depth);
+
     // --- External-controller hooks (Claude-play / human-play prototype) ---------
     // Expose the same candidate enumeration and plan application the solver uses, so
     // an external decision provider can be offered the legal main-phase plans and have

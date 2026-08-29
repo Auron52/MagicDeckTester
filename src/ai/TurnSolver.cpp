@@ -184,6 +184,92 @@ static std::atomic<long long> g_esc_measure_n{0};
 // first few lossy cases so we can see WHY the estimate under-shot. Doubles escalation work (audit only).
 static const bool             s_esc_predict_audit = EnvOn("MTG_ESC_PREDICT_AUDIT");
 static std::atomic<long long> g_pred_audit_n{0}, g_pred_lossy{0}, g_pred_deeper{0}, g_pred_lossy_dumped{0};
+
+// ------------------------------------------------------------------- PER-SITE UNIT ACCOUNTING
+// WHY THIS EXISTS. "Units" (GameWorkMeter, fed by SearchBudget::Consume) is the currency every
+// affordability question in this repo is asked in -- and until now it was a single opaque scalar.
+// A change that costs 2.93x units gave no clue WHICH of the Consume() sites grew, so every attempt
+// to make the plain-cantrip breakpoint class affordable
+// (docs/design/cantrip-class-affordability.md) was guess-and-check: try a prune, read one number,
+// learn nothing about why it returned ~1%. Seven attempts, seven ~1% answers, no diagnosis.
+//
+// The pre-existing counters cannot answer it either, because they do not PARTITION the total:
+// g_interior_nodes covers only FullSearchLine's three plan loops, g_rollout_steps covers the leaf,
+// and the remaining five sites -- including SolveWithLookahead's candidate loop, which the comment
+// on g_cand_scored already calls "where the bulk of the plan applications live" -- were counted by
+// nothing at all or by a counter on a different denominator.
+//
+// One counter per Consume() site, incremented ONLY when the unit is actually charged, so the
+// buckets sum EXACTLY to the units cost.py reports. That turns "2.93x of what?" into a read.
+// Same MTG_ROLLOUT_STATS gate as the rest of this block: off, the rollout hot loop is untouched.
+// Counters only -- no behaviour, no play change.
+namespace unitsite
+{
+enum Site
+{
+    kRolloutStep = 0,      // SimulateToEnd: one simulated turn-step (the leaf)
+    kFsMain2,              // FullSearchLine: SECOND-MAIN plan loop (FSLineTail)
+    kFsTranche,            // FullSearchLine: condemned-cast tranche loop
+    kFsPre,                // FullSearchLine: main pre-combat plan loop
+    kFsBpWave,             // FullSearchLine: breakpoint wave walker
+    kFsGroupWave,          // FullSearchLine: group-wave tranche
+    kGreedyFallback,       // SolveWithLookahead: depth<=0 greedy fallback
+    kLookaheadCand,        // SolveWithLookahead: the root candidate loop
+    kLookaheadBpWave,      // SolveWithLookahead: breakpoint wave walker
+    kLookaheadGroupWave,   // SolveWithLookahead: group-wave scorer
+    kEscEval,              // SolveWithLookahead: condemnation escalation re-evaluation
+    kSiteCount
+};
+static const char* kNames[kSiteCount] = {
+    "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
+    "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval"
+};
+static std::atomic<long long> g_units[kSiteCount];
+}   // namespace unitsite
+
+// COMMITTED-DEPTH histogram (same MTG_ROLLOUT_STATS gate). Iterative deepening commits the DEEPEST
+// pass that fits the budget, so a change that costs 3x the work per pass does not "run slower" at
+// play settings -- it commits SHALLOWER. That is the mechanism by which an UNBUDGETED quality win
+// (site 3: +0.0492, t=+6.59) becomes a BUDGETED loss (-0.0233), and it is completely invisible in a
+// units total, which is pinned near the allowance in both arms. Counting the committed depth turns
+// that inference into a read. Counters only, no behaviour.
+static std::atomic<long long> g_cdepth_hist[16];
+static std::atomic<long long> g_cdepth_n{0}, g_cdepth_sum{0};
+// ...and the ITERATIVE-DEEPENING pass depth actually committed, which is the one that matters here.
+// (g_cdepth_* above is SolveWithLookahead's committed_sub_depth -- "the sub_depth that PROVED the
+// win", 0 when no win was verified -- so it is ~95% zeros and cannot show a lost ply.)
+static std::atomic<long long> g_iddepth_hist[16];
+static std::atomic<long long> g_iddepth_n{0}, g_iddepth_sum{0};
+
+// Record one top-level decision's committed ITERATIVE-DEEPENING depth. See g_iddepth_hist.
+static inline void RecordIdDepth(int d)
+{
+    if (!s_rollout_stats) { return; }
+    const int i = d < 0 ? 0 : (d > 15 ? 15 : d);
+    g_iddepth_hist[i].fetch_add(1, std::memory_order_relaxed);
+    g_iddepth_n.fetch_add(1, std::memory_order_relaxed);
+    g_iddepth_sum.fetch_add(d, std::memory_order_relaxed);
+}
+
+// Record one top-level decision's committed search depth. See g_cdepth_hist.
+void TurnSolver::RecordCommittedDepth(int committed_sub_depth)
+{
+    if (!s_rollout_stats) { return; }
+    const int i = committed_sub_depth < 0 ? 0 : (committed_sub_depth > 15 ? 15 : committed_sub_depth);
+    g_cdepth_hist[i].fetch_add(1, std::memory_order_relaxed);
+    g_cdepth_n.fetch_add(1, std::memory_order_relaxed);
+    g_cdepth_sum.fetch_add(committed_sub_depth, std::memory_order_relaxed);
+}
+
+// Charge one work unit and attribute it. Byte-identical to `if (budget) { budget->Consume(1); }`
+// when MTG_ROLLOUT_STATS is unset.
+static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
+{
+    if (budget == nullptr) { return; }
+    budget->Consume(1);
+    if (s_rollout_stats) { unitsite::g_units[site].fetch_add(1, std::memory_order_relaxed); }
+}
+
 namespace
 {
     struct RolloutStatsReporter
@@ -246,6 +332,44 @@ namespace
                           << " (" << (bd ? est / bd : 0.0) << "x today)"
                           << ", hard upper bound " << (bd + peer)
                           << " (" << (bd ? static_cast<double>(bd + peer) / bd : 0.0) << "x)\n";
+            }
+            // PER-SITE UNIT PARTITION. These sum to the units cost.py reports, so each line is a
+            // share of the ONE number affordability is judged on. Read as: which bucket carries
+            // the cost, and which bucket does a candidate prune actually touch?
+            const long long idn = g_iddepth_n.load();
+            if (idn > 0)
+            {
+                std::cerr << "[rollout-stats] id_depth n=" << idn
+                          << " mean=" << static_cast<double>(g_iddepth_sum.load()) / idn << " hist=";
+                for (int i = 0; i < 16; ++i)
+                {
+                    const long long h = g_iddepth_hist[i].load();
+                    if (h > 0) { std::cerr << i << ":" << h << " "; }
+                }
+                std::cerr << "\n";
+            }
+            const long long cdn = g_cdepth_n.load();
+            if (cdn > 0)
+            {
+                std::cerr << "[rollout-stats] committed_depth n=" << cdn
+                          << " mean=" << static_cast<double>(g_cdepth_sum.load()) / cdn << " hist=";
+                for (int i = 0; i < 16; ++i)
+                {
+                    const long long h = g_cdepth_hist[i].load();
+                    if (h > 0) { std::cerr << i << ":" << h << " "; }
+                }
+                std::cerr << "\n";
+            }
+            long long site_tot = 0;
+            for (int i = 0; i < unitsite::kSiteCount; ++i) { site_tot += unitsite::g_units[i].load(); }
+            std::cerr << "[rollout-stats] units_total=" << site_tot << "\n";
+            for (int i = 0; i < unitsite::kSiteCount; ++i)
+            {
+                const long long u = unitsite::g_units[i].load();
+                if (u == 0) { continue; }
+                std::cerr << "[rollout-stats]   units." << unitsite::kNames[i] << "=" << u
+                          << " share=" << (site_tot ? static_cast<double>(u) / site_tot : 0.0)
+                          << "\n";
             }
         }
     };
@@ -23575,7 +23699,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // out here too (return no-win) so the leaf can't run unbounded. Overrun() is false
         // unless armed (m_overrun_limit==0 on the baseline path / normal decisions), so this
         // is byte-identical for every non-pathological rollout.
-        if (budget) { budget->Consume(1); }
+        ConsumeAt(budget, unitsite::kRolloutStep);
         if (s_rollout_stats) { g_rollout_steps.fetch_add(1, std::memory_order_relaxed); }   // one simulated turn-step
         if (budget && budget->Overrun())
         { ++g_fs_trunc_events; leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
@@ -24374,7 +24498,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
             if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only)
-            if (budget) { budget->Consume(1); }   // one interior node (plan applied)
+            ConsumeAt(budget, unitsite::kFsMain2);   // one interior node (plan applied)
             LoadPlanState(s2_buf, state, reuse_s2);
             GameState& s2 = s2_buf;
             std::vector<Action> bp;
@@ -24535,7 +24659,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 // no beam here -- the tranche is already the narrow remainder.
                 for (const TurnSolver::Plan& q : tranche)
                 {
-                    if (budget) { budget->Consume(1); }
+                    ConsumeAt(budget, unitsite::kFsTranche);
                     LoadPlanState(s2_buf, state, reuse_s2);
                     GameState& s2 = s2_buf;
                     std::vector<Action> bp;
@@ -24811,7 +24935,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // 0 = unlimited = byte-identical. pre is value-ordered above, so this keeps the best W lines.
         if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; break; }
         ++scanned;
-        if (budget) { budget->Consume(1); }   // one interior node (plan applied)
+        ConsumeAt(budget, unitsite::kFsPre);   // one interior node (plan applied)
         if (s_rollout_stats)
         {
             g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
@@ -25057,7 +25181,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                   if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
                 if (BpWaveProbeOn()) { g_bp_wave_probe.scored.fetch_add(1); BpWaveRank(walker.LastRank()); }
 
-                if (budget) { budget->Consume(1); }   // one interior node (plan applied)
+                ConsumeAt(budget, unitsite::kFsBpWave);   // one interior node (plan applied)
                 if (s_rollout_stats)
                 {
                     g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
@@ -25179,7 +25303,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 { ++g_fs_trunc_events;
                   if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
                   return false; }
-                if (budget) { budget->Consume(1); }   // one interior node (plan applied)
+                ConsumeAt(budget, unitsite::kFsGroupWave);   // one interior node (plan applied)
                 if (s_rollout_stats)
                 {
                     g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
@@ -26730,6 +26854,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         }
     }
     if (out_committed_depth) { *out_committed_depth = committed; }
+    RecordIdDepth(committed);   // telemetry only (MTG_ROLLOUT_STATS)
     return line;
 }
 
@@ -27210,7 +27335,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
     if (depth <= 0)
     {
-        if (budget) { budget->Consume(1); }
+        ConsumeAt(budget, unitsite::kGreedyFallback);
         report(max_turns + 1, 0);   // greedy fallback is not an exhaustively-verified win
         greedysite::Record(90);
         return Solve(state, is_pre_combat);
@@ -27402,7 +27527,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
             // One work unit for this candidate's inline first turn (combat + post
             // main); the remaining turns are counted inside SimulateToEnd.
-            if (budget) { budget->Consume(1); }
+            ConsumeAt(budget, unitsite::kLookaheadCand);
 
             const unsigned long long esc_drops_before = g_condemn_drops;   // escalation window
             PROF_INC(gamestate_copies);
@@ -27557,7 +27682,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (BpWaveProbeOn())
                     { g_bp_wave_probe.scored.fetch_add(1); BpWaveRank(walker.LastRank()); }
 
-                    if (budget) { budget->Consume(1); }
+                    ConsumeAt(budget, unitsite::kLookaheadBpWave);
                     PROF_INC(gamestate_copies);
                     const uint64_t ck = (static_cast<uint64_t>(walker.LastBase()) << 8)
                                       | static_cast<uint64_t>(walker.LastAt() & 0xFF);
@@ -27665,7 +27790,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 { ++g_fs_trunc_events;
                   if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
                   return false; }
-                if (budget) { budget->Consume(1); }
+                ConsumeAt(budget, unitsite::kLookaheadGroupWave);
                 if (groupwave::ProbeOn()) { groupwave::g_probe.scored.fetch_add(1); }
                 PROF_INC(gamestate_copies);
                 GameState copy = state;
@@ -27797,7 +27922,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             int esc_best_win = max_turns + 1;
             auto esc_eval = [&](const Plan& plan) -> int
             {
-                if (budget) { budget->Consume(1); }
+                ConsumeAt(budget, unitsite::kEscEval);
                 PROF_INC(gamestate_copies);
                 GameState copy = state;
                 if (is_pre_combat)

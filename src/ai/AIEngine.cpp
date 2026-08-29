@@ -2244,6 +2244,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             PROF_ADD_NODES(budget.Used());
             PROF_RECORD_DECISION(state.turn_number, is_pre_combat_main, budget.Used());
+            // Committed-depth telemetry (MTG_ROLLOUT_STATS): what iterative deepening actually
+            // reached under this decision's budget. Inert unless the flag is set.
+            TurnSolver::RecordCommittedDepth(committed_sub_depth);
 
             // Cleanup-discard lockstep: pin the executing plan's searched shed choice for this
             // turn's real cleanup (ChooseDiscard). Write-when->=0, exactly like ApplyPlanDirect's

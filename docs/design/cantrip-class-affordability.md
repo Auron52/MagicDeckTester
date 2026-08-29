@@ -1,17 +1,99 @@
 # The plain-cantrip breakpoint class: why it is worth having and why nothing has made it affordable
 
-**Status: OPEN, restarting from scratch (USER, 2026-08-29).** The USER's framing: *"I'm looking to
-figure out why this falls short in either quality or performance. The latter is especially
-confusing."* This doc is the self-contained state of that question. Read it before re-deriving
-anything; several of the attempts below were made twice already.
+**Status: DIAGNOSED 2026-08-29 (was OPEN).** The USER's framing was *"I'm looking to figure out why
+this falls short in either quality or performance. The latter is especially confusing."* It is
+answered below, and the answer is that **the premise of the last seven attempts was wrong**: at play
+settings the class does not cost more work at all. Read "THE DIAGNOSIS" first; the historical
+attempt table is kept because it now has an explanation.
 
-## The one-paragraph statement
+## THE DIAGNOSIS (2026-08-29)
+
+At the shipped budget the two arms spend **the same units** -- 16,082,034 (site 3 closed) vs
+16,220,810 (open) over 300 games at d5/20 ms, **+0.9%**. The budget is the binding constraint in
+both arms, exactly as TRAP 1 says it must be. What changes is what that budget BUYS:
+
+| committed iterative-deepening depth (300 games, d5, 20 ms) | closed | open |
+|---|---|---|
+| mean | **3.233** | **2.819** |
+| committed at depth 1 | 10.2% | **19.7%** |
+| committed at depth 5 | 22.1% | 15.3% |
+
+**Opening the class costs 0.41 plies of committed search depth**, and nearly doubles the share of
+decisions that get only one ply. It buys breadth at the breakpoint and pays in depth, and on Hinata
+depth is worth more -- which is the whole of the budgeted regression (quality over those same 300
+games: 5.7233 closed, 5.7533 open, matching the paired -0.023 / -0.031).
+
+So the class is not EXPENSIVE at play. It is **STARVED**. "Make it cheaper" was never going to work,
+because it is not the thing consuming the budget -- and that is why condemnation, key-narrowing,
+peer-splitting, the DEFER lever and the apply-time partition each returned ~1% or nothing.
+
+## Where the work actually goes (per-site unit partition)
+
+New instrument (`MTG_ROLLOUT_STATS`, `units.*` lines): one counter per `SearchBudget::Consume()`
+site, charged only when the unit is charged, so **the buckets sum exactly to the units `cost.py`
+reports** -- verified to the unit against the batch `.units` on four games. Before this, `units` was
+one opaque scalar and every diagnosis in this arc was guess-and-check.
+
+Unbudgeted d5, single games reproduced from the s3q blocks, all IDENTICAL PLAY in both arms:
+
+| game | arm | total units | fs_main2 | fs_pre | fs_bp_wave | rollout |
+|---|---|---|---|---|---|---|
+| hold gi=92 | closed | 2,639,297 | 60.0% | 39.9% | -- | 0.03% |
+| | open | 35,037,851 | 40.5% | 20.3% | 39.2% | 0.004% |
+| hold gi=697 | closed | 4,971,794 | 68.3% | 31.7% | -- | 0.008% |
+| | open | 41,749,134 | 44.6% | 22.0% | 33.4% | 0.002% |
+| train gi=724 | closed | 7,919,071 | 55.6% | 34.6% | 9.8% | 0.006% |
+| | open | 65,052,233 | 45.4% | 25.2% | 29.5% | 0.001% |
+| hold gi=268 | closed | 5,780,126 | 68.1% | 31.9% | 0.02% | 0% |
+
+Four things fall out, and they retire several standing beliefs:
+
+1. **Rollouts are 0.0-0.03% of the work.** The value sidecar made the horizon leaf O(1), so
+   essentially every unit is an interior plan application. The 2026-07-31 framing "+113% interior
+   nodes for +2% rollout calls" was therefore never a trade-off to be balanced: interior nodes ARE
+   the cost and rollout calls are free. **This is the measurement the previous session's handoff
+   named as the one to run, and it does explain the arc -- just not the way it predicted.**
+2. **`g_interior_nodes` -- the counter every prior diagnosis was read off -- covers only `fs_pre`**,
+   i.e. 20-40% of interior nodes. It is blind to the second-main loop, the LARGEST bucket. "Interior
+   nodes flat while rollout calls rose 22%" was read off a counter that could not see 60% of the
+   tree, and off a rollout that is 0.03% of the cost.
+3. **The second main is the biggest bucket in the control arm** (55.6-68.3%). It is not site-3
+   specific and it is the largest single affordability target on this deck.
+4. **61-70% of the class's growth is OUTSIDE the breakpoint wave.** Opening site 3 adds `fs_bp_wave`
+   (29-39% of the new total) but also multiplies the ORDINARY main-phase loops 5.5-9.0x, because a
+   breakpoint variant is itself a plan in `pre` and everything below it multiplies. A prune that
+   deletes breakpoint CANDIDATES cannot reach that. **This is the mechanical answer to "condemnation
+   deletes 41.5% of payable re-offers and returns ~1%".**
+
+## REFUTED here, so it is not re-tried
+
+* **The enum-memo cap is not the cost.** Site 3 open collapses the plan-enumeration memo on gi=92
+  (hit rate 57.1% -> 33.3%, clears 34 -> 489) -- the exact thrash signature
+  `fivecolour-search-waste.md` records, whose note says the unbounded case "remains unmeasured".
+  Measured now: raising `MTG_ENUM_MEMO_CAP` 8192 -> 1,048,576 lifts the hit rate to 56.9% and drops
+  clears to 2, and total units are **byte-identical** (35,037,851 at every cap). The collapse is
+  also not universal -- on gi=697 the hit rate IMPROVES with site 3 open (72.9% -> 79.8%).
+* ...which exposes an instrument caveat worth its own line: **units count plan APPLICATIONS, so
+  neither `cost.py` nor `SearchBudget` charges for ENUMERATION.** An enumeration blow-up is
+  invisible to both, and cannot be measured in units at all -- only in wall time on a quiet box.
+
+## OPEN -- a measurement-integrity question raised by this work
+
+The open arm's single-game units are **systematically below** the same game's units inside a
+1,200-game batch: gi=92 35,037,851 vs 38,748,236 (-9.6%), gi=697 41,749,134 vs 50,058,929 (-16.6%).
+The closed arm matches **to the unit** on all four games. `ClearPerGameCaches()` clears the three
+thread-local memos, so the documented cross-game-residue cause should be closed. Until this is
+explained, per-game units may carry an ARM-DEPENDENT batch bias, and every ratio in this arc rests
+on them.
+
+## The one-paragraph statement (historical)
 
 Opening the plain-cantrip breakpoint class (site 3) lets the search decide what to cast AFTER a
 cantrip's draw instead of guessing. It is a **genuine quality win** and it costs **~3x the search
-work**. Under the shipped 20 ms budget that 3x is rationed, the win inverts into a loss, and every
-attempt to make the class cheaper has returned ~1% or less. The open question is not whether the
-class is correct -- it is -- but why nothing recovers its cost.
+work** *when both arms are allowed to run to depth 5*. Under the shipped 20 ms budget neither arm
+gets that far; the class simply commits shallower. Every attempt to make the class cheaper has
+returned ~1% or less. The open question is not whether the class is correct -- it is -- but what
+budget it needs.
 
 ## The measurements that matter
 
@@ -82,7 +164,19 @@ on the tail, not the mean.** gi=717 is 110x its own class median even at d3, so 
 structural, not a depth artifact -- and it has never been root-caused. That may be the highest-value
 unexamined lead in this whole arc.
 
-## The next concrete step
+## The next concrete step (superseded 2026-08-29 -- see THE DIAGNOSIS)
+
+Since the class is starved rather than expensive, the question "how do we prune it" is replaced by
+"what budget does it need". A crossover budget MUST exist: the class is behind by -0.023 at 20 ms
+and ahead by +0.049 unbudgeted. `gen_site3_budget_manifest.py` locates it (2 arms x {20,40,80,160}
+ms x 2 blocks x 1200 games, one pooled batch). Three decision-ready outcomes: crossover near 20 ms
+=> nearly free, adopt with a small budget bump; crossover at 4-8x => real but expensive, the USER's
+call; no crossover => depth dominates breadth on this deck and the class stays closed at play.
+
+The affordability work that would move the crossover is now aimed at the **second main**
+(55.6-68.3% of all units, and NOT site-3-specific), not at breakpoint candidates.
+
+## The old next concrete step (kept for the exemption list)
 
 The enumeration-level partition, i.e. the **cantrip-first collapse** of
 `cantrip-first-collapse.md`, which was specified in 2026-07-31 and never built. Apply-time
