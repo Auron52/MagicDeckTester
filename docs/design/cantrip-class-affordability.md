@@ -27,6 +27,37 @@ So the class is not EXPENSIVE at play. It is **STARVED**. "Make it cheaper" was 
 because it is not the thing consuming the budget -- and that is why condemnation, key-narrowing,
 peer-splitting, the DEFER lever and the apply-time partition each returned ~1% or nothing.
 
+## THE CROSSOVER (the price of the class)
+
+If the class is starved, a crossover budget must exist. `gen_site3_budget_manifest.py`, one pooled
+batch, 2 arms x 4 budgets x 2 blocks x 1200 games = 19,200 games, paired on the game index:
+
+| budget | hold delta | t | train delta | t | mean per-game work |
+|---|---|---|---|---|---|
+| 20 ms (shipped) | **-0.0233** | -2.15 | **-0.0292** | -2.68 | 1.49x / 1.51x |
+| 40 ms | -0.0117 | -1.17 | -0.0067 | -0.69 | 1.64x / 1.70x |
+| **80 ms** | **+0.0025** | +0.27 | **+0.0017** | +0.18 | 1.87x / 1.93x |
+| 160 ms | **+0.0267** | +3.69 | **+0.0133** | +1.75 | 1.99x / 2.16x |
+| unbudgeted | +0.0492 | +6.59 | +0.0350 | +5.31 | 2.93x / 2.82x |
+
+(delta > 0 = the class wins SOONER = better.)
+
+**The crossover is 80 ms -- 4x the shipped budget -- and the two blocks agree to the cell.** The
+curve is monotone in budget on both blocks across five points, which is about as clean as this
+harness gets.
+
+It is not merely that more budget helps: the control arm SATURATES and the class does not. Raw avgs,
+hold block: control 5.6658 / 5.6258 / 5.6100 / 5.6042 across 20/40/80/160 ms (gaining 0.062 over the
+whole range, nearly all of it by 80 ms), class 5.6892 / 5.6375 / 5.6075 / 5.5775 (gaining 0.112 and
+still falling). At 160 ms the class beats the control's best measured play by 0.027.
+
+**Two work columns, and conflating them is how this arc lost time.** `units` is the BLOCK TOTAL,
+which the tail games dominate and the budget caps -- at 20 ms it is -2.2% / -2.9%, i.e. the class
+consumes no more of the budget than the control. `ratio` is the MEAN PER-GAME ratio -- 1.49x at
+20 ms, which is the "budgeted 1.49x" quoted earlier in this arc. Both are correct and they measure
+different things; the per-game figure is higher because the class's games run longer (more decisions,
+each capped) while the monster games, which own the block total, are capped identically in both arms.
+
 ## Where the work actually goes (per-site unit partition)
 
 New instrument (`MTG_ROLLOUT_STATS`, `units.*` lines): one counter per `SearchBudget::Consume()`
@@ -164,17 +195,25 @@ on the tail, not the mean.** gi=717 is 110x its own class median even at d3, so 
 structural, not a depth artifact -- and it has never been root-caused. That may be the highest-value
 unexamined lead in this whole arc.
 
-## The next concrete step (superseded 2026-08-29 -- see THE DIAGNOSIS)
+## The next concrete step -- A USER DECISION, not a measurement
 
-Since the class is starved rather than expensive, the question "how do we prune it" is replaced by
-"what budget does it need". A crossover budget MUST exist: the class is behind by -0.023 at 20 ms
-and ahead by +0.049 unbudgeted. `gen_site3_budget_manifest.py` locates it (2 arms x {20,40,80,160}
-ms x 2 blocks x 1200 games, one pooled batch). Three decision-ready outcomes: crossover near 20 ms
-=> nearly free, adopt with a small budget bump; crossover at 4-8x => real but expensive, the USER's
-call; no crossover => depth dominates breadth on this deck and the class stays closed at play.
+The measurement is finished. What is left is a choice only the USER can make, because it trades a
+deck's play budget against its play quality:
 
-The affordability work that would move the crossover is now aimed at the **second main**
-(55.6-68.3% of all units, and NOT site-3-specific), not at breakpoint candidates.
+* **Adopt the class and raise Hinata's play budget to 80-160 ms.** At 160 ms it is +0.027 (hold,
+  t=+3.69) and +0.013 (train) over the control at the SAME budget, and 0.088 better than today's
+  shipped play. Cost: ~2x the mean per-game search work, and a play-policy change for this deck.
+* **Leave the class closed at 20 ms.** Today's behaviour. Correct under the current budget: the
+  class loses 0.0233 / 0.0292 there and no prune will change that, because it is not work the class
+  is wasting, it is depth it cannot afford.
+
+Do NOT spend more effort pruning the class to fit 20 ms. Five separate levers have now been measured
+against a premise this doc shows is false.
+
+If the budget is NOT to be raised, the affordability work that would move the crossover downward is
+aimed at the **second main** -- 55.6-68.3% of ALL units on this deck, and not site-3-specific, so it
+would make every Hinata decision cheaper rather than making one class cheaper. That is a separate
+project and it has never been examined.
 
 ## The old next concrete step (kept for the exemption list)
 
