@@ -32,6 +32,8 @@ declare -A DECK_FILE=(
   [fivecolour]=decks/FiveColour/FiveColour.cod
   [stompy]=decks/StompySurprise/StompySurprise.cod
   [minotaur]=decks/Minotaur/Minotaur.cod
+  [kitty]=decks/KittyEquipment/KittyEquipment.cod
+  [dragons]=decks/Dragons/Dragons.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -48,6 +50,8 @@ declare -A DECK_PROF=(
   [fivecolour]=decks/FiveColour/FiveColour.profile.json
   [stompy]=decks/StompySurprise/StompySurprise.profile.json
   [minotaur]=decks/Minotaur/Minotaur.profile.json
+  [kitty]=decks/KittyEquipment/KittyEquipment.profile.json
+  [dragons]=decks/Dragons/Dragons.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -147,6 +151,19 @@ SMOKE_CASES=(
   "minotaur 0 1001 1000 0"
   "minotaur 3 1001  250 10"
   "minotaur 5 1001  150 20"
+  # kitty: KittyEquipment -- mono-white equipment aggro (Kor Duelist/Balan double-strike + stacked
+  # equipment; wins ~T4.3-5.2). Pooled-probe 2026-08-29 vs minotaur as in-batch anchor: d0
+  # ~0.0006 s/game, d3 b10 ~0.46 s/game, d5 b20 ~0.50 s/game -- 0.21x/0.13x minotaur, the
+  # CHEAPEST searched deck in the suite. Ships an adopted exhaustive keep model + a value leaf.
+  "kitty 0 1001 1000 0"
+  "kitty 3 1001  250 10"
+  "kitty 5 1001  150 20"
+  # dragons: mono-red Dragons ramp (Sol Ring/Dragonspeaker into 5-8 drops; wins ~T5.7-6.2, the
+  # slowest clock in the suite after hinata). Same probe: d0 ~0.0004 s/game, d3 b10 ~0.98 s/game,
+  # d5 b20 ~2.0 s/game -- 0.44x/0.52x minotaur. Defaults/static keep, no value leaf (like minotaur).
+  "dragons 0 1001 1000 0"
+  "dragons 3 1001  250 10"
+  "dragons 5 1001  150 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -238,6 +255,19 @@ REGRESSION_CASES=(
   "minotaur 3 3003  300 10"
   "minotaur 5 2002  250 20"
   "minotaur 5 3003  250 20"
+  # kitty: minotaur-shaped two-seed sweep. At 0.21x/0.13x minotaur's per-game cost this is the
+  # cheapest block in the tier (~9 min ST added, vs minotaur's ~9 min for 5x the work).
+  "kitty 0 2002 1000 0"
+  "kitty 3 2002  300 10"
+  "kitty 3 3003  300 10"
+  "kitty 5 2002  250 20"
+  "kitty 5 3003  250 20"
+  # dragons: same shape (~26 min ST added at the probed costs; pools inside the existing makespan).
+  "dragons 0 2002 1000 0"
+  "dragons 3 2002  300 10"
+  "dragons 3 3003  300 10"
+  "dragons 5 2002  250 20"
+  "dragons 5 3003  250 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -463,4 +493,34 @@ OVERNIGHT_CASES=(
   "minotaur 5 5005  500 40"
   "minotaur 5 6006  500 40"
   "minotaur 5 7007  500 40"
+  # kitty: minotaur-shaped 4-seed deep sweep at 2x gate budgets. Probed at the ACTUAL overnight
+  # budgets 2026-08-29: d3 b20 ~0.83 s/game, d5 b40 ~1.65 s/game (0.32x/0.21x minotaur)
+  # => ~1.8 core-hours added.
+  "kitty 0  4004 2000 0"
+  "kitty 0  6006 2000 0"
+  "kitty 0  8008 2000 0"
+  "kitty 0 10010 2000 0"
+  "kitty 3 4004 1000 20"
+  "kitty 3 5005 1000 20"
+  "kitty 3 6006 1000 20"
+  "kitty 3 7007 1000 20"
+  "kitty 5 4004  500 40"
+  "kitty 5 5005  500 40"
+  "kitty 5 6006  500 40"
+  "kitty 5 7007  500 40"
+  # dragons: same shape. Probed at b20/b40: d3 ~1.39 s/game, d5 ~3.60 s/game (0.54x/0.45x
+  # minotaur) => ~3.6 core-hours added. Combined with kitty this is ~+5.4 core-hours on a tier
+  # that ran ~9.6 core-hours, i.e. ~40 min wall on a free box against an 8 h budget.
+  "dragons 0  4004 2000 0"
+  "dragons 0  6006 2000 0"
+  "dragons 0  8008 2000 0"
+  "dragons 0 10010 2000 0"
+  "dragons 3 4004 1000 20"
+  "dragons 3 5005 1000 20"
+  "dragons 3 6006 1000 20"
+  "dragons 3 7007 1000 20"
+  "dragons 5 4004  500 40"
+  "dragons 5 5005  500 40"
+  "dragons 5 6006  500 40"
+  "dragons 5 7007  500 40"
 )

@@ -27,6 +27,36 @@ Ground truth is recorded by running a mode and, once inspected, promoting it wit
 | auras   | 0     | -      | 1000  | ~1s         | ~99.7% win at d0; goldfish horizon is max_turns=8 |
 | auras   | 3     | 10     | 2000  | ~47s (1thr) | **~0.023 s/game**; at budget 80 it is ~0.066 s/game (2.8x) |
 | auras   | 5     | 20     | 1200  | ~10s (1thr) | **~0.0086 s/game** — CHEAPER than its own d3, see note below |
+| kitty   | 3     | 10 / 20 | —    | 0.46 / 0.83 s/game | see "kitty + dragons" below |
+| kitty   | 5     | 20 / 40 | —    | 0.50 / 1.65 s/game | |
+| dragons | 3     | 10 / 20 | —    | 0.98 / 1.39 s/game | |
+| dragons | 5     | 20 / 40 | —    | 2.00 / 3.60 s/game | |
+
+### kitty + dragons: sized by RATIO, because the box was contended
+
+Probed 2026-08-29 when an external process held ~half the machine, so absolute
+wall-clock was not trustworthy. The probe therefore pooled **minotaur as an
+in-batch anchor** alongside both candidates (one `--batch`, identical
+conditions), and sized from the per-game cost *ratio*, which is robust to
+uniform contention in a way absolute times are not:
+
+| deck | d3 b10 | d5 b20 | d3 b20 | d5 b40 | vs minotaur |
+|---|---|---|---|---|---|
+| minotaur (anchor) | 2.20 | 3.82 | 2.58 | 7.99 | 1.00x |
+| kitty | 0.46 | 0.50 | 0.83 | 1.65 | **0.21x / 0.13x** (gate), 0.32x / 0.21x (overnight) |
+| dragons | 0.98 | 2.00 | 1.39 | 3.60 | **0.44x / 0.52x** (gate), 0.54x / 0.45x (overnight) |
+
+Both are cheaper than minotaur at every searched cell, so both carry minotaur's
+exact case shape. Added overnight cost ~1.8 (kitty) + ~3.6 (dragons) = ~5.4
+core-hours on a tier that ran ~9.6 — comfortably inside the 8 h budget.
+
+Two traps this probe walked into, recorded so the next sizing avoids them:
+- **Use a different seed per depth and you cannot read depth-monotonicity from
+  the result.** The first probe did exactly that; it sized cost correctly and
+  said nothing about whether d5 beats d3. The smoke run (one seed, all depths)
+  is what actually confirmed monotonicity.
+- **Probe at the budget you will ship.** b10/b20 understates the overnight
+  cells, which run b20/b40; kitty's d5 ratio moves 0.13x -> 0.21x between them.
 
 ### Auras: why d5 costs less than d3, and why its budgets differ per depth
 
