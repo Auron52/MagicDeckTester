@@ -1,6 +1,7 @@
-# Regression ground truth -- commit 76ceb857  date 2026-08-29
+# Regression ground truth -- commit 1f94b9a0  date 2026-08-29
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-08-29): duplicate-legend prune: casting a legendary you already control is NOT a tie when a hand-size anthem is unmet -- Neheb, the Worthy gives Minotaurs +2/+0 only at <=1 card in hand, so shedding the spare copy IS the payoff and the legend rule killing it is the point. Param-driven (hand_size_anthem_max), inert for every other deck. SCOPED (user 2026-08-29): relaxed only where something can weigh it -- HumanPlayActive() or g_searched_play -- so autonomous greedy d0 keeps the original prune and is byte-identical. Overnight: 184 pass / 8 fail, all minotaur d3+d5; searched 0 SLOWER, 6 faster (all T6->T5), 109 play-changed at same score, net -0.00100 t/game over 6000 searched games; d0 0/0/0. Oracle over the 8 searched cells: nonconv=0, fd-diverge=0. Motivating game reproduced: d3_s4004 gi272 T5 old ATTACK -> opp 3 (win T6); new casts the duplicate Neheb, anthem on, ATTACK -> opp -3 (win T5), kept hand and draws identical.
+# accepted-with-regressions (regression, 2026-08-29): Oracle's Restoration illegal-target fix (995c1daf): the spell reads 'target creature you control', but the no-own-target fallback offered an OPPONENT-target cast to cash its riders, so with an empty board it was castable for a free CANTRIP DRAW + 1 life. Removing that removes a card from turn 1, which shifts the whole draw sequence -- so every changed mirrorwing game is a DIFFERENT PHYSICAL GAME from the divergence turn on, not a worse decision. classify_turn_later: d3_s3003 gi12/gi13 and d5_s3003 gi12/gi13 PERSIST at 4x/16x budget but show DRAWS DIVERGE (variance, not same-draws slowdown); gi137 is churn. NET over the 5 changed cases: 1600 games, 9 faster / 8 slower, net +0 turns, mean +0.00000. Reference fleet 0/267 shortfalls (was 1). Mirrorwing-only; every other deck byte-identical.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -35,8 +36,8 @@ goblins_smoke_d5_s1001=3.5867/dbe15f21f0cca5d2
 creature_giving_smoke_d0_s1001=5.5160/dbd1edeb6f3ec1b8
 creature_giving_smoke_d3_s1001=4.7133/9d90e407eda5d8f2
 creature_giving_smoke_d5_s1001=4.6800/793e512b6e51ae19
-mirrorwing_smoke_d0_s1001=5.8360/62a3a21500af8d21
-mirrorwing_smoke_d3_s1001=4.6800/87f2a5fdd36956a4
+mirrorwing_smoke_d0_s1001=5.8340/3713092acf14f0a3
+mirrorwing_smoke_d3_s1001=4.6800/ace0cded7b6296fa
 mirrorwing_smoke_d5_s1001=4.7467/7d1e94a7fe75886e
 fivecolour_smoke_d0_s1001=5.7830/26299104ad40b026
 fivecolour_smoke_d3_s1001=4.9667/e78c58adbad71403
@@ -105,11 +106,11 @@ creature_giving_regression_d3_s2002=4.6533/92df7bfb366239f4
 creature_giving_regression_d3_s3003=4.6800/619afcd304afa26a
 creature_giving_regression_d5_s2002=4.6320/0f8f5b59837f4411
 creature_giving_regression_d5_s3003=4.6720/2c8d19ae35e86362
-mirrorwing_regression_d0_s2002=5.9450/8afe1a7d2cfaa22e
-mirrorwing_regression_d3_s2002=4.7550/8d5b6e38d59a3d6c
-mirrorwing_regression_d3_s3003=4.6800/437ded8112bf4a48
-mirrorwing_regression_d5_s2002=4.7100/a44c23ef23727cee
-mirrorwing_regression_d5_s3003=4.6900/2856689a690bdf2b
+mirrorwing_regression_d0_s2002=5.9410/2d470c580761dbc0
+mirrorwing_regression_d3_s2002=4.7500/a1ddc1a841b2420e
+mirrorwing_regression_d3_s3003=4.6950/20a291550e17ad09
+mirrorwing_regression_d5_s2002=4.7100/6bac2c1fc0c68eb5
+mirrorwing_regression_d5_s3003=4.7100/ffe67c730b151584
 fivecolour_regression_d0_s2002=5.8360/a06a28a53b4f874b
 fivecolour_regression_d3_s2002=4.8700/7bc29bdf0de4e17f
 fivecolour_regression_d3_s3003=4.9500/3a9202c780ee2d3f
