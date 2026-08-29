@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,30 @@ struct RunResult
     int    games_played     = 0;
     std::vector<int> win_turns;  // per-game result; -1 = did not win within max_turns
 };
+
+// --force-mulligan / manifest "force_mulligan": "<count>:<n1,n2,...>" -> keep at <count> mulligans,
+// bottoming those card NUMBERS (not hand indices). Skips a malformed token rather than failing --
+// deliberate: a replay should not die on a stale spec.
+//
+// Lives here, in the core library, so the CLI (main.cpp) and the pooled batch runner share ONE
+// implementation. Two parsers for one spec format is a real bug class: they drift, and the two
+// routes then reconstruct DIFFERENT opening hands from the same recorded string -- which would be
+// invisible, because each route looks self-consistent.
+inline void ParseForcedMulliganSpec(const std::string& spec_in, int& count, std::vector<int>& bottom)
+{
+    const std::string spec = spec_in;
+    const auto colon = spec.find(':');
+    const int fcount = std::stoi(spec.substr(0, colon));
+    std::vector<int> fbottom;
+    if (colon != std::string::npos)
+    {
+        std::stringstream bs(spec.substr(colon + 1));
+        std::string tok;
+        while (std::getline(bs, tok, ',')) { if (!tok.empty()) { fbottom.push_back(std::stoi(tok)); } }
+    }
+    count  = fcount;
+    bottom = std::move(fbottom);
+}
 
 // avg (turns): the goldfish success metric -- mean turn-to-win, where an unwon game (no lethal by
 // max_turns) is scored as max_turns+1. Win/loss is never reported on its own: a goldfishing loss is

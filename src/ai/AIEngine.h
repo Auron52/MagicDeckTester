@@ -63,6 +63,14 @@ public:
     //     bottoms exactly `bottom_numbers` (by card m_number, in order), ignoring both heuristics.
     void SetForcedMulligan(int count, std::vector<int> bottom_numbers)
     { m_forced_mull_active = true; m_forced_mull_count = count; m_forced_bottom_numbers = std::move(bottom_numbers); }
+    //   * ...and back to the normal keep/bottom heuristics. Required by any caller that REUSES one
+    //     engine across games -- the pooled batch runner keeps a per-thread engine alive across
+    //     consecutive games, so without a clear, one game's forced hand would silently be imposed
+    //     on every later game that thread happened to pick up (reconstructing a hand from the WRONG
+    //     reference, which still looks like a valid result). The single-run CLI path never needs it:
+    //     one spec, one game, one process.
+    void ClearForcedMulligan()
+    { m_forced_mull_active = false; m_forced_mull_count = -1; m_forced_bottom_numbers.clear(); }
 
     // Called each main phase. Plays lands, casts spells, activates abilities.
     //

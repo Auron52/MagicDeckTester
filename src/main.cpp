@@ -1988,22 +1988,8 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
 // game state, and they were inline blocks inside RunClaudePlay. Every one of them SKIPS a malformed
 // token rather than failing -- deliberate (a replay should not die on a stale spec), and preserved.
 
-// --force-mulligan "<count>:<n1,n2,...>" -> keep at <count> mulligans, bottoming those card numbers.
-void ParseForcedMulliganSpec(const std::string& spec_in, int& count, std::vector<int>& bottom)
-{
-    std::string spec = spec_in;
-    auto colon = spec.find(':');
-    int fcount = std::stoi(spec.substr(0, colon));
-    std::vector<int> fbottom;
-    if (colon != std::string::npos)
-    {
-        std::stringstream bs(spec.substr(colon + 1));
-        std::string tok;
-        while (std::getline(bs, tok, ',')) { if (!tok.empty()) { fbottom.push_back(std::stoi(tok)); } }
-    }
-    count  = fcount;
-    bottom = std::move(fbottom);
-}
+// --force-mulligan's parser now lives in runner/GoldFishRunner.h (ParseForcedMulliganSpec), so the
+// CLI and the pooled batch runner share one implementation of the spec format.
 
 // --firebreathe "<turn>:<count>,..." -> turn -> pump count.
 std::map<int, int> ParseFirebreatheSpec(const std::string& firebreathe_spec)
@@ -4865,16 +4851,7 @@ int main(int argc, char* argv[])
         int              fm_count = -1;
         std::vector<int> fm_bottom;
         if (!force_mulligan.empty())
-        {
-            auto colon = force_mulligan.find(':');
-            fm_count   = std::stoi(force_mulligan.substr(0, colon));
-            if (colon != std::string::npos)
-            {
-                std::stringstream bs(force_mulligan.substr(colon + 1));
-                std::string tok;
-                while (std::getline(bs, tok, ',')) { if (!tok.empty()) { fm_bottom.push_back(std::stoi(tok)); } }
-            }
-        }
+        { ParseForcedMulliganSpec(force_mulligan, fm_count, fm_bottom); }
 
         // Resolve the effective play settings from the CLI request + the deck's value_play (auto-attached
         // above). Byte-identical whenever --depth or --budget-ms is given (explicit mode reproduces the old

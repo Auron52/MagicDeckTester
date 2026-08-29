@@ -60,6 +60,18 @@ struct Job
     // exactly as the single-run `--seed (base+off) --game-index off` form does). Default 0 keeps
     // every existing manifest byte-identical.
     int             game_index          = 0;
+    // FORCED-MULLIGAN replay ("force_mulligan": "<count>:<n1,n2,...>"), the reference-bench shape:
+    // keep at exactly <count> mulligans bottoming exactly those card numbers, reconstructing a
+    // hand-played game's recorded opening hand so the replay measures PLAY, not mulligan policy.
+    // fm_count < 0 = unset = the normal heuristics, which is every pre-existing manifest.
+    //
+    // Per JOB rather than per manifest because each reference game has its OWN spec -- which is
+    // precisely what lets the whole reference fleet pool into ONE process. Before this existed the
+    // bench had to spawn one `mtg` per game, and each of those independently loaded the deck's
+    // sidecars: on Mirrorwing that is a 256 MB bincache per process, ~700 MB RSS x N workers, which
+    // OOM-killed the box at N=24 for a result identical to loading it once.
+    int              fm_count           = -1;
+    std::vector<int> fm_bottom;
     int             depth               = 0;
     int             budget_ms           = 0;
     // Per-GAME work ceiling in search units (see ai/GameWorkMeter.h). 0 = disarmed = byte-identical
@@ -557,6 +569,11 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     j.games               = jspec["games"].get<int>();
     j.seed                = jspec["seed"].get<uint64_t>();
     j.game_index          = jspec.value("game_index", 0);   // chunk offset; see Job::game_index
+    // Same spec string the CLI's --force-mulligan takes, through the SAME parser (see Job::fm_count).
+    {
+        const std::string fm = jspec.value("force_mulligan", std::string());
+        if (!fm.empty()) { ParseForcedMulliganSpec(fm, j.fm_count, j.fm_bottom); }
+    }
     j.depth               = jspec.value("depth", 0);
     j.budget_ms           = jspec.value("budget_ms", 0);
     j.sched_weight        = jspec.value("weight", 0);      // LPT priority override (see Job::sched_weight)
@@ -1503,6 +1520,14 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // digests are byte-identical whether or not tracing is on. Reset per game via
                 // StartGame. Records only the real game's decisions (m_logger is nulled in the
                 // search rollouts), so it does not perturb play.
+                // Forced-mulligan directive, applied PER GAME and unconditionally (see
+                // Job::fm_count). The else-branch is load-bearing, not defensive: the engine is
+                // cached across consecutive games and rebuilt only on a job CHANGE, so a job
+                // carrying no spec can inherit the previous job's forced hand on the same thread --
+                // a wrong-but-plausible result that nothing downstream could detect.
+                if (job.fm_count >= 0) { ai->SetForcedMulligan(job.fm_count, job.fm_bottom); }
+                else                   { ai->ClearForcedMulligan(); }
+
                 hb.SetRunning(slot, job.name, global_gi, job.cell_id);
                 const bool trace = !trace_dir.empty();
                 GameLogger dlog(/*digest_only=*/!trace);
