@@ -146,9 +146,22 @@ if [ "$ACCEPT" = 1 ]; then
       [ -n "$val" ] && [ "$val" != "TODO" ] && echo "$key=$val"
     done
   }
+  # CARRY FORWARD prior acknowledgements. The GT file is fully REGENERATED here, and the ack line
+  # used to be emitted only for THIS accept -- so accepting any OTHER mode silently erased it. That
+  # is a provenance loss, not a cosmetic one: the note is the only record that a set of cells was
+  # deliberately accepted while FAILING, and which are still carried on that basis. It went wrong
+  # exactly once (a mirrorwing smoke accept dropped minotaur's overnight note, 2026-08-29), and the
+  # cost of noticing is high -- the values it explains are untouched, so nothing looks wrong.
+  # An ack for the mode being accepted NOW is dropped from the carried set: this run supersedes it.
+  prior_acks=""
+  if [ -f "$GT" ]; then
+    prior_acks="$(grep -E '^# accepted-with-regressions \(' "$GT" 2>/dev/null \
+                  | grep -vE "^# accepted-with-regressions \($MODE," || true)"
+  fi
   {
     echo "# Regression ground truth -- commit $(git rev-parse --short HEAD 2>/dev/null || echo unknown)  date $(date +%Y-%m-%d)"
     echo "# Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit."
+    [ -n "$prior_acks" ] && echo "$prior_acks"
     [ -n "$ACCEPT_ACK" ] && echo "# accepted-with-regressions ($MODE, $(date +%Y-%m-%d)): $ACCEPT_ACK"
     echo "# Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)"
     echo "# Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint."
