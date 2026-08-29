@@ -430,6 +430,25 @@ MTG_FLAG_NONCONV=1 MTG_FD_ORACLE=1 ./build/Release/mtg --batch <manifest> \
 - `[nonconv]` MUST be **0**. Any non-convergence is a search inconsistency — root-cause; never accept with `nonconv>0`.
 - `[fd-diverge]` = commit-the-line predicted a win earlier than the real game realized it. Categorize by `realized-predicted`: **off-by-one** (realized=predicted+1) is the known minor rollout-optimism — note the count (it must not grow run-over-run); **delta≥2, or predicted-but-never-realized** (realized beyond horizon) is SEVERE → root-cause each. Caveat: the oracle only catches *predicted-but-missed*; a game commit-the-line should have won but **never predicted** is NOT flagged here — Pass 1's in-horizon-to-unwon bucket + Pass 2c catch those.
 
+  > **RECORDED BASELINE (2026-08-29, commit `816b96e1`).** "Must not grow run-over-run" needs a
+  > number to compare against, and none was ever written down. Measured over the **overnight
+  > searched cells** (the 64 d3/d5 jobs of the 8 non-inert decks, 50,000 games) — d0 jobs produce
+  > **zero** fd-diverge, so restricting to searched cells loses nothing and is ~5x cheaper than
+  > sweeping the full tier:
+  >
+  > **11 fd-diverge, 0 nonconv.** 9 off-by-one + 2 severe (delta=2), the severe pair being
+  > dragonstorm `d5_s4004 gi188` (seed 4192) and `d3_s5005 gi227` (seed 5232) — both **unwon in
+  > ground truth as well**, i.e. long-standing, not a live regression.
+  >
+  > This was run **paired** (new arm vs a worktree built at the previous GT commit `2af96e08`,
+  > same manifest) and the two arms produced the *identical* 11 flags — same seeds, same
+  > predicted/realized turns. So the number above is a property of the decks, not of any recent
+  > change. Compare against 11 next time; a *different set* matters more than a different count.
+  >
+  > Method note: run the old arm **from its own worktree** (`cd` into it), never the old binary
+  > from the current tree — `cards.json` and the deck sidecars load at RUNTIME, so a
+  > current-tree run silently gives the old binary new card data and new keep models.
+
 **Pass 2b — out-of-horizon "worse": reproduce at a lifted horizon.** A
 `gt>H → -1` game is benign only if its old win still EXISTS. Re-run those cases at
 the GT's original (higher) horizon via a per-job `max_turns` override and diff vs
