@@ -3301,8 +3301,28 @@ inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
     const int face_dmg = p.etb_damage_any + p.etb_damage_each_opponent + devotion_dmg;
     if (face_dmg > 0)
     {
+        const int before = state.players[opp].life;
         state.players[opp].life -= face_dmg;
         state.opponent_lost_life_this_turn = true;
+        // Play-viewer history: an ETB burn moves the opponent's life with NOTHING on screen to
+        // explain it -- the creature just enters and the total drops. Every other life-changing
+        // site emits an event; this one did not, so Fanatic of Mogis's damage was invisible in the
+        // history panel (user, 2026-08-29, Minotaur reference seed 1). Devotion especially cannot
+        // be recomputed by eye: it counts red pips across EVERY permanent controlled, including
+        // the Fanatic itself, so the count is spelled out rather than left as a bare number.
+        // Nulled by RevealLogPause during search/rollout -> autonomous play stays byte-identical.
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "damage",
+                          "\xF0\x9F\x94\xA5 " + def->card.m_name.str()
+                          + (devotion_dmg > 0
+                               ? " (devotion to " + p.etb_damage_devotion_color + " = "
+                                 + std::to_string(devotion_dmg) + ")"
+                               : std::string{})
+                          + ": " + std::to_string(face_dmg) + " to opponent ("
+                          + std::to_string(before) + "\xE2\x86\x92"
+                          + std::to_string(before - face_dmg) + ")");
+        }
     }
     if (p.etb_damage_each_opponent > 0)
     {
