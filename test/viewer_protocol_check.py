@@ -124,6 +124,12 @@ DECKS = {
     # red exactly as designed. Committed with this row (references/ is commit-only; an untracked
     # reference is user work waiting to be lost, not a stray file).
     "Minotaur":      ("decks/Minotaur/Minotaur.cod",           "decks/Minotaur/Minotaur.profile.json"),
+    # Added 2026-08-29: the user hand-played the first Dragons references, creating references/Dragons/
+    # from nothing. Ten of them landed at once and every one was a CONTRACT-FAIL -- "unknown deck dir"
+    # means NOT REPLAYED, so the gate was red while the games it was meant to check went unexamined.
+    # Third time this exact row has been the fix (StompySurprise, Minotaur, now Dragons): a new
+    # reference directory is not self-registering, and the day it appears is the day it needs a row.
+    "Dragons":       ("decks/Dragons/Dragons.cod",             "decks/Dragons/Dragons.profile.json"),
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)
