@@ -359,6 +359,48 @@ bool GenericProvider::DiscardLandsFirst(const GameState&) const
 // AIEngine::ChooseDiscard tie-break among win-optimal discards and what the searched rollout axis
 // fans out over. Must NOT call SelectCleanupDiscardIndex: that routes through this hook (so a
 // provider override reaches every caller), which would recurse.
+// Does shedding a card from HAND pay for itself right now?
+//
+// The duplicate-legend prune below rests on the cast being a TIE -- the copy dies to the legend
+// rule, the board is unchanged -- and that rests in turn on an UNSTATED premise: that the card
+// leaving hand is worth nothing. For a deck whose payoff is a hand-size condition it is worth a
+// great deal. Neheb, the Worthy gives "Minotaurs you control get +2/+0" only while its controller
+// holds one or fewer cards (hand_size_anthem_max), so while that anthem is OFF the spare Neheb is
+// not a tie at all: it converts a stranded card into a board-wide pump, and the duplicate dying to
+// the legend rule is the POINT rather than the cost.
+//
+// (User-reported from logs/play/rejections/Minotaur_cod_s3_gi2_t5.json: hand of three, a Neheb and
+// a Ragemonger already in play, and the two Minotaur casts leave exactly one card -- switching the
+// anthem on across the whole board. The prune dropped that line as pointless.)
+//
+// PARAM-DRIVEN, never keyed on a card name, so any future hand-size payoff gets this for free and a
+// deckbuilding swap that drops Neheb loses it automatically. Inert everywhere else: no other card
+// in cards.json carries hand_size_anthem_max, so this scan finds nothing and the prune is exactly
+// as before for every other deck.
+//
+// Deliberately NOT "does THIS cast cross the threshold". The hook is asked about one card at a
+// time, while crossing the threshold usually takes the turn's whole cast sequence (two casts, in
+// the reported game) -- so a single-cast crossing test would prune precisely the line that
+// motivated the fix. Being generous costs one extra plan variant in the states where an anthem is
+// live but unmet; being strict costs a real line, and this hook's own comment records that the
+// failure direction that matters is pruning a GOOD cast.
+static bool HandShedIsPayoff(const GameState& s, int controller)
+{
+    const int hand_size = static_cast<int>(s.players[controller].hand.size());
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.hand_size_anthem_max < 0) { continue; }
+        // A gate with no bonus behind it is not a payoff.
+        if (d->params.hand_size_anthem_power == 0 && d->params.hand_size_anthem_tough == 0)
+        { continue; }
+        // Anthem currently OFF and the hand is what is holding it off -> shedding pays.
+        if (hand_size > d->params.hand_size_anthem_max) { return true; }
+    }
+    return false;
+}
+
 // Prune casting a legendary permanent we already control a copy of, when that card does nothing on
 // entry. See the hook comment in DecisionProvider.h for why the whitelist is positive rather than
 // an etb_* enumeration (the failure direction matters: a missed field would prune a GOOD cast).
@@ -384,7 +426,29 @@ bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controll
     // copy is irrelevant: the legend rule is per-controller.)
     for (const Permanent& p : s.battlefield)
     {
-        if (p.controller_index == controller && p.card.m_name == def.card.m_name) { return false; }
+        if (p.controller_index == controller && p.card.m_name == def.card.m_name)
+        {
+            // ...unless emptying the hand is itself the payoff (see HandShedIsPayoff above): then
+            // the cast is not the tie this prune assumes, and dropping it loses a real line.
+            //
+            // AUTONOMOUS GREEDY PLAY KEEPS THE ORIGINAL PRUNE (user, 2026-08-29: "turn it on all of
+            // the time, but have d0 ignore that option"). The widened option set is only worth
+            // offering where something can WEIGH it, which is SetSearchedPlay's own stated rationale
+            // -- "at depth 0 an extra plan variant is not a search, it is just a different fixed rule
+            // chosen by enumeration order". Measured exactly that way: at d0 the greedy scorer takes
+            // the duplicate on static value and loses 3 games across smoke+regression (each of which
+            // wins its original turn again at d3/d5, and none of which is budget -- d0 has no search
+            // for a budget to buy); at d3/d5 the score never moved in either direction.
+            //
+            // HumanPlayActive() is checked FIRST and separately, because the viewer plays at
+            // depth 0 BY CONSTRUCTION -- at depth > 0 the engine's bottoming/mulligan rollouts would
+            // replay hypothetical games through the same external chooser and start asking the human
+            // to play imaginary games (tools/play/server.js). So gating on depth alone would restore
+            // exactly the rejection this fix exists to remove; the human path is d0 without being
+            // greedy, since a person, not the static scorer, is choosing.
+            if (!HumanPlayActive() && !g_searched_play) { return false; }
+            return HandShedIsPayoff(s, controller);
+        }
     }
     return true;
 }

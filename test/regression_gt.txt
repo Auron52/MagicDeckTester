@@ -1,5 +1,6 @@
-# Regression ground truth -- commit c6c54c8b  date 2026-08-29
+# Regression ground truth -- commit 76ceb857  date 2026-08-29
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (overnight, 2026-08-29): duplicate-legend prune: casting a legendary you already control is NOT a tie when a hand-size anthem is unmet -- Neheb, the Worthy gives Minotaurs +2/+0 only at <=1 card in hand, so shedding the spare copy IS the payoff and the legend rule killing it is the point. Param-driven (hand_size_anthem_max), inert for every other deck. SCOPED (user 2026-08-29): relaxed only where something can weigh it -- HumanPlayActive() or g_searched_play -- so autonomous greedy d0 keeps the original prune and is byte-identical. Overnight: 184 pass / 8 fail, all minotaur d3+d5; searched 0 SLOWER, 6 faster (all T6->T5), 109 play-changed at same score, net -0.00100 t/game over 6000 searched games; d0 0/0/0. Oracle over the 8 searched cells: nonconv=0, fd-diverge=0. Motivating game reproduced: d3_s4004 gi272 T5 old ATTACK -> opp 3 (win T6); new casts the duplicate Neheb, anthem on, ATTACK -> opp -3 (win T5), kept hand and draws identical.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -44,8 +45,8 @@ stompy_smoke_d0_s1001=5.4420/dc78a74c3af62737
 stompy_smoke_d3_s1001=4.4933/6523a1bb1be7ca91
 stompy_smoke_d5_s1001=4.4400/926ddaaa248ad176
 minotaur_smoke_d0_s1001=5.4890/3f7bfb5f13c384b7
-minotaur_smoke_d3_s1001=4.9680/2b4edf96526e55fc
-minotaur_smoke_d5_s1001=4.9733/25f54fe9d7c57a6f
+minotaur_smoke_d3_s1001=4.9680/38a1cb1de2fdd86f
+minotaur_smoke_d5_s1001=4.9733/a8e62b11789add45
 kitty_smoke_d0_s1001=5.1600/96c5f848c59bf0fa
 kitty_smoke_d3_s1001=4.4520/002553def2c14e66
 kitty_smoke_d5_s1001=4.4667/406aa8496dde2301
@@ -120,10 +121,10 @@ stompy_regression_d3_s3003=4.6067/fa7420b23649150d
 stompy_regression_d5_s2002=4.5360/616feeab0c5de220
 stompy_regression_d5_s3003=4.5960/54024371bb7c0348
 minotaur_regression_d0_s2002=5.4890/7485fb9e3979df4e
-minotaur_regression_d3_s2002=4.9633/66a8931ec033c276
-minotaur_regression_d3_s3003=4.9233/2d3184c3b0235586
-minotaur_regression_d5_s2002=4.9640/2fddfaf55a956f08
-minotaur_regression_d5_s3003=4.9080/e27a28b39dcc1511
+minotaur_regression_d3_s2002=4.9633/e4789a2358e207c0
+minotaur_regression_d3_s3003=4.9233/a20c096c07153819
+minotaur_regression_d5_s2002=4.9640/4eca48404d5b0d12
+minotaur_regression_d5_s3003=4.9080/d97f514c15b3f38e
 kitty_regression_d0_s2002=5.1150/bab62942b2bf6e26
 kitty_regression_d3_s2002=4.3300/b50e06087e633c1d
 kitty_regression_d3_s3003=4.3800/f3792be1bb75e242
@@ -296,14 +297,14 @@ minotaur_overnight_d0_s4004=5.5175/8f78da388a1c8c40
 minotaur_overnight_d0_s6006=5.4875/7d6354d9c831d6e2
 minotaur_overnight_d0_s8008=5.4755/2a3839fe6ee06c60
 minotaur_overnight_d0_s10010=5.4600/63e0c3697bbea0bd
-minotaur_overnight_d3_s4004=4.9420/61efa519e18d82fb
-minotaur_overnight_d3_s5005=4.9650/e7a5fec3c403788d
-minotaur_overnight_d3_s6006=4.9500/d30ec97840274076
-minotaur_overnight_d3_s7007=4.9400/d93f2b6562884e08
-minotaur_overnight_d5_s4004=4.9220/9e0e3ae550cd8130
-minotaur_overnight_d5_s5005=4.9500/bd6ca4871e3afa41
-minotaur_overnight_d5_s6006=4.9220/4e463908f9e012ba
-minotaur_overnight_d5_s7007=4.9260/5132392cc6b8b8e8
+minotaur_overnight_d3_s4004=4.9410/22cd9dca1d7260a0
+minotaur_overnight_d3_s5005=4.9620/58b5ef88f2adac08
+minotaur_overnight_d3_s6006=4.9500/cf68b4b048b48797
+minotaur_overnight_d3_s7007=4.9400/c739386853d00143
+minotaur_overnight_d5_s4004=4.9200/24e06bcc9a99e0b0
+minotaur_overnight_d5_s5005=4.9480/e9f88bc1216ac455
+minotaur_overnight_d5_s6006=4.9220/aca4713abfd381c5
+minotaur_overnight_d5_s7007=4.9260/6452aab576f792d5
 kitty_overnight_d0_s4004=5.1285/c8893be16f654177
 kitty_overnight_d0_s6006=5.1495/95f35c02ff615a77
 kitty_overnight_d0_s8008=5.1265/caa2b62dc7c94977
