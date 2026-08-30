@@ -69,11 +69,19 @@ tranche/group-wave plan was scored full-tail-greedy and must execute its tail.
 Hold: 80 games faster, 63 slower. Play-settings smoke (150 games, value_play policy): node 5.7667
 vs control 5.7733 — consistent.
 
-**nodem2 settles the all-main-2 arc.** `hinata-all-second-main.md` predicted the arm was blocked
-on `FSLineTail` having no breakpoint hosting; the node gives it full hosting and the arm got
-WORSE (−0.048/−0.068 vs s3m2's −0.018/−0.031, same monotone-worse direction as W=4/8). Every
-form of extra continuation breadth in the second main loses at 20 ms. The idea is now refuted on
-its merits, not on missing machinery.
+**nodem2 kills the old attribution and opens a new question (USER 2026-08-30: "It should be at
+least even").** `hinata-all-second-main.md` predicted the arm was blocked on `FSLineTail` having
+no breakpoint hosting; the node gives it full hosting and the arm got WORSE (−0.048/−0.068 vs
+s3m2's −0.018/−0.031), sitting exactly on the breadth ladder (W=2 −0.018 → node −0.048 → W=4
+−0.089 → W=8 −0.123). The USER's dominance argument is GAME-correct on this deck (goldfish, no
+pumps/haste, the dork is summoning-sick either way), so the penalty must be an ENGINE asymmetry —
+the arm is a DETECTOR for m2-host inferiority, not a refuted idea. Known host asymmetries:
+`FSLineTail` has no group-wave phase, no fresh-axis variants, no value-ranked beam reorder.
+Condemnation is ELIMINATED as a cause (Hinata never arms `CondemnsPassedMainPhase`). Working
+hypothesis: in main 1 the node's breadth is FUNDED by deleting the (prefix x blind-tail)
+product; under all-main-2 there is no product left to delete (s3m2 was already the cheapest arm
+measured, block −13%), so node breadth in m2 is nearly pure added cost, paid in committed depth.
+Pending: the nodem2 units/id_depth probe and per-game root-cause of its worse games.
 
 ## The cost anatomy (300 games hold, MTG_ROLLOUT_STATS)
 
