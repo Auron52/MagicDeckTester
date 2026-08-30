@@ -68,6 +68,26 @@ inline bool HinataSubsetCreditEnabled()
     return heurarm::Flag(heurarm::HINATA_SUBSET_CREDIT, env_on);
 }
 
+// MTG_EXEC_FEAS -- EXECUTOR-VALIDATED sequential subset payability (default OFF -> byte-identical).
+// The enumerator's three mana gates (flat pool, colour-exists, colour-exact) price a subset's whole
+// cost against the pre-cast board SIMULTANEOUSLY, so a chain that is only payable SEQUENTIALLY --
+// an untap ritual refloating the colours of already-tapped sources mid-chain (Reality Spasm), a
+// coloured ritual burst funding a later cast, a same-subset Hinata resolving before her discounted
+// payload -- reads as unpayable and the line is never offered (gi=22: the one-phase T4 win chain
+// Hinata+Spasm+Ponder+Crackle dies at the flat gate in every X variant). When a gate is ABOUT to
+// reject an INTERACTING subset, this flag re-tests it with a real per-cast sequential payment on a
+// scratch state (the executor's own TapForCostDirect + ApplyRitualFloat + live cost recompute, in
+// CastOrderRank order) and offers the subset iff every cast genuinely pays. RESCUE-ONLY: it can
+// only ADD candidates the gates wrongly dropped, never remove one. EnumeratePlans (search branch
+// list) only -- NEVER Solve::consider (the rollout leaf; the 2026-07-23 MTG_FEASIBILITY_GATE
+// dead-end: anything slow in the rollout wedges the suite), and never the d0 greedy (no rollout to
+// validate; the Medallion precedent). See docs/design/enumeration-feasibility-via-executor.md.
+inline bool ExecFeasEnabled()
+{
+    static const bool env_on = EnvOn("MTG_EXEC_FEAS");
+    return heurarm::Flag(heurarm::EXEC_FEAS, env_on);
+}
+
 // MTG_DORK_GROWTH -- same-turn SCALED-MANA-DORK growth (Priest of Titania / Elvish Archdruid):
 // a dork whose one-tap yield is the live count of its subtype grows with every matching creature
 // cast this turn, so (a) EnumeratePlans credits a subset's matching casts into each live dork's

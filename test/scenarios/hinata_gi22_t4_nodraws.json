@@ -1,0 +1,28 @@
+{
+ "_comment": "gi=22 T4 one-phase go-off, NO-DRAW variant (2026-08-30): both Reality Spasms in hand, no Ponder, so the whole win is ONE enumerated subset with no mid-chain draw breakpoint: drop Reflecting Pool -> Hinata {1}{W}{U}{R} -> Spasm x5 {U}{U} (refloat ~7) -> Spasm2 x5 {U}{U} (refloat ~7) -> Crackle x4 {8}{R}{R}-4 = 20 damage. Sequentially payable (verified by hand: Boilerworks pays U+R in one tap, Sol Ring leftover floats, Pool+Ornithopter cover the first {U}{U}); the flat/colour gates cannot see it. Under two mains the phase boundary makes it expressible; under MTG_HINATA_ALL_MAIN2 it is the pure enumeration question MTG_EXEC_FEAS exists to answer.",
+ "deck": "decks/Hinata2/Hinata2.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  { "name": "Izzet Boilerworks",       "controller": 0, "tapped": false },
+  { "name": "Forbidden Orchard",       "controller": 0, "tapped": false },
+  { "name": "Sol Ring",                "controller": 0, "tapped": false },
+  { "name": "Ornithopter of Paradise", "controller": 0, "tapped": false, "sick": false }
+ ],
+ "hand": [
+  "Reflecting Pool",
+  "Hinata, Dawn-Crowned",
+  "Reality Spasm",
+  "Reality Spasm",
+  "Crackle with Power",
+  "Mountain"
+ ],
+ "library_filler": "Island",
+ "library_size": 20,
+ "depth": 5,
+ "budget_ms": 2000,
+ "expect_win_turn": 4
+}

@@ -99,6 +99,7 @@ enum Slot : int
     HINATA_RANGE,             // MTG_HINATA_RANGE          condemnation RANGES: engine/find tiers' latest
     CANTRIP_ORDER,            // MTG_CANTRIP_ORDER         canonical cantrip order bans permutation chains
     HINATA_SUBSET_CREDIT,     // MTG_HINATA_SUBSET_CREDIT  same-subset Hinata discount credit in enumeration
+    EXEC_FEAS,                // MTG_EXEC_FEAS             executor-validated sequential subset payability
     COUNT
 };
 
@@ -175,6 +176,7 @@ inline const char* Name(int slot)
         "MTG_HINATA_RANGE",
         "MTG_CANTRIP_ORDER",
         "MTG_HINATA_SUBSET_CREDIT",
+        "MTG_EXEC_FEAS",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

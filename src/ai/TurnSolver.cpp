@@ -2729,6 +2729,150 @@ static void ProbeColorExactReject(const GameState& state, const std::vector<Acti
                  srcs.empty() ? "" : "   UNTAPPED{", srcs.empty() ? "" : (srcs + "}").c_str());
 }
 
+// MTG_SEQ_CHAIN_TRACE -- diagnostic (default off, print-only). Traces every enumerated subset that
+// contains an untap ritual plus a Hinata reducer (in-subset or already on board) and names the FIRST
+// gate that rejected it ("offered" when none did). Exists to answer, per game, WHERE the sequential
+// Hinata+Spasm chain dies in the one-phase enumerator -- the gi=22 all-main-2 question the
+// executor-validated feasibility work needs pinned before touching a gate.
+static int SeqChainTraceLevel()
+{
+    static const int v = EnvOn("MTG_SEQ_CHAIN_TRACE") ? EnvInt("MTG_SEQ_CHAIN_TRACE", 1) : 0;
+    return v;
+}
+static bool SeqChainTraceOn() { return SeqChainTraceLevel() > 0; }
+// MTG_FS_ROOT_DUMP=<turn> -- diagnostic (default 0 = off, print-only): at the committed decision's
+// OUTERMOST FSLineWin node on that turn, print every plan scanned and every tail result, so "why
+// did the search pick THAT plan" is a read instead of an inference (the s3304 lesson: one fprintf
+// at the decision site).
+static int FsRootDumpTurn()
+{
+    static const int v = EnvInt("MTG_FS_ROOT_DUMP", 0);
+    return v;
+}
+static void FsDumpPlan(const char* tag, const TurnSolver::Plan& p, int win)
+{
+    std::string s;
+    for (const Action& a : p.actions)
+    {
+        if (!s.empty()) { s += " + "; }
+        s += a.card_name.str();
+        if (a.chosen_x > 0)   { s += "(x" + std::to_string(a.chosen_x) + ")"; }
+        if (a.ponder_keep >= 0) { s += a.ponder_keep ? "[keep]" : "[shuf]"; }
+    }
+    std::fprintf(stderr, "[fs-root] %s win=%d bp=%d pc=%d val=%d: %s\n",
+                 tag, win, p.bp_choice, p.ponder_choice, p.value, s.c_str());
+}
+
+struct SeqChainTrace
+{
+    bool armed = false;
+    const GameState* st = nullptr;
+    const std::vector<Action>* cands = nullptr;
+    const std::vector<int>* sel = nullptr;
+    const char* label = "early-gate";
+    int pool_total = -1;   // set by eval_and_push once the pool is in scope
+    ~SeqChainTrace()
+    {
+        if (!armed) { return; }
+        std::string names;
+        for (int j : *sel)
+        {
+            if (!names.empty()) { names += " + "; }
+            names += (*cands)[j].card_name.str();
+            if ((*cands)[j].chosen_x > 0)
+            { names += "(x" + std::to_string((*cands)[j].chosen_x) + ")"; }
+        }
+        std::fprintf(stderr, "[chain] t%d pool=%d hand=%zu %s: %s\n", st->turn_number, pool_total,
+                     st->ActivePlayer().hand.size(), label, names.c_str());
+    }
+};
+
+// EXECUTOR-VALIDATED sequential payability (MTG_EXEC_FEAS; see EngineFlags.h for the full charter).
+// Pays the subset's casts one at a time on a SCRATCH copy, in CastOrderRank order (the order both
+// the rollout apply and the executor realise), with each cost recomputed on the LIVE scratch board
+// (the same recompute apply_one does: EffectiveCost + X pips - HinataGenericDiscount + the
+// Soulfire/strive/Magma terms) and each cast's mana effects resolved before the next payment
+// (ApplyRitualFloat -> state.floating_mana, which TapForCostDirect spends first; a cast rock joins
+// the board exactly as in SubsetPayableWithFilters; a cast Hinata joins so her static discounts the
+// casts after her). Returns true iff EVERY selected cast genuinely pays -- the executor's own
+// answer, so a novel cost interaction needs no new gate code here (the treadmill-kill).
+//
+// CONSERVATIVE BY CONSTRUCTION: this function only ever RESCUES a subset a gate was about to
+// reject, so an unmodelled action kind or a modelling gap resolves to "no rescue" (return false),
+// which is exactly the status quo. It must never be consulted to REJECT a subset a gate accepted.
+static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state, int copies);
+static bool SubsetPayableSequential(const GameState& state, const std::vector<Action>& cands,
+                                    const std::vector<int>& sel)
+{
+    thread_local std::vector<int> order;
+    order.clear();
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::ActivateVial) { continue; }        // Vial deploys cost no mana
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr)
+        { return false; }                                              // unmodelled kind -> no rescue
+        order.push_back(j);
+    }
+    if (order.empty()) { return true; }
+    const DecisionProvider& prov = ResolveProvider(state);
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    { return prov.CastOrderRank(state, *cands[x].def) < prov.CastOrderRank(state, *cands[y].def); });
+
+    GameState cp = state;
+    for (int j : order)
+    {
+        const Action& a   = cands[j];
+        const CardDefinition& def = *a.def;
+        if (!a.free_cast && !a.alt_cost)
+        {
+            // Live cost -- the same recompute the rollout's apply_one performs at cast time.
+            ManaCost ec = EffectiveCost(def, cp, a.splice_count + 1);
+            ec.generic  = std::max(0, ec.generic
+                            - SoulfireOwnTargetDiscount(def, cp, cp.active_player_index,
+                                                        a.soulfire_own_targets));
+            if (def.params.strive_cost.has_value() && a.soulfire_own_targets > 0)
+            {
+                const ManaCost& sc = *def.params.strive_cost;
+                ec.generic += a.soulfire_own_targets * sc.generic;
+                ec.white   += a.soulfire_own_targets * sc.white;
+                ec.blue    += a.soulfire_own_targets * sc.blue;
+                ec.black   += a.soulfire_own_targets * sc.black;
+                ec.red     += a.soulfire_own_targets * sc.red;
+                ec.green   += a.soulfire_own_targets * sc.green;
+            }
+            if (def.card.m_mana_cost.has_x && a.chosen_x > 0)
+            {
+                int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
+                ec.generic += a.chosen_x * pips;
+                ec.generic  = std::max(0, ec.generic
+                                - HinataGenericDiscount(def, cp, a.chosen_x,
+                                      IsCrackleCountSpell(def.params) ? a.crackle_targets : -1));
+            }
+            if (def.params.damage_divided && a.crackle_targets >= 0)
+            {
+                for (const ScaledCastVariant& v : prov.ScaledCastVariants(cp, def))
+                { if (v.face == a.crackle_targets) { ec = v.cost; break; } }
+            }
+            if (!TapForCostDirect(cp, ec, def.card.IsCreature())) { return false; }
+        }
+        // Resolve the cast's mana-relevant effects so they fund the NEXT payment. Anything not
+        // modelled here simply earns no credit (under-optimistic -> fewer rescues, never unsound).
+        if (IsManaRitual(def)) { ApplyRitualFloat(cp, def, a.chosen_x, a.splice_count + 1); }
+        const bool joins_for_mana = (def.params.mana_rock && !def.card.IsCreature())
+                                 || def.params.hinata_cost_reducer;
+        if (joins_for_mana)
+        {
+            Permanent perm;
+            perm.card             = def.card;
+            perm.controller_index = cp.active_player_index;
+            perm.owner_index      = cp.active_player_index;
+            cp.battlefield.push_back(perm);
+        }
+    }
+    return true;
+}
+
 // True if the active player controls an untapped filter / ramp-filter mana source, whose color
 // conversion the flat AvailableManaPool cannot model (so the affordability fallback above is needed).
 static bool HasUntappedFilterSource(const GameState& state)
@@ -7836,13 +7980,30 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             const bool hinata_assumed = HinataSubsetCreditEnabled() && !HinataInPlay(state)
                                      && HinataCastableFromHand(state);
             xpool.wild += HinataRitualNetBonus(state, hinata_assumed);
+            // ASSUMED Hinata must herself be cast by the subset this sizing feeds, so her own mana
+            // cost is not available to the payoff's X. Without this the max X overshoots by her
+            // cost's worth of pips and the ONLY emitted variant is unpayable in every subset --
+            // measured (gi=22 no-draw fixture): Crackle sized x6 (needs 14 after the live
+            // discount, 13 realisable), while the honest x4 is payable and lethal. Only under
+            // hinata_assumed (flag arm) -> byte-identical otherwise.
+            int assumed_her_mv = 0;
+            if (hinata_assumed)
+            {
+                for (const Card& hc : ap.hand)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (hd == nullptr || !hd->params.hinata_cost_reducer) { continue; }
+                    const int mv = hd->card.m_mana_cost.ManaValue();
+                    if (assumed_her_mv == 0 || mv < assumed_her_mv) { assumed_her_mv = mv; }
+                }
+            }
             // Each point of X is paid x_pips times (Crackle {X}{X}{X} = 3), so the max
             // affordable X divides the leftover mana by x_pips.
             int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
             int mult = def.params.x_damage_multiplier; if (mult < 1) { mult = 1; }
             // Hinata's discount frees up mana for a larger X. Two cases:
             int max_x;
-            int P = xpool.Total(), bmv = base.ManaValue();
+            int P = std::max(0, xpool.Total() - assumed_her_mv), bmv = base.ManaValue();
             if (def.params.discount_targets_scale_x && (HinataInPlay(state) || hinata_assumed))
             {
                 // Crackle: discount = min(X, avail) -> cost(X) = pips*X + bmv - min(X, avail),
@@ -12460,7 +12621,13 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                         if (!any_block && L.agg.cost > gate->pool_total + best_head) { continue; }
                     }
                     else if (min_mcost != std::numeric_limits<int>::max()
-                             && L.agg.cost > mana_bound - min_mcost) { continue; }
+                             && L.agg.cost > mana_bound - min_mcost)
+                    {
+                        if (SeqChainTraceLevel() >= 3)
+                        { std::fprintf(stderr, "[chain-prow] SKIP cost=%d bound=%d minm=%d\n",
+                                       L.agg.cost, mana_bound, min_mcost); }
+                        continue;
+                    }
                 }
                 plines.push_back(L);
             }
@@ -12491,6 +12658,11 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         }
     }
     std::sort(pairs.begin(), pairs.end(), [](const Pair& a, const Pair& b) { return a.key < b.key; });
+    if (SeqChainTraceLevel() >= 3)
+    { std::fprintf(stderr, "[chain-pairs] mlines=%zu plines=%zu pairs=%zu groups=%d mg=%zu pg=%zu "
+                   "pgsz0=%d\n",
+                   mlines.size(), plines.size(), pairs.size(), num_groups, mg.size(), pg.size(),
+                   pg.empty() ? -1 : static_cast<int>(groups[pg[0]].size())); }
 
     const int mng = static_cast<int>(mg.size()), png = static_cast<int>(pg.size());
     std::vector<int> choice(num_groups, 0);
@@ -19855,6 +20027,38 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
     if (EnumStatsOn()) { ReportEnumBound(cands, groups, independent); }
 
+    // MTG_SEQ_CHAIN_TRACE=2: dump this enumeration's candidate/group structure when it holds an
+    // untap ritual + a castable Hinata (the go-off shape the trace exists to explain).
+    if (SeqChainTraceLevel() >= 2)
+    {
+        bool has_untap = false, has_red = false;
+        for (const Action& a : cands)
+        {
+            if (a.def && a.def->params.untap_x_mana_sources) { has_untap = true; }
+            if (a.def && a.def->params.hinata_cost_reducer)  { has_red = true; }
+        }
+        if (has_untap && (has_red || HinataInPlay(state)))
+        {
+            std::string s = "[chain-cands] t" + std::to_string(state.turn_number)
+                          + " pool=" + std::to_string(AvailableManaPool(state).Total())
+                          + " groups=" + std::to_string(groups.size())
+                          + " ind=" + std::to_string(independent.size())
+                          + " credit_armed=" + std::to_string(HinataSubsetCreditEnabled()
+                                                              && !HinataInPlay(state) ? 1 : 0)
+                          + " exec_feas=" + std::to_string(ExecFeasEnabled() ? 1 : 0) + " |";
+            for (const Action& a : cands)
+            {
+                s += " " + a.card_name.str();
+                if (a.chosen_x > 0) { s += "(x" + std::to_string(a.chosen_x) + ")"; }
+                s += "/mv" + std::to_string(a.cost.ManaValue());
+                if (a.ritual_float > 0) { s += "/f" + std::to_string(a.ritual_float); }
+                if (a.rock_mana.Total() > 0) { s += "/r" + std::to_string(a.rock_mana.Total()); }
+                s += IsManaSideAction(a) ? "/M" : "/P";
+            }
+            std::fprintf(stderr, "%s\n", s.c_str());
+        }
+    }
+
     int num_groups = static_cast<int>(groups.size());
     int num_ind    = static_cast<int>(independent.size());
 
@@ -19870,6 +20074,24 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     auto eval_and_push = [&](const std::vector<int>& sel)
     {
+        SeqChainTrace _ct;   // MTG_SEQ_CHAIN_TRACE diagnostic; inert (armed=false) when off
+        if (SeqChainTraceOn())
+        {
+            bool has_untap = false, has_reducer = false;
+            const bool every = SeqChainTraceLevel() >= 3;   // =3: every subset of a goff enumeration
+            for (int j : (every ? [&]{ std::vector<int> all(cands.size());
+                                       for (size_t k = 0; k < cands.size(); ++k) { all[k] = (int)k; }
+                                       return all; }() : sel))
+            {
+                const CardDefinition* d = cands[j].def;
+                if (!d) { continue; }
+                if (d->params.untap_x_mana_sources) { has_untap = true; }
+                if (d->params.hinata_cost_reducer && cands[j].kind == Action::Kind::CastFromHand)
+                { has_reducer = true; }
+            }
+            if (has_untap && (has_reducer || HinataInPlay(state)))
+            { _ct.armed = true; _ct.st = &state; _ct.cands = &cands; _ct.sel = &sel; }
+        }
         // Group-wave tranche filter FIRST (cheapest reject): a selection not touching the
         // tranche's required (rank-R) group was already emitted by wave 0 or an earlier tranche
         // -- the highest-ranked-used group assigns every plan to exactly one tranche, which is
@@ -20316,8 +20538,45 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
             mana_ok = ok_after;
         }
+        if (_ct.armed) { _ct.pool_total = pool.Total(); }
+        // EXECUTOR-VALIDATED FEASIBILITY (MTG_EXEC_FEAS, default OFF; see EngineFlags.h). Consulted
+        // lazily, at most once, and ONLY when one of the three mana gates below is about to reject
+        // an INTERACTING subset (a cast that refloats/produces mana mid-chain, or a same-subset
+        // Hinata whose discount the credit models): re-test with the real sequential payment and
+        // rescue the subset if every cast genuinely pays. A cheap scalar ceiling runs first --
+        // sequencing realises COLOURS and TIMING, never new TOTAL mana, so a subset the fully
+        // credited scalar cannot cover can skip the walk.
+        int exec_feas = -1;   // -1 unknown | 0 no rescue | 1 sequentially payable
+        auto exec_feas_rescues = [&]() -> bool
+        {
+            if (exec_feas >= 0) { return exec_feas == 1; }
+            exec_feas = 0;
+            if (!ExecFeasEnabled()) { return false; }
+            bool interacts = any_hinata_credit;
+            for (int j : sel)
+            {
+                if (interacts) { break; }
+                const Action& c = cands[j];
+                if (c.ritual_float > 0 || c.rock_mana.Total() > 0
+                    || (c.def && c.def->params.untap_x_mana_sources)) { interacts = true; }
+            }
+            if (!interacts) { if (_ct.armed) { _ct.label = "ef-no-interact"; } return false; }
+            // Sound scalar ceiling: sequencing realises colours/timing and LIVE discounts, never
+            // new total mana -- but a live discount can forgive up to the whole GENERIC part
+            // (Hinata: -1 per target), so the only cost the walk can never talk down is the
+            // COLOURED/colorless pips. Comparing against the full post-credit ManaValue() was
+            // measured too tight (the gi=22 no-draw chain: eff 21 vs combined 22, while the walk's
+            // live discounts realise it at 16).
+            if ((credited ? eff : pool).Total() < combined.ManaValue() - combined.generic)
+            { if (_ct.armed) { _ct.label = "ef-scalar"; } return false; }
+            if (SubsetPayableSequential(state, cands, sel)) { exec_feas = 1; }
+            else if (_ct.armed) { _ct.label = "ef-walk-fail"; }
+            return exec_feas == 1;
+        };
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
         bool mana_reject = !mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel));
+        if (mana_reject) { _ct.label = "flat-pool"; }
+        if (mana_reject && exec_feas_rescues()) { mana_reject = false; _ct.label = "early-gate"; }
         if (seq_on && seq_spend && !mana_reject) { apply_seq(); }   // survivor: keep its pool honest
         if (mana_reject && CostReframeEnabled())
         {
@@ -20357,9 +20616,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (opt.CanPay(oc) && opt_nc.CanPay(oc_nc)) { mana_reject = false; }
             }
         }
-        if (mana_reject) { return; }
-        if (sacrifice_count > total_lands)                   { return; }
-        if (discard_lands_used > lands_in_hand)              { return; }
+        if (mana_reject) { return; }   // trace label set above (flat-pool or an ef-* reason)
+        if (sacrifice_count > total_lands)                   { _ct.label = "sac-lands"; return; }
+        if (discard_lands_used > lands_in_hand)              { _ct.label = "discard-lands"; return; }
         // A selection whose own entries include a COLOURED-pip reducer (Ragemonger cast or vialed)
         // pays FEWER coloured pips than Action::cost records, so the exact per-colour gates below
         // over-demand and reject the legal multi-Minotaur line (s3/gi2 t4). Skip them for such
@@ -20368,18 +20627,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         bool sel_col_reducer = false;
         if (any_col_reducer)
         { for (int j : sel) { if (ActionColoredReducerDef(cands[j])) { sel_col_reducer = true; break; } } }
-        // Accurate per-color payability (rejects wild-pool phantoms; see SubsetPayable).
-        if (!sel_col_reducer && !SubsetPayable(have_colors, cands, sel)) { return; }
+        // Accurate per-color payability (rejects wild-pool phantoms; see SubsetPayable). A subset
+        // the sequential walk already validated pays for REAL, so both colour models -- which count
+        // only the pre-cast board and cannot see a mid-chain refloat returning a TAPPED source's
+        // colour -- defer to it (exec_feas_rescues, rescue-only).
+        if (!sel_col_reducer && !SubsetPayable(have_colors, cands, sel))
+        {
+            _ct.label = "colour-exists";                    // ef-* labels overwrite on a failed rescue
+            if (!exec_feas_rescues()) { return; }
+            _ct.label = "early-gate";
+        }
         // ... and the COUNT it does not model (see the twin in Solve::consider). Flat-pool path
         // only: the filter fallback and the cost reframe both judge by other means.
-        if (mana_ok && !sel_col_reducer
+        if (mana_ok && !sel_col_reducer && exec_feas != 1
             && ((colour_feas.usable
                  && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff)))
              || (colour_feas_nc.usable
                  && !colour_feas_nc.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc),
-                                            /*noncreature_only=*/true))))
+                                            /*noncreature_only=*/true)))
+            && !exec_feas_rescues())
         {
             if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }
+            _ct.label = "colour-exact";
             return;
         }
 
@@ -20398,10 +20667,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
                 if (k_rank > r_rank) { ++after; }
             }
-            if (after > cands[j].max_casts_after) { return; }
+            if (after > cands[j].max_casts_after) { _ct.label = "irencrag"; return; }
         }
 
-        if (self_damage >= ap.life) { return; }
+        if (self_damage >= ap.life) { _ct.label = "self-damage"; return; }
 
         // FILL a scaled Magma cast UP from this plan's LEFTOVER mana (spend-all; the searched Crackle {X}
         // already took its 3-mana chunks, so the surplus is Magma's sub-chunk remainder). At most one Magma
@@ -20521,8 +20790,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         drop ? "PRUNED" : "rescued(c)", names.c_str());
                 }
             }
-            if (drop) { return; }
+            if (drop) { _ct.label = "sac-burn-hold"; return; }
         }
+        _ct.label = "OFFERED";
         TurnSolver::Plan plan;
         plan.value          = total_eval;
         plan.wins_this_turn = wins;
@@ -20595,11 +20865,35 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
         growth_bound += dg.live * matches;
     }
-    // Both addends are UPPER bounds on what their credit can forgive and both are 0 for a deck
+    // Same-subset HINATA credit the per-subset credit below can grant (the metalcraft lesson,
+    // verbatim: "the position has to survive to be priced"). Without this addend the scalar bound
+    // charges every X spell its FULL undiscounted X while SameTurnHinataCredit would forgive up to
+    // X per cast, so the very go-off position the credit exists to admit -- gi=22's one-phase
+    // Hinata+Spasm+Ponder+Crackle T4 chain, verified by MTG_SEQ_CHAIN_TRACE: the position never
+    // reached consider() with the bound on, formed and died at the flat gate with MTG_MANA_PRUNE=0
+    // -- is skipped at the odometer before the credit can price it. Upper bound: every non-reducer
+    // cast's assumed discount, capped at its own generic. 0 unless the credit is armed (flag on,
+    // Hinata castable, a reducer among the cands) -> every other configuration byte-identical.
+    // All addends are UPPER bounds on what their credit can forgive and all are 0 for a deck
     // without the mechanic, so they compose: a metalcraft deck sees growth_bound 0, an elf deck
     // sees metalcraft_bound 0, and a deck with neither is byte-identical to the un-addended bound.
-    const int mana_bound = ManaPruneBound(pool, cands,
-                                          haste_unlock_bound + metalcraft_bound + growth_bound);
+    //
+    // Same-subset HINATA credit: the scalar bound cannot price a subset-dependent per-target
+    // discount (a live-recomputed min(X, targets) per cast), so when the credit is armed the bound
+    // BAILS entirely -- exactly ManaPruneBound's own precedent for affinity and a same-turn
+    // Medallion ("the position has to survive to be priced", the metalcraft lesson; an addend was
+    // tried first and under-counted the {X}-pip forgiveness, silently skipping the gi=22 no-draw
+    // go-off position at the odometer). Armed only when the flag is on, she is castable from hand
+    // and a reducer is among the cands -> every other configuration byte-identical.
+    const int mana_bound = any_hinata_credit
+        ? std::numeric_limits<int>::max()
+        : ManaPruneBound(pool, cands,
+                         haste_unlock_bound + metalcraft_bound + growth_bound);
+    if (SeqChainTraceLevel() >= 2)
+    {
+        std::fprintf(stderr, "[chain-bound] t%d any_hinata_credit=%d mana_bound=%d\n",
+                     state.turn_number, any_hinata_credit ? 1 : 0, mana_bound);
+    }
     // Both indices are allocated ONLY when the deck actually uses them. Solve is the rollout leaf --
     // called once per node -- so even default-constructing their (empty) vectors on every call cost a
     // measurable ~1% on decks that use neither (Hinata/TH/burn A/B, 2026-07-29). A null pointer plus a
@@ -20612,7 +20906,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // The selection-exact gate models ritual/rock float only, so it also cannot see the scaled-dork
     // growth credit -- bail to the (growth-aware) scalar bound when one is live, exactly like the
     // haste-dork unlock above.
-    if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork && growth_bound == 0)
+    // ... and the same-subset HINATA credit (any_hinata_credit): the gate's per-candidate terms
+    // bake each cast's cost at emission, so a discount that only materialises when the subset also
+    // casts her is invisible to it -- its stage-B row skip then drops the go-off payoff row before
+    // consider() can credit it (measured, gi=22 no-draw fixture: plines 2 of 4, the Crackle rows
+    // gone; MTG_MANA_PRUNE=0 "fixed" it only because that hatch happens to disable this gate too).
+    // Bail to the scalar bound, which the credit already bails to unbounded.
+    if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork && growth_bound == 0
+        && !any_hinata_credit)
     {
         auto idx = std::make_unique<ManaGateIndex>();
         if (BuildManaGateIndex(pool, cands, independent, *idx)) { gate_owned = std::move(idx); }
@@ -25422,6 +25723,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // 0 = unlimited = byte-identical. pre is value-ordered above, so this keeps the best W lines.
         if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; break; }
         ++scanned;
+        if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         ConsumeAt(budget, unitsite::kFsPre);   // one interior node (plan applied)
         if (s_rollout_stats)
         {
@@ -25524,6 +25826,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     TurnSolver::SearchLine tail =
                         FSLineTail(s3, depth - 1, max_turns, std::min(cutoff, best.win_turn),
                                    second_main, tt, lc, budget);
+                    if (bp_root && FsRootDumpTurn() == state.turn_number)
+                    { FsDumpPlan("bp-child", v, tail.win_turn); }
                     if (tail.win_turn < node_best_val) { node_best_val = tail.win_turn; }
                     if (tail.win_turn < best.win_turn)
                     {
@@ -25719,6 +26023,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
         if (rec_vals) { node_vals.push_back(tail.win_turn); }   // value-rank for the beam reorder
         if (tie_scan_here) { tie_scan.emplace_back(tail.win_turn, PlanActionKeys(p)); }
+        if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("tail", p, tail.win_turn); }
         if (tail.win_turn < best.win_turn)
         {
             best.win_turn = tail.win_turn;
@@ -28100,8 +28405,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // TOP-LEVEL decision of turn n -- the movable aim the fixed T1/T2 hooks lack
         // (diagnosis only; unset = 0 = off, byte-identical).
         static const int s_trace_turn = EnvInt("MTG_TRACE_SOLVE_TURN", 0);
-        const bool trace_tn = s_trace_solve && enforce_budget && s_trace_turn > 0
-                              && state.turn_number == s_trace_turn && is_pre_combat;
+        // Not gated on is_pre_combat OR enforce_budget: under MTG_HINATA_ALL_MAIN2 the decision
+        // that matters is the POST-combat main, and a diagnostic that cannot see it traces
+        // nothing (gi=22). Top-level-ness is printed instead of filtered on.
+        const bool trace_tn = s_trace_solve && s_trace_turn > 0
+                              && state.turn_number == s_trace_turn;
         const bool trace_this = trace_t1 || trace_t2 || trace_tn;
         if (trace_this)
         {

@@ -1,0 +1,46 @@
+{
+ "_comment": "gi=22 (seed 6600023) T4 one-phase go-off repro (2026-08-30). The node arm's REAL T4 win, replayed as a single-phase question: board Boilerworks+Orchard+SolRing+Ornithopter, drop Reflecting Pool, then Hinata -> Reality Spasm x5 ({U}{U}, refloat) -> Ponder -> draw Spasm2 -> Spasm2 x5 -> Crackle x4 ({8}{R}{R}) = 20. Under two mains the phase boundary re-prices the chain and the engine wins T4; under MTG_HINATA_ALL_MAIN2 the whole chain must be enumerated in ONE phase. Library filler is Reality Spasm so Ponder's draw is the second Spasm regardless of keep/shuffle. Run with the m2 arm flags +/- MTG_EXEC_FEAS to measure the enumerator, not the T3 policy.",
+ "deck": "decks/Hinata2/Hinata2.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {
+   "name": "Izzet Boilerworks",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forbidden Orchard",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Sol Ring",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Ornithopter of Paradise",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Reflecting Pool",
+  "Hinata, Dawn-Crowned",
+  "Reality Spasm",
+  "Crackle with Power",
+  "Ponder",
+  "Mountain"
+ ],
+ "library_filler": "Reality Spasm",
+ "library_size": 20,
+ "depth": 5,
+ "budget_ms": 2000,
+ "expect_win_turn": 4,
+ "log_out": "logs/bp_node/gi22_scenario_m2.json"
+}
