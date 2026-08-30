@@ -25248,6 +25248,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     if (s3.ActivePlayer().life <= 0) { continue; }
                     if (s3.Opponent().life <= 0)
                     {
+                        if (m2t_here)
+                        { std::fprintf(stderr, "[m2t] T%d d%d PEND q=%s child k=%d WIN-THIS-TURN\n",
+                                       state.turn_number, depth, m2t_sum(q).c_str(), k); }
                         TurnSolver::Plan q_rec = std::move(v);
                         q_rec.breakpoint_actions = std::move(bp3);
                         return { state.turn_number, { { false, std::move(q_rec) } } };
@@ -25257,6 +25260,14 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     TurnSolver::SearchLine sub =
                         FSLineWin(s3, depth, max_turns, std::min(cutoff, best.win_turn),
                                   second_main, tt, lc, budget);
+                    if (m2t_here)
+                    {
+                        std::string cont;
+                        for (const Action& ca : bp3) { cont += ca.card_name.str(); cont += ","; }
+                        std::fprintf(stderr, "[m2t] T%d d%d PEND q=%s child k=%d cont=[%s] sub=%d cutoff=%d\n",
+                                     state.turn_number, depth, m2t_sum(q).c_str(), k, cont.c_str(),
+                                     sub.win_turn, std::min(cutoff, best.win_turn));
+                    }
                     if (sub.win_turn < best.win_turn)
                     {
                         if (s_rollout_stats)
