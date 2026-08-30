@@ -415,3 +415,9 @@ timing. **The principled full fix is the parked executor-validated feasibility d
 flat gate rejects an INTERACTING subset, decide with a real sequential per-cast probe instead
 of another credit.** That is a hot-path architecture change its own doc says to review first
 -- USER sign-off before building.
+
+**USER 2026-08-30 (after the two-layer finding): "Okay, let's compact and then continue." --
+i.e. proceed. NEXT SESSION STARTS HERE: build the executor-validated feasibility probe per
+`enumeration-feasibility-via-executor.md` (flag-gated, default OFF; scope = INTERACTING
+subsets the flat gate REJECTS, so the hot path pays only on would-be rejections), then
+re-run the gi=22 acid test under all-main-2 and re-measure the §6 ladder ± the probe.
