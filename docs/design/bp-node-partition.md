@@ -123,6 +123,29 @@ Note the passes also OVERSHOOT the 20 ms allowance (21.7M vs the control's 16.1M
 gating + Overrun only), so the deepening ladder both overspends and commits shallow; a
 pass-cost-aware predictor for node passes is untried.
 
+## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
+
+The generic-lever collateral check the v1 caveats called for: **14 of 15 decks + all 25
+scenario fixtures are byte-identical PASS** — at play settings, site 3 binds only on Hinata in
+this suite (no other deck's list contains a plain DrawSpell cantrip that reaches the class).
+The mixed-site worry has no suite instance today. Hinata itself:
+
+| cell | control | node | delta |
+|---|---|---|---|
+| d3 s1001 (150 games, 10 ms) | 5.6733 | 5.6600 | **−0.0133 (better)** |
+| d5 s1001 (75 games, 20 ms) | 5.8533 | 5.8400 | **−0.0133 (better)** |
+
+Movers: 7 slower / 10 faster / 75 play-changed. `classify_turn_later.sh`: **all 7 slower games
+are churn** — every one recovers at 4x budget (incl. the loud gi11 8→loss, which recovers to 8;
+its draws also diverge at T7, a different physical game). No draws-identical persistent
+slowdown, i.e. no real regression in the tier.
+
+Adoption would therefore move ONLY Hinata's GT (both searched smoke cells, and presumably the
+regression/overnight tiers' Hinata keys — those tiers not yet run under the lever). NOTE for
+whoever adopts: the node arm was measured here WITHOUT `MTG_HINATA_ORDER_FULL` /
+`MTG_BP_NO_GREEDY_CONT` (suite runs shipped defaults) — the paired 1200-game blocks above had
+both ON; the lever helps in both configurations.
+
 ## v1 scope (deliberate, in the caveat order they matter)
 
 * **Nested chain links stay inline.** A cantrip cast INSIDE a continuation resolves at the inline
@@ -153,8 +176,8 @@ snapshot copy: hoisted-buffer reuse (committed) bought only ~1.4%.
 |---|---|---|
 | dominance-filter answer to the old q1: `eval_and_push` runs filters (`SubsetWastesAccelerant`, stranded-equip, unbacked-X) that can reject a PURE PREFIX standing alone while its extension survives | — | so naive drop-at-emission is LOSSY, confirmed; only truncate-at-emission (after the filters) is sound |
 | emission truncate-and-dedup (kills the 826k duplicate-prefix host applies) | ~3.8% units | untried; needs an emission-side partition-point predictor + apply-side verification counter |
-| in-node exact content dedup (skip fp-duplicate cands in the k loop) | ~2.3% units | untried; the skip must be full-field-exact, not a hash (no-lossy-truncation bar) |
-| EMPTY-arm skip when cands provably contains a no-cast-no-land entry | ~2.2% units (overlaps above) | untried |
+| in-node exact content dedup (skip fp-duplicate cands in the k loop) | ~2.3% units | untried, and now known HARDER than it looks: BuildSimKey folds zone ORDER by name, so a copy-i-vs-copy-j swap collides only when every hand entry between the two copies shares one name — the equality test needs a position guard over the resume state's hand to stay exact |
+| **EMPTY-arm pre-skip** (skip the explicit EMPTY when the k=0 apply reports an apply-empty cands entry — a guaranteed post-apply dupe) | **−0.8% units MEASURED** (190k skips / 300 games; play digest unchanged) | **BUILT + ON under the node** (`MTG_BP_NODE_EMPTYSKIP=0` restores); exact by construction |
 | breakpoint condemnation (`MTG_BP_CLASSIFY`, fires under ORDER_FULL: 627k drops / 5.35% of consultations) | **−1.0% units measured**, children −5.3%, depth flat, ~neutral quality on 300 games | measured 2026-08-30; the soundness exemptions (rituals/tutors/reducers — each guards a recorded deleted-win class, and much of Hinata's hand IS those classes) cap the yield. USER note: greedy continuations may still be cheaper than any condemnation — they skip the search entirely; target is the same ballpark, then quality decides |
 | node-aware overrun floor (m2's 9.2% waste; `kOverrunFloor`=1M = 55x a 20ms budget) | m2 only (~0.25% for node) | untried; only matters if all-main-2 is ever revived |
 | value-ordering the k loop for B&B | small — children/pend ≈ 3.8, too few to reorder | judged not promising |
