@@ -421,3 +421,64 @@ i.e. proceed. NEXT SESSION STARTS HERE: build the executor-validated feasibility
 `enumeration-feasibility-via-executor.md` (flag-gated, default OFF; scope = INTERACTING
 subsets the flat gate REJECTS, so the hot path pays only on would-be rejections), then
 re-run the gi=22 acid test under all-main-2 and re-measure the §6 ladder ± the probe.
+
+### 6b. Executor-validated feasibility BUILT (2026-08-30, `f804a46c`) -- T4 expressible; the residual is BP-NODE CHILD COMPOSITION
+
+**The probe exists: `MTG_EXEC_FEAS` (heurarm slot, default OFF).** `SubsetPayableSequential`
+(TurnSolver, by `SubsetPayableWithFilters`): when any of the three mana gates (flat pool,
+colour-exists, colour-exact) is about to reject an INTERACTING subset (ritual/rock/untap/
+hinata-credit), re-test with the real sequential payment on a scratch state -- casts in
+CastOrderRank order, each cost recomputed LIVE exactly as apply_one does (EffectiveCost + X
+pips - HinataGenericDiscount + Soulfire/strive/Magma terms), TapForCostDirect pays (spends
+state.floating_mana first), ApplyRitualFloat/rock-join/Hinata-join resolve between casts.
+Rescue-only (can never reject what a gate accepted); EnumeratePlans only, never Solve/rollout
+(the 2026-07-23 MTG_FEASIBILITY_GATE dead-end). Cheap pre-filter: the walk can talk generic
+down to zero but never coloured pips, so `eff.Total() >= combined.ManaValue() - combined.generic`
+gates the walk (full-MV comparison was measured too tight).
+
+**Building it exposed THREE stacked non-probe blockers, all fixed under the
+MTG_HINATA_SUBSET_CREDIT arm (byte-identical off; smoke digest re-verified):**
+1. **X sizing ignored assumed-Hinata's own cost**: Crackle's only emitted variant (x6) was
+   sequentially unpayable while x4 was payable and lethal. Fix: subtract her MV from the
+   sizing pool when `hinata_assumed`.
+2. **ManaPruneBound** cannot price the subset-dependent discount -> the odometer skipped the
+   go-off position before consider() saw it (the metalcraft lesson). Fix: BAIL (INT_MAX) when
+   the credit is armed -- the affinity/Medallion precedent (an addend was tried and
+   under-counted {X}-pip forgiveness).
+3. **The DEFAULT-ON selection-exact mana gate (MTG_SEL_MANA_GATE)** bakes per-candidate costs;
+   its stage-B row skip dropped every Crackle payoff row (plines 2 of 4) -- the REAL position
+   killer (`MTG_MANA_PRUNE=0` "worked" only because that hatch disables this gate too). Fix:
+   skip building the gate when the credit is armed.
+
+**Verified by two new scenario fixtures** (`test/scenarios/hinata_gi22_t4_nodraws.json` -- the
+pure one-phase enumeration question, both Spasms in hand; `..._t4_onephase.json` -- with the
+mid-chain Ponder draw + breakpoint). Both: two-main control PASSES; all-main-2 FAILED before
+these fixes; all-main-2 now PASSES **at every depth 0..5** -- the one-phase T4 go-off
+(Hinata -> Spasm x5 {U}{U} refloat -> [Ponder/draw ->] Spasm2 -> Crackle x4 = 20) is
+enumerable, walk-validated, and realised by the executor (opp 20 -> -10/0).
+
+**The gi=22 GAME still lands T5, and the cause is now pinned one layer deeper (NOT
+enumeration):** the whole game's committed line roots at T1 (no FSLineWin root ever runs at
+T2+ -- MTG_FS_ROOT_DUMP). At the T3 in-search Ponder pends, the BP-NODE child list never
+COMPOSES the full 3-cast continuation `[Sol Ring, Preordain, Ornithopter]` (m2t PEND trace:
+children are only 0-2-cast subsets -- `[Sol Ring]`, `[Sol Ring, Ornithopter]`, `[Preordain]`;
+a continuation holding a NESTED cantrip is applied with a NULL capture pointer, so nested
+pends are never hosted). Every child's T4 state is therefore poorer than the executor's real
+T4 (Preordain uncast -> different T4 draw, tapped-land drop, pool 6 not 7) and the go-off is
+not lethal there -> every T3 shuffle child scores T6 -> keep wins -> T5. Budget-independent
+(1x/100x/1000x identical). **NEXT: the bp-node child COMPOSITION question -- either host
+nested pends (child apply gets its own capture) or let the child list compose multi-cantrip
+continuations; then the gi=22 T3 flip should follow from machinery that already works
+(fixtures pass at d0).**
+
+**Diagnostics added** (env-gated, print-only): `MTG_SEQ_CHAIN_TRACE=1/2/3` (gate verdict per
+goff subset / candidate+bound dumps / every-subset), `MTG_FS_ROOT_DUMP=<turn>`,
+m2t PEND/child-continuation lines (`9c866e3d`), and MTG_TRACE_SOLVE_TURN no longer requires
+is_pre_combat.
+
+**Ladder re-measure IN FLIGHT at compaction** (`logs/bp_node/ef_ladder.json`, 14 jobs pooled,
+1200x2 hold s6600001 / train s5500001, d5/20ms, MTG_DUMP_WINS -> `ef_ladder.out/.err`): arms
+credit2 / creditef / nodecred2 / nodecredef / recipecred2 / recipecredef / m2credef (credit
+now MEANS credit+the three fixes). Early results vs shipped-greedy 5.6433/5.6917:
+credit2 5.6417/5.6950, creditef 5.6417/5.6942 -- ~neutral so far; node/recipe/m2 arms pending.
+Parse `[win] job= gi= wt=` lines from ef_ladder.err for paired per-game analysis (wt -1 = 9).
