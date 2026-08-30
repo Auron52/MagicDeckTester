@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include "../core/Card.h"
 #include "CardTemplate.h"
 #include <cstdint>
@@ -1587,12 +1588,21 @@ public:
         static const char sentinel = 0;   // stable address, distinct from every real def; never dereferenced
         return reinterpret_cast<const CardDefinition*>(&sentinel);
     }
+    // RACE-FREE lazy fill (2026-08-30). `c` is sometimes a process-wide SHARED Card -- EvalCard
+    // hands ComputeLordBonus the CardDatabase's own `def.card` prototype -- so every worker thread
+    // fills the same m_def concurrently. The value stored is always identical (one definition per
+    // name), so no result was ever at stake, but the plain read/write pair is still a data race and
+    // ThreadSanitizer reports it. std::atomic_ref makes it well-defined while leaving Card
+    // trivially copyable (std::atomic would not); relaxed ordering suffices because the pointee is
+    // immutable and published before any thread starts. See Card::m_def.
     const CardDefinition* LookupCached(const Card& c) const
     {
-        if (c.m_def == NotInDb()) { return nullptr; }   // cached miss (token / unknown card)
-        if (c.m_def)              { return c.m_def; }   // cached hit
+        std::atomic_ref<const CardDefinition*> slot(c.m_def);
+        const CardDefinition* cached = slot.load(std::memory_order_relaxed);
+        if (cached == NotInDb()) { return nullptr; }    // cached miss (token / unknown card)
+        if (cached)              { return cached; }     // cached hit
         const CardDefinition* d = LookupInterned(c.m_name);
-        c.m_def = d ? d : NotInDb();
+        slot.store(d ? d : NotInDb(), std::memory_order_relaxed);
         return d;
     }
 

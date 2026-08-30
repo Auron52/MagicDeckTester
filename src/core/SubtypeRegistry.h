@@ -2,9 +2,12 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <cstdint>
 #include <cstddef>
+#include <cstdio>
+#include <mutex>
 
 // Process-wide interning of subtype NAME strings ("Sliver", "Goblin", "Mountain", ...)
 // to small integer ids, so a Card can store its subtypes as a few uint16_t (POD, no heap)
@@ -22,10 +25,45 @@
 // read-only lookup used on the search hot path across worker threads; it never inserts, so
 // concurrent reads of the (load-frozen) map are safe. An unknown name -> id 0 (kNone),
 // which no card stores, so it can never spuriously match.
+//
+// THAT INVARIANT WAS FALSE UNTIL 2026-08-30, and it is now ENFORCED rather than assumed.
+// A handful of subtype names exist only as C++ string literals in effect code -- Oko's "Elk" and
+// "Food" tokens, the Kavu token -- so they are NOT in cards.json and were NOT interned at load.
+// The first worker thread to create one called Intern() mid-search, which does
+// `m_names.push_back(...)`: a std::vector REALLOCATION racing against every other worker's
+// `Name(id)` read of that same vector, plus an unordered_map insert racing its readers. Confirmed
+// by ThreadSanitizer (write at SubtypeRegistry.h:44 from ApplyLoyaltyAbility vs read at :59 from
+// CardHasSubtype, on 12 threads). That is real UB -- a torn read or a freed buffer, not a benign
+// same-value write.
+//
+// Two changes close it, and BOTH matter:
+//   * kRuntimeSubtypeLiterals below is the single source of truth for every subtype name that
+//     exists only in code. CardDatabase interns the whole list at load (RebuildInternedIndex), so
+//     the runtime path always HITS and never mutates.
+//   * Freeze() then makes that structural: after it, Intern() cannot insert at all. A name that
+//     was somehow missed returns kNone loudly (one warning per name) instead of racing. There is
+//     a unit test asserting every literal in the list resolves after a real DB load, so a newly
+//     added token subtype fails the suite rather than corrupting a run.
+// Post-freeze the containers are immutable, so every read path is lock-free and allocation-free
+// exactly as before -- this costs nothing on the hot path.
 class SubtypeRegistry
 {
 public:
     static constexpr uint16_t kNone = 0;
+
+    // Subtype names that appear ONLY in C++ effect code, never in cards.json. Keep this list in
+    // sync when adding a token whose subtype is a literal -- the unit test enforces it.
+    static const std::vector<std::string>& RuntimeLiterals()
+    {
+        static const std::vector<std::string> kRuntimeSubtypeLiterals = {
+            "Elk",       // Oko +1 elk_transform
+            "Food",      // Oko +2 food_token
+            "Kavu",      // Kavu token
+            "Treasure",  // treasure tokens (also in cards.json today; listed so it stays covered)
+            "Aura",      // synthesised aura back-faces
+        };
+        return kRuntimeSubtypeLiterals;
+    }
 
     static SubtypeRegistry& Instance()
     {
@@ -34,16 +72,39 @@ public:
     }
 
     // Load-time: intern a name, assigning a fresh id if unseen. Single-threaded.
+    //
+    // AFTER Freeze() this NEVER mutates -- it degrades to the same read-only lookup Id() does, so
+    // the worker threads that reach it through SubtypeSet::push_back (token creation) cannot race
+    // the containers. See the class note.
     uint16_t Intern(const std::string& name)
     {
         if (name.empty()) { return kNone; }
         auto it = m_ids.find(name);
         if (it != m_ids.end()) { return it->second; }
+        if (m_frozen)
+        {
+            // A name reachable at runtime that load never saw: a bug in RuntimeLiterals(), not a
+            // condition to paper over. Warn once per name (this is off the hot path by
+            // construction -- a hit returns above) and refuse to mutate.
+            WarnUnfrozen(name);
+            return kNone;
+        }
         const uint16_t id = static_cast<uint16_t>(m_names.size()); // next id == current size
         m_ids.emplace(name, id);
         m_names.push_back(name);
         return id;
     }
+
+    // Called once by CardDatabase after the DB (and RuntimeLiterals) are interned. From here on the
+    // registry is immutable, which is what makes the lock-free Id()/Name() reads on the search hot
+    // path actually safe rather than merely intended.
+    void Freeze() { m_frozen = true; }
+    bool Frozen() const { return m_frozen; }
+    // The loader may run again (LoadFromJson is documented as callable per file, and Register()
+    // adds Tier-3 cards), and parsing a card interns its subtypes. Loading is single-threaded and
+    // happens before the worker pool exists, so re-opening the registry for it is safe; each load
+    // re-freezes at its end via RebuildInternedIndex().
+    void Thaw() { m_frozen = false; }
 
     // Hot-path read-only lookup: returns kNone for an unknown/empty name (no insert).
     uint16_t Id(std::string_view name) const
@@ -62,8 +123,22 @@ public:
 private:
     SubtypeRegistry() { m_names.emplace_back(); } // index 0 == kNone == "" (the empty/none name)
 
-    std::vector<std::string>                  m_names; // id -> name (index 0 = none)
-    std::unordered_map<std::string, uint16_t> m_ids;   // name -> id
+    // Out-of-line-ish so the hot path stays a plain find. Guarded by its own mutex because the
+    // callers ARE worker threads -- the whole point is that this path must not touch m_ids/m_names.
+    static void WarnUnfrozen(const std::string& name)
+    {
+        static std::mutex                    mu;
+        static std::unordered_set<std::string> seen;
+        std::lock_guard<std::mutex> lk(mu);
+        if (!seen.insert(name).second) { return; }
+        std::fprintf(stderr,
+                     "[subtype-registry] '%s' was first seen AFTER freeze and resolves to kNone. "
+                     "Add it to SubtypeRegistry::RuntimeLiterals().\n", name.c_str());
+    }
+
+    std::vector<std::string>                  m_names;  // id -> name (index 0 = none)
+    std::unordered_map<std::string, uint16_t> m_ids;    // name -> id
+    bool                                      m_frozen = false;
 };
 
 // A card's subtypes, stored as a small inline array of interned ids (POD, no heap) but

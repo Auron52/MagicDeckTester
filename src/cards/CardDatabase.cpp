@@ -2,6 +2,7 @@
 #include "../core/EnvFlags.h"
 #include <fstream>
 #include <stdexcept>
+#include <functional>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -72,6 +73,9 @@ CardDatabase CardDatabase::s_instance;
 
 void CardDatabase::LoadFromJson(const std::filesystem::path& path)
 {
+    // Parsing a card interns its subtypes; re-open the registry for this (single-threaded) load.
+    // RebuildInternedIndex() re-freezes at the end. See SubtypeRegistry.h.
+    SubtypeRegistry::Instance().Thaw();
     std::ifstream file(path);
     if (!file)
     {
@@ -95,15 +99,40 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         {
             def.params = BuildParamsFromJson(entry["parameters"]);
         }
-        // Pre-intern the subtype names used to build TOKEN subtypes at runtime, so the
-        // worker threads only ever do read-only id lookups (SubtypeSet::operator=) and
-        // never insert into the shared SubtypeRegistry mid-search. (A card's own subtypes
-        // are already interned in BuildCardFromJson via SubtypeSet::push_back.)
+        // Pre-intern the subtype names used to build TOKEN subtypes at runtime, so the worker
+        // threads only ever do read-only id lookups (SubtypeSet::operator=) and never insert into
+        // the shared SubtypeRegistry mid-search -- an insert there reallocates the registry's name
+        // vector under every other worker's concurrent Name() read (real UB; see SubtypeRegistry.h).
+        // (A card's own subtypes are already interned in BuildCardFromJson via SubtypeSet::push_back.)
+        //
+        // Read straight off the RAW JSON: every string under any key containing "subtype", at any
+        // depth. Mechanical and complete, which naming the param fields one at a time was not -- the
+        // previous hand-written list covered 4 of the ~15 token-subtype params and no nested spec.
         SubtypeRegistry& reg = SubtypeRegistry::Instance();
-        for (const std::string& s : def.params.attack_token_subtypes) { reg.Intern(s); }
-        for (const std::string& s : def.params.upkeep_token_subtypes) { reg.Intern(s); }
-        for (const std::string& s : def.params.tap_token_subtypes)    { reg.Intern(s); }
-        for (const std::string& s : def.params.cast_token_subtypes)   { reg.Intern(s); }
+        std::function<void(const json&, bool)> intern_subtypes =
+            [&](const json& node, bool under_subtype_key)
+        {
+            if (node.is_object())
+            {
+                for (auto it = node.begin(); it != node.end(); ++it)
+                {
+                    const std::string k = it.key();
+                    const bool hit = k.find("subtype") != std::string::npos
+                                  || k.find("Subtype") != std::string::npos;
+                    intern_subtypes(it.value(), under_subtype_key || hit);
+                }
+            }
+            else if (node.is_array())
+            {
+                for (const json& v : node) { intern_subtypes(v, under_subtype_key); }
+            }
+            else if (under_subtype_key && node.is_string())
+            {
+                const std::string s = node.get<std::string>();
+                if (!s.empty()) { reg.Intern(s); }
+            }
+        };
+        intern_subtypes(entry, /*under_subtype_key=*/false);
         m_def_hash[def.card.m_name] = CardDefHash(entry);
         // Synthesize the BACK face of a modal double-faced LAND (Pathway) as its own DB entry: a
         // single-colour land the player may choose to play instead of the front. Derived entirely
@@ -191,6 +220,38 @@ void CardDatabase::RebuildInternedIndex()
     m_by_name_ptr.reserve(m_cards.size());
     for (const auto& kv : m_cards)
     { m_by_name_ptr[InternedName::Intern(kv.first)] = &kv.second; }
+
+    // SUBTYPE registry: intern the code-only subtype literals (Oko's Elk/Food, the Kavu token --
+    // names that exist in effect code and NOT in cards.json), then freeze. Without this the first
+    // worker thread to create one of those tokens interned it MID-SEARCH, reallocating the
+    // registry's name vector under every other worker's concurrent read. See SubtypeRegistry.h.
+    // Load runs single-threaded before the worker pool exists, so this is the right place, and it
+    // is idempotent -- a second LoadFromJson re-interns the same names and re-freezes.
+    for (const std::string& lit : SubtypeRegistry::RuntimeLiterals())
+    { SubtypeRegistry::Instance().Intern(lit); }
+    SubtypeRegistry::Instance().Freeze();
+
+    // RESOLVE EVERY PROTOTYPE'S m_def NOW, so no worker thread ever writes one (2026-08-30).
+    // The DB's own `def.card` objects are process-wide shared and are read from worker threads two
+    // different ways at once:
+    //   * LookupCached(def.card) lazily FILLS m_def -- EvalCard hands the prototype straight to
+    //     ComputeLordBonus; and
+    //   * `perm.card = def.card` COPIES the whole prototype (TurnSolver's cast path,
+    //     PerformTutorToBattlefield). Card is trivially copyable, so that copy is a memcpy that
+    //     reads the m_def bytes too.
+    // A lazy fill on one thread therefore races a struct copy on another. Making the fill atomic
+    // (std::atomic_ref, see LookupCached) fixes fill-vs-fill but NOT fill-vs-copy, because the copy
+    // is a plain memcpy of the struct and cannot be made atomic without giving up Card's triviality
+    // -- which is exactly the property the memcpy exists to exploit. Pre-resolving here removes the
+    // write instead of trying to synchronise it: load is single-threaded, and afterwards every
+    // prototype's m_def is already final, so LookupCached returns on its first branch and stores
+    // nothing. Mirrors LookupCached's own resolution exactly (NotInDb() for an absent name) so the
+    // cached value is identical to what the lazy path would have produced.
+    for (auto& kv : m_cards)
+    {
+        const CardDefinition* d = LookupInterned(kv.second.card.m_name);
+        kv.second.card.m_def = d ? d : NotInDb();
+    }
 }
 
 std::vector<std::string> CardDatabase::MdfcBackFaceNames() const
@@ -207,6 +268,7 @@ std::vector<std::string> CardDatabase::MdfcBackFaceNames() const
 
 void CardDatabase::Register(const std::string& name, CardFactory factory)
 {
+    SubtypeRegistry::Instance().Thaw();   // the factory's card may carry an unseen subtype
     CardDefinition def = factory();
     def.tier = CardTier::Custom;
     def.tmpl = CardTemplate::None;

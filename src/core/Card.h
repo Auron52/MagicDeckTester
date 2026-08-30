@@ -1,4 +1,5 @@
 #pragma once
+#include <type_traits>
 #include <string>
 #include <vector>
 #include <optional>
@@ -220,6 +221,17 @@ struct Card
     // hashing -- a heap address is non-deterministic across runs and would break the
     // deterministic-budget contract. (BuildSimKey folds only chosen fields, not the
     // struct, so it is unaffected.)
+    //
+    // ACCESSED VIA std::atomic_ref, NOT AS A PLAIN POINTER -- see CardDatabase::LookupCached.
+    // Some Card objects are process-wide SHARED: EvalCard passes the CardDatabase's own
+    // `def.card` prototype straight into ComputeLordBonus, so every worker thread lazily fills
+    // the SAME m_def. Every writer stores the identical value, so no result can change, but a
+    // non-atomic write racing a read is still UB (ThreadSanitizer flags it). atomic_ref is used
+    // rather than making the member std::atomic because std::atomic is not trivially copyable,
+    // and Card's triviality is load-bearing: with m_name the last non-trivial member, vector<Card>
+    // copy/erase lower to memcpy/memmove (see NameRegistry.h). Relaxed ordering is sufficient --
+    // the pointee is immutable, published before any thread starts, and there is nothing to
+    // order against. On x86-64 a relaxed atomic load/store is a plain mov, so this is free.
     mutable const CardDefinition* m_def = nullptr;
 
     // The enum value's ordinal is its bit index; every enum above has < 32 values.
@@ -260,3 +272,13 @@ struct Card
     }
     bool IsMulticolored() const { return ColorCount() >= 2; }
 };
+
+// Card's triviality is a PERFORMANCE CONTRACT, not an accident: with InternedName (an 8-byte
+// pointer) as the last non-trivial-looking member, vector<Card> copy/erase lower to
+// memcpy/memmove, which is what makes the per-search-node GameState deep copy cheap (see
+// NameRegistry.h). It is asserted here so a future member -- e.g. "just make m_def a
+// std::atomic" -- fails the build instead of silently costing a per-card element-wise copy on
+// every search node. Use std::atomic_ref for concurrent access to a member instead
+// (CardDatabase::LookupCached does).
+static_assert(std::is_trivially_copyable<Card>::value,
+              "Card must stay trivially copyable -- vector<Card> copy/erase relies on memcpy");
