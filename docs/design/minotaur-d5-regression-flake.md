@@ -244,15 +244,35 @@ Two rules that would have saved all of it:
 ## Cross-machine note
 
 The overnight GT accepted in `a22cf7d0` was taken **while this bug was live**, and its own commit
-message says the minotaur cell it moved was "a coin flip". Post-fix that cell is deterministic; if
-it disagrees with the accepted face, the accepted face was the contaminated one and the key should
-be re-derived — that is a legitimate rebaseline, justified by this fix, not a regression.
+message says the minotaur cell it moved was "a coin flip". **Checked, and it was contaminated.**
+A full post-fix overnight tier came back **191 passed / 1 failed**, the single mismatch being
+exactly that cell — `minotaur_overnight_d5_s5005`, digest-only at an unchanged 4.9460, differing in
+one game (gi319, score T7 unchanged, play differs). The key's history is the two-face signature:
+
+```
+9b54274f -> 263ea077a94a6e23
+d0647517 -> 7808e9a33e782637
+a22cf7d0 -> 263ea077a94a6e23   <- accepted through the bug
+```
+
+Post-fix the cell lands deterministically on `7808e9a33e782637`, reproduced at two different pool
+compositions (a 12-job `--deck=minotaur` block and the full 192-job tier) — i.e. the accepted face
+was the contaminated one, and the pre-`a22cf7d0` value was correct all along. That repair has since
+been **superseded**: `5ba59b1b` (MinotaurProvider) rebaselined the whole minotaur GT on a post-fix
+binary, so the key now carries a fresh measurement (`4.9420/f8b6c011781b5f1d`) rather than either
+face. Recorded here because the *finding* stands on its own: one GT entry was demonstrably
+poisoned, exactly one, and a full-tier run was what proved it.
+
+The same run is the first full-tier determinism confirmation after this fix and the race fixes in
+`cdbffe63` — every other key byte-identical, including the two `minotaur_regression_d5` cells that
+used to flip run to run. A second full tier, after the projection fix below, came back 192/192.
 
 ## Related
 
 * `docs/design/etb-cascade-projection-gap.md` — a separate, latent projection gap found alongside
-  this. Its fix is blocked on this defect, because a genuine GT movement cannot currently be
-  distinguished from the flake.
+  this, and **unblocked by this fix**: with the tier deterministic the change validated in one pass
+  (CLOSED 2026-08-30, byte-identical on all three tiers, −0.2683 avg win turn on the one deck it
+  reaches).
 * The earlier, still-unexplained batch-pool contamination episode (closed as irreproducible). Same
   smell — a pooled-batch result that would not reproduce. This one reproduces in ~2 minutes and is
   the better handle.

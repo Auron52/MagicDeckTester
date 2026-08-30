@@ -11,7 +11,17 @@ sac option."* Constraint stated up front: **no new mulligan profiles** — reuse
 paired games at seed 930000), reproduced on held-out seeds at −0.4531. Survives 30 life (−0.4420),
 50x budget (−0.4107 at d7/b1000), and both non-clairvoyant modes (−0.4338 honest, −0.4067 true NC).
 
-> **2026-08-30 — two later findings bear on everything below; see
+> **2026-08-30 (later the same day) — every Frontline magnitude below is UNDERSTATED.** The
+> search's projection (`ApplyPlanDirect`) never fired the ETB cascade for a noncreature permanent,
+> so Frontline Heroism's `etb_self_creates_tokens` Soldier was invisible to the search: it planned a
+> 3-mana enchantment as producing *nothing*, then the executor made the hasty 1/1 for real. Frontline
+> Heroism is the ONLY card in `cards.json` that hit that gap (creatures took the other branch all
+> along). Closed in `etb-cascade-projection-gap.md`; measured on the v3 list at
+> **−0.2683 avg win turn**, 4/4 seeds, 4000 games. Direction is safe — the fix is pure upside for the
+> arm that already won, so the ADOPT verdict stands — but every delta in this document was measured
+> against a crippled Frontline and the ladder is worth re-running.
+>
+> **2026-08-30 — two earlier findings also bear on everything below; see
 > `mirrorwing-final-results.md`.** (1) The engine support for all four candidate cards was
 > **never committed** — it lived in an uncommitted stash, and `frontline_copy_tokens` /
 > `created_token_haste` were unread by any source file, silently ignored by `params.value()`.

@@ -15921,27 +15921,34 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         && state.battlefield[bi].controller_index == state.active_player_index)
                     {
                         OnDragonEnters(state, state.active_player_index, bi);
-                        // KNOWN GAP, deliberately left open -- see docs/design/etb-cascade-projection-gap.md.
-                        // The executor's EffectHandler::EnterBattlefield fires the param-gated ETB
-                        // cascade (OnGoblinEnters) on EVERY entry; this projection does not. So a
-                        // permanent whose ETB is expressed through a cascade param is under-projected
-                        // by the search.
+                        // ...and the param-gated ETB cascade, so this branch is lockstep with the
+                        // executor's EffectHandler::EnterBattlefield (which fires it on EVERY entry).
+                        // Closes the gap documented in docs/design/etb-cascade-projection-gap.md:
+                        // without it the search plans a permanent whose ETB is expressed through a
+                        // cascade param as though the ETB does nothing, then the executor fires it
+                        // for real -- an fd-diverge in the Puresteel family.
                         //
-                        // Adding `OnGoblinEnters(state, state.active_player_index, bi);` here is the
-                        // fix. It is left out only because it cannot currently be VALIDATED: the
-                        // minotaur_regression_d5 cells are nondeterministic in the full tier (they
-                        // flake on the unmodified control commit too -- see
-                        // docs/design/minotaur-d5-regression-flake.md), so a genuine GT movement from
-                        // this change cannot be told apart from the flake. Fix that first, then this
-                        // is an ordinary rebaseline. The line itself was measured NOT to be the cause
-                        // of the flake.
+                        // The reachable surface is exactly ONE card, and it is not the list the old
+                        // comment here named. Creatures never arrive here: they are taken by the
+                        // `else if (is_creature)` branch above, which has fired OnGoblinEnters (with
+                        // tutor_target/chosen_x) all along. Instants and sorceries are excluded by
+                        // this branch's own condition. So of the 26 cards in cards.json carrying a
+                        // cascade param -- 17 creatures, 8 instants/sorceries -- the only one that
+                        // reaches this line is Frontline Heroism ({2}{R} Enchantment,
+                        // etb_self_creates_tokens: a 1/1 red Soldier with haste). Every deck in the
+                        // regression tier is therefore byte-identical (verified: smoke, regression
+                        // and overnight all unchanged); the deck this actually fixes is the
+                        // v3-heroism-draught Mirrorwing list, where the search was valuing a 3-mana
+                        // enchantment at nothing while the real game got a hasty attacker with it.
                         //
-                        // Do not re-add it before then. The reachable surface is
-                        // wider than it looks: 18 PERMANENTS carry a cascade param today (Fanatic of
-                        // Mogis, Craterhoof, Terastodon, Hornet Queen, Muxus, Siege-Gang, Mogg War
-                        // Marshal, Stoneforge Mystic, ...) against only 5 instants/sorceries -- an
-                        // earlier comment here asserted the opposite and was the reason this looked
-                        // inert.
+                        // Two superseded comments stood here, and both were the same mistake --
+                        // asserting the reachable set from a hand-list instead of counting it. The
+                        // first said all cascade-param cards are instants/sorceries (false: 17 are
+                        // creatures); the second corrected that to "18 PERMANENTS reachable" (also
+                        // false: those permanents are creatures, and creatures do not reach here).
+                        // A byte-identity claim in a comment is a measurement with an expiry date --
+                        // re-count against cards.json rather than trusting any of these three.
+                        OnGoblinEnters(state, state.active_player_index, bi);
                         break;
                     }
                 }

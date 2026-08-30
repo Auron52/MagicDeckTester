@@ -1,8 +1,9 @@
 # The ETB-cascade projection gap
 
-**Status:** open, deliberately. Found 2026-08-30 while re-applying the Mirrorwing candidate-card
-engine support. Not urgent for any shipped deck; written down because the fix is a one-liner that
-looks obviously correct, has already been written once, and cannot currently be **validated**.
+**Status: CLOSED 2026-08-30.** The call is in (`ApplyPlanDirect`'s noncreature-permanent branch,
+beside `OnDragonEnters`). Byte-identical across all three tiers — smoke 48/48, regression 80/80,
+**overnight 192/192** — plus scenarios 42/42 and units 702/702. Kept because the *shape* of how this
+stayed open for so long is worth more than the one-line diff.
 
 ## The gap
 
@@ -11,7 +12,8 @@ Two code paths bring a permanent onto the battlefield:
 | path | fires the param-gated ETB cascade (`OnGoblinEnters`)? |
 |---|---|
 | the executor, `EffectHandler::EnterBattlefield` | **yes**, on every entry, creature or not |
-| the search's projection, `ApplyPlanDirect` | **no** |
+| the search's projection, `ApplyPlanDirect` — creature branch | yes (always did) |
+| the search's projection, `ApplyPlanDirect` — noncreature-permanent branch | **no** ← the gap |
 
 `OnGoblinEnters` is the shared ETB cascade. Despite the name it is not goblin-specific — it reads
 `etb_damage_any`, `etb_damage_each_opponent`, `etb_damage_devotion_color`, `etb_reveal_count`,
@@ -19,77 +21,92 @@ Two code paths bring a permanent onto the battlefield:
 `etb_destroy_own_noncreature_max`, `etb_opp_creatures_debuff`, `tutor_to_hand`, `tutor_to_top`,
 `tutor_types`.
 
-So the search **under-projects** any permanent whose ETB is expressed through one of those params:
-it plans as though the ETB does nothing, then the executor fires it for real. That is an fd-diverge
-in the same family as the Puresteel note in `TurnSolver.cpp`.
+So the search **under-projected** any such permanent: it planned as though the ETB does nothing,
+then the executor fired it for real. An fd-diverge in the same family as the Puresteel note in
+`TurnSolver.cpp`.
 
-The fix is to add `OnGoblinEnters(state, state.active_player_index, bi);` beside the existing
-`OnDragonEnters` call in `ApplyPlanDirect`'s permanent-enter branch.
+## The surface is exactly ONE card — and it is the card under active development
 
-## The surface is much wider than a stale comment claimed
+Counted mechanically against `cards.json` on 2026-08-30 (cascade params come only from the JSON
+`parameters` object; no template injects one, so the count is complete):
 
-The version of this fix that arrived with the Mirrorwing stash carried the justification:
+| kind | count | reaches the gap? |
+|---|---|---|
+| creatures | 17 | **no** — taken by the `else if (is_creature)` branch, which has fired `OnGoblinEnters` (with `tutor_target`/`chosen_x`) all along |
+| instants / sorceries | 8 | **no** — excluded by the branch's own `!IsInstant() && !IsSorcery()` |
+| noncreature permanents | **1** | **yes** |
 
-> *"Byte-identical for every existing deck: all 8 cards carrying a cascade param are instants or
-> sorceries, which never reach this permanent-enter branch."*
+That one card is **Frontline Heroism** — `{2}{R}` Enchantment, `etb_self_creates_tokens: 1`
+(a 1/1 red Soldier with haste). `is_creature` is `def.card.IsCreature()`, so even artifact creatures
+take the creature branch; nothing else can arrive here.
 
-That is **false**, and it is why the change looked inert. Counted against `cards.json` on
-2026-08-30: **18 permanents** carry a cascade param against **5** instants/sorceries.
+Which is why the tier is byte-identical and yet this mattered: **Frontline Heroism is the card the
+Instigator-slot screen chose** (`mirrorwing-instigator-slot-screen.md`, 4-of, −0.4431 avg win turn),
+and it ships in `decks/Mirrorwing Dragon/v3-heroism-draught/`. Under the gap the search valued a
+3-mana enchantment at *nothing* while the real game got a hasty attacker off it.
 
-```
-Craterhoof Behemoth   Fanatic of Mogis     Goblin Matron       Mogg War Marshal
-Elderscale Wurm       Frontline Heroism    Hornet Queen        Muxus, Goblin Grandee
-Goblin Chainwhirler   Goblin Instigator    Hunted Phantasm     Nest Invader
-Massacre Wurm         Siege-Gang Commander Stoneforge Mystic   Terastodon
-Twinshot Sniper       Undercellar Myconid
-```
+### Measured on the deck it affects — −0.268 avg win turn
 
-Lesson worth generalising: **a byte-identity claim in a comment is a measurement with an expiry
-date.** This one may well have been true when written and was still being trusted long after
-`cards.json` moved underneath it.
+Same binary either side of the one-line change (the pre-fix control is the harness's own
+`logs/snapshots/overnight-baseline`, saved at the accept immediately before the edit), v3 list on the
+shipped Mirrorwing profile, d5/b20, 4 seeds x 1000 games:
 
-## UNBLOCKED 2026-08-30 — the flake is fixed
+| seed | gap open | fixed | delta |
+|---|---|---|---|
+| 930001 | 4.6100 | 4.3350 | −0.2750 |
+| 930002 | 4.6030 | 4.3360 | −0.2670 |
+| 930003 | 4.6010 | 4.3340 | −0.2670 |
+| 930004 | 4.6010 | 4.3370 | −0.2640 |
+| **mean** | **4.6038** | **4.3355** | **−0.2683** |
 
-`minotaur-d5-regression-flake.md` is CLOSED (root cause: a `thread_local` probe-structure array read
-by decks that never write it; one-line fix in `FullSearchLineHybrid`). The tier is deterministic
-again — regression 80/80, smoke 48/48 — so a GT movement from re-adding this call is now
-distinguishable from noise. The three steps under "What would close it" are ready to run; nothing
-about the gap itself has changed.
+4/4 seeds, and the effect is ~25x the between-seed spread (range 0.011) — this is not a
+close call. It is also ~24% cheaper per game (~950 s -> ~725 s per 1000 games): the search reaches
+lethal in fewer turns, so there are fewer turns to search.
 
-Note for whoever picks this up: another agent's commit message describes `c4e9930b` as "removing the
-OnGoblinEnters projection call". That is a misreading of history — `OnGoblinEnters` itself is intact
-with 12+ call sites, and the *projection* call in `ApplyPlanDirect` was never committed at all (it
-lived in a stash). `c4e9930b` is where it was deliberately left out, with the KNOWN GAP comment.
+Note the direction for the screen: its verdict was measured with the card **under-projected**, so the
+fix is pure upside for the arm that already won — the −0.4431 conclusion is safe, but its magnitude
+is understated and the ladder is worth re-running.
 
-## Why it WAS blocked: the tier could not validate it
+## The lesson, which this document got wrong itself
 
-The `minotaur_regression_d5_s2002` / `_s3003` cells are **nondeterministic in the full tier**,
-independently of this line and of any local change — the control commit flakes at the same rate.
-Full details and the isolation ladder: `minotaur-d5-regression-flake.md`.
+Three comments have stood at this line. All three asserted the reachable set from a hand-written
+list rather than counting it, and the first two were wrong in opposite directions:
 
-A search that stops under-projecting a real ETB *should* move some lines, and that would be a
-perfectly legitimate rebaseline. But with those exact cells flipping run to run, a genuine movement
-cannot be told apart from the flake. **Fix the flake first**; then this becomes an ordinary GT
-change, accepted on its merits.
+1. *"all 8 cards carrying a cascade param are instants or sorceries, which never reach this branch"*
+   — **false**; 17 are creatures. This is why the change looked inert and was dropped.
+2. *"18 PERMANENTS carry a cascade param against 5 instants/sorceries"* (written here, 2026-08-30,
+   while correcting #1) — the count is right but the **conclusion is wrong**: those permanents are
+   creatures, and creatures take the other branch. It overstated the surface by 18x.
+3. The current comment, which states the split and how it was derived, so the next reader can
+   re-derive it in one command instead of trusting it.
+
+**A byte-identity claim in a comment is a measurement with an expiry date.** #1 may well have been
+true when written and was trusted long after `cards.json` moved underneath it. #2 shows that
+*re-counting* is not enough either — you have to count against the branch that actually executes.
+
+## Why it was blocked, and what unblocked it
+
+`minotaur_regression_d5_s2002` / `_s3003` were nondeterministic in the full tier, independently of
+this line — the control commit flaked at the same rate — so no GT movement here could be told apart
+from the flake. Root-caused and fixed 2026-08-30 (`1e6a9c23`: a `thread_local` probe-structure array
+read by decks that never write it; see `minotaur-d5-regression-flake.md`, CLOSED). With the tier
+deterministic again the change validated in one pass.
+
+Historical note, since it caused confusion across machines: another agent's commit message describes
+`c4e9930b` as "removing the OnGoblinEnters projection call". That is a misreading — `OnGoblinEnters`
+itself was never removed (12+ call sites throughout), and the *projection* call was never committed
+at all (it lived in a stash). `c4e9930b` is where it was deliberately left out, with the KNOWN GAP
+comment that this document was written to explain.
 
 ## Retracted claims — recorded so they are not re-derived
 
-Two conclusions were published during this investigation and are both **wrong**:
+Both were published during the investigation and are **wrong**:
 
-1. *"The `OnGoblinEnters` line causes the minotaur failures."* It does not. The cells flake with the
-   line absent, and on the unmodified control commit.
+1. *"The `OnGoblinEnters` line causes the minotaur failures."* It does not. The cells flaked with the
+   line absent, and on the unmodified control commit. The real cause is in `FullSearchLineHybrid`.
 2. *"`ProfileCache` eviction is the root cause."* It is not. Asserted from ONE clean run at a raised
-   cache cap; repeated five times, 3/5 still fail.
+   cache cap; repeated five times, 3/5 still failed.
 
 Both came from concluding on a **single run of a flaky thing**. On this suite, treat one run as one
 sample of a distribution until proven otherwise, and repeat every arm of a comparison before
 believing the contrast.
-
-## What would close it
-
-1. Fix the nondeterminism (`minotaur-d5-regression-flake.md`).
-2. Re-add the call.
-3. Re-run the full tier and accept the resulting GT movement on its merits.
-
-Until step 1 lands, this projection gap is the lesser of the two problems, and the safer place to
-sit is with the gap open.
