@@ -37,19 +37,51 @@ subsequent runs will disagree with it. Any A/B that touches minotaur d5 will rea
 The score being stable is the small mercy: the *metric* GT compares (`avg`) is unaffected, so
 measurements that only read `avg` are safe. It is the **play digest** that is unreliable.
 
-## It needs a large, HETEROGENEOUS pool — isolation ladder
+## THE REPRODUCER — 8 jobs, ~60% hit rate, ~90 s per run
 
-The cell is perfectly deterministic on its own. Contamination appears only as the pool grows:
+```bash
+./build/Release/mtg --batch logs/soloflake/p_C.json --threads 32 2>/dev/null \
+  | grep minotaur_regression_d5_s2002 | grep -o "digest=[0-9a-f]*"
+#   52937a4626b089b6 == GT (correct)     cf3f51e7546fa082 == the poisoned value
+```
 
-| pool | runs | result |
+Eight jobs, all **d5**: the target plus `minotaur_d5_s3003`, `knights_d5_s2002/s3003`,
+`hinata_d5_s2002/s3003`, `kitty_d5_s2002/s3003`. Run it 5x; expect ~3/5 wrong. (Regenerate the
+manifest from `test/logs/regression/manifest.json` if it is missing — see `logs/soloflake/*.sh`.)
+
+## Isolation ladder — it is NOT pool size, it is d5 NEIGHBOURS
+
+The cell is perfectly deterministic alone. Contamination depends on *which* jobs share the process,
+not how many. Every row is 5 runs unless noted:
+
+| pool | jobs | result |
 |---|---|---|
-| 1 job — this cell alone, 32 threads | 5 | **stable, = GT** |
-| 2 jobs — + `slivers_regression_d0_s2002` | 5 | stable, = GT |
-| 32 jobs — every d5 cell | 1 | stable, = GT *(under-sampled)* |
-| **80 jobs — the full tier** | 5 + 5 + 5 | **flaky, 40–80%** |
+| this cell alone, 32 threads | 1 | **stable, = GT** |
+| + `slivers_regression_d0_s2002` | 2 | stable |
+| target + every **d0** cell | 17 | stable |
+| target + every **d3** cell | 33 | **stable** — bigger than pools that DO flake |
+| halfA: antilife, auras, burn, creature, dragons, dragonstorm, fivecolour, goblins | 17 | stable |
+| quadD: mirrorwing, slivers, stompy, th | 9 | stable |
+| every **d5** cell | 32 | **FLAKY 2/5** |
+| halfB: hinata, kitty, knights, minotaur, mirrorwing, slivers, stompy, th | 15 | **FLAKY 4/5** |
+| **quadC: hinata, kitty, knights, minotaur** | **8** | **FLAKY 3/5** |
+| the full tier | 80 | **FLAKY 40–80%** (15 runs) |
 
-So this is cross-**job** contamination inside one `mtg --batch` process, not intra-job threading:
-32 threads on a single job is stable, which rules out a plain race within the job's own games.
+Two conclusions:
+
+* **Not pool size.** The 33-job d3 pool and 17-job halfA stay clean while 8 jobs of quadC flake.
+* **d5-specific.** d5 cells are the ones that omit an explicit depth, so `value_play` owns the depth
+  and **value-leaf sidecars are live**. Upstream adopted minotaur's sidecar (trust d5) in `9b54274f`
+  immediately before this appeared. hinata / kitty / knights / minotaur is the poisoning set;
+  mirrorwing / slivers / stompy / th is not.
+
+It is cross-**job** contamination inside one `mtg --batch` process, not intra-job threading: 32
+threads on a single job is stable, which rules out a race among a job's own games.
+
+**Next bisection step:** split quadC's non-target jobs `{knights×2, hinata×2, minotaur_s3003,
+kitty×2}` in half and repeat. Note `--deck=minotaur` (which contains all three minotaur d5 cells)
+is stable 3/3, which argues against same-deck cross-seed contamination — so expect the culprit to be
+a foreign deck.
 
 ### REFUTED: `ProfileCache` eviction
 
@@ -66,6 +98,18 @@ flake persists at the same rate:
 Note that raising the cap stops eviction but leaves the cache **shared**, and if anything makes
 sharing *more* persistent. Shared-mutable-state-in-the-cache is therefore not excluded; only the
 eviction mechanism is.
+
+## ELIMINATED by inspection — do not re-derive these
+
+Every known nondeterminism source in the engine is accounted for. Each looked plausible; each is out:
+
+| candidate | why it is out |
+|---|---|
+| memo key collision across decks (`solvememo` / `enummemo`) | both are `thread_local` and keyed on `g_decision_epoch`, which is **only ever incremented** (3 `++` sites, no assignment or reset). An earlier game's entries on a reused thread carry a strictly lower epoch and can never be hit |
+| wall-clock search deadline | `SearchBudget` is **virtual** — it counts rollout turn-steps via `NODES_PER_VIRTUAL_MS`, not time. It exists precisely to kill this class |
+| deck-numbering leak (`decknumbering::t_map`) | would change the shuffle and therefore the SCORE; scores are stable to 4 dp in every observation |
+| `GameWorkMeter` / `CellCeiling` calibration | only armed when a job sets `abandon_k`/`abandon_calib`. The regression manifest sets neither, and the "[batch] relative per-game ceiling armed" banner is absent from the logs |
+| `ProfileCache` eviction | refuted empirically: `MTG_BATCH_PROFILE_CACHE=64` (no eviction) still fails 3/5. Note this leaves the cache SHARED, so shared-mutable-state in it is *not* excluded — only eviction is |
 
 ## Leading hypothesis, not confirmed
 
