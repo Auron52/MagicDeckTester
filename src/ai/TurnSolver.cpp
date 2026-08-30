@@ -5551,6 +5551,38 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p)
 // the same one-apply-measures-the-list convention as g_bp_cands_last.
 static thread_local int g_bp_cands_fp_distinct = -1;
 
+// Does this continuation cand APPLY as a no-op -- i.e. field-for-field what the explicit EMPTY
+// continuation's special case constructs (Plan{} + land_decided)? Checks every field
+// ApplyPlanDirect reads (ordering-only metadata -- value / wins_this_turn / pump_waste /
+// atk_forfeit -- deliberately excluded: the apply never reads them). MAINTENANCE: a new
+// apply-read Plan field must be added here, or the EMPTY pre-skip can silently treat two
+// different plans as equal (a lossy truncation).
+static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
+{
+    return p.actions.empty() && p.breakpoint_actions.empty()
+        && p.land_decided && p.land_to_play.empty() && p.fetch_target.empty()
+        && p.land_face.empty()
+        && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1
+        && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
+        && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
+        && p.vial_charge_choice == -1 && !p.searched_order && p.atk_dork_release == -1
+        && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_wave0;
+}
+// Companion channel (filled by the k=0 apply's in-scope enumeration, node site 3 only): the
+// cands list contains an apply-empty entry, so the host's explicit EMPTY arm (kBpEmptyChoice)
+// would reach a state that cands child's apply already reached -- the post-apply dedup kills it
+// today at the cost of a full resume apply; the host may skip it PRE-apply instead. EXACT: if
+// the k loop reaches k == n, every cands index was visited, so the empty cand's state key is in
+// the dedup set (applied, or itself collapsed onto an even earlier key) -- the EMPTY arm is a
+// guaranteed dupe. An overrun that breaks the loop early never reaches the EMPTY arm anyway.
+// MTG_BP_NODE_EMPTYSKIP=0 restores the apply-then-dedup behaviour (A/B isolation).
+static thread_local bool g_bp_cands_has_empty = false;
+static bool BpNodeEmptySkip()
+{
+    static const bool on = EnvOn("MTG_BP_NODE_EMPTYSKIP", true);
+    return on;
+}
+
 // [bp-node] anatomy probe (under MTG_ROLLOUT_STATS, like the units buckets): where does the
 // node's cost live -- how many base plans pend, how many collapse on the prefix dedup (the
 // duplicate-tails waste the enumeration filter would delete), how many children run, how many of
@@ -5575,6 +5607,7 @@ namespace bpnode
     inline std::atomic<uint64_t> g_dupes_innode{0};
     inline std::atomic<uint64_t> g_dupes_empty{0};
     inline std::atomic<uint64_t> g_fp_predictable{0};
+    inline std::atomic<uint64_t> g_empty_preskips{0};  // EMPTY arms skipped pre-apply (exact)
     struct Dumper
     {
         ~Dumper()
@@ -5591,11 +5624,12 @@ namespace bpnode
                          (unsigned long long)g_empty_adopted.load());
             std::fprintf(stderr,
                          "[bp-node] dupes_innode=%llu dupes_cross=%llu dupes_empty=%llu"
-                         " fp_predictable=%llu\n",
+                         " fp_predictable=%llu empty_preskips=%llu\n",
                          (unsigned long long)g_dupes_innode.load(),
                          (unsigned long long)(g_child_dupes.load() - g_dupes_innode.load()),
                          (unsigned long long)g_dupes_empty.load(),
-                         (unsigned long long)g_fp_predictable.load());
+                         (unsigned long long)g_fp_predictable.load(),
+                         (unsigned long long)g_empty_preskips.load());
         }
     };
     inline Dumper g_dumper;
@@ -15718,6 +15752,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 g_bp_cands_fp_distinct =
                     static_cast<int>(std::unique(fps.begin(), fps.end()) - fps.begin());
             }
+            // EMPTY pre-skip channel (PLAY logic under the node, unlike the stats block above):
+            // report whether the list holds an apply-empty entry, so the host can skip its
+            // explicit EMPTY arm as a guaranteed post-apply dupe. Site 3 k=0 only.
+            if (BpNodeEnabled() && site == 3 && plan.bp_choice == 0)
+            {
+                g_bp_cands_has_empty = false;
+                for (const TurnSolver::Plan& cp : cands)
+                { if (IsApplyEmptyPlan(cp)) { g_bp_cands_has_empty = true; break; } }
+            }
             // Sample once per distinct breakpoint, not once per variant: the W variants of one base
             // plan all re-reach the SAME breakpoint state (that is the enum memo's premise), and
             // bp_choice == 0 is always emitted, so gating on it counts each occurrence exactly once.
@@ -24778,11 +24821,22 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 // cross-node. g_bp_cands_fp_distinct is filled by child k=0's in-scope enumeration.
                 std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pend_local;
                 g_bp_cands_fp_distinct = -1;
+                g_bp_cands_has_empty   = false;
                 for (int k = 0; node_n < 0 || k <= node_n; ++k)
                 {
                     // Mid-pass overrun: same abort the recursion's entry guards take.
                     if (budget != nullptr && budget->Overrun())
                     { ++g_fs_trunc_events; break; }
+                    // EMPTY pre-skip: the k loop reached the EMPTY arm (so every cands index was
+                    // visited) and the list holds an apply-empty entry -- the EMPTY arm's state
+                    // is already in the dedup set, so the resume apply it would pay is pure
+                    // waste. Exact by construction (see g_bp_cands_has_empty).
+                    if (k == node_n && g_bp_cands_has_empty && BpNodeEmptySkip())
+                    {
+                        if (s_rollout_stats)
+                        { bpnode::g_empty_preskips.fetch_add(1, std::memory_order_relaxed); }
+                        break;
+                    }
                     ConsumeAt(budget, unitsite::kFsBpNode);
                     TurnSolver::Plan v = q;
                     v.bp_choice = (node_n >= 0 && k == node_n) ? kBpEmptyChoice : k;
@@ -25331,10 +25385,18 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // Dupe-structure probe scratch (MTG_ROLLOUT_STATS only) -- see the m2 host.
                 std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pend_local;
                 g_bp_cands_fp_distinct = -1;
+                g_bp_cands_has_empty   = false;
                 for (int k = 0; node_n < 0 || k <= node_n; ++k)
                 {
                     // Mid-pass overrun: same abort the recursion's entry guards take.
                     if (budget != nullptr && budget->Overrun()) { ++g_fs_trunc_events; break; }
+                    // EMPTY pre-skip -- see the m2 host (exact: a guaranteed post-apply dupe).
+                    if (k == node_n && g_bp_cands_has_empty && BpNodeEmptySkip())
+                    {
+                        if (s_rollout_stats)
+                        { bpnode::g_empty_preskips.fetch_add(1, std::memory_order_relaxed); }
+                        break;
+                    }
                     ConsumeAt(budget, unitsite::kFsBpNode);
                     if (s_rollout_stats)
                     {
