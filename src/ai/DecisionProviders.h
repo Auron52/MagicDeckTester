@@ -964,6 +964,23 @@ public:
     bool        DigDecisionSearched() const override { return true; }
 };
 
+// Mono-red Dragons ramp. Exists to hold ONE measured hook: the cleanup-discard bucket policy.
+// Everything else inherits Generic -- the deck was routed to GenericProvider when its
+// GoblinsProvider misroute was fixed precisely because it had no measured heuristic of its own,
+// and a bucket policy is exactly such a heuristic.
+class DragonsProvider : public GenericProvider
+{
+public:
+    const char* Name() const override { return "Dragons"; }
+    // The generic fallback is DESCENDING MANA VALUE, which on this deck sheds Utvara Hellkite (8),
+    // then Lathliss/Inferno (6), then Glorybringer/Scourge (5) -- the payoffs in almost exactly
+    // descending order of importance -- while keeping Lightning Bolt and Sol Ring. That is not
+    // merely arbitrary here (the skill's word for it), it is INVERTED: on this deck the expensive
+    // cards ARE the deck. MTG_DRAGONS_BUCKET_DISCARD=0 -> generic base (A/B hatch).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
+};
+
 // Process-lifetime default provider (stateless, shared across threads). Used as the
 // nullptr fallback so any raw-GameState path stays valid.
 const DecisionProvider& DefaultProvider();

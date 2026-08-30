@@ -8812,6 +8812,7 @@ namespace
     const MirrorwingProvider     g_mirrorwing;
     const EquipmentProvider      g_equipment;
     const StompyProvider         g_stompy;
+    const DragonsProvider        g_dragons;
     const AurasProvider          g_auras;
 }
 
@@ -9040,9 +9041,12 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // cleanup-discard bucket policy (docs/design/minotaur-discard-policy-proposal.md) is ever
     // approved and measured, THAT is when this becomes a MinotaurProvider.
     if (minotaur) { return g_generic; }
-    // Dragons: GenericProvider, for the reason spelled out in the detection block -- Dragonspeaker
-    // Shaman's reduces_spell_subtype sets the goblin signature on its own. Placed above goblin.
-    if (dragons) { return g_generic; }
+    // Dragons: DragonsProvider (Generic + the user-approved cleanup-discard bucket policy; every
+    // other hook inherits Generic). Must still sit ABOVE goblin for the reason spelled out in the
+    // detection block -- Dragonspeaker Shaman's reduces_spell_subtype sets that signature on its
+    // own. It was routed to g_generic when that misroute was fixed, because a deck earns its own
+    // provider only once it has a MEASURED hook to hold; the bucket policy is that hook.
+    if (dragons) { return g_dragons; }
     if (goblin) { return g_goblins; }
     // Equipment aggro; must WIN OVER anti (Stoneforge Mystic's tutor_to_hand sets that signature
     // on its own -- see the equipment detection note above). No other deck carries the equipment
@@ -10103,6 +10107,193 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         if (kept_magnet >= 0) { put(kept_magnet); }
         for (int i : magnets) { put(i); }   // any magnet the group protection released
     }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
+// ---- DragonsProvider::CleanupDiscardCandidates ------------------------------
+//
+// USER-AUTHORED role-bucket policy (approved 2026-08-30; see
+// docs/design/dragons-discard-policy-proposal.md for the rationale and the numbers).
+//
+// WHY THIS DECK NEEDS ONE AT ALL. The shared fallback's tier B is descending mana value, which
+// here sheds Utvara Hellkite (8) -> Lathliss/Inferno (6) -> Glorybringer/Scourge (5): the payoffs
+// in almost exactly descending order of importance, while keeping Lightning Bolt and Sol Ring.
+//
+// And it is NOT a rare decision, which is the thing a real-play census gets wrong (user,
+// 2026-08-30). MTG_SHED_STATS over 200 games at the shipped d5/b40: 66 sheds in real play against
+// 661,269 inside the SEARCH -- a 10,020x ratio -- and 99.6% of those are taken with fewer than four
+// lands on the battlefield. Index 0 of this ranking decides every one of them with no search above
+// it, so the rule shapes which plans the search believes are good even in games where nothing is
+// ever discarded.
+//
+// THE BUCKETS (quota-first, net of board; only overflow beyond a quota is sheddable):
+//   1 MANA. Lands to reach 4-5 on the battlefield, board counted first; then rocks, Sol Ring first
+//     (it alone nets +2 off a {1}). A Karoo (etb_bounce_land) counts as a land ONLY if another land
+//     exists to bounce -- with none it returns ITSELF and is a blank. That was found on Minotaur's
+//     Rakdos Carnarium (seed 1001 gi=27: two Karoos, no other land, zero lands played in eight
+//     turns) and this deck runs three Gruul Turf carrying the same param.
+//   2 COST REDUCERS (reduces_spell_subtype_amount): 2 while none is on board, 1 once one is. They
+//     take 2 off EVERY Dragon -- Utvara 8->6, Lathliss 6->4 -- so they are what makes the top of
+//     the curve reachable.
+//   3 PAYOFFS: keep at least 2, and deliberately FEWER than a threats-bucket instinct suggests
+//     (user: "you might keep fewer dragons, since they can be expensive... 2 at minimum"). A hand
+//     of five Dragons and two lands does nothing.
+//   4 A 2-MANA ENABLER, only IF THERE IS SPACE (user) -- a SOFT quota filled from overflow, never
+//     displacing the three above.
+//
+// Classification is by PARAMS and subtype, never card names, so a screening arm that swaps a card
+// keeps the right bucket. The list names every hand card it has an opinion about; anything it does
+// not name falls behind everything it did (omission == keep), and the return routes through
+// CleanupDiscardRankingWithOrder so the staged-card and required-piece protections stay
+// engine-enforced.
+std::vector<int> DragonsProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_bucket = EnvOn("MTG_DRAGONS_BUCKET_DISCARD", true);
+    if (!s_bucket) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    auto def_of  = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto mv_of   = [&](int i) { return CleanupDiscardManaValue(ap.hand[i]); };
+    auto is_land = [&](int i) { return CleanupDiscardIsLand(ap.hand[i]); };
+    auto is_karoo = [&](int i)
+    { const CardDefinition* d = def_of(ap.hand[i]); return d && d->params.etb_bounce_land; };
+    auto is_rock = [&](int i)
+    { const CardDefinition* d = def_of(ap.hand[i]); return d && d->params.mana_rock; };
+    auto is_reducer = [&](int i)
+    { const CardDefinition* d = def_of(ap.hand[i]); return d && d->params.reduces_spell_subtype_amount > 0; };
+    // The payoff subtype is DERIVED, not hardcoded: it is whatever this deck's own cost reducers
+    // discount. A reducer that picks its type at resolution (chooses_creature_type) names nothing,
+    // so the literal-subtype reducer is the one that supplies it.
+    std::string tribe;
+    for (int i = 0; i < n && tribe.empty(); ++i)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        if (d && !d->params.reduces_spell_subtype.empty()) { tribe = d->params.reduces_spell_subtype; }
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (!tribe.empty()) { break; }
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && !d->params.reduces_spell_subtype.empty()) { tribe = d->params.reduces_spell_subtype; }
+    }
+    auto is_payoff = [&](int i)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        if (!d || !d->card.IsCreature()) { return false; }
+        if (is_reducer(i)) { return false; }             // a reducer is mana, not a payoff
+        return tribe.empty() ? (mv_of(i) >= 4) : CardHasSubtype(ap.hand[i], tribe);
+    };
+
+    // ---- board state, netted first -------------------------------------------------------------
+    int board_lands = 0, board_rocks = 0, board_reducers = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (p.card.IsLand())                                   { ++board_lands; }
+        else if (d && d->params.mana_rock)                     { ++board_rocks; }
+        if (d && d->params.reduces_spell_subtype_amount > 0)   { ++board_reducers; }
+    }
+
+    // ---- partition the hand --------------------------------------------------------------------
+    std::vector<int> lands, rocks, reducers, payoffs, enablers, rest;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged)  { continue; }
+        if (is_land(i))              { lands.push_back(i); }
+        else if (is_reducer(i))      { reducers.push_back(i); }
+        else if (is_payoff(i))       { payoffs.push_back(i); }
+        else if (is_rock(i) || mv_of(i) <= 2) { enablers.push_back(i); }
+        else                         { rest.push_back(i); }
+    }
+
+    // Lands: a Karoo with nothing to bounce is a blank, so it is kept LAST among lands and does not
+    // count toward the quota. Non-Karoo lands first, then Karoos.
+    const bool karoo_live = board_lands > 0
+        || std::any_of(lands.begin(), lands.end(), [&](int i) { return !is_karoo(i); });
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b)
+    { return static_cast<int>(is_karoo(a)) < static_cast<int>(is_karoo(b)); });
+
+    // Rocks by yield: Sol Ring (produces_amount 2 off {1}) first, then cheapest.
+    std::stable_sort(rocks.begin(), rocks.end(), [&](int a, int b)
+    {
+        const CardDefinition* da = def_of(ap.hand[a]);
+        const CardDefinition* db = def_of(ap.hand[b]);
+        const int ya = da ? da->params.produces_amount : 1;
+        const int yb = db ? db->params.produces_amount : 1;
+        if (ya != yb) { return ya > yb; }
+        return mv_of(a) < mv_of(b);
+    });
+    // Payoffs: cheapest-to-deploy kept first, because distance-to-playable is what decides which of
+    // them is real. A resolved reducer erases 2 of that distance for EVERY payoff, which is the one
+    // place the fallback's "shed the biggest" must stop agreeing with us.
+    const int reducer_discount = 2 * (board_reducers > 0 ? 1 : 0);
+    std::stable_sort(payoffs.begin(), payoffs.end(), [&](int a, int b)
+    { return (mv_of(a) - reducer_discount) < (mv_of(b) - reducer_discount); });
+    // Enablers: cheapest first, and a rock outranks a pure trick at equal cost.
+    std::stable_sort(enablers.begin(), enablers.end(), [&](int a, int b)
+    {
+        if (mv_of(a) != mv_of(b)) { return mv_of(a) < mv_of(b); }
+        return static_cast<int>(is_rock(a)) > static_cast<int>(is_rock(b));
+    });
+
+    // ---- quotas ---------------------------------------------------------------------------------
+    const int kLandTarget    = 5;    // "enough land to have 4 or 5 on the field" (user)
+    const int kPayoffFloor   = 2;    // "2 at minimum" (user)
+    const int kEnablerSlots  = 1;    // "if there is space" -- soft, filled from overflow only
+
+    int land_need = std::max(0, kLandTarget - board_lands - board_rocks);
+    int reducer_need = board_reducers > 0 ? 1 : 2;
+
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; };
+
+    for (int i : lands)
+    {
+        if (land_need <= 0) { break; }
+        if (is_karoo(i) && !karoo_live) { continue; }   // a self-bouncing Karoo is not a land
+        take(i); --land_need;
+    }
+    for (int i : rocks) { if (land_need <= 0) { break; } take(i); --land_need; }
+    for (int i : reducers) { if (reducer_need <= 0) { break; } take(i); --reducer_need; }
+    int payoff_need = kPayoffFloor;
+    for (int i : payoffs) { if (payoff_need <= 0) { break; } take(i); --payoff_need; }
+    // The soft enabler slot: only once every hard quota above is satisfied.
+    if (land_need <= 0 && reducer_need <= 0 && payoff_need <= 0)
+    {
+        int slots = kEnablerSlots;
+        for (int i : enablers) { if (slots <= 0) { break; } if (!keep[i]) { take(i); --slots; } }
+    }
+
+    // ---- shed order: everything unkept, weakest first -------------------------------------------
+    std::vector<int> shed;
+    std::vector<char> listed(static_cast<std::size_t>(n), 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[static_cast<std::size_t>(i)]) { return; }
+        if (keep[static_cast<std::size_t>(i)] || ap.hand[i].m_is_staged) { return; }
+        listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
+    };
+
+    // S0 -- a dead Karoo (nothing to bounce) is the single most worthless card in the hand.
+    for (int i : lands) { if (is_karoo(i) && !karoo_live) { put(i); } }
+    // S1 -- surplus lands beyond the quota. The deck never wants a sixth source.
+    for (int i : lands) { put(i); }
+    // S2 -- surplus payoffs, MOST EXPENSIVE FIRST. This is where the fallback and this policy agree
+    // in the common land-light state and diverge once a reducer lands (see reducer_discount).
+    for (auto it = payoffs.rbegin(); it != payoffs.rend(); ++it) { put(*it); }
+    // S3 -- surplus reducers: dead once the discount is already online.
+    for (auto it = reducers.rbegin(); it != reducers.rend(); ++it) { put(*it); }
+    // S4 -- surplus enablers and everything unclassified, cheapest-value last.
+    for (auto it = enablers.rbegin(); it != enablers.rend(); ++it) { put(*it); }
+    for (int i : rocks) { put(i); }
+    for (int i : rest)  { put(i); }
+
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
