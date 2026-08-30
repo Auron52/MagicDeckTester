@@ -28,7 +28,13 @@ declare -A DECK_FILE=(
   [auras]=decks/Auras/Auras.cod
   [goblins]=decks/Goblins/Goblins.cod
   [creature_giving]="decks/Creature Giving/Creature Giving.cod"
-  [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.cod"
+  # PINNED TO THE ARCHIVED LIST, deliberately and TEMPORARILY (2026-08-30). The shipping
+  # decks/Mirrorwing Dragon/ is now the Anger-4 / Oracle-3 list (3faf5c76) and its profile /
+  # value leaf / keep table have not been regenerated yet. Measuring the new list against GT
+  # taken on the old one is not a regression, it is a different deck -- so the suite keeps
+  # running the list the GT actually describes until the rebaseline lands. Repoint both this
+  # and DECK_PROF back to the top level in the same commit as that rebaseline.
+  [mirrorwing]="decks/Mirrorwing Dragon/v2-instigator-entrance/Mirrorwing Dragon.cod"
   [fivecolour]=decks/FiveColour/FiveColour.cod
   [stompy]=decks/StompySurprise/StompySurprise.cod
   [minotaur]=decks/Minotaur/Minotaur.cod
@@ -46,7 +52,10 @@ declare -A DECK_PROF=(
   [auras]=decks/Auras/Auras.profile.json
   [goblins]=decks/Goblins/Goblins.profile.json
   [creature_giving]="decks/Creature Giving/Creature Giving.profile.json"
-  [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
+  # Pinned to the archived list -- see the DECK_FILE note above. The value leaf and the
+  # exhaustive keep table resolve directory-relative off THIS path, so pointing it at the
+  # variant folder moves the whole fitted apparatus with it.
+  [mirrorwing]="decks/Mirrorwing Dragon/v2-instigator-entrance/Mirrorwing Dragon.profile.json"
   [fivecolour]=decks/FiveColour/FiveColour.profile.json
   [stompy]=decks/StompySurprise/StompySurprise.profile.json
   [minotaur]=decks/Minotaur/Minotaur.profile.json
