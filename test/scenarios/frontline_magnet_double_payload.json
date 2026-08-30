@@ -1,6 +1,6 @@
 {
  "_comment": "Frontline Heroism, part 3 of 3: the interaction the implementation note claims and nothing else tests -- under a magnet the new Soldier receives TWO payloads. Board: Heroism + Zada (3/3, not sick) + two Forests. Hand: Oracle's Restoration. Casting it at Zada triggers BOTH Heroism (make a Soldier, copy the spell onto it) and Zada (copy for each OTHER creature you control). Taking Heroism's trigger first -- the controller's choice, CR 603.3b -- means the Soldier exists when Zada's fan is built, so Zada's fan also targets it. Three instances resolve in total: the original on Zada, Heroism's copy on the Soldier, Zada's copy on the Soldier. Zada 3/3 -> 4/4; Soldier 1/1 -> 3/3 from BOTH +1/+1s; swing = 4 + 3 = 7, exactly opponent_life. The failure modes this pins are all one short or worse: Soldier gets only ONE payload -> 4 + 2 = 6; Heroism does not fire, so Zada has no other creature to copy onto -> 4; Soldier lacks haste -> 4. Asserts active_life 23 (three +1 life riders). NOTE Heroism is an ENCHANTMENT, so it is not itself a legal copy recipient and adds no body of its own to Zada's fan -- if it were wrongly treated as a creature the fan would be wider and the total would overshoot 7.",
- "deck": "decks/Mirrorwing Dragon/v3-heroism-draught/Mirrorwing Dragon.cod",
+ "deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
  "turn": 5,
  "on_the_play": true,
  "max_turns": 5,
