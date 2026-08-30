@@ -112,3 +112,13 @@ the 2026-08-26 games. This confirms the parent doc's commit-bound warning empiri
 ledger is a measurement of (engine, env), not a stable property of the seed list. Any future
 pricing work should regenerate its own snapshot first and diff against the tsv before trusting
 either.
+
+## 2026-08-30 CORRECTION: step 2 (production-table audit) is DEAD — the short-count bucket is the Spasm float
+
+Sampled 12 of the 89 hinata short-count rows (control replays, logs read): **12/12 short turns
+cast Reality Spasm** (often several, plus Irencrag Feat, ending in Crackle). A float-funded turn
+spends more than its sources produce — exactly the "short on raw count" abstention — so cause 3's
+bulk is cause 2 wearing its label, and the `{X}` bucket is largely Spasm's own cost string.
+There is no missing-production-path pile to audit. The single unlock for the hinata unpriced mass
+is the Spasm model rework + ledger support, now designed in
+[`reality-spasm-phase2.md`](reality-spasm-phase2.md) (the link above that used to dangle).
