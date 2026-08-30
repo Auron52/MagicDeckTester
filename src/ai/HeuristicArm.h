@@ -97,6 +97,7 @@ enum Slot : int
     MAIN2_DROP,               // MTG_MAIN2_DROP            the land drop is offered POST-combat too
     BP_NODE,                  // MTG_BP_NODE               plain-cantrip breakpoint = REAL SEARCH NODE
     HINATA_RANGE,             // MTG_HINATA_RANGE          condemnation RANGES: engine/find tiers' latest
+    CANTRIP_ORDER,            // MTG_CANTRIP_ORDER         canonical cantrip order bans permutation chains
     COUNT
 };
 
@@ -171,6 +172,7 @@ inline const char* Name(int slot)
         "MTG_MAIN2_DROP",
         "MTG_BP_NODE",
         "MTG_HINATA_RANGE",
+        "MTG_CANTRIP_ORDER",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

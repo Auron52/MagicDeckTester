@@ -6283,8 +6283,10 @@ static void ApplyCantripFirstOrder(std::vector<Action>& acts)
 // the A/B shows a drawn-cantrip regression, that exemption is the first fix.
 inline bool CantripOrderEnabled()
 {
+    // Per-JOB overridable (heurarm) so the P/P-separation arms pool into one batch (USER
+    // 2026-08-30: "We should try separating Ponder and Preordain").
     static const bool v = EnvOn("MTG_CANTRIP_ORDER");
-    return v;
+    return heurarm::Flag(heurarm::CANTRIP_ORDER, v);
 }
 
 // Semantic tier within equal mana value; -1 = not in the ordered class.

@@ -156,6 +156,17 @@ work lever on this deck: the node's state dedup is the sound version of the same
 argument, and no order narrow enough to bite survives Hinata's re-pricing chains. Not worth
 carrying on Hinata in any form; the class's equal-compute gap will not be closed here.
 
+**2026-08-30 (latest) — the pruning ceiling is CLOSED OUT and the adoption bar is set.**
+Maximal condemnation (all order/mana gates off — the absolute bound, zero soundness): drop
+rate 17.9%, **units −8.1%** (19.95M). P/P separation: MTG_HINATA_PP_STRICT is outcome-identical
+to node (0 changed games / 2400 — the node searches both orders); MTG_CANTRIP_ORDER (heurarm
+slot added) buys −2.6% units but deletes train gi811's T4 win at 100x budget (earlier-turn
+P/Pre sequencing reaches different library states — not duplicates) → fails the bar, stays a
+measurement lever. USER 2026-08-30: *"Hinata is a slow enough deck that I don't want to pay
+50% extra."* With the ceiling measured (perfect stack ≈ 1.2x best case), **MTG_BP_NODE stays
+DEFAULT OFF** — the premium is the added search dimension itself, and the structure-vs-compute
+question is answered by the USER's bar unless a structurally cheaper form is invented.
+
 ## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
 
 The generic-lever collateral check the v1 caveats called for: **14 of 15 decks + all 25

@@ -50,6 +50,43 @@
 > sighting); Ornithopter's ruling said "before Soulfire" but a post-Soulfire one still targets
 > Crackle, so its range errs wide pending review.
 
+> ## STATUS 2026-08-30 (LATEST): the FULL POSSIBILITY measured, P/P separation measured, and
+> the USER's cost bar set. Three follow-ups to the verdict above, all on the node arm:
+>
+> * **Ornithopter's range DELETED (USER ruling):** "Before soulfire for ornithopter deals with
+>   the cast you mentioned since, if we get it off soulfire, it can be played after soulfire."
+>   The staged-off-Soulfire copy is NEW at that breakpoint (drawn-card rule), so the only sound
+>   late-Ornithopter line needs no range; an in-hand one held through Soulfire was genuinely
+>   declined. Single spot at 14; implemented by TEMPLATE so it survives MTG_HINATA_DORK_TIE.
+>   The 5 deleted-line games still recover.
+> * **CONDEMNATION'S ABSOLUTE CEILING = −8.1% units** (USER: "I would like to see what the full
+>   possibility is"). Maximal arm — ORDER_AWARE=0, LAND_SETTLED=0, MANA_SITE_EXEMPT=0, i.e.
+>   condemn EVERY payable dominated in-hand-before card, zero soundness: drop rate 17.9%
+>   (2.18M drops, 3.5x the exemption-free rule), units 19.95M vs node 21.70M. So: sound = −0%,
+>   exemption-free-unsound = −2%, absolute-maximum = −8%. The dedup-overlap explanation is
+>   confirmed three ways; condemnation cannot fix the node's premium at ANY soundness level.
+> * **P/P separation (USER: "We should try separating Ponder and Preordain"), two levers:**
+>   - `MTG_HINATA_PP_STRICT` (nominal 10/11 split): **outcome-identical to node — 0 changed
+>     games in 2400** (the node searches both orders and dedup merges convergent states). Free;
+>     adopting it into the reviewed order is a pure doctrine choice with no play effect here.
+>   - `MTG_CANTRIP_ORDER` (canonical-order ban at enumeration, now a heurarm slot): −2.6%
+>     units, hold −0.0017 (churn incl. a gi140 8→5 recovery), train +0.0025 (3 worse / 0
+>     better) — and the escalation classifies **train gi811 as a DELETED LINE** (node wins T4
+>     at 100x, the ban's arm never does; the win turn has NO cantrips — the damage is an earlier
+>     turn's P/Pre sequencing, which under clairvoyance reaches genuinely different library
+>     states, i.e. NOT permutation duplicates). Fails the no-lossy-truncation bar: stays a
+>     measurement lever, default OFF.
+>
+> **THE COST REALITY (USER: "That means we have a real issue, though, performance-wise";
+> "Hinata is a slow enough deck that I don't want to pay 50% extra"):** the node's premium
+> (1.35x units, d3 1.63x / d5 1.18x wall) is STRUCTURAL — non-duplicate children are 3.5M
+> applies and the pruning ceiling is now measured: sound condemnation 0%, cantord −2.6%
+> (lossy), maximal-unsound condemnation −8%, pre-apply dupe prediction ≤15% (position-guard
+> problem, mostly unpredictable), EMPTY pre-skip −0.8% (shipped). Even a perfect stack leaves
+> ~1.2x. Given the USER's bar, MTG_BP_NODE stays DEFAULT OFF; the doctrine is parked until a
+> structurally cheaper form exists (the searched continuation's cost IS the search dimension it
+> adds, not overhead to be shaved).
+
 **Status of the section below: the original plan, kept for the reference numbers. Steps 1-4
 executed 2026-08-30 (see STATUS above); step 5 answered negatively (units do not shrink).**
 
