@@ -15921,14 +15921,27 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         && state.battlefield[bi].controller_index == state.active_player_index)
                     {
                         OnDragonEnters(state, state.active_player_index, bi);
-                        // ...and the param-gated ETB cascade, which the executor's
-                        // EffectHandler::EnterBattlefield fires on EVERY entry, creature or not.
-                        // Without it an enchantment's ETB token (Frontline Heroism's 1/1 Soldier)
-                        // would exist in the real game and NOT in the projection -- an fd-diverge of
-                        // exactly the shape the Puresteel note above records. Byte-identical for
-                        // every existing deck: all 8 cards carrying a cascade param are instants or
-                        // sorceries, which never reach this permanent-enter branch.
-                        OnGoblinEnters(state, state.active_player_index, bi);
+                        // KNOWN GAP, deliberately left open -- see docs/design/etb-cascade-projection-gap.md.
+                        // The executor's EffectHandler::EnterBattlefield fires the param-gated ETB
+                        // cascade (OnGoblinEnters) on EVERY entry; this projection does not. So a
+                        // permanent whose ETB is expressed through a cascade param is under-projected
+                        // by the search.
+                        //
+                        // Adding `OnGoblinEnters(state, state.active_player_index, bi);` here is the
+                        // fix. It is left out only because it cannot currently be VALIDATED: the
+                        // minotaur_regression_d5 cells are nondeterministic in the full tier (they
+                        // flake on the unmodified control commit too -- see
+                        // docs/design/minotaur-d5-regression-flake.md), so a genuine GT movement from
+                        // this change cannot be told apart from the flake. Fix that first, then this
+                        // is an ordinary rebaseline. The line itself was measured NOT to be the cause
+                        // of the flake.
+                        //
+                        // Do not re-add it before then. The reachable surface is
+                        // wider than it looks: 18 PERMANENTS carry a cascade param today (Fanatic of
+                        // Mogis, Craterhoof, Terastodon, Hornet Queen, Muxus, Siege-Gang, Mogg War
+                        // Marshal, Stoneforge Mystic, ...) against only 5 instants/sorceries -- an
+                        // earlier comment here asserted the opposite and was the reason this looked
+                        // inert.
                         break;
                     }
                 }
