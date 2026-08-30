@@ -482,3 +482,49 @@ credit2 / creditef / nodecred2 / nodecredef / recipecred2 / recipecredef / m2cre
 now MEANS credit+the three fixes). Early results vs shipped-greedy 5.6433/5.6917:
 credit2 5.6417/5.6950, creditef 5.6417/5.6942 -- ~neutral so far; node/recipe/m2 arms pending.
 Parse `[win] job= gi= wt=` lines from ef_ladder.err for paired per-game analysis (wt -1 = 9).
+
+### 6c. gi=22 CLOSED (2026-08-30): the residual was CANTRIP-FIRST misclassifying Hinata, not composition
+
+**The 6b "NEXT: bp-node child composition" diagnosis is REFUTED.** Re-traced with a pend-state
+dump (m2t level 2): the T3 bp-node children DO compose the full winning set -- child
+`q=land=Orchard;Ponder,Ornithopter + cont=[Sol Ring, Preordain]` reaches an end-of-T3 state
+BYTE-EQUIVALENT to the two-main control's (hand `[Crackle, Hinata, Spasm, Mountain, Ponder,
+Pool]`, libtop `[Hinata2, Ponder3, Spasm2]`; Ponder shuffled and drew Sol Ring, Preordain's
+scry kept Ponder2 -- every hidden decision matched). Composition, the reorder heuristic, and
+the pend machinery were all CORRECT. (The 6b claim rested on a cont print that hid nested
+`breakpoint_casts`; the composition was there all along.)
+
+**The real kill was one layer up, in the T4 frame: `MayPrecedeCantrip` never matched Hinata.**
+The cantrip-first collapse (`ApplyCantripFirstOrder`, default ON in searched play, bypasses
+CastOrderRank for any cantrip-holding plan) partitions to `[may-precede][cantrips][rest]`, and
+its affordability clause tested `reduces_spell_color`/`reduces_spell_subtype` with a comment
+claiming `// cost reduction (Hinata)` -- but Hinata's param is `hinata_cost_reducer`, so she
+fell to `[rest]`, BEHIND the cantrips. The T4 plan `{Hinata, Spasm, Ponder}` applied as
+`[Spasm, Ponder | Hinata-truncated]`: Spasm1 paid FULL price ({5}{U}{U} = the whole 7 pool
+instead of her-discounted {U}{U}), so at the pend -- with Spasm2 correctly drawn and in hand --
+the continuation `[Hinata, Spasm2, Crackle]` was mana-dead and every T4 line scored T5.
+In TWO-MAIN play the phase boundary masks this bug (Hinata goes out in main 1), which is why
+only the greedy-free/all-main-2 forms bled from it.
+
+**Fix: one line in `MayPrecedeCantrip` -- `hinata_cost_reducer` => may precede.** With it the
+stable partition emits `[Hinata, Spasm, Ponder]` and **the gi=22 game WINS T4 under the full
+m2 arm** (ORDER_FULL+NGC+BP_NODE+ALL_MAIN2+MAIN2_DROP+credit+EF, d5): T4 main-2 = Pool,
+Hinata, Spasm x5, Ponder -> draw Spasm2, Spasm2 x5, Crackle x5 -> opp -5. One phase, executor-
+realised, one Crackle target better than the two-main control. Both fixtures still PASS
+(m2 arm and default).
+
+**Suite impact (the fix is DEFAULT-PATH -- cantrip-first is not flag-gated):** smoke = 43
+PASS / 2 digest-only moves, both Hinata d3+d5 with avg IDENTICAL (5.6733, 5.8533); per-game
+audit: 18 line changes, every one `Ponder; Hinata -> Hinata; Ponder` at an unchanged win
+turn. All other decks byte-identical (no other deck has a hinata_cost_reducer card); Hinata
+d0 byte-identical (collapse is depth-gated).
+
+**Ladder verdict (14-job batch, complete) -- now PARTLY STALE because of this bug:**
+EF within each form never hurts and slightly helps (credit 1 game better/0 worse; node 9/3;
+recipe 8/1 -- rescue-only working as designed). Form ranking unchanged: shipped ~ credit
+(t<0.5) >= node (+.008/.015 ns) > recipe (+.021/.037, t<=3.2) > m2 (+.046/.050, t 3.1/3.9).
+BUT the greedy-free arms carried the Hinata-behind-cantrips bug (masked in two-main arms),
+so the node/recipe/m2 deficits are CONTAMINATED -- **the section-6 ladder must be re-measured
+with the fix in before any form verdict is trusted.** Per-job wall ms in a contended batch
+proved uninterpretable (one EF arm read 38% faster than its control); EF unit cost still
+needs a dedicated uncontended measurement before adoption talk.

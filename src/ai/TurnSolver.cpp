@@ -6408,8 +6408,16 @@ static bool MayPrecedeCantrip(const Action& a)
     if (a.kind == Action::Kind::SacForMana)  { return true; }   // Lotus Bloom sac
     const CardDefinition* d = a.def;
     if (d == nullptr) { return false; }
-    if (!d->params.reduces_spell_color.empty())   { return true; }   // cost reduction (Hinata)
+    if (!d->params.reduces_spell_color.empty())   { return true; }   // cost reduction (Medallions)
     if (!d->params.reduces_spell_subtype.empty()) { return true; }   // (Goblin Warchief)
+    // Per-TARGET cost reduction (Hinata). Her param is hinata_cost_reducer, NOT
+    // reduces_spell_color -- the line above never matched her, so the collapse hoisted the
+    // cantrips over her and every pre-breakpoint cast paid full price. gi=22 s6600023 T4
+    // (all-main-2): {Hinata, Spasm, Ponder} collapsed to [Spasm, Ponder | Hinata], spending
+    // 7 mana on a Spasm her discount prices at {U}{U}; the pend's continuation was then
+    // mana-dead and the T4 win unreachable. Affordability is this classifier's own first
+    // charter clause; she is the deck's cost reducer.
+    if (d->params.hinata_cost_reducer)            { return true; }   // (Hinata, Dawn-Crowned)
     return false;
 }
 
@@ -25183,6 +25191,23 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 if (s_rollout_stats) { bpnode::g_pends.fetch_add(1, std::memory_order_relaxed); }
                 if (!node_prefix_seen.insert(BuildDedupKey(node_snap.state)).second)
                 { if (s_rollout_stats) { bpnode::g_prefix_dupes.fetch_add(1, std::memory_order_relaxed); } continue; }
+                // Level 2: the PEND state itself -- hand (so the cantrip's actual draw is visible)
+                // and library top, before any child is enumerated. Pairs with the child-state dump.
+                if (m2t_here)
+                {
+                    static const int s_m2t_lvl2 = EnvInt("MTG_M2T_TRACE", 0);
+                    if (s_m2t_lvl2 >= 2)
+                    {
+                        std::string hs, ls;
+                        for (const Card& hc : node_snap.state.ActivePlayer().hand)
+                        { hs += hc.m_name.str(); hs += ","; }
+                        const Library& lib = node_snap.state.ActivePlayer().library;
+                        for (std::size_t li = 0; li < 3 && li < lib.size(); ++li)
+                        { ls += lib[li].m_name.str(); ls += ","; }
+                        std::fprintf(stderr, "[m2t] T%d d%d PEND-STATE q=%s hand=[%s] libtop=[%s]\n",
+                                     state.turn_number, depth, m2t_sum(q).c_str(), hs.c_str(), ls.c_str());
+                    }
+                }
                 // The continuation-list LENGTH is only knowable at APPLY time (the walker's own
                 // lesson): the in-apply enumeration runs under CantripOrderScope / the
                 // condemnation marker, so a host-side enumeration could disagree and silently
@@ -25267,6 +25292,21 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         std::fprintf(stderr, "[m2t] T%d d%d PEND q=%s child k=%d cont=[%s] sub=%d cutoff=%d\n",
                                      state.turn_number, depth, m2t_sum(q).c_str(), k, cont.c_str(),
                                      sub.win_turn, std::min(cutoff, best.win_turn));
+                        // Level 2: the child's NEXT-TURN start state (s3 is post-EOT here), so a
+                        // sub that "should" have won can be diffed against the fixture/control state
+                        // -- hand, library top (the next turn's dig window), and untapped sources.
+                        static const int s_m2t_lvl = EnvInt("MTG_M2T_TRACE", 0);
+                        if (s_m2t_lvl >= 2)
+                        {
+                            std::string hs, ls;
+                            for (const Card& hc : s3.ActivePlayer().hand)
+                            { hs += hc.m_name.str(); hs += ","; }
+                            const Library& lib = s3.ActivePlayer().library;
+                            for (std::size_t li = 0; li < 6 && li < lib.size(); ++li)
+                            { ls += lib[li].m_name.str(); ls += ","; }
+                            std::fprintf(stderr, "[m2t]   child-state hand=[%s] libtop=[%s]\n",
+                                         hs.c_str(), ls.c_str());
+                        }
                     }
                     if (sub.win_turn < best.win_turn)
                     {
