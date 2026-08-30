@@ -5057,6 +5057,41 @@ int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
     return base;
 }
 
+// MTG_HINATA_RANGE -- the RANGE half of the order (USER 2026-08-30: "I don't want arbitrary
+// exemptions. They should be handled within the order instead. (so you would have a potential
+// range of positions for a few specific spells, but most would have one spot in the order)").
+// The nominal spot (HinataFullOrderRank) still sequences every cast; this bound says only how far
+// a card may legitimately be DEFERRED before passing a breakpoint site counts as declining it.
+//
+// EVIDENCE (the 5 condemnation deleted-line games, 2026-08-30, node arm, each surviving 100x
+// budget): the winning turns cast Sol Ring after Ponder AND after Soulfire (hold gi1132), Reality
+// Spasm after Ponder (train gi53) and after Soulfire (gi1132/gi1035), Ponder/Preordain after
+// Soulfire (gi1132/gi1035), Sol Ring after Gamble (hold gi1178). Mechanism: every breakpoint draw
+// re-prices the rest of the chain (Spasm float, Irencrag, Soulfire's staged casts, her per-target
+// discount), so a pass over an engine/find card before a draw resolves is not a settled decline.
+//
+// The table: every tier up to the dork (nominal 4-14) extends to 21 -- one slot past the last
+// draw site (Soulfire 20, and Magma Opus at 21 re-admits on the >= tie), one slot before the
+// Irencrag/Crackle terminal pair, whose positions are hard ("second last"/"last") and therefore
+// have NO range. Doubts flagged for USER review rather than narrowed silently: Izzet Signet and
+// Expressive Iteration are extrapolated from their tier-mates (no direct sighting in the 5 games);
+// Ornithopter's ruling said "before Soulfire", but a post-Soulfire Ornithopter is still a legal
+// Crackle target so its range errs wide pending review.
+static bool HinataRangeEnabled()
+{
+    static const bool on = EnvOn("MTG_HINATA_RANGE");
+    return heurarm::Flag(heurarm::HINATA_RANGE, on);
+}
+
+int HinataProvider::CastOrderRankLatest(const GameState& s, const CardDefinition& def) const
+{
+    const int nominal = CastOrderRank(s, def);
+    if (!HinataOrderFullEnabled() || !HinataRangeEnabled()) { return nominal; }
+    const int tier = nominal / 64;
+    if (tier >= 4 && tier <= 14) { return 21 * 64; }
+    return nominal;
+}
+
 const char* HinataProvider::CastOrderTierName(int rank) const
 {
     if (!HinataOrderFullEnabled()) { return GenericProvider::CastOrderTierName(rank); }

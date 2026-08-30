@@ -141,8 +141,20 @@ class), not compute-efficiency.
 
 **Condemnation on the node — SETTLED at full power (nodecond, node + MTG_BP_CLASSIFY, paired
 1200/cell): train +0.0000 exactly (t 0.00) vs both ng and node; hold −0.0075 vs ng (t −0.65) /
-+0.0067 vs node (t +2.00).** Neutral-to-marginally-worse than plain node, −1.0% units. Under
-the current soundness exemptions there is nothing here for Hinata; not worth carrying.
++0.0067 vs node (t +2.00).** Neutral-to-marginally-worse than plain node, −1.0% units.
+
+**2026-08-30 (later) — the verdict SHARPENED by the range arc (`exemption-free-condemnation-
+order.md` has the full story).** The nodecond filter was ALREADY exemption-free (the type
+exemptions were deleted 2026-08-28; manasite fired 0 times). Three findings: (1) nodecond's
+regressions include **5 deleted lines** that survive 100x budget — engine-tier cards condemned
+at cantrip sites while the real win lines interleave them across breakpoints; (2) with the
+evidence-driven RANGES (`MTG_HINATA_RANGE`, CastOrderRankLatest) all 5 recover and sound
+condemnation fires **exactly 0 times** in 11.4M consultations — inert; (3) the leverage anatomy:
+of the children condemnation removed (6.90M→6.34M), **91% were already child_dupes** the node's
+dedup was killing (3.37M→2.86M) — non-dupe children fell only 1.4%. So condemnation was never a
+work lever on this deck: the node's state dedup is the sound version of the same permutation
+argument, and no order narrow enough to bite survives Hinata's re-pricing chains. Not worth
+carrying on Hinata in any form; the class's equal-compute gap will not be closed here.
 
 ## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
 

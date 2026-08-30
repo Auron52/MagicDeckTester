@@ -386,6 +386,11 @@ public:
     // same-turn Crackle" -- Hinata (creature, 10) -> ritual (15) -> Crackle (20) -- is the GENERIC
     // card-parameter tiering, shared with every ritual deck, and the full order preserves it.
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    // The RANGE half of the order (MTG_HINATA_RANGE; see the .cpp for the per-tier table and
+    // DecisionProvider::CastOrderRankLatest for the contract). Evidence: the 5 deleted-line games
+    // of 2026-08-30 -- this deck's win turns interleave the engine and find tiers across
+    // breakpoint draws, so a nominal-rank condemnation falsely reads them as declined.
+    int  CastOrderRankLatest(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
     // The LAND DROP as slot 0 (USER 2026-08-28: "Land should be placed at the start"; "If we find a
     // better land with cantrips we can play that. Otherwise we can play whatever we have in hand to

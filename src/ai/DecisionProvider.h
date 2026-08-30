@@ -418,6 +418,18 @@ public:
     // Archetypes override (antilife: enablers rank 0 so a same-turn payload sees the flip).
     virtual int CastOrderRank(const GameState& s, const CardDefinition& def) const = 0;
 
+    // CastOrderRankLatest -- the LATE end of a card's position RANGE (USER 2026-08-30: "you would
+    // have a potential range of positions for a few specific spells, but most would have one spot
+    // in the order"). CastOrderRank stays the NOMINAL spot -- it alone drives execution sequencing,
+    // the canonical continuation, and every existing consumer. This bound is consumed ONLY by
+    // breakpoint condemnation (BpSlotIsAfterSite): a card is condemned at a site solely when even
+    // its LATEST legitimate position precedes the site, i.e. when its whole range has passed. The
+    // default (latest == nominal) is exactly the pre-range semantics, so a deck that declares no
+    // ranges is byte-identical. A range REPLACES a soundness exemption, never adds one: it widens
+    // re-admission only for the declared cards, and it is part of the deck's reviewable order.
+    virtual int CastOrderRankLatest(const GameState& s, const CardDefinition& def) const
+    { return CastOrderRank(s, def); }
+
     // PromoteCantripsInCastOrder -- does this deck want its cheap cantrips promoted to the
     // information tier (rank 2, "draw first")? This is a PER-DECK question and the measurement says
     // so plainly: the same promotion, on both seed sets, is a consistent WIN on Mirrorwing (-20.0

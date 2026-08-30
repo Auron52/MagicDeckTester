@@ -96,6 +96,7 @@ enum Slot : int
     HINATA_ALL_MAIN2,         // MTG_HINATA_ALL_MAIN2      every cast is a SECOND-MAIN cast
     MAIN2_DROP,               // MTG_MAIN2_DROP            the land drop is offered POST-combat too
     BP_NODE,                  // MTG_BP_NODE               plain-cantrip breakpoint = REAL SEARCH NODE
+    HINATA_RANGE,             // MTG_HINATA_RANGE          condemnation RANGES: engine/find tiers' latest
     COUNT
 };
 
@@ -169,6 +170,7 @@ inline const char* Name(int slot)
         "MTG_HINATA_ALL_MAIN2",
         "MTG_MAIN2_DROP",
         "MTG_BP_NODE",
+        "MTG_HINATA_RANGE",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

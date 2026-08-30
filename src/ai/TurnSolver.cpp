@@ -1196,7 +1196,13 @@ static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
     // affordable), so it is the order's job rather than the filter's -- MTG_HINATA_GAMBLE_LATE
     // measured play-inert over 6,000 games, so moving a tutor in the order is free.
     const DecisionProvider& prov = ResolveProvider(state);
-    return prov.CastOrderRank(state, *cd) >= prov.CastOrderRank(state, *g_bp_site_def);
+    // The candidate compares by the LATE end of its RANGE (CastOrderRankLatest, default = nominal):
+    // it is condemned only when its whole range precedes the site. The site compares by its NOMINAL
+    // rank -- if the plan actually cast the site later than nominal, nominal under-condemns, which
+    // errs toward re-admitting. Evidence for the range form: the 5 deleted-line games of 2026-08-30
+    // (hold gi1124/1132/1178, train gi53/1035), where the winning turn casts Sol Ring / Reality
+    // Spasm / Ponder AFTER higher-ranked breakpoint sites because each draw re-prices the chain.
+    return prov.CastOrderRankLatest(state, *cd) >= prov.CastOrderRank(state, *g_bp_site_def);
 }
 
 // Was this card already in hand when the current breakpoint's cantrip was cast? True outside a

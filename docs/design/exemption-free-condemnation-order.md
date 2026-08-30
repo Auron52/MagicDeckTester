@@ -1,7 +1,57 @@
 # Exemption-free condemnation: fix the ORDER, not the rule
 
-**Status: USER-DIRECTED, NOT STARTED (2026-08-30). This supersedes the exemption-based framing
-in `breakpoint-condemnation-status.md` as the forward direction.**
+> ## STATUS 2026-08-30 (LATER): ARC EXECUTED — RANGES BUILT, SOUNDNESS PROVEN, AND THE ANSWER
+> ON HINATA IS "SOUND CONDEMNATION IS INERT". AWAITS USER REVIEW of the range table (below).
+>
+> USER (2026-08-30, the range directive, verbatim): *"Let's continue looking into if condemnation
+> is possible. Either way, I don't want arbitrary exemptions. They should be handled within the
+> order instead. (so you would have a potential range of positions for a few specific spells, but
+> most would have one spot in the order) That way, I can review any changes you make to the order."*
+>
+> **Corrections to the plan below (the flag inventory was stale):** the four TYPE exemptions
+> (mana source, ritual/Treasure, tutor, cost reducer — bugs 4-6) were ALREADY DELETED on
+> 2026-08-28 (`TurnSolver.cpp` BpSlotIsAfterSite: "NO TYPE EXEMPTIONS"), replaced by the
+> card-agnostic `BpTurnManaSettled` (LAND_SETTLED, sources-count growth re-admits) and the
+> order-aware comparison. What remains are DEFINITIONAL gates (searched-only decision space,
+> plan-casts-it, drawn-card-is-new, copies-fungible dominance, payability) plus one SITE rule
+> (`MTG_BP_CONDEMN_MANA_SITE_EXEMPT`, bug 7 — measured **inert on Hinata**: manasite=0 of 11.7M
+> consultations). So the nodecond measurement was already the exemption-free filter.
+>
+> **What this session found (all on the node arm, ORDER_FULL + NO_GREEDY_CONT + BP_NODE):**
+> 1. **The exemption-free filter still deletes reachable wins.** Of nodecond's 19 regressions
+>    vs node (1200x2), 14 are churn but **5 survive 100x budget** (hold gi1124/1132/1178, train
+>    gi53/1035): the condemned-and-needed cards are the ENGINE TIER at CANTRIP sites (Reality
+>    Spasm/Sol Ring/Hinata/Gamble @ Ponder/Preordain, plus Ponder/Preordain @ Soulfire). The
+>    winning lines interleave everything across breakpoints — hold gi1132's T4 win is
+>    `Spasm, Soulfire, Spasm, Ponder, Sol Ring, Preordain, Irencrag, Crackle` — because every
+>    draw re-prices the chain (Spasm float, staged Soulfire casts, her per-target discount).
+> 2. **The RANGE mechanism (built, this commit):** `DecisionProvider::CastOrderRankLatest`
+>    (default = nominal ⇒ byte-identical), consumed ONLY by `BpSlotIsAfterSite` — a card is
+>    condemned only when even its LATEST position precedes the site. Hinata's table under
+>    `MTG_HINATA_RANGE` (default OFF): tiers 4-14 (rocks, Hinata, Spasm, Gamble, Ponder/
+>    Preordain, EI, Ornithopter) extend to 21; Soulfire/Opus/Irencrag/Crackle keep single spots.
+>    All 5 deleted-line games RECOVER to node's result at play settings.
+> 3. **The verdict: sound condemnation fires ZERO times.** 300-game probe (whynot histogram):
+>    bp_condemn_seen=11.42M, **drops=0**; units 21.53M ≈ node's 21.70M. Every one of the unsound
+>    rule's 623k drops (5.3%) was a claim the real win lines falsify.
+> 4. **And even unsound, it was never a work lever here:** node children 6.90M vs nodecond
+>    6.34M, but child DUPES fell 3.37M→2.86M — **91% of what condemnation removed, the node's
+>    state dedup was already killing** at one cheap apply each; non-dupe children fell only
+>    1.4%, units only ~2%. The whynot CEILING caps a perfect order at ~2.3x drops. Condemnation
+>    cannot close the class's ~+0.03 equal-compute gap.
+>
+> **Recommendation (awaiting USER):** do not carry BP_CLASSIFY on Hinata — on this deck the
+> node's dedup IS the sound version of the same idea (duplicate detection by state identity
+> instead of by declared order, and Hinata's chains falsify any order narrow enough to bite).
+> The range mechanism stays as the reviewable-order semantics; its live target is decks with
+> genuinely fixed positions (Mirrorwing's bug-8 games — bodies/magnets at trick sites — are the
+> same shape and could keep condemnation biting there WITH ranges instead of the tail exemption).
+> Doubts flagged in the table: Izzet Signet and EI extrapolated from tier-mates (no direct
+> sighting); Ornithopter's ruling said "before Soulfire" but a post-Soulfire one still targets
+> Crackle, so its range errs wide pending review.
+
+**Status of the section below: the original plan, kept for the reference numbers. Steps 1-4
+executed 2026-08-30 (see STATUS above); step 5 answered negatively (units do not shrink).**
 
 USER (2026-08-30, verbatim): *"That makes no sense that there is nothing to condemn. If done
 correctly across breakpoints we should be able to condemn a lot of things. We may need to
