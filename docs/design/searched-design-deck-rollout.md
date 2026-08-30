@@ -347,3 +347,44 @@ runner was making the same misplay. A new deck may need its own instance of this
   `greedysite` sites 0-8, taken when `bp_searched_plan(site, ...)` returns false because the site is
   not searchable for that deck (site 3, the plain cantrip, is pruned outright). That is now the only
   unmeasured greedy class, and §3c gives the cheap way to test it: does it return a different plan?
+
+## 6. HINATA MEASURED END TO END (2026-08-30) -- greedy wins today, and WHY is now known
+
+The full greedy-free ladder on Hinata, paired 1200x2 (hold s6600001 / train s5500001, d5/20ms),
+units from 300-game hold probes, greedy = `acted` breakpoint-continuation decisions per 300 games:
+
+| arm | site-3 continuation | hold | train | units | acted bp greedy |
+|---|---|---|---|---|---|
+| **shipped (all defaults)** | greedy Solve | **5.6433** | **5.6917** | **14.59M** | 2.41M |
+| ORDER_FULL + NO_GREEDY_CONT ("ng") | **still greedy** (class-masked -- NGC does NOT reach a masked site; `why_class` said so) | 5.6658 | 5.7033 | 16.08M | 1.91M |
+| + SITE3 + SITE3_DEFER (recipe, generic order) | canonical deferred | 5.6600 | 5.7258 | 14.63M | **0** |
+| recipe + ORDER_FULL | canonical deferred | 5.6892 | 5.7325 | 15.42M | **0** |
+| ORDER_FULL + NGC + MTG_BP_NODE | searched node | 5.6517 | 5.7033 | 21.70M | **0** |
+
+Paired vs shipped: recipe+ORDER_FULL +0.046/+0.041 (t 3.7/3.3); recipe-generic +0.017/+0.034
+(t 1.6/3.0); node +0.008/+0.012 (t 0.6/1.0, indistinguishable) at 1.49x units. ORDER_FULL is
+measurably WORSE than the generic tiering in both contexts it was isolated in today
+(shipped-vs-ng, recipe-gen-vs-recipe-of +0.029 t 3.8) -- the revised order does not clear its
+own review bar on the numbers. The interior second main is 100% greedy in every arm (M2 PATH
+SEARCHED 0%; ~150k by-hook + ~1.08M by-depth<=0 per 300 games) -- hook 3 untouched.
+
+**THE ROOT CAUSE (USER 2026-08-30: "it makes 0 sense unless we are doing something wrong" --
+confirmed, and the something is named):** greedy `Solve` re-prices SEQUENTIALLY -- each cast
+resolves before the next decision, so Hinata's per-target discount and Reality Spasm's float
+are always priced against the true state. Every searched form prices plans STATICALLY at
+enumeration, and `CountSameTurnReducers` covers only colour/subtype reducers and metalcraft --
+**`hinata_cost_reducer` (per-target discount) has NO same-subset credit**, so any one-enumeration
+plan containing {Hinata, Spasm.., payoff} prices the chain at full cost, fails affordability,
+and is never emitted. This one gap explains, at once: why greedy beats every searched form on
+this deck; why "all-main-2" fails (the m1/m2 boundary is the search's only free re-pricing
+point -- gi=22's T4 chain is inexpressible in one enumeration at 100x budget); why the node
+loses at equal compute; and why Hinata "leans negative" under NO_GREEDY_CONT. On budget
+fairness (USER asked): two mains get NO extra budget -- one shared budget object, and measured
+units at 20ms are node (two-main) 21.70M vs nodem2 (one-main) 22.06M.
+
+**THE WORK ITEM THAT FALLS OUT: build the Hinata same-subset discount credit in enumeration**
+(precedent: `SameTurnMetalcraftEquipCredit` -- optimism is sound where the apply validates;
+EnumeratePlans only, never the d0 leaf, per the LeafReducerCreditEnabled law; the per-target
+count is available where X is chosen). Then RE-MEASURE this ladder: the expectation is the
+searched forms close the gap to greedy, and both "no greedy" and "drop main 1" become askable
+on a sound enumerator instead of being answered by its defect.
