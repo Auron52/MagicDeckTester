@@ -1,8 +1,8 @@
-# Regression ground truth -- commit dcbd2b8d  date 2026-08-29
+# Regression ground truth -- commit d8d827f5  date 2026-08-30
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-08-29): Minotaur value-leaf sidecar adopted (first model, trust d5). Both moving keys are BETTER-or-equal: d3 4.9680->4.9640 (-1 turn over 250g), d5 digest-only at an unchanged 4.9733. d0 untouched, the correct signature for a leaf sidecar. Phase E A/B: -0.00375 t=-3.00 6/1/1 at 0.63x cost; trust re-verified on 16 FRESH seeds x 2500 games at exactly +0.00000.
-# accepted-with-regressions (regression, 2026-08-29): Minotaur value-leaf sidecar adopted (first model, trust d5). 4 keys move, 3 better / 1 worse, NET -3 turns over 1100 searched games: d3_s2002 -2, d3_s3003 +1, d5_s2002 -1, d5_s3003 -1. Across smoke+regression the suite reads -0.00264 turns/game over 1500 searched games, which independently reproduces the phase E A/B's -0.00375 on fully disjoint seeds. Trust d5 re-verified on 16 FRESH seeds x 2500 games: exactly +0.00000 on every seed.
-# accepted-with-regressions (overnight, 2026-08-29): THREE separate causes, all inspected. (1) MINOTAUR value-leaf sidecar adopted (trust d5): 8 keys, NET -5 turns over 6000 searched games (9 games faster / 2 slower), d0 untouched. (2) DRAGONS value-leaf sidecar (adopted in e9b8a6b6, whose overnight cells were never rebaselined): 5 keys, NET -4 turns over 3000 searched games, 4 faster / 0 slower, d0 untouched. (3) MIRRORWING: the other agent's Oracle's Restoration legality fix (995c1daf), whose commit explicitly deferred the overnight tier; 12 keys, +7 turns over 10800 games. That deck's d0 cells churn heavily (18/16/18/18 games) because the removed cast was an ILLEGAL turn-1 CANTRIP, so deleting it shifts the whole draw sequence and those are different physical games, not worse decisions -- and a correctness fix that removes a free card SHOULD cost a little tempo. Pass 2a legality sweep over the 16 minotaur+dragons searched cells (12000 games): 0 nonconv, 0 fd-diverge. classify_turn_later: 3 minotaur slower games PERSIST at 4x and 16x budget; d5_s5005 gi431 (7 -> unwon) was traced to a DECISION at turn 2 -- both arms draw the same card, the new line plays Bloodstained Mire and casts the Raider while the old line wastes its turn-2 land drop entirely. The fetch re-permutes the library, so every draw after T2 is incomparable; the new line then missed four straight land drops. Fetch-reshuffle variance with an identified cause, not a same-draws decision loss, and the aggregate is net better.
+# accepted-with-regressions (smoke, 2026-08-30): Dragons routed off GoblinsProvider onto Generic (undeclared misroute via Dragonspeaker Shaman's reduces_spell_subtype). All 3 dragons keys are DIGEST-ONLY: 6.3160, 5.8440, 5.7733 are unchanged averages, so dropping the borrowed ForcedEarlyLandName turn-1 Mountain prune reshapes the decision stream and moves zero win turns. d0 moves too, which confirms the hook was firing (it is a provider hook, not search-depth gated). Viewer protocol line byte-identical to the prior run.
+# accepted-with-regressions (regression, 2026-08-30): Dragons routed off GoblinsProvider onto Generic. All 5 dragons keys DIGEST-ONLY -- 6.3120/5.7367/5.6800/5.7560/5.6560 all unchanged. Across smoke+regression the fix moves 8 play digests and ZERO win turns, so the value leaf trained under the old routing remains valid (user: staleness does not invalidate the leaf, and the repo's own regeneration study agrees). Viewer protocol byte-identical.
+# accepted-with-regressions (overnight, 2026-08-30): TWO causes. (1) DRAGONS routed off GoblinsProvider onto Generic: all 12 dragons keys are DIGEST-ONLY, every average byte-identical (d0 6.2905/6.2730/6.2640/6.2785, d3 5.7540/5.7570/5.7170/5.7350, d5 5.7520/5.7140/5.6880/5.7120). Across all three tiers the fix moves 20 play digests and ZERO win turns, so the value leaf trained under the old routing stays valid. d0 moving confirms ForcedEarlyLandName was firing -- it is a provider hook, not search-depth gated. (2) minotaur_overnight_d5_s5005 digest-only at an unchanged 4.9460: NOT mine. Bisected to the other agent's 6b3ae5c2 (mirrorwing candidate-card engine support), which generalised a bool haste into etb_created_token_keywords routed through HasteKeywords() -- Sethron's Minotaur tokens read that path. That commit shipped with NO rebaseline of any tier; it moved exactly this one key suite-wide. Verified by rebuilding WITHOUT my provider edit and reproducing the same digest 7808e9a33e782637 twice, so it is deterministic and not the known unexplained run-to-run overnight divergence.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -52,9 +52,9 @@ minotaur_smoke_d5_s1001=4.9733/5e5e13389ec6cfbd
 kitty_smoke_d0_s1001=5.1600/96c5f848c59bf0fa
 kitty_smoke_d3_s1001=4.4520/002553def2c14e66
 kitty_smoke_d5_s1001=4.4667/406aa8496dde2301
-dragons_smoke_d0_s1001=6.3160/4ca6d5d5c815067f
-dragons_smoke_d3_s1001=5.8440/fd138f883b76e715
-dragons_smoke_d5_s1001=5.7733/f1b7dca49acf02fd
+dragons_smoke_d0_s1001=6.3160/3497007f8ff69017
+dragons_smoke_d3_s1001=5.8440/474d752fad87b1de
+dragons_smoke_d5_s1001=5.7733/edb32f9c8892f749
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/91abd0b536a1c263
@@ -132,11 +132,11 @@ kitty_regression_d3_s2002=4.3300/b50e06087e633c1d
 kitty_regression_d3_s3003=4.3800/f3792be1bb75e242
 kitty_regression_d5_s2002=4.3240/5d4e0eaacb4bb0c2
 kitty_regression_d5_s3003=4.3360/7052e9d16185fdca
-dragons_regression_d0_s2002=6.3120/634cf4ffe692b7cc
-dragons_regression_d3_s2002=5.7367/80f053120bba7726
-dragons_regression_d3_s3003=5.6800/8bf0d3fdd233e3e9
-dragons_regression_d5_s2002=5.7560/a06311fd2e0e0192
-dragons_regression_d5_s3003=5.6560/1258fdeca917a0de
+dragons_regression_d0_s2002=6.3120/d17e05d318565114
+dragons_regression_d3_s2002=5.7367/cf8da667f9b8ce13
+dragons_regression_d3_s3003=5.6800/6baba84a5b558d9b
+dragons_regression_d5_s2002=5.7560/a9560fb2ee4e67f4
+dragons_regression_d5_s3003=5.6560/d242608d69d93aee
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/b53c1150b0bd6df6
@@ -304,7 +304,7 @@ minotaur_overnight_d3_s5005=4.9600/e37b00348861453c
 minotaur_overnight_d3_s6006=4.9500/f83a30825533f16a
 minotaur_overnight_d3_s7007=4.9390/ea6e6f7306f8d9d3
 minotaur_overnight_d5_s4004=4.9200/35b9e6156679764c
-minotaur_overnight_d5_s5005=4.9460/263ea077a94a6e23
+minotaur_overnight_d5_s5005=4.9460/7808e9a33e782637
 minotaur_overnight_d5_s6006=4.9220/efa477b8f54aa1ac
 minotaur_overnight_d5_s7007=4.9280/b6ef866d4a8b04e1
 kitty_overnight_d0_s4004=5.1285/c8893be16f654177
@@ -319,15 +319,15 @@ kitty_overnight_d5_s4004=4.3620/d655cfda960d337c
 kitty_overnight_d5_s5005=4.3820/c3e3c15eda210082
 kitty_overnight_d5_s6006=4.3120/c559b9d07a584166
 kitty_overnight_d5_s7007=4.3400/98bd7982346f711c
-dragons_overnight_d0_s4004=6.2905/d1abc74df399ccb1
-dragons_overnight_d0_s6006=6.2730/4ce0021a80ac56bc
-dragons_overnight_d0_s8008=6.2640/514a9110611afa0d
-dragons_overnight_d0_s10010=6.2785/bc82a122143a336b
-dragons_overnight_d3_s4004=5.7540/14bbd78e44224dbb
-dragons_overnight_d3_s5005=5.7570/f15a92756c84d832
-dragons_overnight_d3_s6006=5.7170/ca1f9b56478163e0
-dragons_overnight_d3_s7007=5.7350/6582b41b8af19b73
-dragons_overnight_d5_s4004=5.7520/d2bdbc7926000e0b
-dragons_overnight_d5_s5005=5.7140/a69a6052d4ea88c3
-dragons_overnight_d5_s6006=5.6880/4de6507bb581b0a5
-dragons_overnight_d5_s7007=5.7120/8e54563b58ab9fd3
+dragons_overnight_d0_s4004=6.2905/19fe85aa508c06b0
+dragons_overnight_d0_s6006=6.2730/a609a94a2bcb780d
+dragons_overnight_d0_s8008=6.2640/47030ad6e1edd459
+dragons_overnight_d0_s10010=6.2785/a7b8e3790db56fc6
+dragons_overnight_d3_s4004=5.7540/aa9f827da8fb6775
+dragons_overnight_d3_s5005=5.7570/a203609e19a0ae84
+dragons_overnight_d3_s6006=5.7170/35e0381f54eafbbd
+dragons_overnight_d3_s7007=5.7350/5a95c098d3317804
+dragons_overnight_d5_s4004=5.7520/eac54e0c57f219cd
+dragons_overnight_d5_s5005=5.7140/5fe34c787951720f
+dragons_overnight_d5_s6006=5.6880/78809d034d4f2ddd
+dragons_overnight_d5_s7007=5.7120/d1f7c027d7c9b719

@@ -336,6 +336,35 @@ Parse the JSON output:
 For win% / average win turn, run the deck through the regression suite after the
 profile is written.
 
+### 4a. Provider routing check (MANDATORY — run it before anything is measured)
+
+```
+python3 scripts/provider_audit.py            # or: --check to exit 1 on a suspect
+```
+
+**Confirm the deck landed on the provider you intend**, which for a brand-new deck is almost
+always `Generic`. Do this at Stage 4, not later: the provider decides which heuristics NARROW the
+search, so every number produced after it — the profile, the depth sweep, the value leaf, the
+ground truth — is measured under whatever routing this step would have caught.
+
+`SelectDecisionProvider` detects the archetype from CARD PARAMS, and several of those params are
+archetype-NEUTRAL — `etb_self_creates_tokens`, `sac_creature_outlet` and `reduces_spell_subtype`
+describe what a card DOES, not which deck it belongs to. A deck merely containing such a card
+silently inherits another archetype's narrowing. That has happened four times (Mirrorwing,
+StompySurprise, Minotaur, Dragons), every one found by accident well after the deck was measured,
+and in Minotaur's case the borrowed hook DELETED a real decision branch rather than reordering it.
+
+Landing on a foreign provider is not automatically wrong — Knights and slivers_vial both ride
+`VialProvider` deliberately. What the core invariant forbids is getting there **by accident**. So:
+
+- **Intended?** Say so in the Stage 6 disclosure, naming the provider and why it fits.
+- **Not intended?** Add a signature for the deck and route it ABOVE the offending branch in
+  `SelectDecisionProvider` (copy the Dragons block). Build the signature by OR-ing gated params
+  from **several different cards**, so a deckbuilding swap cannot silently lose it, and never key
+  it on a colourless staple any deck might add (Lightning Greaves was excluded for exactly this).
+- A new deck earns its OWN provider only once it has a **measured** hook to hold. Until then it
+  gets Generic and no narrowing at all.
+
 ---
 
 ## Stage 5 — Verify: mismatch harnesses + multi-depth sanity (loop to convergence)

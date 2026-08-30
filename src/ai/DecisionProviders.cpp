@@ -8828,6 +8828,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
     bool stompy = false;   // StompySurprise (elf ramp) -- routes to Generic BEFORE the anti check
     bool minotaur = false; // Minotaur tribal -- routes to Generic BEFORE the goblin check
+    bool dragons = false;  // Mono-red Dragons ramp -- routes to Generic BEFORE the goblin check
     bool aura = false;     // Bogle Auras -- Light-Paws' aura_cast_tutor_attach is unique to it
     for (const Card& c : deck.mainboard)
     {
@@ -8867,6 +8868,40 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.must_attack)
         {
             minotaur = true;
+        }
+
+        // Mono-red Dragons ramp. MUST be detected and MUST win over the goblin check below, for the
+        // FOURTH occurrence of the misroute class already recorded here for Mirrorwing (Goblin
+        // Instigator), StompySurprise (Hornet Queen) and Minotaur (Slaughter-Priest): Dragonspeaker
+        // Shaman carries reduces_spell_subtype ("Dragon spells you cast cost {2} less"), which is on
+        // the Goblin signature only because Goblin Warchief reads the same way for Goblins. The
+        // param is ARCHETYPE-NEUTRAL -- it says "reduces spells of subtype X", not "is a Goblin
+        // deck" -- so keying a provider on it routes every tribal cost-reducer to GoblinsProvider.
+        //
+        // Measured: `mtg --batch` reported provider=Goblins for Dragons. Four of the five Goblins
+        // hooks were inert (no sac outlet, no echo, no tutors), but ForcedEarlyLandName was NOT: it
+        // prunes the turn-1 land drop to Mountain whenever one is in hand. Benign-looking for a
+        // mono-red deck holding 4 Lightning Bolt, and quite possibly right -- but it was never
+        // measured FOR THIS DECK, and the core invariant is that a deck gets another archetype's
+        // narrowing only on evidence, never by accident.
+        //
+        // Routes to GenericProvider: Dragons has no measured deck heuristic to hold, so per the same
+        // rule applied to Minotaur it gets no narrowing at all. If a Dragons hook is ever proposed
+        // and measured, THAT is when this becomes a DragonsProvider.
+        //
+        // Signature = Dragons-only gated params, OR'd across FIVE cards (Scourge of Valkas, Dragon
+        // Tempest, Utvara Hellkite, Haven of the Spirit Dragon, Inferno of the Star Mounts) so a
+        // deckbuilding swap that cuts one card cannot silently lose it -- the deck-screening lesson.
+        // Deliberately EXCLUDES Lightning Greaves' equip_grants_haste/shroud: those are colourless
+        // staples that any deck may add, and keying on them would recreate this very bug pointing
+        // the other way.
+        if (p.dragon_ping_on_enter
+            || p.attack_per_matching_creates_tokens > 0
+            || p.haste_on_flying_enter
+            || !p.gy_return_requires_subtype.empty()
+            || p.firebreathing_threshold_power > 0)
+        {
+            dragons = true;
         }
 
         if (p.sac_creature_outlet
@@ -8978,8 +9013,15 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Goblins ride GoblinsProvider. This return WINS OVER anti (Goblin Matron's tutor_to_hand would
     // otherwise set anti and misroute the deck to AntiLifegainProvider) and over th/vial/burn/generic.
     // It sits below dragonstorm/hinata only for tidiness -- a Goblins deck carries none of those
-    // signatures (no tutor_to_battlefield / hinata_cost_reducer), so exclusivity is preserved: this
-    // branch fires iff the deck has a Goblin gated param, which no other suite deck does.
+    // signatures (no tutor_to_battlefield / hinata_cost_reducer).
+    //
+    // "Exclusivity" here is MAINTAINED, not intrinsic. This branch fires on any Goblin gated param,
+    // and four decks have now reached it without being Goblins -- Mirrorwing, StompySurprise,
+    // Minotaur and Dragons -- each caught only after the fact, because several of the params below
+    // are archetype-NEUTRAL (etb_self_creates_tokens, sac_creature_outlet, reduces_spell_subtype
+    // describe a card's behaviour, not a deck's identity). Every such deck is therefore routed
+    // ABOVE this line, and the standing check that a new deck has not silently landed here is the
+    // provider step in .claude/skills/analyze-deck.md (`scripts/provider_audit.py`).
     //
     // Was g_generic until GoblinsProvider had MEASURED hooks to hold: the sac-outlet deferral and the
     // Matron tutor width (12, -0.0620 held-out). It derives from GenericProvider and overrides only
@@ -8998,6 +9040,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // cleanup-discard bucket policy (docs/design/minotaur-discard-policy-proposal.md) is ever
     // approved and measured, THAT is when this becomes a MinotaurProvider.
     if (minotaur) { return g_generic; }
+    // Dragons: GenericProvider, for the reason spelled out in the detection block -- Dragonspeaker
+    // Shaman's reduces_spell_subtype sets the goblin signature on its own. Placed above goblin.
+    if (dragons) { return g_generic; }
     if (goblin) { return g_goblins; }
     // Equipment aggro; must WIN OVER anti (Stoneforge Mystic's tutor_to_hand sets that signature
     // on its own -- see the equipment detection note above). No other deck carries the equipment
