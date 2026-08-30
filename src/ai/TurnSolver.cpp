@@ -241,6 +241,10 @@ static std::atomic<long long> g_cdepth_n{0}, g_cdepth_sum{0};
 // win", 0 when no win was verified -- so it is ~95% zeros and cannot show a lost ply.)
 static std::atomic<long long> g_iddepth_hist[16];
 static std::atomic<long long> g_iddepth_n{0}, g_iddepth_sum{0};
+// Aborted-pass WASTE: units consumed by iterative-deepening passes that overran and were rolled
+// back (their partial result discarded). Pure loss -- the pass-cost predictor's miss, and the
+// direct target of a node-aware pass-cost estimate (node passes overshoot: the [bp-node] doc).
+static std::atomic<long long> g_idwaste_units{0}, g_idwaste_passes{0}, g_idpass_starts{0};
 
 // Record one top-level decision's committed ITERATIVE-DEEPENING depth. See g_iddepth_hist.
 static inline void RecordIdDepth(int d)
@@ -364,6 +368,15 @@ namespace
             long long site_tot = 0;
             for (int i = 0; i < unitsite::kSiteCount; ++i) { site_tot += unitsite::g_units[i].load(); }
             std::cerr << "[rollout-stats] units_total=" << site_tot << "\n";
+            const long long iw = g_idwaste_units.load();
+            if (g_idpass_starts.load() > 0)
+            {
+                std::cerr << "[rollout-stats] id_pass starts=" << g_idpass_starts.load()
+                          << " aborted=" << g_idwaste_passes.load()
+                          << " waste_units=" << iw
+                          << " waste_share=" << (site_tot ? static_cast<double>(iw) / site_tot : 0.0)
+                          << "\n";
+            }
             for (int i = 0; i < unitsite::kSiteCount; ++i)
             {
                 const long long u = unitsite::g_units[i].load();
@@ -5491,6 +5504,53 @@ static bool BpNodeEnabled()
 // cands enumeration, so the empty arm costs no enumeration at all.
 static constexpr int kBpEmptyChoice = 1 << 20;
 
+// Content fingerprint of one continuation cand (MEASUREMENT ONLY, MTG_ROLLOUT_STATS): two cands
+// with equal fingerprints applied to the same prefix snapshot should produce the same post-state,
+// so cands.size() - distinct(fingerprints) sizes an exact enumeration-side dedup. Folds every
+// apply-relevant Plan/Action field the emission signature keys on (plan_signature) PLUS the pinned
+// resolution choices (scry/tutor/fetch/...) that distinguish variants with one cast-name set.
+// An under-covered field reads as fp-equal-but-state-distinct, i.e. OVER-counts predictability --
+// acceptable for sizing, not for a real skip (a real skip must compare post-states or full content).
+static uint64_t BpCandFingerprint(const TurnSolver::Plan& p)
+{
+    uint64_t h = 1469598103934665603ull;
+    auto fold = [&h](uint64_t v) { h ^= v; h *= 1099511628211ull; };
+    auto folds = [&](const std::string& s) { fold(std::hash<std::string>{}(s)); };
+    fold(static_cast<uint64_t>(p.actions.size()));
+    for (const Action& a : p.actions)
+    {
+        fold(static_cast<uint64_t>(a.kind));
+        folds(a.card_name.str());
+        folds(a.chosen_float_color.str());
+        folds(a.tutor_target.str());
+        fold(static_cast<uint64_t>(a.sacrifice_land) | (static_cast<uint64_t>(a.free_cast) << 1)
+             | (static_cast<uint64_t>(a.alt_cost) << 2) | (static_cast<uint64_t>(a.dig_sacrifice) << 3));
+        fold(static_cast<uint64_t>(a.chosen_x + 7) * 31 + static_cast<uint64_t>(a.splice_count));
+        fold(static_cast<uint64_t>(a.sac_source_id) * 131 + static_cast<uint64_t>(a.sac_victim_id));
+        fold(static_cast<uint64_t>(a.sac_count) * 17 + static_cast<uint64_t>(a.discard_lands));
+        fold(static_cast<uint64_t>(a.soulfire_own_targets + 3) * 13
+             + static_cast<uint64_t>(a.enchant_target));
+        fold(static_cast<uint64_t>(a.gy_exile_mode + 2) * 11
+             + static_cast<uint64_t>(a.loyalty_ability + 2));
+    }
+    fold(static_cast<uint64_t>(p.land_decided));
+    folds(p.land_to_play);
+    folds(p.fetch_target);
+    folds(p.land_face);
+    fold(static_cast<uint64_t>(p.scry_choice + 2) * 37 + static_cast<uint64_t>(p.etbdig_choice + 2));
+    fold(static_cast<uint64_t>(p.tutor_choice + 2) * 41 + static_cast<uint64_t>(p.tapmode_choice + 2));
+    fold(static_cast<uint64_t>(p.freshmode_choice + 2) * 43 + static_cast<uint64_t>(p.lackey_choice + 2));
+    fold(static_cast<uint64_t>(p.ponder_choice + 2) * 47 + static_cast<uint64_t>(p.discard_choice + 2));
+    fold(static_cast<uint64_t>(p.vial_charge_choice + 2) * 53
+         + static_cast<uint64_t>(p.searched_order ? 1 : 0));
+    return h;
+}
+// Channel from the k=0 child apply's in-scope enumeration back to the node host: the number of
+// DISTINCT cand fingerprints in the list the apply just indexed (-1 = not computed). The host
+// must never enumerate the list itself (CantripOrderScope -- the walker's lesson), so this rides
+// the same one-apply-measures-the-list convention as g_bp_cands_last.
+static thread_local int g_bp_cands_fp_distinct = -1;
+
 // [bp-node] anatomy probe (under MTG_ROLLOUT_STATS, like the units buckets): where does the
 // node's cost live -- how many base plans pend, how many collapse on the prefix dedup (the
 // duplicate-tails waste the enumeration filter would delete), how many children run, how many of
@@ -5504,6 +5564,17 @@ namespace bpnode
     inline std::atomic<uint64_t> g_child_dupes{0};   // ... killed by the post-apply state dedup
     inline std::atomic<uint64_t> g_adopted{0};       // children that improved the node incumbent
     inline std::atomic<uint64_t> g_empty_adopted{0}; // ... of those, the EMPTY continuation
+    // Dupe STRUCTURE (sizes the child-dup predictor): a dupe is IN-NODE when the colliding key
+    // was inserted by an earlier child of the SAME pend -- only those are addressable by a
+    // pre-apply content fingerprint over this pend's own cands list. dupes_empty counts the
+    // explicit EMPTY arm colliding (a cands entry already reached "cast nothing" -- if this is
+    // most of the in-node share the fix is a one-line skip, no predictor needed).
+    // fp_predictable sums, per pend, cands.size() - distinct-content-fingerprints: the applies
+    // an exact enumeration-side fingerprint dedup would skip (measured by child k=0's own
+    // enumeration -- the host must never enumerate, the CantripOrderScope lesson).
+    inline std::atomic<uint64_t> g_dupes_innode{0};
+    inline std::atomic<uint64_t> g_dupes_empty{0};
+    inline std::atomic<uint64_t> g_fp_predictable{0};
     struct Dumper
     {
         ~Dumper()
@@ -5518,6 +5589,13 @@ namespace bpnode
                          (unsigned long long)g_child_dupes.load(),
                          (unsigned long long)g_adopted.load(),
                          (unsigned long long)g_empty_adopted.load());
+            std::fprintf(stderr,
+                         "[bp-node] dupes_innode=%llu dupes_cross=%llu dupes_empty=%llu"
+                         " fp_predictable=%llu\n",
+                         (unsigned long long)g_dupes_innode.load(),
+                         (unsigned long long)(g_child_dupes.load() - g_dupes_innode.load()),
+                         (unsigned long long)g_dupes_empty.load(),
+                         (unsigned long long)g_fp_predictable.load());
         }
     };
     inline Dumper g_dumper;
@@ -15628,6 +15706,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // report the real length back for the deferred-wave loop (and MTG_BP_CANDS_PROBE).
             // See g_bp_cands_last -- write-only for now, hence byte-identical.
             g_bp_cands_last = static_cast<int>(cands.size());
+            // Child-dup predictor sizing (MEASUREMENT, MTG_ROLLOUT_STATS only): on the k=0 apply,
+            // count the list's distinct content fingerprints for the node host (see
+            // g_bp_cands_fp_distinct). bp_choice==0 gates it to once per list, same as BpCands.
+            if (s_rollout_stats && plan.bp_choice == 0)
+            {
+                std::vector<uint64_t> fps;
+                fps.reserve(cands.size());
+                for (const TurnSolver::Plan& cp : cands) { fps.push_back(BpCandFingerprint(cp)); }
+                std::sort(fps.begin(), fps.end());
+                g_bp_cands_fp_distinct =
+                    static_cast<int>(std::unique(fps.begin(), fps.end()) - fps.begin());
+            }
             // Sample once per distinct breakpoint, not once per variant: the W variants of one base
             // plan all re-reach the SAME breakpoint state (that is the enum memo's premise), and
             // bp_choice == 0 is always emitted, so gating on it counts each occurrence exactly once.
@@ -24651,6 +24741,10 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // Hoisted per-plan scratch board -- see LoadPlanState (capacity reuse across plans).
         const bool reuse_s2 = s_state_reuse;
         GameState  s2_buf;
+        // Node children: resume-copy buffer (capacity reuse across children/pends). Each child
+        // starts from a fresh copy of the pend snapshot; the copy was a fresh GameState per child,
+        // and the child fan-out is the node's dominant wall cost (2.1x wall at 1.35x units).
+        GameState  s3_buf;
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
@@ -24679,6 +24773,11 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 // strand tail ranks. Child k=0 measures it via g_bp_cands_last; k == n is the
                 // explicit EMPTY continuation.
                 int node_n = -1;
+                // Dupe-structure probe scratch (MTG_ROLLOUT_STATS only): this pend's own child
+                // keys, so a dupe splits in-node (predictable from this pend's cands list) vs
+                // cross-node. g_bp_cands_fp_distinct is filled by child k=0's in-scope enumeration.
+                std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pend_local;
+                g_bp_cands_fp_distinct = -1;
                 for (int k = 0; node_n < 0 || k <= node_n; ++k)
                 {
                     // Mid-pass overrun: same abort the recursion's entry guards take.
@@ -24688,14 +24787,37 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     TurnSolver::Plan v = q;
                     v.bp_choice = (node_n >= 0 && k == node_n) ? kBpEmptyChoice : k;
                     v.bp_at     = node_snap.bp_seen;
-                    GameState s3 = node_snap.state;
+                    LoadPlanState(s3_buf, node_snap.state, reuse_s2);
+                    GameState& s3 = s3_buf;
                     std::vector<Action> bp3;
                     g_bp_cands_last = 0;
                     ApplyPlanDirect(s3, v, false, &bp3, nullptr, &node_snap);
-                    if (node_n < 0) { node_n = g_bp_cands_last < 0 ? 0 : g_bp_cands_last; }
+                    if (node_n < 0)
+                    {
+                        node_n = g_bp_cands_last < 0 ? 0 : g_bp_cands_last;
+                        if (s_rollout_stats && g_bp_cands_fp_distinct >= 0
+                            && g_bp_cands_fp_distinct < node_n)
+                        {
+                            bpnode::g_fp_predictable.fetch_add(
+                                static_cast<uint64_t>(node_n - g_bp_cands_fp_distinct),
+                                std::memory_order_relaxed);
+                        }
+                    }
                     if (s_rollout_stats) { bpnode::g_children.fetch_add(1, std::memory_order_relaxed); }
-                    if (!node_child_seen.insert(BuildDedupKey(s3)).second)
-                    { if (s_rollout_stats) { bpnode::g_child_dupes.fetch_add(1, std::memory_order_relaxed); } continue; }
+                    const TranspositionTable::Key child_key = BuildDedupKey(s3);
+                    if (!node_child_seen.insert(child_key).second)
+                    {
+                        if (s_rollout_stats)
+                        {
+                            bpnode::g_child_dupes.fetch_add(1, std::memory_order_relaxed);
+                            if (pend_local.count(child_key) != 0)
+                            { bpnode::g_dupes_innode.fetch_add(1, std::memory_order_relaxed); }
+                            if (v.bp_choice == kBpEmptyChoice)
+                            { bpnode::g_dupes_empty.fetch_add(1, std::memory_order_relaxed); }
+                        }
+                        continue;
+                    }
+                    if (s_rollout_stats) { pend_local.insert(child_key); }
                     if (s3.ActivePlayer().life <= 0) { continue; }
                     if (s3.Opponent().life <= 0)
                     {
@@ -25165,6 +25287,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // iteration, and it is never moved from, so reuse cannot alias.
     const bool reuse_s = s_state_reuse;
     GameState  s_buf;
+    // Node children: resume-copy buffer (capacity reuse across children/pends) -- see the m2 host.
+    GameState  s3_buf;
     for (const TurnSolver::Plan& p : pre)
     {
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
@@ -25204,6 +25328,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // CantripOrderScope and could disagree, stranding tail ranks. k == n is the
                 // explicit EMPTY continuation.
                 int node_n = -1;
+                // Dupe-structure probe scratch (MTG_ROLLOUT_STATS only) -- see the m2 host.
+                std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pend_local;
+                g_bp_cands_fp_distinct = -1;
                 for (int k = 0; node_n < 0 || k <= node_n; ++k)
                 {
                     // Mid-pass overrun: same abort the recursion's entry guards take.
@@ -25217,14 +25344,37 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     TurnSolver::Plan v = p;
                     v.bp_choice = (node_n >= 0 && k == node_n) ? kBpEmptyChoice : k;
                     v.bp_at     = node_snap.bp_seen;
-                    GameState s3 = node_snap.state;
+                    LoadPlanState(s3_buf, node_snap.state, reuse_s);
+                    GameState& s3 = s3_buf;
                     std::vector<Action> bp3;
                     g_bp_cands_last = 0;
                     ApplyPlanDirect(s3, v, true, &bp3, nullptr, &node_snap);
-                    if (node_n < 0) { node_n = g_bp_cands_last < 0 ? 0 : g_bp_cands_last; }
+                    if (node_n < 0)
+                    {
+                        node_n = g_bp_cands_last < 0 ? 0 : g_bp_cands_last;
+                        if (s_rollout_stats && g_bp_cands_fp_distinct >= 0
+                            && g_bp_cands_fp_distinct < node_n)
+                        {
+                            bpnode::g_fp_predictable.fetch_add(
+                                static_cast<uint64_t>(node_n - g_bp_cands_fp_distinct),
+                                std::memory_order_relaxed);
+                        }
+                    }
                     if (s_rollout_stats) { bpnode::g_children.fetch_add(1, std::memory_order_relaxed); }
-                    if (!bp_seen_states.insert(BuildDedupKey(s3)).second)
-                    { if (s_rollout_stats) { bpnode::g_child_dupes.fetch_add(1, std::memory_order_relaxed); } continue; }
+                    const TranspositionTable::Key child_key = BuildDedupKey(s3);
+                    if (!bp_seen_states.insert(child_key).second)
+                    {
+                        if (s_rollout_stats)
+                        {
+                            bpnode::g_child_dupes.fetch_add(1, std::memory_order_relaxed);
+                            if (pend_local.count(child_key) != 0)
+                            { bpnode::g_dupes_innode.fetch_add(1, std::memory_order_relaxed); }
+                            if (v.bp_choice == kBpEmptyChoice)
+                            { bpnode::g_dupes_empty.fetch_add(1, std::memory_order_relaxed); }
+                        }
+                        continue;
+                    }
+                    if (s_rollout_stats) { pend_local.insert(child_key); }
                     if (s3.ActivePlayer().life <= 0) { continue; }   // self-kill guard, as above
                     AnimateLandsShared(s3, nullptr);
                     ActivateTapTokensShared(s3, nullptr);
@@ -26066,6 +26216,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 kOverrunBeta * static_cast<double>(budget->Limit()));
             budget->SetOverrunLimit(used_before + std::max(beta_ceiling, kOverrunFloor));
         }
+        if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
         SearchLine attempt = FSLineWin(state, pass_depth, max_turns, max_turns + 1, second_main, tt,
                                        &line_cache, budget);
         bool aborted = (budget != nullptr && budget->Overrun());
@@ -26074,6 +26225,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         if (aborted)
         {
             // Runaway pass: discard its partial result, commit the last completed pass.
+            if (s_rollout_stats)
+            {
+                g_idwaste_passes.fetch_add(1, std::memory_order_relaxed);
+                g_idwaste_units.fetch_add(budget->Used() - used_before, std::memory_order_relaxed);
+            }
             TRACE("search", "T%d pass=%d OVERRUN abort (used=%lld limit=%lld) -> commit depth=%d",
                   state.turn_number, pass_depth,
                   budget ? budget->Used() : 0, budget ? budget->Limit() : 0, prev_committed);
@@ -27084,9 +27240,19 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                     const long long ub2 = esc_budget->Used();
                     esc_budget->SetOverrunLimit(ub2 + std::max<long long>(2 * esc_budget->Limit(), 1));
                     const long long r_ub0 = esc_budget->Used();
+                    if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
                     SearchLine up = FSLineWin(state, td + 1, max_turns, single_cut, second_main,
                                               single_tt, &single_cache, esc_budget);
-                    if (esc_budget->Overrun()) { break; }   // deeper pass did not fit => keep current line
+                    if (esc_budget->Overrun())
+                    {
+                        // Deeper pass did not fit => keep current line; its units are pure waste.
+                        if (s_rollout_stats)
+                        {
+                            g_idwaste_passes.fetch_add(1, std::memory_order_relaxed);
+                            g_idwaste_units.fetch_add(esc_budget->Used() - r_ub0, std::memory_order_relaxed);
+                        }
+                        break;
+                    }
                     c_prev_climb = static_cast<double>(c_last);
                     hline  = up;
                     c_last = esc_budget->Used() - r_ub0;
