@@ -49,7 +49,7 @@ Mind Stone, Fire Diamond, Dragonspeaker Shaman, Glorybringer, Haven of the Spiri
 * **Opponent creatures never block or attack** (`GoldFishRunner::PopulateOpponentSpawns` —
   "their purpose is to provide targets"). So trample/flying are inert, *and* nothing in this
   deck can kill our own creatures.
-* `OnDragonEnters` (SpellEffects.h:2777) is the universal enter cascade; STEP 2 scans the
+* `FireEtbWatchers` (SpellEffects.h:2777) is the universal enter cascade; STEP 2 scans the
   battlefield for `dragon_ping_on_enter` on **any** permanent, so an enchantment pinger works
   with no new plumbing.
 * `EffectHandler::EnterBattlefield` never applies `enters_tapped` — that flag is honored only

@@ -372,7 +372,7 @@ New params, all additive and default-off (`cast_trigger_instant_sorcery_tokens`,
    `SacFloatColorFor` (which already honours a pin). Verified by a discriminating scenario pair in
    `logs/cardcheck/scen/`: it **cannot** pay `{G}`, and it **can** pay a generic pip.
 3. **Rollout lockstep for noncreature ETBs.** `TurnSolver`'s non-creature permanent branch fired
-   `OnDragonEnters` but not `OnGoblinEnters`, so an enchantment's ETB token would exist in the real
+   `FireEtbWatchers` but not `FireOwnEtbTriggers`, so an enchantment's ETB token would exist in the real
    game and not in the projection (an fd-diverge of the Puresteel shape). Now fires both. Provably
    inert for existing decks: all 8 cards carrying a cascade param are instants/sorceries, which never
    reach a permanent-enter branch.

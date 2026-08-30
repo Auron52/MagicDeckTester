@@ -1680,7 +1680,7 @@ static SameTurnReducerCounts CountSameTurnReducers(const GameState& state,
             {
                 // A same-turn Incubator is not on the battlefield yet, so its ETB choice has not
                 // happened. It is a pure function of the deck, so predicting it here gives exactly
-                // what OnDragonEnters will pick when the cast resolves.
+                // what FireEtbWatchers will pick when the cast resolves.
                 if (chosen == SubtypeRegistry::kNone)
                 { chosen = DominantCreatureSubtypeId(state, state.active_player_index); }
                 id = chosen;
@@ -5409,7 +5409,7 @@ bool TurnSolver::BreakpointHandSnapshotWanted(const GameState& state)
 // ---- Breakpoint site 6: the equipment-ETB draw (Puresteel Paladin) ----------------------------
 //
 // THE BUG THIS CLOSES. Puresteel Paladin's "whenever an Equipment you control enters, draw a card"
-// is fully implemented (OnDragonEnters, the universal enter cascade, so it fires for a CAST
+// is fully implemented (FireEtbWatchers, the universal enter cascade, so it fires for a CAST
 // Equipment and for one PUT onto the battlefield alike) and it fires in both worlds. What never
 // existed was the DECISION that follows it: no breakpoint armed, so the drawn card could not be
 // cast in the phase that drew it. Measured over 150 logged held-out games: ~109 main-1 equipment
@@ -14377,8 +14377,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // could never SEE a vial line's ETB value either).
             {
                 const int slot = static_cast<int>(state.battlefield.size()) - 1;
-                OnDragonEnters(state, state.active_player_index, slot);
-                OnGoblinEnters(state, state.active_player_index, slot);
+                FireEtbWatchers(state, state.active_player_index, slot);
+                FireOwnEtbTriggers(state, state.active_player_index, slot);
             }
             if (copt->card.HasSupertype(Supertype::Legendary))
             {
@@ -15206,13 +15206,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // (Scourge ETB ping -> opponent life loss + Lathliss 5/5 token). Mirrors the executor's
             // EffectHandler::EnterBattlefield (lockstep) so the search's win projection counts the
             // ping toward lethal. No-op for every non-Dragon creature -> other decks byte-identical.
-            OnDragonEnters(state, state.active_player_index,
+            FireEtbWatchers(state, state.active_player_index,
                            static_cast<int>(state.battlefield.size()) - 1);
 
             // Goblins tribal ETB cascade (rollout side, lockstep with EffectHandler): self-tokens,
             // ETB burn, Matron tutor (search target = tutor_target), Muxus reveal. No-op for every
             // non-Goblin creature -> other decks byte-identical.
-            OnGoblinEnters(state, state.active_player_index,
+            FireOwnEtbTriggers(state, state.active_player_index,
                            static_cast<int>(state.battlefield.size()) - 1, tutor_target, chosen_x);
 
             // ETB library dig (Acclaimed Contender): performed inline so the clairvoyant
@@ -15709,7 +15709,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (def.params.tutor_to_battlefield)
         {
             // Dragonstorm (Storm): mirror EffectHandler -- put min(spells_cast_this_turn, Dragons-
-            // left) Dragons onto the battlefield through the shared OnDragonEnters cascade (Scourge
+            // left) Dragons onto the battlefield through the shared FireEtbWatchers cascade (Scourge
             // ping -> opponent life loss; Lathliss token), then shuffle. The pings/tokens are realised
             // by THIS rollout, so the win projection (opp.life <= 0 after ApplyPlanDirect) sees the
             // kill -- no fast-path hand-projection needed (an over-projection would fd-diverge; an
@@ -15920,7 +15920,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (state.battlefield[bi].card.m_number == cast_number
                         && state.battlefield[bi].controller_index == state.active_player_index)
                     {
-                        OnDragonEnters(state, state.active_player_index, bi);
+                        FireEtbWatchers(state, state.active_player_index, bi);
                         // ...and the param-gated ETB cascade, so this branch is lockstep with the
                         // executor's EffectHandler::EnterBattlefield (which fires it on EVERY entry).
                         // Closes the gap documented in docs/design/etb-cascade-projection-gap.md:
@@ -15930,7 +15930,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         //
                         // The reachable surface is exactly ONE card, and it is not the list the old
                         // comment here named. Creatures never arrive here: they are taken by the
-                        // `else if (is_creature)` branch above, which has fired OnGoblinEnters (with
+                        // `else if (is_creature)` branch above, which has fired FireOwnEtbTriggers (with
                         // tutor_target/chosen_x) all along. Instants and sorceries are excluded by
                         // this branch's own condition. So of the 26 cards in cards.json carrying a
                         // cascade param -- 17 creatures, 8 instants/sorceries -- the only one that
@@ -15948,7 +15948,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         // false: those permanents are creatures, and creatures do not reach here).
                         // A byte-identity claim in a comment is a measurement with an expiry date --
                         // re-count against cards.json rather than trusting any of these three.
-                        OnGoblinEnters(state, state.active_player_index, bi);
+                        FireOwnEtbTriggers(state, state.active_player_index, bi);
                         break;
                     }
                 }

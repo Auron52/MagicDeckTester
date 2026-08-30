@@ -245,7 +245,7 @@ victim as `sacrifice`, and both non-cleanup discards (Burning-Fist's cost, Neheb
 - Stage 1 coverage; 12 missing; Scryfall fetch complete (with the Slaughter-Priest recall catch).
 - All 12 implemented; build clean; coverage clean; cost audit clean.
 - Smoke 39/39 and regression 65/65 byte-identical — the shared-code changes (ComputeLordBonus
-  signature, the OnDragonEnters early-out, CanonicalSacVictim widening, EffectiveSpellCost,
+  signature, the FireEtbWatchers early-out, CanonicalSacVictim widening, EffectiveSpellCost,
   ApplyAttackSelfPumps, AttackWith, ResolveCombatDamage, PerformFetch) are provably inert for all
   13 existing decks.
 - 200-game observational sweep: Sethron tokens, both ActivatePump shapes, hybrid payment and the

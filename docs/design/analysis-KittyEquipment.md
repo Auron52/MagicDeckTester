@@ -117,7 +117,7 @@ full-depth fd-oracle + equip-width arms. THREE REAL DEFECTS found and FIXED:
 
 1. **[fd-diverge] seed=300018 → rollout missed Puresteel draws on CAST equipment (FIXED).**
    The rollout's noncreature-permanent cast branch (TurnSolver ~9147) never fired the
-   universal enter cascade (`OnDragonEnters`), so a cast Equipment did not trigger Puresteel
+   universal enter cascade (`FireEtbWatchers`), so a cast Equipment did not trigger Puresteel
    Paladin's draw in projections while the executor (EffectHandler:34) did. Concretely: real
    T5 Greaves cast drew 2 cards (2 Puresteels) incl. the Colossus Hammer it then cast; the
    projection kept those cards in the library and its Skyhunter attack-dig put a phantom
@@ -270,7 +270,7 @@ REGENERATE on the final engine (mandatory).
   EnforceLegendRule's doomed-removal path doesn't zero `equipped_to` of equipment on the
   doomed legend — inert under keep-oldest, fix one line while in the area.)
 - **Puresteel Paladin** — draft ready (Tier 3: `{W}{W}` 2/2; `draw_on_equipment_etb` hooked at
-  the UNIVERSAL enter cascade `OnDragonEnters` (NOT on-cast — Stoneforge/Skyhunter puts must
+  the UNIVERSAL enter cascade `FireEtbWatchers` (NOT on-cast — Stoneforge/Skyhunter puts must
   draw), always-take-may (6a disclosure), copy draw_on_aura_cast body;
   `metalcraft_equip_zero_artifacts=3` via new shared `EquipCostGenericNow` helper +
   `CountControlledArtifacts`, applied at enumeration ~L4234 AND payment sites (apply_one

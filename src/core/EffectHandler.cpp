@@ -36,11 +36,11 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // Scourge's ETB ping + Lathliss's 5/5 token. No-op for every non-Dragon permanent (early
     // subtype return) so all other decks are byte-identical. Mirrors the rollout's creature-enter
     // site in TurnSolver::ApplyPlanDirect (lockstep).
-    OnDragonEnters(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1);
+    FireEtbWatchers(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1);
     // Goblins tribal ETB cascade (self-tokens / ETB burn / Matron tutor / Muxus reveal). No-op for
     // every non-Goblin permanent (early param return). entry.tutor_target carries a search/human
     // Goblin Matron fetch target (empty -> the provider's pick).
-    OnGoblinEnters(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1,
+    FireOwnEtbTriggers(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1,
                    entry.tutor_target, entry.chosen_x.value_or(-1));
 }
 
@@ -81,7 +81,7 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
     // Adding one means gating EVERY EnforceLegendRule site, not just this one.
     //
     // Placed AFTER the dispatch so it runs after the permanent has entered and its ETB effects have
-    // resolved (dig, Dragon cascade), which is exactly the rollout's ordering -- and after, not
+    // resolved (dig, enter-watcher cascade), which is exactly the rollout's ordering -- and after, not
     // before, so an ETB dig's `battlefield.back()` self-pointer is never invalidated underneath it.
     // No-op for every deck with no legendary permanent.
     if (def.card.HasSupertype(Supertype::Legendary))
@@ -221,7 +221,7 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                                                   entry.tutor_target);
                 }
                 // Dragonstorm (Storm): put min(spells_cast_this_turn, Dragons-in-library) Dragons
-                // onto the battlefield, each through the shared OnDragonEnters cascade (Scourge ping
+                // onto the battlefield, each through the shared FireEtbWatchers cascade (Scourge ping
                 // + Lathliss token), then shuffle. spells_cast_this_turn was incremented at THIS
                 // spell's cast (CastSpellFromHand, before it went on the stack), so it already counts
                 // Dragonstorm itself -> it equals (prior spells cast this turn) + 1 = storm copies +

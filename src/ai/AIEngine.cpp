@@ -2460,8 +2460,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // put path calls; lockstep twin in TurnSolver's apply_vial.
             {
                 const int slot = static_cast<int>(state.battlefield.size()) - 1;
-                OnDragonEnters(state, state.active_player_index, slot);
-                OnGoblinEnters(state, state.active_player_index, slot);
+                FireEtbWatchers(state, state.active_player_index, slot);
+                FireOwnEtbTriggers(state, state.active_player_index, slot);
             }
             if (copt->card.HasSupertype(Supertype::Legendary))
             {
@@ -4052,7 +4052,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // X is 0 except on the stack, where it is the chosen value -- so it is NOT in the card's
     // mana value, only here on the stack entry.
     // Positive X only -- EXCEPT the Terastodon destroy-K sentinel (kEtbKxHeuristic = "project K
-    // at resolution"), which must survive to OnGoblinEnters or the executor would silently
+    // at resolution"), which must survive to FireOwnEtbTriggers or the executor would silently
     // resolve K as -1 (destroy nothing) while the rollout (which passes the int directly)
     // projected -- an executor/rollout divergence by construction. chosen_x defaults to 0 for
     // every other cast, so no other deck's entries move.

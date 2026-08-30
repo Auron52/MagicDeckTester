@@ -123,14 +123,14 @@ ping); Scourge in → make token T1 → T1 pings **3**, Scourge's own ping **3**
 token T2 → T2 pings **5**, Scourge's ping for Kolaghan **5** (= 5+5) = **16 to the face** + **two** 5/5
 tokens, and every Dragon+token has haste (Kolaghan/Karrthus grant_haste) → hasted alpha strike (~26 power)
 → lethal. (Scourge-first is worse: only ONE token + fewer pings, because Lathliss isn't in play when
-Scourge enters.) **IMPLEMENTATION ORDERING:** `OnDragonEnters` must create the Lathliss token (and
+Scourge enters.) **IMPLEMENTATION ORDERING:** `FireEtbWatchers` must create the Lathliss token (and
 recurse) BEFORE resolving the entered Dragon's Scourge ping, so every ping sees the maximal Dragon count
 — the unambiguously-optimal line (more pings/tokens is never worse in goldfish), so token-first is a
 faithful deterministic model, not a search choice. **This ordering/selection is a
 reasonable DRAGONSTORM PROVIDER HEURISTIC** (Lathliss/token-makers first, then Scourge the pinger, then a
 haste-Dragon, while they remain in the library) — encode it as the tutor-to-battlefield candidate ORDER
 in a DragonstormProvider, but keep it search-explorable (unpruned / human-play must still see every legal
-target+order), and validate via 5e. Requirements this imposes: (a) `OnDragonEnters` fires for **Lathliss
+target+order), and validate via 5e. Requirements this imposes: (a) `FireEtbWatchers` fires for **Lathliss
 tokens** so they re-ping Scourge (call it from `CreateToken`); (b) **Lathliss triggers for EVERY
 subsequent nontoken Dragon** (not just once) — put ORDER (Lathliss first) is a real search decision; (c)
 the **win/lethal eval must count the Scourge ping (opponent life loss) PLUS the hasted
@@ -166,7 +166,7 @@ a proposal; keep search-explorable (unpruned/human-play sees all legal target se
   above are the SELECTION rules — which Dragons to grab when the library is short; this is the ORDER for a
   chosen set.)
 
-**Shared engine hook (5,6,8):** one `OnDragonEnters(state, controller, &perm)` cascade called from
+**Shared engine hook (5,6,8):** one `FireEtbWatchers(state, controller, &perm)` cascade called from
 EVERY dragon-enter site — executor `EffectHandler::EnterBattlefield`/`ResolveVanillaCreature`
 (`EffectHandler.cpp:11/165`), rollout `TurnSolver` creature-enter (~`3420`) + all `CreateToken` sites,
 and eval (`TurnSolver.cpp:503`) — driving both Scourge's ping and Lathliss's token. Must stay lockstep
@@ -202,7 +202,7 @@ Convergence loop back to Stage 2 on any flag.
 DONE + build-green + byte-identity-checked (hinata+slivers ALL PASS): Pyretic, Seething, Kolaghan,
 Karrthus (cards.json), `ritual_float_color` (rituals→red), Ruby Medallion (`reduces_spell_color`), Rite
 of Flame (gy self-scaling + triangular planner credit), **Dragon kill-engine** (Scourge ping /
-Lathliss token / Utvara attack-tokens / firebreathing / `is_token` — shared `OnDragonEnters` cascade,
+Lathliss token / Utvara attack-tokens / firebreathing / `is_token` — shared `FireEtbWatchers` cascade,
 token-first ordering verified 3+3+5+5=16, lockstep executor `EffectHandler::EnterBattlefield`+`CreateToken`
 / rollout `ApplyPlanDirect`+`SimulateCombat` / eval = rollout), **Storage lands** (Dwarven Hold +
 Mercadian Bazaar — `storage_land` + `storage_charge_mode`; see "Storage-land model" below),
@@ -237,7 +237,7 @@ later step; the deck still routes to **GenericProvider** (search enumerates targ
   Dragonstorm" convention — no subtract-1 needed.)
 - **Tutor-to-battlefield** (`tutor_to_battlefield` + `tutor_types:["Dragon"]` + `tutor_shuffle_after`,
   CardDatabase.h/.cpp): new shared helper `PerformTutorToBattlefield` (SpellEffects.h) puts the
-  min(...) Dragons from library ONTO THE BATTLEFIELD, each **routed through the shared `OnDragonEnters`
+  min(...) Dragons from library ONTO THE BATTLEFIELD, each **routed through the shared `FireEtbWatchers`
   cascade** (Scourge ETB ping → opp life loss; Lathliss 5/5 token; token-first ordering) — the #1
   wiring requirement, so puts are live bodies, not inert. Resolved LOCKSTEP in executor
   `EffectHandler::Resolve` (custom else-branch) + rollout `apply_one` (custom else-chain). The
@@ -467,7 +467,7 @@ on new params so every other deck is byte-identical. Faithful to the oracle + th
 
 ### Follow-ups from the kill-engine (carry into later steps)
 - **CRITICAL for Dragonstorm (item 8):** the tutor-to-battlefield PUT must route each Dragon through the
-  shared `OnDragonEnters` (call it, or go through the same `EnterBattlefield` the executor uses) so put-in
+  shared `FireEtbWatchers` (call it, or go through the same `EnterBattlefield` the executor uses) so put-in
   Dragons ping Scourge / trigger Lathliss. The hook exists but is wired only at hard-cast + `CreateToken`
   sites today. Without this, Dragonstorm drops inert bodies.
 - **Eval fast-path caveat (validate in Stage 5):** `PendingAttackDamage`/`wins_this_turn` static pre-plan

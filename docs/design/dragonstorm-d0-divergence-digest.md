@@ -89,7 +89,7 @@ The digest showed the search STORMS OFF (rituals → Dragonstorm → N dragons �
 states where greedy casts Dragonstorm late as a board-dev spell. Root cause: `DragonstormProvider` had
 no `ExtraLethalDamage` override, so `GenericProvider` returned 0 and the greedy/rollout `wins` check
 never saw the go-off (Dragonstorm the spell has `direct_damage == 0`; its damage is the fetched dragons'
-later ETB). The hook (`GoOffSim`, mirroring `SpellEffects.h OnDragonEnters`) projects that burst so
+later ETB). The hook (`GoOffSim`, mirroring `SpellEffects.h FireEtbWatchers`) projects that burst so
 `wins` fires for real go-offs. Blind d0 LP: 7.14 → 6.81. Adopted. Full detail:
 `dragonstorm-goff-lethal-recognition.md`.
 

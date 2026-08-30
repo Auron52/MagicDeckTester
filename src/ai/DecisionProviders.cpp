@@ -5726,7 +5726,7 @@ DragonstormProvider::TutorToBattlefieldPutOrder(const GameState& s, int controll
 namespace
 {
     // Cheap integer model of the Dragonstorm go-off's this-turn ETB burst, mirroring SpellEffects.h
-    // OnDragonEnters EXACTLY: for each entering NONTOKEN Dragon, every OTHER Lathliss first makes a 5/5
+    // FireEtbWatchers EXACTLY: for each entering NONTOKEN Dragon, every OTHER Lathliss first makes a 5/5
     // Dragon token (which itself enters -> pings), then every Scourge in play deals `dragons` (the current
     // count) to the opponent. Pure integer recursion (no GameState copy, tiny N) -> safe on the rollout
     // hot path. Dragons already in play seed the counts (they don't re-enter but scale the ping X and

@@ -150,7 +150,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     }
 
     // Utvara Hellkite: per attacking Dragon, create a 6/6 Dragon token (untapped, summoning-sick;
-    // NOT added to this combat). Each token entering fires OnDragonEnters (Scourge ping / Lathliss
+    // NOT added to this combat). Each token entering fires FireEtbWatchers (Scourge ping / Lathliss
     // token) via CreateToken. `attackers` still holds the pre-token attacker pointers, which
     // FireUtvaraAttackTokens reads before any CreateToken.
     FireUtvaraAttackTokens(state, active, attackers);

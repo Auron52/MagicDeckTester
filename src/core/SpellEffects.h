@@ -761,11 +761,30 @@ inline std::vector<std::string> HasteKeywords(bool haste)
 inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&,
                         const std::string& = std::string(),
                         const std::vector<std::string>& = std::vector<std::string>());
-// Forward declaration: the Dragonstorm-engine cascade (Scourge ping + Lathliss token) is
-// mutually recursive with CreateToken (a Lathliss 5/5 token entering re-fires the cascade).
-// Defined after CreateToken; called from CreateToken so EVERY token dragon enter also pings.
-inline void OnDragonEnters(GameState&, int controller, int entered_index);
-inline void OnGoblinEnters(GameState&, int controller, int entered_index,
+// THE TWO ENTER CASCADES. Every site that puts a permanent onto the battlefield calls both, in
+// this order, and they split by WHOSE ability fires:
+//
+//   FireEtbWatchers    -- the OTHER permanents already on the battlefield that watch for an entry
+//                         ("Whenever a creature you control enters, ..."): Suture Priest / Wardens,
+//                         Dragon Tempest's haste grant, Puresteel Paladin's draw, Lathliss's token,
+//                         Scourge of Valkas' ping. Plus one deliberate exception -- the newcomer's
+//                         own "as this enters, choose a creature type" (Urza's Incubator), which
+//                         lives here so executor and rollout share one decision point.
+//   FireOwnEtbTriggers -- the ENTERING permanent's own "When this enters, ..." abilities, read
+//                         entirely off its own CardParams: etb_life_floor, etb_damage_any,
+//                         etb_self_creates_tokens, the ETB tutors, and the rest.
+//
+// Both are universal, not tribal -- they were named OnDragonEnters / OnGoblinEnters after the
+// first deck that needed each, which was already wrong by the time a dozen archetypes hooked them
+// and was actively misleading: an "OnGoblinEnters" missing from the search's noncreature-permanent
+// projection read as a Goblins-only gap when it silently cost an Enchantment its ETB token (see
+// docs/design/etb-cascade-projection-gap.md).
+//
+// Forward-declared because FireEtbWatchers is mutually recursive with CreateToken (a Lathliss 5/5
+// token entering re-fires the cascade). Defined after CreateToken; called FROM CreateToken so
+// every token enter fires the watchers too.
+inline void FireEtbWatchers(GameState&, int controller, int entered_index);
+inline void FireOwnEtbTriggers(GameState&, int controller, int entered_index,
                            const std::string& chosen_tutor, int etb_kx);
 // etb_kx sentinel: "PUT entry with no searched destroy-K axis -- pick heuristically at
 // resolution" (full rationale at kEtbKxHeuristic's consumers near HeuristicEtbDestroyK).
@@ -1207,7 +1226,7 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
 
 // Dragonstorm (Storm) tutor-TO-BATTLEFIELD. Put up to `max_puts` cards matching pp.tutor_types
 // (Dragons) from the controller's library ONTO THE BATTLEFIELD, each routed through the shared
-// OnDragonEnters cascade (Scourge ping / Lathliss token) so a put Dragon is a live body, not inert
+// FireEtbWatchers cascade (Scourge ping / Lathliss token) so a put Dragon is a live body, not inert
 // -- the #1 wiring requirement. `max_puts` = the STORM total = state.spells_cast_this_turn, which the
 // caller passes AS-IS: the storm counter is ++'d at Dragonstorm's own cast, so it already equals
 // (prior spells this turn) + 1 = storm copies + the original = the number of Dragons to fetch. The
@@ -1437,7 +1456,7 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     if (put_names.empty()) { return; }
 
     // Put each named Dragon: find+remove the first library copy, enter it (preserving its per-copy
-    // number), fire OnDragonEnters. Re-find per put -- erase shifts library indices, and OnDragonEnters
+    // number), fire FireEtbWatchers. Re-find per put -- erase shifts library indices, and FireEtbWatchers
     // may append tokens to the battlefield but never touches the library.
     for (const std::string& nm : put_names)
     {
@@ -1470,13 +1489,13 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         }
         // #1 wiring requirement: route the put Dragon through the SAME cascade the hard-cast enter
         // uses (Scourge ping -> opponent life loss; Lathliss 5/5 token; token-first ordering baked in).
-        OnDragonEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+        FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
         // ...and the generic param-ETB cascade (Craterhoof team pump, Hornet Queen tokens,
         // Muxus-class reveals) so a Natural-Order-put creature's ETB fires exactly like a cast one.
         // No-op for every Dragon (no such params) -> Dragonstorm byte-identical.
         // kEtbKxHeuristic: a put Terastodon's destroy-K is picked by the resolution-time
         // lethality heuristic (no searched axis on this path); inert for every other creature.
-        OnGoblinEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1,
+        FireOwnEtbTriggers(state, controller, static_cast<int>(state.battlefield.size()) - 1,
                        std::string(), kEtbKxHeuristic);
     }
 
@@ -2572,7 +2591,7 @@ inline int CountAttackTriggerLifeLoss(
 
 // ---- Creature-enter watchers (Creature Giving: Soul/Essence Warden, Suture Priest) ------------
 // "Whenever [another] creature [you control / an opponent controls] enters ..." -- fired for EVERY
-// creature entering on EITHER side. Called from the universal enter cascade (OnDragonEnters' top,
+// creature entering on EITHER side. Called from the universal enter cascade (FireEtbWatchers' top,
 // which every enter site already invokes: cast resolution, CreateToken, battlefield puts,
 // off-suspend) plus the two opponent-spawn materialisation sites (GameEngine / TurnSolver
 // turn-start, lockstep). Gated per-watcher on the params, so a board with no watcher permanents is
@@ -2813,10 +2832,10 @@ inline void CreateToken(
     token.is_token          = true;   // Lathliss "nontoken Dragon" gate reads this (loop-safe)
     state.battlefield.push_back(token);
     // A token Dragon (Lathliss 5/5, Utvara 6/6) entering also fires the Dragonstorm cascade: it
-    // re-pings every Scourge (via OnDragonEnters step 2) but, being a token, never re-triggers
+    // re-pings every Scourge (via FireEtbWatchers step 2) but, being a token, never re-triggers
     // Lathliss (nontoken gate). No-op for every non-Dragon token (early subtype return) -> all
     // existing token-making decks (Adeline, Forbidden Orchard, Sliver Hive) are byte-identical.
-    OnDragonEnters(state, controller_index, static_cast<int>(state.battlefield.size()) - 1);
+    FireEtbWatchers(state, controller_index, static_cast<int>(state.battlefield.size()) - 1);
 }
 
 // Token that is a COPY of a real card (Vaultborn Tyrant's "create a token that's a copy of it").
@@ -2834,7 +2853,7 @@ inline void CreateTokenCopyOfCard(GameState& state, int controller, const Card& 
     token.entered_this_turn = true;
     token.is_token          = true;
     state.battlefield.push_back(token);
-    OnDragonEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+    FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
 }
 
 // ---- Dragonstorm kill-engine shared helpers (Scourge / Lathliss / Utvara) -----------
@@ -2926,16 +2945,27 @@ inline int CountControlledDragons(const GameState& state, int controller)
     return n;
 }
 
-// A Dragon just entered under `controller` at battlefield slot `entered_index`. Drives BOTH
-// Scourge of Valkas ("this or another Dragon enters -> deal X = Dragons you control to any
-// target", modelled as opponent life loss) and Lathliss ("another NONTOKEN Dragon enters ->
-// 5/5 Dragon token"). Deterministic token-first ordering (the unambiguously optimal goldfish
-// line): create Lathliss's token FIRST (it re-pings Scourge via the recursive CreateToken at the
-// new, higher count), THEN resolve the newcomer's own Scourge pings at that higher count.
+// A permanent just entered under `controller` at battlefield slot `entered_index`: fire every
+// OTHER permanent's enter-watching trigger. See the pair note at the forward declaration for how
+// this splits from FireOwnEtbTriggers, and for why neither is Dragon- or Goblin-specific.
+//
+// In order: the newcomer's own choose-a-creature-type (the one self-effect that lives here, so the
+// executor and the rollout share one decision point), creature-enter watchers (Suture Priest /
+// Wardens), Dragon Tempest's haste-on-flying-enter, Puresteel Paladin's equipment draw, then the
+// two Dragonstorm-engine steps this function was originally written for -- Lathliss ("another
+// NONTOKEN Dragon enters -> 5/5 Dragon token") and Scourge of Valkas ("this or another Dragon
+// enters -> deal X = Dragons you control to any target", modelled as opponent life loss).
+//
+// Deterministic token-first ordering between those two (the unambiguously optimal goldfish line):
+// create Lathliss's token FIRST (it re-pings Scourge via the recursive CreateToken at the new,
+// higher count), THEN resolve the newcomer's own Scourge pings at that higher count.
 //
 // Loop-safety: a Scourge ping creates no permanents (can't loop); a Lathliss token is is_token so
 // step 1 skips it (never re-triggers Lathliss) though it still re-pings Scourge (correct).
-inline void OnDragonEnters(GameState& state, int controller, int entered_index)
+//
+// Every block below is param-gated, so a deck using none of these params pays only the scans and
+// is byte-identical.
+inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
     // Creature-enter watchers (Creature Giving: Wardens / Suture Priest). This function is the
@@ -3140,7 +3170,7 @@ inline int CountEtbDestroyTargets(const GameState& state, int controller)
     return n;
 }
 
-// kEtbKxHeuristic (declared with the OnGoblinEnters fwd decl above): the PUT paths (Natural
+// kEtbKxHeuristic (declared with the FireOwnEtbTriggers fwd decl above): the PUT paths (Natural
 // Order / Call of the Wild / Turntimber) pass it to mean "no searched K rode this entry -- pick
 // one heuristically at resolution". Distinct from -1 ("no K specified, destroy nothing") because
 // the EXECUTOR's stack entry only records a cast's chosen_x when it is POSITIVE (AIEngine), so a
@@ -3198,7 +3228,19 @@ inline int DevotionTo(const GameState& state, int controller, const std::string&
     return dev;
 }
 
-inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
+// A permanent just entered under `controller` at battlefield slot `entered_index`: fire ITS OWN
+// "When this enters, ..." abilities. Everything below is read off the newcomer's own CardParams,
+// which is the line that separates this from FireEtbWatchers (other permanents watching the
+// entry) -- see the pair note at the forward declaration.
+//
+// `chosen_tutor` is the searched target for an ETB tutor; `etb_kx` the searched K for an ETB
+// destroy-K, with kEtbKxHeuristic meaning "PUT entry, no searched axis, pick at resolution".
+//
+// Not Goblin-specific despite the name it carried until 2026-08-30: 26 cards across a dozen decks
+// hook these params, and the tribal name is what made a missing call in the search's
+// noncreature-permanent projection look inert for months (docs/design/etb-cascade-projection-gap.md).
+// Every block is param-gated -> byte-identical for a deck that uses none of them.
+inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_index,
                            const std::string& chosen_tutor = "", int etb_kx = -1)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
@@ -3631,7 +3673,7 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         perm.entered_this_turn = true;
         perm.is_token          = true;   // a conjured copy ceases to exist in other zones anyway
         state.battlefield.push_back(perm);
-        OnDragonEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+        FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
     }
     else if (name == "Braingeyser")
     {
@@ -4376,10 +4418,10 @@ inline bool ApplyRevealTopDeploy(GameState& state, int controller)
         perm.entered_this_turn = true;
         state.battlefield.push_back(perm);
         const int slot = static_cast<int>(state.battlefield.size()) - 1;
-        OnDragonEnters(state, controller, slot);
+        FireEtbWatchers(state, controller, slot);
         // kEtbKxHeuristic: a PUT Terastodon has no searched destroy-K axis -- the resolution-time
         // lethality heuristic picks one (HeuristicEtbDestroyK); inert for every other creature.
-        OnGoblinEnters(state, controller, slot, std::string(), kEtbKxHeuristic);
+        FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
     }
     else
     {
@@ -4487,10 +4529,10 @@ inline void PerformLookTopPutCreature(GameState& state, int controller, const Ca
             { perm.counters.push_back(Counter{ Counter::Type::PlusOnePlusOne, pp.look_put_counter_bonus }); }
             state.battlefield.push_back(perm);
             const int slot = static_cast<int>(state.battlefield.size()) - 1;
-            OnDragonEnters(state, controller, slot);
+            FireEtbWatchers(state, controller, slot);
             // kEtbKxHeuristic: a PUT Terastodon has no searched destroy-K axis -- the
             // resolution-time lethality heuristic picks one; inert for every other creature.
-            OnGoblinEnters(state, controller, slot, std::string(), kEtbKxHeuristic);
+            FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
         }
         else
         {
@@ -4835,7 +4877,7 @@ inline void ApplyChannel(GameState& state, int controller, int hand_index,
 
 // Utvara Hellkite: "Whenever a Dragon you control attacks, create a 6/6 Dragon token." Per
 // ATTACKING matching creature. Called at declare-attackers with the finalized `attackers`. Tokens
-// enter UNTAPPED + summoning-sick via CreateToken (so each fires OnDragonEnters: Scourge ping /
+// enter UNTAPPED + summoning-sick via CreateToken (so each fires FireEtbWatchers: Scourge ping /
 // Lathliss token) and are NOT returned to this combat. Counts are gathered BEFORE any CreateToken
 // (which invalidates the `attackers` pointers). Distinct from the flat tapped-and-attacking
 // FireAttackCreateTokens (Adeline).
@@ -4875,7 +4917,7 @@ inline void FireUtvaraAttackTokens(GameState& state, int controller,
     {
         for (int k = 0; k < s.n; ++k)
         {
-            // untapped; pings via OnDragonEnters (and, with a Dragon Tempest out, gains haste)
+            // untapped; pings via FireEtbWatchers (and, with a Dragon Tempest out, gains haste)
             CreateToken(state, controller, s.p, s.t, s.subs, std::string(), s.kws);
         }
     }
@@ -5013,7 +5055,7 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
 // controller's attackers that (a) has combat_damage_puts_subtype_from_hand non-empty and (b) dealt
 // positive combat damage (its index is in `damaging_attacker_indices`). For each, deterministically
 // cheat the HIGHEST-impact matching permanent from hand into play through the shared enter cascade
-// (OnDragonEnters + OnGoblinEnters -- mirroring PerformMuxusReveal), so the cheated body fires its own
+// (FireEtbWatchers + FireOwnEtbTriggers -- mirroring PerformMuxusReveal), so the cheated body fires its own
 // ETB (Siege-Gang tokens, Muxus reveal, ...). Heuristic pick: highest mana value, tie-break higher
 // printed power then lower card number (deterministic; the human-play/viewer chooser is wired later).
 // Gated: no Lackey-flagged damaging attacker (or no matching hand card) -> no-op, other decks identical.
@@ -5422,8 +5464,8 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                        { raw.m_number }, { raw.m_name.str() }, { raw.m_number }, {},
                        /*dispositions*/ { "\xE2\x86\x92 battlefield (from hand)" });
         }
-        OnDragonEnters(state, controller, slot);   // in case a put permanent is ever a Dragon
-        OnGoblinEnters(state, controller, slot);   // fire the put permanent's own Goblin ETB cascade
+        FireEtbWatchers(state, controller, slot);   // in case a put permanent is ever a Dragon
+        FireOwnEtbTriggers(state, controller, slot);   // fire the put permanent's own ETB triggers
         // Legend rule (CR 704.5j) -- a STATE-BASED action, checked continuously, so it must run the
         // moment the duplicate enters. It was missing here: the other put path (a Vial deploy) does
         // enforce it, but this put resolves in the COMBAT-DAMAGE step, i.e. AFTER the combat-start
@@ -5628,7 +5670,7 @@ inline int ApplyFirebreathing(GameState& state, int controller,
 // that just push_backs a Permanent) is deliberate: it is the SINGLE place Dragonstorm's future
 // spells_cast_this_turn increment will live, so an off-suspend arrival automatically counts +1 toward
 // storm. Suspending (paying {0}) and sacrificing are NOT casts and do NOT come through here. The card
-// enters as its permanent; a Dragon fires OnDragonEnters (Lotus Bloom is a colourless artifact -> no-op).
+// enters as its permanent; a Dragon fires FireEtbWatchers (Lotus Bloom is a colourless artifact -> no-op).
 inline void CastOffSuspend(GameState& state, int controller, const Card& card)
 {
     const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
@@ -5651,7 +5693,7 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
         EmitPlayEvent(state.turn_number, "suspend",
                       "\xE2\x8C\x9B " + card.m_name.str() + " -- cast off suspend (enters play)");
     }
-    OnDragonEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+    FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
 }
 
 // Apply a SUSPEND action ({0}): move the first matching in-hand card to Player::suspended_cards with
@@ -5816,7 +5858,7 @@ inline void ProcessSuspendArrivals(GameState& state, int controller)
     if (pl.suspended_cards.empty()) { return; }
     std::vector<SuspendedCard> remaining;
     remaining.reserve(pl.suspended_cards.size());
-    // Snapshot then clear so a re-entrant OnDragonEnters (a suspended Dragon would ping/spawn) cannot
+    // Snapshot then clear so a re-entrant FireEtbWatchers (a suspended Dragon would ping/spawn) cannot
     // observe a half-processed list; arrivals are cast in the order they were suspended.
     std::vector<SuspendedCard> snap = std::move(pl.suspended_cards);
     pl.suspended_cards.clear();
@@ -6029,8 +6071,8 @@ inline void PerformUpkeepSacTutor(GameState& state)
                 { slot = i; break; }
             }
             if (slot < 0) { continue; }
-            OnDragonEnters(state, active, slot);   // universal cascade (enter-watchers fire here)
-            OnGoblinEnters(state, active, slot);   // param-gated ETBs: Phantasm gift / Wurm sweep
+            FireEtbWatchers(state, active, slot);   // universal cascade (enter-watchers fire here)
+            FireOwnEtbTriggers(state, active, slot);   // param-gated ETBs: Phantasm gift / Wurm sweep
         }
 
         // "...then shuffle" (deterministic + lockstep). ON BY DEFAULT; MTG_NO_SEARCH_SHUFFLE opts out.
@@ -6244,7 +6286,7 @@ inline void CreateTreasureTokens(GameState& state, int controller, int n)
 // not its counters, damage, or until-EOT effects -- which is exactly Permanent::card. m_number is
 // reassigned from the token counter (two live permanents must not share a per-copy id; see
 // GameState::next_token_number). The token enters through the universal enter cascade
-// (OnDragonEnters top fires the creature-enter watchers; OnGoblinEnters fires a copied Goblin
+// (FireEtbWatchers top fires the creature-enter watchers; FireOwnEtbTriggers fires a copied Goblin
 // Instigator's own ETB token -- faithful, CR 707.4: the copy has the ETB trigger). A LEGENDARY
 // copy (Zada) legend-rules immediately after; MirrorwingProvider::LegendKeepIndex keeps the
 // original unless the hasty copy converts this turn into the win (user rule; disclosed 6a).
@@ -6261,8 +6303,8 @@ inline void CreateTrickCopyToken(GameState& state, int controller, int src_i)
     token.exile_at_end      = true;
     state.battlefield.push_back(token);
     const int idx = static_cast<int>(state.battlefield.size()) - 1;
-    OnDragonEnters(state, controller, idx);
-    OnGoblinEnters(state, controller, idx);
+    FireEtbWatchers(state, controller, idx);
+    FireOwnEtbTriggers(state, controller, idx);
     if (state.battlefield[idx].card.HasSupertype(Supertype::Legendary))
     {
         EnforceLegendRule(state, controller);

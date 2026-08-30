@@ -1,21 +1,33 @@
 # The ETB-cascade projection gap
 
 **Status: CLOSED 2026-08-30.** The call is in (`ApplyPlanDirect`'s noncreature-permanent branch,
-beside `OnDragonEnters`). Byte-identical across all three tiers — smoke 48/48, regression 80/80,
+beside `FireEtbWatchers`). Byte-identical across all three tiers — smoke 48/48, regression 80/80,
 **overnight 192/192** — plus scenarios 42/42 and units 702/702. Kept because the *shape* of how this
 stayed open for so long is worth more than the one-line diff.
 
 ## The gap
 
+> **Renamed 2026-08-30, and this document is why.** The two enter cascades were named after the
+> first deck that needed each, and both names were wrong by the time a dozen archetypes hooked them:
+>
+> | was | is | fires |
+> |---|---|---|
+> | `OnGoblinEnters` | **`FireOwnEtbTriggers`** | the ENTERING permanent's own "When this enters, ..." |
+> | `OnDragonEnters` | **`FireEtbWatchers`** | OTHER permanents watching the entry |
+>
+> The tribal name is a direct cause of the gap below: a missing `OnGoblinEnters` in the search's
+> noncreature-permanent projection reads as a Goblins-only concern, so it sat unfixed while it
+> silently cost an Enchantment its ETB token. Older text and commit messages use the old names.
+
 Two code paths bring a permanent onto the battlefield:
 
-| path | fires the param-gated ETB cascade (`OnGoblinEnters`)? |
+| path | fires the param-gated ETB cascade (`FireOwnEtbTriggers`)? |
 |---|---|
 | the executor, `EffectHandler::EnterBattlefield` | **yes**, on every entry, creature or not |
 | the search's projection, `ApplyPlanDirect` — creature branch | yes (always did) |
 | the search's projection, `ApplyPlanDirect` — noncreature-permanent branch | **no** ← the gap |
 
-`OnGoblinEnters` is the shared ETB cascade. Despite the name it is not goblin-specific — it reads
+`FireOwnEtbTriggers` is the shared ETB cascade, and nothing about it is tribal — it reads
 `etb_damage_any`, `etb_damage_each_opponent`, `etb_damage_devotion_color`, `etb_reveal_count`,
 `etb_self_creates_tokens`, `etb_opp_creates_tokens`, `etb_team_pump_per_creature`, `etb_life_floor`,
 `etb_destroy_own_noncreature_max`, `etb_opp_creatures_debuff`, `tutor_to_hand`, `tutor_to_top`,
@@ -32,7 +44,7 @@ Counted mechanically against `cards.json` on 2026-08-30 (cascade params come onl
 
 | kind | count | reaches the gap? |
 |---|---|---|
-| creatures | 17 | **no** — taken by the `else if (is_creature)` branch, which has fired `OnGoblinEnters` (with `tutor_target`/`chosen_x`) all along |
+| creatures | 17 | **no** — taken by the `else if (is_creature)` branch, which has fired `FireOwnEtbTriggers` (with `tutor_target`/`chosen_x`) all along |
 | instants / sorceries | 8 | **no** — excluded by the branch's own `!IsInstant() && !IsSorcery()` |
 | noncreature permanents | **1** | **yes** |
 
@@ -93,7 +105,8 @@ read by decks that never write it; see `minotaur-d5-regression-flake.md`, CLOSED
 deterministic again the change validated in one pass.
 
 Historical note, since it caused confusion across machines: another agent's commit message describes
-`c4e9930b` as "removing the OnGoblinEnters projection call". That is a misreading — `OnGoblinEnters`
+`c4e9930b` as "removing the OnGoblinEnters projection call" (quoted verbatim; that was the function's
+name at the time — see the rename note above). That is a misreading — `FireOwnEtbTriggers`
 itself was never removed (12+ call sites throughout), and the *projection* call was never committed
 at all (it lived in a stash). `c4e9930b` is where it was deliberately left out, with the KNOWN GAP
 comment that this document was written to explain.

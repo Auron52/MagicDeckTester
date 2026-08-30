@@ -9,7 +9,7 @@ remaining spell mechanics and the mid-build resume state so a compaction/handoff
   18 passed / 0 new / EXACT digests).** Branch `phase-1-2-deck-analyzer`. Commits (in order):
   `f50de75` Knights references · `ea2c3cb` 12 cards + inert splice scaffolding · `5529bfb` Desperate Ritual
   splice (search-chosen k, copies-scale-before-floor) · `406966f` Dragonstorm engine (storm counter
-  `spells_cast_this_turn` + `PerformTutorToBattlefield` + shuffle; OnDragonEnters wired for puts) ·
+  `spells_cast_this_turn` + `PerformTutorToBattlefield` + shuffle; FireEtbWatchers wired for puts) ·
   `5437427` DragonstormProvider (selection + single deterministic put-order; A/B 7.20 vs 7.40 library-order) ·
   `4483f9f` Apex of Power (impulse-exile-7 + cast-from-hand 10-color float, staged-land block `m_impulse_no_land`) ·
   `ccb578e` Storm keyword tag + refreshed Scryfall snapshot (`scryfall_reference.json`) · `dfe3fff` executor

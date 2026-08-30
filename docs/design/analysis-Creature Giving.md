@@ -49,7 +49,7 @@ All oracle texts + costs fetched live from Scryfall 2026-08-05 (this run's 2a).
 ## Engine wiring (lockstep executor + rollout)
 
 - `FireCreatureEnterWatchers` — called from inside the universal enter cascade
-  (`OnDragonEnters` top, gated on the entered permanent being a creature) so every existing
+  (`FireEtbWatchers` top, gated on the entered permanent being a creature) so every existing
   enter site (cast, token, puts, off-suspend) fires it; PLUS explicit calls at the two
   opponent-spawn materialisation sites (GameEngine turn-start, TurnSolver turn-start).
   Gated on watcher params → byte-identical for every other deck.
@@ -144,7 +144,7 @@ defects confirmed and fixed, engine + provider scorer together:
   watcher). Now pass 1 moves every chosen card onto the battlefield, pass 2 fires the shared
   cascades in list order (re-found by per-copy card number — a sweep can erase lower slots).
   Also makes simultaneously-put enter-watchers see each other (paired-Soul-Warden ruling).
-- **Sweep collapse → real until-EOT debuff** (`OnGoblinEnters` 1c): −2/−2 now applied via
+- **Sweep collapse → real until-EOT debuff** (`FireOwnEtbTriggers` 1c): −2/−2 now applied via
   `temp_tough_bonus` (cleanup-cleared, sim-key/signature-folded), so same-turn sweeps stack:
   the double put's second trigger kills 3/3 and 4/4 profile spawns at cumulative −4/−4.
 - **`SacTutorPutList` scorer mirrored**: all puts' watchers accumulate before any trigger is

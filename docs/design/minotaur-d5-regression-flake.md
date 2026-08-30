@@ -223,7 +223,7 @@ to is not what varies.
 All three came from **concluding on a single run of a flaky thing**, or from a plausible-looking
 code reading that was never measured:
 
-1. An `OnGoblinEnters` projection line was blamed, on a probe showing filtered-pass / full-fail. The
+1. An `OnGoblinEnters` (now `FireOwnEtbTriggers`) projection line was blamed, on a probe showing filtered-pass / full-fail. The
    filtered tier passes with *or* without that line; the probe never isolated the code.
 2. `ProfileCache` eviction was then declared the root cause on the strength of **one** clean run at a
    raised cap — which, at a ~20–60% pass rate, is barely evidence at all.

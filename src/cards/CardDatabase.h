@@ -354,14 +354,14 @@ struct CardParams
     // Scourge of Valkas: "Whenever this creature or another Dragon you control enters, it deals
     // X damage to any target, where X is the number of Dragons you control." Modelled as
     // opponent LIFE LOSS of (Dragons you control, INCLUDING the just-entered one). Fired from
-    // OnDragonEnters (SpellEffects.h) at EVERY dragon-enter site -- executor EnterBattlefield,
+    // FireEtbWatchers (SpellEffects.h) at EVERY dragon-enter site -- executor EnterBattlefield,
     // rollout creature-enter, and every CreateToken (so a Lathliss/Utvara token also pings).
     // Multiple Scourges each ping. "Any target" collapses to the opponent's face (optimal /
     // byte-identical in a passive goldfish). Firebreathing "{R}: +1/+0" via firebreathing_* below.
     bool                     dragon_ping_on_enter = false;
 
     // Lathliss, Dragon Queen: "Whenever another nontoken Dragon you control enters, create a
-    // 5/5 red Dragon creature token with flying." When set, OnDragonEnters creates the token for
+    // 5/5 red Dragon creature token with flying." When set, FireEtbWatchers creates the token for
     // each NONTOKEN Dragon (Permanent::is_token == false) that enters, is not this Lathliss
     // itself, and whose subtypes include etb_token_requires_subtype. Token-first ordering: the
     // 5/5 is created (and re-pings Scourge via CreateToken) BEFORE the newcomer's own Scourge
@@ -383,7 +383,7 @@ struct CardParams
     // for each source, count declared attackers matching attack_token_requires_subtypes (empty =
     // any; animated land = all types) and create N x count tokens that enter UNTAPPED and
     // summoning-sick -- they do NOT join this combat (they attack next turn, or this turn only if
-    // a haste-lord grants their "Dragon" subtype haste). Each token entering fires OnDragonEnters
+    // a haste-lord grants their "Dragon" subtype haste). Each token entering fires FireEtbWatchers
     // (Scourge ping / Lathliss token) via CreateToken.
     int                      attack_per_matching_creates_tokens = 0;
     int                      attack_per_token_power       = 0;
@@ -421,7 +421,7 @@ struct CardParams
     // end of turn." A permanent you control with this flag grants Permanent::temp_haste to every
     // entering controlled creature that has flying (read by CanAttackFull / CanTapNow, cleared each
     // cleanup -- the Expedite grants_temp_haste machinery). Fired from the universal enter cascade
-    // (OnDragonEnters' creature-enter watcher block), so it covers hard-cast Dragons AND every
+    // (FireEtbWatchers' creature-enter watcher block), so it covers hard-cast Dragons AND every
     // token (Lathliss 5/5, Utvara 6/6 -- both enter with flying). Tempest's OTHER clause, the
     // Dragon-count ping, is exactly Scourge's and rides dragon_ping_on_enter above. false = inert.
     bool                     haste_on_flying_enter = false;
@@ -482,7 +482,7 @@ struct CardParams
     std::vector<std::string> tutor_types;
     // Dragonstorm (Storm) tutor-TO-BATTLEFIELD: on resolution, put min(spells_cast_this_turn,
     // #library cards matching tutor_types) cards (Dragons) from the library ONTO THE BATTLEFIELD
-    // (not hand/top). Each put routes through the shared OnDragonEnters cascade (Scourge ping /
+    // (not hand/top). Each put routes through the shared FireEtbWatchers cascade (Scourge ping /
     // Lathliss token) via PerformTutorToBattlefield (SpellEffects.h), lockstep executor
     // (EffectHandler) + rollout (apply_one). Which/order of Dragons = the provider's TutorCandidates
     // (search enumeration; a future DragonstormProvider owns the Lathliss-first/Scourge-second
@@ -670,7 +670,7 @@ struct CardParams
     std::optional<ManaCost> attach_all_equipment_cost;   // nullopt = no such ability
 
     // Puresteel Paladin. draw_on_equipment_etb: "Whenever an Equipment you control enters, you
-    // may draw a card" -- hooked at the UNIVERSAL enter cascade (OnDragonEnters) so it fires on
+    // may draw a card" -- hooked at the UNIVERSAL enter cascade (FireEtbWatchers) so it fires on
     // cast AND on put-onto-battlefield (Stoneforge / Skyhunter); "may" always taken (draw is
     // strictly good in goldfish; empty-library guard skips -- disclosed 6a).
     // metalcraft_equip_zero_artifacts: "Equipment you control have equip {0} as long as you

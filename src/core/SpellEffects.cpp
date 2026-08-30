@@ -15,7 +15,7 @@
 //                Expressive Iteration resolution, a Karoo bounce, and the mana backtracker (an
 //                exponential FALLBACK the scarcity-first tap order is designed to avoid entering).
 //   MAY NOT   -- the per-cast / per-death / per-combat helpers: FireOnCastTriggers,
-//                ApplyFirebreathing, OnCreatureDies, OnDragonEnters, TutorCandidates,
+//                ApplyFirebreathing, OnCreatureDies, FireEtbWatchers, TutorCandidates,
 //                SelectCleanupDiscardIndex, FireCombatDamageCheatIntoPlay. Those fire on every
 //                event of every rollout node, and this project is compute-bound.
 //
@@ -403,7 +403,7 @@ void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv,
 // Muxus, Goblin Grandee: "reveal the top six cards; put all Goblin creature cards with mana value
 // 5 or less onto the battlefield and the rest on the bottom of your library in a random order."
 // Deterministic reveal order (the printed "random" bottom order is unobservable in goldfishing --
-// same accepted collapse as etb_dig). Each put creature enters through OnGoblinEnters, so a
+// same accepted collapse as etb_dig). Each put creature enters through FireOwnEtbTriggers, so a
 // revealed Siege-Gang/Mogg fires its own ETB tokens (the cascade). Lockstep executor + rollout.
 void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp)
 {
@@ -464,8 +464,8 @@ void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp)
             perm.entered_this_turn = true;
             state.battlefield.push_back(perm);
             const int slot = static_cast<int>(state.battlefield.size()) - 1;
-            OnDragonEnters(state, controller, slot);   // in case a put creature is ever a Dragon
-            OnGoblinEnters(state, controller, slot);   // fire the put creature's own Goblin ETB
+            FireEtbWatchers(state, controller, slot);      // others watching the entry
+            FireOwnEtbTriggers(state, controller, slot);   // the put creature's own ETB triggers
         }
         else
         {
@@ -645,8 +645,8 @@ bool ApplyPutFromHand(GameState& state, int controller, int source_id,
                    { raw.m_number }, { raw.m_name.str() }, { raw.m_number }, {},
                    /*dispositions*/ { "\xE2\x86\x92 battlefield (from hand)" });
     }
-    OnDragonEnters(state, controller, slot);   // universal cascade: Puresteel draw fires here
-    OnGoblinEnters(state, controller, slot);
+    FireEtbWatchers(state, controller, slot);   // universal cascade: Puresteel draw fires here
+    FireOwnEtbTriggers(state, controller, slot);
     if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
     { EnforceLegendRule(state, controller); }
     return true;
@@ -846,8 +846,8 @@ void FireAttackDigAttach(GameState& state, int controller, const std::vector<int
                 std::vector<int> tg = LegalEnchantTargets(state, controller, d->params);
                 if (!tg.empty()) { state.battlefield[slot].aura_attached_to = tg.front(); }
             }
-            OnDragonEnters(state, controller, slot);   // universal cascade: Puresteel draw fires here
-            OnGoblinEnters(state, controller, slot);
+            FireEtbWatchers(state, controller, slot);   // universal cascade: Puresteel draw fires here
+            FireOwnEtbTriggers(state, controller, slot);
             if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
             { EnforceLegendRule(state, controller); }   // a second Shadowspear / Jitte
         }

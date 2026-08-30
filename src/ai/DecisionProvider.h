@@ -135,7 +135,7 @@ public:
     // name in library order), this is an EXACT max_puts-aware SUBSET selection PLUS a single deterministic
     // put-order -- so when N is small the provider can reserve a slot for a same-turn-relevant Dragon (the
     // haste-Dragon) instead of letting a run of Scourges crowd it out. The engine keeps the PUT mechanism
-    // (find/remove/enter + OnDragonEnters cascade + reshuffle); only the which-and-in-what-order decision is
+    // (find/remove/enter + FireEtbWatchers cascade + reshuffle); only the which-and-in-what-order decision is
     // provider-owned. Default {} (empty) -> the engine falls back to TutorCandidates' library-order
     // enumeration exactly as before, so every non-Dragonstorm deck (and Dragonstorm under MTG_UNPRUNED) stays
     // byte-identical. Only DragonstormProvider overrides it. See PerformTutorToBattlefield +

@@ -11,7 +11,7 @@
 ## The defect
 
 Puresteel Paladin reads "Whenever an Equipment you control enters, you may draw a card." The draw is
-fully implemented, and it fires in **both** worlds — it lives in `OnDragonEnters`, the universal
+fully implemented, and it fires in **both** worlds — it lives in `FireEtbWatchers`, the universal
 enter cascade, so it happens for a cast Equipment and for one put onto the battlefield by Stoneforge
 Mystic or Armored Skyhunter alike (`SpellEffects.h`), and `ApplyPlanDirect` calls that same cascade
 for a noncreature permanent (`TurnSolver.cpp`) precisely so the rollout's library does not run ahead

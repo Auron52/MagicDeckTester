@@ -60,7 +60,7 @@ Known conservative limits (v1, to re-check in Stage 5):
    ColorFeasibility disables itself (usable=false) when a scaled DORK is on board (same
    rule as Three Tree City).
 2. `mana_requires_land_subtype` liveness gate at dork mana sites (pool build + payment).
-3. ETB cascade (OnGoblinEnters): team-pump-per-creature (Craterhoof), life floor
+3. ETB cascade (FireOwnEtbTriggers): team-pump-per-creature (Craterhoof), life floor
    (Elderscale), destroy-own-for-elephants (Terastodon).
 4. Enters-watchers: min-power filter + self-include + draw rider (Vaultborn).
 5. Death sites: dies-trigger copy-self token (Vaultborn); graveyard shuffle-back
@@ -241,7 +241,7 @@ activation is a real move for this deck"*; *"I suppose there is an argument for 
 elephants if we can also drop Craterhoof this turn, but that is a bit more rare."*
 
 **Implementing this exposed a v1 defect:** the destroy-K axis was wired through
-`chosen_x` → cast → `OnGoblinEnters(etb_kx)` in both worlds, but **no K > 0 cast variant was
+`chosen_x` → cast → `FireOwnEtbTriggers(etb_kx)` in both worlds, but **no K > 0 cast variant was
 ever emitted** — the "searched K = 0..3" disclosure was the wiring, not the search. Reproduced:
 lone Terastodon off 8 Forests vs 20 life won T8 with zero Elephants ever made (K=1 wins T7).
 Now a fixture: `test/scenarios/stompy_terastodon_k.json` (expect_win_turn 7; fails at 8 with

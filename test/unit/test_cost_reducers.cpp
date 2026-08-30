@@ -53,7 +53,7 @@ void Deploy(GameState& s, const std::string& name)
     p.controller_index = 0;
     p.owner_index      = 0;
     s.battlefield.push_back(p);
-    OnDragonEnters(s, 0, static_cast<int>(s.battlefield.size()) - 1);
+    FireEtbWatchers(s, 0, static_cast<int>(s.battlefield.size()) - 1);
 }
 
 // A board whose owner's LIBRARY is the given tribe -- that is what a type-choosing permanent reads.
