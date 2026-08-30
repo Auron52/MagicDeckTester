@@ -528,3 +528,31 @@ so the node/recipe/m2 deficits are CONTAMINATED -- **the section-6 ladder must b
 with the fix in before any form verdict is trusted.** Per-job wall ms in a contended batch
 proved uninterpretable (one EF arm read 38% faster than its control); EF unit cost still
 needs a dedicated uncontended measurement before adoption talk.
+
+**POST-FIX LADDER (16 jobs, 19,200 games, fixed binary `b3772793`, fresh shipped arms,
+same seeds; per-game wins in `logs/bp_node/efx_wins/`):**
+
+*The fix at scale -- never worse in 12,000 paired games.* Shipped 5 better : 0 worse
+(hold d=-0.0058 t=-1.81); every flagged form moves only toward better (m2 train 7:0
+t=-2.65, recipe hold 6:0 t=-2.36). Post-fix shipped = 5.6375 hold / 5.6908 train.
+
+*The section-6 form ranking SURVIVES the fix -- the bug was a small part of the
+greedy-free deficit, not its cause.* Paired vs post-fix shipped (positive = worse):
+
+| form         | hold d (t)        | train d (t)       |
+|--------------|-------------------|-------------------|
+| credit2      | -0.0008 (-0.18)   | +0.0042 (+0.62)   |
+| creditef     | -0.0008 (-0.18)   | +0.0033 (+0.49)   |
+| nodecred2    | +0.0092 (+0.72)   | +0.0167 (+1.30)   |
+| nodecredef   | +0.0058 (+0.46)   | +0.0133 (+1.04)   |
+| recipecred2  | +0.0200 (+1.92)   | +0.0375 (+3.22)   |
+| recipecredef | +0.0183 (+1.75)   | +0.0342 (+2.90)   |
+| m2credef     | +0.0492 (+3.32)   | +0.0450 (+3.58)   |
+
+Reading: credit(+/-EF) is quality-neutral vs shipped-greedy; EF consistently shaves a
+little off every form it can act on (node/recipe EF arms beat their non-EF twins on both
+blocks); the all-main-2 deficit remains ~+0.045-0.049 (t 3.3-3.6) even with gi=22 flipped
+to T4 -- the PHASE-BOUNDARY free re-pricing (6a root cause) is still the dominant driver,
+now with the misclassification confound removed. The full fix for that remains
+executor-validated feasibility as the ENUMERATOR's order authority (or per-position order
+search), which is the 6/6a conversation, unchanged.
