@@ -46,6 +46,28 @@ inline bool M2ReconsiderEnabled()
     return v;
 }
 
+// MTG_HINATA_SUBSET_CREDIT=1 -- measurement lever (DEFAULT OFF): the SAME-SUBSET Hinata discount
+// credit. Root cause it exists for (searched-design-deck-rollout.md §6, 2026-08-30): greedy
+// re-prices SEQUENTIALLY while every searched form prices plans STATICALLY at enumeration, and
+// hinata_cost_reducer had no same-subset credit -- so a one-enumeration plan {Hinata, Reality
+// Spasm.., payoff} priced the chain at full cost and was never emitted. This is why greedy beat
+// every searched form on the deck, why all-main-2 fails (the m1/m2 boundary was the search's only
+// free re-pricing point -- gi=22), and why MTG_BP_NODE lost at equal compute. Under the lever:
+// (a) the untap ritual is EMITTED when she is castable from hand (honest, undiscounted cost);
+// (b) the X-payoff's max-X range is sized as if she resolves first; (c) the enumerator's subset
+// gate credits her would-be discount for subsets that actually cast her (metalcraft-credit
+// precedent: optimism where the apply validates -- she casts first by CastOrderRank in both
+// worlds, and the per-cast payment recomputes, so the credited discount is realised, never
+// stranded; the batch prepay declines on X-spells so it cannot fix costs early). ENUMERATOR
+// ONLY, never the d0 leaf (the LeafReducerCreditEnabled law). Read by the provider gate
+// (DecisionProviders: ShouldEmitUntapRitual) and the solver (TurnSolver: sizing + credit) --
+// shared reader per the lockstep rule.
+inline bool HinataSubsetCreditEnabled()
+{
+    static const bool env_on = EnvOn("MTG_HINATA_SUBSET_CREDIT");
+    return heurarm::Flag(heurarm::HINATA_SUBSET_CREDIT, env_on);
+}
+
 // MTG_DORK_GROWTH -- same-turn SCALED-MANA-DORK growth (Priest of Titania / Elvish Archdruid):
 // a dork whose one-tap yield is the live count of its subtype grows with every matching creature
 // cast this turn, so (a) EnumeratePlans credits a subset's matching casts into each live dork's

@@ -7680,17 +7680,19 @@ inline bool HinataInPlay(const GameState& state);
 // combo's lethal value. 0 with no Hinata or no ritual in hand -> the X-enum is unchanged for
 // every non-Hinata deck. (Gross is credited per-subset in Solve::consider; the base cost lives
 // in `combined` there, so pool+gross-cost == pool+net == this -- exact, conservative.)
-inline int HinataRitualNetBonus(const GameState& state)
+inline int HinataRitualNetBonus(const GameState& state, bool assume_hinata = false)
 {
     const Player& ap = state.ActivePlayer();
-    const bool hinata = HinataInPlay(state);
+    const bool hinata = HinataInPlay(state) || assume_hinata;
     int net = 0;
     for (const Card& c : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || !IsManaRitual(*d)) { continue; }
         // An untap ritual (Reality Spasm) only NETS mana when Hinata makes its {X} free; without
-        // her, untapping X costs X mana to recast (break-even). A fixed burst (Irencrag) nets always.
+        // her, untapping X costs X mana to recast (break-even). A fixed burst (Irencrag) nets
+        // always. `assume_hinata` (MTG_HINATA_SUBSET_CREDIT): she is castable from hand this
+        // turn, so size the range as if she resolves first -- the subset gate validates.
         if (d->params.untap_x_mana_sources && !hinata) { continue; }
         const int count = d->params.untap_x_mana_sources ? ManaSourceCount(state) : 0;
         const int gross = RitualFloatAmount(state, *d, count);
@@ -7757,10 +7759,14 @@ inline int HinataAvailableTargets(const CardDefinition& def, const GameState& st
 // human-chosen target set drives the reduction and the extras are then faithfully damaged
 // (CrackleHitExtraTargets). When < 0 (every legacy caller, and non-scale_x spells) it falls back to
 // the old auto-max min(X, avail), so behaviour is byte-identical wherever the count isn't threaded.
-inline int HinataGenericDiscount(const CardDefinition& def, const GameState& state, int chosen_x,
-                                 int crackle_targets = -1)
+// The InPlay-UNGATED body, split out for the SAME-SUBSET credit (MTG_HINATA_SUBSET_CREDIT): the
+// enumerator needs "what WOULD her discount be" for a plan that casts her itself, where
+// HinataInPlay is still false at the enumeration state. Target availability is computed on the
+// CURRENT board (she is not yet a target herself), which under-counts by at most 1 -- the
+// conservative direction for a credit. Every other caller goes through the gated wrapper below.
+inline int HinataGenericDiscountAssumed(const CardDefinition& def, const GameState& state,
+                                        int chosen_x, int crackle_targets = -1)
 {
-    if (!HinataInPlay(state)) { return 0; }
     if (def.params.discount_targets_scale_x)
     {
         if (chosen_x <= 0) { return 0; }
@@ -7776,6 +7782,29 @@ inline int HinataGenericDiscount(const CardDefinition& def, const GameState& sta
     if (cap <= 0) { return 0; }
     int avail = HinataAvailableTargets(def, state);
     return cap < avail ? cap : avail;
+}
+
+inline int HinataGenericDiscount(const CardDefinition& def, const GameState& state, int chosen_x,
+                                 int crackle_targets = -1)
+{
+    if (!HinataInPlay(state)) { return 0; }
+    return HinataGenericDiscountAssumed(def, state, chosen_x, crackle_targets);
+}
+
+// Is the reducer CASTABLE from the active player's hand this turn (in hand + the board's source
+// count covers her printed cost)? The gate for every "assume Hinata resolves first" emission /
+// credit below: cheap (one hand scan + the cached source count), and deliberately OPTIMISTIC on
+// colours -- the subset gate's CanPay and the per-cast apply both validate for real.
+inline bool HinataCastableFromHand(const GameState& state)
+{
+    const Player& ap = state.ActivePlayer();
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.hinata_cost_reducer)
+        { return ManaSourceCount(state) >= d->card.m_mana_cost.ManaValue(); }
+    }
+    return false;
 }
 
 // True for Crackle with Power specifically: a scale_x Hinata-discount spell that DEALS damage to

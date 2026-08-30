@@ -5431,7 +5431,11 @@ HinataProvider::TutorCandidates(const GameState& s, int controller, const CardPa
 // branch. Emission is back to the pre-gate rule: whenever Hinata is online.
 bool HinataProvider::ShouldEmitUntapRitual(const GameState& s) const
 {
-    return HinataInPlay(s);
+    // Same-subset credit (MTG_HINATA_SUBSET_CREDIT): the ritual is also emit-worthy when she is
+    // CASTABLE FROM HAND this turn -- the plan that casts {her, Spasm..} in one enumeration needs
+    // the float action to exist. Emitted at its HONEST undiscounted cost; the subset gate credits
+    // the discount only for subsets that actually cast her (TurnSolver's SameTurnHinataCredit).
+    return HinataInPlay(s) || (HinataSubsetCreditEnabled() && HinataCastableFromHand(s));
 }
 bool HinataProvider::BranchSoulfireOwnTargets(const GameState& s) const  { return HinataInPlay(s); }
 

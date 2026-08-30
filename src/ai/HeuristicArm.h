@@ -98,6 +98,7 @@ enum Slot : int
     BP_NODE,                  // MTG_BP_NODE               plain-cantrip breakpoint = REAL SEARCH NODE
     HINATA_RANGE,             // MTG_HINATA_RANGE          condemnation RANGES: engine/find tiers' latest
     CANTRIP_ORDER,            // MTG_CANTRIP_ORDER         canonical cantrip order bans permutation chains
+    HINATA_SUBSET_CREDIT,     // MTG_HINATA_SUBSET_CREDIT  same-subset Hinata discount credit in enumeration
     COUNT
 };
 
@@ -173,6 +174,7 @@ inline const char* Name(int slot)
         "MTG_BP_NODE",
         "MTG_HINATA_RANGE",
         "MTG_CANTRIP_ORDER",
+        "MTG_HINATA_SUBSET_CREDIT",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

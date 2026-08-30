@@ -2541,6 +2541,38 @@ static void SubtractPipCredit(ManaCost& bill, const ManaCost& credit)
     bill.green = std::max(0, bill.green - credit.green);
 }
 
+// SAME-SUBSET HINATA CREDIT (MTG_HINATA_SUBSET_CREDIT; the rationale and the soundness argument
+// live on the flag reader in EngineFlags.h). For a subset that CASTS the reducer, credit each
+// other cast's would-be per-target discount (HinataGenericDiscountAssumed -- the InPlay-ungated
+// body), capped at that cast's generic. 0 when she is already in play: emission then folded the
+// real discount into a.cost, and crediting again would double-count. She never discounts herself
+// (the static applies to spells cast while she is on the battlefield; her own cast resolves her).
+static int SameTurnHinataCredit(const GameState& state, const std::vector<Action>& cands,
+                                const std::vector<int>& sel)
+{
+    if (!HinataSubsetCreditEnabled() || HinataInPlay(state)) { return 0; }
+    bool casts_her = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::CastFromHand && a.def != nullptr
+            && a.def->params.hinata_cost_reducer) { casts_her = true; break; }
+    }
+    if (!casts_her) { return 0; }
+    int credit = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        if (a.def->params.hinata_cost_reducer) { continue; }
+        if (a.free_cast || a.alt_cost || a.cost.generic <= 0) { continue; }
+        const int d = HinataGenericDiscountAssumed(*a.def, state, a.chosen_x,
+                          IsCrackleCountSpell(a.def->params) ? a.crackle_targets : -1);
+        if (d > 0) { credit += std::min(d, static_cast<int>(a.cost.generic)); }
+    }
+    return credit;
+}
+
 // Same-turn METALCRAFT credit (Puresteel Paladin) -- the Ruby Medallion precedent applied to the
 // EQUIP cost. The Equip candidate block bakes EquipCostGenericNow(state) into Action::cost, i.e.
 // the artifact count as it stands at ENUMERATION. So a subset that casts artifact #3 and then
@@ -7797,7 +7829,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // candidates affordable ONLY with the ritual; Solve::consider rejects any subset that
             // does not actually include the ritual (only the ritual+payoff subset passes CanPay).
             // 0 with no Hinata / no ritual in hand -> byte-identical for every other deck.
-            xpool.wild += HinataRitualNetBonus(state);
+            // `hinata_assumed` (MTG_HINATA_SUBSET_CREDIT): she is castable from hand, so size the
+            // X range as if she resolves first -- over-generation again; the subset gate's
+            // SameTurnHinataCredit admits only subsets that actually cast her, and the per-cast
+            // apply (which recomputes with her on board) realises the discount for real.
+            const bool hinata_assumed = HinataSubsetCreditEnabled() && !HinataInPlay(state)
+                                     && HinataCastableFromHand(state);
+            xpool.wild += HinataRitualNetBonus(state, hinata_assumed);
             // Each point of X is paid x_pips times (Crackle {X}{X}{X} = 3), so the max
             // affordable X divides the leftover mana by x_pips.
             int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
@@ -7805,7 +7843,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // Hinata's discount frees up mana for a larger X. Two cases:
             int max_x;
             int P = xpool.Total(), bmv = base.ManaValue();
-            if (def.params.discount_targets_scale_x && HinataInPlay(state))
+            if (def.params.discount_targets_scale_x && (HinataInPlay(state) || hinata_assumed))
             {
                 // Crackle: discount = min(X, avail) -> cost(X) = pips*X + bmv - min(X, avail),
                 // monotonic increasing. Solve for the largest affordable X (piecewise at X=avail).
@@ -19525,6 +19563,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // credit below. Inert unless one is a candidate -> every non-Ragemonger deck byte-identical.
     bool any_col_reducer = false;
     for (const Action& ra : cands) { if (ActionColoredReducerDef(ra)) { any_col_reducer = true; break; } }
+    // Same-subset HINATA scan (EnumeratePlans ONLY, like metalcraft): the credit can only bite
+    // when the reducer is herself a CANDIDATE and not yet in play. One scan per candidate list;
+    // every other deck (and every state with her already on board) skips the per-subset credit
+    // entirely and stays byte-identical.
+    bool any_hinata_credit = false;
+    if (HinataSubsetCreditEnabled() && !HinataInPlay(state))
+    {
+        for (const Action& ra : cands)
+        {
+            if (ra.kind == Action::Kind::CastFromHand && ra.def
+                && ra.def->params.hinata_cost_reducer) { any_hinata_credit = true; break; }
+        }
+    }
     // Same-turn METALCRAFT scan (EnumeratePlans ONLY -- see the credit below). True only when BOTH
     // a metalcraft reducer is present-or-castable AND some Equip candidate is still priced above
     // {0}; so a deck without Puresteel, and this deck once metalcraft is already on, skip the
@@ -20145,6 +20196,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             const ManaCost ccred = SameTurnColoredReducerPipCredit(cands, sel);
             SubtractPipCredit(combined, ccred);
             SubtractPipCredit(noncreature_combined, ccred);
+        }
+        // Same-subset HINATA discount (MTG_HINATA_SUBSET_CREDIT): a subset that casts her gets
+        // each other cast's would-be per-target discount. Same soundness shape as metalcraft
+        // below: she casts FIRST by CastOrderRank in both worlds and the per-cast payment
+        // recomputes on the live board, so the credited discount is realised, never stranded.
+        if (any_hinata_credit)
+        {
+            const int hcred = SameTurnHinataCredit(state, cands, sel);
+            if (hcred > 0)
+            {
+                combined.generic             = std::max(0, combined.generic - hcred);
+                noncreature_combined.generic = std::max(0, noncreature_combined.generic - hcred);
+            }
         }
         // Same-turn METALCRAFT (Puresteel Paladin): this subset's own artifact casts can flip the
         // equip cost to {0} before the trailing equip pass pays it, so credit the equips' baked
