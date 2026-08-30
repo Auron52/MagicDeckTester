@@ -981,6 +981,23 @@ public:
         const GameState&, const std::vector<std::string>*) const override;
 };
 
+// Rakdos Minotaur tribal aggro. Like DragonsProvider it exists to hold ONE measured hook, the
+// cleanup-discard bucket policy; everything else inherits Generic. The deck routed to
+// GenericProvider from the 2026-08-21 misroute fix (Slaughter-Priest's sac_creature_outlet had it
+// riding GoblinsProvider) until that policy was authored, user-amended and measured -- a deck earns
+// its own provider only once it has a hook to hold.
+class MinotaurProvider : public GenericProvider
+{
+public:
+    const char* Name() const override { return "Minotaur"; }
+    // The generic fallback is DESCENDING MANA VALUE, and 100% of this deck's rollout sheds happen
+    // with fewer than four lands out -- the one state where "shed the most expensive card" reaches
+    // straight past the 2-drops for Kragma Warcaller and Sethron, the cards the deck is climbing
+    // toward. MTG_MINOTAUR_BUCKET_DISCARD=0 -> generic base (A/B hatch).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
+};
+
 // Process-lifetime default provider (stateless, shared across threads). Used as the
 // nullptr fallback so any raw-GameState path stays valid.
 const DecisionProvider& DefaultProvider();

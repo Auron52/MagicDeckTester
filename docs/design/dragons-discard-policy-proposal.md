@@ -1,8 +1,13 @@
-# Dragons — cleanup-discard BUCKET policy (PROPOSAL, awaiting user approval)
+# Dragons — cleanup-discard BUCKET policy (SHIPPED 2026-08-30; REPAIRED the same day)
 
-Authored per the analyze-deck skill's Stage 5i. **Nothing here is implemented.** The deck currently
-uses the generic max-MV fallback ranking, and on this deck that fallback is close to worst-possible
-(see below). Buckets and quotas below follow user direction given 2026-08-30.
+Authored per the analyze-deck skill's Stage 5i, approved by the user, and shipped as
+`DragonsProvider::CleanupDiscardCandidates` behind a default-on `MTG_DRAGONS_BUCKET_DISCARD`.
+Buckets and quotas below follow user direction given 2026-08-30.
+
+> **The first implementation did not run this policy.** It shipped in `c0399210` with a
+> classification bug that made the measured result (metric-neutral) a measurement of something else
+> entirely. See "The classifier bug" below before reading the rest as a description of shipped
+> behaviour.
 
 ## Why the usual "it barely fires" argument does NOT apply here
 
@@ -25,6 +30,43 @@ with **fewer than four lands on the battlefield** — the screwed/flooding shape
 choosing among cards the player cannot yet cast. That is precisely where "shed the most expensive
 card" is most likely to be wrong, because at 2-3 lands nearly every payoff in this deck is uncastable
 and the fallback simply pitches them largest-first.
+
+## The classifier bug (found 2026-08-30, one day after shipping)
+
+`is_reducer` was written as `params.reduces_spell_subtype_amount > 0`. **That field defaults to 1 on
+every card in the database** (`CardDatabase.cpp`: `params.value("reduces_spell_subtype_amount", 1)`),
+so the test was true for every nonland card in hand. Measured on 20 games, 32,087 calls: hands read
+as `lands=1 red=7 pay=0 enab=0 rest=0` — seven "cost reducers" in an eight-card hand.
+
+Everything downstream followed from that:
+
+* the PAYOFF bucket was always empty, so the "keep at least 2 Dragons" floor never protected a
+  Dragon and the `payoff_need <= 0` guard permanently blocked the enabler slot;
+* the shed order collapsed to "surplus lands, then every nonland card in REVERSE HAND ORDER";
+* a second, independent bug hid inside the first: the `rocks` bucket was never filled (the partition
+  sent rocks to `enablers`), so the Sol-Ring-first yield sort and the rock contribution to the land
+  quota were both dead code.
+
+So the policy that was measured as **metric-neutral** was not this policy. With the bug in place,
+`MTG_DRAGONS_BUCKET_DISCARD=0/1` is byte-identical on a 20-game probe; repaired, the same A/B moves
+the d3 average (250 games, s1001: 5.8360 ON vs 5.8440 OFF) and changes the d0 digest.
+
+Two things generalise out of this, both now written into the code:
+
+1. **Check a param's DEFAULT before trusting a `> 0` test.** Several `CardParams` ints default to 1
+   or -1 rather than 0. This is the same class as the `EnvOn` rule in the coding-conventions skill —
+   a presence test that reads as "off" but means "on".
+2. **Classify against the ENGINE's own predicate.** `ManaPayment.cpp` already decides what a subtype
+   cost reducer is (`!reduces_spell_subtype.empty() || chooses_creature_type`, plus the coloured-pip
+   twin). That is now the shared `IsSubtypeCostReducer` helper both bucket policies call, rather than
+   each provider re-deriving it.
+
+A third defect in the same function was found the same way and is worth recording separately: the
+payoff subtype test read `CardHasSubtype(ap.hand[i], tribe)` **on the hand card**. A hand card is a
+name-only placeholder (`DeckLoader::MakePlaceholder`) with no subtypes, so that test was false for
+every card whenever a Dragonspeaker Shaman was visible to supply `tribe`. Characteristic reads
+outside the battlefield must go through the definition — the note at the top of `SpellEffects.h`
+says exactly this, and the code did it correctly two lines above for `IsCreature`.
 
 ## What the deck actually does today
 
@@ -130,10 +172,20 @@ shipping:
 
 What I cannot promise is a metric win. The bar the skill sets is **non-inferiority**, and the
 honest expectation is that avg win turn moves little — the payoff is doctrine correctness and
-rollout fidelity. It should be validated the standard way: rule-vs-searched labels with zero regret,
-then smoke + regression through the accept flow, shipped as
-`DragonsProvider::CleanupDiscardCandidates` behind a default-on `MTG_DRAGONS_BUCKET_DISCARD`.
+rollout fidelity.
 
-Note this would make Dragons the first deck to earn its own provider **for a discard rule** — it was
-routed to `GenericProvider` in the provider fix precisely because it had no measured hook to hold.
-A measured bucket policy is exactly such a hook.
+## What was actually measured
+
+| run | result |
+|---|---|
+| `c0399210`, the BUGGED implementation | smoke+regression −4 turns/3,500 games; overnight (held out, 4x larger) +3/14,000; combined −1 over 17,500 — i.e. metric-neutral, and measuring the classifier bug rather than this policy |
+| repaired, direct A/B (250 games, d3, s1001) | 5.8360 with the policy vs 5.8440 without (−0.008 turns); d0 avg unchanged, digest differs |
+| repaired, suite | rebaselined with Minotaur's — see the git log for the accepted tiers |
+
+**The skill's rule-vs-searched zero-regret check is still UN-RUN** for this deck (it needs a FAN
+lever this provider does not have). That was true when the policy shipped and it is still true; it
+is recorded as un-run, not as passed.
+
+Dragons was the first deck to earn its own provider **for a discard rule** — it was routed to
+`GenericProvider` in the provider fix precisely because it had no measured hook to hold. Minotaur
+followed the same route the next day.

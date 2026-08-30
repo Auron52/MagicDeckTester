@@ -1,8 +1,8 @@
-# Regression ground truth -- commit 321cc2de  date 2026-08-30
+# Regression ground truth -- commit ce7f0459  date 2026-08-30
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-08-30): DragonsProvider bucket-discard policy adopted (user-approved 2026-08-30). d3 5.8440->5.8360 (-2 turns / 250g), d5 digest-only, d0 6.3160->6.3170 (+1 turn / 1000g). Narrowed to --deck=dragons deliberately: the minotaur d5 cells that also moved are the DOCUMENTED two-face flake (docs/design/minotaur-d5-regression-flake.md) and their digests match that doc's alternate pair exactly, so they are left alone while that defect is under investigation.
-# accepted-with-regressions (regression, 2026-08-30): DragonsProvider bucket-discard policy adopted (user-approved 2026-08-30). All 5 dragons keys better-or-equal: d0_s2002 -1 turn, d3_s2002 -1, d5_s2002 -1, d3_s3003 and d5_s3003 digest-only. Across smoke+regression the policy is NET -4 turns over 3500 games (-0.00115/game), 4 keys better / 1 worse (smoke d0 +1 turn / 1000g), and it does ~27% LESS rollout search work on a 50-game probe. This is a FULL-run re-promotion to repair an internal inconsistency I created: a --deck=dragons accept narrowed the gt_logs promotion but NOT the key lines, so regression_gt.txt took the flaked minotaur d5 faces while their .wins files kept the originals. This run puts both back in agreement at the ORIGINAL digests (52937a4626b089b6 / 8ec3f5ad5d923ca2) -- the two minotaur d5 cells flipped back on their own, a third independent confirmation of the two-face flake in docs/design/minotaur-d5-regression-flake.md. Do not read those two as a change: their scores are 4.9600 and 4.9040 in every run.
-# accepted-with-regressions (overnight, 2026-08-30): DragonsProvider bucket-discard policy. HONEST HEADLINE: METRIC-NEUTRAL. The overnight is the larger, held-out sample and it reads +3 turns over 14000 games (+0.00021/game), 3 keys better / 4 worse / 5 tied -- so the -4 turns over 3500 games that smoke+regression showed did NOT survive a 4x bigger sample. Combined across all three tiers: -1 turn over 17500 games, i.e. zero. This is the underpowered-small-sample pattern the repo has recorded before (a leaf signal that died at 32 seeds and flipped). Adopted anyway on the grounds the proposal stated in advance and did not move: the generic fallback is INVERTED on this deck (descending mana value sheds Utvara 8, then Lathliss/Inferno 6, then Glorybringer/Scourge 5 -- the payoffs in descending order of importance), the rule fires 661,269 times per 200 games inside the SEARCH against 66 in real play with 99.6% of those in the land-light state, and Dragons ships a value leaf trained on rollouts that used this ranking. The payoff is doctrine correctness and rollout fidelity; the bar is non-inferiority and ~0.0002 turns/game over 17500 games clears it. NOT DONE: the skill's rule-vs-searched zero-regret check was not run -- no FAN lever exists for this provider yet -- so that validation step is UN-RUN, not passed. Also: minotaur_overnight_d5_s4004 is digest-only at an unchanged 4.9200, a further instance of the documented minotaur d5 flake (this time a third cell), not attributable to this change.
+# accepted-with-regressions (smoke, 2026-08-30): MinotaurProvider (new) + DragonsProvider classifier repair. Minotaur: held-out overnight -26 turns/28000 games. Dragons: its bucket policy never actually RAN before this commit (reduces_spell_subtype_amount defaults to 1, so every nonland classified as a cost reducer); repaired, plus the dead rocks bucket and a hand-card subtype read. Slower cells here are third-decimal and within paired noise.
+# accepted-with-regressions (regression, 2026-08-30): MinotaurProvider (new) + DragonsProvider classifier repair. Minotaur: held-out overnight -26 turns/28000 games. Dragons: its bucket policy never actually RAN before this commit (reduces_spell_subtype_amount defaults to 1, so every nonland classified as a cost reducer); repaired, plus the dead rocks bucket and a hand-card subtype read. Slower cells here are third-decimal and within paired noise.
+# accepted-with-regressions (overnight, 2026-08-30): Re-accept post-rebase on the FIXED engine (1e6a9c23 cleared the probe arrays unconditionally). One cell only: minotaur_overnight_d5_s4004 held a pre-fix FLAKE face (63fb9790, same 4.9200 score) promoted from a pooled run before that fix existed; c7779da1 is the deterministic value. Every other cell reproduced byte-identically, and smoke 48/48 + regression 80/80 were clean post-rebase.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -46,15 +46,15 @@ fivecolour_smoke_d5_s1001=5.1333/f6d7ed5a947b839a
 stompy_smoke_d0_s1001=5.4420/dc78a74c3af62737
 stompy_smoke_d3_s1001=4.4933/6523a1bb1be7ca91
 stompy_smoke_d5_s1001=4.4400/926ddaaa248ad176
-minotaur_smoke_d0_s1001=5.4890/3f7bfb5f13c384b7
-minotaur_smoke_d3_s1001=4.9640/497df7d818df4b95
-minotaur_smoke_d5_s1001=4.9733/5e5e13389ec6cfbd
+minotaur_smoke_d0_s1001=5.4850/1537615962677f38
+minotaur_smoke_d3_s1001=4.9520/49299ba7f57f6f0e
+minotaur_smoke_d5_s1001=4.9600/408594cd10ac648e
 kitty_smoke_d0_s1001=5.1600/96c5f848c59bf0fa
 kitty_smoke_d3_s1001=4.4520/002553def2c14e66
 kitty_smoke_d5_s1001=4.4667/406aa8496dde2301
-dragons_smoke_d0_s1001=6.3170/79684700c8651e43
-dragons_smoke_d3_s1001=5.8360/0b4a4ea1a248e34b
-dragons_smoke_d5_s1001=5.7733/544e18465ecd8a23
+dragons_smoke_d0_s1001=6.3160/e823b83de318e2c9
+dragons_smoke_d3_s1001=5.8360/4429f217a0e949df
+dragons_smoke_d5_s1001=5.7733/19181839cdefe423
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/91abd0b536a1c263
@@ -122,21 +122,21 @@ stompy_regression_d3_s2002=4.5300/ce46dcff525d59e1
 stompy_regression_d3_s3003=4.6067/fa7420b23649150d
 stompy_regression_d5_s2002=4.5360/616feeab0c5de220
 stompy_regression_d5_s3003=4.5960/54024371bb7c0348
-minotaur_regression_d0_s2002=5.4890/7485fb9e3979df4e
-minotaur_regression_d3_s2002=4.9567/7f4016028817498e
-minotaur_regression_d3_s3003=4.9267/d2145fa5e2d44157
-minotaur_regression_d5_s2002=4.9600/52937a4626b089b6
-minotaur_regression_d5_s3003=4.9040/8ec3f5ad5d923ca2
+minotaur_regression_d0_s2002=5.4840/0a5c9070f6f654c8
+minotaur_regression_d3_s2002=4.9633/73021667d1032490
+minotaur_regression_d3_s3003=4.9267/623da4c155ebf15b
+minotaur_regression_d5_s2002=4.9680/6074df8f9d068495
+minotaur_regression_d5_s3003=4.9040/f51f6f0bb5debd6a
 kitty_regression_d0_s2002=5.1150/bab62942b2bf6e26
 kitty_regression_d3_s2002=4.3300/b50e06087e633c1d
 kitty_regression_d3_s3003=4.3800/f3792be1bb75e242
 kitty_regression_d5_s2002=4.3240/5d4e0eaacb4bb0c2
 kitty_regression_d5_s3003=4.3360/7052e9d16185fdca
-dragons_regression_d0_s2002=6.3110/3ee567fbdce1ed7f
-dragons_regression_d3_s2002=5.7333/6d4f60d76414abd2
-dragons_regression_d3_s3003=5.6800/5d985e9c7ce54e5a
-dragons_regression_d5_s2002=5.7520/3f5fb11bbcd967c1
-dragons_regression_d5_s3003=5.6560/2e3459c43acb3c53
+dragons_regression_d0_s2002=6.3110/bc1d441fa7cabacb
+dragons_regression_d3_s2002=5.7333/5331a86348a2c774
+dragons_regression_d3_s3003=5.6800/00c1ba4250e44d71
+dragons_regression_d5_s2002=5.7560/4b392ddb4897acb2
+dragons_regression_d5_s3003=5.6560/36d41d20e495fc12
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/b53c1150b0bd6df6
@@ -295,18 +295,18 @@ stompy_overnight_d5_s4004=4.5080/2a7412472dddb24e
 stompy_overnight_d5_s5005=4.6020/4adb00a5f14f2183
 stompy_overnight_d5_s6006=4.5680/656b488c06699f3a
 stompy_overnight_d5_s7007=4.5540/2a56bdb289f8c917
-minotaur_overnight_d0_s4004=5.5175/8f78da388a1c8c40
-minotaur_overnight_d0_s6006=5.4875/7d6354d9c831d6e2
-minotaur_overnight_d0_s8008=5.4755/2a3839fe6ee06c60
-minotaur_overnight_d0_s10010=5.4600/63e0c3697bbea0bd
-minotaur_overnight_d3_s4004=4.9390/062e752146fd0e34
-minotaur_overnight_d3_s5005=4.9600/e37b00348861453c
-minotaur_overnight_d3_s6006=4.9500/f83a30825533f16a
-minotaur_overnight_d3_s7007=4.9390/ea6e6f7306f8d9d3
-minotaur_overnight_d5_s4004=4.9200/8964198f8464da4e
-minotaur_overnight_d5_s5005=4.9460/263ea077a94a6e23
-minotaur_overnight_d5_s6006=4.9220/efa477b8f54aa1ac
-minotaur_overnight_d5_s7007=4.9280/b6ef866d4a8b04e1
+minotaur_overnight_d0_s4004=5.5125/292439faa8e639fc
+minotaur_overnight_d0_s6006=5.4860/0b48fe0a46903a2d
+minotaur_overnight_d0_s8008=5.4750/289cc107b5ba2081
+minotaur_overnight_d0_s10010=5.4610/613be3b3dab1df93
+minotaur_overnight_d3_s4004=4.9400/48d70e640cf3d6ef
+minotaur_overnight_d3_s5005=4.9620/14ef92cc7025f2dc
+minotaur_overnight_d3_s6006=4.9500/1e266b8b3a2c8e67
+minotaur_overnight_d3_s7007=4.9350/f750f0246aef4221
+minotaur_overnight_d5_s4004=4.9200/c7779da110b83a27
+minotaur_overnight_d5_s5005=4.9420/f8b6c011781b5f1d
+minotaur_overnight_d5_s6006=4.9240/57c4965415206da4
+minotaur_overnight_d5_s7007=4.9200/d562215b5ae34000
 kitty_overnight_d0_s4004=5.1285/c8893be16f654177
 kitty_overnight_d0_s6006=5.1495/95f35c02ff615a77
 kitty_overnight_d0_s8008=5.1265/caa2b62dc7c94977
@@ -319,15 +319,15 @@ kitty_overnight_d5_s4004=4.3620/d655cfda960d337c
 kitty_overnight_d5_s5005=4.3820/c3e3c15eda210082
 kitty_overnight_d5_s6006=4.3120/c559b9d07a584166
 kitty_overnight_d5_s7007=4.3400/98bd7982346f711c
-dragons_overnight_d0_s4004=6.2920/963dcdc4f0209402
-dragons_overnight_d0_s6006=6.2710/3f23f2796d381998
-dragons_overnight_d0_s8008=6.2650/e543dfe46cd1d429
-dragons_overnight_d0_s10010=6.2775/d9f3eb2a30924ba6
-dragons_overnight_d3_s4004=5.7540/ef0d9753c79781b1
-dragons_overnight_d3_s5005=5.7600/d670e1b2f50bdac2
-dragons_overnight_d3_s6006=5.7170/0f2918bd0725bd53
-dragons_overnight_d3_s7007=5.7330/0e27cc21759e58ad
-dragons_overnight_d5_s4004=5.7520/c64214b42d2b1f05
-dragons_overnight_d5_s5005=5.7200/625d5ad700d31f56
-dragons_overnight_d5_s6006=5.6880/3890356e19d0f357
-dragons_overnight_d5_s7007=5.7120/757db0567e5b1970
+dragons_overnight_d0_s4004=6.2900/11659218a5ae8ecc
+dragons_overnight_d0_s6006=6.2725/140b52dfc95e6cd1
+dragons_overnight_d0_s8008=6.2635/5d7d5d220604cc21
+dragons_overnight_d0_s10010=6.2770/3aed18edcbd06a8d
+dragons_overnight_d3_s4004=5.7540/7bcf1fd4e7ba4491
+dragons_overnight_d3_s5005=5.7580/e3e4a1047ef897e4
+dragons_overnight_d3_s6006=5.7170/805854d785231fbe
+dragons_overnight_d3_s7007=5.7340/69ee27749993d3ab
+dragons_overnight_d5_s4004=5.7520/b8eadd427b861953
+dragons_overnight_d5_s5005=5.7160/9373aa145ba01069
+dragons_overnight_d5_s6006=5.6880/9d09ee5a5dbb8602
+dragons_overnight_d5_s7007=5.7120/158341ace8328d98

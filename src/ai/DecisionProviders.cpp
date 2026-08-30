@@ -8812,6 +8812,7 @@ namespace
     const MirrorwingProvider     g_mirrorwing;
     const EquipmentProvider      g_equipment;
     const StompyProvider         g_stompy;
+    const MinotaurProvider       g_minotaur;
     const DragonsProvider        g_dragons;
     const AurasProvider          g_auras;
 }
@@ -9033,14 +9034,13 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // 2026-08-21 this deck silently ran under GoblinsProvider) -- and over anti (Worldly Tutor's
     // tutor_to_top).
     if (stompy) { return g_stompy; }
-    // Minotaur: GenericProvider -- it has NO measured deck heuristic to hold, so per the core
-    // invariant it gets no narrowing at all and every decision resolves through the generic
-    // baseline (its Aether Vials are fine there: the hand-aware charge policy is the ROOT default
-    // since 2026-08-18, which is the fix that stopped Goblins/Minotaur silently losing the Vial).
-    // Placed above goblin for the reason spelled out in the detection block. If the proposed
-    // cleanup-discard bucket policy (docs/design/minotaur-discard-policy-proposal.md) is ever
-    // approved and measured, THAT is when this becomes a MinotaurProvider.
-    if (minotaur) { return g_generic; }
+    // Minotaur: MinotaurProvider (Generic + the user-amended cleanup-discard bucket policy; every
+    // other hook inherits Generic, and its Aether Vials stay on the ROOT hand-aware charge policy
+    // that has been the default since 2026-08-18). Placed above goblin for the reason spelled out in
+    // the detection block. It rode g_generic from the 2026-08-21 misroute fix until the bucket policy
+    // was authored, user-amended and measured -- a deck earns its own provider only once it has a
+    // hook to hold, which is the same rule Dragons went through in both directions.
+    if (minotaur) { return g_minotaur; }
     // Dragons: DragonsProvider (Generic + the user-approved cleanup-discard bucket policy; every
     // other hook inherits Generic). Must still sit ABOVE goblin for the reason spelled out in the
     // detection block -- Dragonspeaker Shaman's reduces_spell_subtype sets that signature on its
@@ -10110,6 +10110,361 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
+// Does this card reduce the cost of a whole SUBTYPE (Goblin Warchief, Dragonspeaker Shaman,
+// Urza's Incubator, Ragemonger)? Shared by the two bucket-discard policies below, which both have a
+// cost-reducer bucket -- the "sharing parts" the per-deck provider direction asks for
+// (docs/design/provider-per-deck-direction.md), rather than one provider inheriting the other.
+//
+// The gate is the ENGINE's own (ManaPayment.cpp): a named subtype, a type chosen on resolution, or
+// the coloured-pip twin. It is deliberately NOT `reduces_spell_subtype_amount > 0` -- that field
+// DEFAULTS TO 1 on every card in the database, so reading it alone classifies the entire hand as
+// cost reducers. DragonsProvider did exactly that from the day it shipped until 2026-08-30: seven
+// of eight cards in a measured hand landed in the reducer bucket, which emptied the payoff and
+// enabler buckets and left the "policy" shedding nonland cards in reverse hand order. Any new
+// param-keyed classifier should check its field's DEFAULT before trusting a `> 0` test.
+inline bool IsSubtypeCostReducer(const CardDefinition& d)
+{
+    return !d.params.reduces_spell_subtype.empty()
+        || d.params.chooses_creature_type
+        || !d.params.reduces_subtype_colored_subtype.empty();
+}
+
+// ---- MinotaurProvider::CleanupDiscardCandidates -----------------------------
+//
+// USER-AMENDED role-bucket policy (approved 2026-08-30; see
+// docs/design/minotaur-discard-policy-proposal.md for the rationale, the deck's role table and the
+// two amendments quoted below).
+//
+// WHY THIS DECK NEEDS ONE. Same shape as the Dragons case below: the shared fallback's tier B is
+// descending mana value, and MTG_SHED_STATS over 200 games at the shipped d5/b40 says this rule
+// runs 99 times in real play against 250,265 times inside the SEARCH (2,528x) -- with **100%** of
+// the rollout sheds taken at fewer than four lands. That is exactly the state where max-MV is least
+// defensible here: at two or three lands it pitches Kragma Warcaller and Sethron, the top of the
+// curve the deck is climbing toward, and keeps a Gnarled Scarhide. Index 0 of this ranking decides
+// every one of those sheds with no search above it.
+//
+// THE BUCKETS and their caps (a card a slot protects is not sheddable; only overflow is):
+//   LANDS, enough to reach FIVE mana sources counting the board first -- "we do not ever need more
+//     than 5" (user 2026-08-30). Sethron and Kragma at 5 are the top of the curve and Ragemonger
+//     takes {B}{R} off every Minotaur below them, so a sixth source is pure overflow; a RESOLVED
+//     reducer lowers the target to 4 for the same reason. KAROO CAVEAT: a Rakdos Carnarium counts as
+//     a land only if there is another land to bounce -- with none it returns ITSELF and is a blank.
+//     That was found for real (regression seed 1001 gi=27 kept two Karoos and no other land and
+//     played zero lands in eight turns), and it is why a dead Karoo is the FIRST thing shed.
+//   THREATS, 3 hard and a 4th soft -- "we should always keep at least 3-4 threats" (user 2026-08-30,
+//     raising the 2 this policy originally proposed). Deck value order, best kept first: the
+//     attack-trigger payoff (Kragma) > static lord (Rageblood) > token/haste engine (Sethron) > the
+//     hand-size anthem (Neheb) > the devotion burn (Fanatic -- the deck's ONLY non-combat damage) >
+//     bodies (biggest first, the cheapest body shed first among threats).
+//   AETHER VIAL, 1. A second copy is close to dead once the first is online.
+//   RAGEMONGER, 1 while none is resolved -- "usually a good idea to keep 1 of them" (user). It is
+//     classified with the MANA, not as a late enabler: taking {B}{R} off every Minotaur is this
+//     deck's answer to a mana problem, and a mana problem is the state every one of these sheds is
+//     taken in. Surplus copies fall back into the body pool -- they are still 3-mana 2/2 Minotaurs
+//     and the engine stacks the reductions.
+//
+// DISTANCE-TO-PLAYABLE. A threat of effective mana value 5+ ranks BELOW a cheap body while total
+// reach (board sources + live lands in hand) is 3 or less -- unless a Ragemonger is already
+// resolved, which takes {B}{R} off it and erases the distance. This is bounded and reach-conditional
+// on purpose: it is not the blanket max-MV rule the evidence above rejects, it fires only where the
+// 5-drop genuinely cannot be cast for two more turns.
+//
+// THE NEHEB INVERSION needs no special case, which is worth stating because it looks like it should.
+// With Neheb resolved, emptying the hand to <=1 card gives every Minotaur +2/+0, so a shed is a
+// BENEFIT and the right move is simply to shed the least valuable card. This list names EVERY card
+// in the hand (the Mirrorwing gi295 lesson -- an under-covering list hands the rest of the decision
+// back to the max-MV fallback, which on this deck is inverted), so index 0 IS the least valuable
+// card at all times and that is already the answer. The other two state promotions in the proposal
+// are NOT implemented and are not lost: Burning-Fist's "a dead card in hand is firebreathing
+// ammunition" and Fanatic's "Boros Reckoner is worth 3 red devotion when the opponent is in reach"
+// are both CAST decisions with a damage projection behind them, which belongs to the search, not to
+// a cleanup ranking. (The devotion tie-break among bodies is kept, and it reproduces the proposal's
+// worked example on this deck without needing the reach term.)
+//
+// Classification is by PARAMS, never card names, so a screening arm that swaps a card keeps the
+// right bucket, and the return routes through CleanupDiscardRankingWithOrder so the staged-card and
+// required-piece protections stay engine-enforced.
+std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_bucket = EnvOn("MTG_MINOTAUR_BUCKET_DISCARD", true);
+    if (!s_bucket) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    // Every characteristic read goes through the DEFINITION: a hand card is a name-only placeholder
+    // (DeckLoader::MakePlaceholder), so its own type/cost/subtype masks are all empty.
+    auto def_of   = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto mv_of    = [&](int i) { return CleanupDiscardManaValue(ap.hand[i]); };
+    auto is_land  = [&](int i) { return CleanupDiscardIsLand(ap.hand[i]); };
+    auto is_karoo = [&](int i)
+    { const CardDefinition* d = def_of(ap.hand[i]); return d && d->params.etb_bounce_land; };
+    auto is_vial  = [&](int i)
+    { const CardDefinition* d = def_of(ap.hand[i]); return d && d->params.upkeep_adds_charge; };
+    auto is_reducer = [&](int i)
+    { const CardDefinition* d = def_of(ap.hand[i]); return d && IsSubtypeCostReducer(*d); };
+    auto is_creature = [&](int i)
+    { const CardDefinition* d = def_of(ap.hand[i]); return d && d->card.IsCreature(); };
+    auto power_of = [&](int i)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        return (d && d->card.m_power.has_value()) ? d->card.m_power.value() : 0;
+    };
+
+    // ---- board census, netted before any quota --------------------------------------------------
+    // board_lands is tracked SEPARATELY from board_sources on purpose. The land quota is about mana,
+    // so a rock counts toward it; the Karoo test is about having a LAND to bounce, and a Sol Ring
+    // cannot be returned to hand by a Rakdos Carnarium. Conflating the two would call a Karoo live
+    // off a board of nothing but rocks.
+    int board_lands = 0, board_sources = 0, board_reducers = 0, board_vials = 0, reducer_amount = 0;
+    std::string reduced_tribe;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (p.card.IsLand())                   { ++board_lands; ++board_sources; }
+        else if (d && d->params.mana_rock)     { ++board_sources; }
+        if (d == nullptr) { continue; }
+        if (d->params.upkeep_adds_charge)      { ++board_vials; }
+        // The reducer's own params supply the discount AND the subtype it applies to, so nothing
+        // here hardcodes "Minotaur" -- a deck whose reducer names another tribe gets that tribe.
+        // A reducer that picks its type on resolution (Urza's Incubator, chooses_creature_type)
+        // names nothing here, so it deliberately counts for NEITHER the discount nor the reducer
+        // census: we cannot price a discount whose subtype we do not know, and under-counting only
+        // keeps the land target where it was. Inert on this decklist, which runs no such card.
+        if (!IsSubtypeCostReducer(*d)) { continue; }
+        int amt = 0;
+        if (!d->params.reduces_subtype_colored_subtype.empty()
+            && d->params.reduces_subtype_colored_cost.has_value())
+        {
+            amt = d->params.reduces_subtype_colored_cost.value().ManaValue();
+            reduced_tribe = d->params.reduces_subtype_colored_subtype;
+        }
+        else if (!d->params.reduces_spell_subtype.empty())
+        {
+            amt = d->params.reduces_spell_subtype_amount;
+            reduced_tribe = d->params.reduces_spell_subtype;
+        }
+        if (amt > 0) { ++board_reducers; reducer_amount = std::max(reducer_amount, amt); }
+    }
+
+    // The devotion payoff's colour, derived from whichever card carries it (Fanatic of Mogis) rather
+    // than assumed red; used only as a tie-break between otherwise equal bodies.
+    std::string devotion_color;
+    for (int i = 0; i < n && devotion_color.empty(); ++i)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        if (d && !d->params.etb_damage_devotion_color.empty())
+        { devotion_color = d->params.etb_damage_devotion_color; }
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (!devotion_color.empty()) { break; }
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && !d->params.etb_damage_devotion_color.empty())
+        { devotion_color = d->params.etb_damage_devotion_color; }
+    }
+    // Devotion pips of one hand card, counting a hybrid pip for BOTH its colours (CR 202.2b) exactly
+    // as DevotionTo does for the battlefield -- that is what makes Boros Reckoner's {R/W}{R/W}{R/W}
+    // read as three red devotion.
+    auto devotion_of = [&](int i)
+    {
+        if (devotion_color.empty()) { return 0; }
+        const CardDefinition* d = def_of(ap.hand[i]);
+        if (d == nullptr) { return 0; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        const char c = devotion_color[0];
+        int dev = 0;
+        switch (c)
+        {
+            case 'W': dev += mc.white; break;
+            case 'U': dev += mc.blue;  break;
+            case 'B': dev += mc.black; break;
+            case 'R': dev += mc.red;   break;
+            case 'G': dev += mc.green; break;
+            default: break;
+        }
+        for (int k = 0; k < mc.hybrid_count; ++k)
+        {
+            const Color second = static_cast<Color>(mc.hybrid_pair[k] & 0xF);
+            if ((c == 'W' && second == Color::White) || (c == 'U' && second == Color::Blue)
+                || (c == 'B' && second == Color::Black) || (c == 'R' && second == Color::Red)
+                || (c == 'G' && second == Color::Green))
+            { ++dev; }
+        }
+        return dev;
+    };
+
+    // ---- partition the hand ---------------------------------------------------------------------
+    std::vector<int> lands, vials, reducers, threats, rest;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        if (is_land(i))          { lands.push_back(i); }
+        else if (is_vial(i))     { vials.push_back(i); }
+        else if (is_reducer(i))  { reducers.push_back(i); }
+        else if (is_creature(i)) { threats.push_back(i); }
+        else                     { rest.push_back(i); }
+    }
+
+    // Lands: non-Karoo first, and a Karoo with nothing to bounce is not a land at all.
+    const bool karoo_live = board_sources > 0
+        || std::any_of(lands.begin(), lands.end(), [&](int i) { return !is_karoo(i); });
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b)
+    { return static_cast<int>(is_karoo(a)) < static_cast<int>(is_karoo(b)); });
+
+    // Reach for the distance rule: sources on board plus every land in hand that is really a land.
+    int live_hand_lands = 0;
+    for (int i : lands) { if (!is_karoo(i) || karoo_live) { ++live_hand_lands; } }
+    const int reach = board_sources + live_hand_lands;
+
+    // Effective cost: a resolved reducer takes its discount off every spell of ITS named subtype.
+    auto eff_mv = [&](int i)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        const bool matches = board_reducers > 0 && d != nullptr && !reduced_tribe.empty()
+                          && CardHasSubtype(d->card, reduced_tribe);
+        return mv_of(i) - (matches ? reducer_amount : 0);
+    };
+    // Deck value order, best kept FIRST. Every test is a gated param, so nothing here is name-bound.
+    auto threat_rank = [&](int i)
+    {
+        const CardDefinition* d = def_of(ap.hand[i]);
+        if (d == nullptr) { return 5; }
+        const CardParams& p = d->params;
+        if (p.attack_pump_matching_power > 0)                              { return 0; }  // Kragma
+        if (p.power_bonus > 0 && !p.subtypes_affected.empty())             { return 1; }  // Rageblood
+        if (p.etb_other_subtype_creates_tokens || p.team_pump_grants_haste){ return 2; }  // Sethron
+        if (p.hand_size_anthem_max >= 0)                                   { return 3; }  // Neheb
+        if (!p.etb_damage_devotion_color.empty())                          { return 4; }  // Fanatic
+        return 5;                                                                         // bodies
+    };
+    // A surplus reducer is a body: still a Minotaur with a stacking discount, so it competes for the
+    // threat slots rather than being shed as a spare enabler.
+    const int reducer_keep = board_reducers > 0 ? 0 : 1;
+    for (std::size_t k = static_cast<std::size_t>(reducer_keep); k < reducers.size(); ++k)
+    { threats.push_back(reducers[k]); }
+    if (static_cast<int>(reducers.size()) > reducer_keep)
+    { reducers.resize(static_cast<std::size_t>(reducer_keep)); }
+
+    std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
+    {
+        // Out of reach sinks below everything castable (see DISTANCE-TO-PLAYABLE above).
+        const int fa = (reach <= 3 && eff_mv(a) >= 5) ? 1 : 0;
+        const int fb = (reach <= 3 && eff_mv(b) >= 5) ? 1 : 0;
+        if (fa != fb) { return fa < fb; }
+        const int ra = threat_rank(a), rb = threat_rank(b);
+        if (ra != rb) { return ra < rb; }
+        // Within the body tier: biggest first, then the one worth more devotion to the deck's burn,
+        // then the more expensive (so the cheapest body sheds first among threats).
+        if (power_of(a) != power_of(b))       { return power_of(a) > power_of(b); }
+        if (devotion_of(a) != devotion_of(b)) { return devotion_of(a) > devotion_of(b); }
+        return mv_of(a) > mv_of(b);
+    });
+
+    // ---- the KEEP PRIORITY, one card per slot ---------------------------------------------------
+    // The quotas are not filled bucket-by-bucket, they are INTERLEAVED, because the fill order is
+    // also the marginal-value order and those are different questions. "Five lands" and "three
+    // threats" are both ceilings-and-floors on the same seven-card hand, so what the ranking has to
+    // say is which land beats which threat. The FIRST land beats the first threat (a missed land
+    // drop is the one thing this deck cannot recover); a Vial beats the second land (it deploys
+    // without mana at all); and RAGEMONGER RANKS AS MANA, above the second threat -- "Ragemonger is
+    // also quite helpful when dealing with mana problems, it's usually a good idea to keep 1 of
+    // them" (user 2026-08-30). That last one supersedes this policy's original placement, which had
+    // the reducer behind the whole 3-threat floor on the reasoning that a discount needs Minotaurs
+    // to discount. The correction matters precisely because 100% of this deck's sheds happen with
+    // fewer than four lands: taking {B}{R} off every Minotaur IS the answer to that state, so the
+    // card that does it cannot be the last thing kept.
+    //
+    // Reversed, this same list is the order the quota-protected cards shed in when the whole hand is
+    // covered and something must still go -- which is most of them. A bucket-at-a-time fill gets
+    // that tail badly wrong: it protects a fifth land ahead of a castable body (seen for real in the
+    // MTG_TRACE=discard probe, T5 lip=4 -> Boros Reckoner).
+    const int kLandTarget  = 5;   // "we do not ever need more than 5 mana" (user)
+    const int kThreatCap   = 4;   // "always keep at least 3-4 threats" (user): 3 hard, the 4th soft
+
+    enum Slot { S_LAND, S_THREAT, S_VIAL, S_REDUCER };
+    static const Slot kFill[] = {
+        S_LAND, S_THREAT, S_VIAL, S_LAND, S_REDUCER, S_THREAT, S_LAND, S_THREAT, S_LAND, S_LAND,
+        S_THREAT
+    };
+
+    // A resolved reducer takes {B}{R} off the whole curve, so four sources cast everything.
+    int land_need    = std::max(0, kLandTarget - (board_reducers > 0 ? 1 : 0) - board_sources);
+    int threat_need  = kThreatCap;
+    int vial_need    = board_vials > 0 ? 0 : 1;
+    int reducer_need = reducer_keep;
+
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    std::vector<int>  taken_order;                 // acquisition order; reversed, it is the keep tail
+    std::size_t next_land = 0, next_threat = 0, next_vial = 0, next_reducer = 0;
+    auto take = [&](int i)
+    { keep[static_cast<std::size_t>(i)] = 1; taken_order.push_back(i); };
+
+    for (Slot slot : kFill)
+    {
+        switch (slot)
+        {
+            case S_LAND:
+                // A self-bouncing Karoo is not a land and never fills a land slot.
+                while (land_need > 0 && next_land < lands.size())
+                {
+                    const int i = lands[next_land++];
+                    if (is_karoo(i) && !karoo_live) { continue; }
+                    take(i); --land_need; break;
+                }
+                break;
+            case S_THREAT:
+                if (threat_need > 0 && next_threat < threats.size())
+                { take(threats[next_threat++]); --threat_need; }
+                break;
+            case S_VIAL:
+                if (vial_need > 0 && next_vial < vials.size())
+                { take(vials[next_vial++]); --vial_need; }
+                break;
+            case S_REDUCER:
+                if (reducer_need > 0 && next_reducer < reducers.size())
+                { take(reducers[next_reducer++]); --reducer_need; }
+                break;
+        }
+    }
+
+    // ---- shed order: overflow first, weakest first ----------------------------------------------
+    std::vector<int> shed;
+    std::vector<char> listed(static_cast<std::size_t>(n), 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[static_cast<std::size_t>(i)]) { return; }
+        if (ap.hand[i].m_is_staged) { return; }
+        listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
+    };
+    auto put_unkept = [&](int i) { if (!keep[static_cast<std::size_t>(i)]) { put(i); } };
+
+    // S0 -- a Karoo with nothing to bounce: the single most worthless card in the hand.
+    for (int i : lands) { if (is_karoo(i) && !karoo_live) { put_unkept(i); } }
+    // S1 -- lands past the quota. The deck has no mana sink worth a sixth source.
+    for (int i : lands) { put_unkept(i); }
+    // S2 -- a second Vial, near-dead once the first is online.
+    for (int i : vials) { put_unkept(i); }
+    // S3 -- surplus threats, REVERSE of the keep order: the cheapest body first, and any 5-drop the
+    //       distance rule pushed out of reach ahead of all of them.
+    for (auto it = threats.rbegin(); it != threats.rend(); ++it) { put_unkept(*it); }
+    // S4 -- a surplus reducer with one already resolved.
+    for (auto it = reducers.rbegin(); it != reducers.rend(); ++it) { put_unkept(*it); }
+    // S5 -- anything this policy does not recognise sheds LAST among the overflow: no opinion is a
+    //       reason to protect a card, not to pitch it.
+    for (int i : rest) { put_unkept(i); }
+    // The KEEP TAIL, so the list covers the whole hand: the keep priority read backwards, i.e. the
+    // 4th threat, then the 5th and 4th land, then the Ragemonger, then the 3rd threat... down to the
+    // first land kept, which is the last card in the deck's hand this policy will ever give up.
+    for (auto it = taken_order.rbegin(); it != taken_order.rend(); ++it) { put(*it); }
+
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- DragonsProvider::CleanupDiscardCandidates ------------------------------
 //
 // USER-AUTHORED role-bucket policy (approved 2026-08-30; see
@@ -10164,7 +10519,7 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
     auto is_rock = [&](int i)
     { const CardDefinition* d = def_of(ap.hand[i]); return d && d->params.mana_rock; };
     auto is_reducer = [&](int i)
-    { const CardDefinition* d = def_of(ap.hand[i]); return d && d->params.reduces_spell_subtype_amount > 0; };
+    { const CardDefinition* d = def_of(ap.hand[i]); return d && IsSubtypeCostReducer(*d); };
     // The payoff subtype is DERIVED, not hardcoded: it is whatever this deck's own cost reducers
     // discount. A reducer that picks its type at resolution (chooses_creature_type) names nothing,
     // so the literal-subtype reducer is the one that supplies it.
@@ -10186,7 +10541,11 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
         const CardDefinition* d = def_of(ap.hand[i]);
         if (!d || !d->card.IsCreature()) { return false; }
         if (is_reducer(i)) { return false; }             // a reducer is mana, not a payoff
-        return tribe.empty() ? (mv_of(i) >= 4) : CardHasSubtype(ap.hand[i], tribe);
+        // The subtype test MUST read the DEFINITION's card: a hand card is a name-only placeholder
+        // (DeckLoader::MakePlaceholder) whose own m_subtypes is empty, so testing ap.hand[i]
+        // directly returns false for every card -- which silently emptied this bucket whenever a
+        // Dragonspeaker Shaman was visible to supply `tribe`, and left it correct when none was.
+        return tribe.empty() ? (mv_of(i) >= 4) : CardHasSubtype(d->card, tribe);
     };
 
     // ---- board state, netted first -------------------------------------------------------------
@@ -10197,10 +10556,14 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (p.card.IsLand())                                   { ++board_lands; }
         else if (d && d->params.mana_rock)                     { ++board_rocks; }
-        if (d && d->params.reduces_spell_subtype_amount > 0)   { ++board_reducers; }
+        if (d && IsSubtypeCostReducer(*d))                     { ++board_reducers; }
     }
 
     // ---- partition the hand --------------------------------------------------------------------
+    // Rocks get their OWN bucket: they are the second half of the mana quota (a Sol Ring is a land
+    // that costs a card), not a two-drop trick. Folding them into `enablers` left the `rocks` vector
+    // permanently empty, so the yield sort and the rock contribution to land_need below were both
+    // dead code.
     std::vector<int> lands, rocks, reducers, payoffs, enablers, rest;
     for (int i = 0; i < n; ++i)
     {
@@ -10208,7 +10571,8 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
         if (is_land(i))              { lands.push_back(i); }
         else if (is_reducer(i))      { reducers.push_back(i); }
         else if (is_payoff(i))       { payoffs.push_back(i); }
-        else if (is_rock(i) || mv_of(i) <= 2) { enablers.push_back(i); }
+        else if (is_rock(i))         { rocks.push_back(i); }
+        else if (mv_of(i) <= 2)      { enablers.push_back(i); }
         else                         { rest.push_back(i); }
     }
 
@@ -10251,7 +10615,9 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
     int reducer_need = board_reducers > 0 ? 1 : 2;
 
     std::vector<char> keep(static_cast<std::size_t>(n), 0);
-    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; };
+    std::vector<int>  taken_order;                 // acquisition order; reversed, it is the keep tail
+    auto take = [&](int i)
+    { keep[static_cast<std::size_t>(i)] = 1; taken_order.push_back(i); };
 
     for (int i : lands)
     {
@@ -10276,23 +10642,29 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
     auto put = [&](int i)
     {
         if (i < 0 || i >= n || listed[static_cast<std::size_t>(i)]) { return; }
-        if (keep[static_cast<std::size_t>(i)] || ap.hand[i].m_is_staged) { return; }
+        if (ap.hand[i].m_is_staged) { return; }
         listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
     };
+    auto put_unkept = [&](int i) { if (!keep[static_cast<std::size_t>(i)]) { put(i); } };
 
     // S0 -- a dead Karoo (nothing to bounce) is the single most worthless card in the hand.
-    for (int i : lands) { if (is_karoo(i) && !karoo_live) { put(i); } }
+    for (int i : lands) { if (is_karoo(i) && !karoo_live) { put_unkept(i); } }
     // S1 -- surplus lands beyond the quota. The deck never wants a sixth source.
-    for (int i : lands) { put(i); }
+    for (int i : lands) { put_unkept(i); }
     // S2 -- surplus payoffs, MOST EXPENSIVE FIRST. This is where the fallback and this policy agree
     // in the common land-light state and diverge once a reducer lands (see reducer_discount).
-    for (auto it = payoffs.rbegin(); it != payoffs.rend(); ++it) { put(*it); }
+    for (auto it = payoffs.rbegin(); it != payoffs.rend(); ++it) { put_unkept(*it); }
     // S3 -- surplus reducers: dead once the discount is already online.
-    for (auto it = reducers.rbegin(); it != reducers.rend(); ++it) { put(*it); }
+    for (auto it = reducers.rbegin(); it != reducers.rend(); ++it) { put_unkept(*it); }
     // S4 -- surplus enablers and everything unclassified, cheapest-value last.
-    for (auto it = enablers.rbegin(); it != enablers.rend(); ++it) { put(*it); }
-    for (int i : rocks) { put(i); }
-    for (int i : rest)  { put(i); }
+    for (auto it = enablers.rbegin(); it != enablers.rend(); ++it) { put_unkept(*it); }
+    for (int i : rocks) { put_unkept(i); }
+    for (int i : rest)  { put_unkept(i); }
+    // The KEEP TAIL: the quota order read backwards, so the list covers the WHOLE hand. Without it
+    // the quota-protected cards fall through to the shared tier B -- descending mana value -- which
+    // is the exact ranking this provider exists to overturn, and on a hand where every card is
+    // quota-covered (common on a deck whose curve tops at eight) that fallback decided everything.
+    for (auto it = taken_order.rbegin(); it != taken_order.rend(); ++it) { put(*it); }
 
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }

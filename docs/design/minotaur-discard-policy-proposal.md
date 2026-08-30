@@ -1,9 +1,13 @@
-# Minotaur — cleanup-discard BUCKET policy (PROPOSAL, awaiting user approval)
+# Minotaur — cleanup-discard BUCKET policy (SHIPPED 2026-08-30)
 
 Authored per the analyze-deck skill's Stage 5i ("the AI gives it its BEST SHOT and reports to the
-user"; user ruling 2026-08-21). **Nothing here is implemented.** The deck currently uses the
-generic max-MV fallback ranking, which is the thing the user called "too arbitrary" — but see the
-honesty note at the bottom before deciding whether it is worth shipping.
+user"; user ruling 2026-08-21), amended by the user, and shipped as
+`MinotaurProvider::CleanupDiscardCandidates` behind a default-on `MTG_MINOTAUR_BUCKET_DISCARD`.
+Shipping it promoted the deck off `GenericProvider` onto a provider of its own, which is the rule
+the routing comment there had been anticipating since the 2026-08-21 misroute fix.
+
+See "What shipped, and where it differs from this document" at the bottom for the two places the
+implementation had to decide something this document left open.
 
 ## Evidence
 
@@ -79,12 +83,19 @@ bounds the *direct* metric upside; it says nothing about the 250k rollout decisi
 7. Slaughter-Priest / Deathbellow Raider / Burning-Fist — 2-power bodies.
 8. **Gnarled Scarhide** — cheapest body, shed first among threats.
 
-**3 — ENABLER: Ragemonger.** Kept only after a **floor of 3-4 threats** (user, 2026-08-30; raised
-from the 2 this document originally proposed). Ragemonger does nothing on an empty board — it makes
-Minotaurs cheaper, which is worthless without Minotaurs to cast — so the threat floor has to be high
-enough that the discount has something to discount. With the land quota capped at 5 above, the two
-changes point the same way: this deck wants **bodies and the mana to deploy them**, and everything
-past that is overflow.
+**3 — MANA (again): Ragemonger.** Keep 1 while none is resolved — *"Ragemonger is also quite
+helpful when dealing with mana problems. It's usually a good idea to keep 1 of them"* (user,
+2026-08-30).
+
+**This supersedes what this document originally said**, which was that Ragemonger should be kept
+only *after* a floor of 3-4 threats, on the reasoning that a discount is worthless without Minotaurs
+to discount. That reasoning treats the card as a payoff-multiplier. It is better read as MANA: it
+takes {B}{R} off every Minotaur spell, which is worth about two lands, and the state it fixes —
+land-light, threats stranded in hand — is the state **100% of this deck's sheds are taken in**. A
+card that answers the problem cannot be the last thing kept while facing it.
+
+The threat floor of 3-4 still holds; the two only compete in a hand that has exactly the floor's
+worth of threats plus a Ragemonger, and there the Ragemonger now wins the second slot.
 
 ## State promotions (where this deck is genuinely unusual)
 
@@ -129,3 +140,46 @@ Recommendation:
   to a provider of its own, which the routing comment in `SelectDecisionProvider` already anticipates
   ("If the proposed cleanup-discard bucket policy is ever approved and measured, THAT is when this
   becomes a MinotaurProvider").
+
+## What shipped, and where it differs from this document
+
+Two things the buckets above did not pin down, both settled in the implementation:
+
+**1. The quotas are INTERLEAVED, not filled bucket-by-bucket.** "Five mana sources" and "3-4
+threats" are both constraints on the same seven-card hand, so the ranking has to say which land
+beats which threat. The shipped keep priority is:
+
+    land1 > threat1 > Vial > land2 > Ragemonger > threat2 > land3 > threat3 > land4 > land5 > threat4
+
+Read forwards it is the quota fill; read backwards it is the order the quota-protected cards give
+way in, which matters because the ranking names the WHOLE hand (see below). A bucket-at-a-time fill
+gets that tail wrong in a way that showed up immediately in an `MTG_TRACE=discard` probe: it
+protected a fifth land ahead of a castable Boros Reckoner at four lands in play.
+
+**2. The list names every card in the hand.** Anything it omits falls through to the shared tier B —
+descending mana value — which is the ranking this provider exists to overturn. Naming everything
+also means the Neheb inversion needs no special case: index 0 is always the least valuable card, so
+"with Neheb out, just shed the cheapest thing" is already what happens.
+
+Two state promotions from the section above are deliberately NOT implemented: Burning-Fist's
+"a dead card is firebreathing ammunition" and the full form of the devotion promotion ("...when the
+opponent is within reach"). Both need a damage projection, which makes them CAST decisions for the
+search rather than facts a cleanup ranking can establish. The devotion tie-break among equal bodies
+did ship, and on this decklist it reproduces the worked example (Boros Reckoner ahead of the other
+bodies) without the reach term.
+
+## Measured
+
+| run | result |
+|---|---|
+| smoke, all three Minotaur cells | d0 5.4890 → 5.4780, d3 4.9640 → 4.9520, d5 4.9733 → 4.9600 (every cell faster) |
+| direct A/B, 250 games d3 s1001 | 4.9520 with the policy vs 4.9640 with the generic fallback |
+| shed census, same 250 games | Kragma shed 30x vs 44x under generic; Fanatic 11x vs 17x; dead Rakdos Carnarium 10x vs 4x; cheap bodies (Scarhide, Deathbellow Raider) 11x vs 1x |
+
+The shed census is the more informative half: the policy stops pitching the deck's best card and
+starts pitching dead Karoos and spare 2-drops, which is the behaviour change the doctrine asked for.
+It does NOT stop shedding the 5-drops entirely, because the distance-to-playable rule deliberately
+demotes them while reach is 3 or less — and 100% of this deck's sheds happen land-light.
+
+**The skill's rule-vs-searched zero-regret check is UN-RUN** (it needs a FAN lever this provider
+does not have), exactly as for Dragons. Recorded as un-run, not as passed.

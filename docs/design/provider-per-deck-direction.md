@@ -69,14 +69,23 @@ measured (net -4 turns over 3,500 suite games).
 So the direction is not "create sixteen empty providers". It is: when a deck needs a heuristic, it
 gets its OWN provider for it, and never borrows one.
 
+## What "sharing parts" looks like in practice (2026-08-30)
+
+The first real instance: `MinotaurProvider` and `DragonsProvider` both need to know what a subtype
+cost reducer is. That is a free function, `IsSubtypeCostReducer`, which both call — NOT one provider
+subclassing the other, and not each re-deriving the test. The re-derivation is the failure this
+guards against: Dragons' own version read a param whose default made every card in hand a cost
+reducer, and the policy shipped and was measured before anyone noticed. One shared predicate, taken
+from the engine's own gate in `ManaPayment.cpp`, is both less code and the only version that can be
+wrong in one place.
 ## Current state (2026-08-30)
 
 `scripts/provider_audit.py` prints the live mapping. As of today:
 
 * Own provider: AntiLifegain, Auras, Burn, CreatureGiving, Dragons, Dragonstorm, FiveColour,
-  Goblins, Hinata2, KittyEquipment (Equipment), Mirrorwing, StompySurprise, treasure_hunt
-* `GenericProvider`: Minotaur — a bucket-discard policy is authored and user-amended
-  (`minotaur-discard-policy-proposal.md`) but not yet implemented; that is what would promote it
+  Goblins, Hinata2, KittyEquipment (Equipment), Minotaur, Mirrorwing, StompySurprise, treasure_hunt
+* `GenericProvider`: none of the suite decks — Minotaur was the last one, promoted 2026-08-30 when
+  its bucket-discard policy was implemented and measured
 * **Shared across two DIFFERENT decks: Knights and slivers_vial both ride `VialProvider`.** Under
   this direction that is the one remaining case to split — they are not versions of one deck. It is
   deliberate and harmless today (both are Aether Vial decks and the hooks are Vial mechanics), so

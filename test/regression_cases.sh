@@ -144,7 +144,9 @@ SMOKE_CASES=(
   "stompy  0 1001 1000 0"
   "stompy  3 1001  150 10"
   "stompy  5 1001   75 20"
-  # minotaur: Rakdos Minotaur tribal aggro (wins ~T5.0 at searched depth; GenericProvider).
+  # minotaur: Rakdos Minotaur tribal aggro (wins ~T5.0 at searched depth; MinotaurProvider since
+  # 2026-08-30 -- Generic plus the user-amended cleanup-discard bucket policy). Ships a value leaf
+  # with trust at d5.
   # Probed single-thread 2026-08-23: d0 ~0.0002 s/game, d3 b10 ~0.39 s/game, d5 b20 ~0.63 s/game
   # -- between stompy and hinata. Counts mirror slivers/knights smoke sizing, giving two ~95 s
   # single-thread jobs that pool alongside the existing gate (smoke makespan was ~160 s).
@@ -160,7 +162,8 @@ SMOKE_CASES=(
   "kitty 5 1001  150 20"
   # dragons: mono-red Dragons ramp (Sol Ring/Dragonspeaker into 5-8 drops; wins ~T5.7-6.2, the
   # slowest clock in the suite after hinata). Same probe: d0 ~0.0004 s/game, d3 b10 ~0.98 s/game,
-  # d5 b20 ~2.0 s/game -- 0.44x/0.52x minotaur. Defaults/static keep, no value leaf (like minotaur).
+  # d5 b20 ~2.0 s/game -- 0.44x/0.52x minotaur. Defaults/static keep; ships a value leaf (no trust),
+  # and DragonsProvider's cleanup-discard bucket policy.
   "dragons 0 1001 1000 0"
   "dragons 3 1001  250 10"
   "dragons 5 1001  150 20"
