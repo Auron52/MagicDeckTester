@@ -21346,12 +21346,30 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             if (p.controller_index != state.active_player_index) { continue; }
             if (is_vial(CardDatabase::Instance().LookupCached(p.card))) { vial_present = true; break; }
         }
-        if (vial_present || std::any_of(all.begin(), all.end(), [&](const TurnSolver::Plan& p)
+        // The "certain circumstances" gate (VialAxisNarrow, default ON when the axis is opted into;
+        // user 2026-08-30). WantVialCharge resolves every ordinary call deterministically off the
+        // hand; the one it defers is the lethal/tempo tradeoff, live only when the hand holds a
+        // creature ABOVE the deck's vial_target_mv. Below that the fan is two pinned variants of a
+        // forced answer -- and one of the two is a provable duplicate by the note above.
+        bool climb_choice_live = !VialAxisNarrow();
+        if (!climb_choice_live)
+        {
+            const Player& vap = state.players[state.active_player_index];
+            for (const Card& c : vap.hand)
+            {
+                const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+                if (cd == nullptr || !cd->card.IsCreature()) { continue; }
+                if (cd->card.m_mana_cost.ManaValue() > state.vial_target_mv)
+                { climb_choice_live = true; break; }
+            }
+        }
+        if (climb_choice_live
+            && (vial_present || std::any_of(all.begin(), all.end(), [&](const TurnSolver::Plan& p)
             {
                 return std::any_of(p.actions.begin(), p.actions.end(), [&](const Action& a)
                 { return a.kind == Action::Kind::CastFromHand
                       && is_vial(CardDatabase::Instance().Lookup(a.card_name)); });
-            }))
+            })))
         {
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)

@@ -181,7 +181,13 @@ static const bool  s_discard_node      = EnvOn("MTG_DISCARD_NODE", true);
 // The trial resumes at ResumeAt::UpkeepTail (the charge is mid-upkeep -- resuming at Draw would
 // skip this turn's upkeep tokens); vials AFTER this one in the same loop are charged on the
 // heuristic first, or the trial would drop their counters entirely.
-static const bool  s_searched_vial     = EnvOn("MTG_SEARCHED_VIAL", true);
+// DEFAULT FLIPPED TO OFF 2026-08-30 alongside MTG_VIAL_AXIS (see EngineFlags.h for the measurement
+// and the user direction). This probe was already dead on the shipped path -- the axis owned the
+// decision and the design doc's follow-up marks the probe for deletion -- so leaving it default-ON
+// while the axis went default-OFF would have silently REVIVED a retired out-of-band probe as the
+// shipping decider, which is not what was measured. The measured configuration is both OFF: the
+// pure hand-aware heuristic.
+static const bool  s_searched_vial     = EnvOn("MTG_SEARCHED_VIAL", false);
 // MTG_DIVERGENCE_LOG=<file>: DIAGNOSTIC (diagnosis only, no play change). On the search-driven path,
 // at each real pre-combat main decision, ALSO compute the greedy d0 plan (TurnSolver::Solve) for the
 // SAME untouched state and append one JSONL record {seed,turn,diverge,search_land,search,greedy,feat[]}.

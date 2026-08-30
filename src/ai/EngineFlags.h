@@ -277,19 +277,51 @@ inline bool BpTraceEnabled()
 // the same memo, cutoffs and first-win ladder as everything else, with nested games impossible by
 // construction.
 //
-// NO OBVIOUSNESS GATE. A narrowed variant was built and measured (fan only when a creature sits at
-// exactly the current counter AND a bigger one is in hand): 4.6-9.8x less fan-out, and it cut the
-// slivers cost from +0.0640 to +0.0140. REJECTED anyway, on two grounds. It is a lossy prune under
-// Rule 0b -- "hold at k because I will draw an MV-k creature next turn" becomes unreachable even at
-// infinite budget -- and it decides which calls are obvious using the very heuristic the search
-// exists to be able to overrule. The branch stays open on every deck.
+// DEFAULT FLIPPED TO OFF, 2026-08-30 (user): "in general we don't want to fully search vial
+// decisions, because that is a waste of effort. However, that doesn't prevent the option from being
+// open if it is needed. Though, if we did take it, we would only do so under certain
+// circumstances." So the ROOT heuristic (WantVialCharge, hand-aware) ships and the fan is opt-in.
+//
+// WHY THIS SUPERSEDES THE 2026-08-18 ADOPTION rather than merely disagreeing with it. That commit
+// (b289661b) bundled TWO changes: it fixed WantVialCharge, which had been returning flat `false` so
+// a Vial in a non-VialProvider deck never gained a counter in its life, AND it added this axis. Its
+// held-out -0.1275 is the SUM of both, dominated by goblins -0.2035 -- plausibly the heuristic fix,
+// which was enormous. Its own table already showed the axis COSTING knights +0.0120 and slivers
+// +0.0640, excused then as "a budget race, not worse judgment".
+//
+// Isolated on 2026-08-30 with the heuristic already correct, removing the fan is worth -108 turns
+// over 34,325 suite games (smoke -6.98/1,125, regression -25.02/4,700, held-out overnight
+// -76.00/28,500) and 3.1x less search on an idle-box 4-deck probe. The deck it helps MOST is
+// slivers (-62 turns) -- exactly the deck the 2026-08-18 table said it cost. The two measurements
+// agree; what is new is that the budget race is a standing net loss, not a wash.
+//
+// THE OPTION STAYS OPEN, which is the part of the original direction that has NOT changed:
+//   MTG_VIAL_AXIS=1                        -> fan, GATED (MTG_VIAL_AXIS_NARROW below): the
+//                                             "certain circumstances" form.
+//   MTG_VIAL_AXIS=1 MTG_VIAL_AXIS_NARROW=0 -> the exact pre-2026-08-30 unconditional fan, for A/B
+//                                             against that era's ground truth.
+// Rule 0b still bites the gated form: "hold at k because I will draw an MV-k creature next turn" is
+// unreachable under the gate even at infinite budget. That cost is now accepted knowingly instead of
+// being disqualifying -- it is only ever paid by someone who has opted INTO the axis.
 //
 // Read by BOTH the rollout (TurnSolver: variant emission + SimulateBeginningPhase consume) and the
 // executor (AIEngine::DecideVialCharge, which retires the probe when the axis owns the decision) --
 // shared reader per the lockstep rule.
 inline bool VialAxisEnabled()
 {
-    static const bool v = EnvOn("MTG_VIAL_AXIS", true);
+    static const bool v = EnvOn("MTG_VIAL_AXIS", false);
+    return v;
+}
+
+// MTG_VIAL_AXIS_NARROW -- when the axis IS opted into, restrict the fan to the one call the
+// heuristic declines to make. WantVialCharge is deterministic and hand-aware everywhere except the
+// tradeoff its own comment defers ("deploy a cheaper creature now vs climb to a lethal bigger one"),
+// which is live only when the hand holds a creature ABOVE the deck's vial_target_mv. Default ON:
+// fanning a call the heuristic already answers is precisely what the measurement above priced at
+// 3.1x for nothing. `=0` restores the unconditional fan. Inert unless MTG_VIAL_AXIS=1.
+inline bool VialAxisNarrow()
+{
+    static const bool v = EnvOn("MTG_VIAL_AXIS_NARROW", true);
     return v;
 }
 

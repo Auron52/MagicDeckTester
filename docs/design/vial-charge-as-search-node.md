@@ -129,6 +129,71 @@ Two grounds:
 The branch stays open on every deck. The measurement is recorded here so the narrowing is not
 re-derived.
 
+> **SUPERSEDED 2026-08-30 — see "The default flipped" below.** This section stood, and an agent
+> re-derived the narrowing anyway while editing the very flag whose comment carries this note. If
+> you are changing a flag, read its documentation first; that failure is the reason this warning is
+> now at the top of the section instead of the bottom.
+
+## The default flipped (2026-08-30): heuristic ships, the fan is opt-in
+
+**User direction:** *"In general yes, we don't want to fully search vial decisions, because that is
+a waste of effort. However, that doesn't prevent the option from being open if it is needed. Though,
+if we did take it, we would only do so under certain circumstances."*
+
+| config | behaviour |
+|---|---|
+| default (`MTG_VIAL_AXIS` unset) | the hand-aware root heuristic decides; no fan, no probe |
+| `MTG_VIAL_AXIS=1` | fan, GATED to the circumstances below |
+| `MTG_VIAL_AXIS=1 MTG_VIAL_AXIS_NARROW=0` | the exact pre-2026-08-30 unconditional fan |
+
+`MTG_SEARCHED_VIAL` also defaults OFF now. It had to: it was dead on the shipped path only *because*
+the axis owned the decision, so flipping the axis alone would have silently revived a retired
+out-of-band probe as the shipping decider — not the configuration that was measured.
+
+**The gate.** `WantVialCharge` resolves every ordinary call deterministically off the hand. The one
+it declines is the tradeoff its own comment defers — "deploy a cheaper creature now vs climb to a
+lethal bigger one" — which is live only when the hand holds a creature ABOVE `vial_target_mv`.
+
+### Why this supersedes the 2026-08-18 adoption rather than just disagreeing with it
+
+`b289661b` bundled TWO changes: it fixed `WantVialCharge` (which returned flat `false`, so a Vial in
+a non-VialProvider deck never gained a counter in its life) AND it added the axis. Its held-out
+−0.1275 is the **sum of both**, dominated by goblins −0.2035 — plausibly the heuristic fix, which was
+enormous. That commit's own table already showed the axis COSTING knights +0.0120 and slivers
++0.0640, excused at the time as "a budget race, not worse judgment".
+
+Isolated on 2026-08-30, with the heuristic already correct:
+
+| tier | removing the fan |
+|---|---|
+| smoke | −6.98 turns / 1,125 games |
+| regression | −25.02 / 4,700 |
+| overnight (held out) | −76.00 / 28,500 |
+| **all three** | **−108.00 / 34,325** (−0.00315/game) |
+
+Per deck on the overnight: slivers −62, minotaur −10, goblins −6, knights +2. Cost on an idle-box
+4-deck probe: wide 1.00x, gated 0.71x, heuristic **0.32x**.
+
+**The deck it helps most is slivers — exactly the deck the 2026-08-18 table said it cost.** The two
+measurements agree with each other; what is new is that the budget race is a standing net loss, not
+a wash that disappears at 4x budget.
+
+### What has NOT changed
+
+Ground 1 of the original rejection still bites the gated form: it is a lossy prune under Rule 0b —
+"hold at k because I will draw an MV-k creature next turn" is unreachable under the gate even at
+infinite budget. That cost is now accepted knowingly, and is only ever paid by someone who has opted
+into the axis at all.
+
+Ground 2 (the gate judges obviousness using the heuristic the search exists to overrule) was
+*demonstrated* with a BROKEN heuristic — the Goblins case where the gate correctly said "charging is
+obvious" and then relied on a `WantVialCharge` that returned false. The principle stands; that
+particular demonstration no longer reproduces, because the heuristic it depended on is fixed.
+
+**Not re-run:** the 2026-08-18 comparison itself — the axis alone against the fixed heuristic on the
+208-reference bench, which is where the original found its shortfall game. The supersession argument
+above is an inference from `b289661b`'s own numbers, not an isolation of them.
+
 ## Follow-up
 
 `MTG_SEARCHED_VIAL` is now dead on the default path (the axis owns the decision; the probe is
