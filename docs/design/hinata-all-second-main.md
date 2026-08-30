@@ -115,6 +115,18 @@ least even" — and the dominance argument above is game-correct, so the residua
 an ENGINE asymmetry of the m2 host).** The arm is now a detector for that asymmetry; the open
 investigation lives in `bp-node-partition.md`.
 
+**ROOT-CAUSED 2026-08-30 — see `bp-node-partition.md` for the full decomposition.** Three
+mechanisms: (1) local depth starvation at early decisions (recovers with budget — gi=17/35/78);
+(2) **the deleted mid-turn re-plan point** (does NOT recover — gi=22: casting Hinata in M1 lets
+the M2 enumeration price Reality Spasm/Crackle with her per-target discount against the real
+board; the single-phase subset would need a same-subset discount credit the enumerator does not
+have, so the T4 win is inexpressible under all-main-2 at ANY budget); (3) a runaway-pass
+pathology (`kOverrunFloor` = 55x a 20ms budget; 9.2% of the arm's units in 4 aborted passes).
+Mechanism 2 refines the dominance argument: it is game-correct about combat but misses that the
+phase BOUNDARY is a free re-pricing point for state-dependent costs. The classification is
+correct; collapsing the phases still loses information. This arm is now a diagnosis, not a
+candidate.
+
 ## Levers this added (all default OFF, byte-identical unset: 150 games, digest 0deb791369e50e31)
 
 | flag | what it does |

@@ -69,19 +69,36 @@ tranche/group-wave plan was scored full-tail-greedy and must execute its tail.
 Hold: 80 games faster, 63 slower. Play-settings smoke (150 games, value_play policy): node 5.7667
 vs control 5.7733 — consistent.
 
-**nodem2 kills the old attribution and opens a new question (USER 2026-08-30: "It should be at
-least even").** `hinata-all-second-main.md` predicted the arm was blocked on `FSLineTail` having
-no breakpoint hosting; the node gives it full hosting and the arm got WORSE (−0.048/−0.068 vs
-s3m2's −0.018/−0.031), sitting exactly on the breadth ladder (W=2 −0.018 → node −0.048 → W=4
-−0.089 → W=8 −0.123). The USER's dominance argument is GAME-correct on this deck (goldfish, no
-pumps/haste, the dork is summoning-sick either way), so the penalty must be an ENGINE asymmetry —
-the arm is a DETECTOR for m2-host inferiority, not a refuted idea. Known host asymmetries:
-`FSLineTail` has no group-wave phase, no fresh-axis variants, no value-ranked beam reorder.
-Condemnation is ELIMINATED as a cause (Hinata never arms `CondemnsPassedMainPhase`). Working
-hypothesis: in main 1 the node's breadth is FUNDED by deleting the (prefix x blind-tail)
-product; under all-main-2 there is no product left to delete (s3m2 was already the cheapest arm
-measured, block −13%), so node breadth in m2 is nearly pure added cost, paid in committed depth.
-Pending: the nodem2 units/id_depth probe and per-game root-cause of its worse games.
+**nodem2 ROOT-CAUSED (2026-08-30). The funding hypothesis is REFUTED and the penalty decomposes
+into three mechanisms.** The probe: nodem2 runs 22.06M units and commits id_depth 3.100 — DEEPER
+than node's 2.792 — yet plays worse (−0.048 vs +0.014), so the penalty is NOT paid in committed
+depth. Per-game root-cause of its worse-vs-ng games (255 across both blocks, dominated by
+one-turn slips, 5→6 the largest bucket):
+
+1. **Local depth starvation (the common class — recovers with budget).** hold gi=17/35/78 all
+   recover at 400 ms. gi=17 anatomy: at T2 both arms hold the same hand; ng casts the mana dork,
+   nodem2 casts two Preordains — its game spent 103.5k units vs ng's 40.5k (2.55x) yet committed
+   shallower ({1,1,2,3} vs {1,3,3}), blind to the dork→Hinata→win payoff at horizon. Under
+   all-main-2 EVERY plan is in the tail and nearly every plan pends, so the fan-out compounds
+   through the fs_main2 recursion exactly at the early decisions that matter.
+2. **The deleted mid-turn re-plan point (the structural class — does NOT recover with budget).**
+   hold gi=22: node@20ms wins T4 (M1: land + Hinata; M2: Reality Spasm x3 + Ponder + Crackle —
+   Hinata's per-target discount priced against the real board because she RESOLVED between the
+   two enumerations); nodem2@2000ms still T5 (it plays Irencrag Feat T3 and finds the same chain
+   a turn late, once Hinata is already down). The single-phase subset {Hinata, Spasm.., Crackle}
+   would need a same-subset discount credit (the rock/haste-dork credit family) to be affordable
+   at enumeration; the two-main structure gets the re-pricing FREE at the phase boundary. So the
+   second main is not a phase label — it is a mid-turn re-plan point, and all-main-2 deletes it.
+   (Same mechanism as bug 6's gi=1938 in `breakpoint-condemnation-status.md`.)
+3. **Runaway-pass waste (m2-specific pathology).** id_pass waste is 9.2% of nodem2's units
+   (2.04M in just 4 aborted passes) vs 0.25% for node. `kOverrunFloor = 1,000,000` units
+   dominates `kOverrunBeta x Limit` (36k) at 20 ms, so one pathological node-heavy pass may burn
+   55x the whole decision budget before the abort.
+
+Consequence: the arm is a diagnosis, not a candidate — mechanism 2 says all-main-2 is structurally
+WORSE for this deck (the USER's own partition intuition, inverted: MORE re-plan points, not
+fewer). The m2-host feature asymmetries (group waves, fresh axis, value reorder) were secondary
+suspects and are no longer needed to explain the result.
 
 ## The cost anatomy (300 games hold, MTG_ROLLOUT_STATS)
 
@@ -121,12 +138,27 @@ pass-cost-aware predictor for node passes is untried.
 * When the continuation list is empty (n=0), child k=0 falls through to the greedy Solve
   fallback (nothing to enumerate) and the explicit empty arm is not separately offered.
 
-## Cost follow-ups (untried)
+## The cost menu, SIZED (2026-08-30 probes; the untried list above, measured)
 
-1. **Enumeration-side filter**: stop emitting subsets whose canonical order continues past the
-   first plain cantrip (31% of pends are duplicate prefixes; each pays a full prefix apply).
-   MUST first check whether the enumerator emits the pure-prefix subsets those plans collapse to
-   — if enumeration is maximal-subset-biased, dropping instead of truncating deletes the class.
-2. **Child-dup prediction**: 49% of children collapse post-apply; predicting the collision before
-   the resume apply would halve fs_bp_node.
-3. **Pass-cost prediction** for node passes (the overshoot above).
+The dupe structure ([bp-node] counters, 300 hold games): node's 3.37M child dupes = 1.52M
+in-node + 1.85M cross-node, of which 469k are the explicit EMPTY arm colliding and only 503k
+(2.3% of units) are exactly predictable from the pend's own cands content (fp_predictable).
+Pass-abort waste is 0.25% for node (the 1.35x overshoot is passes COMPLETING past their
+estimate, not aborts). Cross-node dupes are different prefixes converging post-continuation
+(same total cast set partitioned two ways) — inherent to hosting at every base plan, not
+predictable without applying. The wall gap (2.10x wall at 1.35x units) is NOT the per-child
+snapshot copy: hoisted-buffer reuse (committed) bought only ~1.4%.
+
+| lever | saves (node arm) | status |
+|---|---|---|
+| dominance-filter answer to the old q1: `eval_and_push` runs filters (`SubsetWastesAccelerant`, stranded-equip, unbacked-X) that can reject a PURE PREFIX standing alone while its extension survives | — | so naive drop-at-emission is LOSSY, confirmed; only truncate-at-emission (after the filters) is sound |
+| emission truncate-and-dedup (kills the 826k duplicate-prefix host applies) | ~3.8% units | untried; needs an emission-side partition-point predictor + apply-side verification counter |
+| in-node exact content dedup (skip fp-duplicate cands in the k loop) | ~2.3% units | untried; the skip must be full-field-exact, not a hash (no-lossy-truncation bar) |
+| EMPTY-arm skip when cands provably contains a no-cast-no-land entry | ~2.2% units (overlaps above) | untried |
+| breakpoint condemnation (`MTG_BP_CLASSIFY`, fires under ORDER_FULL: 627k drops / 5.35% of consultations) | **−1.0% units measured**, children −5.3%, depth flat, ~neutral quality on 300 games | measured 2026-08-30; the soundness exemptions (rituals/tutors/reducers — each guards a recorded deleted-win class, and much of Hinata's hand IS those classes) cap the yield. USER note: greedy continuations may still be cheaper than any condemnation — they skip the search entirely; target is the same ballpark, then quality decides |
+| node-aware overrun floor (m2's 9.2% waste; `kOverrunFloor`=1M = 55x a 20ms budget) | m2 only (~0.25% for node) | untried; only matters if all-main-2 is ever revived |
+| value-ordering the k loop for B&B | small — children/pend ≈ 3.8, too few to reorder | judged not promising |
+
+Honest total for the safe exact levers: ~6–8% units (overlapping), i.e. 1.35x → ~1.25x. There is
+no single big lever left inside the node itself; the remaining big buckets are fs_main2 40% +
+fs_pre 18% — the host plan loops, whose product the node already collapsed once.
