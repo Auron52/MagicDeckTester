@@ -115,13 +115,34 @@ children 6.90M, child_dupes 3.37M (49% — dedup discovering duplicates at one a
 adopted 669k (19% of surviving children beat the incumbent), **empty_adopted 8,520** (the
 "cast nothing" arm gets chosen — its existence is not theoretical).
 
-**The headroom reading.** The node commits 0.44 plies SHALLOWER — the exact depth loss that made
-the s3 form lose — and plays neutral-to-better anyway: per-node decision quality (drawn-card-aware
-continuations) fully compensates the depth loss. Any cost reduction that recovers depth should
-turn the class outright positive (equal-depth value of the class: +0.05, the crossover doc).
-Note the passes also OVERSHOOT the 20 ms allowance (21.7M vs the control's 16.1M — pass-boundary
-gating + Overrun only), so the deepening ladder both overspends and commits shallow; a
-pass-cost-aware predictor for node passes is untried.
+**The headroom reading — REFUTED by the equal-compute measurement (2026-08-30).** The original
+inference ("per-node quality fully compensates the depth loss ⇒ cost work turns the class
+positive") did not survive a direct test. The passes OVERSHOOT the 20 ms allowance (21.7M units
+vs the control's 16.1M, +35% — pass-boundary gating + Overrun only), so the +0.0142/0.0000 at
+matched `budget_ms` was partly FUNDED by compute the setting never intended to grant. Measured
+at the equal-units point (node at 12 ms ≈ 16.4M units vs control at 20 ms = 16.1M; paired,
+1200 games/cell):
+
+| | hold | t | train | t |
+|---|---|---|---|---|
+| node@12 vs ng@20 (equal units) | **+0.0242 (worse)** | +1.94 | **+0.0383 (worse)** | +3.17 |
+| node@12 vs node@20 (compute withdrawn) | +0.0383 | +5.92 | +0.0383 | +5.41 |
+
+Budget ladder on the 300-game hold subset (monotone): node@20 5.7300, @15 5.7367, @13 5.7467,
+@12 5.7567; ng@20 5.7233; id_depth falls 2.79 → 2.52 as the overshoot is withdrawn. So **at
+genuinely equal compute the class is still a net quality loss (~+0.03)** — the node is the best
+FORM of the class measured (the s3 rank form lost −0.023/−0.029 while ALSO paying 1.5x), but
+per-node quality compensates only part of the depth cost, not all of it. Consequence for
+adoption: at fixed `budget_ms` the node is neutral-to-better because it takes ~1.35x units /
+~1.2–1.6x wall; spending that same extra wall on raising the CONTROL's budget would almost
+certainly buy more than +0.014. The case for the node is therefore STRUCTURAL (the USER's
+doctrine: no enumeration ahead of the drawn card; the wave/rank machinery deleted for the
+class), not compute-efficiency.
+
+**Condemnation on the node — SETTLED at full power (nodecond, node + MTG_BP_CLASSIFY, paired
+1200/cell): train +0.0000 exactly (t 0.00) vs both ng and node; hold −0.0075 vs ng (t −0.65) /
++0.0067 vs node (t +2.00).** Neutral-to-marginally-worse than plain node, −1.0% units. Under
+the current soundness exemptions there is nothing here for Hinata; not worth carrying.
 
 ## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
 
