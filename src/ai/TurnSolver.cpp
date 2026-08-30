@@ -24796,9 +24796,23 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     const bool eff_single_deck    = !s_esc_single_env && escalation_cap > 0;
     const bool eff_single         = s_esc_single_env || eff_single_deck;
     const bool eff_single_predict = s_esc_single_env ? s_esc_single_predict : eff_single_deck;
+    // CLEARED UNCONDITIONALLY, and that is load-bearing (2026-08-30). These arrays describe THIS
+    // decision's probe structure, but they are RECORDED only under the predictor branch below --
+    // while the path-to-trust start-gate override (MTG_ESC_TO_TRUST, adopted default ON) READS
+    // g_probe_leaves[] on every value-leaf deck that ships a value_trust_depth, INCLUDING the decks
+    // that never record it (no value_play.escalation_cap). They are thread_local and were cleared
+    // only inside the recording branch, so a pooled batch worker handed one deck's leaf counts to
+    // the next deck's game: Knights (escalation_cap=5, records) -> Minotaur (trust depth 5, never
+    // records) read 68,259 stale leaves as its own, inflated `avoided` to ~8.2M, started a depth-5
+    // pass on a budget with 0 remaining, committed depth 5 instead of 4 and so CANCELLED the
+    // escalation -- a different line at the same win turn. That is the whole minotaur_regression_d5
+    // nondeterminism: which games shared a worker decided the answer. See
+    // docs/design/minotaur-d5-regression-flake.md. A non-recording deck now reliably reads 0 (an
+    // `avoided` credit of 0), which is what it already read whenever its worker was clean -- i.e.
+    // the ISOLATED answer, not the contaminated one.
+    for (int d = 0; d < 16; ++d) { g_probe_leaves[d] = 0; g_probe_cost[d] = 0; }
     if (s_esc_predict || eff_single_predict)
     {
-        for (int d = 0; d < 16; ++d) { g_probe_leaves[d] = 0; g_probe_cost[d] = 0; }
         g_probe_recording = true;
     }
     // VALUE-RANKED BEAM (MTG_ESC_BEAM=W): capture the probe's per-node value ranking so the escalation reorders

@@ -48,7 +48,20 @@ Lesson worth generalising: **a byte-identity claim in a comment is a measurement
 date.** This one may well have been true when written and was still being trusted long after
 `cards.json` moved underneath it.
 
-## Why it is blocked: the tier cannot currently validate it
+## UNBLOCKED 2026-08-30 — the flake is fixed
+
+`minotaur-d5-regression-flake.md` is CLOSED (root cause: a `thread_local` probe-structure array read
+by decks that never write it; one-line fix in `FullSearchLineHybrid`). The tier is deterministic
+again — regression 80/80, smoke 48/48 — so a GT movement from re-adding this call is now
+distinguishable from noise. The three steps under "What would close it" are ready to run; nothing
+about the gap itself has changed.
+
+Note for whoever picks this up: another agent's commit message describes `c4e9930b` as "removing the
+OnGoblinEnters projection call". That is a misreading of history — `OnGoblinEnters` itself is intact
+with 12+ call sites, and the *projection* call in `ApplyPlanDirect` was never committed at all (it
+lived in a stash). `c4e9930b` is where it was deliberately left out, with the KNOWN GAP comment.
+
+## Why it WAS blocked: the tier could not validate it
 
 The `minotaur_regression_d5_s2002` / `_s3003` cells are **nondeterministic in the full tier**,
 independently of this line and of any local change — the control commit flakes at the same rate.
