@@ -24176,7 +24176,7 @@ namespace
     // budget; a little over (>1.0) is allowed since the overrun guard backs it up.
     constexpr double kStartGateAlpha = 1.10;
 
-    // ---- PATH-TO-TRUST gate (MTG_ESC_TO_TRUST, default OFF) --------------------------------------
+    // ---- PATH-TO-TRUST gate (MTG_ESC_TO_TRUST, ADOPTED 2026-08-14 -- default ON) -----------------
     // What the ladder is really deciding, when the value leaf drives a deck with a trust depth, is
     // not "can I afford the next pass" but "can I afford to REACH TRUST" -- because landing on the
     // trust depth cancels the hybrid's heuristic escalation outright, while stopping one ply short
