@@ -351,3 +351,24 @@ inline bool ScaledLandRankEnabled()
     static const bool v = EnvOn("MTG_SCALED_LAND_RANK");
     return heurarm::Flag(heurarm::SCALED_LAND_RANK, v);
 }
+
+// MTG_FRONTLINE_FIRST -- DEFAULT ON; =0 takes the CONSERVATIVE trigger order.
+//
+// Frontline Heroism's copy trigger and a Zada/Mirrorwing magnet trigger both fire on the same
+// cast, and CR 603.3b lets the controller stack them in either order. The two orders differ:
+//   ON  (default): Heroism resolves FIRST, so its Soldier is already on the battlefield when the
+//                  magnet trigger reads "each other creature you control that the spell could
+//                  target" -- the Soldier gets the magnet's copy too. Measured 5 payload
+//                  instances on a Zada + 2-creature board.
+//   OFF          : the magnet resolves first and never sees the Soldier -- 4 instances.
+// ON is the goldfish-optimal order and the one a real controller would take, so it ships as the
+// default. OFF exists to BOUND how much of Heroism's measured value depends on that choice
+// rather than on the card, which is a question a screen cannot answer from the delta alone.
+// Inert for every board with no frontline_copy_tokens permanent.
+inline bool FrontlineTriggerFirst()
+{
+    static const bool v = EnvOn("MTG_FRONTLINE_FIRST", true);
+    return v;
+}
+
+

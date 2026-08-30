@@ -8083,6 +8083,27 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // whole point of MTG_TREASURE_PAY_SOURCE; EffectiveProduces has already made it a real
                 // source, so skipping here is a SWAP of the accounting, not a loss of the mana.
                 if (IsPaySacSource(*pd)) { continue; }
+                // COLOUR-PINNED source (Eldrazi Spawn's "Add {C}"): the colour is not a decision, so
+                // emit exactly ONE action carrying the pin. No fan to search and no fold to make --
+                // this is the degenerate |colors| == 1 case, handled explicitly so the pin cannot be
+                // overwritten by a candidate colour the card does not produce. Reached only when the
+                // pay-sac route is off (IsPaySacSource skips above when it is on); the two routes
+                // agree on the colour, so the pin holds either way.
+                if (!pd->params.sac_for_mana_color.empty())
+                {
+                    Action a;
+                    a.kind               = Action::Kind::SacForMana;
+                    a.card_name          = p.card.m_name;
+                    a.hand_index         = -1;
+                    a.cost               = ManaCost{};
+                    a.ritual_float       = pd->params.sac_for_mana_amount;
+                    a.chosen_float_color = pd->params.sac_for_mana_color;
+                    a.sac_source_id      = p.card.m_number;
+                    a.eval               = 0;
+                    a.is_noncreature     = true;
+                    actions.push_back(std::move(a));
+                    continue;
+                }
                 const bool fold = SacColorFoldEnabled() && pd->params.sac_for_mana_amount >= 2;
                 // FAN-WIDTH census (MTG_SAC_COLOR_TRACE): how wide is the fan the fold collapses?
                 // The fold can only save enumeration where width > 1; a provider that already
@@ -15898,7 +15919,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     if (state.battlefield[bi].card.m_number == cast_number
                         && state.battlefield[bi].controller_index == state.active_player_index)
-                    { OnDragonEnters(state, state.active_player_index, bi); break; }
+                    {
+                        OnDragonEnters(state, state.active_player_index, bi);
+                        // ...and the param-gated ETB cascade, which the executor's
+                        // EffectHandler::EnterBattlefield fires on EVERY entry, creature or not.
+                        // Without it an enchantment's ETB token (Frontline Heroism's 1/1 Soldier)
+                        // would exist in the real game and NOT in the projection -- an fd-diverge of
+                        // exactly the shape the Puresteel note above records. Byte-identical for
+                        // every existing deck: all 8 cards carrying a cascade param are instants or
+                        // sorceries, which never reach this permanent-enter branch.
+                        OnGoblinEnters(state, state.active_player_index, bi);
+                        break;
+                    }
                 }
             }
             // ...and that draw is a DECISION POINT (breakpoint site 6): the card it put in hand is

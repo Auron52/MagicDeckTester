@@ -1,0 +1,21 @@
+{
+ "_comment": "Oracle's Restoration as a Fortifying Draught ENABLER -- the interaction the whole 'max the lifegain package' decision rests on, and which nothing else guarded. Draught's X is life gained THIS TURN (Player::life_gained_this_turn), and Oracle carries a +1 life rider, so an Oracle resolved BEFORE Draught starts Draught's X at 3 instead of 2. Board: Elvish Mystic 1/1 (not sick) + exactly two Forests -- two lands for two {G} spells, so the dork never needs to tap and lose its attack. Hand: Oracle's Restoration + Fortifying Draught, no magnet and no Heroism, so nothing multiplies the instances and the arithmetic is bare. Correct line: Oracle on the Mystic (2/2, +1 life), then Draught on the Mystic (+2 life, X = 3 gained this turn, +3/+3) = 5/5, swing 5 = opponent_life exactly. If Draught's X ignored Oracle's rider, or the cast order put Draught FIRST, X would be 2 and the Mystic only 4/4 -- one short, unwinnable. So this fixture pins BOTH the lifegain accumulation and MirrorwingProvider::CastOrderRank's decision to rank Draught last (18) behind the draws (14). Asserts active_life 23 = 20 + 1 (Oracle) + 2 (Draught).",
+ "deck": "decks/Mirrorwing Dragon/v3-heroism-draught/Mirrorwing Dragon.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 5,
+ "battlefield": [
+  { "name": "Forest",        "controller": 0, "tapped": false },
+  { "name": "Forest",        "controller": 0, "tapped": false },
+  { "name": "Elvish Mystic", "controller": 0, "tapped": false, "sick": false }
+ ],
+ "hand": [ "Oracle's Restoration", "Fortifying Draught" ],
+ "library_filler": "Mirrorwing Dragon",
+ "library_size": 40,
+ "depth": 5,
+ "budget_ms": 100,
+ "expect_win_turn": 4,
+ "log_out": "logs/play/oracle_enables_draught_x.json"
+}

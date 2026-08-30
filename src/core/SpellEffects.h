@@ -12,6 +12,7 @@
 #include "GameLogger.h"                // g_reveal_logger: capture scry/dig reveals (real play only)
 #include "../cards/CardDatabase.h"
 #include "../ai/DecisionProviders.h"   // ResolveProvider: route deck decisions through the provider
+#include "../ai/EngineFlags.h"         // FrontlineTriggerFirst: shared executor/rollout flag reader
 #include "Trace.h"                     // MTG_TRACE=discard: cleanup-discard tie distribution
 #include <algorithm>
 #include <array>
@@ -747,6 +748,14 @@ inline int SelectCleanupDiscardIndex(const GameState& state,
     const std::vector<int> rank = ResolveProvider(state).CleanupDiscardCandidates(state, required_pieces);
     return rank.empty() ? -1 : rank.front();
 }
+
+// `created_token_haste` is a BOOL in card data, but tokens carry keywords as a vector
+// (etb_created_token_keywords). Translate at the boundary rather than carry two mechanisms
+// for one property -- CreateToken already maps the string "Haste" to Keyword::Haste, so this
+// keeps ONE place deciding what haste means for a created token. Empty for every card that
+// does not set the flag, which is the historical argument -> byte-identical.
+inline std::vector<std::string> HasteKeywords(bool haste)
+{ return haste ? std::vector<std::string>{"Haste"} : std::vector<std::string>{}; }
 
 // Forward declaration: CreateToken is defined further down but used by FireOnCastTriggers.
 inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&,
@@ -2018,7 +2027,8 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 
     // Token specs are collected first: CreateToken push_backs onto the battlefield, which
     // would invalidate a range-for over it. Iterate the original size by index, then create.
-    struct TokenSpec { int n, p, t; std::vector<std::string> subs; };
+    struct TokenSpec { int n, p, t; std::vector<std::string> subs; std::string color;
+                       std::vector<std::string> kws; };
     std::vector<TokenSpec> to_create;
 
     int bf_size = static_cast<int>(state.battlefield.size());
@@ -2101,8 +2111,30 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
                 to_create.push_back({def->params.cast_trigger_creates_tokens,
                                      def->params.cast_token_power,
                                      def->params.cast_token_toughness,
-                                     def->params.cast_token_subtypes});
+                                     def->params.cast_token_subtypes,
+                                     def->params.created_token_color,
+                                     HasteKeywords(def->params.created_token_haste)});
             }
+        }
+
+        // Young Pyromancer: "Whenever you cast an instant or sorcery spell, create a 1/1 red
+        // Elemental creature token." Same collection pass as Worthy Knight above, keyed on the
+        // cast spell's TYPE instead of a creature subtype. Aria of Flame (a few lines up) already
+        // establishes this exact condition, so the two stay consistent.
+        //
+        // COPIES DO NOT TRIGGER IT (CR 707.10: a copy put onto the stack by a resolving ability is
+        // never "cast"). FireOnCastTriggers runs once per real cast and ResolveSoloTargetTrick's
+        // Zada/Mirrorwing fan-out never calls it, so the count is rules-correct without a guard:
+        // casting one Fists of Flame into a five-creature Zada fan makes ONE Elemental, not six.
+        if (def->params.cast_trigger_instant_sorcery_tokens > 0
+            && (cast_def.card.IsInstant() || cast_def.card.IsSorcery()))
+        {
+            to_create.push_back({def->params.cast_trigger_instant_sorcery_tokens,
+                                 def->params.cast_token_power,
+                                 def->params.cast_token_toughness,
+                                 def->params.cast_token_subtypes,
+                                 def->params.created_token_color,
+                                 HasteKeywords(def->params.created_token_haste)});
         }
 
         // Kor Spiritdancer: "Whenever you cast an Aura spell, you may draw a card." Always draw
@@ -2128,7 +2160,8 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 
     for (const TokenSpec& s : to_create)
     {
-        for (int k = 0; k < s.n; ++k) { CreateToken(state, active, s.p, s.t, s.subs); }
+        for (int k = 0; k < s.n; ++k)
+        { CreateToken(state, active, s.p, s.t, s.subs, s.color, s.kws); }
     }
 }
 
@@ -3247,7 +3280,7 @@ inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
     {
         CreateToken(state, controller, p.etb_created_token_power,
                     p.etb_created_token_toughness, p.etb_created_token_subtypes,
-                    p.created_token_color);
+                    p.created_token_color, HasteKeywords(p.created_token_haste));
     }
 
     // (1b) ETB OPPONENT-token gift (Hunted Phantasm: "target opponent creates five 1/1 red Goblin
@@ -6480,6 +6513,50 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     // duplicate... which sits BEHIND every recipient index -- it erases the HIGHER index of the
     // pair only when the token is not kept; when the provider keeps the token instead, recipient
     // indices after the original could shift, so KeepOldest is relied on and asserted by review).
+    // FRONTLINE HEROISM: "Whenever you cast a spell that targets only a single creature you
+    // control, create a 1/1 red Soldier creature token with haste, then copy that spell. The copy
+    // targets that token." The qualifying cast is exactly this function's job -- a solo_target_trick
+    // resolving against ONE own creature -- so the token is made HERE, before the recipient list is
+    // built, and then simply joins that list: the shared payload applier below gives it the copy.
+    //
+    // ORDERING (controller's choice, CR 603.3b). Heroism's trigger and a magnet's trigger both go on
+    // the stack above the spell; taking Heroism's FIRST is strictly better and so is what a
+    // controller would do -- the Soldier exists before the magnet trigger resolves, so the magnet
+    // also copies for it ("each other creature you control that the spell could target" is read on
+    // the magnet trigger's resolution). Creating the token before the magnet scan below reproduces
+    // that ordering exactly, and gives the Soldier one copy from Heroism plus one from the magnet.
+    // Both are real: two triggered abilities, two copies.
+    //
+    // Only fires when the spell has a single own-creature target (ti >= 0 && strive_extras <= 0):
+    // an opponent-targeted trick returned above, an untargeted trick_up_to_one has ti < 0, and a
+    // strive cast targets several creatures, so none of them is "only a single creature you
+    // control". Inert for every deck with no frontline_copy_tokens permanent -> byte-identical.
+    // MTG_FRONTLINE_FIRST (default ON) picks WHICH order; see EngineFlags.h. ON = make the Soldiers
+    // before the magnet scan below, so the magnet also fans onto them (5 instances on a Zada +
+    // 2-creature board). OFF = make them after, so the magnet never sees them (4). Heroism's own
+    // copy is +1 either way -- it is NOT a magnet and never fans.
+    std::vector<int> frontline_tokens;
+    auto make_frontline_tokens = [&]()
+    {
+        if (ti < 0 || strive_extras > 0) { return; }
+        const int bf_before = static_cast<int>(state.battlefield.size());
+        for (int i = 0; i < bf_before; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != controller) { continue; }
+            const CardDefinition* fd = CardDatabase::Instance().LookupCached(p.card);
+            if (!fd || fd->params.frontline_copy_tokens <= 0) { continue; }
+            for (int k = 0; k < fd->params.frontline_copy_tokens; ++k)
+            {
+                CreateToken(state, controller, fd->params.cast_token_power,
+                            fd->params.cast_token_toughness, fd->params.cast_token_subtypes,
+                            fd->params.created_token_color, HasteKeywords(fd->params.created_token_haste));
+                frontline_tokens.push_back(static_cast<int>(state.battlefield.size()) - 1);
+            }
+        }
+    };
+    if (FrontlineTriggerFirst()) { make_frontline_tokens(); }
+
     std::vector<int> order;
     const bool magnet = ti >= 0 && strive_extras <= 0
         && CardDatabase::Instance().LookupCached(state.battlefield[ti].card)
@@ -6528,6 +6605,18 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     }
     else if (ti >= 0) { order.push_back(ti); }
     else              { order.push_back(-1); }   // up-to-one, no target: one untargeted instance
+
+    // Heroism's own copies, spliced in JUST BEFORE the original. Stack order says why: the magnet
+    // trigger is taken second, so its copies go on the stack ON TOP of Heroism's copy and resolve
+    // first -- Heroism's copy sits directly above the original spell. When there is no magnet the
+    // splice lands the copy first and the original last, which is the same rule. Each Soldier gets
+    // one payload per Heroism (its own copy) plus, under a magnet, one more from the magnet fan --
+    // two triggered abilities, two copies, so the duplicate index is correct, not a double-count.
+    if (!FrontlineTriggerFirst()) { make_frontline_tokens(); }   // magnet scan already ran -> unseen
+    if (!frontline_tokens.empty() && !order.empty())
+    {
+        order.insert(order.end() - 1, frontline_tokens.begin(), frontline_tokens.end());
+    }
 
     for (int i : order) { ApplyTrickPayload(state, controller, def, i, chosen_x); }
     return true;
@@ -8038,6 +8127,27 @@ inline const std::vector<Color>& EffectiveProduces(const GameState& state, int c
     // the accounting, not an addition to it (the action is removed in the same change).
     if (IsPaySacSource(def))
     {
+        // COLOUR-PINNED sac source (Eldrazi Spawn: "Sacrifice this creature: Add {C}"). One real
+        // colour, so AddSourceToPool credits it as that colour rather than wild -- {C} pays generic
+        // pips and nothing else. Without this pin the Spawn would read as a rainbow source and
+        // could pay a {R} or {G} pip it cannot actually pay.
+        if (!def.params.sac_for_mana_color.empty())
+        {
+            static const std::vector<Color> kColorless{ Color::Colorless };
+            static const std::vector<Color> kW{ Color::White }, kU{ Color::Blue },
+                                            kB{ Color::Black }, kR{ Color::Red },
+                                            kG{ Color::Green };
+            switch (def.params.sac_for_mana_color[0])
+            {
+                case 'C': return kColorless;
+                case 'W': return kW;
+                case 'U': return kU;
+                case 'B': return kB;
+                case 'R': return kR;
+                case 'G': return kG;
+                default:  break;
+            }
+        }
         static const std::vector<Color> kAnyColor{ Color::White, Color::Blue, Color::Black,
                                                    Color::Red,   Color::Green };
         return kAnyColor;

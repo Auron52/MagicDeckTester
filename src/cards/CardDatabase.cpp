@@ -601,6 +601,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cast_token_toughness         = params.value("cast_token_toughness", 0);
     for (const std::string& s : params.value("cast_token_subtypes", json::array()))
         p.cast_token_subtypes.push_back(s);
+    p.cast_trigger_instant_sorcery_tokens =
+        params.value("cast_trigger_instant_sorcery_tokens", 0);
 
     p.attack_creates_tokens        = params.value("attack_creates_tokens", 0);
     p.attack_token_power           = params.value("attack_token_power", 0);
@@ -745,6 +747,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.splice_onto_arcane        = params.value("splice_onto_arcane", false);
     p.suspend_time_counters     = params.value("suspend_time_counters", 0);
     p.sac_for_mana_amount       = params.value("sac_for_mana_amount", 0);
+    p.sac_for_mana_color        = params.value("sac_for_mana_color", std::string());
     p.impulse_exile             = params.value("impulse_exile", 0);
     p.impulse_expiry_this_turn  = params.value("impulse_expiry_this_turn", false);
     p.impulse_float_amount      = params.value("impulse_float_amount", 0);
@@ -891,6 +894,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.look_put_counter_bonus        = params.value("look_put_counter_bonus", 0);
     p.look_put_counter_bonus_max_mv = params.value("look_put_counter_bonus_max_mv", 0);
     p.created_token_color           = params.value("created_token_color", std::string{});
+    p.created_token_haste           = params.value("created_token_haste", false);
+    p.frontline_copy_tokens         = params.value("frontline_copy_tokens", 0);
 
     // ---- Minotaur tribal (see CardParams' block comment for each field's semantics) ----
     p.etb_damage_devotion_color       = params.value("etb_damage_devotion_color", std::string{});

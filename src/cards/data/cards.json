@@ -5510,6 +5510,139 @@
     "gy_return_requires_creature": true,
     "gy_return_requires_subtype": "Dragon"
    }
+  },
+  {
+   "name": "Nest Invader",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Eldrazi",
+    "Drone"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, create a 0/1 colorless Eldrazi Spawn creature token with \"Sacrifice this creature: Add {C}.\" [ETB creates one 0/1 Eldrazi Spawn (etb_self_creates_tokens; the Goblin Instigator pattern). The Spawn is a real creature: it receives Zada/Mirrorwing copies. Its sac ability is a NAMED TOKEN DEF (\"0/1 Eldrazi Spawn Token\", the Treasure Token precedent) carrying sac_for_mana_amount 1 + sac_for_mana_color \"C\", so it is a live one-shot mana source that pays GENERIC pips only -- never a {R} or {G} pip. The ability has no tap symbol, so a summoning-sick Spawn can still be sacrificed.]",
+   "template": "custom",
+   "parameters": {
+    "etb_self_creates_tokens": 1,
+    "etb_created_token_power": 0,
+    "etb_created_token_toughness": 1,
+    "etb_created_token_subtypes": [
+     "Eldrazi Spawn"
+    ]
+   }
+  },
+  {
+   "name": "0/1 Eldrazi Spawn Token",
+   "mana_cost": "",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Eldrazi Spawn"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 1,
+   "oracle_text": "Sacrifice this creature: Add {C}. [Token definition (created by Nest Invader's ETB; never in a decklist). CreateToken names a token \"<P>/<T> <first subtype> Token\", so this name is what LookupCached resolves for that token -- which is what makes the sac ability LIVE (the Treasure Token precedent). sac_for_mana_color \"C\" pins it to colourless: it pays generic pips and no coloured pip.]",
+   "template": "custom",
+   "parameters": {
+    "sac_for_mana_amount": 1,
+    "sac_for_mana_color": "C"
+   }
+  },
+  {
+   "name": "Young Pyromancer",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "Whenever you cast an instant or sorcery spell, create a 1/1 red Elemental creature token. [cast_trigger_instant_sorcery_tokens: fires once per real CAST from FireOnCastTriggers (shared executor/rollout). A Zada/Mirrorwing copy is NOT cast (CR 707.10), so one Fists of Flame into a five-creature fan makes ONE Elemental, not six -- the token arrives while the fan is still on the stack in real play, but the engine creates it at cast time, so it is a recipient of that same fan. Disclosed: that is one extra copy recipient versus the strict stack ordering.]",
+   "template": "custom",
+   "parameters": {
+    "cast_trigger_instant_sorcery_tokens": 1,
+    "cast_token_power": 1,
+    "cast_token_toughness": 1,
+    "cast_token_subtypes": [
+     "Elemental"
+    ],
+    "created_token_color": "R"
+   }
+  },
+  {
+   "name": "Undercellar Myconid",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 2,
+   "oracle_text": "Whenever this creature enters or dies, create a 1/1 green Saproling creature token.\n{T}: Add one mana of any color. [ETB + self-death Saproling (etb_self_creates_tokens + dies_watch_includes_self/dies_trigger_creates_tokens -- the Mogg War Marshal pattern). Any-colour mana via the mana_dork template with produces WUBRG (the Birds of Paradise precedent). NOTE this is a THREE-drop, not a two-drop like the Goblin Instigator it replaces.]",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "etb_self_creates_tokens": 1,
+    "etb_created_token_power": 1,
+    "etb_created_token_toughness": 1,
+    "etb_created_token_subtypes": [
+     "Saproling"
+    ],
+    "dies_watch_includes_self": true,
+    "dies_trigger_creates_tokens": 1,
+    "dies_token_power": 1,
+    "dies_token_toughness": 1,
+    "dies_token_subtypes": [
+     "Saproling"
+    ],
+    "created_token_color": "G"
+   }
+  },
+  {
+   "name": "Frontline Heroism",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When this enchantment enters, create a 1/1 red Soldier creature token with haste.\nWhenever you cast a spell that targets only a single creature you control, create a 1/1 red Soldier creature token with haste, then copy that spell. The copy targets that token. [ETB Soldier via etb_self_creates_tokens + created_token_haste. The copy clause is frontline_copy_tokens, hooked into ResolveSoloTargetTrick -- the shared executor/rollout resolver for exactly the qualifying cast (a solo_target_trick against ONE own creature): the Soldier is made, then joins the recipient list so the shared payload applier gives it the copy. Under a Zada/Mirrorwing magnet the Soldier gets TWO payloads (Heroism's own copy plus one from the magnet fan), which is correct -- two triggered abilities, and taking Heroism's trigger first is the controller's choice. NOT a creature: it is a 3-mana enchantment, so unlike the Goblin Instigator it replaces it adds no body to the magnet fan beyond its tokens, and it is not itself a legal copy recipient.]",
+   "template": "custom",
+   "parameters": {
+    "etb_self_creates_tokens": 1,
+    "etb_created_token_power": 1,
+    "etb_created_token_toughness": 1,
+    "etb_created_token_subtypes": [
+     "Soldier"
+    ],
+    "frontline_copy_tokens": 1,
+    "cast_token_power": 1,
+    "cast_token_toughness": 1,
+    "cast_token_subtypes": [
+     "Soldier"
+    ],
+    "created_token_color": "R",
+    "created_token_haste": true
+   }
   }
  ]
 }

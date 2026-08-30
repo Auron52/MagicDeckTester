@@ -328,6 +328,15 @@ struct CardParams
     int                      cast_token_toughness = 0;
     std::vector<std::string> cast_token_subtypes;
 
+    // Cast-trigger token creation keyed on the CARD TYPE of the cast spell rather than a creature
+    // subtype (Young Pyromancer: "Whenever you cast an instant or sorcery spell, create a 1/1 red
+    // Elemental creature token"). Shares the cast_token_* spec above plus created_token_color.
+    // Fired from the same FireOnCastTriggers pass as cast_trigger_creates_tokens, so executor and
+    // rollout stay lockstep. A COPY is not cast (CR 707.10), so a Zada/Mirrorwing fan-out fires
+    // this exactly once -- on the original cast -- which is the rules-correct count.
+    // 0 = not an instant/sorcery cast-trigger -> byte-identical for every other deck.
+    int                      cast_trigger_instant_sorcery_tokens = 0;
+
     // Attack-trigger token creation (e.g. Adeline, Resplendent Cathar: "Whenever you
     // attack, for each opponent, create a 1/1 white Human token that's tapped and
     // attacking"). When attack_creates_tokens > 0, declaring at least one attacker makes
@@ -864,6 +873,16 @@ struct CardParams
     // sac-for-mana source -> byte-identical for every other deck.
     int sac_for_mana_amount = 0;
 
+    // Colour PIN for the sac-for-mana ability above. Empty (the historical default) = "one mana of
+    // any colour" (Black Lotus / Lotus Bloom / Treasure), which enumerates a colour fan and is
+    // credited as WILD. A non-empty letter means the ability adds THAT mana only -- "C" for an
+    // Eldrazi Spawn's "Sacrifice this creature: Add {C}", which pays generic costs but no coloured
+    // pip. It collapses the colour fan to one action, pins Action::chosen_float_color at
+    // enumeration, and narrows EffectiveProduces on the pay-sac path so the payment solver never
+    // spends the Spawn on a {R} or {G} pip. Modelling it as any-colour would materially FLATTER a
+    // Spawn-making card in a two-colour deck, which is exactly the comparison this pin protects.
+    std::string sac_for_mana_color;
+
     // --- Apex of Power ({7}{R}{R}{R} Sorcery: impulse-exile-7 + conditional 10-of-one-colour float) ---
     // "Exile the top seven cards of your library. Until end of turn, you may cast spells from among
     // them." impulse_exile = the number of top cards exiled as STAGED cards (7 for Apex). > 0 gates the
@@ -1378,6 +1397,22 @@ struct CardParams
     // Terastodon token sites so a green token is legal "sacrifice a green creature" fodder
     // (Natural Order). Empty = colourless token (the historical default; byte-identical).
     std::string created_token_color;
+
+    // Creature tokens this card creates enter with HASTE (Frontline Heroism's "1/1 red Soldier
+    // creature token with haste"). Read by the same etb_self / cast-trigger / frontline sites that
+    // read created_token_color, so the token is attack-eligible the turn it is made (CanAttackFull
+    // reads Keyword::Haste). false = the historical summoning-sick token -> byte-identical.
+    bool created_token_haste = false;
+
+    // --- Frontline Heroism ({2}{R} enchantment) --------------------------------------------------
+    // "Whenever you cast a spell that targets only a single creature you control, create a 1/1 red
+    // Soldier creature token with haste, then copy that spell. The copy targets that token."
+    // > 0 = this permanent makes that many token+copy pairs per qualifying cast. The qualifying
+    // cast is exactly a solo_target_trick resolving against ONE own creature, so the hook lives in
+    // ResolveSoloTargetTrick (shared executor/rollout): the token is created, then appended to the
+    // recipient list so the shared payload applier gives it the copy. Uses the cast_token_* spec
+    // plus created_token_color / created_token_haste. 0 = off -> byte-identical for every other deck.
+    int frontline_copy_tokens = 0;
 
     // ================= Minotaur tribal (Rakdos aggro) =================
     // Every field below is gated (0/false/empty/-1 = inert) so decks that don't run Minotaurs

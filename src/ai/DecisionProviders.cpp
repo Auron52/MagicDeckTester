@@ -9432,6 +9432,35 @@ static bool MirrorwingOrderedEnabled()
     return on;
 }
 
+// Bodies a card supplies to the Mirrorwing/Zada fan-out. A "body" is anything that puts a creature
+// on the board for a magnet to copy onto -- which is NOT the same as being a creature.
+//
+// USER 2026-08-27, on the four new Goblin-Instigator-slot candidates: "let's try to update all of
+// the heuristics to take the new cards into account. They should probably all go into the creature
+// bucket, counting as 2 critters." Property-keyed rather than name-keyed so it stays true of any
+// future card with the same shape:
+//
+//   Goblin Instigator    creature(1) + ETB token(1)                     = 2
+//   Nest Invader         creature(1) + ETB Spawn(1)                     = 2
+//   Undercellar Myconid  creature(1) + ETB Saproling(1)                 = 2
+//   Young Pyromancer     creature(1) + a token per instant/sorcery(1)   = 2
+//   Frontline Heroism    NOT a creature(0) + ETB Soldier(1) + per-cast Soldier(1) = 2
+//
+// The ongoing term is deliberately +1, not a count: an engine that makes one body per qualifying
+// cast is worth strictly more than a one-shot two-for-one, so 2 is a FLOOR that merely ties
+// Instigator rather than an estimate of its real output.
+//
+// Byte-identical for every shipped decklist: Goblin Instigator is the only card in any of them that
+// scores above 1, and it scored 2 under the previous hardcoded constant too.
+static int MwBodyCount(const CardDefinition& d)
+{
+    const int self    = d.card.IsCreature() ? 1 : 0;
+    const int etb     = d.params.etb_self_creates_tokens;
+    const int ongoing = (d.params.cast_trigger_instant_sorcery_tokens > 0
+                      || d.params.frontline_copy_tokens > 0) ? 1 : 0;
+    return self + etb + ongoing;
+}
+
 bool MirrorwingProvider::CastEnablerFirst(const GameState&, const std::string& name) const
 {
     const CardDefinition* d = CardDatabase::Instance().Lookup(name);
@@ -9444,7 +9473,11 @@ bool MirrorwingProvider::CastEnablerFirst(const GameState&, const std::string& n
         // shape; its position is now the funding ladder (CastOrderFallbackRanks).
         return d->card.IsCreature()                 // bodies first: more copies for the fan-outs
             || d->params.token_copy_of_target       // Twinflame: double the board before the pumps
-            || d->params.trick_token_power > 0;     // Luxurious Libation: its token is a body too
+            || d->params.trick_token_power > 0      // Luxurious Libation: its token is a body too
+            // ...and a NONCREATURE body-maker (Frontline Heroism) belongs in the same camp: its
+            // Soldier is a body, and every trick cast after it makes another one, so casting it
+            // late wastes exactly the tricks it exists to copy.
+            || MwBodyCount(*d) > 0;
     }
     // ALL creatures precede the doubler (user round 3: "you might cast creatures before
     // Twinflame to get more [critters]"), the doubler precedes the pump tricks, and Gold Rush
@@ -9465,6 +9498,12 @@ int MirrorwingProvider::CastOrderRank(const GameState& s, const CardDefinition& 
         // of these params except Fists of Flame (cast_draw AND pump_per_cards_drawn), so the
         // payoff check precedes the draw check. Creatures fall through to Generic's 10.
         if (def.params.copies_solo_targeted_spells)       { return 5;  }  // magnets: first body
+        // Frontline Heroism: AFTER the magnets, BEFORE every trick (USER 2026-08-27). It makes a
+        // Soldier -- and a copy -- for each qualifying spell cast AFTER it resolves, so any trick
+        // cast ahead of it is a Soldier and a copy thrown away. That puts it below Libation (11)
+        // and Twinflame (12), which are themselves tricks, and above the magnets (5), which must
+        // still land first because they are what the copies fan onto.
+        if (!def.card.IsCreature() && MwBodyCount(def) > 0) { return 6; }
         if (def.params.trick_token_power > 0)             { return 11; }  // Libation: body-maker, before the doubler
         if (def.params.token_copy_of_target)              { return 12; }  // Twinflame: doubler, after every other body
         if (def.params.pump_per_cards_drawn_power > 0)    { return 16; }  // Fists: the payoff, after every draw
@@ -9692,7 +9731,14 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         if (is_magnet(c)) { magnets.push_back(i); continue; }
         if (is_land(c) || is_dork(c)) { mana.push_back(i); }
         const CardDefinition* d = def_of(c);
-        if (d && d->card.IsCreature()) { bodies.push_back(i); }
+        // A "body" is anything that puts a creature on the board for the fan-out to copy onto.
+        // That is normally a creature, but a NONCREATURE permanent whose ETB makes a token
+        // (Frontline Heroism's 1/1 Soldier) supplies one just the same. Counting it here is what
+        // keeps it NAMED in the shed list below -- an unlisted card falls through to the shared
+        // highest-MV fallback, which is the gi295 defect that sheds the magnet. Byte-identical for
+        // the shipped decklist: Goblin Instigator is the only ETB-token maker in it and it is
+        // already a creature.
+        if (d && MwBodyCount(*d) > 0) { bodies.push_back(i); }
     }
     // The kept enabler: none needed with a magnet already on board. Among hand magnets the pick
     // is NOT a fixed cheapest-first (user, Stage-6 round 2): estimate each magnet's EARLIEST CAST
@@ -9877,7 +9923,20 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         std::vector<char> s1_kept(static_cast<std::size_t>(n), 0);
         for (std::size_t k = 0; k < mana.size(); ++k)
         { if (kept[k]) { s1_kept[static_cast<std::size_t>(mana[k])] = 1; } }
-        auto body_weight = [&](const Card& c) { return c.m_name == "Goblin Instigator" ? 2 : 1; };
+        // "Instigator weighs 2" is really "this card brings a SECOND body". Keyed on the property
+        // rather than the name so any ETB-token maker earns the same weight -- otherwise a screen
+        // that swaps Instigator for another two-for-one (Nest Invader's Spawn, Undercellar
+        // Myconid's Saproling, Frontline Heroism's Soldier) silently marks the newcomer down to 1
+        // and measures the name, not the card. Byte-identical for the shipped decklist: Instigator
+        // is a creature (1) whose ETB makes one token (+1) = 2, exactly as before.
+        // An ONGOING body producer (Frontline Heroism: a token on every qualifying cast) is worth
+        // more than its ETB token alone. Without the rider it weighs 1 against Goblin Instigator's
+        // 2, which undercounts the card this slot is being asked to fill -- user, 2026-08-26:
+        // "Frontline heroism is a 'creature' because it produces them." +1 is a deliberate FLOOR
+        // (it ties Instigator); over a game with ~19 tricks it produces far more. Measurement
+        // lever MTG_FRONTLINE_BODY, default OFF until the A/B is accepted.
+        auto body_weight = [&](const Card& c)
+        { const CardDefinition* d = def_of(c); return d ? MwBodyCount(*d) : 1; };
         int secured = board_bodies + (kept_magnet >= 0 ? 1 : 0);
         std::vector<int> kept_bodies, spare_bodies;
         for (int i : bodies)
@@ -9977,8 +10036,14 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
             }
             const std::size_t land_floor = kept_dork ? 2 : 3;
             for (std::size_t k = kept_lands.size(); k-- > land_floor; ) { put(kept_lands[k]); }
+            // Same de-naming as body_weight above: the doctrine is "prefer the body that brings a
+            // second body", not "prefer this one card". Byte-identical for the shipped decklist.
             auto keep_rank = [&](const Card& c)   // higher = kept longer
-            { return is_dork(c) ? 2 : (c.m_name == "Goblin Instigator" ? 1 : 0); };
+            {
+                if (is_dork(c)) { return 2; }
+                const CardDefinition* d = def_of(c);
+                return (d && MwBodyCount(*d) >= 2) ? 1 : 0;
+            };
             std::vector<int> kb = kept_bodies;    // keep-priority order, so the tail sheds first
             std::stable_sort(kb.begin(), kb.end(), [&](int a, int b)
             { return keep_rank(ap.hand[a]) > keep_rank(ap.hand[b]); });

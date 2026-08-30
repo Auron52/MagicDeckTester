@@ -1,0 +1,21 @@
+{
+ "_comment": "Frontline Heroism, part 1 of 3: the ETB half. 'When this enchantment enters, create a 1/1 red Soldier creature token with haste.' Board is THREE LANDS AND NOTHING ELSE -- no creatures at all -- so the deck has exactly zero power on board and the only possible source of damage is the token Heroism makes as it enters. Mountain + Rootbound Crag + Forest pays {2}{R} exactly. opponent_life 1 is therefore reachable if and only if (a) the ETB token is created (etb_self_creates_tokens) and (b) it carries HASTE (created_token_haste), letting it attack the turn Heroism resolves. Drop either and the board deals 0 and the game cannot be won by max_turns. This is the fixture that would have caught a token created without its haste keyword -- the failure mode that is invisible in aggregate win-turn numbers because the token still exists and still blocks/attacks a turn later.",
+ "deck": "decks/Mirrorwing Dragon/v3-heroism-draught/Mirrorwing Dragon.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "max_turns": 3,
+ "active_life": 20,
+ "opponent_life": 1,
+ "battlefield": [
+  { "name": "Mountain",       "controller": 0, "tapped": false },
+  { "name": "Rootbound Crag", "controller": 0, "tapped": false },
+  { "name": "Forest",         "controller": 0, "tapped": false }
+ ],
+ "hand": [ "Frontline Heroism" ],
+ "library_filler": "Mirrorwing Dragon",
+ "library_size": 40,
+ "depth": 5,
+ "budget_ms": 100,
+ "expect_win_turn": 3,
+ "log_out": "logs/play/frontline_etb_soldier_haste.json"
+}

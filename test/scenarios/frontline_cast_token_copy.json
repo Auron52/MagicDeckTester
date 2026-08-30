@@ -1,0 +1,22 @@
+{
+ "_comment": "Frontline Heroism, part 2 of 3: the CAST-TRIGGER half, with NO magnet so the copy under test is unambiguously Heroism's own. 'Whenever you cast a spell that targets only a single creature you control, create a 1/1 red Soldier with haste, then copy that spell. The copy targets that token.' Board: Heroism + Ignoble Hierarch (0/1, not sick) + two Forests. Hand: Oracle's Restoration ({G}, flat +1/+1, cantrip, +1 life). Casting it at the Hierarch must (a) make a Soldier, (b) give that Soldier the COPY, and (c) let it attack the same turn. Damage math is exact: Hierarch 0/1 -> 1/2 from the original, Soldier 1/1 -> 2/2 from the copy, swing = 1 + 2 = 3. Every failure mode falls short of opponent_life 3: no trigger at all -> 1; token but no copy -> 1 + 1 = 2; copy but no haste -> 1. TWO Forests deliberately, so the {G} never needs the Hierarch's mana ability -- tapping the dork would cost its attack and drop the line to 2, which the search should reject on its own, but the fixture should not depend on that judgement. Asserts active_life 22: two resolved instances, each with Oracle's +1 life rider.",
+ "deck": "decks/Mirrorwing Dragon/v3-heroism-draught/Mirrorwing Dragon.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 3,
+ "battlefield": [
+  { "name": "Forest",            "controller": 0, "tapped": false },
+  { "name": "Forest",            "controller": 0, "tapped": false },
+  { "name": "Frontline Heroism", "controller": 0, "tapped": false },
+  { "name": "Ignoble Hierarch",  "controller": 0, "tapped": false, "sick": false }
+ ],
+ "hand": [ "Oracle's Restoration" ],
+ "library_filler": "Mirrorwing Dragon",
+ "library_size": 40,
+ "depth": 5,
+ "budget_ms": 100,
+ "expect_win_turn": 4,
+ "log_out": "logs/play/frontline_cast_token_copy.json"
+}
