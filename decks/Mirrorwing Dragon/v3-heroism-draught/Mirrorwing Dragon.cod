@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Mirrorwing Dragon"/>
+        <card number="4" name="Zada, Hedron Grinder"/>
+        <card number="4" name="Frontline Heroism"/>
+        <card number="4" name="Ignoble Hierarch"/>
+        <card number="4" name="Elvish Mystic"/>
+        <card number="4" name="Fists of Flame"/>
+        <card number="4" name="Gold Rush"/>
+        <card number="3" name="Oracle's Restoration"/>
+        <card number="4" name="Fortifying Draught"/>
+        <card number="4" name="Ancestral Anger"/>
+        <card number="8" name="Forest"/>
+        <card number="4" name="Game Trail"/>
+        <card number="3" name="Sandstone Needle"/>
+        <card number="2" name="Gruul Turf"/>
+        <card number="2" name="Mountain"/>
+        <card number="2" name="Rootbound Crag"/>
+    </zone>
+</cockatrice_deck>

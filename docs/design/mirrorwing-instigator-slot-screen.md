@@ -11,6 +11,16 @@ sac option."* Constraint stated up front: **no new mulligan profiles** — reuse
 paired games at seed 930000), reproduced on held-out seeds at −0.4531. Survives 30 life (−0.4420),
 50x budget (−0.4107 at d7/b1000), and both non-clairvoyant modes (−0.4338 honest, −0.4067 true NC).
 
+> **2026-08-30 — two later findings bear on everything below; see
+> `mirrorwing-final-results.md`.** (1) The engine support for all four candidate cards was
+> **never committed** — it lived in an uncommitted stash, and `frontline_copy_tokens` /
+> `created_token_haste` were unread by any source file, silently ignored by `params.value()`.
+> Re-applied and verified 2026-08-30; the Frontline conclusion here is unaffected in direction
+> (the missing clause is pure upside for Frontline) but the *magnitudes* were measured with the
+> stash applied and are only reproducible with it. (2) A depth/budget ladder showed the shipped
+> `d5/20 ms` setting is **search-starved** for this deck; the Oracle-4-vs-Anger-4 recommendation
+> flipped to **4 Ancestral Anger** once measured at converged depth.
+
 Stage-1 pure 4-ofs @20 life: frontline **−0.4431**, nest_invader −0.1376, pyromancer −0.1092,
 myconid **+0.0391** (the one arm slower than the incumbent — see the stratification section; it is a
 mixture, not a verdict).
