@@ -388,3 +388,30 @@ EnumeratePlans only, never the d0 leaf, per the LeafReducerCreditEnabled law; th
 count is available where X is chosen). Then RE-MEASURE this ladder: the expectation is the
 searched forms close the gap to greedy, and both "no greedy" and "drop main 1" become askable
 on a sound enumerator instead of being answered by its defect.
+
+### 6a. The credit BUILT and MEASURED (2026-08-30, `22c0efc9`) -- necessary but NOT sufficient
+
+`MTG_HINATA_SUBSET_CREDIT` (default OFF, heurarm slot; rationale on the reader in
+EngineFlags.h): the ritual emits when she is castable from hand (honest undiscounted cost),
+the X-payoff's range is sized as if she resolves first, and the enumerator's subset gate
+credits her would-be discount for subsets that cast her (`SameTurnHinataCredit`, the
+metalcraft pattern -- realised, never stranded: she casts first by rank and the per-cast
+payment recomputes; the batch prepay declines on X-spells so it cannot fix costs early).
+
+Measured, paired 1200x2 on the ladder arms: **quality-neutral everywhere** -- shipped
++credit hold -0.0050 (t -1.1) / train +0.0042; recipe +0.0042/+0.0017; node -0.0050/+0.0067.
+~25 games move per cell, the gap to greedy does not.
+
+**Why: the static-pricing gap has (at least) TWO LAYERS, and the credit fixes only the
+first.** gi=22 under all-main-2 + credit still cannot express the T4 chain at 100x budget --
+the whole chain in ONE subset must now pass the COLOUR-EXACT feasibility gate against the
+pre-untap board (~8 coloured pips vs 5 sources), and the refloat's COLOURS are not modelled
+there (the flat credits are generic/wild). The two-main + breakpoint structure never faces
+this: each boundary chunks the chain into small subsets priced against REAL state (M2 sees
+her resolved; the continuation sees the float). So the boundaries are compensating for
+sequential-realization as a whole -- generic discounts (now credited) AND colours AND float
+timing. **The principled full fix is the parked executor-validated feasibility design
+(`enumeration-feasibility-via-executor.md`, "kill the per-deck patching treadmill"): when the
+flat gate rejects an INTERACTING subset, decide with a real sequential per-cast probe instead
+of another credit.** That is a hot-path architecture change its own doc says to review first
+-- USER sign-off before building.
