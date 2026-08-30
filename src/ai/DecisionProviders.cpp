@@ -5070,13 +5070,22 @@ int HinataProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
 // re-prices the rest of the chain (Spasm float, Irencrag, Soulfire's staged casts, her per-target
 // discount), so a pass over an engine/find card before a draw resolves is not a settled decline.
 //
-// The table: every tier up to the dork (nominal 4-14) extends to 21 -- one slot past the last
+// The table: the engine and find tiers (nominal 4-12) extend to 21 -- one slot past the last
 // draw site (Soulfire 20, and Magma Opus at 21 re-admits on the >= tie), one slot before the
 // Irencrag/Crackle terminal pair, whose positions are hard ("second last"/"last") and therefore
-// have NO range. Doubts flagged for USER review rather than narrowed silently: Izzet Signet and
-// Expressive Iteration are extrapolated from their tier-mates (no direct sighting in the 5 games);
-// Ornithopter's ruling said "before Soulfire", but a post-Soulfire Ornithopter is still a legal
-// Crackle target so its range errs wide pending review.
+// have NO range. Izzet Signet and Expressive Iteration are extrapolated from their tier-mates
+// (no direct sighting in the 5 games; flagged in the review).
+//
+// THE DORK HAS NO RANGE (USER 2026-08-30, resolving the flagged doubt): "Before soulfire for
+// ornithopter deals with the cast you mentioned since, if we get it off soulfire, it can be
+// played after soulfire." I.e. the only sound late-Ornithopter line -- playing it after Soulfire
+// as a Crackle target -- is one where Soulfire STAGED it, and a staged card is NEW at that
+// breakpoint (BpCardWasInHandBefore), so the drawn-card rule keeps it playable with no range
+// needed. An Ornithopter already in hand and held through Soulfire was genuinely declined
+// (casting it first is strictly better: one more Soulfire target and one more discount), and
+// the affordability corner (a staged rock growing the pool that pays for it) is re-admitted by
+// BpTurnManaSettled. So it keeps its single spot at 14 -- already after every find-tier site --
+// and is condemnable at exactly the Soulfire/Opus sites, per the ruling.
 static bool HinataRangeEnabled()
 {
     static const bool on = EnvOn("MTG_HINATA_RANGE");
@@ -5087,8 +5096,11 @@ int HinataProvider::CastOrderRankLatest(const GameState& s, const CardDefinition
 {
     const int nominal = CastOrderRank(s, def);
     if (!HinataOrderFullEnabled() || !HinataRangeEnabled()) { return nominal; }
+    // By TEMPLATE rather than by tier so the ruling survives the MTG_HINATA_DORK_TIE arm (which
+    // moves the dork's nominal onto her tier): the dork never has a range, wherever it sits.
+    if (def.tmpl == CardTemplate::ManaDork) { return nominal; }   // USER ruling -- see above
     const int tier = nominal / 64;
-    if (tier >= 4 && tier <= 14) { return 21 * 64; }
+    if (tier >= 4 && tier <= 12) { return 21 * 64; }
     return nominal;
 }
 
