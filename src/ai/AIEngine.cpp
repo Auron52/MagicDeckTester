@@ -4637,7 +4637,13 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     {
         throw std::runtime_error("ChooseDiscard called with empty hand");
     }
-    ShedStats::Count(state, /*is_rollout=*/false);   // MTG_SHED_STATS; off by default
+    // MTG_SHED_STATS; off by default. `m_in_rollout`, NOT a hard-coded false: this function is the
+    // real cleanup's chooser, but GameEngine::PlayOut reaches the very same CleanupStep, so every
+    // ROLLOUT playout (RolloutWinTurn, the bottoming/mulligan rollouts) lands here too. Counting
+    // those as `real` inflated the number the analyzer's _ShedCensus reads to decide whether a deck
+    // sheds in play at all -- dragons measured real=86 per 200 games while the g_real_resolution
+    // trace, which every rollout scope clears, saw 7. Diagnostic-only; no play path reads these.
+    ShedStats::Count(state, /*is_rollout=*/m_in_rollout);
 
     // Heuristic victim (land-outlet ammo, required-piece protection, highest-MV, staged-last): the
     // SHARED SelectCleanupDiscardIndex, so the search rollout's cleanup (TurnSolver) sheds the same

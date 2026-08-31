@@ -226,10 +226,101 @@ provider returning one index is immune to this bound; use `MTG_5C_DISCARD_FAN=1`
 measure those. (KittyEquipment's own bound, on the full ranking, was measured separately at 150
 games/cell: 0 faster / 0 slower of 300 — see `kitty-tutor-and-discard-heuristics.md` §1.)
 
+## The rule-vs-searched check, actually RUN (2026-08-31) — and a THIRD blindness
+
+`analyze-deck.md` requires a rule-vs-searched pass on every authored bucket policy and
+"demands zero regret". It had been recorded as UN-RUN for both `MinotaurProvider` and
+`DragonsProvider`, with the reason given as "needs a FAN lever neither provider has".
+**That reason was wrong.** `CleanupDiscardRankingWithOrder` always returns the FULL hand
+(tiers B and C sweep every card the provider did not name), so both providers already
+return `cand.size() > 1` and `AIEngine::ChooseDiscard`'s searched pass already trials every
+card. FiveColour needs `MTG_5C_DISCARD_FAN` only because it explicitly `resize(1)`s; a
+provider that does not narrow needs no lever. The check was runnable all along.
+
+### Minotaur — the labeller cannot see this deck's discards AT ALL
+
+The stage instruments exactly one call site: `AIEngine::ChooseDiscard`, the CR 514.1
+cleanup. Minotaur reaches it **zero** times — measured at d0/d3/d5, with and without the
+play profile, 200 games per cell. An aggro deck with a Vial and a 1–3 curve does not end a
+turn holding eight cards.
+
+But the policy is far from inert. The `g_real_resolution`-gated `MTG_TRACE=discard` (which
+fires in the shared ranking builder, i.e. at EVERY real discard site) counts **118
+consultations per 200 games, 71 of them genuine choices** (`cands >= 2`). They come from
+two non-cleanup sites:
+
+- **Burning-Fist Minotaur** — `{1}{R}, Discard a card:` pump. The activation COUNT is a
+  searched axis (`Action::Kind::ActivatePump`, one variant per K), but the card discarded
+  to pay is not searched: cards.json says it outright, *"The discarded card is the
+  provider's cleanup-discard pick."*
+- **Neheb, the Worthy** — "each player discards a card" on combat damage.
+
+`MTG_MINOTAUR_BUCKET_DISCARD=0/1` is NOT byte-identical (200 games d3:
+`589e8d275a2717b0` vs `b7aaac0903b83902`), so the policy is live in play — it just fires
+somewhere the labeller has no probe. So this is a **third** blindness, alongside the
+rollout one above: the verdict vocabulary (`DISCARD_INERT` / `DISCARD_UNLABELLED`) is
+keyed on the cleanup site, and a deck can be busy at a site the stage never looks at.
+
+**Consequence: the zero-regret check is not merely un-run for Minotaur, it is
+unrunnable as specified.** Closing it is not a lever but a new probe, and not a cheap one:
+the searched pass works because cleanup is a clean `ResumeAt` boundary, whereas these
+discards happen mid-resolution inside an activation cost and a trigger. The policy's
+standing evidence is therefore the OUTCOME A/B (adopted on measured suite wins), which is
+the stronger of the two gates anyway.
+
+### Dragons — RUN, and it is not zero
+
+20,000 games, d3/b10, `MTG_DISCARD_NODE=0 MTG_DISCARD_TRACE=1`, 20 single-threaded shards
+on disjoint seed bases (the trace is raw unsynchronised `std::cerr`, which is why the
+stage pins `threads=1`; sharding by seed buys the cores back without touching the engine).
+589 labelled decisions:
+
+| rule | mean regret | win-optimal | misses |
+|---|---|---|---|
+| status quo (`DragonsProvider`) | 0.0238 | 97.79% | 13 |
+| spare-copy band (nonland, max mv) | 0.0153 | 98.47% | 9 |
+| spare copy incl. land | 0.0187 | 98.13% | 11 |
+| never shed a land (max mv) | 0.0883 | 91.68% | 49 |
+| ORACLE (label lower bound) | 0.0000 | 100% | 0 |
+
+**The bar is not met — but the whole decision surface is worth 0.0007 turns/game.** Real
+cleanup sheds are 589 / 20,000 = 0.029 per game, so even PERFECT play at this decision
+(the oracle row) buys `0.0238 x 0.029 = 0.0007` turns/game. That is at or below the
+apparatus floor `deck-screening.md` measures for R=40 (~0.0006t); no rule change here can
+be measured, let alone pay.
+
+Two things worth keeping from the residual:
+
+- The labels are near-degenerate: **58.6% of decisions are full ties** (every candidate
+  labels identically — unlosable) and **99.8% are multi-optimal**. Grading a rule against
+  a single clairvoyant rollout per candidate at this resolution is mostly grading noise.
+- All 13 misses are T2/hand=8, and they lean one way: the rule sheds a land or a unique
+  fatty where shedding a SPARE COPY ties or wins (`seed=1330237`: shed Lathliss with two
+  Atsushi and two Urza's Incubator in hand). That is the spare-copy band — which improves
+  labels by 4 decisions in 589 and was already REMOVED as an engine rule for losing on
+  OUTCOME (see "The band" above; it cost dragonstorm +0.063 overnight). Label-better,
+  outcome-worse is exactly the trap that section exists to record.
+- The opposite hypothesis — formed from the shed NAMES, since Gruul Turf is 6 of the 13 —
+  is refuted by the table: forbidding land sheds is **3.7x worse** (0.0883). Do not read a
+  policy defect off a shed name without the trial table underneath it.
+
+### `MTG_SHED_STATS` `real=` was counting rollouts (FIXED)
+
+`ShedStats::Count(state, /*is_rollout=*/false)` was hard-coded at the top of
+`ChooseDiscard`, before its `m_in_rollout` guards — but `GameEngine::PlayOut` reaches the
+same `CleanupStep`, so every rollout playout (`RolloutWinTurn`, the bottoming/mulligan
+rollouts) was counted as a REAL shed. Dragons measured `real=86` per 200 games where the
+genuine count was 7. Now passes `m_in_rollout`; Dragons reads `real=7`, matching the
+independent `g_real_resolution` trace exactly. Diagnostic-only (the counter early-returns
+when `MTG_SHED_STATS` is unset) and digest-verified byte-identical. This matters because
+`_ShedCensus` reads that number to decide whether a deck sheds in play at all.
+
 ## Known limits / follow-ups
 
 - Evidence only covers CLEANUP sheds (the probe site); pitch-site labels (Land's Edge,
-  retrace) would need the same trace at those call sites.
+  retrace, and — see above — activation-cost and trigger discards like Burning-Fist
+  Minotaur and Neheb) would need the same trace at those call sites. Minotaur is the
+  worked case where that gap swallows a deck's ENTIRE discard surface.
 - Discard decisions are rare (~0.5–1% of games at d3), so evidence runs need thousands
   of games; `DISCARD_INERT` on a low-decision deck means "not enough signal", not
   "proven fine" — and if the ROLLOUT sheds, the verdict is now `DISCARD_UNLABELLED`

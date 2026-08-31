@@ -814,10 +814,26 @@ Then: author the bucket policy from the decklist (read the deck's cards from
 approval implement it as the provider's `CleanupDiscardCandidates` override behind a
 default-on `MTG_<DECK>_BUCKET_DISCARD` flag (=0 restores the generic ranking). Validate:
 
-* **Rule-vs-searched labels:** re-run the evidence config with a testing-only FAN lever
-  that returns the full shed order (a single-entry return skips the trace —
-  FiveColour's `MTG_5C_DISCARD_FAN=1` is the pattern), and demand zero regret; any
+* **Rule-vs-searched labels:** re-run the evidence config and demand zero regret; any
   rule-worse decision must classify as churn/clairvoyance, never a visible-info miss.
+  Two things to check FIRST, because both have cost a session (2026-08-31):
+  - **Does your provider even need a fan lever?** Only if it narrows. A provider that
+    returns `CleanupDiscardRankingWithOrder(...)` unmodified already returns the FULL
+    hand, so the searched pass trials everything and the trace works as-is. FiveColour
+    needs `MTG_5C_DISCARD_FAN=1` because it explicitly `resize(1)`s; Minotaur/Dragons
+    need nothing. "It needs a FAN lever" was recorded as a blocker for two providers
+    that never had one and never needed one.
+  - **Does the deck reach the CLEANUP site at all?** The probe instruments only
+    `AIEngine::ChooseDiscard`. Minotaur reaches it zero times at every depth, yet makes
+    118 real discards per 200 games at Burning-Fist's activation cost and Neheb's
+    trigger — sites the labeller has no probe for, so the check is *unrunnable*, not
+    merely un-run. `MTG_TRACE=discard` (gated on `g_real_resolution`, fires at EVERY real
+    discard site) is the instrument that tells you where a deck actually discards;
+    `MTG_SHED_STATS` counts the cleanup site only. If they disagree, believe the trace.
+  And weigh the residual before acting on it: regret is per DECISION, so multiply by the
+  per-game decision rate. Dragons' 97.79%/0.0238 sounds like a miss until the surface is
+  0.029 sheds/game and the perfect-oracle prize is 0.0007 turns/game — unmeasurable.
+  See `docs/design/per-deck-discard-analysis-phase.md`.
 * **Suite gates:** smoke + regression through the accept flow (slower searched games
   classified — `test/classify_turn_later.sh`; draws-diverge = variance), overnight tier
   to finish. The bar is NON-INFERIORITY: sheds are rare at shipped play on most decks and
