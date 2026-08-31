@@ -4,6 +4,24 @@ The value leaf is a learned O(1) evaluator that replaces the search's horizon ro
 the whole process for **building one for a deck** — new deck or regeneration — and deciding whether
 to ship it.
 
+
+## NEVER BLOCK THIS RUN ON A QUESTION (user directive, 2026-08-31)
+
+Generation is the long pole — tens of hours. **Nothing may hold it up pending a user reply.**
+Surface any question in your message so the user sees it if they are reading, then start/continue
+the run in the same turn. Do not call `AskUserQuestion` and do not end a turn waiting.
+
+Apply the one-line test before letting anything wait: *does this answer change what the run
+computes?* Generation depends on **play correctness** (mismatch harnesses, play-invariants,
+claude-play sweep) and on the frozen commit. It does **not** read the viewer decision manifest,
+card-param classifications, naming, or docs — so a question about any of those cannot block it.
+
+This is written from the failure: on 2026-08-31 a ~36 h Mirrorwing value-leaf run was left
+unstarted on a just-freed 32-core box while the agent blocked on whether three `cards.json` params
+were inert — viewer paperwork with no bearing on the run at all. The window was the user's weekend
+and it did not come back. Only two things genuinely stop you: a destructive/irreversible action, or
+a fork where either choice would waste the run (which deck, which list, which commit to freeze).
+
 ## Rule 0 — one command, one consistent PLAY DIGEST
 
 ```bash

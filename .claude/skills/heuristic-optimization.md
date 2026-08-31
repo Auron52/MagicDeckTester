@@ -135,7 +135,10 @@ override (e.g. `AntiLifegainProvider::ManaSourceRank`), never the root
 7. **Report the decision to the user** — knob, from→to, per-deck avg deltas, any
    notable SLOWER games, and the noise caveat — *before* adopting. A pass that finds "baseline
    wins" reports that; it does not silently keep the default.
-8. **Adopt + rebaseline** only on approval: move the winner into the archetype
+8. **Adopt + rebaseline** only on approval — but *collect* that approval, never *wait* on it
+   (CLAUDE.md, "NEVER BLOCK ON A QUESTION"): finish the sweep and the held-out validation, report
+   the decision, and leave the adoption staged for the user's reply rather than pausing the work.
+   Move the winner into the archetype
    provider, delete the scaffolding, and `--accept` the GT like any change.
 
 ## Worked example — specify the variant faithfully, then measure

@@ -88,7 +88,9 @@ sweep like `TF3/Lib0 ... TF0/Lib3` is a legitimate union of plausible combinatio
 existing per-deck tables first (base / trick / libonly already exist). What you must never do is
 widen the coverage to candidates that no arm in the current test plays, "so it will serve later
 tests too" — that is precisely the rationalisation that produced the 1,167,340-cell waste. Scope
-the table to the test in front of you; if a later test needs more, generate then, or ASK.
+the table to the test in front of you; if a later test needs more, generate then, or ASK — where
+ASK means surface the question and keep working, never halt on the answer (CLAUDE.md, "NEVER BLOCK
+ON A QUESTION").
 
 This supersedes the "pool table" guidance in *Never run without a table* below, and
 `deck_compare.py`'s automatic pool-table path must be disabled (`"pool_table": false`) unless the

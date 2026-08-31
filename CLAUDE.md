@@ -55,6 +55,45 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
     as **UN-RUN** in the per-deck ledger — never as "deferred to the user", which reads as a
     sign-off the user never gave.
 
+- **NEVER BLOCK ON A QUESTION — SURFACE IT AND KEEP WORKING (user directive, 2026-08-31).**
+  Asking is not the problem; **waiting for the answer is.** Raise the question in your message
+  so the user sees it if they happen to be reading, then **immediately carry on and finish
+  everything.** Nothing — no stage, no run, no commit — may sit idle pending a reply.
+  * The user's words: *"you must not ask questions until everything is complete"*, and
+    *"you can surface the question while other things are running for if the user happens to
+    read, but you must not block anything on it."*
+  * **Concretely:** put the question in prose, mid-report, and continue in the same turn. Do NOT
+    call `AskUserQuestion`, and do NOT end a turn waiting on an answer, for anything that is not
+    a genuine blocker (below). Batch the full set of open questions again in the closing message
+    so none is lost.
+  * This OVERRIDES every "stop and check with the user" instruction in the skills —
+    `analyze-deck`'s Tier-4 escalation and deferral approvals, `audit_viewer_decisions.py`'s
+    self-guard ("needs the user's OK"), `mulligan-profile`'s and `heuristic-optimization`'s
+    adopt-on-approval steps. Those sign-offs are still **required**; they are *collected*
+    without ever halting the work.
+  * When you hit one: **state the question, take the documented default (or the option you would
+    have recommended), say plainly which way you went, and keep going.** A wrong assumption
+    costs a rerun of one cheap step. Blocking costs the user their window.
+  * **What this cost, and why the rule exists.** 2026-08-31: with 32 cores just freed by the
+    Dragons generation and a ~36 h Mirrorwing value-leaf run not yet started, the agent called
+    `AskUserQuestion` about which of three `cards.json` params were inert — pure classification
+    paperwork that changed nothing about the run — and stopped. The machine sat idle through the
+    user's weekend window and it did not come back. *"Wasting this many hours is a massive
+    headache for me."*
+  * **And note WHICH question it was, because that is the sharpest part of the lesson.** It was
+    about **play-viewer decision surfacing** — whether a human should be offered a trigger-order
+    choice. Value-leaf and mulligan generation depend on **play correctness**, which the mismatch
+    harnesses, play-invariants and claude-play sweep had already passed; they do not read the
+    viewer manifest at all. So the question was not merely deferrable, it was **entirely
+    unrelated to the work it halted**. Before letting anything wait, ask the one-line test:
+    *does this answer change what the pending run computes?* If it does not even touch it —
+    which is the common case for classification, naming, docs and viewer paperwork — then
+    blocking on it is indefensible, not just suboptimal.
+  * The ONLY true blockers are the ones already carved out elsewhere in this file: an action
+    that is **destructive or hard to reverse**, and a fork where **either choice would waste the
+    run itself** (which deck, which list, which commit to freeze). Nothing else. If you are
+    unsure which kind you have, surface it and keep working.
+
 - **NEVER create merge commits — REBASE local work onto origin (user directive, 2026-08-12).**
   The user wants linear history. `git config pull.rebase true` + `rebase.autoStash true` are
   set in this repo; keep them set on any new clone, and integrate remote work with
