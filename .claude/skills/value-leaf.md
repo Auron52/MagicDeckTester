@@ -5,6 +5,23 @@ the whole process for **building one for a deck** — new deck or regeneration �
 to ship it.
 
 
+## NOTHING ELSE RUNS WHILE THIS DOES (user directive, 2026-08-31)
+
+This generation owns the box. No mulligan gen, no `recommend` scout, no regression tier, no screen
+alongside it -- generation stages are strictly serial (CLAUDE.md). Two reasons beyond the obvious
+core-splitting:
+
+* **Downstream stages depend on this one's OUTPUT.** The final stage writes `<deck>.value.json`
+  carrying `value_play` (`mull_gen_depth` / `mull_gen_budget_ms`, `expected_buckets`) -- the
+  settings the mulligan generator reads. Anything mulligan-shaped started before this finishes is
+  measuring the wrong deck at the wrong depth.
+* **This model changes performance by 1.35-84.8x.** The H-cell ladder is guarded on the sidecar
+  existing, so any timing measured while this is still running (or before it lands) describes the
+  slow path and is not a number anyone can plan with.
+
+Corollary: do not create or edit a `.value.json` for this deck while the run is live. Sidecar
+PRESENCE activates the hybrid in play, so writing one changes the very play being fitted.
+
 ## NEVER BLOCK THIS RUN ON A QUESTION (user directive, 2026-08-31)
 
 Generation is the long pole — tens of hours. **Nothing may hold it up pending a user reply.**

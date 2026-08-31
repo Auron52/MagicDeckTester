@@ -175,6 +175,41 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   without going through `--batch` therefore has NO utilisation reporting — which is one
   more reason the pooled queue is the only route.
 
+- **GENERATION STAGES ARE STRICTLY SERIAL, IN ORDER, AT THE RIGHT SETTINGS (user directive,
+  2026-08-31).** The per-deck pipeline is **profile → value leaf → mulligan**, and each stage —
+  including a *scout* or `recommend` probe — runs **alone on the box, only after the previous
+  stage has finished, and at the settings that stage will really use**. Never two generations at
+  once, not even "just a quick probe alongside".
+  * **It is a DEPENDENCY, not merely scheduling.** The mulligan generator reads its depth and
+    budget from `value_play` (`mull_gen_depth` / `mull_gen_budget_ms`, and `expected_buckets`) in
+    `<deck>.value.json` — a file the **value leaf's final stage writes**. Run before that and the
+    gen silently inherits the *play* depth and measures a run nobody would ever do. It cannot be
+    worked around by hand-writing a `.value.json` either: **sidecar PRESENCE activates the
+    value-leaf hybrid in play**, so creating one mid-generation changes the very play the value
+    leaf is fitting.
+  * **THE VALUE LEAF CHANGES THE PERFORMANCE YOU ARE MEASURING — this is the main reason.** The
+    value leaf replaces the search's horizon rollout with an O(1) evaluator, and the H-cell ladder
+    is guarded on the sidecar EXISTING (a missing model silently costs **1.35–84.8x**, per
+    `value-leaf.md`). So a mulligan gen or probe run *before* the value leaf is timing the SLOW
+    path — the deck as it will never be shipped. Its projection is not merely noisy, it can be
+    wrong by more than an order of magnitude, and always in the pessimistic direction. Any
+    feasibility verdict reached that way ("this deck's mulligan is too expensive") is worthless
+    and must not be recorded as a deferral.
+  * **Contention makes the output WRONG, not just slow.** A `recommend` probe's deliverable IS a
+    wall-clock projection, so measuring it on a shared box produces a number that cannot answer
+    the question it was run for. Same for any timing-based estimate.
+  * **A generation can go LIVE mid-run and corrupt its neighbour.** Keep tables and value sidecars
+    are presence-gated — the file existing IS adoption — so a mulligan gen dropping a
+    `keepmodel.exhaustive.profile.json` beside the decklist changes play *while* a value leaf is
+    being fitted to that play. (`recommend` writes no profile, which is the only reason the
+    2026-08-31 incident was recoverable.)
+  * **What went wrong.** 2026-08-31, Mirrorwing: a mulligan `recommend` probe was started
+    alongside a running value-leaf generation *and* before it finished — so it was wrong three
+    ways at once (contended, at inherited depth 5 instead of the deck's d3/b3, and reading
+    settings the value leaf had not written yet). It measured 8 rollouts/s and produced a
+    projection inflated on every axis. The user: *"We shouldn't be running it with the value leaf.
+    Those should absolutely be serial."*
+
 - **After pushing platform-sensitive code, WATCH CI and report the Windows result.**
   `.github/workflows/build.yml` builds on **ubuntu-latest AND windows-latest** on every push
   (any branch) that touches `src/**`, `test/unit/**`, `CMakeLists.txt`, `CMakePresets.json`,
