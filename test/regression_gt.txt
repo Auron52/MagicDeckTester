@@ -1,8 +1,8 @@
-# Regression ground truth -- commit 86237590  date 2026-08-30
+# Regression ground truth -- commit 4f33d562  date 2026-08-31
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-08-30): rebase integration of the exec-feas/cantrip-first branch onto origin 3efbe969. Digest-only: on 8 of the 9 moved keys the per-game SCORES are IDENTICAL to origin. kitty d0 -0.17 avg (171 faster : 1 slower incl. two unwon->T8) is this branch's already-audited greedy/order arc; kitty d3 nets 0 (gi182 CHURN). Origin's 5 newest commits (ETB-cascade-for-noncreature, gated Vial heuristic, cascade rename) are inert wrt these deltas -- the per-game picture is unchanged from the pre-pull rebase. CARRIES FORWARD origin's Minotaur/Dragons note: MinotaurProvider (new) + DragonsProvider classifier repair.
-# accepted-with-regressions (regression, 2026-08-30): rebase integration onto origin 3efbe969. 12 of 17 moved keys digest-only (per-game SCORES identical to origin); kitty d0 -0.162, kitty d5 -2/-1 turns. ONE searched slower game: kitty_regression_d3_s3003 gi147 4->5, CHURN (recovers to T4 at 4x, 16x and UNLIMITED budget, re-verified under this binary). Zero win->unwon transitions. nonconv=0 and the 9 fd-diverge are BYTE-IDENTICAL to both the pre-pull sweep and a paired origin-built binary (same 5 seeds, incl. severe 3091 realized6/predicted4) => pre-existing deck property. References 253: 0 play-drift / 0 enum-gap / 0 contract-fail. Scenarios 44/44, unit 48/48. CARRIES FORWARD origin's Minotaur/Dragons note.
-# accepted-with-regressions (overnight, 2026-08-30): rebase integration onto origin 3efbe969, overnight tier. 20 of 36 moved keys are digest-only (per-game SCORES identical to origin). Net is strongly favourable: kitty d0 -1390 turns across 4 seeds (1398 faster : 13 slower, incl. FOUR unwon->T8 wins), kitty d3 -12, kitty d5 -5; hinata nets ZERO (d3_s4004 +1, d5_s6006 -1); th/antilife/goblins/stompy digest-only. Zero win->unwon transitions anywhere in 225,600 games. Of 7 searched SLOWER games, 6 are CHURN (recover at 4x/16x/unlimited). The 7th, hinata_overnight_d3_s4004 gi291 (T6->T7), PERSISTS at unlimited -- but a PAIRED re-run shows ORIGIN also returns T7 at 4x, 16x and unlimited and only wins T6 at the 10ms case budget, so the OLD side was budget luck, not a line this branch lost (the documented goblins gi43 pattern). nonconv=0. fd-diverge 30 (26 off-by-one, 4 severe): seeds 4192 and 5232 are the dragonstorm pair already recorded as long-standing in the skill's baseline; the third severe seed 4295 is that same hinata gi291 game, where a targeted PAIRED oracle run shows origin emits no flag (it predicted 6 and realized 6) while this branch predicts 5 and realizes 7 -- i.e. ONE NEW 2-turn commit-the-line optimism on a single knife-edge Hinata go-off, whose realized value is T7 under BOTH arms at honest budget, so no score is lost. References 253: 0 play-drift / 0 enum-gap / 0 contract-fail.
+# accepted-with-regressions (smoke, 2026-08-31): Minotaur exhaustive mulligan profile ADOPTED (complete recipe, R40, K=16). Validation: keep exhaustive-vs-static -0.1320t 16/16 seeds (mean/se -33.2); confounded blind bottoming vs lookahead -0.0616t 16/16 (mean/se -24.6). In-game: only minotaur cells move and ALL 28 are faster -- smoke -164t/1400, regression -202t/2100, held-out overnight -1591t/14000; combined -0.1118/game. GT movement is expected when a mulligan profile is adopted.
+# accepted-with-regressions (regression, 2026-08-31): Minotaur exhaustive mulligan profile ADOPTED (complete recipe, R40, K=16). Validation: keep exhaustive-vs-static -0.1320t 16/16 seeds (mean/se -33.2); confounded blind bottoming vs lookahead -0.0616t 16/16 (mean/se -24.6). In-game: only minotaur cells move and ALL 28 are faster -- smoke -164t/1400, regression -202t/2100, held-out overnight -1591t/14000; combined -0.1118/game. GT movement is expected when a mulligan profile is adopted.
+# accepted-with-regressions (overnight, 2026-08-31): Minotaur exhaustive mulligan profile ADOPTED (complete recipe, R40, K=16). Validation: keep exhaustive-vs-static -0.1320t 16/16 seeds (mean/se -33.2); confounded blind bottoming vs lookahead -0.0616t 16/16 (mean/se -24.6). In-game: only minotaur cells move and ALL 28 are faster -- smoke -164t/1400, regression -202t/2100, held-out overnight -1591t/14000; combined -0.1118/game. GT movement is expected when a mulligan profile is adopted.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -46,9 +46,9 @@ fivecolour_smoke_d5_s1001=5.1333/f6d7ed5a947b839a
 stompy_smoke_d0_s1001=5.4420/dc78a74c3af62737
 stompy_smoke_d3_s1001=4.4933/6523a1bb1be7ca91
 stompy_smoke_d5_s1001=4.4400/dcca5f0deaf50323
-minotaur_smoke_d0_s1001=5.4850/1537615962677f38
-minotaur_smoke_d3_s1001=4.9520/f10cffbe1b3fe696
-minotaur_smoke_d5_s1001=4.9600/408594cd10ac648e
+minotaur_smoke_d0_s1001=5.3410/4d54a56131aaf36c
+minotaur_smoke_d3_s1001=4.9080/b79d89f4d959a9c8
+minotaur_smoke_d5_s1001=4.9000/b9543e87c70bc6fd
 kitty_smoke_d0_s1001=4.9900/4b96809105a7d663
 kitty_smoke_d3_s1001=4.4520/2c6413628c53a42c
 kitty_smoke_d5_s1001=4.4667/48012e909205eb57
@@ -122,11 +122,11 @@ stompy_regression_d3_s2002=4.5300/ce46dcff525d59e1
 stompy_regression_d3_s3003=4.6067/fa7420b23649150d
 stompy_regression_d5_s2002=4.5360/f43306628735073e
 stompy_regression_d5_s3003=4.5960/919b36175d5c35e0
-minotaur_regression_d0_s2002=5.4840/0a5c9070f6f654c8
-minotaur_regression_d3_s2002=4.9600/d1ac2f87676792a3
-minotaur_regression_d3_s3003=4.9233/ded987924ae807a0
-minotaur_regression_d5_s2002=4.9680/eb183cf763eec1e1
-minotaur_regression_d5_s3003=4.9040/66199a04bc041966
+minotaur_regression_d0_s2002=5.3410/dedcb94b75bc2aa2
+minotaur_regression_d3_s2002=4.8967/1457b0df107b7abb
+minotaur_regression_d3_s3003=4.8767/7dc400cf3e5e9031
+minotaur_regression_d5_s2002=4.9040/005f7f54c9594e0a
+minotaur_regression_d5_s3003=4.8640/56acabf1410490b8
 kitty_regression_d0_s2002=4.9530/1d5005d927f09fce
 kitty_regression_d3_s2002=4.3300/b65f5921a855eeb5
 kitty_regression_d3_s3003=4.3800/fef85df2a993212a
@@ -295,18 +295,18 @@ stompy_overnight_d5_s4004=4.5080/730e2e70502d0fd3
 stompy_overnight_d5_s5005=4.6020/8ea3d49c55910837
 stompy_overnight_d5_s6006=4.5680/4851ffa4881141a4
 stompy_overnight_d5_s7007=4.5540/82f2e2cb1e8a673d
-minotaur_overnight_d0_s4004=5.5125/292439faa8e639fc
-minotaur_overnight_d0_s6006=5.4860/0b48fe0a46903a2d
-minotaur_overnight_d0_s8008=5.4750/289cc107b5ba2081
-minotaur_overnight_d0_s10010=5.4610/613be3b3dab1df93
-minotaur_overnight_d3_s4004=4.9400/1aa291a3c018d423
-minotaur_overnight_d3_s5005=4.9560/cf4c18de6210e0e5
-minotaur_overnight_d3_s6006=4.9480/d652d323e055731f
-minotaur_overnight_d3_s7007=4.9320/1e52617e3dc89ef9
-minotaur_overnight_d5_s4004=4.9200/403af8f3f3b34d82
-minotaur_overnight_d5_s5005=4.9420/f8b6c011781b5f1d
-minotaur_overnight_d5_s6006=4.9260/9e7614fcb494882d
-minotaur_overnight_d5_s7007=4.9200/6d8c74124ad65e40
+minotaur_overnight_d0_s4004=5.3595/4567e22b9c89172c
+minotaur_overnight_d0_s6006=5.3425/80a6194e578377bf
+minotaur_overnight_d0_s8008=5.3390/c4916c5c2eda5f69
+minotaur_overnight_d0_s10010=5.3200/dff88428efd71f7d
+minotaur_overnight_d3_s4004=4.8760/c118cc9d21fd112b
+minotaur_overnight_d3_s5005=4.8560/4569dc18b46b87e5
+minotaur_overnight_d3_s6006=4.8920/1a370edf048ebb03
+minotaur_overnight_d3_s7007=4.8490/704707088a3245fb
+minotaur_overnight_d5_s4004=4.8600/a9bc504f0aee7dce
+minotaur_overnight_d5_s5005=4.8420/1704b9967bfbf405
+minotaur_overnight_d5_s6006=4.8920/ba830247c41d8682
+minotaur_overnight_d5_s7007=4.8320/df738421309d9c12
 kitty_overnight_d0_s4004=4.9625/e6ab733548ed960a
 kitty_overnight_d0_s6006=4.9790/cb335a9ee6411f34
 kitty_overnight_d0_s8008=4.9525/33edc32b07e76418
