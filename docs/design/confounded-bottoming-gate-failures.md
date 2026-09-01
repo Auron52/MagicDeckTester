@@ -49,6 +49,46 @@ passes.**
 
 Depth-vs-play mismatch is therefore not sufficient, and probably not the mechanism at all.
 
+## ELIMINATED: the confound flag never reaching the test
+
+Checked first, because if the reshuffle were not happening the whole result would be an artifact.
+It IS happening. `mullgen.sh` passes `MTG_CONFOUND_BOTTOM=1` through `run_ab`'s `env "$@"`, and the
+harness logs what it received:
+
+```
+ab_keep_r1.log               ... confound=0     <- correct, keep A/B must not confound
+ab_bottom_confounded_r1.log  ... confound=1     <- the gate that failed
+```
+
+The engine side also reads correctly (`AIEngine.cpp` ~533): the reshuffle happens AFTER
+`BottomCards` has made its decision, is gated on `mulligan_count > 0`, and uses
+`game_seed + 0x9E3779B97F4A7C15` — the same value in both arms, so the comparison stays paired.
+
+## The theoretical objection, which still stands
+
+**User, 2026-09-01:** *"I understand that it would fail if we tested bottoming on vs off without the
+confound, but with it the lookahead that assumes a certain library should lose out."*
+
+That is the right reading, and it is why this document exists. Once the library is reshuffled after
+the decision, lookahead is optimizing a removal for a library that no longer exists, while the
+blind table's pick was the argmin over exactly the reshuffled distribution. Blind should win or
+tie. Losing on **0/16 seeds with mean/se +18** is not a bad draw, it is the wrong sign — so
+something in the chain is still not doing what its comment says.
+
+## Leading suspect, NOT yet tested: the label depth vs the play depth
+
+The table's argmin ranks sub-hands by their value at the **generation** settings (`d2/b3` for
+Mirrorwing, `d1/b3` for Dragons), but the A/B plays at the deck's real play point (d5/b20 via
+`value_play`). Under the confound, lookahead loses its peek but is still making a judgement AT PLAY
+DEPTH, whereas the table is replaying a d1–d2 judgement. That is a mechanism by which blind could
+lose a fair, correctly-confounded comparison.
+
+It does not explain Minotaur passing at `d1/b3` on its own — but Minotaur is linear aggro where
+which card you bottom matters less, so the two facts are not actually in conflict the way the
+refuted hypothesis above was. **This is a hypothesis, not a finding: it has not been measured.**
+The cheap test is to regenerate one deck's table at its play depth and re-run only the bottoming
+gate.
+
 ## What has NOT been ruled out
 
 * **A deck-shape effect.** Minotaur is linear aggro that wins ~T5 on curve; Dragons is ramp into a
