@@ -450,7 +450,13 @@ def _units_for(card):
     # A filter/signet is not free: it CONSUMES mana to run. The input matters -- Cascade Bluffs costs
     # {U/R}, so a Sol Ring's colourless cannot feed it, while a Signet's {1} can be fed by anything.
     if p.get("is_filter"):         return units * 2, frozenset(prod)   # {U/R},{T}: add two of U/R
-    if p.get("ramp_filter"):       return units, ANY_PIP               # Signet: {1},{T}: one of each
+    # Signet ({1},{T}: add {U}{R}): ONE UNIT PER produces COLOUR, feeder any. The old `units`
+    # return here was the single choice-unit [frozenset(prod)] -- gross 1 in exchange for the
+    # {1} feeder = NET ZERO, while both the real card and the engine (ManaPayment's ramp-filter
+    # branch floats EVERY produces colour) are net +1. Every turn a Signet tapped was therefore
+    # under-credited by one unit -- a "short(n<m)" verdict away from spurious. Found 2026-09-01
+    # during the Spasm literal-untap line-payability analysis.
+    if p.get("ramp_filter"):       return cols, ANY_PIP
     return units, 0
 
 

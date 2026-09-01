@@ -1633,6 +1633,19 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     //      would reorder measured Goblins lines, a separate adoption if ever wanted.
     if (!def.params.reduces_subtype_colored_subtype.empty()
         && def.params.reduces_subtype_colored_cost.has_value()) { return 8; }
+    // MTG_SPASM_ORDER_LATE -- DIAGNOSTIC probe (default OFF), only meaningful together with
+    // MTG_SPASM_UNTAP_LITERAL: under the LITERAL untap model the float-era "ritual early" rank
+    // (15, before every payoff at 20) makes Reality Spasm resolve on a mostly-UNTAPPED board, so
+    // its untap refunds ~nothing and the chain the rules allow (tap out on payoffs -> Spasm
+    // refreshes -> terminal X payoff) is never sequenced. This probe ranks the untap ritual
+    // AFTER the mana-hungry payoffs (21) and the terminal {X} payoff after it (22):
+    // Opus/Soulfire (20) -> Spasm (21) -> Crackle (22). NOT a shippable shape (a static rank
+    // still wastes 2nd+ consecutive Spasms); it exists to prove the slower-case mechanism
+    // causally. See docs/design/reality-spasm-phase2.md.
+    static const bool s_spasm_late = EnvOn("MTG_SPASM_ORDER_LATE");
+    if (s_spasm_late && def.params.untap_x_mana_sources) { return 21; }
+    if (s_spasm_late && def.tmpl == CardTemplate::DirectDamage && def.card.m_mana_cost.has_x)
+    { return 22; }
     if (IsManaRitual(def))                       { return 15; }
     if (def.params.verse_damage)                 { return 19; }
     if (def.params.on_cast_trigger_damage > 0) { return 30; }

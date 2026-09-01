@@ -129,9 +129,11 @@ cell moves SLOWER, at every depth — smoke d0 6.9690→7.3180, d3 5.6733→6.06
 regression d0 7.0480→7.4320, d3 s2002 5.6800→6.0300, d3 s3003 5.6800→6.1100, d5 s2002
 5.6800→6.0400, d5 s3003 5.6900→6.0600 (Δ +0.33..+0.43/cell). Per-game: 890 slower / 18 faster /
 **80 newly-unwon** of 2725. Dragonstorm is digest-identical even flag-ON (Irencrag = the fixed-
-burst branch, untouched); burn likewise. Per §4's pre-registered expectation this is the fix
-WORKING: the off-arm wins were part-funded by mana the rules never granted (worked example:
-gi33's off-arm T3 "kill" pays {U}{U} + {8}{R}{R} — 12 mana — off a board producing ~6).
+burst branch, untouched); burn likewise. Per §4's pre-registered expectation this looked like the fix
+WORKING — but **§8's full-scale line analysis overturns that reading for most games**: ~97.6%
+of the slower lines are payable under honest rules (gi33's 12-pip line is exactly fundable by
+tap-out → Spasm-refresh → retap), so the bulk of this slowdown is an engine sequencing gap,
+not recovered laundering. Read §8 before acting on these numbers.
 
 **The §5 success criterion is met at 100%**: re-running all 149 formerly-UNPRICED hinata ledger
 rows on today's engine, the float arm still reads 139 UNPRICED / 10 LEGAL, while the literal arm
@@ -144,6 +146,57 @@ with the untap logged the ledger prices every one of those turns exactly.
 greedy; flag-off ~1%) — a wasted {U}{U}. The refinement, if wanted later, is §4's payment-aware
 projection at the consider/credit sites. Also note `crackle-reality-spasm-overgeneration.md`'s
 enum/apply edge is MOOT under the literal model (there is no float to over-generate).
+
+## 8. WHY the slower cases are slower (2026-09-01, full-scale analysis) — §7's doctrine framing was WRONG for most games
+
+USER challenge that triggered this ("most of the time you only need 2 blue + some red on board to
+manage that if you have 1-2 Reality Spasm... a big loss is unexpected here") — and the USER was
+right. Every one of the 890 slower games (80 newly-unwon included) was analysed with a
+constructive **line-payability checker** (`logs/mana_robust/spasm/line_check.py` + results
+JSON): take the off-arm's winning-turn casts, the real board's sources, and ask whether ANY
+tap/untap schedule pays that line under honest rules. The key structural fact making this exact:
+the engine always sizes Spasm's X = TOTAL source count, so X >= #tapped and **every Spasm is a
+full board refresh** — with k Spasms, each source is legally usable k+1 times (mana abilities
+tap at will within the phase; floats are turn-scoped), so payability reduces to a colour
+matching over (k+1) x board + Irencrag, minus filter feeds.
+
+**Result: 869 of 890 slower lines (97.6%) are PAYABLE under honest rules** — including 76 of
+the 80 lost wins. Only 21 lines are genuinely unpayable (mostly 30–43-pip multi-Spasm turns
+that really were float fiction). Worked example (gi33, smoke d3): board nets 6 mana, line =
+Spasm {U}{U} + Crackle {8}{R}{R} = 12 pips; the honest schedule is *tap all 6 into the float →
+Spasm off the float (refunds all 6) → retap 6 → Crackle 10*. Exactly 12. The off-arm's T3 kill
+was rules-achievable; the float model reached the right answer by unsound accounting.
+
+**So the +0.35–0.43/cell is NOT mostly honesty — it is an engine capability gap.** 232 searched
+movers are payable yet unrecovered at UNBOUNDED budget (283 probes, `probe_results.json`):
+structural, not budget. Two mechanisms, one probed causally:
+
+1. **Cast order** (secondary, and REFUTED as the lever): both order tables put the untap ritual
+   before every payoff (generic 15 < 20; hinata full order 7) — a float-era decision ("consider
+   it as soon as possible", sound when the float persists) that under the literal model fires
+   the untap on an untapped board: 396 of 488 lit-arm Spasm turns cast Spasm before any big
+   spell. BUT the diagnostic reorder `MTG_SPASM_ORDER_LATE` (Opus/Soulfire 20 → Spasm 21 →
+   Crackle 22; default OFF, probe-only) measured WORSE than plain literal (951 slower than
+   control, 186 slower than lit, 131 unwon) — a static rank cannot express the needed
+   interleaving and disturbs plan selection. Do not ship it; kept only as the recorded negative.
+2. **No tap-ahead** (the load-bearing gap): the modal kill line (Spasm + one payoff, gi33-class)
+   is payable ONLY by speculatively tapping the whole board into the float before Spasm — the
+   payment machinery has no such move (it taps exactly to cover costs). **The phase-3 shippable
+   shape is therefore: casting an untap-X ritual first taps EVERY untapped mana source into the
+   float** — strictly mana-optimal whenever X covers the board (the untap refunds every one),
+   rules-legal, and exactly the schedule the checker proves sufficient for the 869 payable
+   lines. The enum credit then stops being "optimistic" and becomes ~exact.
+
+Corrected framing: the float model's *accounting* was unsound (the ledger rightly refuses to
+price it), but its *outcomes* were ~97% rules-achievable. Adopting the literal model as-is
+would trade fictional accounting for a REAL play regression — **do not adopt without the
+phase-3 tap-ahead**. The honest GT cost of a correct implementation is bounded by the 21
+unpayable lines (~2% of movers), not the measured +0.4.
+
+Also found during this analysis: `prepay_recheck._units_for` modelled a ramp filter (Izzet
+Signet) as NET ZERO while the card and the engine are net +1 — every Signet turn was
+under-credited one unit (fixed in the same commit; affects future verdicts only, and only in
+the fewer-accusations direction; the §7 collapse stands a fortiori).
 
 **The adoption bill, for the USER**:
 1. Flip the default (EnvOn(...,true) + hatch) and rebaseline all tiers — hinata GT gets
