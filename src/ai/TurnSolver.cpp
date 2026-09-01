@@ -6010,6 +6010,14 @@ namespace bpnode
     // units. Two chrono calls per child (~50ns against ~7.6us) -- a diagnostic, never on in a
     // measured run.
     inline std::atomic<uint64_t> g_ns_copy{0}, g_ns_apply{0}, g_timed_children{0};
+    // WHERE the node spends and where it PAYS OFF, bucketed by search depth. The class hosts at
+    // EVERY depth, but this engine already holds the doctrine that only the root decision has real
+    // authority (see g_condemn_root_turn: deeper turns are budget-starved and their passes are the
+    // unreliable kind). If cost spreads across depth while adoptions concentrate at the root, then
+    // depth-gating the host is free headroom. Counters only, MTG_ROLLOUT_STATS.
+    inline std::atomic<uint64_t> g_children_at[8];
+    inline std::atomic<uint64_t> g_adopted_at[8];
+    inline std::atomic<uint64_t> g_pends_at[8];
 
     // Record one PEND: its plan signature, the dedup key that decides whether the prefix dedup
     // collapses it, and a descriptor of the state behind that key. Two rows with the SAME sig but
@@ -6052,6 +6060,29 @@ namespace bpnode
         {
             const uint64_t p = g_pends.load();
             if (p == 0) { return; }
+            {
+                uint64_t tc = 0, ta = 0;
+                for (int i = 0; i < 8; ++i)
+                { tc += g_children_at[i].load(); ta += g_adopted_at[i].load(); }
+                if (tc != 0)
+                {
+                    std::fprintf(stderr, "[bp-depth] d: pends / children / adopted\n");
+                    for (int i = 0; i < 8; ++i)
+                    {
+                        const uint64_t c = g_children_at[i].load();
+                        if (c == 0) { continue; }
+                        std::fprintf(stderr,
+                                     "[bp-depth] d%d: %8llu / %9llu / %8llu   (%5.1f%% of children,"
+                                     " %5.1f%% of adopted, adopt-rate %4.1f%%)\n",
+                                     i, (unsigned long long)g_pends_at[i].load(),
+                                     (unsigned long long)c,
+                                     (unsigned long long)g_adopted_at[i].load(),
+                                     100.0 * (double)c / (double)tc,
+                                     ta ? 100.0 * (double)g_adopted_at[i].load() / (double)ta : 0.0,
+                                     100.0 * (double)g_adopted_at[i].load() / (double)c);
+                    }
+                }
+            }
             if (g_timed_children.load() != 0)
             {
                 const double n  = static_cast<double>(g_timed_children.load());
@@ -16111,6 +16142,27 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
 
 // ---- Prefix-scoped prepay (MTG_BP_PREFIX_PREPAY) ---------------------------------------------
 // See the call site inside ApplyPlanDirect for the why. Default OFF.
+// MTG_BP_NODE_D0ONLY: host the breakpoint node only at the ROOT search depth.
+//
+// Measured (200 games, MTG_ROLLOUT_STATS): the class's COST and its PAYOFF sit at different
+// depths. d0 runs 39.7% of children and yields 79.1% of adoptions (adopt-rate 23.7%); d1 runs
+// 56.5% of children for 18.5% of adoptions (adopt-rate 3.9%, six times worse); d2+ is rounding.
+// So more than half the node's cost buys the evaluation of lines the search re-decides anyway --
+// only the ROOT decision is ever committed, and this engine already holds that doctrine for
+// condemnation (g_condemn_root_turn: deeper turns are budget-starved and their passes are the
+// unreliable kind the m2 re-offer exists to rescue).
+//
+// When the gate declines to host, the apply gets NO capture pointer and the deeper turn takes the
+// ordinary inline continuation exactly as before -- so this trades a greedy-free evaluation at
+// d>=1 for cost, and it is a DOCTRINE call, not just a lever: the committed line stays greedy-free,
+// the lookahead does not. Default OFF pending that decision.
+static bool BpNodeD0Only()
+{
+    static const bool env_on = EnvOn("MTG_BP_NODE_D0ONLY");
+    return heurarm::Flag(heurarm::BP_NODE_D0ONLY, env_on);
+}
+
+static inline int BpDepthBucket(int d) { return d < 0 ? 0 : (d > 7 ? 7 : d); }
 static bool BpChildTimingOn()
 {
     static const bool v = EnvOn("MTG_BP_CHILD_TIMING");
@@ -26017,7 +26069,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // main pend at a plain-cantrip partition point? Decides whether the apply gets a capture
         // pointer at all -- off (the default), every apply below is byte-identical to before.
         bool node_host_here = false;
-        if (BpNodeEnabled())
+        if (BpNodeEnabled() && !(BpNodeD0Only() && depth > 0))
         {
             for (const TurnSolver::Plan& q : post)
             { if ((PlanOpensBreakpoint(state, q) & (1 << 3)) != 0) { node_host_here = true; break; } }
@@ -26060,7 +26112,11 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 // snapshot (plus the explicit EMPTY continuation), and score each through the
                 // normal EOT + next-turn recursion under the node's own B&B cutoff. No rank
                 // width, no waves -- completeness is the enumeration itself.
-                if (s_rollout_stats) { bpnode::g_pends.fetch_add(1, std::memory_order_relaxed); }
+                if (s_rollout_stats)
+                {
+                    bpnode::g_pends.fetch_add(1, std::memory_order_relaxed);
+                    bpnode::g_pends_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+                }
                 const TranspositionTable::Key pend_key = BuildDedupKey(node_snap.state);
                 if (dupe_trace) { bpnode::PendTraceRecord(pend_key, DupeSig(q), node_snap.state); }
                 if (!node_prefix_seen.insert(pend_key).second)
@@ -26144,7 +26200,11 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                                 std::memory_order_relaxed);
                         }
                     }
-                    if (s_rollout_stats) { bpnode::g_children.fetch_add(1, std::memory_order_relaxed); }
+                    if (s_rollout_stats)
+                    {
+                        bpnode::g_children.fetch_add(1, std::memory_order_relaxed);
+                        bpnode::g_children_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+                    }
                     const TranspositionTable::Key child_key = BuildDedupKey(s3);
                     if (!node_child_seen.insert(child_key).second)
                     {
@@ -26214,6 +26274,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         if (s_rollout_stats)
                         {
                             bpnode::g_adopted.fetch_add(1, std::memory_order_relaxed);
+                            bpnode::g_adopted_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
                             if (v.bp_choice == kBpEmptyChoice)
                             { bpnode::g_empty_adopted.fetch_add(1, std::memory_order_relaxed); }
                         }
@@ -26644,7 +26705,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // loop below is byte-identical. When hosting, ordinary plans RECORD into bp_seen_states (never
     // skip) so node children dedup against them too -- same contract as the variant dedup above.
     bool node_host_here = false;
-    if (BpNodeEnabled())
+    if (BpNodeEnabled() && !(BpNodeD0Only() && depth > 0))
     {
         for (const TurnSolver::Plan& p : pre)
         { if ((PlanOpensBreakpoint(state, p) & (1 << 3)) != 0) { node_host_here = true; break; } }
@@ -26713,7 +26774,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // partition state collapse (node_prefix_seen); children dedup against everything
             // scored at this node (bp_seen_states, ordinary plans recording below).
             int node_best_val = max_turns + 1;   // node_vals alignment for the probe/beam pair
-            if (s_rollout_stats) { bpnode::g_pends.fetch_add(1, std::memory_order_relaxed); }
+            if (s_rollout_stats)
+            {
+                bpnode::g_pends.fetch_add(1, std::memory_order_relaxed);
+                bpnode::g_pends_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+            }
             const TranspositionTable::Key pend_key = BuildDedupKey(node_snap.state);
             if (dupe_trace_pre) { bpnode::PendTraceRecord(pend_key, DupeSig(p), node_snap.state); }
             const bool node_fresh = node_prefix_seen.insert(pend_key).second;
@@ -26765,7 +26830,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                 std::memory_order_relaxed);
                         }
                     }
-                    if (s_rollout_stats) { bpnode::g_children.fetch_add(1, std::memory_order_relaxed); }
+                    if (s_rollout_stats)
+                    {
+                        bpnode::g_children.fetch_add(1, std::memory_order_relaxed);
+                        bpnode::g_children_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+                    }
                     const TranspositionTable::Key child_key = BuildDedupKey(s3);
                     if (!bp_seen_states.insert(child_key).second)
                     {
@@ -26812,6 +26881,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         if (s_rollout_stats)
                         {
                             bpnode::g_adopted.fetch_add(1, std::memory_order_relaxed);
+                            bpnode::g_adopted_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
                             if (v.bp_choice == kBpEmptyChoice)
                             { bpnode::g_empty_adopted.fetch_add(1, std::memory_order_relaxed); }
                         }

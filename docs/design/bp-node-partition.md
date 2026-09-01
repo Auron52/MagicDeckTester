@@ -382,6 +382,55 @@ during an apply that recurses. Sizing is unchanged and modest: fp_predictable is
 dupe children, ~2% of units -- it moves the equal-quality premium from +27% to about +24%, so it
 is worth doing only as part of a package, never on its own.
 
+### MTG_BP_NODE_D0ONLY -- the class's cost and its payoff are at DIFFERENT DEPTHS (2026-09-01)
+
+The node hosts at every search depth. It should not, and the counters say so plainly
+(`bpnode::g_children_at` / `g_adopted_at`, 200 games, node arm):
+
+| depth | pends | children | adopted | share of children | share of adopted | adopt-rate |
+|---|---|---|---|---|---|---|
+| **d0** | 713,864 | 1,480,102 | 350,622 | 39.7% | **79.1%** | **23.7%** |
+| **d1** | 651,488 | 2,108,271 | 81,856 | **56.5%** | 18.5% | **3.9%** |
+| d2 | 55,123 | 127,641 | 9,082 | 3.4% | 2.0% | 7.1% |
+| d3+ | ~7,800 | ~13,300 | ~1,700 | 0.4% | 0.4% | -- |
+
+**d1 burns 56.5% of the node's children to produce 18.5% of its adoptions -- an adopt-rate six
+times worse than the root.** More than half the class's cost buys the evaluation of turns the
+search re-decides when it reaches them; only the ROOT decision is ever committed. This engine
+already holds exactly that doctrine for condemnation (`g_condemn_root_turn`: *"only ONE decision
+per search has that authority... every deeper m1 is budget-starved, and its passes are exactly the
+unreliable kind the m2 re-offer exists to rescue"*). It was never applied to the node.
+
+`MTG_BP_NODE_D0ONLY` (heurarm slot, default OFF) hosts only at depth 0. Measured, 200 games:
+
+| | node | node + D0ONLY | shipped |
+|---|---|---|---|
+| units_total | 11,928,902 | **8,218,402 (-31%)** | 7,916,678 |
+| children | 3,729,307 | **973,721 (-74%)** | -- |
+| id_depth | 2.981 | **3.367** | 3.448 |
+
+So the whole cost of deleting greedy soundly AT THE COMMITTED DECISION is **+3.8% units**, not
++50.7%, and it hands back 0.39 of the 0.47 plies the full node was losing.
+
+Quality, paired 5000/cell vs shipped: **-0.0038 hold (t 1.18) / -0.0054 train (t 1.75)** -- better
+on both blocks, keeping **44% of the full node's gain for 7.5% of its cost**. Against the control's
+budget ladder that is ~2x more compute-efficient: matching noded0's quality by raising `budget_ms`
+instead needs ~+7.8% units (interpolating b26's -0.0102 for +17%), versus noded0's +3.8%. **This is
+the first form of the class that is cheaper than simply buying the same quality with budget.**
+
+**What it gives up, stated precisely.** All these arms carry `MTG_BP_NO_GREEDY_CONT`, so when the
+node declines to host, the deeper turn resolves its continuation from the CAST ORDER, not from
+greedy `Solve` -- **greedy is still deleted everywhere**. What d>=1 loses is the explicit EMPTY
+arm, i.e. it runs the "recipe" form that measured +0.020 worse when used at ALL depths. Using it
+only for lookahead costs +0.0048/+0.0068 against the full node (t 1.07/1.47). So the trade is:
+sound at the decision that is committed, ordered-but-empty-less in the lookahead that is not.
+Whether that satisfies "search the entire window losslessly" is a USER doctrine call, not a
+measurement -- flagged, not assumed.
+
+A 2-child (order + EMPTY) mini-node at d>=1 was costed and rejected on arithmetic: ~651k pends x 2
+children = +1.3M children, landing ~+20% units over shipped -- worse than the +15% bar it would be
+trying to reach, for at most half of a 0.005 gap.
+
 ## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
 
 The generic-lever collateral check the v1 caveats called for: **14 of 15 decks + all 25
