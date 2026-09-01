@@ -1,8 +1,8 @@
-# Regression ground truth -- commit 4f33d562  date 2026-08-31
+# Regression ground truth -- commit e64ef05b  date 2026-09-01
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-08-31): Minotaur exhaustive mulligan profile ADOPTED (complete recipe, R40, K=16). Validation: keep exhaustive-vs-static -0.1320t 16/16 seeds (mean/se -33.2); confounded blind bottoming vs lookahead -0.0616t 16/16 (mean/se -24.6). In-game: only minotaur cells move and ALL 28 are faster -- smoke -164t/1400, regression -202t/2100, held-out overnight -1591t/14000; combined -0.1118/game. GT movement is expected when a mulligan profile is adopted.
-# accepted-with-regressions (regression, 2026-08-31): Minotaur exhaustive mulligan profile ADOPTED (complete recipe, R40, K=16). Validation: keep exhaustive-vs-static -0.1320t 16/16 seeds (mean/se -33.2); confounded blind bottoming vs lookahead -0.0616t 16/16 (mean/se -24.6). In-game: only minotaur cells move and ALL 28 are faster -- smoke -164t/1400, regression -202t/2100, held-out overnight -1591t/14000; combined -0.1118/game. GT movement is expected when a mulligan profile is adopted.
 # accepted-with-regressions (overnight, 2026-08-31): Minotaur exhaustive mulligan profile ADOPTED (complete recipe, R40, K=16). Validation: keep exhaustive-vs-static -0.1320t 16/16 seeds (mean/se -33.2); confounded blind bottoming vs lookahead -0.0616t 16/16 (mean/se -24.6). In-game: only minotaur cells move and ALL 28 are faster -- smoke -164t/1400, regression -202t/2100, held-out overnight -1591t/14000; combined -0.1118/game. GT movement is expected when a mulligan profile is adopted.
+# accepted-with-regressions (smoke, 2026-09-01): MinotaurProvider EV discard model adopted (MTG_MINOTAUR_EV_DISCARD, default on). Net delta 0 on smoke and 0 on regression; searched depths 2 faster / 0 slower across both tiers. d0 slowdowns are single-seed noise -- held-out d0 over 500,000 games is -0.000110 (t=-1.16, neutral). Adoption rests on d3: -0.00037 t/game replicated across THREE independent seed blocks (t=-1.50/-2.46/-2.80).
+# accepted-with-regressions (regression, 2026-09-01): MinotaurProvider EV discard model adopted (MTG_MINOTAUR_EV_DISCARD, default on). Net delta 0 on smoke and 0 on regression; searched depths 2 faster / 0 slower across both tiers. d0 slowdowns are single-seed noise -- held-out d0 over 500,000 games is -0.000110 (t=-1.16, neutral). Adoption rests on d3: -0.00037 t/game replicated across THREE independent seed blocks (t=-1.50/-2.46/-2.80).
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -46,9 +46,9 @@ fivecolour_smoke_d5_s1001=5.1333/f6d7ed5a947b839a
 stompy_smoke_d0_s1001=5.4420/dc78a74c3af62737
 stompy_smoke_d3_s1001=4.4933/6523a1bb1be7ca91
 stompy_smoke_d5_s1001=4.4400/dcca5f0deaf50323
-minotaur_smoke_d0_s1001=5.3410/4d54a56131aaf36c
-minotaur_smoke_d3_s1001=4.9080/b79d89f4d959a9c8
-minotaur_smoke_d5_s1001=4.9000/b9543e87c70bc6fd
+minotaur_smoke_d0_s1001=5.3410/4cfea45e4e6043a4
+minotaur_smoke_d3_s1001=4.9080/e1504a596d15333c
+minotaur_smoke_d5_s1001=4.9000/3187f873e3835454
 kitty_smoke_d0_s1001=4.9900/4b96809105a7d663
 kitty_smoke_d3_s1001=4.4520/2c6413628c53a42c
 kitty_smoke_d5_s1001=4.4667/48012e909205eb57
@@ -122,11 +122,11 @@ stompy_regression_d3_s2002=4.5300/ce46dcff525d59e1
 stompy_regression_d3_s3003=4.6067/fa7420b23649150d
 stompy_regression_d5_s2002=4.5360/f43306628735073e
 stompy_regression_d5_s3003=4.5960/919b36175d5c35e0
-minotaur_regression_d0_s2002=5.3410/dedcb94b75bc2aa2
-minotaur_regression_d3_s2002=4.8967/1457b0df107b7abb
-minotaur_regression_d3_s3003=4.8767/7dc400cf3e5e9031
-minotaur_regression_d5_s2002=4.9040/005f7f54c9594e0a
-minotaur_regression_d5_s3003=4.8640/56acabf1410490b8
+minotaur_regression_d0_s2002=5.3430/6e3150e112985ba7
+minotaur_regression_d3_s2002=4.8967/61d386ce69cbd53f
+minotaur_regression_d3_s3003=4.8733/51f570ff5f8ec55f
+minotaur_regression_d5_s2002=4.9040/3d75a96884cd341a
+minotaur_regression_d5_s3003=4.8600/9619fe4c6644011a
 kitty_regression_d0_s2002=4.9530/1d5005d927f09fce
 kitty_regression_d3_s2002=4.3300/b65f5921a855eeb5
 kitty_regression_d3_s3003=4.3800/fef85df2a993212a

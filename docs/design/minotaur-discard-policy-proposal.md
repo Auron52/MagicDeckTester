@@ -275,7 +275,47 @@ The d0 verdict is unambiguous and the d3 column is null in every row. Note the s
 across depths — d0 prefers V1, d3 leans (insignificantly) toward EV. Do not build a story on the
 d3 column; it is not significant anywhere.
 
-**The `value` term is the weak link, and it is the honest next step.** `value` is currently the
+### Round 3 — EV2: the value term WAS the weak link. ADOPTED.
+
+Fixing `value` turned the whole model positive. `MTG_MINOTAUR_DISCARD_EV2` replaces the 6-bucket
+`threat_rank` with **the position in V1's FULL value order** (rank, then power/devotion/mv), so
+value is a total order with no ties left to collapse into.
+
+**Why the bucket version had to lose.** Rank 5 is a huge bucket — every plain body (Gnarled
+Scarhide, Deathbellow Raider, Burning-Fist, Slaughter-Priest, Boros Reckoner) *plus* a surplus
+Ragemonger. Inside it `value` was CONSTANT, so `EV = P x const` degenerated to sorting on distance
+alone — exactly the playability-first arm that measured worst in round 1. A behavioural diff caught
+it red-handed: plain EV sheds **Ragemonger**, the card the user said to keep for mana.
+
+Two properties fall out of the total-order fix: with P equal the sort reproduces V1 EXACTLY (so it
+degrades gracefully instead of scrambling), and distance can only reorder cards of genuinely
+different value. It stays aligned with V1 for 834 decisions where plain EV diverged after 44, and
+changes 15 of 516 genuine choices.
+
+**Adopted combination: `EV2` + HARD decay + `DUPES`**, behind `MTG_MINOTAUR_EV_DISCARD`
+(default ON; `=0` restores V1 exactly, digest-verified). Measured on THREE independent seed blocks,
+the third of which was a pre-registered held-out confirmation of a single named arm:
+
+| block | d0 | d3 | d5 |
+|---|---|---|---|
+| selection (32/16 seeds) | -0.000294 (t=-1.73) | -0.000375 (t=-1.50) | — |
+| held-out (100/64 seeds) | -0.000110 (t=-1.16) | **-0.000313 (t=-2.46, p=0.019)** | — |
+| third (64 seeds) | — | **-0.000422 (t=-2.80, p=0.0067)** | -0.000130 (t=-0.69) |
+
+Pooled d3 ~ **-0.00037 turns/game**, negative in all three blocks; d0 neutral (it was +0.00089
+before EV2 — the regression is gone); d5 neutral. Per-seed at d3: 18/10 and 31/12 better.
+
+Suite: **net 0 turn-units on smoke AND on regression**, with searched depths **2 faster / 0 slower**
+across both tiers; the handful of d0 slowdowns are single-seed noise against a 500,000-game held-out
+d0 read of -0.000110. GT accepted for both tiers, 320 gt_logs consistent.
+
+**Note this exceeds the earlier best-vs-worst bound (+0.00025t at d3) — legitimately.** That bound
+was measured with `MTG_NONCLEANUP_SHED_WORST`, which only reaches
+`ChooseNonCleanupDiscardIndex` (the cost/trigger site). These levers change
+`CleanupDiscardCandidates`, which ALSO feeds the ROLLOUT cleanup, so their reach is strictly larger
+than what that bound covered. The bound was never wrong; it just bounded one of the two channels.
+
+**Still the honest next step: the `value` term is a proxy.** `value` is currently the
 authored `threat_rank` inverted, i.e. a linear 6..1 guess. The deck's profile carries LEARNED
 `card_scores`, which is what the user's `value(playing)` actually means — but they live on the
 profile (`AIEngine`), not `GameState`, so the provider cannot reach them without plumbing the

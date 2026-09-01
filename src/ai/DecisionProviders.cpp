@@ -10763,10 +10763,21 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
     static const bool s_ev_env   = EnvOn("MTG_MINOTAUR_DISCARD_EV");
     static const bool s_evh_env  = EnvOn("MTG_MINOTAUR_DISCARD_EVHARD");
     static const bool s_dup_env  = EnvOn("MTG_MINOTAUR_DISCARD_DUPES");
+    static const bool s_ev2_env  = EnvOn("MTG_MINOTAUR_DISCARD_EV2");
+    // THE ADOPTED MODEL, default ON: EV = P(play) x value with the HARD decay, value taken from the
+    // full V1 order, and duplicates paying cumulative mana. MTG_MINOTAUR_EV_DISCARD=0 restores the
+    // pre-EV ranking (V1) exactly. Measured d3 -0.00037 t/game across THREE independent seed blocks
+    // (t = -1.50 / -2.46 / -2.80), d0 and d5 neutral. See the design doc for the full table.
+    static const bool s_adopt_env = EnvOn("MTG_MINOTAUR_EV_DISCARD", true);
     const bool v2_reducer = heurarm::Flag(heurarm::MINOTAUR_DISCARD_REDUCER, s_red_env);
-    const bool v2_evhard  = heurarm::Flag(heurarm::MINOTAUR_DISCARD_EVHARD, s_evh_env);
+    const bool adopted    = heurarm::Flag(heurarm::MINOTAUR_EV_DISCARD, s_adopt_env);
+    const bool v2_evhard  = adopted || heurarm::Flag(heurarm::MINOTAUR_DISCARD_EVHARD, s_evh_env);
     const bool v2_ev      = v2_evhard || heurarm::Flag(heurarm::MINOTAUR_DISCARD_EV, s_ev_env);
-    const bool v2_dupes   = heurarm::Flag(heurarm::MINOTAUR_DISCARD_DUPES, s_dup_env);
+    const bool v2_dupes   = adopted || heurarm::Flag(heurarm::MINOTAUR_DISCARD_DUPES, s_dup_env);
+    const bool v2_ev2     = adopted || heurarm::Flag(heurarm::MINOTAUR_DISCARD_EV2, s_ev2_env);
+    // Filled just before the threat sort (it needs the FINAL threat list, after surplus
+    // reducers are folded in). Position of each card in V1's own value order.
+    std::vector<int> value_pos(static_cast<std::size_t>(n), 0);
 
     // MTG_MINOTAUR_DISCARD_DUPES -- how many copies of this card we already have committed ahead of
     // it (earlier in hand, or already on the battlefield). User 2026-09-01: "we don't want multiple
@@ -10905,6 +10916,24 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
         const int need = eff_mv(i) * (1 + copies_ahead[static_cast<std::size_t>(i)]);
         const int d = need - reach;
         const double p = (d <= 0) ? 1.0 : (d < 5 ? kP[d] : 0.02);
+        // VALUE. The 6-bucket `threat_rank` was the model's weak point and the reason EV lost:
+        // rank 5 is a big bucket (every plain body, plus a surplus Ragemonger), so inside it
+        // `value` was CONSTANT and EV degenerated to P alone -- pure playability sorting, which is
+        // the exact arm that measured worst. It was shedding Ragemonger, the card the user said to
+        // keep for mana.
+        //
+        // EV2 uses the position in V1's FULL value order (rank, then power/devotion/mv) instead, so
+        // value is a total order with no ties to collapse into. Two properties fall out: with P
+        // equal the sort reproduces V1 EXACTLY, and distance can only ever reorder cards of
+        // genuinely different value. The geometric spread is chosen so the ratio between the best
+        // and a mid body stays inside the window the user's two cases pin down -- Kragma one source
+        // short must still beat a castable body, and Kragma three short must lose to one.
+        if (v2_ev2)
+        {
+            const double val = 6.0 * std::pow(0.85, static_cast<double>(
+                                   value_pos[static_cast<std::size_t>(i)]));
+            return p * val;
+        }
         return p * static_cast<double>(6 - threat_rank(i));
     };
 
@@ -10915,6 +10944,21 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
     { threats.push_back(reducers[k]); }
     if (static_cast<int>(reducers.size()) > reducer_keep)
     { reducers.resize(static_cast<std::size_t>(reducer_keep)); }
+
+    if (v2_ev2)
+    {
+        std::vector<int> byval = threats;
+        std::stable_sort(byval.begin(), byval.end(), [&](int a, int b)
+        {
+            const int ra = threat_rank(a), rb = threat_rank(b);
+            if (ra != rb) { return ra < rb; }
+            if (power_of(a) != power_of(b))       { return power_of(a) > power_of(b); }
+            if (devotion_of(a) != devotion_of(b)) { return devotion_of(a) > devotion_of(b); }
+            return mv_of(a) > mv_of(b);
+        });
+        for (std::size_t k = 0; k < byval.size(); ++k)
+        { value_pos[static_cast<std::size_t>(byval[k])] = static_cast<int>(k); }
+    }
 
     std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
     {

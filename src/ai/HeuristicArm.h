@@ -110,6 +110,8 @@ enum Slot : int
     MINOTAUR_DISCARD_EV,      // MTG_MINOTAUR_DISCARD_EV      EV = P(play) x value(play), soft decay
     MINOTAUR_DISCARD_EVHARD,  // MTG_MINOTAUR_DISCARD_EVHARD  ...steeper decay
     MINOTAUR_DISCARD_DUPES,   // MTG_MINOTAUR_DISCARD_DUPES   k-th copy pays CUMULATIVE mana
+    MINOTAUR_DISCARD_EV2,     // MTG_MINOTAUR_DISCARD_EV2     value = the FULL V1 order, not 6 buckets
+    MINOTAUR_EV_DISCARD,      // MTG_MINOTAUR_EV_DISCARD      THE ADOPTED MODEL (default ON)
     COUNT
 };
 
@@ -197,6 +199,8 @@ inline const char* Name(int slot)
         "MTG_MINOTAUR_DISCARD_EV",
         "MTG_MINOTAUR_DISCARD_EVHARD",
         "MTG_MINOTAUR_DISCARD_DUPES",
+        "MTG_MINOTAUR_DISCARD_EV2",
+        "MTG_MINOTAUR_EV_DISCARD",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }
