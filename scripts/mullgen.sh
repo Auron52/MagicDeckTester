@@ -252,8 +252,11 @@ validate(){
   [ -x build/Release/mtg ] || { echo "build/Release/mtg missing -- run ./build.sh"; exit 1; }
 
   # Artifact check first: it is free, and a malformed table makes every game below meaningless.
-  python3 - "$PROF" <<'PY' || exit 1
-import json, sys
+  # It reads the RAW as well as the profile, because the profile records only the DECISIONS -- it
+  # cannot show how many rollouts stand behind them, and the bottoming half failed silently exactly
+  # there (see docs/design/confounded-bottoming-gate-failures.md).
+  python3 - "$PROF" "$RAW" <<'PY' || exit 1
+import json, sys, gzip, os
 ek = (json.load(open(sys.argv[1])) or {}).get("exhaustive_keep") or {}
 K, ents = len(ek.get("buckets") or []), (ek.get("entries") or [])
 bad = sum(1 for e in ents if not e.get("bottom_keep") or any(len(r) != K for r in e["bottom_keep"]))
@@ -261,7 +264,42 @@ if not ents or not ek.get("bottoming_enabled") or bad:
     print(f"ARTIFACT CHECK FAILED: entries={len(ents)} bottoming_enabled="
           f"{ek.get('bottoming_enabled')} malformed_bottom_keep={bad}")
     sys.exit(1)
-print(f"artifact check OK: K={K} entries={len(ents)} bottoming_enabled=True")
+
+# SUB-TABLE SAMPLING. DecideBottom's target is an argmin over the (7-m)-subcompositions of the hand,
+# so every sub-cell is a CANDIDATE and the argmin is only as good as the worst-sampled one. Dragons
+# and Mirrorwing shipped tables whose every sub-cell held a single probe-carried rollout: the
+# generator's fused sub-table batches were never fed on a journal resume (`sub=0/142464` for the whole
+# run) and nothing checked. An argmin over 6-26 one-rollout estimates selects on noise, which is what
+# their confounded-bottoming A/Bs caught -- after 40+ minutes of games, for a defect visible here for
+# free. `sub_target` is what the run intended every sub cell-side to reach (cap for bottoming-full,
+# floor when adaptive); older raws predate it, so fall back to the documented floor of 2.
+raw_p = sys.argv[2] if len(sys.argv) > 2 else ""
+for cand in (raw_p, raw_p + ".gz"):
+    if cand and os.path.exists(cand):
+        raw = json.load(gzip.open(cand, "rt") if cand.endswith(".gz") else open(cand))
+        break
+else:
+    print(f"ARTIFACT CHECK FAILED: raw sidecar not found ({raw_p}) -- cannot verify sub-table sampling")
+    sys.exit(1)
+meta = raw.get("meta") or {}
+target = meta.get("sub_target")
+legacy = target is None
+if legacy: target = 2
+mn, tot, under = 10**9, 0, 0
+for s in raw.get("sizes") or []:
+    if s.get("H", 7) >= 7: continue
+    for e in s["entries"]:
+        for pd in (0, 1):
+            c = e["count"][pd]; tot += 1; mn = min(mn, c)
+            if c < target: under += 1
+if tot and under:
+    print(f"ARTIFACT CHECK FAILED: {under}/{tot} bottoming sub-table cell-sides below "
+          f"sub_target={target}{' (legacy raw: floor)' if legacy else ''}; min={mn}. "
+          f"The bottoming argmin ranks these candidates, so an under-sampled sub-table makes "
+          f"DecideBottom select on noise. Do NOT rebaseline over this -- regenerate.")
+    sys.exit(1)
+print(f"artifact check OK: K={K} entries={len(ents)} bottoming_enabled=True "
+      f"sub_cells={tot} min_rollouts={mn if tot else 'n/a'} sub_target={target}")
 PY
 
   local gated=1

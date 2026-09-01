@@ -986,6 +986,21 @@ static void WriteRawSidecar(std::ostream& os, const Decklist& deck, const Exhaus
             { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
         };
         StampRolloutCfg(root["meta"], RolloutCfgOf(cfg));   // what the samples were searched at
+        // sub_target: the rollout count EVERY sub-table cell-side (H < 7) was supposed to reach --
+        // the cap for a bottoming-FULL run, the floor when the sub-tables stay adaptive. Written so a
+        // reader can check the bottoming half is actually sampled instead of inferring it from R.
+        // Without it the shipped Dragons/Mirrorwing tables (every sub-cell holding ONE probe-carried
+        // rollout, so DecideBottom's argmin selected on pure noise) were indistinguishable from a
+        // legitimately adaptive one, and nothing in the pipeline looked. scripts/mullgen.sh's artifact
+        // check now gates on it.
+        // (r0/r_max are locals of the generator proper; recompute from cfg with the same derivation.)
+        {
+            const long long rmax = cfg.rollouts;
+            const long long rflr = std::max<long long>(
+                1, std::min<long long>(cfg.r_floor > 0 ? cfg.r_floor : 2, rmax - 1));
+            root["meta"]["sub_target"] =
+                (!cfg.bottoming_enabled || cfg.adaptive_bottom) ? rflr : rmax;
+        }
         // Execution-trace Phase B provenance (auto card-scope attribution at re-run): the engine
         // fingerprint (was the compiled engine the same?) and a per-card behaviourally-relevant
         // definition hash (which cards' DATA changed?). A re-run diffs these against the current build
@@ -3510,6 +3525,20 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         {
             const bool refine = refs_ready.load();
             bool any_below_floor = false, any_live = false; any_fed = false;
+            // RESUME FIX (2026-09-01): the fused sub-table batches must be drained in the REFINE phase
+            // too, because a journal resume that restores refs publishes refs_ready BEFORE this loop
+            // starts -- so `refine` is true on the very first iteration, the floor branch below never
+            // executes, and the only feed_sub() call site (in that branch) was never reached. The run
+            // then finished on the size-7 exit with every sub-table task still unfed, and wrote a
+            // profile whose bottoming table was pure noise: each sub-cell held just the single
+            // probe-carried r=0 sample, so DecideBottom's argmin over 6-26 candidates selected on
+            // noise. That shipped on Dragons and Mirrorwing (`sub=0/142464` for the whole run) and is
+            // exactly what their confounded-bottoming A/Bs caught (+0.0641t / +0.1006t, 0/16 seeds).
+            // Keep the floor-phase call below where it was, so a normal (non-resume) run enqueues in
+            // the identical order and stays byte-identical; this only drains what that run already
+            // drained to empty. Feed ORDER cannot move a value anyway -- run_one is a pure function of
+            // (seed_base, r, w, pd) and the fold is deterministic.
+            if (refine) { feed_sub(); }
             if (!refine)
             {
                 // Floor pass 1 (mandatory): drive every cell to r0. The slow floor cell's rollouts are
@@ -3656,7 +3685,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
               // once (at floor-complete) and never again, so a degenerate cell that only shows up during
               // refine -- or a run the operator kills before it ends -- reported nothing at all.
               Slow().Dump(std::cerr, "so far", 3); }
-            if (refine && !any_live && in_flight.load() == 0) { break; }
+            // The refine exit must ALSO require the sub-tables to be done. It used to gate on size-7
+            // alone, so the resume bug above could not even announce itself: the run terminated
+            // "successfully" with sub_remaining still at its full 142464 and wrote the profile. The
+            // matching sub_remaining==0 test at the floor-complete branch lives inside `!refine`, so
+            // on a resume nothing checked the sub-tables at any point.
+            if (refine && !any_live && in_flight.load() == 0 && sub_remaining.load() == 0) { break; }
             if (!any_fed)
             { std::unique_lock<std::mutex> pk(prod_mtx);
               prod_cv.wait_for(pk, std::chrono::milliseconds(100)); }
