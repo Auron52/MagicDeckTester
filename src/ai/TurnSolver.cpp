@@ -10908,6 +10908,39 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             a.cost           = per;   // ONE activation -- the loop is self-funding
                             a.eval           = k;
                             a.is_noncreature = true;
+                            // CREDIT THE MANA THE LOOP MAKES. Without this the planner sees a blink
+                            // as pure cost and can never put a payoff after it -- which is exactly
+                            // what a 20-game sample showed: ZERO blink activations, because a loop
+                            // that generates mana the subset math cannot see is strictly worse than
+                            // not looping. Same channel as a ritual's refloat (a.ritual_float,
+                            // credited as wild in the subset math) and the same optimistic-bound
+                            // contract: an over-credited plan's unpayable follow-up is dropped by
+                            // the pay path and scores honestly.
+                            //
+                            // NET, not gross: the cost of every iteration but the first is paid
+                            // inside the apply loop, and only a.cost (one activation) is on the
+                            // subset's books. Zero for a loop that does not net positive.
+                            // MEASURED AND NOT ADOPTED (2026-09-01), kept as the record and as a
+                            // lever. The reasoning for it is sound -- a planner that cannot see the
+                            // mana a loop makes can never put a payoff after it -- but the metric
+                            // refuses it: paired, held-out seeds 5101/5202, 200 games at d5/b20,
+                            // ON 7.225 vs OFF 7.205 avg turns, and 7.250 vs 7.200 on the earlier
+                            // 20-game train sample. Neutral at best on the axis it exists to move.
+                            // The combo fires WITHOUT it (7 go-offs in a 20-game sample), so it is
+                            // not load-bearing. Default OFF; =1 to re-measure.
+                            // (Unresolved: ON was ~19% cheaper in batch WALL time, but that was
+                            // measured on a box also running the analyzer, and wall time under load
+                            // is exactly the number this repo does not trust. Re-measure clean
+                            // before reading anything into it.)
+                            static const bool s_blink_credit = EnvOn("MTG_EDF_BLINK_CREDIT", false);
+                            if (const CardDefinition* td = s_blink_credit
+                                    ? CardDatabase::Instance().LookupCached(tgt.card) : nullptr)
+                            {
+                                const int refund =
+                                    EtbUntapLandsCredit(state, td->params.etb_untap_lands);
+                                const int net = refund - per.ManaValue();
+                                if (net > 0) { a.ritual_float = net * k; }
+                            }
                             actions.push_back(std::move(a));
                         }
                     }

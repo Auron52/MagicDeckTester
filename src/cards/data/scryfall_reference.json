@@ -8,6 +8,15 @@
     "toughness": "3",
     "type_line": "Creature — Human Knight"
   },
+  "Adarkar Wastes": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}: Add {W} or {U}. This land deals 1 damage to you.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Adeline, Resplendent Cathar": {
     "cmc": 3.0,
     "keywords": [
@@ -351,6 +360,18 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Cloud of Faeries": {
+    "cmc": 2.0,
+    "keywords": [
+      "Cycling",
+      "Flying"
+    ],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Flying\nWhen this creature enters, untap up to two lands.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Faerie"
+  },
   "Cloudshredder Sliver": {
     "cmc": 2.0,
     "keywords": [],
@@ -370,6 +391,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact — Equipment"
+  },
+  "Conservatory": {
+    "cmc": 0.0,
+    "keywords": [
+      "Investigate"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {G} or {W}.\n{4}, {T}: Investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\")",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Cosmic Spider-Man": {
     "cmc": 5.0,
@@ -561,6 +593,15 @@
     "toughness": "2",
     "type_line": "Enchantment Creature — Spirit"
   },
+  "Eladamri's Call": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{W}",
+    "oracle_text": "Search your library for a creature card, reveal that card, put it into your hand, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Elderscale Wurm": {
     "cmc": 7.0,
     "keywords": [
@@ -571,6 +612,17 @@
     "power": "7",
     "toughness": "7",
     "type_line": "Creature — Wurm"
+  },
+  "Eldrazi Displacer": {
+    "cmc": 3.0,
+    "keywords": [
+      "Devoid"
+    ],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "Devoid (This card has no color.)\n{2}{C}: Exile another target creature, then return it to the battlefield tapped under its owner's control. ({C} represents colorless mana.)",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Eldrazi"
   },
   "Elvish Archdruid": {
     "cmc": 3.0,
@@ -589,6 +641,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
+  },
+  "Emiel the Blessed": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}{W}",
+    "oracle_text": "{3}: Exile another target creature you control, then return it to the battlefield under its owner's control.\nWhenever another creature you control enters, you may pay {G/W}. If you do, put a +1/+1 counter on it. If it's a Unicorn, put two +1/+1 counters on it instead. ({G/W} can be paid with either {G} or {W}.)",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Unicorn"
   },
   "Enlightened Tutor": {
     "cmc": 1.0,
@@ -666,6 +727,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Fertile Ground": {
+    "cmc": 2.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Enchant land\nWhenever enchanted land is tapped for mana, its controller adds an additional one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
+  },
   "Fiery Islet": {
     "cmc": 0.0,
     "keywords": [],
@@ -739,6 +811,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Frontline Heroism": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "When this enchantment enters, create a 1/1 red Soldier creature token with haste.\nWhenever you cast a spell that targets only a single creature you control, create a 1/1 red Soldier creature token with haste, then copy that spell. The copy targets that token.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Frostboil Snarl": {
     "cmc": 0.0,
@@ -1221,6 +1302,17 @@
     "toughness": "4",
     "type_line": "Legendary Creature — Cat Cleric"
   },
+  "Kitchen": {
+    "cmc": 0.0,
+    "keywords": [
+      "Investigate"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {G} or {U}.\n{4}, {T}: Investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\")",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Knight Exemplar": {
     "cmc": 3.0,
     "keywords": [
@@ -1439,6 +1531,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment"
+  },
+  "Mariposa Military Base": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "You may have this land enter tapped. If you do, you get two rad counters.\n{T}: Add {C}.\n{5}, {T}: Draw a card. This ability costs {1} less to activate for each rad counter you have.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Marsh Flats": {
     "cmc": 0.0,
@@ -1671,6 +1772,17 @@
     "toughness": null,
     "type_line": "Land — Swamp Forest"
   },
+  "Overgrowth": {
+    "cmc": 3.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Enchant land\nWhenever enchanted land is tapped for mana, its controller adds an additional {G}{G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
+  },
   "Pashalik Mons": {
     "cmc": 3.0,
     "keywords": [],
@@ -1679,6 +1791,17 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Legendary Creature — Goblin Warrior"
+  },
+  "Peregrine Drake": {
+    "cmc": 5.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{4}{U}",
+    "oracle_text": "Flying\nWhen this creature enters, untap up to five lands.",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Creature — Drake"
   },
   "Plague Drone": {
     "cmc": 4.0,
@@ -2054,6 +2177,15 @@
     "toughness": "5",
     "type_line": "Creature — Dragon"
   },
+  "Shivan Gorge": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{2}{R}, {T}: Shivan Gorge deals 1 damage to each opponent.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Land"
+  },
   "Siege-Gang Commander": {
     "cmc": 5.0,
     "keywords": [],
@@ -2236,6 +2368,15 @@
     "toughness": "1",
     "type_line": "Creature — Sliver"
   },
+  "Stroke of Genius": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{X}{2}{U}",
+    "oracle_text": "Target player draws X cards.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Suture Priest": {
     "cmc": 2.0,
     "keywords": [],
@@ -2362,6 +2503,26 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Trace of Abundance": {
+    "cmc": 2.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{R/W}{G}",
+    "oracle_text": "Enchant land\nEnchanted land has shroud. (It can't be the target of spells or abilities.)\nWhenever enchanted land is tapped for mana, its controller adds an additional one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
+  },
+  "Training Grounds": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "Activated abilities of creatures you control cost {2} less to activate. This effect can't reduce the mana in that cost to less than one mana.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Treasure Hunt": {
     "cmc": 2.0,
     "keywords": [],
@@ -2445,6 +2606,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Undercellar Myconid": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Whenever this creature enters or dies, create a 1/1 green Saproling creature token.\n{T}: Add one mana of any color.",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Fungus"
+  },
   "Unexpectedly Absent": {
     "cmc": 2.0,
     "keywords": [],
@@ -2525,6 +2695,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Wild Growth": {
+    "cmc": 1.0,
+    "keywords": [
+      "Enchant"
+    ],
+    "mana_cost": "{G}",
+    "oracle_text": "Enchant land\nWhenever enchanted land is tapped for mana, its controller adds an additional {G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Aura"
+  },
   "Windswept Heath": {
     "cmc": 0.0,
     "keywords": [],
@@ -2580,6 +2761,24 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Human Knight"
+  },
+  "Yavimaya Coast": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}: Add {G} or {U}. This land deals 1 damage to you.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Young Pyromancer": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Whenever you cast an instant or sorcery spell, create a 1/1 red Elemental creature token.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Human Shaman"
   },
   "Zada, Hedron Grinder": {
     "cmc": 4.0,

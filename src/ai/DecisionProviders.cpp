@@ -13266,6 +13266,25 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
                               1, kFlickerMaxIterations);
         }
     }
+
+    // THE DRAW SINK (user, 2026-09-01: "once you have the infinite mana combo on board and a draw
+    // source the route to end the game is quite straightforward"). An {X} draw held in hand turns
+    // unbounded mana into the whole library, and the library is where the rest of the deck's
+    // damage lives -- more creatures to deploy, and the Shivan Gorge that makes the loop lethal
+    // outright. Size the loop to FUND that draw: enough net mana to pay {X} for the library plus
+    // the spell's fixed cost, so the planner's X-value sees a pool that can actually buy it.
+    //
+    // Only counted for a draw whose X the mana can grow -- a fixed-size draw ({4},{T}: Investigate)
+    // is not a mana sink in the sense that matters, it is capped by the number of sources.
+    for (const Card& c : s.players[s.active_player_index].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->tmpl != CardTemplate::DrawX) { continue; }
+        const int want_mana = static_cast<int>(s.players[s.active_player_index].library.size())
+                            + d->card.m_mana_cost.ManaValue();
+        const int iters = (want_mana + loop.net - 1) / loop.net;
+        return std::clamp(iters, 1, kFlickerMaxIterations);
+    }
     return 0;   // no way to cash the mana -> no go-off candidate
 }
 

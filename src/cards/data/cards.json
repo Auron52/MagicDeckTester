@@ -5795,7 +5795,7 @@
    ],
    "power": 3,
    "toughness": 3,
-   "oracle_text": "Devoid (This card has no color.)\n{2}{C}: Exile another target creature, then return it to the battlefield tapped under its owner's control. [Blink outlet. No {T} in the cost, so it activates the turn it lands and repeats freely -- that is what makes this a combo. The {C} is a real colourless PIP (ManaPool::wild_c): 'one mana of any colour' from a Fertile Ground cannot pay it. Targets ANY creature (no 'you control'). Devoid is inert: nothing in this deck or the goldfish opponent reads a card's colour.]",
+   "oracle_text": "Devoid (This card has no color.)\n{2}{C}: Exile another target creature, then return it to the battlefield tapped under its owner's control. ({C} represents colorless mana.) [Blink outlet. No {T} in the cost, so it activates the turn it lands and repeats freely -- that is what makes this a combo. The {C} is a real colourless PIP (ManaPool::wild_c): 'one mana of any colour' from a Fertile Ground cannot pay it. Targets ANY creature (no 'you control'). Devoid is inert: nothing in this deck or the goldfish opponent reads a card's colour.]",
    "template": "vanilla_creature",
    "parameters": {
     "blink_cost": "{2}{C}",
@@ -5818,7 +5818,7 @@
    "keywords": [],
    "power": 4,
    "toughness": 4,
-   "oracle_text": "{3}: Exile another target creature you control, then return it to the battlefield.\nWhenever another creature you control enters, you may pay {G/W}. If you do, put a +1/+1 counter on it. If it's a Unicorn, put two +1/+1 counters on it instead. [Both abilities modelled. The blink returns the creature UNTAPPED (unlike Displacer) and is restricted to creatures you control. The counter trigger is the deck's second kill: an Emiel loop re-enters its target every iteration, so N iterations are N counters -- though the target is summoning sick after each blink (CR 400.7), so it attacks the FOLLOWING turn. The optional {G/W} is paid whenever affordable (a resolution heuristic; monotone against a passive opponent -- disclosed).]",
+   "oracle_text": "{3}: Exile another target creature you control, then return it to the battlefield under its owner's control.\nWhenever another creature you control enters, you may pay {G/W}. If you do, put a +1/+1 counter on it. If it's a Unicorn, put two +1/+1 counters on it instead. ({G/W} can be paid with either {G} or {W}.) [Both abilities modelled. The blink returns the creature UNTAPPED (unlike Displacer) and is restricted to creatures you control. The counter trigger is the deck's second kill: an Emiel loop re-enters its target every iteration, so N iterations are N counters -- though the target is summoning sick after each blink (CR 400.7), so it attacks the FOLLOWING turn. The optional {G/W} is paid whenever affordable (a resolution heuristic; monotone against a passive opponent -- disclosed).]",
    "template": "vanilla_creature",
    "parameters": {
     "blink_cost": "{3}",

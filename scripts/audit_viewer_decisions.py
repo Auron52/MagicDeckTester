@@ -106,6 +106,25 @@ MANIFEST = {
     # (WriteDragonDecisionJson / dragonPanelHtml). Was `main_phase` while the selection was search-only.
     "tutor_to_battlefield":  ("dragon",               truthy),
     "fetch_land_types":      ("main_phase",           truthy),
+    # ---- EldraziDisplacerFlicker (flicker combo) --------------------------------------------
+    # Blink ("{cost}: Exile another target creature, then return it"). TWO choices, both
+    # plan-variant sub-decisions on main_phase exactly like tutor/X/soulfire-count: WHICH creature
+    # (Action::sac_victim_id, one variant per legal target -- opened to EVERY creature under human
+    # play, the provider narrows only the autonomous search) and HOW MANY times (Action::chosen_x,
+    # rendered by the existing "activations" sub, "x2"). Not their own decision type.
+    "blink_cost":            ("main_phase",           truthy),
+    # "{cost}, {T}: <effect>" permanent abilities and the Clue's sacrifice-to-draw. Each is an
+    # Action::ActivatePermAbility in the turn's plan list, so choosing to activate (and which
+    # source) is a main_phase plan pick -- the same shape as Mutavault's animate and Sliver Hive's
+    # token ability, which were surfaced this way in 1ccbe95/772ff62.
+    "tap_damage_cost":       ("main_phase",           truthy),
+    "tap_investigate_cost":  ("main_phase",           truthy),
+    "tap_draw_cost":         ("main_phase",           truthy),
+    "sac_draw_cost":         ("main_phase",           truthy),
+    # "Enchant land": WHICH land carries the aura is a real decision and rides the existing
+    # enchant_target plan-variant axis (one main_phase variant per legal land host), opened to
+    # every land under human play.
+    "is_land_aura":          ("main_phase",           truthy),
     # ---- Minotaur ----
     # BESTOW (Gnarled Scarhide): casting it as an AURA instead of a creature is a real decision,
     # and so is WHICH creature the aura enchants. Both are surfaced as main_phase plan VARIANTS
@@ -425,6 +444,39 @@ INERT_PARAMS = {
     # model picks own best attacker only because the passive opponent has no board -> a disclosed
     # (2) card-modeling limitation, NOT a viewer restriction.
     "target_own_creature": "targeting modifier; choice rides `targeting` (can also hit opponent creatures)",
+    # ---- EldraziDisplacerFlicker (flicker combo) --------------------------------------------
+    # Detail params that ride an already-mapped decision.
+    "blink_own_only": "blink legality detail (rides blink_cost -> main_phase)",
+    "blink_returns_tapped": "blink resolution detail (rides blink_cost -> main_phase)",
+    "land_aura_extra_mana": "mana amount (the host pick rides is_land_aura -> main_phase)",
+    "land_aura_produces": "mana colour (auto-resolved in payment, like `produces`)",
+    "tap_damage_each_opponent": "damage amount (rides tap_damage_cost)",
+    "tap_draw_cost_less_per_rad": "cost-reduction detail (rides tap_draw_cost)",
+    "reduces_creature_activation": "cost reduction (static, like hinata_cost_reducer)",
+    # Emiel the Blessed's "you may pay {G/W} ... put a +1/+1 counter on it". A DISCLOSED
+    # always-taken "you may": a +1/+1 counter is monotone-good against an opponent that never
+    # blocks, removes or races, so declining is never right -- the same shape as Suture Priest's
+    # may-always-taken enter triggers above. The counter count and the Unicorn bump are fixed
+    # values, not picks.
+    "other_creature_etb_counter_cost": "disclosed always-taken 'you may pay' (monotone vs a passive opponent)",
+    "other_creature_etb_counters": "counter count, no choice",
+    "other_creature_etb_counter_subtype": "counter-bump gating detail",
+    "other_creature_etb_counters_subtype": "counter count, no choice",
+    # Mariposa Military Base's "You may have this land enter tapped ... you get two rad counters".
+    # A DISCLOSED always-DECLINED auto-decision, with the reasoning in the card's bracket note:
+    # entering tapped costs a full turn of the land's mana to shave at most {2} off one activation
+    # of a {5} draw that is already worse than Stroke of Genius, and the rad mill is a real cost to
+    # a deck that wins by drawing its library. PROVISIONAL -- awaiting user sign-off.
+    "etb_optional_tapped_rad": "disclosed always-declined enter-tapped mode (see the card's bracket note); PROVISIONAL",
+    # "When this creature enters, untap up to N lands" (Peregrine Drake 5 / Cloud of Faeries 2).
+    # NOT inert, and recorded here as a DISCLOSED KNOWN GAP rather than a non-choice: WHICH lands
+    # to untap is a real decision and is currently auto-resolved (highest per-tap yield, with the
+    # damage sink promoted inside a blink loop). It matters -- the yield order alone made Shivan
+    # Gorge unreachable, which is why the loop carries a priority. A human cannot currently
+    # override it. Wiring it needs a NEW multi-pick decision type (the Dragonstorm `dragon` shape,
+    # "choose up to N of these lands"), which is a bucket-B build, not a mapping.
+    # PROVISIONAL -- surfaced for user sign-off; see docs/design/analysis-EldraziDisplacerFlicker.md.
+    "etb_untap_lands": "DISCLOSED VIEWER GAP (not inert): which lands to untap is auto-resolved by yield order; needs a new multi-pick type. PROVISIONAL",
     # self-declared
     "goldfish_inert": "self-declared inert marker",
     # --- Creature Giving (gift-the-opponent drain) -----------------------------------------

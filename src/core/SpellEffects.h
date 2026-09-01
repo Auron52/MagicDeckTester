@@ -8057,15 +8057,31 @@ inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const Man
                                      const std::function<bool(const ManaCost&)>& pay)
 {
     int dealt = 0;
-    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    // Collect the candidate sinks as m_numbers FIRST, then re-find each by id before using it.
+    // `pay` can both tap sources AND remove permanents (a sac-for-mana Treasure is sacrificed by
+    // CommitPaySacSacrifices at the end of a payment), so neither an index nor a Permanent& taken
+    // across a pay() call is safe. No such source exists in this deck, which is exactly why it
+    // would have gone unnoticed until some other deck picked up a damage land.
+    std::vector<int> sink_ids;
+    for (const Permanent& p : state.battlefield)
     {
-        // Re-read by index: `pay` taps sources, and a Permanent& taken before it would be stale.
-        if (state.battlefield[i].controller_index != controller
-            || state.battlefield[i].tapped) { continue; }
+        if (p.controller_index != controller || p.tapped || !p.CanTap()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.tap_damage_cost.has_value() && d->params.tap_damage_each_opponent > 0)
+        { sink_ids.push_back(p.card.m_number); }
+    }
+    for (int sink : sink_ids)
+    {
+        int i = -1;
+        for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+        {
+            if (state.battlefield[bi].card.m_number == sink
+                && state.battlefield[bi].controller_index == controller) { i = bi; break; }
+        }
+        if (i < 0 || state.battlefield[i].tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[i].card);
         if (!d || !d->params.tap_damage_cost.has_value()
             || d->params.tap_damage_each_opponent <= 0) { continue; }
-        if (!state.battlefield[i].CanTap()) { continue; }
         const ManaCost c = EffectiveActivationCost(state, controller, state.battlefield[i].card,
                                                    d->params.tap_damage_cost.value());
         // Never spend the loop's entry price: only fire if the board could still pay BOTH this
@@ -8077,6 +8093,14 @@ inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const Man
             if (!have.CanPay(AddManaCosts(c, keep_payable))) { continue; }
         }
         if (!pay(c)) { continue; }
+        // Re-find once more: the payment itself may have moved things.
+        i = -1;
+        for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+        {
+            if (state.battlefield[bi].card.m_number == sink
+                && state.battlefield[bi].controller_index == controller) { i = bi; break; }
+        }
+        if (i < 0) { continue; }
         state.battlefield[i].tapped = true;
         const int dmg = d->params.tap_damage_each_opponent;
         state.players[1 - controller].life -= dmg;
@@ -8195,6 +8219,26 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
     }
 }
 
+// A land the caller wants back FIRST, ahead of the yield order, as an m_number (0 = none). Set only
+// by ApplyBlinkLoop, for one reason: the damage sink.
+//
+// The default order is highest per-tap YIELD, which is right for mana and exactly wrong for Shivan
+// Gorge -- it makes {C}, so on a board of Overgrowth'd lands it is never in the top five and the
+// loop untaps it exactly never. Measured: the go-off was recognised and proposed on 708 nodes of a
+// 3-game sample and executed ZERO times, because one Gorge activation is all the loop could ever
+// buy. A land you can convert into DAMAGE is worth more than the one or two extra mana the land it
+// displaces would make, since mana is what the loop already has an unbounded supply of.
+//
+// Scoped, thread_local, and nulled outside the loop, so every other untap keeps the yield order.
+inline thread_local int g_etb_untap_priority = 0;
+
+struct EtbUntapPriorityScope
+{
+    int prev;
+    explicit EtbUntapPriorityScope(int id) : prev(g_etb_untap_priority) { g_etb_untap_priority = id; }
+    ~EtbUntapPriorityScope() { g_etb_untap_priority = prev; }
+};
+
 // The blink loop -- ONE shared driver both worlds call, so the executor realises exactly the line
 // the rollout scored. Per iteration, in this order:
 //   1. TAP AHEAD, if the blinked creature untaps lands: its ETB is about to refresh up to N lands,
@@ -8212,6 +8256,16 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
                           const std::function<bool(const ManaCost&)>& pay)
 {
     if (!outlet.blink_cost.has_value()) { return 0; }
+    // The damage sink this loop wants back every iteration (0 = none). Fixed for the whole loop:
+    // lands do not move, so it need not be recomputed per iteration.
+    int sink_id = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.tap_damage_cost.has_value() && d->params.tap_damage_each_opponent > 0)
+        { sink_id = p.card.m_number; break; }
+    }
     int done = 0;
     for (int k = 0; k < iterations; ++k)
     {
@@ -8226,16 +8280,22 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         if (src_card == nullptr) { break; }
         const Card src_copy = *src_card;   // ApplyBlink push_backs; no battlefield pointer survives
         const int untaps = (tgt_def != nullptr) ? tgt_def->params.etb_untap_lands : 0;
-        if (untaps > 0) { EtbUntapTapAheadIntoFloat(state, controller, untaps); }
         const ManaCost c = EffectiveActivationCost(state, controller, src_copy,
                                                    outlet.blink_cost.value());
+        // ORDER MATTERS. The sink fires BEFORE the tap-ahead: the tap-ahead would otherwise tap the
+        // Gorge for its one {C} and the damage ability would find it already tapped -- turning the
+        // deck's kill into a rounding error on the mana. Firing it first also means the Gorge is
+        // tapped when the ETB untap runs, which is what puts it back for the next iteration.
         SpendSurplusOnDamageSinks(state, controller, c, pay);
+        if (untaps > 0) { EtbUntapTapAheadIntoFloat(state, controller, untaps); }
         if (!pay(c)) { break; }
         // Emiel's optional {G/W} counter trigger fires inside ApplyBlink's ETB cascade; hand it
         // this loop's payer so its mana is on the same books as the activation's (see
-        // PayOptionalTriggerCost). Restored on scope exit.
+        // PayOptionalTriggerCost). Restored on scope exit. The untap priority puts the damage sink
+        // back at the front of the untapped set (see g_etb_untap_priority).
         {
-            EtbOptionalPayerScope _eops(&pay);
+            EtbOptionalPayerScope   _eops(&pay);
+            EtbUntapPriorityScope   _eups(sink_id);
             ApplyBlink(state, controller, source_id, target_id, outlet.blink_returns_tapped);
         }
         ++done;
@@ -8298,14 +8358,17 @@ inline ManaCost EffectiveActivationCost(const GameState& state, int controller,
 inline void EtbUntapLands(GameState& state, int controller, int count)
 {
     if (count <= 0) { return; }
-    std::vector<std::pair<int, int>> tapped;   // (per-tap yield, battlefield index)
+    std::vector<std::pair<int, int>> tapped;   // (sort key, battlefield index)
     for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
     {
         const Permanent& p = state.battlefield[bi];
         if (p.controller_index != controller || !p.tapped || !p.card.IsLand()) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
-        tapped.emplace_back(PermanentManaYield(state, p, *d), bi);
+        int key = PermanentManaYield(state, p, *d);
+        if (g_etb_untap_priority != 0 && p.card.m_number == g_etb_untap_priority)
+        { key += 1000; }   // above any real yield, so the sink is always in the untapped set
+        tapped.emplace_back(key, bi);
     }
     std::stable_sort(tapped.begin(), tapped.end(),
                      [](const std::pair<int, int>& a, const std::pair<int, int>& b)
