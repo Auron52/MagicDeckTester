@@ -324,6 +324,31 @@ a genuine order transposition (`[X;Ornithopter]` casting the dork BEFORE the can
 continuation casts it AFTER; Ornithopter is a mana dork so it ranks ahead of the cantrip). That
 half needs a commutativity argument, exactly as the cost menu originally said.
 
+### Where a child's time actually goes (MTG_BP_CHILD_TIMING, 2026-09-01)
+
+The virtual budget charges ONE unit per child whatever a child really costs, so units cannot say
+whether the node's wall is the state COPY or the APPLY -- and that decides which lever is worth
+building (a cheaper copy would cut WALL without touching play; dedup cuts units). Measured, m2
+host, 200 games:
+
+```
+[bp-child] children=1552028  copy=0.412s (0.27us/child, 5.5%)  apply=7.122s (4.59us/child, 94.5%)
+```
+
+**The copy is 5.5%.** The hoisted-buffer reuse already took that cost out, and the earlier
+suspicion that per-child snapshot copying was the node's hidden expense is closed: 94.5% is the
+apply itself, i.e. real work resolving the continuation. There is no cheap-copy win, so the ONLY
+way to cut the node's wall is to run fewer children -- back to dedup, whose ceiling is the 42% of
+children that are duplicates.
+
+**What that ceiling is worth, honestly.** Removing ALL duplicate children saves ~42% of child
+work, landing the node near 1.38x wall = **~+16% over the equal-quality control** -- right at the
+USER's bar, but it requires the whole dupe bucket. It cannot all be had: the float share is
+load-bearing (the rejection above) and the dominant remainder is an order transposition needing a
+commutativity argument. The exactly-buildable piece is the in-node fingerprint dedup
+(fp_predictable = 204k of 1.56M dupes), worth ~2% units, i.e. **~+24%**. So the realistic landing
+zone for this class is +24%, not +15%, unless someone invents sound transposition detection.
+
 ## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
 
 The generic-lever collateral check the v1 caveats called for: **14 of 15 decks + all 25

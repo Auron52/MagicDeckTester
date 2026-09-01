@@ -5981,6 +5981,14 @@ namespace bpnode
     inline std::mutex                      pend_mu;
     inline std::map<std::string, uint64_t> pend_cases;
 
+    // PER-CHILD COST SPLIT (MTG_BP_CHILD_TIMING, diagnostic). The virtual budget charges ONE unit
+    // per child regardless of what a child really costs, so the unit metric cannot say whether the
+    // node's wall lives in the state COPY (LoadPlanState) or in the APPLY. That decides which lever
+    // is worth building: a cheaper copy cuts wall without touching play, whereas dedup levers cut
+    // units. Two chrono calls per child (~50ns against ~7.6us) -- a diagnostic, never on in a
+    // measured run.
+    inline std::atomic<uint64_t> g_ns_copy{0}, g_ns_apply{0}, g_timed_children{0};
+
     // Record one PEND: its plan signature, the dedup key that decides whether the prefix dedup
     // collapses it, and a descriptor of the state behind that key. Two rows with the SAME sig but
     // different key= are the pends that should have collapsed and did not -- and the descriptor
@@ -6022,6 +6030,18 @@ namespace bpnode
         {
             const uint64_t p = g_pends.load();
             if (p == 0) { return; }
+            if (g_timed_children.load() != 0)
+            {
+                const double n  = static_cast<double>(g_timed_children.load());
+                const double cp = static_cast<double>(g_ns_copy.load());
+                const double ap = static_cast<double>(g_ns_apply.load());
+                std::fprintf(stderr,
+                             "[bp-child] children=%llu copy=%.3fs (%.2fus/child, %.1f%%)"
+                             "  apply=%.3fs (%.2fus/child, %.1f%%)\n",
+                             (unsigned long long)g_timed_children.load(),
+                             cp / 1e9, cp / n / 1e3, 100.0 * cp / (cp + ap),
+                             ap / 1e9, ap / n / 1e3, 100.0 * ap / (cp + ap));
+            }
             std::fprintf(stderr,
                          "[bp-node] pends=%llu prefix_dupes=%llu children=%llu child_dupes=%llu"
                          " adopted=%llu empty_adopted=%llu\n",
@@ -15850,6 +15870,12 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
 
 // ---- Prefix-scoped prepay (MTG_BP_PREFIX_PREPAY) ---------------------------------------------
 // See the call site inside ApplyPlanDirect for the why. Default OFF.
+static bool BpChildTimingOn()
+{
+    static const bool v = EnvOn("MTG_BP_CHILD_TIMING");
+    return v;
+}
+
 static bool BpPrefixPrepayEnabled()
 {
     static const bool env_on = EnvOn("MTG_BP_PREFIX_PREPAY");
@@ -25732,6 +25758,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pend_local;
                 g_bp_cands_fp_distinct = -1;
                 g_bp_cands_has_empty   = false;
+                const bool ct = BpChildTimingOn();   // hoisted: this is the hottest loop in the node
                 for (int k = 0; node_n < 0 || k <= node_n; ++k)
                 {
                     // Mid-pass overrun: same abort the recursion's entry guards take.
@@ -25751,11 +25778,25 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     TurnSolver::Plan v = q;
                     v.bp_choice = (node_n >= 0 && k == node_n) ? kBpEmptyChoice : k;
                     v.bp_at     = node_snap.bp_seen;
+                    std::chrono::steady_clock::time_point t0, t1, t2;
+                    if (ct) { t0 = std::chrono::steady_clock::now(); }
                     LoadPlanState(s3_buf, node_snap.state, reuse_s2);
+                    if (ct) { t1 = std::chrono::steady_clock::now(); }
                     GameState& s3 = s3_buf;
                     std::vector<Action> bp3;
                     g_bp_cands_last = 0;
                     ApplyPlanDirect(s3, v, false, &bp3, nullptr, &node_snap);
+                    if (ct)
+                    {
+                        t2 = std::chrono::steady_clock::now();
+                        bpnode::g_ns_copy.fetch_add(
+                            (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count(),
+                            std::memory_order_relaxed);
+                        bpnode::g_ns_apply.fetch_add(
+                            (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count(),
+                            std::memory_order_relaxed);
+                        bpnode::g_timed_children.fetch_add(1, std::memory_order_relaxed);
+                    }
                     if (node_n < 0)
                     {
                         node_n = g_bp_cands_last < 0 ? 0 : g_bp_cands_last;
