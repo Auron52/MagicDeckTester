@@ -7595,7 +7595,7 @@ inline ManaPool RitualRefloatPool(const GameState& state, int count)
     return pool;
 }
 
-// MTG_SPASM_UNTAP_LITERAL=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
+// MTG_SPASM_UNTAP_LITERAL -- ADOPTED DEFAULT-ON 2026-09-01 (=0 restores the float model):
 // resolve an untap ritual (Reality Spasm) as a LITERAL untap of up to X TAPPED mana sources
 // instead of floating the output of the board's best X sources. The float model has two proven
 // defects (docs/design/reality-spasm-phase2.md §2): it ignores tapped-ness (an untapped target
@@ -7603,14 +7603,15 @@ inline ManaPool RitualRefloatPool(const GameState& state, int count)
 // float grants mana the rules would not) and a choice-of-N dual floats WILD (pays any pip; the
 // real choice is one of that source's colours). The literal untap fixes both at once because the
 // untapped sources re-tap through the normal payment machinery, which prices colour choice
-// exactly. Read ONLY here (this one function is the shared resolution for the executor's
-// EffectHandler, the rollout's apply_one, ApplyPlanDirect and SubsetPayableSequential ->
-// lockstep by construction, same as MTG_LEGACY_RITUAL_WILD).
+// exactly; paired with the tap-ahead (RitualTapAheadIntoFloat) it beat the float model in every
+// hinata train cell (§9). Read ONLY here (this one function is the shared resolution for the
+// executor's EffectHandler, the rollout's apply_one, ApplyPlanDirect and SubsetPayableSequential
+// -> lockstep by construction, same as MTG_LEGACY_RITUAL_WILD).
 inline bool SpasmUntapLiteralOn()
 {
     // heurarm slot so ONE pooled batch can carry both arms of the A/B (per-job override; -1
     // unset everywhere = the env static = byte-identical off the batch path).
-    static const bool env_on = EnvOn("MTG_SPASM_UNTAP_LITERAL");
+    static const bool env_on = EnvOn("MTG_SPASM_UNTAP_LITERAL", true);
     return heurarm::Flag(heurarm::SPASM_UNTAP_LITERAL, env_on);
 }
 
