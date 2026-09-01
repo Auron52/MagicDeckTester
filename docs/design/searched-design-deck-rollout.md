@@ -624,3 +624,84 @@ BAILS `ManaPruneBound` and skips `MTG_SEL_MANA_GATE`. EF on top of the credit is
 enumerator, where no `ConsumeAt()` site charges). If the credit is ever wanted, the cheap shape is
 an exact upper-bound ADDEND on the bound (the metalcraft / haste-unlock precedent) instead of
 bailing it -- untested.
+
+### 6e. THE CASE-LIST METHOD, the Irencrag gate ADOPTED, and NGC found LOSSY (2026-09-01)
+
+USER framing that redirected the whole arc: *"I don't get why we need this 'repair'... Ordering is
+not lossy as long as it is built correctly. There can be problems if we make a mistake with how the
+order is built, though... Those cases need to be fixed case by case."* So: stop theorising about
+the ordering, INSTRUMENT the disagreements and fix them one at a time.
+
+**THE INSTRUMENT (`MTG_CONT_DIFF`, print-only).** At every breakpoint continuation the
+no-greedy path resolves (`cands.front()`), also compute what the greedy `Solve` would have played
+and record the pair, DEDUPED BY SIGNATURE with an occurrence count. A run yields a CASE LIST rather
+than a flood. First read (20 games, Hinata): 252,533 continuations, **47.2% identical to greedy**,
+1,632 distinct differing cases, and one case dominated -- 20,117 of the 55,006 occurrences in the
+top 40 were the ordered continuation casting **Irencrag Feat** where greedy correctly declined.
+
+**INSTRUMENT BUG WORTH RECORDING:** the first version compared the plan's LAND too, which made
+"+land X vs nothing" look like the top remaining case. It is an artifact: the two paths play the
+breakpoint land by different mechanisms (greedy calls `play_breakpoint_land()` BEFORE `Solve`, so
+the land is already down and absent from its plan; the searched path carries the land inside the
+plan for `bp_play_searched_land()`). Comparing CASTS ONLY moved agreement 62.8% -> **80.3%** and
+distinct cases 1,245 -> 554. Always ask what the other side's plan CANNOT contain.
+
+**CASE 1 -- THE RESTRICTOR, and why card-identity rules all mis-measured.** Four rules were built
+behind heurarm slots and measured paired 1200x2 at play settings (negative = better, vs no gate):
+
+| rule | follower required | hold | train |
+|---|---|---|---|
+| loose (`MTG_IRENCRAG_WASTE`) | anything | **-0.0167** (t -3.26, 20:4) | **-0.0117** (t -2.75, 16:4) |
+| payoff (`_PAYOFF`) | Crackle/Soulfire/Opus | -0.0175 | -0.0008 vs loose (ns) |
+| finisher (`_FINISHER`) | Crackle only (USER doctrine) | **+0.0150 vs loose** (t 2.41) | +0.0075 |
+| **needs (`_NEEDS`, ADOPTED)** | a payoff that could not be cast WITHOUT the float | -0.0008 vs loose | -0.0017 (6:2) |
+
+The USER's stated doctrine ("Irencrag must be second last as it can only be cast before Crackle")
+measured WORSE, and the USER's own budget-confound challenge was checked and did not explain it: a
+ladder at 20/80/320 ms has the doctrine arm never gaining at ANY rung. **Root cause (hold gi=664):
+Soulfire Eruption is `{6}{R}{R}{R}` = NINE mana and exiles+STAGES a card per target -- it is the
+deck's DIG, and on turn 3 off ~5 mana Irencrag is the only way to cast it.** The loose arm casts
+it, digs into two lands, and wins T5; the doctrine arm cannot, draws two dead counterspells, and
+never wins. With Hinata out Soulfire costs 3-4, the pool covers it, and spending Irencrag on it IS
+the waste the doctrine describes. **So the principle is not WHICH CARD follows but WHETHER THE
+FLOAT WAS NEEDED**, which is what shipped (USER: *"we'll go with your rule, but just those 3
+cards"*). Lethal-exempt (verified free: zero games moved).
+
+**SCOPE, measured not assumed:** the gate is only sound where the plan's PLAY order IS the rank
+order. Dragonstorm SEARCHES its cast order (`WantsCastOrderingSearch`), so `after` counted by
+`CastOrderRank` does not describe what follows Irencrag there -- unscoped it measured WORSE on that
+deck in all four cells (+0.0115, t 5.66, 2 better : 43 worse). Excluding ordering-search decks
+restored byte-identity.
+
+**WHY THE ADOPTED RULE IS QUALITY-NEUTRAL ON TOP OF `loose`, and why that is expected:** in
+COMMITTED play (150 games) the line casts Irencrag on 36 turns -- 27 -> Crackle, 7 -> Soulfire,
+1 -> Ponder, 1 -> Preordain, and **0 with nothing after it**. The loose gate had already taken the
+whole defect; rule 3's domain is 2 turns per 150 games. Its value is correctness, not turns. (The
+93k cantrip-follower subsets per 150 games are plans CONSIDERED, not CHOSEN -- the search was
+already declining them on value. A prune only moves the metric where the search was choosing what
+it removes.)
+
+**GT rebaselined all three tiers** (`ddaf992b`, on top of the Spasm literal-untap adoption, where
+the gate is LARGER -- smoke d5 -0.0134 standalone vs **-0.040** on top): smoke `slower=0`;
+regression 4 of 5 cells better, net -0.05, all 3 slower explained; overnight all 12 cells better or
+neutral, `searched 29 faster : 8 slower`, `d0 63 : 21`. CI green incl. Windows determinism parity.
+
+**THE STRUCTURAL FINDING -- `MTG_BP_NO_GREEDY_CONT` IS ITSELF LOSSY.** Three facts:
+`EnumeratePlans` drops the empty combination (*"The empty combination (skip everything) is not a
+plan and is dropped"*), so `cands[0]` can NEVER be "cast nothing"; greedy `SolveUncached` has an
+explicit do-nothing default (`Plan best; int best_mask = 0`); and `MTG_BP_NODE` adds
+`kBpEmptyChoice` precisely *"so 'stop here' is in the option set and nothing is a lossy
+truncation"*. **So replacing greedy with `cands[0]` DELETES "stop here" from the continuation's
+option set** -- a lossy truncation introduced by the lever meant to remove a lossy heuristic. That
+is the residue the case list shows after Irencrag (`[Ponder]` vs `[nothing]`, `[Ornithopter x2]`
+vs `[Ornithopter]`), and it means **the "recipe" arm (SITE3+DEFER+NGC) was never a valid
+greedy-free form** -- the section-6 ladder's greedy-free deficits were partly measuring a broken
+alternative, not the price of removing greedy.
+
+**WHAT THAT LEAVES.** The SOUND greedy-free form is `MTG_BP_NODE` (continuation as a real search
+node, with the empty child). It already measured QUALITY-NEUTRAL vs shipped (+0.008/+0.012, t
+0.6/1.0). Greedy never beat it on quality -- it was parked on COST alone, and the USER's bar is
+wall time ("wall slowness is still an issue"). So the open question is no longer "can a greedy-free
+form be good enough" but "what does the sound form cost at play settings", which needs a QUIET BOX
+(a second container was running throughout 2026-08-31/09-01, so every wall figure from that window
+-- including EF +7% and credit +21% -- is untrustworthy; their UNITS figures are unaffected).
