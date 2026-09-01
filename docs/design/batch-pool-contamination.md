@@ -65,3 +65,18 @@ flipped poisoned→clean in the same-day differential. Cost is RSS (~167 MB per 
 This class is almost certainly the real carrier behind the older mirrorwing batch-vs-standalone
 divergence (the ab0799ce mystery): the same games reappear at their old "batch fiction" turns.
 The mirrorwing overnight GT is standalone-honest and remains valid.
+
+## 2026-09-01 (same day): the instrument caught a NEW, different instance
+
+Hours after the hardening shipped, a mixed-arm pooled A/B (per-job heurarm flag
+`MTG_FILTER_FEED_STRICT`) produced control-arm results that failed to match GT,
+**nondeterministically** — unlike the 2026-08-26 event, which was deterministic.
+`MTG_BATCH_STATE_DUMP` localised it in one run: every worker's per-job inputs were clean
+(ctl hf=0 / str hf=2, identical profile fingerprints), yet results moved → the leak was at game
+time, not job-switch time. Cause: the payable-mana cache (`g_mana_cache`, SpellEffects.cpp) is
+thread_local, **outlives batch job switches by design** (its entries are pure functions of the
+key), and the new lever changed the backtracker's answer without entering the key — so workers
+replayed one arm's solves inside the other arm's games. Fix: `ManaCacheKey` mixes the lever in.
+
+**Rule for future levers:** a heurarm (per-job) lever that changes the answer of any memoised
+computation must be hashed into that memo's key. See `filter-feed-strict.md` §5.

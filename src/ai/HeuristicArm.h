@@ -120,6 +120,7 @@ enum Slot : int
     IRENCRAG_PAYOFF,          // MTG_IRENCRAG_PAYOFF       ...and the follower must be a PAYOFF
     IRENCRAG_FINISHER,        // MTG_IRENCRAG_FINISHER     ...or the FINISHER (Crackle) specifically
     IRENCRAG_NEEDS,           // MTG_IRENCRAG_NEEDS        ...a payoff that could NOT be cast without him
+    FILTER_FEED_STRICT,       // MTG_FILTER_FEED_STRICT    backtracker filter feed pays the real hybrid cost
     COUNT
 };
 
@@ -217,6 +218,7 @@ inline const char* Name(int slot)
         "MTG_IRENCRAG_PAYOFF",
         "MTG_IRENCRAG_FINISHER",
         "MTG_IRENCRAG_NEEDS",
+        "MTG_FILTER_FEED_STRICT",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

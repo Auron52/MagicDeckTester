@@ -7615,6 +7615,21 @@ inline bool SpasmUntapLiteralOn()
     return heurarm::Flag(heurarm::SPASM_UNTAP_LITERAL, env_on);
 }
 
+// MTG_FILTER_FEED_STRICT=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
+// the backtracker's is_filter feed pays the card's real HYBRID cost -- one of the filter's own
+// colours, or a wild unit -- instead of ConsumeFloatingAny's any-unit feed. The lenient feed lets
+// an off-colour float (a Sol Ring {C}) launder into two on-colour mana through Cascade Bluffs
+// ("{U/R},{T}: Add ..."), which is the gi164 prepay laundering channel. Read only at the worker's
+// is_filter branch, the single shared filter-feed site (the greedy path skips filters entirely and
+// ManaPayment's tap_source already feeds colour-strictly), so executor and rollout are in lockstep
+// by construction. The feasibility ORACLE's gross filter model is deliberately unchanged: it only
+// ever claims INFEASIBLE, so its over-credit stays sound.
+inline bool FilterFeedStrictOn()
+{
+    static const bool env_on = EnvOn("MTG_FILTER_FEED_STRICT");
+    return heurarm::Flag(heurarm::FILTER_FEED_STRICT, env_on);
+}
+
 // The literal resolution: untap up to `count` TAPPED mana sources, highest per-tap output first,
 // battlefield order breaking ties -- the float model's selection rule (RitualRefloatPool),
 // restricted to the tapped subset the real card can actually profit from. A summoning-sick dork

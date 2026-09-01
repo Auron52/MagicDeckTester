@@ -2176,12 +2176,37 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             { ManaPool f = floating; f.Add(Color::Colorless, 1); if (activate(f)) { return true; } }  // {T}: Add {C}
             if (floating.Total() >= 1 && !produces.empty())                                            // feed 1, Add 2
             {
-                for (Color c1 : produces) for (Color c2 : produces)
+                if (FilterFeedStrictOn())
                 {
-                    ManaPool f = floating; Color took;
-                    if (!ConsumeFloatingAny(f, took)) { break; }
-                    f.Add(c1, 1); f.Add(c2, 1);
-                    if (activate(f)) { return true; }
+                    // The feed cost is HYBRID in the filter's own colours (Cascade Bluffs is
+                    // "{U/R},{T}: Add ..."), so only one of `produces` -- or a wild unit -- may pay
+                    // it; ConsumeFloatingAny let any float (a Sol Ring {C}) feed it, which laundered
+                    // an off-colour unit into two on-colour ones (gi164). Branch over the feed
+                    // colour too: which unit pays the feed can decide a different pip's fate, and
+                    // the DFS never revisits float choices within a node.
+                    const int nfeeds = static_cast<int>(produces.size());
+                    for (int fi = 0; fi <= nfeeds; ++fi)          // each produce colour, then wild
+                    {
+                        ManaPool base = floating;
+                        if (fi < nfeeds) { if (!ConsumeFloating(base, produces[static_cast<std::size_t>(fi)])) { continue; } }
+                        else             { if (base.wild <= 0) { continue; } --base.wild; }
+                        for (Color c1 : produces) for (Color c2 : produces)
+                        {
+                            ManaPool f = base;
+                            f.Add(c1, 1); f.Add(c2, 1);
+                            if (activate(f)) { return true; }
+                        }
+                    }
+                }
+                else
+                {
+                    for (Color c1 : produces) for (Color c2 : produces)
+                    {
+                        ManaPool f = floating; Color took;
+                        if (!ConsumeFloatingAny(f, took)) { break; }
+                        f.Add(c1, 1); f.Add(c2, 1);
+                        if (activate(f)) { return true; }
+                    }
                 }
             }
         }
@@ -2543,6 +2568,14 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
 {
     auto mix = [](std::uint64_t& h, std::uint64_t v){ h ^= v; h *= 1099511628211ull; h ^= h >> 29; };
     std::uint64_t h1 = 1469598103934665603ull, h2 = 14695981039346656037ull;
+    // Any flag that changes the BACKTRACKER'S ANSWER for the same board+cost must be hashed into
+    // the key: the cache is thread_local and outlives a batch job switch, so in a mixed-arm pooled
+    // batch (per-job heurarm flags) a worker would otherwise replay one arm's solve inside the
+    // other arm's games -- measured 2026-09-01 as a NONDETERMINISTIC control-arm corruption the
+    // moment MTG_FILTER_FEED_STRICT jobs shared a pool with control jobs (the statedump instrument
+    // localised it: per-job inputs clean, results still moved). heurarm::Flag is per-thread and
+    // per-job, so reading it here keys each job's entries to its own arm.
+    mix(h1, FilterFeedStrictOn() ? 0x9e3779b97f4a7c15ull : 0ull);
     // Canonical mode collects one descriptor per source and hashes the SORTED multiset; indexed mode
     // hashes the sequence as it stands. `canon` holds (descriptor, index) so the sort is stable on
     // index -- which is what makes position p mean "rank within its group" and match the DFS's

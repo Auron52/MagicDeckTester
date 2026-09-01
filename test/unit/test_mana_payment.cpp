@@ -12,6 +12,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/AIEngine.h"
+#include "ai/HeuristicArm.h"  // heurarm::t_arm -- per-test lever control (env reads are static)
 #include "ai/ManaPayment.h"   // AvailableManaPool: the unified accounting pool (C1 unit 4)
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -503,4 +504,36 @@ TEST_CASE("D12: Secluded Courtyard's coloured mana pays a creature-source ABILIT
 
     // Scope is RAII: legality reverts once the activation payment ends.
     CheckTwinsAgree(courtyard, red, /*for_creature=*/false, /*expect_ok=*/false);
+}
+
+TEST_CASE("strict filter feed: on-colour feeds work, off-colour laundering is refused")
+{
+    EnsureCards();
+    // Force the lever through its heurarm slot (the env read is a process-lifetime static, so a
+    // test cannot toggle it via EnvPut once anything has read it). Cleared at each block's end.
+    struct ArmScope
+    {
+        ArmScope(bool on) { heurarm::t_arm[heurarm::FILTER_FEED_STRICT] = on ? 1 : 0; }
+        ~ArmScope() { heurarm::Clear(); }
+    };
+
+    const GameState island_board = MakeBoard({"Cascade Bluffs", "Island"});
+    const GameState ring_board   = MakeBoard({"Cascade Bluffs", "Sol Ring"});
+    const ManaCost  rr = Cost(0, 0, 0, 0, /*r=*/2);
+    const ManaCost  ur = Cost(0, 0, /*u=*/1, 0, /*r=*/1);
+
+    {   // STRICT: the Island's {U} is a legal {U/R} feed -- {R}{R} and {U}{R} must both stay payable.
+        ArmScope strict(true);
+        CheckTwinsAgree(island_board, rr, /*for_creature=*/false, /*expect_ok=*/true);
+        CheckTwinsAgree(island_board, ur, /*for_creature=*/false, /*expect_ok=*/true);
+        // Sol Ring makes only {C}, which cannot pay the {U/R} feed: without the launder the board's
+        // only red is unreachable, so {R}{R} must be refused.
+        CheckTwinsAgree(ring_board, rr, /*for_creature=*/false, /*expect_ok=*/false);
+    }
+
+    {   // LENIENT (the pre-fix model, still the default until adoption): the same {R}{R} is paid by
+        // feeding the Bluffs with Sol Ring's {C} -- the exact laundering the strict mode removes.
+        ArmScope lenient(false);
+        CheckTwinsAgree(ring_board, rr, /*for_creature=*/false, /*expect_ok=*/true);
+    }
 }
