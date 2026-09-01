@@ -2772,6 +2772,27 @@ inline bool ContDiffOn()
     static const bool v = EnvOn("MTG_CONT_DIFF");
     return v;
 }
+// MTG_BP_DUPE_TRACE: same case-list treatment for the node's duplicate CHILD applies (13.2% of
+// the node's units, and the whole gap between "+28% wall at equal quality" and "+11%"). Keeps a
+// per-key origin map, so it costs a string per surviving child -- diagnostic only, never on in a
+// measured run.
+inline bool DupeTraceOn()
+{
+    static const bool v = EnvOn("MTG_BP_DUPE_TRACE");
+    return v;
+}
+// Trace signature for the dupe case list. UNLIKE contdiff::PlanSig this DOES include the land:
+// there the land is noise (the two paths play it by different mechanisms), here it is exactly the
+// thing that decides whether two plans share a partition state, so omitting it makes plans that
+// differ look identical and hides why the prefix dedup let both through.
+inline std::string DupeSig(const TurnSolver::Plan& p)
+{
+    std::string s;
+    for (const Action& a : p.actions) { s += a.card_name.str(); s += ";"; }
+    if (s.empty()) { s = "(nothing)"; }
+    s += p.land_to_play.empty() ? " +noland" : (" +" + p.land_to_play);
+    return s;
+}
 namespace contdiff
 {
     struct Case
@@ -5911,6 +5932,48 @@ namespace bpnode
     inline std::atomic<uint64_t> g_dupes_empty{0};
     inline std::atomic<uint64_t> g_fp_predictable{0};
     inline std::atomic<uint64_t> g_empty_preskips{0};  // EMPTY arms skipped pre-apply (exact)
+    // CROSS-dupe ORIGIN split (MTG_BP_DUPE_TRACE). The cross bucket is 77% of the dupe prize and
+    // this doc previously wrote it off as "different prefixes converging post-continuation, not
+    // predictable without applying". That is an assumption, and it lumps together two very
+    // different collisions:
+    //   vs_plan  -- the key was first claimed by an ORDINARY base plan (they RECORD into the same
+    //               set, see the node_child_seen insert after the pend branch). A child colliding
+    //               with a whole-turn plan means the same cast CONTENT was reached two ways; the
+    //               content is enumerable host-side, so this half is predictable in principle.
+    //   vs_child -- claimed by another PEND's child: a true transposition between two partitions,
+    //               which does need a commutativity argument to predict.
+    // Splitting them says whether a pre-apply content filter can reach the prize at all.
+    inline std::atomic<uint64_t> g_dupes_vs_plan{0};
+    inline std::atomic<uint64_t> g_dupes_vs_child{0};
+    inline std::atomic<uint64_t> g_dupes_vs_variant{0};  // ... by a breakpoint VARIANT
+    inline std::atomic<uint64_t> g_dupes_untraced{0};    // ... by a claimant this probe does not map
+    inline std::atomic<uint64_t> g_dupes_same_base{0};   // ... colliding pair shares a base-cast sig
+    inline std::mutex                      dt_mu;
+    inline std::map<std::string, uint64_t> dt_cases;     // "origin => dup" -> count
+
+    using OriginMap = std::unordered_map<TranspositionTable::Key,
+                                         std::pair<uint8_t, std::string>,
+                                         TranspositionTable::KeyHash>;
+    // Record one cross-node dupe against whoever first claimed its key. Shared by both hosts so
+    // the case list is one list, not two.
+    inline void DupeTraceRecord(const OriginMap& origin, const TranspositionTable::Key& k,
+                                const std::string& dup_sig, const std::string& child_label)
+    {
+        const auto it = origin.find(k);
+        if (it == origin.end())
+        { g_dupes_untraced.fetch_add(1, std::memory_order_relaxed); return; }
+        static const char* const kKind[3] = { "PLAN ", "CHILD", "VAR  " };
+        const uint8_t kind = it->second.first < 3 ? it->second.first : uint8_t(1);
+        if      (kind == 0) { g_dupes_vs_plan.fetch_add(1, std::memory_order_relaxed); }
+        else if (kind == 2) { g_dupes_vs_variant.fetch_add(1, std::memory_order_relaxed); }
+        else                { g_dupes_vs_child.fetch_add(1, std::memory_order_relaxed); }
+        if (it->second.second == dup_sig)
+        { g_dupes_same_base.fetch_add(1, std::memory_order_relaxed); }
+        std::string c = kKind[kind];
+        c += " [" + it->second.second + "]  <=  child k=" + child_label + " of [" + dup_sig + "]";
+        std::lock_guard<std::mutex> lk(dt_mu);
+        ++dt_cases[c];
+    }
     struct Dumper
     {
         ~Dumper()
@@ -5933,6 +5996,23 @@ namespace bpnode
                          (unsigned long long)g_dupes_empty.load(),
                          (unsigned long long)g_fp_predictable.load(),
                          (unsigned long long)g_empty_preskips.load());
+            if (g_dupes_vs_plan.load() + g_dupes_vs_child.load()
+                + g_dupes_vs_variant.load() + g_dupes_untraced.load() == 0) { return; }
+            std::fprintf(stderr,
+                         "[bp-node] cross_vs_plan=%llu cross_vs_child=%llu cross_vs_variant=%llu"
+                         " untraced=%llu same_base_sig=%llu distinct_cases=%zu\n",
+                         (unsigned long long)g_dupes_vs_plan.load(),
+                         (unsigned long long)g_dupes_vs_child.load(),
+                         (unsigned long long)g_dupes_vs_variant.load(),
+                         (unsigned long long)g_dupes_untraced.load(),
+                         (unsigned long long)g_dupes_same_base.load(),
+                         dt_cases.size());
+            std::vector<std::pair<std::string, uint64_t>> v(dt_cases.begin(), dt_cases.end());
+            std::sort(v.begin(), v.end(),
+                      [](const auto& a, const auto& b) { return a.second > b.second; });
+            for (std::size_t i = 0; i < v.size() && i < 30; ++i)
+            { std::fprintf(stderr, "[bp-dupe] n=%llu %s\n",
+                           (unsigned long long)v[i].second, v[i].first.c_str()); }
         }
     };
     inline Dumper g_dumper;
@@ -25459,6 +25539,11 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // RECORD, never skip, exactly like FSLineWin's bp_seen_states.
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> node_prefix_seen;
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> node_child_seen;
+        // MTG_BP_DUPE_TRACE only: who first claimed each key (0 = an ordinary base plan, 1 = a
+        // node child) and with what base-cast signature. Empty and untouched when the flag is off.
+        const bool dupe_trace = DupeTraceOn();
+        std::unordered_map<TranspositionTable::Key, std::pair<uint8_t, std::string>,
+                           TranspositionTable::KeyHash> node_key_origin;
         // Hoisted per-plan scratch board -- see LoadPlanState (capacity reuse across plans).
         const bool reuse_s2 = s_state_reuse;
         GameState  s2_buf;
@@ -25564,8 +25649,20 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                             if (v.bp_choice == kBpEmptyChoice)
                             { bpnode::g_dupes_empty.fetch_add(1, std::memory_order_relaxed); }
                         }
+                        // Cross-dupe origin split: was this key first claimed by an ordinary base
+                        // plan (content-predictable in principle) or by another pend's child (a
+                        // true transposition)? See bpnode::g_dupes_vs_plan.
+                        if (dupe_trace && pend_local.count(child_key) == 0)
+                        {
+                            bpnode::DupeTraceRecord(
+                                node_key_origin, child_key, DupeSig(v),
+                                v.bp_choice == kBpEmptyChoice ? std::string("EMPTY")
+                                                              : std::to_string(v.bp_choice));
+                        }
                         continue;
                     }
+                    if (dupe_trace)
+                    { node_key_origin.emplace(child_key, std::make_pair(uint8_t(1), DupeSig(v))); }
                     if (s_rollout_stats) { pend_local.insert(child_key); }
                     if (s3.ActivePlayer().life <= 0) { continue; }
                     if (s3.Opponent().life <= 0)
@@ -25625,7 +25722,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 }
                 continue;   // the pending base plan itself is never scored -- its children were
             }
-            if (node_host_here) { node_child_seen.insert(BuildDedupKey(s2)); }
+            if (node_host_here)
+            {
+                const TranspositionTable::Key plan_key = BuildDedupKey(s2);
+                node_child_seen.insert(plan_key);
+                if (dupe_trace)
+                { node_key_origin.emplace(plan_key, std::make_pair(uint8_t(0), DupeSig(q))); }
+            }
             // Self-lethal second main (Eidolon on-cast self-damage) -> we die to the
             // triggers before the spell resolves; not a viable line. See FSLineWin.
             if (s2.ActivePlayer().life <= 0) { continue; }
@@ -26020,6 +26123,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     bool bp_variants_here = false;
     for (const TurnSolver::Plan& p : pre) { if (p.bp_choice >= 0) { bp_variants_here = true; break; } }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
+    // MTG_BP_DUPE_TRACE origin map for THIS host (see the m2 host's node_key_origin). This set has
+    // more claimants than the m2 one -- ordinary plans, breakpoint VARIANTS, wave entries -- so an
+    // unattributed dupe here is itself informative: it came from a claimant not traced.
+    const bool dupe_trace_pre = DupeTraceOn();
+    std::unordered_map<TranspositionTable::Key, std::pair<uint8_t, std::string>,
+                       TranspositionTable::KeyHash> pre_key_origin;
     // BREAKPOINT NODE hosting (MTG_BP_NODE; see BpNodeEnabled): may any plan of this node pend at
     // a plain-cantrip partition point? Off (default) => no capture pointer is ever passed and the
     // loop below is byte-identical. When hosting, ordinary plans RECORD into bp_seen_states (never
@@ -26156,8 +26265,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                             if (v.bp_choice == kBpEmptyChoice)
                             { bpnode::g_dupes_empty.fetch_add(1, std::memory_order_relaxed); }
                         }
+                        if (dupe_trace_pre && pend_local.count(child_key) == 0)
+                        {
+                            bpnode::DupeTraceRecord(
+                                pre_key_origin, child_key, DupeSig(v),
+                                v.bp_choice == kBpEmptyChoice ? std::string("EMPTY")
+                                                              : std::to_string(v.bp_choice));
+                        }
                         continue;
                     }
+                    if (dupe_trace_pre)
+                    { pre_key_origin.emplace(child_key, std::make_pair(uint8_t(1), DupeSig(v))); }
                     if (s_rollout_stats) { pend_local.insert(child_key); }
                     if (s3.ActivePlayer().life <= 0) { continue; }   // self-kill guard, as above
                     AnimateLandsShared(s3, nullptr);
@@ -26207,13 +26325,21 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
         // Record for node-child dedup -- but only when the variant block below will not (its own
         // insert must stay FIRST for a variant plan, or it would see its own key and self-skip).
-        if (node_host_here && !bp_variants_here) { bp_seen_states.insert(BuildDedupKey(s)); }
+        if (node_host_here && !bp_variants_here)
+        {
+            const TranspositionTable::Key plan_key = BuildDedupKey(s);
+            bp_seen_states.insert(plan_key);
+            if (dupe_trace_pre)
+            { pre_key_origin.emplace(plan_key, std::make_pair(uint8_t(0), DupeSig(p))); }
+        }
         // Breakpoint-variant dedup (see bp_seen_states): a variant whose continuation lands on an
         // already-scored state is redundant -- skip its rollout. Ordinary plans only RECORD.
         if (bp_variants_here)
         {
             const TranspositionTable::Key mk = BuildDedupKey(s);
             const bool fresh = bp_seen_states.insert(mk).second;
+            if (dupe_trace_pre && fresh)
+            { pre_key_origin.emplace(mk, std::make_pair(uint8_t(p.bp_choice >= 0 ? 2 : 0), DupeSig(p))); }
             if (!fresh && p.bp_choice >= 0)
             { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
         }

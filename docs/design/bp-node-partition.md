@@ -252,6 +252,48 @@ Two consequences:
    budget). Raising the shipped budget is a separate USER decision (it rebaselines every tier),
    but any "should we spend 1.4x wall on Hinata" conversation should compare against it.
 
+### The cross-node dupes ROOT-CAUSED (2026-09-01, `MTG_BP_DUPE_TRACE`)
+
+The cost menu wrote the cross bucket off as *"different prefixes converging post-continuation,
+inherent to hosting at every base plan, not predictable without applying"*. That was an
+assumption, and it is wrong. `MTG_BP_DUPE_TRACE` (print-only, default off, byte-identical when
+off — verified: same `units_total`, same every `[bp-node]` counter) keys an origin map beside each
+host's dedup set and reports who first claimed each colliding key, deduped into a case list.
+40 games, node arm, BOTH hosts instrumented, 100% of dupes attributed:
+
+```
+cross_vs_plan=0  cross_vs_child=138912  cross_vs_variant=0  untraced=0  distinct_cases=5744
+n=4203  CHILD [Ponder;Ornithopter of Paradise; +noland]  <=  child k=0 of [Ponder; +noland]
+n=3467  CHILD [Preordain;Ornithopter of Paradise; +noland] <= child k=0 of [Preordain; +noland]
+n=1393  CHILD [Preordain;Ponder; +noland]                <=  child k=0 of [Preordain; +noland]
+n=1367  CHILD [Ponder; +Forbidden Orchard]               <=  child k=2 of [Ponder; +noland]
+```
+
+Every cross dupe is child-vs-child (never against an ordinary plan or a variant), and the case
+list shows ONE defect wearing two hats:
+
+* **Extended base plan.** The origin's base plan is the duplicate's base plan PLUS one card cast
+  AFTER the breakpoint. `[Ponder;Ornithopter]` truncates its blind tail at Ponder and its
+  continuation re-adds Ornithopter; `[Ponder]`'s continuation k=0 casts Ornithopter. Same land,
+  same casts, same final state — one line reached twice. They survive the PREFIX dedup because
+  reserving mana for the tail taps different sources, so the two pend states differ transiently
+  and only converge once the continuation is applied — which is why this looks like an
+  unpredictable transposition post-apply and is completely obvious pre-apply.
+* **Land collision.** `[Ponder; +Forbidden Orchard]` vs `[Ponder; +noland]` whose continuation
+  plays the land (`bp_play_searched_land`). The same redundancy on the land axis.
+
+**So the cross bucket is not a transposition problem at all — it is the base-plan enumerator
+enumerating PAST the breakpoint and the node then covering the same ground again.** That is
+exactly what the USER's direction at the top of this doc forbids (*"Enumerating ahead without the
+drawn or staged cards doesn't make sense either way"*): the doctrine was implemented for the node
+but never enforced on the enumerator feeding it. The fix is the cost menu's own
+**truncate-at-emission** entry (truncate AFTER `eval_and_push`'s filters — a naive pre-filter drop
+is lossy, already confirmed), now with a measured target rather than a guess: it addresses
+cross 1,192,267 of the 1,541,982 dupe children, ~10% of the node's units, taking the equal-quality
+premium from +28% toward ~+15% before the in-node fingerprint lever (2.2%) is even counted. It
+also removes duplicate PENDS, whose applies are charged to `fs_main2`/`fs_pre`, so the realised
+saving should exceed the child-side arithmetic.
+
 ## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
 
 The generic-lever collateral check the v1 caveats called for: **14 of 15 decks + all 25
