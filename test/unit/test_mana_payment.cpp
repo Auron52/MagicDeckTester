@@ -581,3 +581,55 @@ TEST_CASE("strict filter feed: a DEPLETION land's burst feeds the filter (gi448 
     // ...and {1}{R}{R}{R} is genuinely out of reach (only two Bluffs outputs exist).
     CheckTwinsAgree(s, Cost(1, 0, 0, 0, /*r=*/3), /*for_creature=*/false, /*expect_ok=*/false);
 }
+
+TEST_CASE("feed-filter-first: the last feeder routes THROUGH the filter so a later cast keeps its feed (th gi448 T3 shape)")
+{
+    EnsureCards();
+    // th gi448's control T3: Saprazzan Skerry (1 counter) + Cascade Bluffs + Reliquary Tower paying
+    // Treasure Hunt {1}{U} TWICE. The per-cast greedy pays TH#1 from the Skerry's {U}{U} alone --
+    // which SUCCEEDS, so the complete backtracker is never consulted -- and strands the Bluffs
+    // (Tower is {C}-only, no strict feed left): TH#2 unpayable, a whole-turn stranding no per-cast
+    // fallback can see. MTG_FEED_FILTER_FIRST reroutes the Skerry (the Bluffs' LAST feeder)
+    // THROUGH the filter: same two taps float {U}{U}{U}, the leftover {U} carries (CR 500.4
+    // float retention) and TH#2 pays off it plus the Tower.
+    struct ArmScope
+    {
+        ArmScope(bool fff)
+        {
+            heurarm::t_arm[heurarm::FILTER_FEED_STRICT] = 1;
+            heurarm::t_arm[heurarm::FEED_FILTER_FIRST]  = fff ? 1 : 0;
+        }
+        ~ArmScope() { heurarm::Clear(); }
+    };
+    auto board = []
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number         = 3;
+        Permanent skerry = MakeLand("Saprazzan Skerry");
+        Counter c; c.type = Counter::Type::Depletion; c.count = 1;
+        skerry.counters.push_back(c);
+        s.battlefield.push_back(skerry);
+        s.battlefield.push_back(MakeLand("Cascade Bluffs"));
+        s.battlefield.push_back(MakeLand("Reliquary Tower"));
+        return s;
+    };
+    {   // ON: both casts pay, and the twins agree on the end state.
+        ArmScope on(true);
+        GameState ex = board();
+        AIEngine  eng;
+        ManaPool  avail = AvailableManaPool(ex);
+        CHECK(MtgTestSeam::TapForCost(eng, ex, Cost(1, 0, /*u=*/1), avail, false));
+        CHECK(MtgTestSeam::TapForCost(eng, ex, Cost(1, 0, /*u=*/1), avail, false));
+        GameState ro = board();
+        CHECK(TapForCostDirect(ro, Cost(1, 0, /*u=*/1), false));
+        CHECK(TapForCostDirect(ro, Cost(1, 0, /*u=*/1), false));
+        CHECK(Snapshot(ex, true) == Snapshot(ro, true));
+    }
+    {   // OFF (the gap this lever exists for): TH#1 pays, TH#2 is strictly stranded.
+        ArmScope off(false);
+        GameState ro = board();
+        CHECK(TapForCostDirect(ro, Cost(1, 0, /*u=*/1), false));
+        CHECK_FALSE(TapForCostDirect(ro, Cost(1, 0, /*u=*/1), false));
+    }
+}

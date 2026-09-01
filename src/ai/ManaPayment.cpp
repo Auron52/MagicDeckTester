@@ -140,6 +140,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             const int bn = static_cast<int>(state.battlefield.size());
             int best_i = -1, best_rank = 1 << 30, best_kind = 0;  // 1 direct, 2 filter-colour, 3 filter-{C}
             int best_dep = -1;   // depletion tiebreak: more counters tap FIRST (DepletionTapOrderEnabled)
+            int ff_i = -1, ff_rank = 1 << 30;   // best kind-2 filter candidate (FeedFilterFirstOn reroute)
             for (int i = 0; i < bn; ++i)
             {
                 Permanent& p = state.battlefield[i];
@@ -227,8 +228,79 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 const int dep = DepletionTapOrderEnabled() ? DepletionCountersOn(p) : 0;
                 if (rank < best_rank || (rank == best_rank && dep > best_dep))
                 { best_rank = rank; best_i = i; best_kind = kind; best_dep = dep; }
+                if (kind == 2 && FeedFilterFirstOn() && rank < ff_rank) { ff_rank = rank; ff_i = i; }
             }
             if (best_i < 0) { return false; }
+            // Feed-aware reroute (MTG_FEED_FILTER_FIRST; see FeedFilterFirstOn in SpellEffects.h):
+            // when the chosen DIRECT source is the LAST untapped non-filter source producing any of
+            // the best filter candidate's colours, and none of those colours float, tapping it
+            // directly strands the filter's fed mode for the rest of the turn. Route the SAME
+            // source through the filter instead (the kind-2 path's feeder loop will pick it -- it
+            // is the only feeder): same source spent, one MORE unit floated (the filter's dead {C}
+            // option converted into a live coloured unit), and the turn's later casts keep their
+            // feed. Preference only -- candidates and the complete backtracker fallback unchanged.
+            if (best_kind == 1 && ff_i >= 0 && ff_i != best_i)
+            {
+                const CardDefinition* fd = CardDatabase::Instance().LookupCached(state.battlefield[ff_i].card);
+                bool feed_floats = false;
+                for (Color c : fd->params.produces)
+                { ManaPool pr = floating; if (ConsumeFloating(pr, c)) { feed_floats = true; break; } }
+                if (!feed_floats)
+                {
+                    bool chosen_feeds = false; int feeders = 0;
+                    for (int i = 0; i < bn; ++i)
+                    {
+                        const Permanent& s = state.battlefield[i];
+                        if (s.controller_index != active || s.tapped) { continue; }
+                        const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
+                        if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
+                        bool m = false;
+                        for (Color pc : EffectiveProduces(state, active, *sd))
+                        { for (Color ic : fd->params.produces) { if (pc == ic) { m = true; break; } } if (m) { break; } }
+                        if (!m) { continue; }
+                        ++feeders;
+                        if (i == best_i) { chosen_feeds = true; }
+                    }
+                    // FILTER-CHAIN escape: another untapped filter-class source G whose output
+                    // includes one of F's colours, and which is itself still feedable once the
+                    // chosen source is spent, can re-feed F later -- so F is NOT stranded and the
+                    // reroute must not fire (th d0 gi625 T5: routing the last non-filter U/R
+                    // through the Bluffs consumed the Bluffs a later Land's Edge needed; Ferrous
+                    // Lake, fed by a Reliquary Tower {C}, could have fed the Bluffs instead --
+                    // the backtracker chains filters, so the greedy's strand test must too).
+                    bool chain_feed = false;
+                    for (int i = 0; i < bn && !chain_feed; ++i)
+                    {
+                        if (i == ff_i || i == best_i) { continue; }
+                        const Permanent& g = state.battlefield[i];
+                        if (g.controller_index != active || g.tapped) { continue; }
+                        const CardDefinition* gd = CardDatabase::Instance().LookupCached(g.card);
+                        if (!gd || !(gd->params.is_filter || gd->params.ramp_filter) || !usable(g, *gd)) { continue; }
+                        bool makes_f = false;
+                        for (Color gc : gd->params.produces)
+                        { for (Color ic : fd->params.produces) { if (gc == ic) { makes_f = true; break; } } if (makes_f) { break; } }
+                        if (!makes_f) { continue; }
+                        // G's own feed: a ramp filter eats a GENERIC {1} (any third source pays it,
+                        // a plain {C} included); an is_filter needs one of ITS colours from a third
+                        // non-filter source. "Third" excludes the chosen source (spent in the
+                        // no-reroute world), G itself, and F (held up for the later conversion).
+                        for (int k = 0; k < bn; ++k)
+                        {
+                            if (k == i || k == ff_i || k == best_i) { continue; }
+                            const Permanent& t = state.battlefield[k];
+                            if (t.controller_index != active || t.tapped) { continue; }
+                            const CardDefinition* td = CardDatabase::Instance().LookupCached(t.card);
+                            if (!td || td->params.is_filter || td->params.ramp_filter || !usable(t, *td)) { continue; }
+                            if (gd->params.ramp_filter) { chain_feed = true; break; }
+                            bool m = false;
+                            for (Color pc : EffectiveProduces(state, active, *td))
+                            { for (Color gc : gd->params.produces) { if (pc == gc) { m = true; break; } } if (m) { break; } }
+                            if (m) { chain_feed = true; break; }
+                        }
+                    }
+                    if (chosen_feeds && feeders == 1 && !chain_feed) { best_i = ff_i; best_kind = 2; }
+                }
+            }
             Permanent& bp = state.battlefield[best_i];
             const CardDefinition* bdef = CardDatabase::Instance().LookupCached(bp.card);
             if (best_kind == 1)

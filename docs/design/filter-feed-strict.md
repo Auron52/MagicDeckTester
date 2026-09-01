@@ -144,6 +144,19 @@ payment-correctness regression -- offset by 46+ faster games and one game the st
 wins FASTER than the control. Countervailing capability evidence: 4 unit tests pin every
 disputed payment shape as strict-payable.
 
+**§4d correction (2026-09-01, the feed-aware follow-up): the residual set is 2, not 3.**
+The matcher had a phase-boundary generosity hole: a rock cast in MAIN_1 but first tapped in
+MAIN_2 appears "already on board" in the MAIN_2 record's prev-board diff, so it was credited
+at avail -1 instead of cast-pos+0.5 -- letting Sol Ring PAY FOR ITS OWN CAST. hinata d0_s4004
+gi1516's control T6 (Gamble + Sol Ring + Hinata off Boilerworks/Monastery/Bluffs/Sol Ring)
+rode exactly that credit; every realizable strict assignment of the turn's full bill fails
+(hand-enumerated, and the fixed matcher agrees). With the fix (`final_adjudicate.py` now keys
+entered-this-turn on the turn's cast list, not the per-record board diff) gi1516 and one
+prong-B-recovered sibling (d0_s6006 gi1292) flip to ILLEGAL-LINE; all other ALL-LEGAL rows
+re-verify (`final_verdicts_fixed_survivors.json`). The true residual set is **th gi249 + th
+gi448**, both since recovered by the feed-aware tap lever -- see
+`docs/design/feed-aware-tap-choice.md`.
+
 ## 5. The mixed-pool cache lesson (fixed unconditionally, and a rule for future levers)
 
 First battery run: the CONTROL arm failed to reproduce GT in 3 cells, nondeterministically. The

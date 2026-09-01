@@ -1,53 +1,94 @@
-# Feed-aware tap choice — deferred work item (2026-09-01)
+# Feed-aware tap choice — MTG_FEED_FILTER_FIRST (built + measured 2026-09-01)
 
-**Status:** DEFERRED. Identified during the strict-filter-feed adoption's final adjudication
-(`filter-feed-strict.md` §4c); affects 3 of 1,016 adjudicated games (~0.3% of slower games,
-~0.02% of all games in the two filter decks' suite footprint). Not a correctness bug — a
-search-quality gap the strict model exposed.
+**Status:** BUILT, measured suite-wide, staged for adoption (default OFF until user sign-off).
+Recovers both true residuals of the strict-filter-feed adoption (`filter-feed-strict.md` §4c/§4d):
+th gi249 (6→5) and th gi448 (4→3), at d3 AND d5, with strictly-legal lines (matcher-verified).
 
-## The gap
+## The gap (corrected from the first draft of this doc)
 
-When a turn's payments are applied cast-by-cast (and especially across a mid-turn breakpoint
-re-plan), the tap-choice machinery picks WHICH source pays a pip without knowing that a filter
-(Cascade Bluffs) later in the line will need a feed in the filter's own colours. Under the
-lenient feed model this could never matter — any floating unit fed the filter. Under the
-adopted strict model, spending the last U/R-capable source on an ordinary pip strands the
-filter for the rest of the turn.
+The per-cast greedy in `TapForCostSharedOnce` optimizes each cast in isolation, and the complete
+backtracker only runs when the greedy FAILS. So when the greedy *succeeds* by spending a filter's
+last feeder on an ordinary pip, nothing ever notices that a LATER cast this turn needed the
+filter's fed mode — a whole-turn stranding no per-cast fallback can see. Under the lenient feed
+this never mattered (any float fed); under the adopted strict model it priced a few boards'
+filters out of lines that are really available.
 
-Traced concretely on hinata gi68 (seed 3071, gi 68, d3 b10):
-the T3 kill (Hinata → Ponder → **breakpoint: Ponder draws Irencrag** → Spasm → Irencrag →
-Crackle) is strictly legal ONLY if the Hinata/Ponder payments preserve Mountain's {R} for the
-Bluffs feed. The tap chooser spends it on Hinata's {R} pip (Ornithopter could have paid it),
-the feed is stranded at the breakpoint, the continuation reads unpayable, and the ROLLOUT
-scores the branch a turn worse than it really is. Because the mis-valuation is inside the
-rollout, no search budget or depth recovers it — d7 at b10000 still plays the other line.
+Traced concretely (th gi448 T3, the control's win line): Skerry (1 counter) + Bluffs + Tower
+paying Treasure Hunt {1}{U} twice. Greedy pays TH#1 from Skerry's {U}{U} alone — succeeds — and
+strands the Bluffs (Tower is {C}-only): TH#2 strictly unpayable, the rollout scores the Skerry
+T1-land-drop branch a turn worse, and the search plays Temple T1 instead. The turn-optimal
+payment routes TH#1 THROUGH the Bluffs: Skerry-U feeds it → {U}{U} out + leftover Skerry-U =
+three blue units from the same two sources; the leftover carries (CR 500.4) and TH#2 pays.
 
-The same mechanism explains th gi448/gi249 (Saprazzan Skerry's {U}{U} burst must feed the
-Bluffs; the T1 land-drop branch that enables it is mis-scored) and the lone hinata d0
-residual (gi1516).
+Note the arithmetic that makes this nearly a dominance rule: when tapping source S would strand
+filter F anyway, routing S *as F's feed* yields amt+1 units instead of amt — the only loss is
+F's {C} mode, which the strand was about to reduce it to.
 
-## What is already proven (so the fix starts from evidence)
+(The first draft blamed a "preserve the feeder" shape traced on hinata gi68; the final
+adjudication later proved gi68's control T3 ILLEGAL as executed, and §4d's matcher fix proved
+hinata d0 gi1516's control line illegal too — Sol Ring paying for its own cast through a
+phase-boundary hole in the matcher. Neither is a residual; the two th games above are.)
 
-- Payment capability is NOT the problem: unit tests "strict filter feed" (Island feed),
-  "gi68 T2 shape" (dork feeds filter inside a joint bill) and "gi448 T2 shape" (depletion
-  burst feeds filter) all pass — the backtracker finds these solutions when asked directly.
-- The executed-record matcher in `logs/mana_robust/harden/final_adjudicate.py` re-derives
-  per-turn strict-legality from a game log; useful as the acceptance oracle for any fix.
+## The lever
 
-## Candidate directions (measure via the heuristic-optimization loop, never adopt on intuition)
+`MTG_FEED_FILTER_FIRST` (default OFF; heurarm slot FEED_FILTER_FIRST for pooled A/Bs), read in
+`FeedFilterFirstOn()` (SpellEffects.h), applied in TapForCostSharedOnce's scarcity selection:
+for a coloured pip, when the chosen DIRECT source is the LAST source able to feed an
+also-candidate filter (no feed colour floating, no other untapped non-filter source produces
+one), reroute the pip through the filter's fed mode (the kind-2 feeder loop then taps the same
+source as the feed). Preference only — candidates, legality, and the backtracker fallback are
+unchanged (Rule 0b: pure tap reordering, no branch removal).
 
-1. **Feed-reservation in tap choice**: when an untapped/unfed filter exists and the plan (or
-   the hand) holds later casts, prefer paying coloured pips from sources whose colours the
-   filter cannot use, tie-broken by the existing ManaSourceRank. This is the tap-order
-   analogue of the scarce-colour hold.
-2. **Backtracker-first for filter boards**: on boards with an unfed filter, route the whole
-   turn's payment through the joint solve (which already sequences feeds correctly) instead
-   of per-cast greedy taps — measure the cost; the joint solve is pricier.
-3. **Breakpoint continuation probe**: at a bp re-plan, if the continuation is unpayable,
-   retry the PRE-bp payments with the backtracker constrained to leave the continuation
-   payable (a one-shot repair, bounded).
+**Filter-chain escape (v2, the th625 lesson):** the strand test must count filter-class
+re-feeders. At th d0 gi625's T5, the reroute consumed Snarl+Bluffs on a {U} pip although
+Ferrous Lake (ramp filter, fed by a Tower {C}) could re-feed the Bluffs for the later Land's
+Edge — the backtracker chains filters, so the greedy's strand test must too. The reroute now
+declines when another untapped filter/ramp-filter producing one of F's colours is itself still
+feedable from a third source. v1 (without this) cost ~38 slower d0 games incl. one won→unwon;
+v2 cured them.
 
-Ship any of these behind a heurarm lever, measure on the hinata + th suite cells (the §4c
-residual games are the direct probes: gi68/gi448/gi249/gi1516 should flip), and remember the
-mana-cache rule: a lever that changes backtracker/tap-choice answers must enter the memo keys
-it flows through (`batch-pool-contamination.md`).
+**Cache note** (batch-pool-contamination.md rule): the lever changes the GREEDY only; the mana
+cache memoizes BACKTRACKER answers, which a greedy success short-circuits before reaching, so it
+does not enter ManaCacheKey. solve/enum memos are decision-epoch-scoped (unreachable across
+jobs).
+
+Unit test: "feed-filter-first: the last feeder routes THROUGH the filter..." (gi448 T3 shape,
+executor+rollout twins agree; OFF-arm pins the stranding this lever exists for).
+
+## Measurement (2026-09-01, ONE pooled 80-job battery, 33,450 games/arm, full suite footprint
+of both filter decks; ctl arm byte-matched the strict-feed adoption battery's strict arms in
+ALL 40 cells)
+
+- **th: net faster** (weighted −0.00076): 10 faster / 2 slower of 19,825. Both residuals fixed
+  at d3 and d5. d0: 6 faster (7→4, 8→5, 6→4, 7→6, 6→5, 6→4) / 2 slower (both +1 turn).
+  All searched th cells: zero regressions.
+- **hinata: flat** (weighted +0.00015): 3 faster (d3 8→7, d3 6→5, d0 8→7) / 4 slower
+  (d3 gi39 5→6, d5 gi95 5→6, d0 gi348 7→8, d0 gi1225 7→unwon) of 13,625.
+- Every lever-slower game's lever line was run through the §4d matcher: flags appear only where
+  the CONTROL line flags too (matcher model gaps on Reflecting-Pool-class boards, equal in both
+  arms) — no illegality introduced; the strict engine enforces the feed at payment time.
+
+**The one ugly residual, mechanism-known:** hinata d0 gi1225 (7→unwon) is a KNOCK-ON, not a
+payment error: the reroute's banked leftover {U} made a second Preordain payable at T2 and the
+d0 cast ranker picked it over Sol Ring (which the same float could equally have paid) — the
+lever exposes a cast-rank ordering question (rock-vs-cantrip with float up), it does not
+misplay mana. Fixing that ordering is HINATA_MANA_FLOAT_RANK-adjacent work, out of scope here.
+
+## Measurement-apparatus lesson (cost ~90 min of ghost-hunting)
+
+Deriving a new battery manifest by copying a prior battery's jobs copied a STALE
+`"flags": {"MTG_FILTER_FEED_STRICT": false}` from the adoption battery's th control arm
+(legitimate there — it ran post-flip and needed forced-lenient controls) into this battery's
+control arm — which therefore measured lenient-vs-lever and reproduced §4b's known strict-cost
+numbers as a phantom "lever regression", while probes/env runs "mysteriously" disagreed (a
+manifest flag beats env by design). **When reusing a prior manifest, strip its `flags` blocks;
+a control arm is FLAGLESS.** The tell that resolved it: `MTG_BATCH_STATE_DUMP`'s `hf` heurarm
+hash ≠ 0 on a supposedly-flagless job.
+
+## Adoption decision (staged for the user)
+
+Recommendation: ADOPT default-ON. It exists to fix real search-quality misses the strict feed
+exposed (both fixed, legally); suite-wide it is net-neutral-to-positive with the residual cost
+concentrated in two hinata searched +1s and the gi1225 knock-on above. Adoption steps when
+approved: flip `FeedFilterFirstOn()` to `EnvOn(..., true)`, rebaseline the three GT tiers
+(hinata/th cells move), record here.

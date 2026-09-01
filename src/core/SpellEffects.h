@@ -7632,6 +7632,26 @@ inline bool FilterFeedStrictOn()
     return heurarm::Flag(heurarm::FILTER_FEED_STRICT, env_on);
 }
 
+// MTG_FEED_FILTER_FIRST (EXPERIMENT, default OFF; =1 enables): feed-aware per-pip tap choice --
+// the greedy rule for the stranding the strict feed exposed (docs/design/feed-aware-tap-choice.md).
+// When a coloured pip's chosen DIRECT source is the LAST untapped non-filter source producing any
+// of an also-candidate filter's colours (and no such colour floats), tapping it directly strands
+// the filter's fed mode for the rest of the turn -- so route the SAME source through the filter
+// instead (it becomes the feed): total float becomes amt+1 units instead of amt (the filter's dead
+// {C} option converted into a live coloured unit), and a later cast this turn keeps its feed
+// (th gi448 T3: Treasure Hunt #1 paid by Skerry's {U}{U} alone strands Bluffs and TH#2; routed
+// through Bluffs the same two taps float {U}{U}{U} and TH#2 pays). Tap-ORDER preference only:
+// candidates, legality and the complete backtracker fallback are unchanged (Rule 0b safe). Read
+// only in TapForCostSharedOnce's scarcity selection, shared by executor and rollout -> lockstep by
+// construction. Cache note (batch-pool-contamination.md rule): this changes the GREEDY only; the
+// mana cache memoizes BACKTRACKER answers, which a greedy success short-circuits before reaching,
+// so the lever does not enter ManaCacheKey.
+inline bool FeedFilterFirstOn()
+{
+    static const bool env_on = EnvOn("MTG_FEED_FILTER_FIRST");
+    return heurarm::Flag(heurarm::FEED_FILTER_FIRST, env_on);
+}
+
 // The literal resolution: untap up to `count` TAPPED mana sources, highest per-tap output first,
 // battlefield order breaking ties -- the float model's selection rule (RitualRefloatPool),
 // restricted to the tapped subset the real card can actually profit from. A summoning-sick dork

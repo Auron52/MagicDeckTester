@@ -122,6 +122,7 @@ enum Slot : int
     IRENCRAG_NEEDS,           // MTG_IRENCRAG_NEEDS        ...a payoff that could NOT be cast without him
     FILTER_FEED_STRICT,       // MTG_FILTER_FEED_STRICT    backtracker filter feed pays the real hybrid cost
     BP_PREFIX_PREPAY,         // MTG_BP_PREFIX_PREPAY      node-host prepay covers only the PRE-breakpoint casts
+    FEED_FILTER_FIRST,        // MTG_FEED_FILTER_FIRST     route a filter's last feeder THROUGH the filter
     COUNT
 };
 
@@ -221,6 +222,7 @@ inline const char* Name(int slot)
         "MTG_IRENCRAG_NEEDS",
         "MTG_FILTER_FEED_STRICT",
         "MTG_BP_PREFIX_PREPAY",
+        "MTG_FEED_FILTER_FIRST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
