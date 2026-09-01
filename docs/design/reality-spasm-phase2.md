@@ -1,10 +1,13 @@
 # Reality Spasm phase 2 — the untap model, what it still launders, and the rework plan
 
-**Status:** BUILT + MEASURED (2026-09-01, commit 53fa08eb) — see §7 for the results. The lever is
-`MTG_SPASM_UNTAP_LITERAL`, **default OFF**; flipping it (with the GT rebaseline and the sidecar
-question) is the USER's adoption call. Originally designed 2026-08-30. This is the doc
-`unpriced-prepay-rows.md` links as "cause 2's blocker". Read this before touching the Spasm model
-or spending any effort on the unpriced-rows "production table audit" (§3 kills that step).
+**Status:** COMPLETE WITH TAP-AHEAD (2026-09-01) — §9 has the final measurement: the literal
+model + tap-ahead is **equal-or-better than the float model in every hinata train cell** while
+making every Spasm turn exactly priceable. The lever is `MTG_SPASM_UNTAP_LITERAL`, **default
+OFF**; flipping it (with the GT rebaseline and the sidecar question) is the USER's adoption
+call, now with a straightforward recommendation. History: designed 2026-08-30 (§1–§6); first
+cut built + measured (§7, commit 53fa08eb); §7's "honest slowdown" reading overturned by the
+§8 line-payability analysis; the §8-prescribed tap-ahead built and measured in §9. This is the
+doc `unpriced-prepay-rows.md` links as "cause 2's blocker".
 
 ## 1. Current state — CORRECTING two stale claims
 
@@ -208,3 +211,84 @@ the fewer-accusations direction; the §7 collapse stands a fortiori).
    least re-ask the keep-table question (mulligan-profile.md's commit-bound rule: a play-logic
    fix invalidates prior sidecars).
 3. After adoption, re-run the unpriced split to retire the ledger's hinata section for good.
+
+## 9. TAP-AHEAD BUILT + MEASURED (2026-09-01) — the literal model now BEATS the float model
+
+The §8-prescribed fix, folded into the same `MTG_SPASM_UNTAP_LITERAL` lever (it is the missing
+half of the literal model, not a separate switch):
+
+- **`RitualTapAheadIntoFloat`** (SpellEffects.h): immediately before an untap ritual's payment,
+  tap every untapped, side-effect-free mana source into the turn-scoped float. Resolution then
+  untaps min(X, #tapped) = everything (X is always sized to the full source count), so the
+  float is pure profit — the engine version of a human's "tap out, Spasm refunds the board,
+  tap again". Capped at X total tapped sources; colour per source via `AddRefloatContribution`
+  (ONE rule shared with the float credit, extracted so they cannot drift); side-effectful taps
+  (Deathrite exile, pain, storage, domain, creature-only, depletion) skipped — byte-inert
+  today, safe-by-construction later. The USER's land-drop caveat is satisfied structurally:
+  both the plan apply and the executor play the drop BEFORE the cast loop, so the new land
+  (even an enters-tapped Karoo — it arrives tapped and the untap harvests it) is in the
+  refresh; drop-vs-hold on bad colours stays a searched decision as before.
+- **Three lockstep payment hooks**: the rollout/plan apply, the executor's
+  `CastSpellFromHand` (which re-derives `available` — it excludes floating, so the stale
+  snapshot would double-count), and `SubsetPayableSequential`. Resolution untap unchanged.
+- This makes the enumeration credit **exact**, closing §7's "optimistic bound" caveat:
+  realised mana after a Spasm = float(board) + refreshed board = pool + `HinataRitualNetBonus`,
+  the same arithmetic the planner uses. The §8 stranded-Spasm artifact goes with it.
+
+**Measurement** (same 18-job/5950-game pooled battery, `logs/mana_robust/spasm/ta_*`):
+
+| cell | float (ctl) | literal, no tap-ahead (§7) | literal + tap-ahead |
+|---|---|---|---|
+| smoke d0 | 6.9690 | 7.3180 | **6.9590** |
+| smoke d3 | 5.6733 | 6.0600 | **5.6733** |
+| smoke d5 | 5.8533 | 6.1867 | **5.8400** |
+| regression d0 | 7.0480 | 7.4320 | **7.0430** |
+| regression d3 s2002 | 5.6800 | 6.0300 | **5.6700** |
+| regression d3 s3003 | 5.6800 | 6.1100 | **5.6500** |
+| regression d5 s2002 | 5.6800 | 6.0400 | **5.6600** |
+| regression d5 s3003 | 5.6900 | 6.0600 | **5.6600** |
+
+(The table is the final COLOUR-COMMITTED build; the first tap-ahead cut floated a
+partial-choice source — a Signet's U-or-R — as WILD, and the ledger immediately caught a
+tap-ahead Signet paying an off-colour pip: §2 defect (b) re-entering through the float. The
+fix: a partial-choice source (2–4 colours) COMMITS to a colour at tap-ahead time — need-aware,
+by the hand's remaining pip demand, though on this deck that is byte-identical to first-listed
+— while full-rainbow sources keep wild, which is exact. The commit costs a handful of d0
+greedy games whose wild-float wins were partly the laundering channel itself.)
+
+Equal-or-better in EVERY cell (7 better, 1 equal). Per-game vs the float model:
+**8 slower / 28 faster / 1 newly-unwon / 2 newly-WON** (was 890 / 18 / 80 / 0 without the
+tap-ahead). The §8 hand-proved case gi33 recovers its T3 at CASE budget, as do gi86/gi8/gi34/
+gi90/gi104 — all previously unrecoverable at unbounded. The residual slower games adjudicate:
+gi23 = one of §8's 21 honestly-UNPAYABLE lines (and tap-ahead still improved it 7→6); the d3/d5
+pair gi58 + gi120 = coverable (both win the control turn at unbounded budget); the rest are d0
+greedy churn/commit casualties inside cells that still net faster-than-control averages. ZERO
+unrecoverable searched regressions. Gates: flag-off byte-identical (+ =0 hatch), dragonstorm
+digest-identical flag-ON, control == committed GT per-game everywhere, unit 702/702,
+scenarios 44/44.
+
+**The ledger collapse under the final build: 148/149 LEGAL** (the tap-ahead's taps land in the
+tapped-delta and the untap event credits the refresh, so Spasm turns price exactly).
+
+**The 1 non-LEGAL row is a separate defect found by the collapse re-run (NOT this feature's):** gi164
+(hinata_overnight_d3_s4004) prices LAUNDERED under the flag — but its T3 casts NO Spasm and no
+tap-ahead fires; the [bp-pay] trace shows `BatchPrepayMainCasts` pre-floated the turn, and the
+line's mana only balances if the prepay fed Cascade Bluffs with an off-colour feeder (only Sol
+Ring's colourless remained once Mountain's R went to Hinata). A pre-existing PREPAY-path filter-
+feed leniency, surfaced because the flag-on search picks a line that exercises it; flag-off play
+happens to dodge it today. Belongs to the prepay-recheck workstream: audit the prepay joint
+solve's filter feed against tap_source's strict colour rule.
+
+Why the honest model WINS rather than ties: the float was generous in total mana but wrong in
+structure — its wild/colour approximations and enum-vs-realised mismatches cost real casts,
+while the literal chain realises true colours through the normal payment machinery and the
+now-exact credit stops the search being misled. Honesty turned out to be free, and slightly
+profitable.
+
+**Adoption recommendation (USER call, but now unambiguous)**: flip `MTG_SPASM_UNTAP_LITERAL`
+default-ON. GT movement is small and favourable (the §2 bill's "hinata gets honestly worse"
+never materialises — the tap-ahead recovers it). The sidecar-regeneration question (§7 bill
+item 2) softens accordingly: play changed far less than the §7 measurement implied, but the
+value leaf / keep table were still fitted to float-model games; regenerating the value leaf on
+the adopted commit remains the clean-room move. After adoption, re-run the unpriced split on
+the shipped default to close the ledger's hinata section.

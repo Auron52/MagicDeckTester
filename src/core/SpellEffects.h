@@ -7526,6 +7526,36 @@ inline int RitualRefloatMana(const GameState& state, int count)
 inline const std::vector<Color>& EffectiveProduces(const GameState& state, int controller,
                                                   const CardDefinition& def, bool in_hand);
 
+// ONE per-source colour rule for every ritual float/tap-ahead contribution: a single-colour
+// source gives `amt` of its colour; a lumpy multi-colour source (a Karoo's 2-for-1) gives one of
+// each; a genuinely FLEXIBLE source (Forbidden Orchard, a rainbow dork) stays WILD, because there
+// the controller really does choose the colour at tap time. Shared by RitualRefloatPool (the
+// float model's credit) and RitualTapAheadIntoFloat (the literal model's speculative tap) so the
+// two cannot drift.
+// `constrain_partial_choice` (the TAP-AHEAD only): a PARTIAL-choice source (2-4 colours, one
+// unit -- a Signet's U-or-R) must not float WILD, because a wild float pays ANY pip and this
+// float is real spendable mana -- the ledger caught a tap-ahead Signet paying Hinata's {W}
+// (§2 defect (b) re-entering through the float). The tap commits to the source's FIRST
+// produces colour instead: deterministic, always legal, and the ledger's per-source credit
+// covers it. A full-rainbow source keeps WILD (the controller genuinely chooses any colour).
+// The FLOAT MODEL's credit keeps the old wild semantics (constrain=false) -- its GT depends
+// on them and it is the model being replaced, not repaired.
+inline void AddRefloatContribution(ManaPool& pool, int amt, const std::vector<Color>& prod,
+                                   bool constrain_partial_choice = false)
+{
+    if (amt <= 0) { return; }
+    if (prod.size() == 1)                { pool.Add(prod[0], amt); }
+    else if (amt > 1 && prod.size() > 1)
+    {
+        int left = amt;
+        for (Color c : prod) { if (left <= 0) { break; } pool.Add(c, 1); --left; }
+        pool.wild += left;                     // more output than colours -> the rest is free choice
+    }
+    else if (constrain_partial_choice && prod.size() > 1 && prod.size() < 5)
+    { pool.Add(prod[0], amt); }                // partial choice: commit, never launder
+    else                                 { pool.wild += amt; }   // rainbow / unknown: real choice
+}
+
 inline ManaPool RitualRefloatPool(const GameState& state, int count)
 {
     ManaPool pool;
@@ -7554,15 +7584,7 @@ inline ManaPool RitualRefloatPool(const GameState& state, int count)
         if (amt <= 0) { continue; }
         // Consumed immediately -- EffectiveProduces may return a thread_local buffer (reflecting /
         // domain sources), valid only until the next call.
-        const std::vector<Color>& prod = EffectiveProduces(state, active, *srcs[i].second, false);
-        if (prod.size() == 1)                      { pool.Add(prod[0], amt); }
-        else if (amt > 1 && prod.size() > 1)
-        {
-            int left = amt;
-            for (Color c : prod) { if (left <= 0) { break; } pool.Add(c, 1); --left; }
-            pool.wild += left;                     // more output than colours -> the rest is free choice
-        }
-        else                                       { pool.wild += amt; }   // rainbow / unknown: real choice
+        AddRefloatContribution(pool, amt, EffectiveProduces(state, active, *srcs[i].second, false));
     }
     return pool;
 }
@@ -7629,6 +7651,98 @@ inline void RitualUntapSources(GameState& state, int count)
             names.push_back(up.card.m_name.str());
         }
         g_reveal_logger->LogUntapSources(nums, names);
+    }
+}
+
+// MTG_SPASM_UNTAP_LITERAL phase 3 -- TAP-AHEAD (docs/design/reality-spasm-phase2.md §8). Called
+// immediately BEFORE an untap ritual's payment: tap every untapped, side-effect-free mana source
+// into the turn-scoped float, because the ritual's resolution is about to untap up to X tapped
+// sources and the enumerator always sizes X = the FULL source count -- so every source tapped
+// here comes straight back up, and the float is pure profit. This is the mana-optimal way to
+// cast the card (a human's "tap out, Spasm refunds the board, tap again"), and it is what makes
+// the modal Spasm+payoff line payable at all: without it the untap fires on a mostly-untapped
+// board and refunds ~nothing (the §8 analysis measured 97.6% of the literal model's lost games
+// as exactly this gap). It also makes the enumeration credit (`a.ritual_float` = the board's
+// top-X output) EXACT instead of optimistic: realised mana after the cast = float(board) +
+// refreshed board = pool + HinataRitualNetBonus, the same arithmetic the planner uses.
+//
+// Colour per source = AddRefloatContribution (the one shared rule). Filters/signets contribute
+// their engine-wide NET model (ManaProducedPerTap = 1 free) -- the same approximation the
+// refloat credit and AddSourceToPool already carry. Sources whose tap has a SIDE EFFECT
+// (Deathrite's graveyard exile, pain lands, storage bursts, Faeburrow's board-dependent yield,
+// creature-only mana, depletion counters) are skipped: no untap-ritual deck runs one, so the
+// skip is byte-inert today and safe-by-construction if that ever changes. Caps at `chosen_x`
+// TOTAL tapped sources so the resolution's min(X, #tapped) always covers everything tapped here.
+inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
+{
+    if (!SpasmUntapLiteralOn() || chosen_x <= 0) { return; }
+    const int active = state.active_player_index;
+    auto is_src = [&](const Permanent& p, const CardDefinition& d)
+    {
+        return d.card.IsLand()
+            || (d.tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+            || d.params.mana_rock;
+    };
+    int tapped_n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || !p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && is_src(p, *d)) { ++tapped_n; }
+    }
+    for (Permanent& p : state.battlefield)
+    {
+        if (tapped_n >= chosen_x) { break; }
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !is_src(p, *d)) { continue; }
+        const CardParams& q = d->params;
+        if (q.gy_land_exile_mana || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
+            || q.storage_land || q.domain_mana || q.colored_creature_only) { continue; }
+        bool depletion = false;
+        for (const Counter& c : p.counters)
+        { if (c.type == Counter::Type::Depletion) { depletion = true; break; } }
+        if (depletion) { continue; }
+        if (d->tmpl == CardTemplate::ManaDork && !ManaSubtypeGateLive(state, active, *d))
+        { continue; }
+        p.tapped = true;
+        ++tapped_n;
+        // EffectiveProduces' thread_local buffer is consumed immediately, before the next call.
+        // constrain_partial_choice: this float is REAL spendable mana, so a choice-limited
+        // source commits to a colour here rather than floating wild (see the helper's comment).
+        // The committed colour is NEED-AWARE: the hand's remaining coloured-pip demand picks it
+        // (a first-listed commit measured 4 extra d0 losses incl. one unwon -- the greedy
+        // committed {U} off a Signet when the hand's casts wanted {R}). Ties keep list order.
+        const int amt = ManaProducedPerTap(*d);
+        const std::vector<Color>& prod = EffectiveProduces(state, active, *d, false);
+        if (amt == 1 && prod.size() > 1 && prod.size() < 5)
+        {
+            Color best = prod[0]; int best_need = -1;
+            for (Color c : prod)
+            {
+                int need = 0;
+                for (const Card& hc : state.players[active].hand)
+                {
+                    const ManaCost& mc = hc.m_mana_cost;
+                    switch (c)
+                    {
+                        case Color::White: need += mc.white; break;
+                        case Color::Blue:  need += mc.blue;  break;
+                        case Color::Black: need += mc.black; break;
+                        case Color::Red:   need += mc.red;   break;
+                        case Color::Green: need += mc.green; break;
+                        default: break;
+                    }
+                }
+                if (need > best_need) { best_need = need; best = c; }
+            }
+            state.floating_mana.Add(best, 1);
+        }
+        else
+        {
+            AddRefloatContribution(state.floating_mana, amt, prod,
+                                   /*constrain_partial_choice=*/true);
+        }
     }
 }
 

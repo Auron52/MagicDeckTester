@@ -2854,6 +2854,9 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
                 for (const ScaledCastVariant& v : prov.ScaledCastVariants(cp, def))
                 { if (v.face == a.crackle_targets) { ec = v.cost; break; } }
             }
+            // MTG_SPASM_UNTAP_LITERAL phase 3: same tap-ahead as the apply/executor twins, so
+            // this sequential-payability answer prices the chain the way it will really be paid.
+            if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(cp, a.chosen_x); }
             if (!TapForCostDirect(cp, ec, def.card.IsCreature())) { return false; }
         }
         // Resolve the cast's mana-relevant effects so they fund the NEXT payment. Anything not
@@ -16259,6 +16262,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Sac-fodder-first (MTG_SAC_FODDER_PAYS): the creature this cast sacrifices as an
             // additional cost (searched victim in own_targets) pays its mana before any other
             // source -- it is free, the body is spent by the cost either way. st993's T4.
+            // MTG_SPASM_UNTAP_LITERAL phase 3: before paying an untap ritual, tap the board
+            // ahead into the float -- resolution untaps everything tapped, so the float is pure
+            // profit and the chain the credit priced becomes realisable (see
+            // RitualTapAheadIntoFloat; lockstep twins in CastSpellFromHand + SubsetPayableSequential).
+            if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(state, chosen_x); }
             PaySacVictimScope _psv(
                 !def.params.sac_additional_creature_color.empty() ? own_targets : 0);
             if (!TapForCostDirect(state, ec, is_creature))

@@ -4344,6 +4344,15 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         const int audit_have = AffordAuditOn()
                              ? AvailableManaPool(state).Total() + state.floating_mana.Total() : 0;
         if (AffordAuditOn()) { g_afford_real_attempts.fetch_add(1, std::memory_order_relaxed); }
+        // MTG_SPASM_UNTAP_LITERAL phase 3: tap ahead into the float before paying an untap
+        // ritual (lockstep twin of the rollout apply's call -- see RitualTapAheadIntoFloat).
+        // `available` EXCLUDES floating, so the pre-computed snapshot would double-count the
+        // just-tapped sources for the remainder of this one payment; re-derive it.
+        if (def->params.untap_x_mana_sources && SpasmUntapLiteralOn())
+        {
+            RitualTapAheadIntoFloat(state, chosen_x);
+            available = AvailableManaPool(state);
+        }
         // Sac-fodder-first (MTG_SAC_FODDER_PAYS): lockstep twin of the rollout's apply-cast
         // publish -- the additional-cost victim (own_targets) pays before any other source.
         PaySacVictimScope _psv(
