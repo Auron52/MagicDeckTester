@@ -2,8 +2,14 @@
 
 **Status: BUILT + MEASURED (2026-08-29). The first form of the plain-cantrip class that does not
 lose at the shipped 20 ms budget — hold +0.0142 (t +1.21), train 0.0000, where every prior form
-lost. Costs 1.35x units / ~2x wall at fixed budget settings (1.62x wall at play settings).
-Default OFF; adoption is a USER decision.**
+lost. Default OFF; adoption is a USER decision.**
+
+**COST RE-MEASURED ON A QUIET BOX (2026-09-01) — the wall figures below were CONTENDED and are
+superseded. `1.52x wall`, not 2.10x, and the per-unit overhead is ~ZERO.** Every wall number in
+this doc predating 2026-09-01 was taken while a second container shared the host; they scattered
+across `~2x` / `1.62x` / `1.2–1.6x` / `2.10x` for the same arm, which is itself the tell. See
+"Uncontended cost" below for the replacement numbers and for why the correction *narrows* rather
+than reopens the case.
 
 USER direction (2026-08-29): *"Wave phases, though they may be a backup plan for some problems,
 are not the primary method in my opinion, I would like to return to partitioning the turn. From
@@ -166,6 +172,47 @@ measurement lever. USER 2026-08-30: *"Hinata is a slow enough deck that I don't 
 50% extra."* With the ceiling measured (perfect stack ≈ 1.2x best case), **MTG_BP_NODE stays
 DEFAULT OFF** — the premium is the added search dimension itself, and the structure-vs-compute
 question is answered by the USER's bar unless a structurally cheaper form is invented.
+
+## Uncontended cost (2026-09-01) — the wall number was wrong, and the diagnosis with it
+
+Method: `scripts/wall_probe.sh` — single-threaded, pinned to one CPU, 3 reps rep-major, alone on
+an idle box, 200 games Hinata2 d5/20 ms; startup (2.2 s, arm-independent) subtracted. Rep spread
+was under 1.5%, versus the 1.2x–2.1x spread the contended figures showed for one arm.
+
+| arm | wall (net) | vs base | units | id_depth | wall per unit |
+|---|---|---|---|---|---|
+| base (shipped, greedy continuation) | 54.0 s | — | 7.87M | 3.432 | 1.00x |
+| recipe (SITE3+DEFER+NGC — LOSSY, see below) | 62.1 s | 1.15x | 8.03M | 2.975 | 1.13x |
+| **node (SITE3+DEFER+NGC+BP_NODE — sound)** | **81.9 s** | **1.52x** | **11.69M** | **2.951** | **1.02x** |
+
+**The 2.10x implied ~1.55x of UNCHARGED overhead — enumerator/apply work the virtual budget cannot
+see. That overhead does not exist.** The node's wall/units ratio is 1.02: its units are
+ordinary-priced, and it is expensive purely because it spends 48% more of them (11.69M against a
+20 ms allowance the control meets with 7.87M — pass-boundary gating lets a node pass complete past
+its estimate). Two consequences, and they point in opposite directions:
+
+* **Good:** the virtual budget is an HONEST proxy for wall under the node, so the exact dedup
+  levers in the cost menu convert ~1:1 into wall. The menu is not chasing the wrong metric.
+* **Bad:** it kills the "the node does more real work than it is charged for" defence. There is no
+  hidden work to reclaim — the node is simply buying less per unit. It spends 48% MORE units and
+  still commits **0.48 plies SHALLOWER** (2.951 vs 3.432).
+
+Also re-measured on the same quiet box, both previously reported from contended runs:
+`MTG_EXEC_FEAS` costs **+2.8% wall / +0.003% units / depth unchanged at 3.432** (was reported
+"+7% wall" — it is very nearly free), and `MTG_HINATA_SUBSET_CREDIT` costs **+18.7% wall / +15%
+units, depth 3.432 → 3.333** (was "+21%" — that one was about right).
+
+### The lossy-recipe control, now measured rather than argued
+
+`MTG_BP_NO_GREEDY_CONT` alone is NOT a greedy-free form: `EnumeratePlans` drops the empty
+combination, so `cands[0]` can never be "cast nothing", while greedy `SolveUncached` has a
+do-nothing default (`best_mask = 0`) and the node re-adds `kBpEmptyChoice` explicitly. Paired
+1200 games/cell against shipped confirms the hole is real and costly: recipe **+0.0200 hold
+(t 2.03) / +0.0208 train (t 1.94)** — consistently worse — while node is **+0.0025 hold (t 0.23) /
+−0.0067 train (t −0.62)**, i.e. neutral with signs disagreeing. The two arms differ only in
+whether "stop here" is in the option set, so that one restored option is worth ~0.027.
+**Greedy has never beaten the sound greedy-free form on QUALITY on this deck; the whole case
+against the class is compute.**
 
 ## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
 
