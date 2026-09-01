@@ -412,8 +412,10 @@ unreliable kind the m2 re-offer exists to rescue"*). It was never applied to the
 So the whole cost of deleting greedy soundly AT THE COMMITTED DECISION is **+3.8% units**, not
 +50.7%, and it hands back 0.39 of the 0.47 plies the full node was losing.
 
-Quality, paired 5000/cell vs shipped: **-0.0038 hold (t 1.18) / -0.0054 train (t 1.75)** -- better
-on both blocks, keeping **44% of the full node's gain for 7.5% of its cost**. Against the control's
+Quality, paired 5000/cell vs shipped: -0.0038 hold (t 1.18) / -0.0054 train (t 1.75) -- better on
+both blocks but under t=2, so it was re-run at 3x. **CONFIRMED at 15000/cell: -0.0065 hold
+(t -3.52) / -0.0059 train (t -3.31)** -- a real improvement over shipped on both blocks, not noise,
+keeping roughly half the full node's gain for 7.5% of its cost. Against the control's
 budget ladder that is ~2x more compute-efficient: matching noded0's quality by raising `budget_ms`
 instead needs ~+7.8% units (interpolating b26's -0.0102 for +17%), versus noded0's +3.8%. **This is
 the first form of the class that is cheaper than simply buying the same quality with budget.**
