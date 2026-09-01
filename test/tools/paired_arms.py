@@ -81,8 +81,21 @@ def main():
             continue
         base = runs[(depth, baseline)]
         pooled_base = {(s, gi): v for s, g in base.items() for gi, v in g.items()}
-        bavg = sum(v[0] for v in pooled_base.values()) / len(pooled_base)
-        print(f"\n=== d{depth}   baseline {baseline}: n={len(pooled_base)}  avg={bavg:.4f} ===")
+        # Report the baseline over the games the ARMS have actually reached, not over every game the
+        # baseline happens to hold. During a PARTIAL read of a running batch those differ -- the
+        # baseline runs ahead -- and a header averaging seeds no arm has played yet invites a
+        # comparison against a number no arm was measured against.
+        reached = set()
+        for (d, a), cur in runs.items():
+            if d != depth or a == baseline:
+                continue
+            reached |= {(s, gi) for s, g in cur.items() for gi in g}
+        shared = [pooled_base[k][0] for k in pooled_base if k in reached] or \
+                 [v[0] for v in pooled_base.values()]
+        bavg = sum(shared) / len(shared)
+        note = "" if len(shared) == len(pooled_base) else \
+               f"  (of {len(pooled_base)} baseline games; PARTIAL run)"
+        print(f"\n=== d{depth}   baseline {baseline}: n={len(shared)}  avg={bavg:.4f}{note} ===")
         print(f"{'arm':<8} {'n':>7} {'avg':>7} {'delta':>10} {'se':>8} {'t':>6} "
               f"{'faster':>7} {'slower':>7} {'plays-differ':>13} {'seed-blocks':>12}")
         for arm in arms:
