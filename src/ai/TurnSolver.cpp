@@ -10895,6 +10895,33 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     std::vector<int> allowed;
                     if (!HumanPlayActive() && !DecisionUnpruned(UnprunedGate::BlinkTarget))
                     { allowed = prov.BlinkTargetCandidates(state, src); }
+                    // ---- HUMAN-PLAY / UNPRUNED FAN-OUT CONTROL --------------------------------
+                    // --claude-play sets MTG_UNPRUNED for the whole session, so BOTH provider
+                    // narrowings above stand down and this fan-out becomes (every creature) x
+                    // (every count) PER OUTLET, squared across two outlets. Measured: 21 variants
+                    // each, a 8.67e5 odometer bound, 278,783 plans and 3.2 GB RSS for ONE decision
+                    // -- and at the reference sweep's 24 concurrent replays that is 77 GB. It
+                    // OOM-killed the box (dmesg: `mtg` at 46 GB anon-rss). Same class as
+                    // docs/design/claude-play-unprune-blowup.md.
+                    //
+                    // Both folds below are LOSSLESS IN REACHABLE LINES, which is the standard the
+                    // core invariant sets -- they merge branches with identical outcomes, they
+                    // never pick a winner among distinct ones:
+                    //
+                    //  (a) COUNT collapses to 1. K is not a separate decision, it is a REPETITION
+                    //      of one: the main phase re-prompts after each activation (main_ordinal
+                    //      increments), so a human reaches "blink three times" by choosing it three
+                    //      times -- and that is strictly MORE expressive than a fixed {1,2,3} menu.
+                    //      The autonomous search keeps its counts (including the go-off), which is
+                    //      what it needs since it commits a whole turn at once.
+                    //  (b) DUPLICATE TARGETS fold. Two creatures identical in every property a
+                    //      blink can read -- name, tapped, summoning sickness, P/T, counters,
+                    //      controller -- give the identical result whichever copy is picked. This
+                    //      deck runs 4-ofs, so it is a real factor. The trick-target equivalence
+                    //      fold a few hundred lines up is the same idea and the same justification.
+                    const bool fold_fanout =
+                        HumanPlayActive() || DecisionUnpruned(UnprunedGate::BlinkTarget);
+                    std::vector<std::string> seen_targets;   // equivalence keys, fold (b)
                     for (const Permanent& tgt : state.battlefield)
                     {
                         if (!tgt.card.IsCreature()) { continue; }
@@ -10904,8 +10931,22 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (!allowed.empty()
                             && std::find(allowed.begin(), allowed.end(), tgt.card.m_number)
                                == allowed.end()) { continue; }
+                        if (fold_fanout)
+                        {
+                            std::string key = tgt.card.m_name.str();
+                            key += tgt.tapped ? "|T" : "|U";
+                            key += tgt.entered_this_turn ? "|s" : "|r";
+                            key += "|" + std::to_string(tgt.EffectivePower())
+                                 + "/" + std::to_string(tgt.EffectiveToughness())
+                                 + "|" + std::to_string(tgt.counters.size())
+                                 + "|" + std::to_string(tgt.controller_index);
+                            if (std::find(seen_targets.begin(), seen_targets.end(), key)
+                                != seen_targets.end()) { continue; }
+                            seen_targets.push_back(std::move(key));
+                        }
                         const std::vector<int> counts =
-                            prov.BlinkActivationCounts(state, src, tgt, affordable);
+                            fold_fanout ? std::vector<int>{ 1 }
+                                        : prov.BlinkActivationCounts(state, src, tgt, affordable);
                         for (int k : counts)
                         {
                             if (k <= 0) { continue; }
