@@ -5840,12 +5840,11 @@
     "Faerie"
    ],
    "keywords": [
-    "Flying",
-    "Cycling"
+    "Flying"
    ],
    "power": 1,
    "toughness": 1,
-   "oracle_text": "Flying\nWhen this creature enters, untap up to two lands.\nCycling {2} ({2}, Discard this card: Draw a card.) [All three clauses modelled. The untap is a REAL untap of the two highest-yield tapped lands, so with a cheap blink outlet it is a second combo engine (Displacer under Training Grounds costs {C} for two untaps). Flying is inert -- the passive opponent never blocks.]",
+   "oracle_text": "Flying\nWhen this creature enters, untap up to two lands.\nCycling {2} ({2}, Discard this card: Draw a card.) [All three clauses modelled. The untap is a REAL untap of the two highest-yield tapped lands, so with a cheap blink outlet it is a second combo engine (Displacer under Training Grounds costs {C} for two untaps). Flying is inert -- the passive opponent never blocks. Cycling is deliberately NOT tagged in `keywords`: this engine models it structurally via cycling_cost, and every other cycling card (Lonely Sandbar, Forgotten Cave, the Triomes) leaves the tag off too -- see audit_card_fields.py's MODELED_ELSEWHERE_KEYWORDS.]",
    "template": "vanilla_creature",
    "parameters": {
     "etb_untap_lands": 2,

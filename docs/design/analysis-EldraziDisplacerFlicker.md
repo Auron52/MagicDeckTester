@@ -97,6 +97,58 @@ Measured over 20 games at d5/b20 (paired seeds):
 The combo does fire: `blink x20`, `blink x14`, `blink x12` appear in the logs, alongside Clue
 tokens being made and cracked.
 
+## Stage 5 — verification results (2026-09-01)
+
+| gate | result |
+|---|---|
+| Stage 3 coverage | **CLEAN** — 0 missing, 0 partial, 0 gaps |
+| 2d-bis Scryfall cost audit | **CLEAN** — "All mana costs match Scryfall" (218 costed cards) |
+| field/oracle diff (this deck's 19) | **ALL MATCH** verbatim: cost, P/T, types, supertypes, subtypes, keywords, oracle text |
+| 5a `[nonconv]` | **0 lines / 1,200 games** (d3, 4 seeds x 100) |
+| 5a `[fd-diverge]` | **0 lines / 1,200 games** (`MTG_FULL_DEPTH` + `MTG_FD_ORACLE`) |
+| 5b multi-depth | **monotonic**: d0 8.52 -> d3 7.12 -> d5 7.12 (converged) |
+| 5c2 horizon-honest tie-break | **NO SIGN AT THIS SAMPLE** — 15 changed of 400 paired (3.75%), net -5 turns (10 better / 5 worse). Directionally helping, below the 20-game threshold. Decisive run (`--blocks 4`) queued. |
+| 5h viewer self-guard | **PASSES** — every new param classified; one DISCLOSED GAP (below) |
+| suite | smoke **48/48**, regression **80/80**, 0 configs changed |
+| CI | ubuntu + windows + **Linux/Windows determinism parity** all green |
+
+### Multi-depth detail (4 seeds x 100 games)
+
+| depth | s4101 | s4202 | s4303 | s4404 | mean |
+|---|---|---|---|---|---|
+| d0 | 8.42 | 8.43 | 8.67 | 8.56 | 8.52 |
+| d3 | 7.16 | 7.09 | 7.20 | 7.04 | **7.12** |
+| d5 | 7.15 | 7.10 | 7.20 | 7.04 | **7.12** |
+
+d5 == d3 to two decimals on every seed: the search has **converged by depth 3** on this deck.
+
+### COST — the honest number, and a measurement trap
+
+**~20-23 s/game wall at d3/b20 and d5/b20** (100-game batches, 24 threads). A single-game probe
+said 1.5 s and was badly unrepresentative: the distribution has a heavy tail, with individual
+`SLOW-GAME` lines at **40-100 s**. Do not size anything off one game.
+
+Also: `MTG_ENUM_STATS` / `MTG_ROLLOUT_STATS` are NOT free -- the same game timed 48 s with them on
+and 19 s off. Time without them, and repeat (host `loadavg` ran 15-23 with an idle container).
+
+This is a **rollout-bound** profile (164k rollout calls / 2,326 interior nodes, i.e. ~96% rollout),
+which is the shape the VALUE LEAF exists for -- the documented next stage, not an enumeration
+problem.
+
+## Recommended next steps
+
+1. **Value leaf** (`bash scripts/valueleaf.sh run decks/EldraziDisplacerFlicker`) — the deck is
+   rollout-bound and its d0 policy is 1.4 turns worse than the search (8.52 vs 7.12), so the leaf is
+   the highest-leverage lever available. This is also the gate that decides whether the deck can
+   afford mulligan generation at all.
+2. **Decisive 5c2 run** at `--blocks 4`.
+3. **Do NOT add to the regression suite yet** — at ~20 s/game it would dominate the smoke budget.
+   Revisit after the value leaf.
+4. Wire the `etb_untap_lands` chooser (below).
+5. Re-run the discard-analysis stage on a frozen binary (the first run's verdict, `STATUS_QUO_OK`,
+   was measured across a binary that changed mid-run, and the regeneration used a deliberately
+   under-sampled 20-game evidence pass).
+
 ## Open items / PROVISIONAL decisions (need user sign-off)
 
 1. **Mariposa Military Base's rad-counter mode is always DECLINED**, so `Player::rad_counters`

@@ -78,9 +78,12 @@ enum class Keyword
     // "<name> (Bestowed)" aura face. Kept only so the Scryfall keywords field ["Bestow"] stays
     // faithful; no engine code reads this enumerator.
     Bestow,
-    // Cycling (Cloud of Faeries): an INERT keyword-ability tag -- the mechanic is modelled
-    // structurally via CardParams::cycling_cost (Action::Kind::DigDraw), not by this enum. Kept
-    // only so the Scryfall keywords field ["Cycling"] stays faithful; no engine code reads it.
+    // Cycling: parseable but DELIBERATELY UNUSED. The mechanic is modelled structurally via
+    // CardParams::cycling_cost, and this repo's convention is that cards.json does NOT tag it in
+    // `keywords` -- every cycling card (Lonely Sandbar, Forgotten Cave, the Triomes, Cloud of
+    // Faeries) leaves it off, and audit_card_fields.py strips it from the Scryfall side
+    // (MODELED_ELSEWHERE_KEYWORDS) so tagging it is a HARD MISMATCH. The enumerator exists only so
+    // a pasted-verbatim Scryfall keywords array does not throw.
     Cycling,
     // Devoid (Eldrazi Displacer): an INERT keyword ABILITY tag -- "this card has no color."
     // Provably inert here: nothing in the engine reads a CARD's colour (colour lives on mana, and
