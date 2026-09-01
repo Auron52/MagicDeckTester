@@ -1,10 +1,11 @@
 # Reality Spasm phase 2 — the untap model, what it still launders, and the rework plan
 
-**Status:** COMPLETE WITH TAP-AHEAD (2026-09-01) — §9 has the final measurement: the literal
-model + tap-ahead is **equal-or-better than the float model in every hinata train cell** while
-making every Spasm turn exactly priceable. The lever is `MTG_SPASM_UNTAP_LITERAL`, **default
-OFF**; flipping it (with the GT rebaseline and the sidecar question) is the USER's adoption
-call, now with a straightforward recommendation. History: designed 2026-08-30 (§1–§6); first
+**Status:** ADOPTED (2026-09-01, commit 4f449fbd) — `MTG_SPASM_UNTAP_LITERAL` is **default ON**
+(`=0` restores the float model byte-exactly) and all three GT tiers are rebaselined (7994ce8f).
+The overnight (held-out) seeds confirmed the §9 pattern: 12 hinata cells moved net **−0.064
+turns**, every cell equal-or-better except two at +0.0025; the 15 searched-slower games
+classified as 4 churn + 11 isolated one-turn slowdowns (the colour-commit tax). Remaining
+follow-up: regenerate the hinata value leaf on the adopted commit (§9). History: designed 2026-08-30 (§1–§6); first
 cut built + measured (§7, commit 53fa08eb); §7's "honest slowdown" reading overturned by the
 §8 line-payability analysis; the §8-prescribed tap-ahead built and measured in §9. This is the
 doc `unpriced-prepay-rows.md` links as "cause 2's blocker".
