@@ -13246,26 +13246,17 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         { return std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, kFlickerMaxIterations); }
     }
 
-    // Counter-watcher kill: how many counters until the payload swings for lethal?
-    int watcher_counters = 0;
-    for (const Permanent& p : s.battlefield)
-    {
-        if (p.controller_index != s.active_player_index) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && d->params.other_creature_etb_counter_cost.has_value())
-        { watcher_counters = std::max(watcher_counters, d->params.other_creature_etb_counters); }
-    }
-    if (watcher_counters > 0)
-    {
-        for (const Permanent& p : s.battlefield)
-        {
-            if (p.card.m_number != loop.payload_id) { continue; }
-            const int need = life - p.EffectivePower();
-            if (need <= 0) { return 0; }   // already lethal; no reason to grow it
-            return std::clamp((need + watcher_counters - 1) / watcher_counters,
-                              1, kFlickerMaxIterations);
-        }
-    }
+    // NO COUNTER-WATCHER ROUTE. An earlier version of this heuristic sized the loop to "enough
+    // Emiel +1/+1 counters to swing for lethal next turn". That is WRONG, and the Stage 5d sweep
+    // proved it empirically: a 13-iteration Emiel loop left the payload with ONE counter, not 13.
+    //
+    // CR 400.7 -- a permanent that leaves the battlefield and returns is a NEW OBJECT. It loses its
+    // counters along with its summoning-sickness status. So each blink WIPES the counter the
+    // previous iteration's trigger added, and the loop's steady state is exactly one counter (two
+    // for a Unicorn), no matter how many times it runs. Emiel's trigger is a fine value ability; it
+    // is not a win condition, and sizing a go-off around it asked for iterations that buy nothing.
+    // (ApplyBlink was always right -- it builds a fresh Permanent. Only this heuristic and the
+    // cards.json note were wrong.)
 
     // THE DRAW SINK (user, 2026-09-01: "once you have the infinite mana combo on board and a draw
     // source the route to end the game is quite straightforward"). An {X} draw held in hand turns

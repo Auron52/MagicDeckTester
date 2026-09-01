@@ -9300,15 +9300,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
         if (IsManaRitual(def)) { a.ritual_float = RitualFloatAmount(state, def, a.chosen_x); }  // Irencrag burst
         // "When this creature enters, untap up to N lands" (Peregrine Drake 5 / Cloud of Faeries 2).
-        // The untap REFUNDS the mana that paid for it, so the cast has to carry that refund as an
-        // enumeration credit or the planner can never see a Drake followed by anything -- and the
-        // whole deck is "Drake followed by anything". Same channel and the same optimistic-on-colour
-        // bound as a ritual's a.ritual_float (credited as wild in the subset math), because the tap
-        // -ahead below is the same manoeuvre: tap sources into the float, then untap them. NOT
-        // IsManaRitual, deliberately -- a Drake is a creature and must stay out of the ritual
-        // accelerant/payoff machinery (which is provider-gated off for this deck anyway).
-        if (def.params.etb_untap_lands > 0)
-        { a.ritual_float = EtbUntapLandsCredit(state, def.params.etb_untap_lands); }
+        //
+        // NO ENUMERATION CREDIT, and the reason is worth keeping. The refund is real, but it lands
+        // AFTER the creature resolves, so it cannot pay for the creature ITSELF -- and crediting it
+        // as a.ritual_float (which is summed into the same pool the subset's combined cost is
+        // checked against) did exactly that. The Stage 5d claude-play sweep caught it: 12 of 16
+        // agents independently flagged "Peregrine Drake offered as castable with 2-4 mana
+        // available", once as the ONLY plan for 11 consecutive decisions and once as a decision
+        // loop escapable only by passing. Reproduced directly: turn 1, empty battlefield, plan 0 =
+        // "land=Yavimaya Coast; cast: Cloud of Faeries" -- the hypothetical land drop yields 1, the
+        // credit added the same land's yield a second time, and {1}{U} read as payable.
+        //
+        // A ritual can carry this credit because a ritual's output precedes the payoff it funds; an
+        // ETB refund does not. The executor was never fooled (it reports dropped_casts and the
+        // payment is atomic), so nothing illegal ever resolved -- but the enumerator spent its
+        // breadth on unpayable plans and human play was offered them.
         // Same-turn mana-rock ramp: a non-creature mana rock (Sol Ring) taps the turn it is cast.
         // Stamp the mana it produces (by real colour) so the enumerator can fund the rest of the
         // subset off it. Creatures (mana dorks) are excluded -- they are summoning-sick this turn.
@@ -18707,11 +18713,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             // Shivan Gorge / Investigate / Mariposa draw / Clue crack. Precondition FIRST so a
             // stranded activation never pays (the UntapCreature discipline).
+            // The {T} half of the cost is paid BEFORE the mana half, so the source cannot tap
+            // itself toward its own activation (see SetPermTapped). Restored if the mana fails.
             if (a.def != nullptr && PermAbilitySourceLive(state, state.active_player_index,
-                                                          a.sac_source_id, a.ability_mode)
-                && TapForCostDirect(state, a.cost, /*for_creature=*/false))
+                                                          a.sac_source_id, a.ability_mode))
             {
-                ApplyPermAbility(state, state.active_player_index, a.sac_source_id, a.ability_mode);
+                const bool taps = a.ability_mode != Action::AbilityMode::SacDraw;
+                if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
+                if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+                { ApplyPermAbility(state, state.active_player_index, a.sac_source_id, a.ability_mode); }
+                else if (taps)
+                { SetPermTapped(state, state.active_player_index, a.sac_source_id, false); }
             }
         }
         else if (a.kind == Action::Kind::ActivatePump)

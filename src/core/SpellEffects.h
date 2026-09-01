@@ -802,6 +802,7 @@ inline void EtbUntapLands(GameState&, int controller, int count);               
 inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count);                // defined below
 inline int  EtbUntapLandsCredit(const GameState&, int count);                                // defined below
 inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost);                      // defined below
+inline bool SetPermTapped(GameState&, int controller, int source_id, bool tapped);            // defined below
 inline ManaCost EffectiveActivationCost(const GameState&, int controller, const Card& source,
                                         const ManaCost& printed);                            // defined below
 // Forward declaration: the reusable chosen-colour float (defined in the ritual section below) is
@@ -8092,16 +8093,9 @@ inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const Man
             have.AddPool(state.floating_mana);
             if (!have.CanPay(AddManaCosts(c, keep_payable))) { continue; }
         }
-        if (!pay(c)) { continue; }
-        // Re-find once more: the payment itself may have moved things.
-        i = -1;
-        for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
-        {
-            if (state.battlefield[bi].card.m_number == sink
-                && state.battlefield[bi].controller_index == controller) { i = bi; break; }
-        }
-        if (i < 0) { continue; }
+        // Pay the {T} half FIRST so the sink cannot tap itself toward its own mana cost.
         state.battlefield[i].tapped = true;
+        if (!pay(c)) { SetPermTapped(state, controller, sink, false); continue; }
         const int dmg = d->params.tap_damage_each_opponent;
         state.players[1 - controller].life -= dmg;
         state.opponent_lost_life_this_turn = true;
@@ -8155,6 +8149,22 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
     return false;
 }
 
+// Set/clear the source's tapped flag by m_number. Used to pay a "{cost}, {T}" activation's TAP
+// half BEFORE its mana half, which is the only ordering that stops the source paying part of its
+// own cost -- a permanent taps once (CR 602.2a: the {T} symbol and a separate mana ability are the
+// same single tap), so a Conservatory cannot both tap for the ability's {T} and tap for {G} toward
+// its own {4}. Found by the Stage 5d sweep: Conservatory's Investigate resolved on 3 mana against a
+// printed {4}, cross-checked against the life total (only one painland tap had occurred).
+inline bool SetPermTapped(GameState& state, int controller, int source_id, bool tapped)
+{
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number == source_id && p.controller_index == controller)
+        { p.tapped = tapped; return true; }
+    }
+    return false;
+}
+
 inline const char* PermAbilityLabel(PermAbilityMode mode)
 {
     switch (mode)
@@ -8187,7 +8197,6 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
     {
         case PermAbilityMode::TapDamage:
         {
-            state.battlefield[idx].tapped = true;
             const int dmg = d->params.tap_damage_each_opponent;
             state.players[1 - controller].life -= dmg;
             state.opponent_lost_life_this_turn = true;
@@ -8200,11 +8209,9 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             break;
         }
         case PermAbilityMode::TapInvestigate:
-            state.battlefield[idx].tapped = true;
             CreateClueTokens(state, controller, 1);
             break;
         case PermAbilityMode::TapDraw:
-            state.battlefield[idx].tapped = true;
             TrickDraw(state, controller, 1);
             break;
         case PermAbilityMode::SacDraw:
@@ -8447,9 +8454,47 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         if (depletion) { continue; }
         p.tapped = true;
         ++tapped_n;
-        ManaPool add;
-        AddSourceToPool(add, state, *d, PermanentManaYield(state, p, *d), &p);
-        state.floating_mana.AddPool(add);
+        // COMMIT A COLOUR for a choice-limited source, exactly as RitualTapAheadIntoFloat does and
+        // for the same reason: this float is REAL spendable mana, and AddSourceToPool books a
+        // multi-colour land as `wild`, which pays ANY pip. Floating it wild is free colour-fixing.
+        //
+        // The Stage 5d sweep caught it being exploited: a turn where the tap-ahead left
+        // floating_mana {G:1, wild:2} let Emiel the Blessed resolve its {W}{W} with no white source
+        // ever tapped for it. The committed colour is NEED-AWARE (the hand's remaining coloured-pip
+        // demand picks it); ties keep list order.
+        const int amt = ManaProducedPerTap(*d);
+        const std::vector<Color>& prod = EffectiveProduces(state, controller, *d, false);
+        if (amt == 1 && prod.size() > 1 && prod.size() < 5)
+        {
+            Color best = prod[0]; int best_need = -1;
+            for (Color c : prod)
+            {
+                int need = 0;
+                for (const Card& hc : state.players[controller].hand)
+                {
+                    const ManaCost& mc = hc.m_mana_cost;
+                    switch (c)
+                    {
+                        case Color::White: need += mc.white; break;
+                        case Color::Blue:  need += mc.blue;  break;
+                        case Color::Black: need += mc.black; break;
+                        case Color::Red:   need += mc.red;   break;
+                        case Color::Green: need += mc.green; break;
+                        default: break;
+                    }
+                }
+                if (need > best_need) { best_need = need; best = c; }
+            }
+            state.floating_mana.Add(best, 1);
+        }
+        else
+        {
+            AddRefloatContribution(state.floating_mana, amt, prod,
+                                   /*constrain_partial_choice=*/true);
+        }
+        // A land Aura's bonus rides the same tap and keeps its own colour (never wild unless the
+        // aura itself says "any colour").
+        if (LandAuraBonus(state, p) > 0) { LandAuraAddToPool(state.floating_mana, state, p); }
     }
 }
 

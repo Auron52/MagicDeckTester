@@ -21,10 +21,10 @@ once-per-turn — so an outlet can go off the turn it lands.
 | Training Grounds `{U}` | your creatures' activated abilities cost `{2}` less, floor one mana → Emiel `{3}`→`{1}`, Displacer `{2}{C}`→`{C}` |
 | Wild Growth / Fertile Ground / Overgrowth / Trace of Abundance | land Auras: enchanted land taps for **+{G} / +any / +{G}{G} / +any** |
 | Shivan Gorge (Legendary Land) | **kill A** — `{2}{R}, {T}: 1 damage to each opponent`, re-untapped every iteration |
-| Emiel's counter watcher | **kill B** — N iterations = N +1/+1 counters, cashed NEXT turn (a blinked creature is summoning sick, CR 400.7) |
+| Emiel's counter watcher | VALUE ONLY — **not** a kill. CR 400.7 makes the returned creature a NEW OBJECT, so each blink WIPES the previous counter: a 13-iteration loop leaves ONE counter, not 13 (measured, Stage 5d). |
 | Stroke of Genius `{X}{2}{U}` | **the sink** — with unbounded mana this draws the library |
 
-### The three sinks, and why the sink is the whole problem
+### The sinks, and why the sink is the whole problem
 
 Unbounded mana wins nothing by itself. The go-off heuristic therefore sizes the loop to whichever
 sink the board supports — Gorge damage, Emiel counters, or an `{X}` draw — and proposes **no**

@@ -1141,7 +1141,8 @@ public:
                                            const Permanent& source) const override;
     std::vector<int> LandAuraHostCandidates(const GameState& s, int controller) const override;
 
-    // The go-off recognizer: with the loop assembled, the kill is arithmetic, not search.
+    // The go-off recognizer: with the loop assembled and a SINK to cash the mana on
+    // (Shivan Gorge damage, or an {X} draw), the kill is arithmetic, not search.
     bool HasExtraLethalModel() const override;
     int  ExtraLethalDamage(const GameState& s,
                            const std::vector<const CardDefinition*>& casting) const override;

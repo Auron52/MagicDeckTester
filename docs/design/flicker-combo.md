@@ -14,7 +14,8 @@ mechanic-level design, for anyone adding another card that touches one of these 
       3. pay the OUTLET            (Eldrazi Displacer {2}{C} / Emiel {3}; no {T}, repeatable)
       4. BLINK the PAYLOAD         (exile + return -> both ETB cascades re-fire)
            -> Peregrine Drake's "untap up to five lands" refunds step 2
-           -> Emiel's watcher puts a +1/+1 counter on the returning creature
+           -> Emiel's watcher puts a +1/+1 counter on the returning creature (ONE, not N --
+              CR 400.7 makes it a new object each time, wiping the previous counter)
 ```
 
 Net mana per iteration = (yield of the top-N lands) − (activation cost). Positive ⇒ unbounded.
