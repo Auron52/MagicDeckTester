@@ -71,7 +71,22 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         // Deathrite Shaman ability 1: the mana tap exiles a graveyard land (usable() guaranteed
         // one exists). A failed payment restores the graveyard from gy_pre below.
         if (def.params.gy_land_exile_mana) { ExileGraveyardLandForMana(state, active); }
-        if (def.params.tap_self_damage > 0) { state.players[active].life -= def.params.tap_self_damage; }
+        // Painland ({T}: Add {C}. / {T}: Add {W} or {U}. This land deals 1 damage to you.) -- the
+        // two are SEPARATE abilities and only the coloured one hurts, so a Colorless tap of a land
+        // that actually has a {C} mode is painless. Exactly the shape of the Grove drip guard
+        // above. The `produces contains Colorless` half is load-bearing for byte-identity: a
+        // painland with no {C} mode (how every painland was modelled before this deck) can still
+        // be handed Color::Colorless for a GENERIC pip, and must keep taking its damage there.
+        if (def.params.tap_self_damage > 0)
+        {
+            // ONE EffectiveProduces call: it returns a reference into a thread_local buffer that
+            // the next call overwrites (see RitualTapAheadIntoFloat's note).
+            bool has_c_mode = false;
+            for (Color pc : EffectiveProduces(state, active, def))
+            { if (pc == Color::Colorless) { has_c_mode = true; break; } }
+            if (!(col == Color::Colorless && has_c_mode))
+            { state.players[active].life -= def.params.tap_self_damage; }
+        }
         // Grove of the Burnwillows: the COLOURED tap ({R}/{G}) makes the opponent gain 1 (-> 1 damage
         // with Tainted Remedy out). A `col == Colorless` tap is the painless "{T}: Add {C}" mode --
         // no drip (see DripLandAnyPipColor: a generic pip absent a Remedy routes here as Colorless).
@@ -132,6 +147,23 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             floating.Add(col, amt);
             if (available) { available->Add(col, -consumed); }
             if (prod.size() > 1) { retire_wild_c(consumed); }
+        }
+        // "Whenever enchanted land is tapped for mana, its controller adds an additional <X>" --
+        // the land Aura's mana arrives on THIS tap, in the AURA's colour (Wild Growth {G},
+        // Overgrowth {G}{G}, Fertile Ground any). AvailableManaPool credited it the same way via
+        // AddSourceToPool, so retire the same units from `available`. No-op with no aura attached.
+        if (LandAuraBonus(state, p) > 0)
+        {
+            ManaPool bonus;
+            LandAuraAddToPool(bonus, state, p);
+            floating.AddPool(bonus);
+            if (available)
+            {
+                available->white -= bonus.white; available->blue      -= bonus.blue;
+                available->black -= bonus.black; available->red       -= bonus.red;
+                available->green -= bonus.green; available->colorless -= bonus.colorless;
+                available->wild  -= bonus.wild;
+            }
         }
     };
 
@@ -1240,7 +1272,7 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
             if (gy_fuel <= 0) { continue; }
             --gy_fuel;
         }
-        AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def));
+        AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def), &p);
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool;
@@ -1276,7 +1308,7 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state)
             if (gy_fuel <= 0) { continue; }
             --gy_fuel;
         }
-        AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def));
+        AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def), &p);
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool;

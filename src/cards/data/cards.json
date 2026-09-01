@@ -2725,12 +2725,13 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}: Add {C}.\n{T}: Add {G} or {W}. This land deals 1 damage to you. [Modelled as a G/W painland (tap_self_damage 1). The free {C} mode is not modelled -- our life loss is inert for the goldfish clock (opponent-life is the wincon); the {C} option would only matter for a life-total-sensitive deck.]",
+   "oracle_text": "{T}: Add {C}.\n{T}: Add {G} or {W}. This land deals 1 damage to you. [Painland, both modes modelled -- see Adarkar Wastes. The {C} mode was previously bracket-noted as unmodelled on the grounds that our life loss is inert for the goldfish clock; that reasoning does not survive a deck with a {C} PIP in an activation cost, so it is modelled now. Also used by decks/Auras.]",
    "template": "basic_land",
    "parameters": {
     "produces": [
      "G",
-     "W"
+     "W",
+     "C"
     ],
     "tap_self_damage": 1
    }
@@ -5643,6 +5644,365 @@
     "created_token_color": "R",
     "created_token_haste": true
    }
+  },
+  {
+   "name": "Adarkar Wastes",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{T}: Add {W} or {U}. This land deals 1 damage to you. [Painland, BOTH modes modelled: produces W/U/C, and tap_self_damage applies only to the COLOURED modes -- a {C} tap is painless (CR: they are separate abilities). The {C} mode is live here rather than cosmetic: Eldrazi Displacer activates for {2}{C} and no coloured mana can pay a {C} pip.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "C"
+    ],
+    "tap_self_damage": 1
+   }
+  },
+  {
+   "name": "Yavimaya Coast",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{T}: Add {G} or {U}. This land deals 1 damage to you. [Painland, both modes modelled -- see Adarkar Wastes.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "U",
+     "C"
+    ],
+    "tap_self_damage": 1
+   }
+  },
+  {
+   "name": "Conservatory",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [
+    "Investigate"
+   ],
+   "oracle_text": "This land enters tapped.\n{T}: Add {G} or {W}.\n{4}, {T}: Investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\") [All three clauses modelled. Investigate creates the 'Clue Token' named token def, whose own {2}-sacrifice-to-draw is a real searched ActivatePermAbility source.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "W"
+    ],
+    "enters_tapped": true,
+    "tap_investigate_cost": "{4}"
+   }
+  },
+  {
+   "name": "Kitchen",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [
+    "Investigate"
+   ],
+   "oracle_text": "This land enters tapped.\n{T}: Add {G} or {U}.\n{4}, {T}: Investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\") [All three clauses modelled -- see Conservatory.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "U"
+    ],
+    "enters_tapped": true,
+    "tap_investigate_cost": "{4}"
+   }
+  },
+  {
+   "name": "Shivan Gorge",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{2}{R}, {T}: Shivan Gorge deals 1 damage to each opponent. [Both modes modelled. The damage ability is this deck's same-turn kill: a blink loop untaps the Gorge every iteration, so N iterations are N activations. 'Each opponent' is one player in a goldfish. Legendary, so the legend rule caps the board at one.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "tap_damage_cost": "{2}{R}",
+    "tap_damage_each_opponent": 1
+   }
+  },
+  {
+   "name": "Mariposa Military Base",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "You may have this land enter tapped. If you do, you get two rad counters.\n{T}: Add {C}.\n{5}, {T}: Draw a card. This ability costs {1} less to activate for each rad counter you have. [PARTIAL, and the unimplemented half is unreachable by a DISCLOSED DECISION rather than dropped: the mana ability and the draw ability (including the per-rad-counter discount) are modelled; the rad-counter MODE is always DECLINED, so Player::rad_counters stays 0 and the rad mill ('at the beginning of your precombat main, mill that many; for each nonland milled, lose 1 life and remove a counter') is never reached. Why declining is right here: entering tapped costs a full turn of this land's mana to shave at most {2} off ONE activation of a {5} draw that is already far worse than Stroke of Genius, and the mill is a real cost to a deck that wins by drawing its library with infinite mana. PROVISIONAL -- awaiting user sign-off; if the mode is ever wanted, the mill is what must be built.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "tap_draw_cost": "{5}",
+    "tap_draw_cost_less_per_rad": true,
+    "etb_optional_tapped_rad": 2
+   }
+  },
+  {
+   "name": "Clue Token",
+   "mana_cost": "",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Clue"
+   ],
+   "keywords": [],
+   "oracle_text": "{2}, Sacrifice this token: Draw a card. [Token definition (created by Investigate; never in a decklist). NAMED TOKEN DEF -- the Treasure Token precedent -- so each Clue is an individually addressable, searched ActivatePermAbility source. No tap symbol, so a Clue made this turn can be cracked this turn.]",
+   "template": "custom",
+   "parameters": {
+    "sac_draw_cost": "{2}"
+   }
+  },
+  {
+   "name": "Eldrazi Displacer",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Eldrazi"
+   ],
+   "keywords": [
+    "Devoid"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Devoid (This card has no color.)\n{2}{C}: Exile another target creature, then return it to the battlefield tapped under its owner's control. [Blink outlet. No {T} in the cost, so it activates the turn it lands and repeats freely -- that is what makes this a combo. The {C} is a real colourless PIP (ManaPool::wild_c): 'one mana of any colour' from a Fertile Ground cannot pay it. Targets ANY creature (no 'you control'). Devoid is inert: nothing in this deck or the goldfish opponent reads a card's colour.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "blink_cost": "{2}{C}",
+    "blink_returns_tapped": true,
+    "blink_own_only": false
+   }
+  },
+  {
+   "name": "Emiel the Blessed",
+   "mana_cost": "{2}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Unicorn"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "{3}: Exile another target creature you control, then return it to the battlefield.\nWhenever another creature you control enters, you may pay {G/W}. If you do, put a +1/+1 counter on it. If it's a Unicorn, put two +1/+1 counters on it instead. [Both abilities modelled. The blink returns the creature UNTAPPED (unlike Displacer) and is restricted to creatures you control. The counter trigger is the deck's second kill: an Emiel loop re-enters its target every iteration, so N iterations are N counters -- though the target is summoning sick after each blink (CR 400.7), so it attacks the FOLLOWING turn. The optional {G/W} is paid whenever affordable (a resolution heuristic; monotone against a passive opponent -- disclosed).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "blink_cost": "{3}",
+    "blink_returns_tapped": false,
+    "blink_own_only": true,
+    "other_creature_etb_counter_cost": "{G/W}",
+    "other_creature_etb_counters": 1,
+    "other_creature_etb_counter_subtype": "Unicorn",
+    "other_creature_etb_counters_subtype": 2
+   }
+  },
+  {
+   "name": "Cloud of Faeries",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Faerie"
+   ],
+   "keywords": [
+    "Flying",
+    "Cycling"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Flying\nWhen this creature enters, untap up to two lands.\nCycling {2} ({2}, Discard this card: Draw a card.) [All three clauses modelled. The untap is a REAL untap of the two highest-yield tapped lands, so with a cheap blink outlet it is a second combo engine (Displacer under Training Grounds costs {C} for two untaps). Flying is inert -- the passive opponent never blocks.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_untap_lands": 2,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Peregrine Drake",
+   "mana_cost": "{4}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Drake"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "Flying\nWhen this creature enters, untap up to five lands. [The deck's engine. A REAL untap of the five highest-yield tapped lands (yield counts any land Aura on them), so each blink of the Drake refunds five lands' worth of mana against the outlet's cost -- net positive, hence unbounded. Casting it is also mana-neutral via the tap-ahead. Flying is inert vs the passive opponent.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_untap_lands": 5
+   }
+  },
+  {
+   "name": "Wild Growth",
+   "mana_cost": "{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant land\nWhenever enchanted land is tapped for mana, its controller adds an additional {G}. [Land Aura: the bonus rides the enchanted land's tap, in the aura's own colour, at both the projection and the real tap. WHICH land to enchant is a searched plan variant per legal host.]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "is_land_aura": true,
+    "land_aura_extra_mana": 1,
+    "land_aura_produces": [
+     "G"
+    ]
+   }
+  },
+  {
+   "name": "Overgrowth",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant land\nWhenever enchanted land is tapped for mana, its controller adds an additional {G}{G}. [Land Aura -- see Wild Growth. Two GREEN mana, not two wild: an Overgrowth'd land cannot pay Eldrazi Displacer's {C} off the bonus.]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "is_land_aura": true,
+    "land_aura_extra_mana": 2,
+    "land_aura_produces": [
+     "G"
+    ]
+   }
+  },
+  {
+   "name": "Fertile Ground",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant land\nWhenever enchanted land is tapped for mana, its controller adds an additional one mana of any color. [Land Aura -- see Wild Growth. 'Any color' is credited as WILD and deliberately not as wild_c: a colour cannot pay a {C} pip. This and Trace of Abundance are the deck's only red sources, so they are what turn Shivan Gorge's {2}{R} on.]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "is_land_aura": true,
+    "land_aura_extra_mana": 1,
+    "land_aura_produces": []
+   }
+  },
+  {
+   "name": "Trace of Abundance",
+   "mana_cost": "{R/W}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Aura"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "oracle_text": "Enchant land\nEnchanted land has shroud. (It can't be the target of spells or abilities.)\nWhenever enchanted land is tapped for mana, its controller adds an additional one mana of any color. [Mana clause modelled as a Land Aura -- see Fertile Ground. SHROUD is inert and disclosed: the passive opponent casts nothing, and no card in this deck targets a land (Azorius Chancery's ETB return is not targeted). PROVISIONAL deferral.]",
+   "template": "custom",
+   "parameters": {
+    "is_aura": true,
+    "is_land_aura": true,
+    "land_aura_extra_mana": 1,
+    "land_aura_produces": []
+   }
+  },
+  {
+   "name": "Training Grounds",
+   "mana_cost": "{U}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Activated abilities of creatures you control cost {2} less to activate. This effect can't reduce the mana in that cost to less than one mana. [Reduces ACTIVATION costs (a new axis: every other reducer in this engine is keyed on the card being cast). Emiel's {3} becomes {1}; Eldrazi Displacer's {2}{C} becomes {C} -- the generic half goes and the colourless pip stays, so a {C} source is still required. The one-mana floor is enforced.]",
+   "template": "custom",
+   "parameters": {
+    "reduces_creature_activation": 2
+   }
+  },
+  {
+   "name": "Eladamri's Call",
+   "mana_cost": "{G}{W}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a creature card, reveal that card, put it into your hand, then shuffle. [Finds whichever combo piece is missing. WHICH creature is a searched tutor_target axis (one plan variant per candidate).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [
+     "Creature"
+    ],
+    "tutor_shuffle_after": true
+   }
+  },
+  {
+   "name": "Stroke of Genius",
+   "mana_cost": "{X}{2}{U}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Target player draws X cards. [The deck's draw payoff: with infinite mana this draws the library. 'Target player' = self (handing the passive opponent cards is strictly pointless -- the same collapse Braingeyser carries).]",
+   "template": "draw_x",
+   "parameters": {}
   }
  ]
 }

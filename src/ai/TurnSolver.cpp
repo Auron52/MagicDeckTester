@@ -745,7 +745,7 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
             pool.Add(Color::Colorless, yield >= 0 ? yield : ManaProducedPerTap(*def));
             continue;
         }
-        AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def));
+        AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def), &p);
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }  // see AvailableManaPool
     return pool;
@@ -3015,6 +3015,8 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
             // MTG_SPASM_UNTAP_LITERAL phase 3: same tap-ahead as the apply/executor twins, so
             // this sequential-payability answer prices the chain the way it will really be paid.
             if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(cp, a.chosen_x); }
+            if (def.params.etb_untap_lands > 0)
+            { EtbUntapTapAheadIntoFloat(cp, cp.active_player_index, def.params.etb_untap_lands); }
             if (!TapForCostDirect(cp, ec, def.card.IsCreature())) { return false; }
         }
         // Resolve the cast's mana-relevant effects so they fund the NEXT payment. Anything not
@@ -4034,7 +4036,7 @@ static void HasteUnlockedManaOf(const GameState& state, int host_id, ManaPool& o
     // copies the pool already credited, so it is deliberately not credited here (conservative).
     if (d->params.gy_land_exile_mana) { return; }
     ManaPool add;
-    AddSourceToPool(add, state, *d, perm ? PermanentManaYield(state, *perm, *d) : -1);
+    AddSourceToPool(add, state, *d, perm ? PermanentManaYield(state, *perm, *d) : -1, perm);
     if (add.Total() <= 0) { return; }
     out.AddPool(add);
     if (!d->params.creature_mana_only) { out_nc.AddPool(add); }
@@ -4395,6 +4397,26 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
                 if (cands[sel[b]].kind == Action::Kind::GarthActivate
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+            }
+        }
+        // Blink: one outlet does ONE thing per plan. Two variants of the same Displacer would be
+        // two different (target, count) pairs -- mutually exclusive, not a legal pair. (Activating
+        // an outlet twice at different counts is already expressible as one larger count.)
+        if (cands[sel[a]].kind == Action::Kind::ActivateBlink)
+        {
+            for (size_t b = a + 1; b < sel.size(); ++b)
+            {
+                if (cands[sel[b]].kind == Action::Kind::ActivateBlink
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+            }
+        }
+        // Permanent ability: one {T} per source across every mode (the Deathrite precedent).
+        if (cands[sel[a]].kind == Action::Kind::ActivatePermAbility)
+        {
+            for (size_t b = a + 1; b < sel.size(); ++b)
+            {
+                if (cands[sel[b]].kind == Action::Kind::ActivatePermAbility
                     && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
             }
         }
@@ -8868,7 +8890,22 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // modified creature). The provider is NOT the narrower here -- every legal target is emitted.
         if (def.params.is_aura)
         {
-            for (int tgt_num : LegalEnchantTargets(state, state.active_player_index, def.params))
+            // "Enchant land" (Wild Growth / Fertile Ground / Overgrowth / Trace of Abundance): the
+            // host set is every LAND, which on a seven-land board is 7 variants per copy and 7^3
+            // across three auras in hand -- measured as one of the two fan-outs that made this deck
+            // 1.38e9 odometer positions a game. The PROVIDER narrows it (the only legal home for a
+            // narrowing), and MTG_UNPRUNE=landaurahost / human play reopens every land, which is
+            // what the 5f pruned-vs-unpruned A/B compares against.
+            std::vector<int> aura_hosts =
+                LegalEnchantTargets(state, state.active_player_index, def.params);
+            if (def.params.is_land_aura && !HumanPlayActive()
+                && !DecisionUnpruned(UnprunedGate::LandAuraHost))
+            {
+                const std::vector<int> narrowed =
+                    ResolveProvider(state).LandAuraHostCandidates(state, state.active_player_index);
+                if (!narrowed.empty()) { aura_hosts = narrowed; }
+            }
+            for (int tgt_num : aura_hosts)
             {
                 Action a;
                 a.kind           = Action::Kind::CastFromHand;
@@ -9262,6 +9299,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
         if (IsManaRitual(def)) { a.ritual_float = RitualFloatAmount(state, def, a.chosen_x); }  // Irencrag burst
+        // "When this creature enters, untap up to N lands" (Peregrine Drake 5 / Cloud of Faeries 2).
+        // The untap REFUNDS the mana that paid for it, so the cast has to carry that refund as an
+        // enumeration credit or the planner can never see a Drake followed by anything -- and the
+        // whole deck is "Drake followed by anything". Same channel and the same optimistic-on-colour
+        // bound as a ritual's a.ritual_float (credited as wild in the subset math), because the tap
+        // -ahead below is the same manoeuvre: tap sources into the float, then untap them. NOT
+        // IsManaRitual, deliberately -- a Drake is a creature and must stay out of the ritual
+        // accelerant/payoff machinery (which is provider-gated off for this deck anyway).
+        if (def.params.etb_untap_lands > 0)
+        { a.ritual_float = EtbUntapLandsCredit(state, def.params.etb_untap_lands); }
         // Same-turn mana-rock ramp: a non-creature mana rock (Sol Ring) taps the turn it is cast.
         // Stamp the mana it produces (by real colour) so the enumerator can fund the rest of the
         // subset off it. Creatures (mana dorks) are excluded -- they are summoning-sick this turn.
@@ -10806,6 +10853,107 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 actions.push_back(std::move(a));
             }
 
+            // ---- Blink: Eldrazi Displacer "{2}{C}:" / Emiel the Blessed "{3}:" -------------------
+            // No {T} in either cost, so a summoning-sick outlet activates the turn it lands, and
+            // neither is once-per-turn. Two independent axes, both real decisions:
+            //   * WHICH creature to blink -- one Action variant per legal target (the Equip
+            //     precedent). Blinking a Peregrine Drake refills five lands; blinking anything else
+            //     re-fires that creature's own ETB and Emiel's counter watcher. Never collapsed to
+            //     a "first legal target" (that would be the enumerator stealing a decision).
+            //   * HOW MANY times -- chosen_x. The candidate set comes from the PROVIDER
+            //     (BlinkActivationCounts), the only thing permitted to narrow: generic returns
+            //     1..min(3, affordable) exactly like every other K-count activation, and a combo
+            //     provider that recognises a self-funding loop proposes the go-off count as one
+            //     further candidate. The search still picks among what it is handed.
+            if (sd->params.blink_cost.has_value())
+            {
+                const ManaCost per =
+                    EffectiveActivationCost(state, state.active_player_index, src.card,
+                                            sd->params.blink_cost.value());
+                const int per_mv = per.ManaValue();
+                const int affordable = per_mv > 0
+                                     ? (AvailableManaPool(state).Total() + state.floating_mana.Total()) / per_mv
+                                     : 1;
+                if (affordable >= 1)
+                {
+                    const DecisionProvider& prov = ResolveProvider(state);
+                    // Provider-narrowed target set (the other half of the 1.38e9 fan-out). Empty =
+                    // no narrowing = every legal creature, which is what Generic returns and what
+                    // MTG_UNPRUNE=blinktarget / human play force.
+                    std::vector<int> allowed;
+                    if (!HumanPlayActive() && !DecisionUnpruned(UnprunedGate::BlinkTarget))
+                    { allowed = prov.BlinkTargetCandidates(state, src); }
+                    for (const Permanent& tgt : state.battlefield)
+                    {
+                        if (!tgt.card.IsCreature()) { continue; }
+                        if (tgt.card.m_number == src.card.m_number) { continue; }   // "another"
+                        if (sd->params.blink_own_only
+                            && tgt.controller_index != state.active_player_index) { continue; }
+                        if (!allowed.empty()
+                            && std::find(allowed.begin(), allowed.end(), tgt.card.m_number)
+                               == allowed.end()) { continue; }
+                        const std::vector<int> counts =
+                            prov.BlinkActivationCounts(state, src, tgt, affordable);
+                        for (int k : counts)
+                        {
+                            if (k <= 0) { continue; }
+                            Action a;
+                            a.kind           = Action::Kind::ActivateBlink;
+                            a.card_name      = src.card.m_name;
+                            a.def            = sd;
+                            a.hand_index     = -1;
+                            a.sac_source_id  = src.card.m_number;
+                            a.sac_victim_id  = tgt.card.m_number;
+                            a.chosen_x       = k;
+                            a.cost           = per;   // ONE activation -- the loop is self-funding
+                            a.eval           = k;
+                            a.is_noncreature = true;
+                            actions.push_back(std::move(a));
+                        }
+                    }
+                }
+            }
+
+            // ---- "{cost}, {T}: <effect>" permanent abilities -------------------------------------
+            // Shivan Gorge's "deals 1 damage to each opponent", Conservatory/Kitchen's Investigate,
+            // Mariposa's Draw, and a Clue token's tap-free "Sacrifice this: Draw a card". One Kind
+            // with an AbilityMode because the wiring is identical for all four: check the source is
+            // available, pay, apply. Every tap mode requires an UNTAPPED source ({T} is part of the
+            // cost); SacDraw does not (a Clue made this turn can be cracked this turn -- artifacts
+            // have no summoning sickness and there is no tap symbol).
+            {
+                struct ModeSpec { Action::AbilityMode mode; const std::optional<ManaCost>* cost; bool taps; };
+                const ModeSpec modes[] = {
+                    { Action::AbilityMode::TapDamage,      &sd->params.tap_damage_cost,      true  },
+                    { Action::AbilityMode::TapInvestigate, &sd->params.tap_investigate_cost, true  },
+                    { Action::AbilityMode::TapDraw,        &sd->params.tap_draw_cost,        true  },
+                    { Action::AbilityMode::SacDraw,        &sd->params.sac_draw_cost,        false },
+                };
+                for (const ModeSpec& m : modes)
+                {
+                    if (!m.cost->has_value()) { continue; }
+                    if (m.taps && (src.tapped || !src.CanTap())) { continue; }
+                    Action a;
+                    a.kind           = Action::Kind::ActivatePermAbility;
+                    a.card_name      = src.card.m_name;
+                    a.def            = sd;
+                    a.hand_index     = -1;
+                    a.sac_source_id  = src.card.m_number;
+                    a.ability_mode   = m.mode;
+                    a.cost           = EffectiveActivationCost(state, state.active_player_index,
+                                                               src.card, m.cost->value());
+                    if (m.mode == Action::AbilityMode::TapDraw && sd->params.tap_draw_cost_less_per_rad)
+                    { a.cost.generic = std::max(0, a.cost.generic
+                                                   - state.players[state.active_player_index].rad_counters); }
+                    a.eval           = (m.mode == Action::AbilityMode::TapDamage)
+                                     ? sd->params.tap_damage_each_opponent * 2 : 1;
+                    a.direct_damage  = (m.mode == Action::AbilityMode::TapDamage)
+                                     ? sd->params.tap_damage_each_opponent : 0;
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+
             // ---- The two GREEDY post-cast mana sinks, as real actions -- HUMAN PLAY ONLY ----------
             // Mutavault's "{1}: becomes a 2/2" and Sliver Hive's "{5}, {T}: create a Sliver" are the
             // only activated abilities in the database with NO Action::Kind of their own: both are
@@ -11431,6 +11579,13 @@ static int ActivationFamilyKey(const Action& a)
         case Action::Kind::AttachAllEquipment:
         case Action::Kind::PutFromHandAbility:   // shared {T}: one put per Stoneforge
         case Action::Kind::JitteModeAbility:     // one counter-spend variant per Jitte per plan
+        // Blink: one outlet fans out over (every legal target) x (every candidate count), so its
+        // variants are the widest family here -- exactly the 2^k odometer blowup this grouping
+        // exists to prevent. They are mutually exclusive by construction (one outlet does one
+        // thing per plan), so grouping costs nothing in coverage.
+        case Action::Kind::ActivateBlink:
+        // Permanent ability: one {T} per source across its modes (the Deathrite precedent).
+        case Action::Kind::ActivatePermAbility:
             return (a.sac_source_id >= 0) ? -1000 - a.sac_source_id : 0;
         default:
             return 0;
@@ -16675,6 +16830,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // profit and the chain the credit priced becomes realisable (see
             // RitualTapAheadIntoFloat; lockstep twins in CastSpellFromHand + SubsetPayableSequential).
             if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(state, chosen_x); }
+            if (def.params.etb_untap_lands > 0)
+            { EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands); }
             PaySacVictimScope _psv(
                 !def.params.sac_additional_creature_color.empty() ? own_targets : 0);
             if (!TapForCostDirect(state, ec, is_creature))
@@ -17856,7 +18013,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (def.params.is_aura)
             {
                 state.battlefield.back().aura_attached_to =
-                    ResolveEnchantTarget(state, state.active_player_index, enchant_target);
+                    ResolveEnchantTarget(state, state.active_player_index, enchant_target,
+                                         def.params.is_land_aura);
                 PerformLightPawsAttach(state, state.active_player_index,
                                        def.card.m_mana_cost.ManaValue(),
                                        g_bp_trace_arm ? "APPLY" : "rollout");
@@ -18497,6 +18655,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 for (int k = 0; k < std::max(1, a.chosen_x); ++k)
                 { if (!ApplyRevealTopDeploy(state, state.active_player_index)) { break; } }
+            }
+        }
+        else if (a.kind == Action::Kind::ActivateBlink)
+        {
+            // Eldrazi Displacer / Emiel: run the shared loop driver, which pays ONE activation per
+            // iteration (the loop is self-funding) and stops the moment one cannot be paid. The
+            // executor calls the identical driver with its own payer -- lockstep by construction.
+            if (a.def != nullptr)
+            {
+                ApplyBlinkLoop(state, state.active_player_index, a.sac_source_id, a.sac_victim_id,
+                               a.def->params, std::max(1, a.chosen_x),
+                               [&state](const ManaCost& c)
+                               { return TapForCostDirect(state, c, /*for_creature=*/false); });
+            }
+        }
+        else if (a.kind == Action::Kind::ActivatePermAbility)
+        {
+            // Shivan Gorge / Investigate / Mariposa draw / Clue crack. Precondition FIRST so a
+            // stranded activation never pays (the UntapCreature discipline).
+            if (a.def != nullptr && PermAbilitySourceLive(state, state.active_player_index,
+                                                          a.sac_source_id, a.ability_mode)
+                && TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            {
+                ApplyPermAbility(state, state.active_player_index, a.sac_source_id, a.ability_mode);
             }
         }
         else if (a.kind == Action::Kind::ActivatePump)
@@ -21912,6 +22094,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     msf.push_back("APUMP#" + std::to_string(act.sac_source_id)
                                   + "m" + std::to_string(act.gy_exile_mode)
                                   + "x" + std::to_string(act.chosen_x)); break;
+                // Blink: which outlet, WHICH CREATURE, and how many times are three DISTINCT
+                // decisions and all three ride the signature. Dropping the target would be the
+                // Gamble-tutor bug verbatim (the dedup keeping one of several real alternatives);
+                // dropping K would collapse a 20-iteration go-off into a single value blink.
+                case Action::Kind::ActivateBlink:
+                    msf.push_back("BLINK#" + std::to_string(act.sac_source_id)
+                                  + ">" + std::to_string(act.sac_victim_id)
+                                  + "x" + std::to_string(act.chosen_x)); break;
+                // Permanent ability: which source AND which mode (a Conservatory could in principle
+                // offer more than one; a Clue and a Gorge are different sources anyway).
+                case Action::Kind::ActivatePermAbility:
+                    msf.push_back("PABIL#" + std::to_string(act.sac_source_id)
+                                  + "m" + std::to_string(static_cast<int>(act.ability_mode)));
+                    break;
             }
         }
         std::sort(v.begin(), v.end());

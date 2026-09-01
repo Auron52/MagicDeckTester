@@ -68,6 +68,8 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"saclandhold",UnprunedGate::SacLandHold},
     {"tricktarget",UnprunedGate::TrickTarget},
     {"treasuretrickcast",UnprunedGate::TreasureTrickCast},
+    {"blinktarget",  UnprunedGate::BlinkTarget},
+    {"landaurahost", UnprunedGate::LandAuraHost},
     {"equiphost",  UnprunedGate::EquipHost},
     {"jittemode",  UnprunedGate::JitteMode},
     {"uacast",     UnprunedGate::UACast},
@@ -3393,7 +3395,7 @@ static bool ScryKeepOnTopLands(const GameState& s, const Card& top_card)
         const bool is_l = (d->tmpl == CardTemplate::BasicLand);
         const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield)) || d->params.mana_rock;
         if (!is_l && !is_dork) { continue; }
-        AddSourceToPool(pool, s, *d);
+        AddSourceToPool(pool, s, *d, -1, &p);
     }
 
     // Outlets already online: Land's Edge (lands become damage) or Reliquary Tower (the flood is
@@ -4366,7 +4368,7 @@ bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controll
             bool is_land = (d->tmpl == CardTemplate::BasicLand);
             bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield)) || d->params.mana_rock;
             if (!is_land && !is_dork) { continue; }
-            AddSourceToPool(pool, s, *d);
+            AddSourceToPool(pool, s, *d, -1, &p);
         }
         ManaCost combined  = def.card.m_mana_cost;
         const ManaCost& lc = le_def->card.m_mana_cost;
@@ -4474,7 +4476,7 @@ bool TreasureHuntProvider::HoldDeferredDropForFurtherDig(const GameState& s, int
         bool is_land = (d->tmpl == CardTemplate::BasicLand);
         bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield)) || d->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
-        AddSourceToPool(pool, s, *d);
+        AddSourceToPool(pool, s, *d, -1, &p);
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(s.floating_mana); }
     for (const Card& c : ap.hand)
@@ -9180,6 +9182,7 @@ namespace
     const MinotaurProvider       g_minotaur;
     const DragonsProvider        g_dragons;
     const AurasProvider          g_auras;
+    const EldraziFlickerProvider g_eldrazi_flicker;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -9197,11 +9200,21 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool minotaur = false; // Minotaur tribal -- routes to Generic BEFORE the goblin check
     bool dragons = false;  // Mono-red Dragons ramp -- routes to Generic BEFORE the goblin check
     bool aura = false;     // Bogle Auras -- Light-Paws' aura_cast_tutor_attach is unique to it
+    // Eldrazi Displacer / Emiel flicker combo. MUST be detected and MUST return ABOVE the `anti`
+    // check: Eladamri's Call carries tutor_to_hand, which is the anti-lifegain signature, and this
+    // deck would otherwise inherit AntiLifegainProvider's narrowing wholesale -- the recorded
+    // misroute class (Goblin Matron, Stoneforge, Sylvan Scrying, the FiveColour fetchlands).
+    // OR-ed across THREE different cards' params (the blink outlets, the untap payloads, the land
+    // auras) so no single deckbuilding swap can silently lose the signature, and every one of them
+    // is new + gated (0/false/nullopt inert), so no existing deck can set it.
+    bool eldrazi = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+
+        if (p.blink_cost.has_value() || p.etb_untap_lands > 0 || p.is_land_aura) { eldrazi = true; }
 
         // Goblins archetype: any Goblin-specific gated param marks the deck. Goblin Matron carries
         // tutor_to_hand, which would otherwise trip the anti-lifegain signature below and MISROUTE
@@ -9372,6 +9385,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         }
     }
 
+    // ABOVE everything: this deck's own signature is unambiguous, and its tutor_to_hand would
+    // otherwise be read as anti-lifegain (see the flag's comment).
+    if (eldrazi)     { return g_eldrazi_flicker; }
     if (dragonstorm) { return g_dragonstorm; }
     if (hinata) { return g_hinata; }
     // Mirrorwing/Zada swarm: MirrorwingProvider (Generic + the trick-target 5f prune); must WIN
@@ -13090,4 +13106,330 @@ const char* EquipmentProvider::CastOrderTierName(int rank) const
         case 30: return "GOLDFISH-INERT REMOVAL: last, and m2 (no blocking in this apparatus)";
         default: return nullptr;
     }
+}
+
+// ---- EldraziFlickerProvider -------------------------------------------------
+//
+// See the class comment in DecisionProviders.h for the measurement that motivates every hook here
+// (1.38e9 odometer positions / 78 s for ONE d3 game before any of it).
+
+namespace
+{
+
+// The go-off, described once so the recognizer and the count heuristic cannot drift apart.
+struct FlickerLoop
+{
+    bool ok            = false;
+    int  outlet_id     = 0;   // m_number of the blink outlet (Displacer / Emiel)
+    int  payload_id    = 0;   // m_number of the creature whose ETB untaps lands
+    int  untaps        = 0;   // lands that ETB untaps
+    int  cost_mv       = 0;   // mana per activation, AFTER Training Grounds
+    int  refund        = 0;   // mana the untap hands back per iteration
+    int  net           = 0;   // refund - cost_mv; > 0 means unbounded
+    int  gorge_cost_mv = 0;   // mana per Shivan Gorge activation (0 = no Gorge available)
+    int  gorge_dmg     = 0;   // damage per Gorge activation
+};
+
+// Sum of the controller's TOP-N land yields -- the same order EtbUntapLands untaps in and the same
+// yield PermanentManaYield reports (land Auras included), so the recognizer's refund is the refund
+// the executor will actually realise.
+//
+// Written as a fixed-size top-N insertion rather than "collect, sort, sum": ExtraLethalDamage is
+// called once per CONSIDERED SUBSET on the rollout hot path (the contract's rule 3 -- it must not
+// allocate and must not copy GameState), and the sort-and-vector version showed up at 3.5% of a
+// whole game's runtime for a quantity that is a five-element maximum.
+constexpr int kFlickerMaxUntaps = 8;   // no printed "untap up to N lands" exceeds this
+
+int FlickerTopLandYields(const GameState& s, int controller, int n)
+{
+    if (n <= 0) { return 0; }
+    if (n > kFlickerMaxUntaps) { n = kFlickerMaxUntaps; }
+    int top[kFlickerMaxUntaps] = {0};
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        int y = PermanentManaYield(s, p, *d);
+        for (int i = 0; i < n; ++i)
+        { if (y > top[i]) { std::swap(y, top[i]); } }
+    }
+    int sum = 0;
+    for (int i = 0; i < n; ++i) { sum += top[i]; }
+    return sum;
+}
+
+// Recognise an assembled, SELF-FUNDING blink loop on the battlefield. Deliberately conservative:
+// it reads only what is already in play (never a card in hand), prices the activation through the
+// same EffectiveActivationCost the payer uses, and takes the refund as the top-N land yields --
+// which is what EtbUntapLands untaps. Returns ok=false unless net > 0.
+FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
+{
+    FlickerLoop best;
+
+    // CHEAP GATE FIRST (hot path): no blink outlet on the board means no loop, and that is the
+    // common case for most of every game. One scan, no lookups beyond the def, no allocation.
+    bool any_outlet = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.blink_cost.has_value()) { any_outlet = true; break; }
+    }
+    if (!any_outlet) { return best; }
+
+    // The cheapest live Shivan-Gorge-style sink, if any (priced through EffectiveActivationCost so
+    // the recognizer and the payer can never disagree about what an activation costs).
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.tap_damage_cost.has_value()
+            || d->params.tap_damage_each_opponent <= 0) { continue; }
+        const int mv = EffectiveActivationCost(s, controller, p.card,
+                                               d->params.tap_damage_cost.value()).ManaValue();
+        if (best.gorge_dmg == 0 || mv < best.gorge_cost_mv)
+        { best.gorge_cost_mv = mv; best.gorge_dmg = d->params.tap_damage_each_opponent; }
+    }
+
+    for (const Permanent& src : s.battlefield)
+    {
+        if (src.controller_index != controller) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+        if (!sd || !sd->params.blink_cost.has_value()) { continue; }
+        const int cost_mv = EffectiveActivationCost(s, controller, src.card,
+                                                    sd->params.blink_cost.value()).ManaValue();
+        for (const Permanent& tgt : s.battlefield)
+        {
+            if (!tgt.card.IsCreature()) { continue; }
+            if (tgt.card.m_number == src.card.m_number) { continue; }         // "another"
+            if (sd->params.blink_own_only && tgt.controller_index != controller) { continue; }
+            const CardDefinition* td = CardDatabase::Instance().LookupCached(tgt.card);
+            if (!td || td->params.etb_untap_lands <= 0) { continue; }
+            const int n = td->params.etb_untap_lands;
+            const int refund = FlickerTopLandYields(s, controller, n);
+            const int net = refund - cost_mv;
+            if (net <= 0) { continue; }
+            if (best.ok && net <= best.net) { continue; }
+            best.ok = true; best.outlet_id = src.card.m_number; best.payload_id = tgt.card.m_number;
+            best.untaps = n; best.cost_mv = cost_mv; best.refund = refund; best.net = net;
+        }
+    }
+    return best;
+}
+
+// How many iterations the deck should actually ASK for.
+//
+// This is the sharp end of the go-off heuristic and it is deliberately SMALL. "Infinite" is not a
+// useful request: every iteration is real work inside every rollout that scores the plan, so asking
+// for 40 when 12 kills costs 3x for nothing. Ask for exactly enough to FINISH, by whichever of the
+// deck's two kills the board supports:
+//
+//   * a Shivan-Gorge-style sink -> ceil(opponent life / damage per activation);
+//   * an Emiel-style counter watcher -> enough +1/+1 counters to make the blinked creature lethal
+//     NEXT turn (it is summoning sick after every blink, CR 400.7, so it cannot attack this one).
+//
+// With NEITHER, extra mana buys nothing a goldfish can spend and the answer is 0 -- fall back to
+// the generic small counts. That case matters: it is most of the game, and an un-cashable 40-blink
+// loop was the single most expensive thing the first version of this heuristic did.
+constexpr int kFlickerMaxIterations = 30;
+
+int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
+{
+    if (!loop.ok) { return 0; }
+    const int life = std::max(1, s.Opponent().life);
+
+    if (loop.gorge_dmg > 0)
+    {
+        // The loop must fund the sink as well as itself, or the damage never fires.
+        if (loop.refund > loop.cost_mv + loop.gorge_cost_mv)
+        { return std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, kFlickerMaxIterations); }
+    }
+
+    // Counter-watcher kill: how many counters until the payload swings for lethal?
+    int watcher_counters = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.other_creature_etb_counter_cost.has_value())
+        { watcher_counters = std::max(watcher_counters, d->params.other_creature_etb_counters); }
+    }
+    if (watcher_counters > 0)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.card.m_number != loop.payload_id) { continue; }
+            const int need = life - p.EffectivePower();
+            if (need <= 0) { return 0; }   // already lethal; no reason to grow it
+            return std::clamp((need + watcher_counters - 1) / watcher_counters,
+                              1, kFlickerMaxIterations);
+        }
+    }
+    return 0;   // no way to cash the mana -> no go-off candidate
+}
+
+const bool s_edf_goff = !EnvOn("MTG_NO_ELDRAZI_GOFF");
+
+}  // namespace
+
+// WHICH creature to blink. Unnarrowed this is "every creature on the board", and across two or
+// three outlets that product is a large part of the 1.38e9. Only two targets can matter:
+//
+//   * the best ETB-UNTAP payload (highest untap count) -- the mana engine, and the only target that
+//     makes the loop self-funding at all;
+//   * if an Emiel-style counter watcher is out, the best ATTACKER to grow -- the deck's other kill
+//     (N iterations = N +1/+1 counters, cashed the FOLLOWING turn because a blinked creature is
+//     summoning sick).
+//
+// Blinking anything else re-fires an ETB that does nothing (Displacer and Emiel have none) for a
+// strictly positive cost, so it is dominated rather than merely unpromising. Reopened in full by
+// MTG_UNPRUNED / human play (the enumerator applies that gate), which is what the 5f A/B needs.
+std::vector<int> EldraziFlickerProvider::BlinkTargetCandidates(const GameState& s,
+                                                               const Permanent& source) const
+{
+    const int me = source.controller_index;
+    const CardDefinition* sd = CardDatabase::Instance().LookupCached(source.card);
+    const bool own_only = sd && sd->params.blink_own_only;
+
+    int best_payload = 0, best_untaps = 0;
+    int best_attacker = 0, best_power = -1;
+    bool counter_watcher = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.other_creature_etb_counter_cost.has_value()
+            && d->params.other_creature_etb_counters > 0) { counter_watcher = true; }
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (!p.card.IsCreature()) { continue; }
+        if (p.card.m_number == source.card.m_number) { continue; }
+        if (own_only && p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.etb_untap_lands > best_untaps)
+        { best_untaps = d->params.etb_untap_lands; best_payload = p.card.m_number; }
+        if (counter_watcher && p.controller_index == me)
+        {
+            const int pw = p.EffectivePower();
+            if (pw > best_power) { best_power = pw; best_attacker = p.card.m_number; }
+        }
+    }
+    std::vector<int> out;
+    if (best_payload  != 0) { out.push_back(best_payload); }
+    if (best_attacker != 0 && best_attacker != best_payload) { out.push_back(best_attacker); }
+    return out;
+}
+
+// HOW MANY activations. Generic caps at 3, which for this deck is not merely conservative -- it
+// makes the deck's only win line UNREACHABLE, because the kill wants ~20 iterations and the
+// enumerator would never offer one. So: the generic small counts (a value blink is still a real
+// play), plus ONE go-off candidate when a self-funding loop is recognised on the board.
+//
+// It is a candidate, not a decision: the search still scores it against the alternatives, the apply
+// loop pays per iteration and BREAKS the moment one cannot be paid, and the win is only ever
+// realised by damage actually dealt. So a mis-recognised loop costs a wasted branch, never a
+// phantom win.
+std::vector<int> EldraziFlickerProvider::BlinkActivationCounts(const GameState& s,
+                                                               const Permanent& source,
+                                                               const Permanent& target,
+                                                               int max_affordable) const
+{
+    std::vector<int> out;
+    const int kmax = std::min(3, max_affordable);
+    for (int k = 1; k <= kmax; ++k) { out.push_back(k); }
+    if (!s_edf_goff) { return out; }
+
+    const FlickerLoop loop = RecogniseFlickerLoop(s, source.controller_index);
+    if (!loop.ok) { return out; }
+    if (loop.outlet_id != source.card.m_number)  { return out; }
+    if (loop.payload_id != target.card.m_number) { return out; }
+    const int n = FlickerGoOffCount(s, loop);
+    if (n > kmax) { out.push_back(n); }
+    return out;   // n == 0 (nothing to cash the mana on) falls through to the generic counts
+}
+
+// WHICH land an "Enchant land" Aura goes on. The bonus is the AURA's, in the aura's own colour, and
+// it is collected whenever the host is tapped -- so on a board whose lands neither die nor go
+// unused, the host barely matters. Two things do, and both are captured by the ordering below:
+//
+//   * a host that is UNTAPPED right now collects the bonus THIS turn;
+//   * a KAROO bounce land (Azorius Chancery) can be returned to hand by its own ETB, which would
+//     take the aura with it -- a real difference, so it goes last.
+//
+// Proposes the best two rather than one: concentrating auras on a single land raises the top-N
+// yield the blink loop untaps, while spreading them raises the total across a fully-tapped board,
+// and which wins depends on the land count. Two candidates keeps that trade searched at a cost of
+// 3 odometer states per aura instead of 8.
+std::vector<int> EldraziFlickerProvider::LandAuraHostCandidates(const GameState& s,
+                                                                int controller) const
+{
+    struct Host { int score; int number; };
+    std::vector<Host> hosts;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        int score = PermanentManaYield(s, p, *d) * 4;
+        if (!p.tapped)                { score += 2; }
+        if (d->params.etb_bounce_land) { score -= 100; }
+        hosts.push_back(Host{ score, p.card.m_number });
+    }
+    std::stable_sort(hosts.begin(), hosts.end(),
+                     [](const Host& a, const Host& b)
+                     { return a.score != b.score ? a.score > b.score : a.number < b.number; });
+    std::vector<int> out;
+    for (std::size_t i = 0; i < hosts.size() && i < 2; ++i) { out.push_back(hosts[i].number); }
+    return out;
+}
+
+// The go-off recognizer (the user's "heuristic for going off", 2026-09-01). With the loop assembled
+// and a Shivan Gorge on the board, the kill is arithmetic and the search should not have to find it
+// twenty activations deep: each iteration untaps the Gorge, so damage is bounded only by the mana
+// the loop makes, which is unbounded.
+//
+// Contract-critical, and the reason this can only ever HELP: ExtraLethalDamage is an ADDEND to the
+// engine's own win projection, never a win. Execution stays the arbiter -- the damage is realised
+// by ApplyBlinkLoop actually tapping the Gorge N times -- and both go-off short-circuits re-simulate
+// with ApplyPlanDirect before believing a lethal. So an over-claim costs a mis-ranked plan; it
+// cannot report a win the game did not produce.
+//
+// Deliberately conservative in three ways: it reads the board only (never a combo piece still in
+// hand), it prices activations through EffectiveActivationCost, and it clamps.
+bool EldraziFlickerProvider::HasExtraLethalModel() const { return s_edf_goff; }
+
+int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
+                                              const std::vector<const CardDefinition*>& casting) const
+{
+    (void)casting;   // the loop is a BOARD state; nothing cast this turn changes the arithmetic
+    if (!s_edf_goff) { return 0; }
+    const int me = s.active_player_index;
+    const FlickerLoop loop = RecogniseFlickerLoop(s, me);
+    if (!loop.ok || loop.gorge_dmg <= 0) { return 0; }
+
+    // The loop must fund BOTH halves of an iteration: the activation and the Gorge. Otherwise the
+    // mana grows but the damage never fires, and claiming lethal off it would be a pure fiction.
+    if (loop.refund <= loop.cost_mv + loop.gorge_cost_mv) { return 0; }
+
+    // It must also be STARTABLE from what is on the board right now -- one full iteration's worth.
+    ManaPool have = AvailableManaPool(s);
+    have.AddPool(s.floating_mana);
+    if (have.Total() < loop.cost_mv + loop.gorge_cost_mv) { return 0; }
+
+    const long long dmg = static_cast<long long>(kFlickerMaxIterations) * loop.gorge_dmg;
+    return dmg > 1000000 ? 1000000 : static_cast<int>(dmg);
+}
+
+// Deploy the combo before anything else: an outlet or a payload on the battlefield is what every
+// other card in the deck is for, and a land Aura cast before them raises the refund they collect.
+// Ranks are inside the generic bands (creatures 10, noncreature 20) so nothing else reorders.
+int EldraziFlickerProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (def.params.is_land_aura)                 { return 4; }   // ramp first: it feeds the rest
+    if (def.params.reduces_creature_activation)  { return 5; }   // Training Grounds cheapens both outlets
+    if (def.params.etb_untap_lands > 0)          { return 6; }   // the payload refunds its own cost
+    if (def.params.blink_cost.has_value())       { return 7; }   // then the outlet
+    return GenericProvider::CastOrderRank(s, def);
 }

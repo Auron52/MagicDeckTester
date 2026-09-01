@@ -798,6 +798,12 @@ inline void FireOwnEtbTriggers(GameState&, int controller, int entered_index,
 constexpr int kEtbKxHeuristic = -2;
 extern thread_local int g_scripted_tutor_choice;   // defined below (ScriptedTutor)
 inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefinition&);   // defined below
+inline void EtbUntapLands(GameState&, int controller, int count);                            // defined below
+inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count);                // defined below
+inline int  EtbUntapLandsCredit(const GameState&, int count);                                // defined below
+inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost);                      // defined below
+inline ManaCost EffectiveActivationCost(const GameState&, int controller, const Card& source,
+                                        const ManaCost& printed);                            // defined below
 // Forward declaration: the reusable chosen-colour float (defined in the ritual section below) is
 // called by ApplySacForMana (Lotus Bloom), which is defined above that section.
 inline void AddChosenColorFloat(GameState& state, const std::string& col, int amt);
@@ -1965,6 +1971,19 @@ inline std::vector<int> LegalEnchantTargets(const GameState& state, int controll
                                             const CardParams& pp)
 {
     std::vector<int> out;
+    // "Enchant land" (Wild Growth / Fertile Ground / Overgrowth / Trace of Abundance): the host is a
+    // LAND, not a creature. Which land is a REAL decision -- the bonus rides that land's tap, so
+    // enchanting an untapped multi-colour land is not the same play as enchanting a tapped one --
+    // so every legal host is emitted as its own plan variant and the search picks (core invariant).
+    if (pp.is_land_aura)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+            out.push_back(p.card.m_number);
+        }
+        return out;
+    }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
@@ -1979,8 +1998,33 @@ inline std::vector<int> LegalEnchantTargets(const GameState& state, int controll
 // a creature `controller` controls; otherwise a deterministic heuristic fallback (a self-buff creature
 // like Kor first, then the one already carrying the most auras, then lowest m_number) so the executor
 // and rollout agree even if a target was ever left unset. Returns 0 if no creature exists.
-inline int ResolveEnchantTarget(const GameState& state, int controller, int enchant_target)
+//
+// `land_aura` switches the host type to LAND ("Enchant land"). Its fallback ranks by the host's
+// per-tap yield BEFORE this aura lands (highest first, lowest m_number to break ties): the extra
+// mana rides the enchanted land's tap, so doubling up on the land that already makes the most is
+// the deterministic default. It is only a fallback -- which land to enchant is emitted as a plan
+// variant per legal host, so the search normally decides. Defaults false -> byte-identical.
+inline int ResolveEnchantTarget(const GameState& state, int controller, int enchant_target,
+                                bool land_aura = false)
 {
+    if (land_aura)
+    {
+        for (const Permanent& p : state.battlefield)
+            if (p.controller_index == controller && p.card.IsLand()
+                && p.card.m_number == enchant_target)
+            { return enchant_target; }
+        int lbest = 0, lbest_yield = -1;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d) { continue; }
+            const int y = PermanentManaYield(state, p, *d);
+            if (y > lbest_yield || (y == lbest_yield && p.card.m_number < lbest))
+            { lbest_yield = y; lbest = p.card.m_number; }
+        }
+        return lbest;
+    }
     for (const Permanent& p : state.battlefield)
         if (p.controller_index == controller && p.card.IsCreature()
             && p.card.m_number == enchant_target)
@@ -2621,6 +2665,41 @@ std::string DescribeLifeWatchers(const GameState& state, int subject_controller,
                                  const std::vector<std::pair<std::string, int>>& on_other,
                                  int life_before_subject, int life_before_other);
 
+// --- Optional trigger costs ("you may pay {X}. If you do, ...") --------------------------------
+// Emiel the Blessed's +1/+1 counter trigger is the only one today. Two payment sources, in order:
+//
+//  1. `g_etb_optional_payer`, when a caller that OWNS a payment context has installed one. The
+//     blink loop does: it is already tapping and paying per iteration, so its payer keeps the
+//     trigger's mana on exactly the same books as the activation's. Same thread_local-hook idiom
+//     as the g_play_*_chooser family, and nulled the same way -- if nobody installs one, nothing
+//     changes.
+//  2. Otherwise the TURN-SCOPED FLOAT only.
+//
+// It deliberately does NOT reach for TapForCostShared on its own. No core resolution effect in
+// this engine pays mana by tapping, and adding one here would desynchronise the EXECUTOR's
+// `available` accounting (AIEngine carries a pool across a plan's payments; a tap it did not make
+// leaves that pool over-counting) -- a silent [fd-diverge] source. The cost of the restriction is
+// that a hard-cast creature can miss a counter when the board has untapped mana but no float; that
+// under-claims, never over-claims, and is disclosed in Stage 6a.
+inline thread_local const std::function<bool(const ManaCost&)>* g_etb_optional_payer = nullptr;
+
+struct EtbOptionalPayerScope
+{
+    const std::function<bool(const ManaCost&)>* prev;
+    explicit EtbOptionalPayerScope(const std::function<bool(const ManaCost&)>* p)
+        : prev(g_etb_optional_payer) { g_etb_optional_payer = p; }
+    ~EtbOptionalPayerScope() { g_etb_optional_payer = prev; }
+};
+
+inline bool PayOptionalTriggerCost(GameState& state, const ManaCost& cost)
+{
+    if (g_etb_optional_payer != nullptr) { return (*g_etb_optional_payer)(cost); }
+    if (!state.floating_mana.CanPay(cost)) { return false; }
+    ManaCost remaining = cost;
+    SpendFloatingTowardCost(state.floating_mana, remaining);
+    return remaining.ManaValue() == 0;
+}
+
 inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, int entered_index)
 {
     // Play-viewer history (viewer issue #11): this is the DRAIN ENGINE, and it used to move life
@@ -2713,6 +2792,46 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             if (entered_controller != state.active_player_index)
             { state.opponent_lost_life_this_turn = true; }
             if (log) { note(entered_controller, w.card.m_name.str()); }
+        }
+    }
+
+    // Emiel the Blessed: "Whenever ANOTHER creature you control enters, you may pay {G/W}. If you
+    // do, put a +1/+1 counter on it. If it's a Unicorn, put two +1/+1 counters on it instead."
+    //
+    // This is the deck's SECOND kill and the reason it does not need Shivan Gorge: an Emiel blink
+    // loop re-enters its target every iteration, so N iterations put N counters on it. (The target
+    // is summoning sick after every blink -- CR 400.7 -- so the huge creature attacks NEXT turn.)
+    //
+    // The payment is OPTIONAL and taken whenever it is affordable: against a passive opponent a
+    // +1/+1 counter is monotone-good and there is nothing else the mana could be held for at this
+    // point in the resolution. That is a RESOLUTION heuristic, not a searched branch -- disclosed
+    // in Stage 6a. Paid straight out of the turn-scoped float when it is there (the blink loop's
+    // tap-ahead leaves it there), else by tapping a source.
+    for (std::size_t wi = 0; wi < state.battlefield.size(); ++wi)
+    {
+        const int watcher_ctrl = state.battlefield[wi].controller_index;
+        if (watcher_ctrl != entered_controller) { continue; }
+        if (static_cast<int>(wi) == entered_index) { continue; }   // "ANOTHER creature"
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(state.battlefield[wi].card);
+        if (!wd || !wd->params.other_creature_etb_counter_cost.has_value()
+            || wd->params.other_creature_etb_counters <= 0) { continue; }
+        const ManaCost c = wd->params.other_creature_etb_counter_cost.value();
+        if (!PayOptionalTriggerCost(state, c)) { continue; }
+        int n = wd->params.other_creature_etb_counters;
+        const std::string& usub = wd->params.other_creature_etb_counter_subtype;
+        if (!usub.empty() && wd->params.other_creature_etb_counters_subtype > 0)
+        {
+            for (const std::string& st : state.battlefield[entered_index].card.m_subtypes)
+            { if (st == usub) { n = wd->params.other_creature_etb_counters_subtype; break; } }
+        }
+        state.battlefield[entered_index].counters.push_back(
+            Counter{ Counter::Type::PlusOnePlusOne, n });
+        if (log)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          "\xE2\x9E\x95 " + state.battlefield[wi].card.m_name.str() + ": +"
+                          + std::to_string(n) + "/+" + std::to_string(n) + " counter on "
+                          + state.battlefield[entered_index].card.m_name.str());
         }
     }
 
@@ -3255,6 +3374,11 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         CardDatabase::Instance().LookupCached(state.battlefield[entered_index].card);
     if (!def) { return; }
     const CardParams& p = def->params;
+
+    // Peregrine Drake / Cloud of Faeries: "When this creature enters, untap up to N lands." FIRST,
+    // ahead of every other own-ETB effect, because it is a MANA effect and a later trigger in the
+    // same resolution (Emiel's optional {G/W} counter) may want to spend what it refunds.
+    if (p.etb_untap_lands > 0) { EtbUntapLands(state, controller, p.etb_untap_lands); }
 
     // --- StompySurprise ETB effects (all param-gated; byte-identical elsewhere) ---
 
@@ -6960,14 +7084,59 @@ inline int UntapLandBurstNet(const GameState& state, int controller, const CardD
 // live scaled dork exists -> byte-identical for every other deck.
 inline bool FeedsLiveScaledDork(const GameState& state, const CardDefinition& def);   // below
 
+// --- Land Auras (Wild Growth / Fertile Ground / Overgrowth / Trace of Abundance) ---------------
+// "Whenever enchanted land is tapped for mana, its controller adds an additional <X>." The bonus
+// belongs to the AURA, not to the land's own CardDefinition, so unlike every other yield modifier
+// in this engine it can only be found by looking at what is attached to THIS permanent. That is why
+// the three yield readers below all need the Permanent, not just the def.
+//
+// LandAuraBonus returns the extra mana COUNT; LandAuraAddToPool credits it with the right colour.
+// Both are no-ops (an early `return` on the m_number scan) for every deck with no land aura in
+// play, so the whole mechanic is inert elsewhere.
+inline int LandAuraBonus(const GameState& state, const Permanent& land)
+{
+    if (!land.card.IsLand()) { return 0; }
+    int bonus = 0;
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.aura_attached_to != land.card.m_number) { continue; }
+        if (a.controller_index != land.controller_index) { continue; }
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+        if (ad && ad->params.is_land_aura) { bonus += ad->params.land_aura_extra_mana; }
+    }
+    return bonus;
+}
+
+// Credit each attached land aura's additional mana into `pool`, in the aura's own colour. An EMPTY
+// land_aura_extra_color is "one mana of any colour" -- credited as `wild` but deliberately NOT as
+// `wild_c`, because a colour cannot pay a {C} pip (ManaPool::wild_c). A named colour is credited
+// exactly ({G} for Wild Growth, {G}{G} for Overgrowth).
+inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Permanent& land)
+{
+    if (!land.card.IsLand()) { return; }
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.aura_attached_to != land.card.m_number) { continue; }
+        if (a.controller_index != land.controller_index) { continue; }
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+        if (!ad || !ad->params.is_land_aura || ad->params.land_aura_extra_mana <= 0) { continue; }
+        const std::vector<Color>& prod = ad->params.land_aura_produces;
+        if (prod.empty())        { pool.wild += ad->params.land_aura_extra_mana; }
+        else if (prod.size() == 1) { pool.Add(prod[0], ad->params.land_aura_extra_mana); }
+        else                     { pool.wild += ad->params.land_aura_extra_mana; }
+    }
+}
+
 inline int PermanentManaYield(const GameState& state, const Permanent& perm, const CardDefinition& def)
 {
-    if (def.params.storage_land) { return perm.storage_counters; }
+    if (def.params.storage_land) { return perm.storage_counters + LandAuraBonus(state, perm); }
     // Priest of Titania / Elvish Archdruid: yield = live Elf count (state-dependent).
     if (IsScaledManaDork(def))   { return ScaledDorkCount(state, perm.controller_index, def); }
     // Arbor Elf: no controlled Forest -> not a live source (yield 0; pool adds nothing).
     if (!ManaSubtypeGateLive(state, perm.controller_index, def)) { return 0; }
-    return ManaProducedPerTap(def);
+    // A land aura's "additional mana" rides the enchanted land's own tap, so it is part of that
+    // land's per-tap yield everywhere yield is ranked (untap priority, tap order, burst nets).
+    return ManaProducedPerTap(def) + LandAuraBonus(state, perm);
 }
 
 inline bool FeedsLiveScaledDork(const GameState& state, const CardDefinition& def)
@@ -7277,8 +7446,13 @@ inline int SoulfireOwnTargetDiscount(const CardDefinition& def, const GameState&
 // null chooser) leaves the autonomous default untouched.
 inline int SpareUntappedMana(const GameState& state, int controller);   // defined below (mana helpers)
 inline bool ConsumeFloatingAny(ManaPool& floating, Color& took);        // defined below (mana helpers)
+// `perm` is the source PERMANENT when the caller has it (every battlefield walk does). It is needed
+// only for land Auras, whose extra mana is a property of what is ATTACHED to the source rather than
+// of the source's own CardDefinition -- the one yield modifier in this engine the def cannot see.
+// nullptr (a source not yet on the battlefield: a rock about to be cast) -> no aura credit, which
+// is exactly right, and keeps every pre-existing call byte-identical.
 inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def,
-                            int yield_override = -1);  // below
+                            int yield_override = -1, const Permanent* perm = nullptr);  // below
 inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targets = 0,
                                   const CardDefinition* def = nullptr,
                                   const char* trace_side = "?")
@@ -7788,6 +7962,431 @@ inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
             AddRefloatContribution(state.floating_mana, amt, prod,
                                    /*constrain_partial_choice=*/true);
         }
+    }
+}
+
+// --- Blink ("exile another target creature, then return it to the battlefield") -----------------
+// Eldrazi Displacer "{2}{C}:" (any creature, returns TAPPED) and Emiel the Blessed "{3}:" (a
+// creature YOU CONTROL, returns untapped). Neither cost contains {T}, so a summoning-sick outlet
+// activates the turn it lands -- and neither is once-per-turn, which is what makes the deck a combo
+// deck rather than a value deck.
+//
+// The return is a NEW OBJECT (CR 400.7): both ETB cascades fire again -- which is the engine of the
+// whole deck (Peregrine Drake's "untap up to five lands" re-runs every activation, and Emiel's
+// counter watcher sees another creature enter) -- and it is summoning sick again, so the blinked
+// creature cannot attack this turn no matter how large Emiel makes it.
+//
+// m_number is PRESERVED across the blink so every id-keyed relationship stays coherent (an aura's
+// aura_attached_to, an Equipment's equipped_to). Real Magic would drop those attachments when the
+// permanent leaves; nothing in this deck attaches to a creature, so the two agree here -- but a
+// deck that did would need the detach, so it is called out rather than assumed. Returns false if
+// the target is gone (a stranded activation must not pay).
+inline bool CanApplyBlink(const GameState& state, int controller, int source_id, int target_id,
+                          bool own_only)
+{
+    bool src_ok = false, tgt_ok = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number == source_id && p.controller_index == controller) { src_ok = true; }
+        if (p.card.m_number != target_id || !p.card.IsCreature())            { continue; }
+        if (own_only && p.controller_index != controller)                    { continue; }
+        if (target_id == source_id)                                          { continue; }  // "another"
+        tgt_ok = true;
+    }
+    return src_ok && tgt_ok;
+}
+
+inline void ApplyBlink(GameState& state, int controller, int source_id, int target_id,
+                       bool returns_tapped)
+{
+    int idx = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        if (state.battlefield[i].card.m_number == target_id
+            && state.battlefield[i].card.IsCreature() && state.battlefield[i].card.m_number != source_id)
+        { idx = i; break; }
+    }
+    if (idx < 0) { return; }
+    const Card    raw   = state.battlefield[idx].card;
+    const int     owner = state.battlefield[idx].owner_index;
+    state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(idx));
+
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(raw);
+    Permanent perm;
+    perm.card              = d ? d->card : raw;
+    perm.card.m_number     = raw.m_number;
+    perm.controller_index  = owner;   // "under its OWNER's control" -- we own everything in goldfish
+    perm.owner_index       = owner;
+    perm.entered_this_turn = true;    // a new object: summoning sick again
+    perm.tapped            = returns_tapped;
+    state.battlefield.push_back(perm);   // may reallocate -- no Permanent& into battlefield survives
+    const int slot = static_cast<int>(state.battlefield.size()) - 1;
+    FireEtbWatchers(state, owner, slot);       // Emiel's +1/+1 counter watcher lives here
+    FireOwnEtbTriggers(state, owner, slot);    // the Drake's "untap up to five lands" lives here
+    if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
+    { EnforceLegendRule(state, owner); }
+    if (g_play_event_sink)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      "\xE2\x9C\xA8 blinked " + raw.m_name.str()
+                      + (returns_tapped ? " (returns tapped)" : ""));
+    }
+}
+
+// Activate every affordable "{cost}, {T}: deals N damage to each opponent" source the controller
+// has UNTAPPED, but only while a `keep_payable` cost stays payable afterwards. Called once per
+// blink iteration (see ApplyBlinkLoop) because that is the only place the ability can fire more
+// than once a turn: the loop's ETB untaps the damage land again every pass, so N iterations are N
+// activations, and that is the deck's same-turn kill.
+//
+// Why it is safe to do without a search branch: against the single PASSIVE opponent this engine
+// models, face damage is monotone -- there is no board to hold the land back for and no downside
+// to the tap -- and the `keep_payable` guard means it can never starve the loop it rides on. It is
+// still a RESOLUTION heuristic (the ApplyUntapCreature auto-target precedent), so it is disclosed
+// in Stage 6a rather than treated as free. Returns the damage dealt.
+inline ManaCost AddManaCosts(const ManaCost& a, const ManaCost& b)
+{
+    ManaCost c = a;
+    c.generic += b.generic; c.white += b.white; c.blue  += b.blue;
+    c.black   += b.black;   c.red   += b.red;   c.green += b.green;
+    c.colorless += b.colorless;
+    return c;
+}
+
+inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const ManaCost& keep_payable,
+                                     const std::function<bool(const ManaCost&)>& pay)
+{
+    int dealt = 0;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        // Re-read by index: `pay` taps sources, and a Permanent& taken before it would be stale.
+        if (state.battlefield[i].controller_index != controller
+            || state.battlefield[i].tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[i].card);
+        if (!d || !d->params.tap_damage_cost.has_value()
+            || d->params.tap_damage_each_opponent <= 0) { continue; }
+        if (!state.battlefield[i].CanTap()) { continue; }
+        const ManaCost c = EffectiveActivationCost(state, controller, state.battlefield[i].card,
+                                                   d->params.tap_damage_cost.value());
+        // Never spend the loop's entry price: only fire if the board could still pay BOTH this
+        // ability and the next iteration. A projection check, not a trial payment, so a decline
+        // leaves no tapped land behind -- and it is the same pool the enumerator reasons over.
+        {
+            ManaPool have = AvailableManaPool(state, nullptr);
+            have.AddPool(state.floating_mana);
+            if (!have.CanPay(AddManaCosts(c, keep_payable))) { continue; }
+        }
+        if (!pay(c)) { continue; }
+        state.battlefield[i].tapped = true;
+        const int dmg = d->params.tap_damage_each_opponent;
+        state.players[1 - controller].life -= dmg;
+        state.opponent_lost_life_this_turn = true;
+        dealt += dmg;
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "damage",
+                          "\xF0\x9F\x94\xA5 " + state.battlefield[i].card.m_name.str()
+                          + " deals " + std::to_string(dmg) + " to the opponent");
+        }
+    }
+    return dealt;
+}
+
+// Investigate (Conservatory / Kitchen): "Create a Clue token. It's an artifact with '{2},
+// Sacrifice this token: Draw a card.'" The ability lives on the "Clue Token" NAMED TOKEN DEF in
+// cards.json (sac_draw_cost) exactly as a Treasure's mana ability does -- the Treasure Token
+// precedent -- so the Clue is a real, searched ActivatePermAbility source rather than a bookkeeping
+// counter. next_token_number keeps each Clue individually addressable.
+inline void CreateClueTokens(GameState& state, int controller, int n)
+{
+    for (int k = 0; k < n; ++k)
+    {
+        Permanent token;
+        token.card.m_name = "Clue Token";
+        token.card.RehashName();
+        token.card.AddType(CardType::Artifact);
+        token.card.m_subtypes   = std::vector<std::string>{ "Clue" };
+        token.card.m_number     = state.next_token_number++;
+        token.controller_index  = controller;
+        token.owner_index       = controller;
+        token.entered_this_turn = true;   // no summoning sickness on an artifact; crackable now
+        token.is_token          = true;
+        state.battlefield.push_back(token);
+        FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+    }
+}
+
+// Is an ActivatePermAbility's source still there and still activatable? Checked BEFORE paying in
+// both worlds, so a stranded activation (its source left, or it got tapped earlier in the same
+// plan) is a clean no-op rather than a paid one -- the UntapCreature discipline.
+inline bool PermAbilitySourceLive(const GameState& state, int controller, int source_id,
+                                  PermAbilityMode mode)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number != source_id || p.controller_index != controller) { continue; }
+        if (mode == PermAbilityMode::SacDraw) { return true; }   // no {T} in the cost
+        return !p.tapped && p.CanTap();
+    }
+    return false;
+}
+
+inline const char* PermAbilityLabel(PermAbilityMode mode)
+{
+    switch (mode)
+    {
+        case PermAbilityMode::TapDamage:      return "deals damage to each opponent";
+        case PermAbilityMode::TapInvestigate: return "investigate";
+        case PermAbilityMode::TapDraw:        return "draw a card";
+        case PermAbilityMode::SacDraw:        return "sacrifice: draw a card";
+        default:                              return "activate";
+    }
+}
+
+// Resolve one ActivatePermAbility. The cost is already paid by the caller; this is the effect half
+// only, shared by the rollout and the executor. `source_id` is the activating permanent's
+// m_number.
+inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode)
+{
+    int idx = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        if (state.battlefield[i].card.m_number == source_id
+            && state.battlefield[i].controller_index == controller) { idx = i; break; }
+    }
+    if (idx < 0) { return; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
+    if (!d) { return; }
+    const std::string src_name = state.battlefield[idx].card.m_name.str();
+
+    switch (mode)
+    {
+        case PermAbilityMode::TapDamage:
+        {
+            state.battlefield[idx].tapped = true;
+            const int dmg = d->params.tap_damage_each_opponent;
+            state.players[1 - controller].life -= dmg;
+            state.opponent_lost_life_this_turn = true;
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "damage",
+                              "\xF0\x9F\x94\xA5 " + src_name + " deals " + std::to_string(dmg)
+                              + " to the opponent");
+            }
+            break;
+        }
+        case PermAbilityMode::TapInvestigate:
+            state.battlefield[idx].tapped = true;
+            CreateClueTokens(state, controller, 1);
+            break;
+        case PermAbilityMode::TapDraw:
+            state.battlefield[idx].tapped = true;
+            TrickDraw(state, controller, 1);
+            break;
+        case PermAbilityMode::SacDraw:
+        {
+            // "Sacrifice this token" is part of the COST, so the permanent is gone before the draw.
+            state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(idx));
+            FireSacrificeWatchers(state, controller);   // a sac cost IS a sacrifice
+            TrickDraw(state, controller, 1);
+            break;
+        }
+        default: break;
+    }
+}
+
+// The blink loop -- ONE shared driver both worlds call, so the executor realises exactly the line
+// the rollout scored. Per iteration, in this order:
+//   1. TAP AHEAD, if the blinked creature untaps lands: its ETB is about to refresh up to N lands,
+//      so tapping N into the float first turns the refund into spendable mana (the Reality Spasm
+//      manoeuvre; without it the loop refunds an already-untapped board and nets nothing).
+//   2. Fire the damage sinks (Shivan Gorge), guarded so the next iteration stays payable. This is
+//      the only place a "{T}" ability can fire repeatedly in a turn, because step 4 untaps it.
+//   3. Pay ONE activation, re-costed against the board (a Training Grounds could have entered
+//      mid-plan; the Equip precedent says recompute at the pay site so payment is never wrong).
+//   4. Blink: the target leaves and re-enters, re-firing both ETB cascades.
+// BREAKS the moment an iteration cannot be paid or the target is gone -- so an over-large K from
+// the provider costs nothing but a loop that stops early.
+inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int target_id,
+                          const CardParams& outlet, int iterations,
+                          const std::function<bool(const ManaCost&)>& pay)
+{
+    if (!outlet.blink_cost.has_value()) { return 0; }
+    int done = 0;
+    for (int k = 0; k < iterations; ++k)
+    {
+        if (!CanApplyBlink(state, controller, source_id, target_id, outlet.blink_own_only)) { break; }
+        const Card* src_card = nullptr;
+        const CardDefinition* tgt_def = nullptr;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number == source_id) { src_card = &p.card; }
+            if (p.card.m_number == target_id) { tgt_def = CardDatabase::Instance().LookupCached(p.card); }
+        }
+        if (src_card == nullptr) { break; }
+        const Card src_copy = *src_card;   // ApplyBlink push_backs; no battlefield pointer survives
+        const int untaps = (tgt_def != nullptr) ? tgt_def->params.etb_untap_lands : 0;
+        if (untaps > 0) { EtbUntapTapAheadIntoFloat(state, controller, untaps); }
+        const ManaCost c = EffectiveActivationCost(state, controller, src_copy,
+                                                   outlet.blink_cost.value());
+        SpendSurplusOnDamageSinks(state, controller, c, pay);
+        if (!pay(c)) { break; }
+        // Emiel's optional {G/W} counter trigger fires inside ApplyBlink's ETB cascade; hand it
+        // this loop's payer so its mana is on the same books as the activation's (see
+        // PayOptionalTriggerCost). Restored on scope exit.
+        {
+            EtbOptionalPayerScope _eops(&pay);
+            ApplyBlink(state, controller, source_id, target_id, outlet.blink_returns_tapped);
+        }
+        ++done;
+    }
+    // One last damage-sink pass with nothing held back: the loop is over, so there is no next
+    // iteration to keep payable and any float left is genuinely surplus. Only after a loop that
+    // actually ran -- a blink that never fired must not quietly tap a land for damage the plan
+    // did not ask for (the Gorge has its own ActivatePermAbility action for that).
+    if (done > 0) { SpendSurplusOnDamageSinks(state, controller, ManaCost{}, pay); }
+    return done;
+}
+
+// --- Training Grounds: static cost reduction for ACTIVATED abilities ---------------------------
+// "Activated abilities of creatures you control cost {2} less to activate. This effect can't reduce
+// the mana in that cost to less than one mana."
+//
+// A different axis from every reducer in EffectiveSpellCost, all of which are keyed on the card
+// being CAST; nothing in this engine reduced an ACTIVATION cost before. Two consequences worth
+// naming:
+//   * The FLOOR is one mana, not zero. Every spell reducer floors the generic half at 0 and stops
+//     there; this one must also refuse to zero out a cost that is ALL generic. {3} -> {1}.
+//   * It reduces the GENERIC half only (CR 601.2f applies reductions to generic first and there is
+//     no "reduce a coloured pip" here), so {2}{C} -> {C}: the generic 2 goes, the colourless pip
+//     stays and still demands real colourless mana. That is the whole reason Displacer's activation
+//     stays gated on a {C} source even with two Training Grounds out.
+// Must be applied at EVERY site an activation cost is read -- enumeration, the rollout pay, the
+// executor pay, and the human trial-pay -- or the planner prices a line the payer cannot buy (or
+// vice versa). Returns `printed` unchanged when no reducer is out, so every other deck is
+// byte-identical.
+inline ManaCost EffectiveActivationCost(const GameState& state, int controller,
+                                        const Card& source, const ManaCost& printed)
+{
+    if (!source.IsCreature()) { return printed; }   // "abilities of CREATURES you control"
+    int reduce = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d) { reduce += d->params.reduces_creature_activation; }
+    }
+    if (reduce <= 0) { return printed; }
+    ManaCost c = printed;
+    // Pips that are NOT generic survive the reduction and already satisfy the one-mana floor; only
+    // an all-generic cost has to keep a mana behind.
+    const int pips = c.white + c.blue + c.black + c.red + c.green + c.colorless;
+    const int floor_generic = (pips >= 1) ? 0 : 1;
+    c.generic = std::max(floor_generic, c.generic - reduce);
+    return c;
+}
+
+// --- "When this creature enters, untap up to N lands" (Peregrine Drake 5, Cloud of Faeries 2) ----
+// A REAL untap of LANDS you control (not the ritual's older floating-mana fake), highest per-tap
+// yield first -- and per-tap yield now includes any land Aura on the host, so an Overgrowth'd land
+// is untapped ahead of a bare one, which is what a human does. Ties keep battlefield order, so the
+// executor and the rollout pick the identical set.
+//
+// "Up to" N is always taken in full: an untapped land is never worse than a tapped one for a
+// goldfish (no opponent to bluff, nothing punishes an open board), so the choice collapses -- the
+// only real decision is WHICH lands, which the yield order settles. Disclosed in Stage 6a.
+inline void EtbUntapLands(GameState& state, int controller, int count)
+{
+    if (count <= 0) { return; }
+    std::vector<std::pair<int, int>> tapped;   // (per-tap yield, battlefield index)
+    for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+    {
+        const Permanent& p = state.battlefield[bi];
+        if (p.controller_index != controller || !p.tapped || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        tapped.emplace_back(PermanentManaYield(state, p, *d), bi);
+    }
+    std::stable_sort(tapped.begin(), tapped.end(),
+                     [](const std::pair<int, int>& a, const std::pair<int, int>& b)
+                     { return a.first > b.first; });
+    const int n = std::min<int>(static_cast<int>(tapped.size()), count);
+    for (int i = 0; i < n; ++i) { state.battlefield[tapped[i].second].tapped = false; }
+    // Real-game untap ledger for the viewer (see RitualUntapSources' identical block): g_reveal_logger
+    // is nulled by RevealLogPause for every search/rollout scope, so only the executor logs.
+    if (n > 0 && g_reveal_logger != nullptr)
+    {
+        std::vector<int> nums; std::vector<std::string> names;
+        nums.reserve(n); names.reserve(n);
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& up = state.battlefield[tapped[i].second];
+            nums.push_back(up.card.m_number);
+            names.push_back(up.card.m_name.str());
+        }
+        g_reveal_logger->LogUntapSources(nums, names);
+    }
+}
+
+// Enumeration credit for the above: the mana the untap will hand back. Sized as the top-N per-tap
+// yields over the controller's lands REGARDLESS of tapped-ness, because at enumeration time the
+// lands that will fund this very cast are still untapped -- they are tapped moments later by the
+// tap-ahead. An upper bound (the executor realises min over what is actually tapped at resolution),
+// exactly as a.ritual_float is under MTG_SPASM_UNTAP_LITERAL: an over-credited plan's unpayable
+// follow-up is dropped by the pay path and scores honestly, so the cost is plan-ranking quality,
+// never phantom mana.
+inline int EtbUntapLandsCredit(const GameState& state, int count)
+{
+    if (count <= 0) { return 0; }
+    const int active = state.active_player_index;
+    std::vector<int> yields;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        yields.push_back(PermanentManaYield(state, p, *d));
+    }
+    std::sort(yields.begin(), yields.end(), std::greater<int>());
+    int total = 0;
+    for (int i = 0; i < static_cast<int>(yields.size()) && i < count; ++i) { total += yields[i]; }
+    return total;
+}
+
+// TAP-AHEAD for an ETB-untap creature -- the same manoeuvre RitualTapAheadIntoFloat performs for
+// Reality Spasm, and for the same reason: the cast is about to untap up to N lands, so every land
+// tapped BEFORE paying comes straight back. Without it the Drake resolves onto a mostly-untapped
+// board and refunds nothing, which is the difference between "free 2/3 flier that refills your
+// mana" and "five-mana 2/3". Bounded by `count` (never tap more than the untap will restore), and
+// it deliberately skips sources whose tap has a SIDE EFFECT (pain, drip, depletion, storage) --
+// those are not free to cycle. Called immediately before the cast's payment in all four worlds.
+inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int count)
+{
+    if (count <= 0) { return; }
+    int tapped_n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.tapped && p.card.IsLand()) { ++tapped_n; }
+    }
+    for (Permanent& p : state.battlefield)
+    {
+        if (tapped_n >= count) { break; }
+        if (p.controller_index != controller || p.tapped || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& q = d->params;
+        if (q.gy_land_exile_mana || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
+            || q.storage_land || q.domain_mana || q.colored_creature_only || q.is_filter
+            || q.ramp_filter) { continue; }
+        bool depletion = false;
+        for (const Counter& c : p.counters)
+        { if (c.type == Counter::Type::Depletion) { depletion = true; break; } }
+        if (depletion) { continue; }
+        p.tapped = true;
+        ++tapped_n;
+        ManaPool add;
+        AddSourceToPool(add, state, *d, PermanentManaYield(state, p, *d), &p);
+        state.floating_mana.AddPool(add);
     }
 }
 
@@ -9054,8 +9653,16 @@ inline bool AnyUntappedFilterSource(const GameState& state)
 // (e.g. a storage land's live counter count via PermanentManaYield); -1 falls back to the static
 // per-tap yield, keeping every existing caller byte-identical.
 inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def,
-                            int yield_override)
+                            int yield_override, const Permanent* perm)
 {
+    // A land Aura's "additional mana" is the AURA's, in the AURA's colour -- so credit it up front,
+    // independently of whichever mode the enchanted land itself is in, and then remove it from a
+    // caller-supplied yield_override below. PermanentManaYield deliberately FOLDS the aura into the
+    // land's per-tap total (the honest number for every yield RANKING -- untap priority, tap order),
+    // so crediting it again from that override would invent mana that does not exist. Zero, and
+    // therefore inert, for every source with no land aura attached.
+    const int aura_bonus = (perm != nullptr) ? LandAuraBonus(state, *perm) : 0;
+    if (aura_bonus > 0) { LandAuraAddToPool(pool, state, *perm); }
     if (def.params.is_filter)
     {
         if (HasUntappedNonFilterSourceProducing(state, def.params.produces)) { ++pool.wild; }
@@ -9096,7 +9703,9 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
         if (int net = UntapLandBurstNet(state, state.active_player_index, def))
         { pool.Add(*UntapBurstFeedColor(def), net); return; }
     }
-    int amt = (yield_override >= 0) ? yield_override : ManaProducedPerTap(def);
+    // The aura's share is already in the pool (above), so take it back out of the override.
+    int amt = (yield_override >= 0) ? (yield_override - aura_bonus) : ManaProducedPerTap(def);
+    if (amt < 0) { amt = 0; }
     // Reflecting Pool: its colours are the union of the controller's other lands (empty -> adds
     // nothing, the solo-RP dead case). For every normal source this is the static produces[].
     const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, def);
@@ -9141,7 +9750,7 @@ inline int SpareUntappedMana(const GameState& state, int controller)
             if (gy_fuel <= 0) { continue; }
             --gy_fuel;
         }
-        AddSourceToPool(pool, state, *d, PermanentManaYield(state, p, *d));
+        AddSourceToPool(pool, state, *d, PermanentManaYield(state, p, *d), &p);
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool.Total();

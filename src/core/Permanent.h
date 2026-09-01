@@ -9,6 +9,18 @@ struct Counter
     int count = 1;
 };
 
+// The sub-mode of an ActivatePermAbility action. Lives in the CORE layer (not beside Action in the
+// ai layer) because the shared resolver below is what both worlds call, and core must not depend
+// on ai. TurnSolver's Action::AbilityMode is an alias of this.
+enum class PermAbilityMode
+{
+    None = 0,
+    TapDamage,       // {cost}, {T}: deals N damage to each opponent   (Shivan Gorge)
+    TapInvestigate,  // {cost}, {T}: Investigate                        (Conservatory / Kitchen)
+    TapDraw,         // {cost}, {T}: Draw a card                        (Mariposa Military Base)
+    SacDraw,         // {cost}, Sacrifice this: Draw a card             (Clue Token -- no {T})
+};
+
 struct Permanent
 {
     Card card;

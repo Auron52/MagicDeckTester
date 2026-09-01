@@ -356,6 +356,9 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Double strike") { return Keyword::DoubleStrike; }
     if (s == "Regenerate")    { return Keyword::Regenerate; } // inert tag; nothing destroys our creatures
     if (s == "Bestow")        { return Keyword::Bestow; }     // inert tag; mechanic is param-modelled
+    if (s == "Cycling")       { return Keyword::Cycling; }    // inert tag; mechanic is param-modelled
+    if (s == "Devoid")        { return Keyword::Devoid; }     // inert tag; no colour reader exists
+    if (s == "Investigate")   { return Keyword::Investigate; } // inert tag; mechanic is param-modelled
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -979,6 +982,39 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.sac_outlet_excludes_self      = params.value("sac_outlet_excludes_self", false);
     if (params.contains("bestow_cost"))
         p.bestow_cost = ManaCostFromString(params["bestow_cost"].get<std::string>());
+
+    // ---- Flicker combo (see CardParams' block comment for each field's semantics) ----
+    p.etb_untap_lands               = params.value("etb_untap_lands", 0);
+    p.is_land_aura                  = params.value("is_land_aura", false);
+    p.land_aura_extra_mana          = params.value("land_aura_extra_mana", 0);
+    for (const std::string& c : params.value("land_aura_produces", json::array()))
+    {
+        p.land_aura_produces.push_back(ColorFromString(c));
+    }
+    if (params.contains("blink_cost"))
+        p.blink_cost = ManaCostFromString(params["blink_cost"].get<std::string>());
+    p.blink_returns_tapped          = params.value("blink_returns_tapped", false);
+    p.blink_own_only                = params.value("blink_own_only", false);
+    p.reduces_creature_activation   = params.value("reduces_creature_activation", 0);
+    if (params.contains("other_creature_etb_counter_cost"))
+        p.other_creature_etb_counter_cost =
+            ManaCostFromString(params["other_creature_etb_counter_cost"].get<std::string>());
+    p.other_creature_etb_counters   = params.value("other_creature_etb_counters", 0);
+    p.other_creature_etb_counter_subtype =
+        params.value("other_creature_etb_counter_subtype", std::string{});
+    p.other_creature_etb_counters_subtype =
+        params.value("other_creature_etb_counters_subtype", 0);
+    if (params.contains("tap_damage_cost"))
+        p.tap_damage_cost = ManaCostFromString(params["tap_damage_cost"].get<std::string>());
+    p.tap_damage_each_opponent      = params.value("tap_damage_each_opponent", 0);
+    if (params.contains("tap_draw_cost"))
+        p.tap_draw_cost = ManaCostFromString(params["tap_draw_cost"].get<std::string>());
+    p.tap_draw_cost_less_per_rad    = params.value("tap_draw_cost_less_per_rad", false);
+    p.etb_optional_tapped_rad       = params.value("etb_optional_tapped_rad", 0);
+    if (params.contains("tap_investigate_cost"))
+        p.tap_investigate_cost = ManaCostFromString(params["tap_investigate_cost"].get<std::string>());
+    if (params.contains("sac_draw_cost"))
+        p.sac_draw_cost = ManaCostFromString(params["sac_draw_cost"].get<std::string>());
 
     return p;
 }

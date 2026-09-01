@@ -77,7 +77,22 @@ enum class Keyword
     // structurally via CardParams::bestow_cost + Action::bestow + the DB's synthesized
     // "<name> (Bestowed)" aura face. Kept only so the Scryfall keywords field ["Bestow"] stays
     // faithful; no engine code reads this enumerator.
-    Bestow
+    Bestow,
+    // Cycling (Cloud of Faeries): an INERT keyword-ability tag -- the mechanic is modelled
+    // structurally via CardParams::cycling_cost (Action::Kind::DigDraw), not by this enum. Kept
+    // only so the Scryfall keywords field ["Cycling"] stays faithful; no engine code reads it.
+    Cycling,
+    // Devoid (Eldrazi Displacer): an INERT keyword ABILITY tag -- "this card has no color."
+    // Provably inert here: nothing in the engine reads a CARD's colour (colour lives on mana, and
+    // the one colour-of-a-permanent reader, Natural Order's "sacrifice a green creature", keys on
+    // a created_token_color param rather than the card). Kept so the Scryfall keywords field
+    // ["Devoid"] stays faithful; no engine code reads it.
+    Devoid,
+    // Investigate (Conservatory / Kitchen): an INERT keyword-ACTION tag (Scryfall marks Clue-token
+    // makers with it) -- the mechanic is modelled structurally via CardParams::tap_investigate_cost
+    // + the "Clue Token" card def's sac_draw_cost. Kept only so the Scryfall keywords field stays
+    // faithful; no engine code reads it.
+    Investigate
 };
 enum class Supertype { Legendary, Basic, Snow, World };
 

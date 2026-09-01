@@ -628,6 +628,52 @@ public:
     virtual std::vector<int> XCandidates(const GameState& s, const CardDefinition& def,
                                          int max_affordable) const = 0;
 
+    // BlinkActivationCounts -- how many times to activate a blink outlet ("{cost}: Exile another
+    // target creature, then return it") on `source`, blinking `target`, this turn. Returns the
+    // candidate K values the search branches over; one entry is a decided heuristic, several is
+    // narrowed-but-searched, empty declines the activation entirely.
+    //
+    // Generic returns 1..min(3, max_affordable) -- the same hard bound every other K-count
+    // activation (ActivateRevealTop, ActivatePump) carries, because more than three activations of
+    // a value ability in one turn is fringe and the branching is not free.
+    //
+    // THE HOOK EXISTS FOR THE ONE CASE THAT BOUND IS WRONG: a blink loop can be SELF-FUNDING.
+    // Blinking a Peregrine Drake ("untap up to five lands") refunds more mana than the activation
+    // costs, so K is not bounded by present mana at all -- it is bounded by what you want to do
+    // with the mana. A generic cap of 3 does not merely play the deck badly, it makes the deck's
+    // only win line invisible to the search: the kill needs ~20 iterations and the enumerator would
+    // never offer one. A combo provider recognises the loop and proposes the go-off count as a
+    // further candidate, which is the sanctioned shape (provider proposes; search picks) and keeps
+    // the narrowing in one named, A/B-testable place instead of in the enumerator.
+    //
+    // `max_affordable` is how many activations the CURRENT pool could pay for outright, ignoring
+    // any refund -- so it is a floor on a self-funding loop, never a ceiling.
+    virtual std::vector<int> BlinkActivationCounts(const GameState& s, const Permanent& source,
+                                                  const Permanent& target, int max_affordable) const
+    {
+        (void)s; (void)source; (void)target;
+        std::vector<int> out;
+        const int kmax = std::min(3, max_affordable);
+        for (int k = 1; k <= kmax; ++k) { out.push_back(k); }
+        return out;
+    }
+
+    // BlinkTargetCandidates -- which creatures a blink outlet may target, as m_numbers. Empty means
+    // "no narrowing": the enumerator offers EVERY legal target, which is the generic answer and the
+    // only correct one absent a measured reason (dropping a target would be the enumerator stealing
+    // a decision -- the Gamble-tutor precedent). A combo provider narrows because targets x counts
+    // multiply into the odometer across every outlet on the board.
+    virtual std::vector<int> BlinkTargetCandidates(const GameState& s,
+                                                   const Permanent& source) const
+    { (void)s; (void)source; return {}; }
+
+    // LandAuraHostCandidates -- which LANDS an "Enchant land" Aura may be cast onto, as m_numbers.
+    // Empty means "no narrowing" (every land the controller has). Generic returns empty; only a
+    // deck that actually plays land auras has a reason to narrow, and it must justify it, because
+    // this is a cast-target decision like any other.
+    virtual std::vector<int> LandAuraHostCandidates(const GameState& s, int controller) const
+    { (void)s; (void)controller; return {}; }
+
     // ShouldAttackWith -- combat: should this eligible creature be DECLARED as an attacker this turn?
     // The engine keeps combat eligibility (CanAttackFull: summoning sickness, tap state,
     // haste) and the damage MECHANISM; this is only the attack/hold DECISION over an

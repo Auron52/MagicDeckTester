@@ -1521,6 +1521,82 @@ struct CardParams
     // now). "It becomes a creature again if it's not attached" is inert -- nothing removes our
     // creatures. nullopt = no bestow.
     std::optional<ManaCost> bestow_cost;
+
+    // ---- Flicker combo (EldraziDisplacerFlicker; see docs/design/flicker-combo.md) ----
+
+    // Peregrine Drake: "When this creature enters, untap up to five lands." Cloud of Faeries: "up
+    // to two lands." A REAL untap of tapped lands you control (the Reality Spasm literal-untap
+    // precedent, RitualUntapSources), highest per-tap yield first -- NOT a floating-mana fake, and
+    // that distinction is the whole deck: the untapped lands must be re-tappable so a blink loop
+    // nets mana. 0 = no such trigger.
+    int etb_untap_lands = 0;
+
+    // Land Auras (Wild Growth / Fertile Ground / Overgrowth / Trace of Abundance): "Enchant land.
+    // Whenever enchanted land is tapped for mana, its controller adds an additional <X>."
+    // is_land_aura routes the aura to a LAND host (is_aura's LegalEnchantTargets is creature-only);
+    // the bonus is credited at the SAME two places a land's own yield is -- PermanentManaYield /
+    // AddSourceToPool for the projection and ManaPayment's tap_source for the real tap.
+    // land_aura_produces is the bonus's colour, in the same "produces" string form ({"G"});
+    // EMPTY means "one mana of any colour" (Fertile Ground / Trace of Abundance), credited as
+    // wild -- and NOT as wild_c, because "any colour" cannot pay a {C} pip (ManaPool::wild_c).
+    bool               is_land_aura         = false;
+    int                land_aura_extra_mana = 0;
+    std::vector<Color> land_aura_produces;
+
+    // Eldrazi Displacer "{2}{C}: Exile another target creature, then return it to the battlefield
+    // tapped under its owner's control" / Emiel the Blessed "{3}: Exile another target creature you
+    // control, then return it". A repeatable, NON-tap activated ability: no {T} in the cost, so a
+    // summoning-sick outlet can blink the turn it lands. The returned permanent is a NEW OBJECT --
+    // it re-enters (both ETB cascades fire, which is what makes the loop) and is summoning sick
+    // again. blink_returns_tapped is Displacer's drawback; blink_own_only is Emiel's "you control"
+    // restriction (Displacer may target ANY creature). nullopt = no such ability.
+    std::optional<ManaCost> blink_cost;
+    bool                    blink_returns_tapped = false;
+    bool                    blink_own_only       = false;
+
+    // Training Grounds: "Activated abilities of creatures you control cost {2} less to activate.
+    // This effect can't reduce the mana in that cost to less than one mana." A STATIC cost reducer
+    // for ACTIVATION costs -- a different axis from every reducer in EffectiveSpellCost, which are
+    // all keyed on the card being CAST. Applied by EffectiveActivationCost (ManaPayment.h) at all
+    // four sites an activation cost is read (enumeration + both pay paths + the human trial-pay).
+    // The one-mana FLOOR is the card's own wording and is unlike every spell reducer, which floors
+    // at zero: {3} -> {1}, and {2}{C} -> {C} (the generic half goes, the colourless pip stays).
+    int reduces_creature_activation = 0;
+
+    // Emiel the Blessed's second ability: "Whenever ANOTHER creature you control enters, you may
+    // pay {G/W}. If you do, put a +1/+1 counter on it. If it's a Unicorn, put two instead." An
+    // optional-cost ETB WATCHER (fires from FireEtbWatchers, so a blinked creature re-triggers it
+    // every iteration -- the deck's second kill). The payment is optional and taken whenever it is
+    // affordable from mana that is otherwise spare. Empty cost = no such watcher.
+    std::optional<ManaCost> other_creature_etb_counter_cost;
+    int         other_creature_etb_counters         = 0;
+    std::string other_creature_etb_counter_subtype;   // "Unicorn"
+    int         other_creature_etb_counters_subtype = 0;
+
+    // Shivan Gorge: "{2}{R}, {T}: Shivan Gorge deals 1 damage to each opponent." A {cost}+{T}
+    // activated ability on a LAND. This is the deck's same-turn kill: the blink loop untaps the
+    // Gorge every iteration, so N iterations are N activations. nullopt = no such ability.
+    std::optional<ManaCost> tap_damage_cost;
+    int                     tap_damage_each_opponent = 0;
+
+    // Mariposa Military Base: "{5}, {T}: Draw a card. This ability costs {1} less to activate for
+    // each rad counter you have", plus "You may have this land enter tapped. If you do, you get two
+    // rad counters." Rad counters are a PLAYER resource (Player::rad_counters), not a permanent's.
+    // nullopt = no such ability; 0 = no rad option.
+    std::optional<ManaCost> tap_draw_cost;
+    bool                    tap_draw_cost_less_per_rad = false;
+    int                     etb_optional_tapped_rad    = 0;
+
+    // Conservatory / Kitchen: "{4}, {T}: Investigate." Creates one Clue artifact token, whose own
+    // "{2}, Sacrifice this token: Draw a card" lives on the "Clue Token" NAMED TOKEN DEF in
+    // cards.json (the Treasure Token precedent) via sac_draw_cost below. nullopt = no such ability.
+    std::optional<ManaCost> tap_investigate_cost;
+
+    // "{cost}, Sacrifice this: Draw a card" on a PERMANENT (the Clue Token). Distinct from
+    // sacrifice_draw_cost, which is a LAND ability that also requires {T} (Fiery Islet) -- a Clue
+    // has no tap symbol, so a Clue made this turn can be cracked this turn. nullopt = no such
+    // ability.
+    std::optional<ManaCost> sac_draw_cost;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

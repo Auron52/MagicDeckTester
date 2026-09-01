@@ -46,6 +46,12 @@ struct Player
     // and byte-identical -- for every deck with no lifegain-count payload.
     int life_gained_this_turn = 0;
     int poison_counters            = 0;
+    // Rad counters (Mariposa Military Base: "You may have this land enter tapped. If you do, you
+    // get two rad counters"). A PLAYER resource, not a permanent's. At the beginning of this
+    // player's precombat main phase they mill that many cards, and for each NONLAND card milled
+    // they lose 1 life and remove one rad counter -- so the resource decays as it is used. Also
+    // reduces the Base's own "{5}, {T}: Draw a card" by {1} each. 0 for every other deck.
+    int rad_counters               = 0;
 
     // Cards exiled by "Light Up the Stage" and similar; playable until their expiry turn.
     std::vector<StagedCard> staged_cards;

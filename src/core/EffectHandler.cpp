@@ -189,7 +189,8 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 if (def.params.is_aura && !state.battlefield.empty())
                 {
                     state.battlefield.back().aura_attached_to =
-                        ResolveEnchantTarget(state, entry.controller_index, entry.enchant_target);
+                        ResolveEnchantTarget(state, entry.controller_index, entry.enchant_target,
+                                             def.params.is_land_aura);
                     PerformLightPawsAttach(state, entry.controller_index,
                                            def.card.m_mana_cost.ManaValue(), "EXEC");
                 }

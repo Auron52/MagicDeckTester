@@ -142,7 +142,31 @@ struct Action
                              // taps the source and untaps the highest-yield TAPPED matching
                              // creature (disclosed weakly-dominant auto-target); a no-op (cost
                              // unpaid) when the source is tapped or no matching creature is tapped.
+        ActivateBlink,       // Eldrazi Displacer "{2}{C}:" / Emiel the Blessed "{3}:" -- exile
+                             // another target creature and return it. sac_source_id = the outlet,
+                             // sac_victim_id = the blinked creature (a real search axis: one
+                             // variant per legal target), chosen_x = how many times.
+                             //
+                             // UNLIKE every other K-count activation (ActivateRevealTop,
+                             // ActivatePump), `cost` is ONE activation, NOT K pre-scaled -- because
+                             // this loop is SELF-FUNDING: blinking a Peregrine Drake untaps five
+                             // lands, so iteration k+1 is paid for by iteration k. Pre-scaling
+                             // would price a 20-iteration go-off at 20x its entry cost and prune
+                             // the only line the deck wins with. The apply loop pays per iteration
+                             // and BREAKS when one cannot be paid, so a K the board cannot sustain
+                             // costs plan-ranking quality, never phantom mana or a phantom win.
+        ActivatePermAbility, // "{cost}, {T}: <effect>" on a permanent you control (and the Clue
+                             // token's tap-free "{2}, Sacrifice this: Draw a card").
+                             // sac_source_id = the source; ability_mode selects which effect:
+                             // Shivan Gorge's damage, Conservatory/Kitchen's investigate,
+                             // Mariposa's draw, a Clue's sacrifice-to-draw.
     };
+
+    // ActivatePermAbility sub-mode. Defined in the CORE layer (core/Permanent.h) because the shared
+    // resolver ApplyPermAbility takes it and core must not depend on ai; aliased here so call sites
+    // read as Action::AbilityMode. A named enum rather than a reused gy_exile_mode int so the plan
+    // signature and the family key read as what they are.
+    using AbilityMode = PermAbilityMode;
 
     // The three name fields are InternedName, not std::string (2026-08-12): an Action is copied,
     // moved, sorted and destroyed ~10 per plan x 113M plans in a 60-game Mirrorwing label batch,
@@ -174,6 +198,7 @@ struct Action
                                        // exclusive) so the search picks; one variant when it is
                                        // sure. Empty for non-tutors (PerformTutor falls back to
                                        // the heuristic's top pick).
+    AbilityMode ability_mode   = AbilityMode::None;  // ActivatePermAbility sub-mode; None elsewhere
     int         ritual_float   = 0;    // Hinata combo: gross floating mana this cast adds when it
                                        // resolves (Reality Spasm refloat / Irencrag burst), stamped
                                        // at enumeration (CollectActions, where the def is in hand)

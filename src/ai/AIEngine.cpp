@@ -3623,6 +3623,46 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 { if (!ApplyRevealTopDeploy(state, state.active_player_index)) { break; } }
             }
         }
+        else if (a.kind == Action::Kind::ActivateBlink)
+        {
+            // Eldrazi Displacer / Emiel (executor mirror): the SAME ApplyBlinkLoop the rollout
+            // ran, so the realised line is the scored line. `available` is re-derived per payment
+            // because the loop's untaps change the board between iterations.
+            if (a.def != nullptr)
+            {
+                const int done = ApplyBlinkLoop(
+                    state, state.active_player_index, a.sac_source_id, a.sac_victim_id,
+                    a.def->params, std::max(1, a.chosen_x),
+                    [&state, this](const ManaCost& c)
+                    {
+                        ManaPool avail = AvailableManaPool(state);
+                        return TapForCost(state, c, avail, /*for_creature=*/false);
+                    });
+                if (m_logger && done > 0)
+                {
+                    m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                         "blink x" + std::to_string(done));
+                }
+            }
+        }
+        else if (a.kind == Action::Kind::ActivatePermAbility)
+        {
+            if (a.def != nullptr && PermAbilitySourceLive(state, state.active_player_index,
+                                                          a.sac_source_id, a.ability_mode))
+            {
+                ManaPool avail = AvailableManaPool(state);
+                if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+                {
+                    ApplyPermAbility(state, state.active_player_index, a.sac_source_id,
+                                     a.ability_mode);
+                    if (m_logger)
+                    {
+                        m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                             PermAbilityLabel(a.ability_mode));
+                    }
+                }
+            }
+        }
         else if (a.kind == Action::Kind::ActivatePump)
         {
             // Burning-Fist discard-pump / Sethron team-pump-with-haste (executor mirror of the
@@ -4356,6 +4396,16 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         if (def->params.untap_x_mana_sources && SpasmUntapLiteralOn())
         {
             RitualTapAheadIntoFloat(state, chosen_x);
+            available = AvailableManaPool(state);
+        }
+        // Same manoeuvre for an ETB-untap creature (Peregrine Drake / Cloud of Faeries): its
+        // resolution untaps up to N lands, so tapping N ahead into the float makes the refund real
+        // and lets the rest of the turn spend it. Lockstep twins in ApplyPlanDirect's cast branch
+        // and SubsetPayableSequential -- all four worlds tap ahead or none do, or the executor
+        // realises a different board than the plan priced ([fd-diverge]).
+        if (def->params.etb_untap_lands > 0)
+        {
+            EtbUntapTapAheadIntoFloat(state, state.active_player_index, def->params.etb_untap_lands);
             available = AvailableManaPool(state);
         }
         // Sac-fodder-first (MTG_SAC_FODDER_PAYS): lockstep twin of the rollout's apply-cast

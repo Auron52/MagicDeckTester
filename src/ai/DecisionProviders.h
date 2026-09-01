@@ -69,6 +69,11 @@ enum class UnprunedGate
                   // nothing wants" cast (MirrorwingProvider::TrickCastSensible; USER doctrine
                   // 2026-08-12 -- magnetless GR is 2 mana for 1 Treasure, a ramp/screw-mitigation
                   // play toward the magnet, never a this-turn mana play)
+    BlinkTarget,  // blink ("exile another target creature, then return it") target set opened to
+                  // EVERY legal creature instead of EldraziFlickerProvider::BlinkTargetCandidates'
+                  // payload+attacker pair
+    LandAuraHost, // "Enchant land" aura host set opened to every land you control instead of
+                  // EldraziFlickerProvider::LandAuraHostCandidates' best two
     EquipHost,    // Equip host candidate set opened: every legal (equipment, host) pair instead of
                   // the width-capped benefit ranking (KittyEquipment; also forced by HumanPlayActive
                   // so the viewer surfaces every legal host -- the pre-existing narrowing gap found
@@ -1105,6 +1110,43 @@ public:
     // toward. MTG_MINOTAUR_BUCKET_DISCARD=0 -> generic base (A/B hatch).
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+};
+
+// Eldrazi Displacer / Emiel flicker combo. An INFINITE-MANA deck, and the first one here whose
+// enumeration is unbounded by construction rather than merely wide: blinking a Peregrine Drake
+// ("untap up to five lands") refunds more mana than the outlet's activation costs, so "how many
+// times" has no natural ceiling and neither does the mana the turn can spend.
+//
+// Measured, on the unnarrowed engine, one game at d3/b200: 1.38 BILLION odometer positions and 78
+// SECONDS (Dragonstorm, the next-heaviest combo deck, is 553 units). MTG_ENUM_STATS pinned it on
+// exactly two fan-outs, and this provider narrows exactly those two -- both in the one place the
+// core invariant allows a narrowing to live:
+//
+//   * WHICH LAND a land Aura enchants -- one CastFromHand variant per legal land, so three auras in
+//     hand over seven lands is 7^3 = 343 positions for a choice that is very nearly a no-op (the
+//     bonus is the AURA's, in the aura's colour, and lands here neither die nor go untapped).
+//   * WHICH CREATURE to blink and HOW MANY TIMES -- targets x counts, seen at 12 variants per
+//     outlet and multiplying across outlets.
+//
+// Everything else is Generic.
+class EldraziFlickerProvider : public GenericProvider
+{
+public:
+    const char* Name() const override { return "EldraziFlicker"; }
+
+    std::vector<int> BlinkActivationCounts(const GameState& s, const Permanent& source,
+                                           const Permanent& target,
+                                           int max_affordable) const override;
+    std::vector<int> BlinkTargetCandidates(const GameState& s,
+                                           const Permanent& source) const override;
+    std::vector<int> LandAuraHostCandidates(const GameState& s, int controller) const override;
+
+    // The go-off recognizer: with the loop assembled, the kill is arithmetic, not search.
+    bool HasExtraLethalModel() const override;
+    int  ExtraLethalDamage(const GameState& s,
+                           const std::vector<const CardDefinition*>& casting) const override;
+
+    int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the
