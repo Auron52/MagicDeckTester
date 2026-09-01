@@ -399,9 +399,51 @@ game and stopped at each game's first divergence — after that the arms are pla
 |---|---|---|
 | `CSVAL` | 312 / 5,725 (5.5%) | sheds Rageblood/Neheb/Sethron more; keeps Slaughter-Priest, Burning-Fist, Ragemonger |
 | `CSNOP` | 1,112 / 4,980 (22.3%) | overwhelmingly **keeps Kragma** — with no `P`, its cost never discounts it |
-| `CSDUP` | 172 / 5,844 (2.9%) | **keeps a second Rageblood** (learned marginal positive → penalty waived), shedding Kragma or Fanatic instead |
+| `CSDUP` | 98 / 5,911 (1.7%) | **keeps a second Rageblood** — and, after the fix below, nothing else |
 
 Every arm fires, and each signature is the mechanism doing what it was built to do — so the outcome
 A/B is measuring something real in all three cases. Outcome numbers to follow: one pooled batch,
 256 jobs / 1.28M games, arms × {d0, d3} × 32 seeds, on selection seeds 5.0M–5.31M (disjoint from
 every prior Minotaur sweep; 6.0M+ held back for confirmation).
+
+**The diff earned its keep before any outcome number existed: `CSDUP` was measuring a bug.**
+`learned_marginal` indexed the marginals vector with `AIEngine::CardScore`'s CLAMP. That clamp is
+right for SCORING — marginals diminish, so reusing the last known one understates safely — and
+wrong for the question this arm asks. `ComputeCardScores` stops the vector at the first copy count
+with under 30 samples, so **a one-entry vector means no evidence about the second copy**, and
+clamping answers with the FIRST copy's value. For a card whose first copy is good, that says "a
+second one is fine" on the strength of nothing.
+
+On this decklist the 3-ofs and 2-ofs (Fanatic, Neheb, Boros Reckoner, Sethron) all stop at one
+entry, and **Fanatic's is positive** — so the arm waived Fanatic's duplicate penalty outright,
+which the diff caught happening **30 times in 172 changes**. About a sixth of the arm was measuring
+the defect rather than the mechanism. Fixed to require a real entry at index `k` and otherwise fall
+through to the shipped cumulative-mana rule; after the fix **all 98 changes are
+`Rageblood Shaman -> ...`**, which is exactly and only what the arm exists to test — Rageblood being
+the one card here with a recorded, positive second-copy marginal.
+
+The selection batch was **stopped and relaunched clean** rather than re-running the one arm later:
+a per-arm re-run is the split-pool pattern this repo forbids, and it was my own experiment to stop.
+
+**A caveat found while the batch ran, and it reframes what a LOSS here would mean.** This deck's
+`card_scores` were computed by its **first** analysis, `a43ef60f` (2026-08-23), and that is the only
+commit that has ever touched `Minotaur.profile.json`. **127 commits have touched `src/` since** —
+including `MinotaurProvider` itself, the value leaf, the exhaustive mulligan profile and the whole
+EV discard model. So the learned order is a fingerprint of an engine that no longer exists, and
+specifically of one in which this deck had **no archetype provider at all**: every number in it was
+measured while the generic max-MV fallback was making these very discards.
+
+It went unnoticed because `card_scores` are nearly inert for this deck today —
+`hand_score_threshold` is `-1e+18`, so the hand-score gate never binds, and their only live effect
+is `AIEngine::CardScore`'s bottoming tie-break. Nobody thinks of them as a generated artifact, but
+they are one, and Rule 0 for artifacts applies: they are an engine-state fingerprint.
+
+This does not invalidate the measurement, it bounds the conclusion:
+
+* if the stale learned order **wins**, that is a strong result — it beat the authored order while
+  handicapped by describing a different engine;
+* if it **loses**, that establishes only that *this* order is worse, NOT that learned value is worse
+  than authored value. The honest follow-up is to regenerate `card_scores` on the current engine and
+  re-measure. (Regeneration is a generation stage, so it must run alone on the box — it cannot be
+  folded into this run.) Precedent cuts both ways: the value-leaf work found regeneration staleness
+  to be neutral on five decks, so staleness is not automatically fatal.
