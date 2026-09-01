@@ -110,6 +110,7 @@ tokens being made and cracked.
 | 5c2 horizon-honest tie-break | **NO SIGN AT THIS SAMPLE** — 15 changed of 400 paired (3.75%), net -5 turns (10 better / 5 worse). Directionally helping, below the 20-game threshold. Decisive run (`--blocks 4`) queued. |
 | 5h viewer self-guard | **PASSES** — every new param classified; one DISCLOSED GAP (below) |
 | 5d claude-play sweep | 16 games x2 (pre- and post-fix). **6 real bugs found and FIXED**; re-sweep on a frozen binary reproduced none of them |
+| `verify_deck.py` (the one-command gate) | **GATE PASS** — every blocking check green |
 | suite | smoke **48/48**, regression **80/80**, 0 configs changed |
 | CI | ubuntu + windows + **Linux/Windows determinism parity** all green |
 
@@ -201,6 +202,46 @@ just creatures) so a land host reads "Kitchen" instead of "#31".
 
 So the net cost of every correctness fix is **+0.14 turns**, not +0.68: the land-aura repair gave
 back 0.54 of it by making the deck's ramp usable for the first time. Wall time also fell ~20%.
+
+## The OOM — and why fixing the auras is what caused it
+
+**The box was OOM-killed** (`dmesg` 2026-09-01 19:17:19: `mtg` at 46 GB anon-rss on a 47 GB host),
+taking the user's VSCode session with it. Same class as
+[claude-play-unprune-blowup.md](claude-play-unprune-blowup.md).
+
+`--claude-play` does `setenv("MTG_UNPRUNED","1")` for the whole session, so **both** of this deck's
+provider narrowings stand down and the blink fan-out becomes (every creature) × (every count) **per
+outlet**, squared across two outlets: 21 variants each, an 8.67e5 odometer bound, **278,783 plans
+and 3.2 GB RSS for ONE decision**. At the reference sweep's 24 concurrent replays that is 77 GB.
+
+**The land-aura fix is what made it bite.** Before it, `SubsetHasAuraOnUncastCreature` rejected every
+subset containing a land aura, which incidentally kept the product small. Repairing the auras removed
+that accidental brake and the real fan-out appeared — a fix exposing a latent degeneracy, exactly the
+pattern the skill's core-invariant note describes for the removed plan-dedup limiter.
+
+Two folds, **human-play/unpruned only**, both lossless in reachable lines:
+
+* **count → 1.** K is a REPETITION of a decision, not a separate one: the main phase re-prompts after
+  each activation (verified — `main_ordinal` increments), so a human reaches "blink three times" by
+  choosing it three times, which is strictly *more* expressive than a fixed `{1,2,3}` menu. The
+  autonomous search keeps its counts and its go-off (it commits a whole turn at once).
+* **duplicate targets fold** on every property a blink can read (name, tapped, summoning sickness,
+  P/T, counters, controller). The deck runs 4-ofs.
+
+| | before | after |
+|---|---|---|
+| peak RSS, one decision | 3.2 GB | **16.6 MB** (193×) |
+| elapsed | 9.08 s | **0.09 s** (100×) |
+| `play_invariants` | OOM | **PASS** — 8 games, 1168 decisions, 18 MB peak |
+
+The decision is **preserved and now legible**: the human is offered "Eldrazi Displacer: blink Cloud
+of Faeries" vs "… blink Peregrine Drake" as two distinct labelled plans — precisely the choice a
+sweep agent said it could not make, and declined every blink rather than guess. The autonomous combo
+is untouched (21 blink activations over 20 games, including `blink x25` / `x26` / `x17`).
+
+**Lesson for the next deck with a wide targeted activation:** measure the HUMAN-PLAY plan count, not
+just the autonomous one. `MTG_UNPRUNED` makes them completely different numbers, and only the
+autonomous one is covered by the regression suite.
 
 ## Recommended next steps
 
