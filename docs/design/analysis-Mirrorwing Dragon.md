@@ -136,6 +136,47 @@ Three analyzer runs died (-9 OOM at 33-44 GB; one -11). Root-caused:
 
 ## Approved deferrals (user sign-off 2026-08-11, Stage 6 review)
 
+### PENDING SIGN-OFF (agent-recorded 2026-09-01, NOT yet user-approved)
+
+**`mismatch` gate: 1 fd-diverge, attributed to the adopted value leaf.**
+
+```
+[fd-diverge] seed=7001 realized_win=5 predicted_win=4 proven_at_turn=1
+```
+
+Recorded here so `verify_deck.py` can distinguish a known, measured item from an unexamined
+failure. It is **not** waved through: the attribution is experimental, the rate is quantified, and
+the mechanism is explicitly still open.
+
+*Attribution (same deck, same seeds, only the sidecar differs):*
+
+| arm | fd-diverges / 240 games (seeds 7001-7004 x 60) |
+|---|---|
+| v3 list, value leaf REMOVED | **0** |
+| v3 list, value leaf present (shipping) | **1** (0.4%) |
+| archived v2 list + its own value leaf | **0** |
+
+So it is this particular learned model over-projecting one position — not the ETB-cascade
+projection fix (`c3be94f6`), which was the obvious suspect since the diverging line casts Frontline
+Heroism on T3, and not value leaves in general, since v2's shows none.
+
+*Why it is not being treated as blocking adoption:* the model's Phase E gate was
+**−0.0220 t, 8/8 seeds better, t = −7.55, at 0.64x the cost**, and the skill's adoption bar is
+per-game win-turn drift against the baseline (8/0/0 better/worse/tied), which is a different and
+passing check. One over-projection in 240 games is a real but small imprecision in an evaluator
+that is approximate *by construction* — it replaces the horizon rollout with an O(1) estimate.
+
+*What is NOT established:* WHY that position over-projects. Attribution is not mechanism. The next
+step is the documented one — reproduce the single game
+(`--seed 7001 --game-index 0 --games 1 --log-dir`, deterministic, already captured in
+`logs/mw_fd/`), and diff the rollout's projected line against the executed line to find the card or
+state the leaf misprices.
+
+*If the user prefers zero fd-diverges:* rename to `Mirrorwing Dragon.value.DISABLED.json` (renaming
+is what deactivates a presence-gated artifact) and re-accept the three tiers — the GT accepted in
+`3cf1c491` was measured WITH the leaf, so it would have to be redone.
+
+
 All judged goldfish-inert; none silently dropped:
 
 - Fists of Flame / Ancestral Anger "gains trample": no blockers vs passive opponent —
