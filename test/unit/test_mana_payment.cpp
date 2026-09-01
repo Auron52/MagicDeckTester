@@ -554,3 +554,30 @@ TEST_CASE("strict filter feed: a DORK's mana feeds the filter inside a joint bil
     // A third U is genuinely out of reach (the feed spends the dork's unit).
     CheckTwinsAgree(board, Cost(2, 0, /*u=*/3), /*for_creature=*/false, /*expect_ok=*/false);
 }
+
+TEST_CASE("strict filter feed: a DEPLETION land's burst feeds the filter (gi448 T2 shape)")
+{
+    EnsureCards();
+    struct ArmScope
+    {
+        ArmScope() { heurarm::t_arm[heurarm::FILTER_FEED_STRICT] = 1; }
+        ~ArmScope() { heurarm::Clear(); }
+    } strict;
+    auto with_dep = [](Permanent p, int n)
+    {
+        Counter c; c.type = Counter::Type::Depletion; c.count = n;
+        p.counters.push_back(c);
+        return p;
+    };
+    // gi448's control T2: Saprazzan Skerry ({T}, remove a counter: add {U}{U}) + Cascade Bluffs
+    // paying Land's Edge {1}{R}{R}. Strictly legal: one Skerry {U} feeds the Bluffs -> {R}{R},
+    // the other pays the generic.
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 3;
+    s.battlefield.push_back(with_dep(MakeLand("Saprazzan Skerry"), 2));
+    s.battlefield.push_back(MakeLand("Cascade Bluffs"));
+    CheckTwinsAgree(s, Cost(1, 0, 0, 0, /*r=*/2), /*for_creature=*/false, /*expect_ok=*/true);
+    // ...and {1}{R}{R}{R} is genuinely out of reach (only two Bluffs outputs exist).
+    CheckTwinsAgree(s, Cost(1, 0, 0, 0, /*r=*/3), /*for_creature=*/false, /*expect_ok=*/false);
+}

@@ -86,16 +86,63 @@ differ. Capability loss: none found anywhere.
 
 th (20,825 games/arm): searched cells essentially FLAT (worst +0.004, one cell -0.002 faster)
 -- with search the deck reroutes around the lost launder. The cost concentrates at d0
-(+0.065..+0.11): the greedy player leaned on Reliquary Tower / Saprazzan Skerry / Sandstone
-Needle {C} feeding the Bluffs. Adjudication: 231 LAUNDERED by the flat ledger; **all 533 d0
-residue games audited as committing off-colour feeds** (533/533); of 5 unique searched
-persists, 4 hand-proven LAUNDER-REQUIRED (win turns tap ONLY colourless sources beside the
-Bluffs -- gi657 needed two illegal feeds) and 1 (gi249) strict-legal on every turn = plan
-divergence.
+(+0.065..+0.11): the greedy player leaned on off-colour float (Reliquary Tower / Sandstone
+Needle {C}) feeding the Bluffs. First-pass adjudication: 231 LAUNDERED by the flat ledger;
+all 533 d0 residue games audited as committing off-colour feeds (533/533).
 
-Two adjudication-tool lessons recorded: the flat ledger lets a filter's own output satisfy its
-own feed (the self-feed hole -- why th showed 533 false-RESIDUE), and game repro is
-`--seed base+gi --game-index gi` (adjudicating at the base seed prices the WRONG games).
+Three adjudication-tool lessons recorded: the flat ledger lets a filter's own output satisfy
+its own feed (the self-feed hole -- why th showed 533 false-RESIDUE); game repro is
+`--seed base+gi --game-index gi` (adjudicating at the base seed prices the WRONG games); and
+READ THE CARD -- a hand analysis mis-remembered Saprazzan Skerry as colourless (it taps for
+{U}{U}) and "proved" launders that were legal; the checker, which reads cards.json, was right.
+
+## 4c. FINAL adjudication, to the user's sharpened bar (2026-09-01, post-adoption)
+
+The user's bar: *"For all of them we should be able to show there is a line that is illegal
+in the original or it should be possible to recover with budget (and potentially depth)"* --
+and the other side must be checked too: where the original is illegal, was there an
+alternative legal approach the strict engine misses?
+
+Instrument: a corrected timing-aware matcher over each control game's EXECUTED record (actual
+tapped sources incl. vanished ones, actual manaPaid bills, the executed cast order): filter
+tap-times are free variables; a filter offers its free {C} mode OR the fed mode; feeds accept
+only units available strictly before the filter's tap (kills self- and mutual-feeds); rock
+mana exists only after the rock's cast; Spasm's untap credit only after Spasm. LAUNDER-REQUIRED
+means NO assignment over any tap-time/mode choice balances -- proven illegality of the
+executed line. (This subsumed and corrected §4b's flat+sequencing gates: the executed-order
+constraint flipped most of §4b's "plan divergence" games to proven-illegal -- e.g. gi68's T3
+is only assignment-legal if Ponder is reordered after Spasm, which is not the line played.)
+
+All 1,016 slower games (241 hinata + 775 th), each run once through the matcher, then
+survivors through recovery probes (d0 survivors: strict at d3/d5 with real budgets; searched
+survivors: d3..d7 at b10000):
+
+- **923 ILLEGAL-LINE** -- the executed control payment is colour/timing-infeasible without
+  the launder. Prong A.
+- **86 of 87 d0 survivors RECOVER at d3** (strict + search reaches the control's win turn or
+  better). Prong B.
+- **2 searched survivors RECOVER**: hinata d3_s6006 gi233 (equals control at b10000) and
+  th d3_s7007 gi335 (strict at b10000 wins T5 vs the control's T6 -- BETTER). Prong B.
+- **3 unique games fail both prongs** (5 rows with depth-duplicates): th gi249 (5->6),
+  th gi448 (3->4), hinata d0_s4004 gi1516 (7->unwon; probes reach 8). For each, the control
+  line is proven legal AND the payment machinery is proven capable of its exact shapes by
+  unit tests (gi68-T2 dork-feeds-filter; gi448-T2 depletion-burst-feeds-filter) -- the miss
+  is in the SEARCH: rollout tap-sequencing is not feed-aware (see below), so the strict
+  rollout mis-scores the branch and no budget/depth recovers a mis-scored rollout.
+
+**The mechanism, traced concretely on gi68**: the T3 kill needs a mid-turn breakpoint
+(Ponder's draw reveals Irencrag) and its continuation is payable only if the earlier payments
+PRESERVED a U/R unit (Mountain) for the Bluffs feed. The tap-choice heuristic is not
+feed-aware, spends Mountain's R on Hinata's R, and strands the feed at the breakpoint. Under
+the lenient model this could never matter (any float fed); under the strict model it prices a
+few boards' filters out of rollout lines that are really available. Filed as deferred work:
+`docs/design/feed-aware-tap-choice.md`.
+
+**Net verdict**: 1,011 of 1,016 slower games meet the bar outright (99.5%); the 3 residual
+games are a bounded, mechanism-identified search-quality gap -- not hidden illegality, not a
+payment-correctness regression -- offset by 46+ faster games and one game the strict engine
+wins FASTER than the control. Countervailing capability evidence: 4 unit tests pin every
+disputed payment shape as strict-payable.
 
 ## 5. The mixed-pool cache lesson (fixed unconditionally, and a rule for future levers)
 
