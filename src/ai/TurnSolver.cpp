@@ -9315,6 +9315,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // ETB refund does not. The executor was never fooled (it reports dropped_casts and the
         // payment is atomic), so nothing illegal ever resolved -- but the enumerator spent its
         // breadth on unpayable plans and human play was offered them.
+        // MTG_EDF_ETB_CREDIT=1 restores the removed credit for ATTRIBUTION ONLY -- it is unsound
+        // (see the comment above) and must never be default-on. Its only use is measuring how much
+        // of the post-fix delta is the credit's enumeration breadth versus the two illegal-mana
+        // fixes that shipped alongside it.
+        if (def.params.etb_untap_lands > 0 && EnvOn("MTG_EDF_ETB_CREDIT"))
+        { a.ritual_float = EtbUntapLandsCredit(state, def.params.etb_untap_lands); }
         // Same-turn mana-rock ramp: a non-creature mana rock (Sol Ring) taps the turn it is cast.
         // Stamp the mana it produces (by real colour) so the enumerator can fund the rest of the
         // subset off it. Creatures (mana dorks) are excluded -- they are summoning-sick this turn.
