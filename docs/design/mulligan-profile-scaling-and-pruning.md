@@ -132,7 +132,8 @@ to the cap up front (= the size-7-only scheme).
 **Measured (test_deck/burn, d1, R_floor=8/cap=40, paired seed vs uniform R=40):**
 - keep-only: **40.7% fewer rollouts**; keep-flag residual **0.39%** (m=0 only 8 flips — threshold held, no
   drift; the rest are m=1 near-ties, mild over-mull from the heterogeneous-R min). Bottoming argmins move
-  38% (noisy sub-cells) but are **inert** when bottoming ships off.
+  38% (noisy sub-cells) but were **inert** in the keep-only arm, which pins bottoming off. (That arm is
+  the A/B harness's isolation, not a shipping mode — bottoming is always on in a shipped profile.)
 - bottoming on: 30.4% fewer, residual **0.06%**, bottom targets exact (0 diffs) — reproduces size-7-only.
 - Uniform off-path byte-identical to the pre-change binary.
 

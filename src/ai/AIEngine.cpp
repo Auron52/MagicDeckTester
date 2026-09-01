@@ -1200,10 +1200,19 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     // Falls through when the policy is absent, has no bottoming table, or doesn't cover the hand, so
     // decks without an exhaustive policy are byte-identical. Consistent with KeepHand's Decide consult.
     //
-    // Whether to use it is driven by the PROFILE's bottoming_enabled flag (baked in at generation:
-    // off for low-R/noise-limited profiles, on for validated high-R ones). MTG_EXHAUSTIVE_BOTTOM is a
-    // 3-state A/B override: unset => follow the profile flag; "0" => force off; else => force on. Keep
-    // is presence-gated and independent of this, so a profile with bottoming off still uses its keep.
+    // Driven by the PROFILE's bottoming_enabled flag, which generation ALWAYS bakes true
+    // (analyzer/main.cpp) -- there is no off switch and no per-deck judgment to make. A table that
+    // ships has bottoming on; every deck in the repo reads true. (This comment used to say "off for
+    // low-R/noise-limited profiles, on for validated high-R ones". That was the ORIGINAL 2026-07
+    // policy from docs/design/exhaustive-keep-policy.md and it has not been true since generation
+    // started baking the flag on; it survived long enough to make an agent hedge a shipped adoption
+    // as though enabling bottoming were a decision it had made. It is not.)
+    //
+    // MTG_EXHAUSTIVE_BOTTOM is a 3-state override that exists FOR THE A/B HARNESS ONLY: unset =>
+    // follow the profile flag; "0" => force off; else => force on. test/keepmodel_exhaustive_ab.sh
+    // uses it to isolate the two halves -- KM_MODE=keep pins it to 0 on BOTH arms so the keep effect
+    // is measured with bottoming held identical, and KM_MODE=bottom toggles it as the axis under
+    // test. Nothing outside that harness sets it. Keep is presence-gated and independent.
     static const int bottom_override = []
     { const char* e = std::getenv("MTG_EXHAUSTIVE_BOTTOM");
       if (!e || !*e) { return -1; } return std::string(e) == "0" ? 0 : 1; }();

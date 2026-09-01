@@ -487,8 +487,10 @@ hands are played, which is why several decks come out negative. Trust the callgr
 1. **A mulligan profile with `bottoming_enabled` turns this into an O(1) table lookup** — the
    architecture already does this (`ExhaustiveKeep::DecideBottom`). This is the single biggest win
    available for FiveColour, and it is user-gated work (generation is expensive and commit-bound).
-   Note the mulligan skill ships `bottoming_enabled` OFF until a validated high-R run, so a profile
-   alone does not automatically collect it. Goblins has a profile being generated now.
+   **A profile DOES automatically collect it**: generation bakes `bottoming_enabled=true` and there
+   is no off switch, so the win lands the moment the table ships. (This bullet used to say the skill
+   ships the flag OFF until a validated high-R run, so "a profile alone does not collect it" — stale,
+   and it mis-priced the lever.) Goblins has a profile being generated now.
 2. **Duplicate-candidate collapse** (lossless-ish): two copies of the same card are the same
    removal. Expected distinct names in a 7-card hand — burn 4.57/7 (**35%** fewer rollouts),
    Goblins 5.24/7 (**25%**), FiveColour 6.47/7 (**8%**). A good general win, but small on the deck
@@ -1461,18 +1463,25 @@ policy (a headline adoption) moved 0.22. So this is not dead work to delete; it 
 
 **2. The prize is 4.84x on the most expensive deck, and it is collectable WITHOUT the quality loss.**
 `BottomCards` already has an O(1) path -- `m_profile.exhaustive_keep->DecideBottom` -- which
-short-circuits the entire rollout loop. It is gated on `bottoming_enabled`, and **no deck in the repo
-has it set** (checked: every sidecar reports it absent/false, and FiveColour and Creature Giving have
-no mulligan sidecar at all). The two decks paying this bill are exactly the two with no mulligan
+short-circuits the entire rollout loop. It is gated on `bottoming_enabled` — and **every keep table in
+the repo now has it true** (re-checked 2026-09-01: all 13 sidecars read `true`; generation bakes it and
+there is no off switch). FiveColour and Creature Giving have no mulligan sidecar at all, which is the
+real and only reason they pay this bill: the two decks paying it are exactly the two with no mulligan
 profile.
+
+> **Corrected 2026-09-01.** This paragraph previously read *"no deck in the repo has it set (checked:
+> every sidecar reports it absent/false)"*. That was true when written and is now the reverse of the
+> truth. It matters here because it made the prize look gated behind a validation step that does not
+> exist: generating the profile collects the 4.84x on its own.
 
 ### Levers, sized
 
 1. **A mulligan profile for FiveColour with `bottoming_enabled`** — replaces ~10 rollouts/game with a
    table lookup. Worth ~4.8x on the deck, with no quality loss (the table IS the considered answer).
-   Expensive, commit-bound and user-gated per the mulligan skill, which also ships `bottoming_enabled`
-   OFF until a validated high-R run -- so the profile alone does not collect this; the high-R
-   validation is part of the price.
+   Expensive, commit-bound and user-gated per the mulligan skill -- but the profile DOES collect this
+   on its own: generation bakes `bottoming_enabled=true` and there is no off switch. (This used to
+   read "the profile alone does not collect this; the high-R validation is part of the price", which
+   is stale and overstated the cost.)
 2. **Top-K heuristic pre-filter on the bottom candidates.** The curve between K=0 (4.84x, +0.135) and
    K=7 (1x, +0). Needs a ranking function rather than the current single `HeuristicBottomPick`, and it
    is play-affecting. Cheap to build and the only lever here that needs no generation run.

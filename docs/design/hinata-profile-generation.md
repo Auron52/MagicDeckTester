@@ -73,6 +73,8 @@ Defaults to pin (MUST match across machines for a shared `bucket_fp`):
   pool fine (element-wise sum; floor cells stay thin, refined cells deepen) — same as antilife run1+run2.
 - `MTG_KEEP_BOTTOMING=1` (default) so bottoming sub-tables are sampled (don't handicap bottoming — the
   antilife keep-only mistake). Validate bottoming later via the confounded A/B.
+  *(HISTORICAL: this flag was removed in `ea2d530` and is no longer read. Bottoming sub-tables are
+  always sampled and `bottoming_enabled` is always baked true — nothing to set.)*
 - `MTG_KEEP_CHECKPOINT_SEC=1800` — crash-safe; a killed chunk resumes from its last checkpoint sidecar.
 - `MTG_COMMIT=<frozen hash>` stamped into every sidecar.
 

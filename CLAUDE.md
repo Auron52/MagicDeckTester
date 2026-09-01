@@ -429,7 +429,21 @@ When the user asks to **generate / regenerate / pool / A-B / adopt a mulligan (k
 Read `.claude/skills/mulligan-profile.md` and [feasibility-check / generate / merge / A-B / adopt] ...
 ```
 
-**Rule 0 it enforces:** generate **late, on a frozen commit** — generation is expensive *and* commit-bound (the raw sidecar's `commit` fingerprint gates cross-machine pooling; a later play-logic fix invalidates prior sidecars). Only generate once cards are implemented, reviewed, and play is validated. It also covers the three mulligan tiers (defaults → low-R exhaustive keep → high-R exhaustive, static skipped), the feasibility pre-check, the multi-machine handoff/merge protocol (parity fingerprints + determinism handshake + seed allocation), the `bottoming_enabled` profile flag (bottoming ships **off** until a validated high-R run — low-R bottoming is noise-limited), and the clairvoyance-vs-R-noise attribution method.
+**Rule 0 it enforces:** generate **late, on a frozen commit** — generation is expensive *and* commit-bound (the raw sidecar's `commit` fingerprint gates cross-machine pooling; a later play-logic fix invalidates prior sidecars). Only generate once cards are implemented, reviewed, and play is validated. It also covers the three mulligan tiers (defaults → low-R exhaustive keep → high-R exhaustive, static skipped), the feasibility pre-check, the multi-machine handoff/merge protocol (parity fingerprints + determinism handshake + seed allocation), and the clairvoyance-vs-R-noise attribution method.
+
+**BOTTOMING IS ALWAYS ON. It is not a decision, and there is nothing to report about it.**
+Generation bakes `bottoming_enabled=true` unconditionally and **there is no off switch** — every
+keep table in the repo reads true. Do not describe shipping a profile with bottoming on as a
+choice, a departure from a default, or something the evidence "permitted": it is the only thing
+that can happen. If a confounded bottoming A/B comes back bad, the response is **raise R or fix
+the heuristic**, never disable bottoming. `mullgen.sh run` already runs both A/Bs and the artifact
+check (which *fails* on `bottoming_enabled != true`) as one command, so this needs no agent
+attention at all. The single exception is internal to the harness: `test/keepmodel_exhaustive_ab.sh`
+uses `MTG_EXHAUSTIVE_BOTTOM` to isolate the halves — `KM_MODE=keep` pins it off on *both* arms to
+measure keep alone. That is the harness's business, not a knob to reach for.
+*(This paragraph replaces a stale "ships off until a validated high-R run" summary that outlived
+the policy by months and caused a shipped adoption to be hedged as though enabling bottoming had
+been an agent's call.)*
 
 ## Claude-Play Runner Skill
 

@@ -210,8 +210,8 @@ analyze, and never automatically. The full ordering:
    the viewer**. These get fixed. This is the "sanity-check" phase the whole effort is built to
    enable — and because it can still change the engine, it must **settle before** step 5.
 5. **THEN — and only then — the user manually kicks off mulligan generation** on the frozen commit
-   (the separate `mulligan-profile.md` workflow: defaults → low-R exhaustive keep → high-R;
-   `bottoming_enabled` ships off until a validated high-R run).
+   (the separate `mulligan-profile.md` workflow: defaults → low-R exhaustive keep → high-R).
+   Bottoming is **always on** — generation bakes it and there is no off switch.
 
 This means the earlier `analyze-deck` "Stage 4 = build & run" **must not** include
 exhaustive-profile generation; that moves out to step 5 above. (Reinforces, and is stricter than,

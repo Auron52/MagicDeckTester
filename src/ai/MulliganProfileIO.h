@@ -389,7 +389,13 @@ inline ExhaustiveKeepPolicy ExhaustiveKeepFromJsonObj(const nlohmann::json& e)
     ExhaustiveKeepPolicy ek;
     if (e.contains("max_mull"))          { ek.max_mull          = e["max_mull"].get<int>(); }
     if (e.contains("effective_R"))       { ek.effective_R       = e["effective_R"].get<int>(); }
-    if (e.contains("bottoming_enabled")) { ek.bottoming_enabled = e["bottoming_enabled"].get<bool>(); }
+    // Defaults ON, not off. Generation always bakes this true and there is no off switch, so a
+    // block that is PRESENT but missing the key is an ancient or hand-edited file -- never a
+    // deliberate opt-out. Defaulting it off would silently ship a table with its bottoming half
+    // dead, which is the one failure this flag must not be able to cause. Only reached when the
+    // caller has already confirmed an "exhaustive_keep" block exists; a deck with no table at all
+    // keeps the struct's own `false` and is gated by ek.empty() upstream.
+    ek.bottoming_enabled = e.value("bottoming_enabled", true);
     if (e.contains("commit"))            { ek.commit            = e["commit"].get<std::string>(); }
     if (e.contains("play_digest"))       { ek.play_digest       = e["play_digest"].get<std::string>(); }
     if (e.contains("buckets"))

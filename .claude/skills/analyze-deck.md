@@ -310,7 +310,8 @@ python scripts/analyze_deck.py <deck_path> --no-rebuild
 
 **Policy (user, 2026-07-17): mulligan-profile generation is NOT part of analyze.** Stage 4 only
 produces the **baseline** `<deck>.profile.json` needed to *run and play* the deck — per-card scores
-+ **defaults / static keep** (`bottoming_enabled` off). The expensive, commit-bound mulligan
++ **defaults / static keep**, with no exhaustive keep/bottom table at all (so there is no bottoming
+to enable; this is an ABSENCE, not a setting — bottoming has no off switch). The expensive, commit-bound mulligan
 work — the exhaustive keep/bottom generation of the separate `mulligan-profile.md` skill, and any
 mulligan *optimisation* (grid search / threshold tuning) — is the **LAST stage and the USER kicks
 it off**, only after performance is optimised, play correctness is validated, AND the user's own

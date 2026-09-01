@@ -86,7 +86,17 @@ mis-ranked near-tie subhands. (Correction to an earlier inference: the d0 blind-
 prove pure clairvoyance; it only shows the noisy bottoming beats the crude heuristic. Only the per-game
 re-score reveals the noise.)
 
-**Consequences (encoded in the workflow + `bottoming_enabled`):**
+> **SUPERSEDED — bottoming is now ALWAYS ON and there is no off switch.** The bullets below record
+> the ORIGINAL 2026-07 policy and are kept for provenance only. Generation bakes
+> `bottoming_enabled=true` unconditionally (`analyzer/main.cpp`), the `MTG_KEEP_BOTTOMING` gen-time
+> switch was **removed** (commit `ea2d530`), `mullgen.sh`'s artifact check *fails* the run if the
+> flag is not true, and every keep table in the repo reads true. The live position is
+> `.claude/skills/mulligan-profile.md` ("Bottoming: always on"): a bad confounded bottoming A/B
+> means **raise R or fix the heuristic**, never ship bottoming off. Do not cite the bullets below as
+> current doctrine — they outlived the policy by months and caused a shipped adoption to be hedged
+> as though enabling bottoming had been an agent's decision.
+
+**Consequences as originally encoded (HISTORICAL — see the banner above):**
 - Low-R bottoming is worse than the free lookahead bottoming → **ships off** (`bottoming_enabled`
   default false; low-R profiles are keep-only). Only a validated high-R run whose re-attribution shows
   ties/beats-lookahead (or loses *only* to clairvoyance) sets it true.
@@ -207,9 +217,12 @@ matching bucket_fp/deck_fp, distinct seeds). R is **per-mode**, so R=100 = 100 g
 - `decks/slivers_vial.keepmodel.exhaustive.{profile,raw}.json` is now the **committed R=100** table
   (bottoming ON). The `.r20`/`.r80` half-sidecars are kept on disk for provenance but are intermediate
   and not committed.
-- `bottoming_enabled` (profile flag, default off) governs runtime use of exhaustive bottoming;
-  `MTG_EXHAUSTIVE_BOTTOM` is a 3-state A/B override (unset=follow flag, 0=off, 1=on). Set at gen/merge via
-  `MTG_KEEP_BOTTOMING`.
+- `bottoming_enabled` (profile flag) governs runtime use of exhaustive bottoming. **Generation always
+  sets it true and there is no off switch**; the loader defaults it ON for a present-but-keyless block
+  so an ancient file cannot silently ship with its bottoming half dead. `MTG_EXHAUSTIVE_BOTTOM` is a
+  3-state override (unset=follow flag, 0=off, 1=on) that exists **for `test/keepmodel_exhaustive_ab.sh`
+  only** — `KM_MODE=keep` pins it to 0 on BOTH arms to isolate the keep effect. (The gen/merge switch
+  `MTG_KEEP_BOTTOMING` was removed in `ea2d530` and is no longer read anywhere.)
 - `MTG_SCORE_COMPS` (parallel) re-scores explicit subhand comps at high R — the non-circular
   clairvoyance-vs-R-noise test.
 - Thread-safety: the evaluator's worker uses `vector<SizeTable>` (not map) + const `bof.find()` for

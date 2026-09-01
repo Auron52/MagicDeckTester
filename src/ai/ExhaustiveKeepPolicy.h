@@ -23,11 +23,19 @@ struct ExhaustiveKeepPolicy
     // (fall back to the heuristic). Populated only for mull >= 1.
     std::map<std::vector<int>, std::vector<std::vector<int>>> bottom_keep;
     // Whether this profile's blind exhaustive bottoming should be USED at runtime (vs. falling through
-    // to lookahead/heuristic bottoming). Baked into the artifact: default OFF, because low-R bottoming
-    // is noise-limited (the argmin mis-ranks near-tie subhands) and loses to lookahead -- only a
-    // validated high-R profile sets this true. Overridable at play time by MTG_EXHAUSTIVE_BOTTOM
-    // (unset = follow this flag; 0 = force off; 1 = force on) for A/B. Keep is always presence-gated
-    // and independent of this flag.
+    // to lookahead/heuristic bottoming). Generation ALWAYS bakes this true and there is NO off switch,
+    // so in practice every shipped table has it set; the JSON loader likewise defaults it ON for a
+    // present-but-keyless block. This member's `false` is only the default for a DEFAULT-CONSTRUCTED
+    // (empty) policy, which ek.empty() gates upstream -- it is not a per-deck choice.
+    //
+    // (It once WAS a choice: "default OFF, because low-R bottoming is noise-limited... only a validated
+    // high-R profile sets this true." That policy is dead -- see the SUPERSEDED banner in
+    // docs/design/exhaustive-keep-policy.md. A bad confounded bottoming A/B now means raise R or fix
+    // the heuristic, never ship bottoming off.)
+    //
+    // Overridable at play time by MTG_EXHAUSTIVE_BOTTOM (unset = follow this flag; 0 = force off;
+    // 1 = force on) -- that override exists FOR test/keepmodel_exhaustive_ab.sh ONLY, which uses it to
+    // isolate the halves. Keep is always presence-gated and independent of this flag.
     bool        bottoming_enabled = false;
     // Provenance (audit/merge only; unused at decision time).
     std::string commit;         // source revision the sidecar was built at (advisory once play_digest exists)
