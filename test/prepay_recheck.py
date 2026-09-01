@@ -593,6 +593,17 @@ def _turn_ledger(game, turn, db, precombat_only=True):
                 add(c, units)                             # a Treasure vanishes BECAUSE it paid
             else:
                 add(c, maybe)                             # bounced / self-sacrificed: probably paid
+        # UNTAP_SOURCES (MTG_SPASM_UNTAP_LITERAL): the engine recorded EXACTLY which mana sources
+        # Reality Spasm untapped, so each becomes producible once more in its OWN colours. This is
+        # an exact credit, not a generous one, so it carries NO `soft` note -- a turn that balances
+        # under it is genuinely proven and may classify LEGAL. It also repairs the tapped-delta's
+        # blindness in both directions: a source that re-tapped after the untap reads as ONE delta
+        # unit though it produced twice (+1 here), and one that stayed untapped reads as ZERO
+        # though it produced once before the untap (+1 here).
+        rec_untap_events = [a for a in rec.get("actions", []) if a.get("type") == "UNTAP_SOURCES"]
+        for a in rec_untap_events:
+            for c in a.get("cards", []):
+                add(c, units)
         for a in rec.get("actions", []):
             if a.get("type") == "ABILITY":
                 # Only a MANA source's tap can mislead this ledger (it would book mana the source
@@ -630,6 +641,11 @@ def _turn_ledger(game, turn, db, precombat_only=True):
             bill += got
             p = (db.get(a.get("cardName")) or {}).get("parameters") or {}
             if p.get("untap_x_mana_sources"):
+                # Under the literal model the UNTAP_SOURCES events above already credited this
+                # cast's real untap EXACTLY -- adding the generous chosenX credit on top would
+                # double-count. Only fall back to it for a float-model log (no events recorded).
+                if rec_untap_events:
+                    continue
                 # Untapping X sources lets them tap TWICE in one main, so the source count is short
                 # by X. Which X is not recorded, but `chosenX` is -- so credit X units able to make
                 # any colour this board produces. That is GENEROUS on purpose: over-crediting can

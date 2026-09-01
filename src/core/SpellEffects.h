@@ -7567,6 +7567,71 @@ inline ManaPool RitualRefloatPool(const GameState& state, int count)
     return pool;
 }
 
+// MTG_SPASM_UNTAP_LITERAL=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
+// resolve an untap ritual (Reality Spasm) as a LITERAL untap of up to X TAPPED mana sources
+// instead of floating the output of the board's best X sources. The float model has two proven
+// defects (docs/design/reality-spasm-phase2.md §2): it ignores tapped-ness (an untapped target
+// gains nothing from the real card, so whenever fewer than X sources are tapped at resolution the
+// float grants mana the rules would not) and a choice-of-N dual floats WILD (pays any pip; the
+// real choice is one of that source's colours). The literal untap fixes both at once because the
+// untapped sources re-tap through the normal payment machinery, which prices colour choice
+// exactly. Read ONLY here (this one function is the shared resolution for the executor's
+// EffectHandler, the rollout's apply_one, ApplyPlanDirect and SubsetPayableSequential ->
+// lockstep by construction, same as MTG_LEGACY_RITUAL_WILD).
+inline bool SpasmUntapLiteralOn()
+{
+    // heurarm slot so ONE pooled batch can carry both arms of the A/B (per-job override; -1
+    // unset everywhere = the env static = byte-identical off the batch path).
+    static const bool env_on = EnvOn("MTG_SPASM_UNTAP_LITERAL");
+    return heurarm::Flag(heurarm::SPASM_UNTAP_LITERAL, env_on);
+}
+
+// The literal resolution: untap up to `count` TAPPED mana sources, highest per-tap output first,
+// battlefield order breaking ties -- the float model's selection rule (RitualRefloatPool),
+// restricted to the tapped subset the real card can actually profit from. A summoning-sick dork
+// is skipped exactly as the float's source predicate skips it (untapping it buys nothing this
+// turn); an untapped source is not a target (it gains nothing, and choosing it would waste one
+// of the X).
+inline void RitualUntapSources(GameState& state, int count)
+{
+    if (count <= 0) { return; }
+    const int active = state.active_player_index;
+    std::vector<std::pair<int, int>> tapped;   // (per-tap output, battlefield index)
+    for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+    {
+        const Permanent& p = state.battlefield[bi];
+        if (p.controller_index != active || !p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool is_src = d->card.IsLand()
+                         || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                         || d->params.mana_rock;
+        if (!is_src) { continue; }
+        tapped.emplace_back(ManaProducedPerTap(*d), bi);
+    }
+    std::stable_sort(tapped.begin(), tapped.end(),
+                     [](const std::pair<int, int>& a, const std::pair<int, int>& b)
+                     { return a.first > b.first; });
+    const int n = std::min<int>(static_cast<int>(tapped.size()), count);
+    for (int i = 0; i < n; ++i)
+    { state.battlefield[tapped[i].second].tapped = false; }
+    // Record the REAL game's untap for the prepay ledger (see GameLogger::LogUntapSources).
+    // g_reveal_logger is nulled by RevealLogPause for every search/rollout/enumeration scope,
+    // so only the executor's actual resolution logs -- the sim's untaps never reach the file.
+    if (n > 0 && g_reveal_logger != nullptr)
+    {
+        std::vector<int> nums; std::vector<std::string> names;
+        nums.reserve(n); names.reserve(n);
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& up = state.battlefield[tapped[i].second];
+            nums.push_back(up.card.m_number);
+            names.push_back(up.card.m_name.str());
+        }
+        g_reveal_logger->LogUntapSources(nums, names);
+    }
+}
+
 // Number of mana sources the active player controls (the natural chosen X for Reality Spasm:
 // untap them ALL, which Hinata makes free). Used to size the ritual's X in the planner.
 inline int ManaSourceCount(const GameState& state)
@@ -7689,6 +7754,19 @@ inline void ApplyRitualFloat(GameState& state, const CardDefinition& def, int ch
     }
     if (def.params.untap_x_mana_sources)
     {
+        if (SpasmUntapLiteralOn())
+        {
+            // The literal model (see the reader's comment above): untap up to X tapped sources and
+            // let the payment machinery re-tap them -- no float at all. Every caller of this
+            // function (executor, rollout apply, plan apply, sequential feasibility) takes this
+            // same branch, so all four worlds realise the identical state change. NOTE the
+            // planner's enumeration credit (a.ritual_float, stamped from RitualFloatAmount) is now
+            // an OPTIMISTIC upper bound under this flag -- an over-credited plan's unpayable cast
+            // is dropped by the rollout's TapForCostDirect failure path and scores honestly, so
+            // the cost is plan-ranking quality, never phantom mana.
+            for (int c = 0; c < copies; ++c) { RitualUntapSources(state, chosen_x); }   // copies==1 in practice
+            return;
+        }
         ManaPool add = RitualRefloatPool(state, chosen_x);
         for (int c = 1; c < copies; ++c) { state.floating_mana.AddPool(add); }   // copies==1 in practice
         state.floating_mana.AddPool(add);

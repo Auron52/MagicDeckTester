@@ -296,6 +296,23 @@ void GameLogger::LogCastSpell(int card_num, const std::string& card_name,
     m_current.actions.push_back(std::move(a));
 }
 
+void GameLogger::LogUntapSources(const std::vector<int>& nums,
+                                  const std::vector<std::string>& names)
+{
+    if (!m_in_phase) { return; }
+    // Folded into the play digest like every other action: the event only fires under
+    // MTG_SPASM_UNTAP_LITERAL (and only when something actually untapped), so every recorded
+    // fingerprint, GT number and reference digest stays byte-identical with the flag off.
+    FoldStr("US");
+    for (int n : nums) { FoldInt(n); }
+    if (m_digest_only) { return; }
+    Action a;
+    a.type            = "UNTAP_SOURCES";
+    a.looked_at       = nums;
+    a.looked_at_names = names;
+    m_current.actions.push_back(std::move(a));
+}
+
 void GameLogger::LogReveal(const std::string& source_name,
                             const std::vector<int>& looked_at_nums,
                             const std::vector<std::string>& looked_at_names,
@@ -586,6 +603,20 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
                 json bot = json::array();
                 for (int n : a.bottomed) { bot.push_back(n); }
                 act["bottomed"] = bot;
+            }
+            else if (a.type == "UNTAP_SOURCES")
+            {
+                // The literal untap ritual's chosen targets (see LogUntapSources): one entry per
+                // untapped source, so the prepay ledger can credit each source's own colours.
+                json cards = json::array();
+                for (std::size_t i = 0; i < a.looked_at.size(); ++i)
+                {
+                    json c;
+                    c["card"] = a.looked_at[i];
+                    if (i < a.looked_at_names.size()) { c["cardName"] = a.looked_at_names[i]; }
+                    cards.push_back(std::move(c));
+                }
+                act["cards"] = cards;
             }
             else if (a.type == "ABILITY")
             {

@@ -7935,6 +7935,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.is_noncreature = !def.card.IsCreature();
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
                 a.ritual_float   = RitualFloatAmount(state, def, x);   // refloat mana, stamped once
+                                                                       // (under MTG_SPASM_UNTAP_LITERAL an
+                                                                       // OPTIMISTIC bound; the apply realises
+                                                                       // min(x, tapped-at-resolution))
                 actions.push_back(std::move(a));
                 continue;
             }

@@ -105,6 +105,7 @@ enum Slot : int
     MINOTAUR_DISCARD_VIAL,    // MTG_MINOTAUR_DISCARD_VIAL  ...half 1: Vial sheds with the mana
     MINOTAUR_DISCARD_PLAY,    // MTG_MINOTAUR_DISCARD_PLAY  ...half 2: threats by graded playability
     MINOTAUR_DISCARD_PLAY2,   // MTG_MINOTAUR_DISCARD_PLAY2 ...half 2, gentler: slack 2 not 1
+    SPASM_UNTAP_LITERAL,      // MTG_SPASM_UNTAP_LITERAL   untap ritual resolves as a LITERAL untap
     COUNT
 };
 
@@ -187,6 +188,7 @@ inline const char* Name(int slot)
         "MTG_MINOTAUR_DISCARD_VIAL",
         "MTG_MINOTAUR_DISCARD_PLAY",
         "MTG_MINOTAUR_DISCARD_PLAY2",
+        "MTG_SPASM_UNTAP_LITERAL",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

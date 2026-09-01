@@ -104,6 +104,14 @@ public:
                    const std::vector<int>& bottomed_nums,
                    const std::vector<std::string>& dispositions = {});
 
+    // An untap ritual's LITERAL resolution (MTG_SPASM_UNTAP_LITERAL): exactly which mana sources
+    // Reality Spasm untapped. The per-main tapped-delta cannot see a mid-main untap+retap (the
+    // source reads "tapped" on both edges while it produced TWICE), so without this event the
+    // prepay ledger can only credit the cast generously off chosenX; with it the ledger prices
+    // the turn EXACTLY (each named source's own colours, once more per untap). Fires only when
+    // the literal model actually untaps something -> zero digest/log movement flag-off.
+    void LogUntapSources(const std::vector<int>& nums, const std::vector<std::string>& names);
+
     // An activated ability firing (mana tap, sac, pay-life, discard-cost, etc.).
     // For mana abilities the board `tapped` rotation already conveys the visible
     // result; this records the activation event for non-tap abilities and audit.
