@@ -1,7 +1,5 @@
-# Regression ground truth -- commit 33487f5a  date 2026-09-01
+# Regression ground truth -- commit f2994872  date 2026-09-01
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-09-01): DECK CHANGE, not a regression: the mirrorwing key now measures the Anger-4 / Oracle-3 list (3faf5c76) instead of the archived v2-instigator-entrance one, so all 20 mirrorwing cells are a fresh measurement of a DIFFERENT deck. ZERO non-mirrorwing cells moved in any tier -- the change is perfectly isolated. Direction is unanimous within each depth: d0 +0.2101 (6 cells, all worse), d3 -0.3030 (7 cells, all better), d5 -0.3014 (7 cells, all better); overall -0.1485, searched-only -0.3022. That split is the deck's signature rather than noise -- the list's value is Frontline Heroism's ETB Soldier plus Ancestral Anger/Fortifying Draught through a Zada/Mirrorwing magnet, which only the search can sequence, so greedy d0 gets worse while every searched cell gets ~0.30 turns faster. Consistent in sign with the Instigator-slot screen's -0.4431 for the 4-Heroism arm, which was itself measured with Heroism's ETB under-projected (fixed in c3be94f6). Deck ships: new baseline profile, adopted value leaf (-0.0220t, 8/8 seeds, 0.64x cost), static/default keep -- the exhaustive keep table was QUARANTINED by mullgen's confounded bottoming gate (+0.1006t, 0/16 seeds), see docs/design/confounded-bottoming-gate-failures.md. User pre-approved this rebaseline 2026-09-01.
-# accepted-with-regressions (regression, 2026-09-01): DECK CHANGE, not a regression: the mirrorwing key now measures the Anger-4 / Oracle-3 list (3faf5c76) instead of the archived v2-instigator-entrance one, so all 20 mirrorwing cells are a fresh measurement of a DIFFERENT deck. ZERO non-mirrorwing cells moved in any tier -- the change is perfectly isolated. Direction is unanimous within each depth: d0 +0.2101 (6 cells, all worse), d3 -0.3030 (7 cells, all better), d5 -0.3014 (7 cells, all better); overall -0.1485, searched-only -0.3022. That split is the deck's signature rather than noise -- the list's value is Frontline Heroism's ETB Soldier plus Ancestral Anger/Fortifying Draught through a Zada/Mirrorwing magnet, which only the search can sequence, so greedy d0 gets worse while every searched cell gets ~0.30 turns faster. Consistent in sign with the Instigator-slot screen's -0.4431 for the 4-Heroism arm, which was itself measured with Heroism's ETB under-projected (fixed in c3be94f6). Deck ships: new baseline profile, adopted value leaf (-0.0220t, 8/8 seeds, 0.64x cost), static/default keep -- the exhaustive keep table was QUARANTINED by mullgen's confounded bottoming gate (+0.1006t, 0/16 seeds), see docs/design/confounded-bottoming-gate-failures.md. User pre-approved this rebaseline 2026-09-01.
 # accepted-with-regressions (overnight, 2026-09-01): DECK CHANGE, not a regression: the mirrorwing key now measures the Anger-4 / Oracle-3 list (3faf5c76) instead of the archived v2-instigator-entrance one, so all 20 mirrorwing cells are a fresh measurement of a DIFFERENT deck. ZERO non-mirrorwing cells moved in any tier -- the change is perfectly isolated. Direction is unanimous within each depth: d0 +0.2101 (6 cells, all worse), d3 -0.3030 (7 cells, all better), d5 -0.3014 (7 cells, all better); overall -0.1485, searched-only -0.3022. That split is the deck's signature rather than noise -- the list's value is Frontline Heroism's ETB Soldier plus Ancestral Anger/Fortifying Draught through a Zada/Mirrorwing magnet, which only the search can sequence, so greedy d0 gets worse while every searched cell gets ~0.30 turns faster. Consistent in sign with the Instigator-slot screen's -0.4431 for the 4-Heroism arm, which was itself measured with Heroism's ETB under-projected (fixed in c3be94f6). Deck ships: new baseline profile, adopted value leaf (-0.0220t, 8/8 seeds, 0.64x cost), static/default keep -- the exhaustive keep table was QUARANTINED by mullgen's confounded bottoming gate (+0.1006t, 0/16 seeds), see docs/design/confounded-bottoming-gate-failures.md. User pre-approved this rebaseline 2026-09-01.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -28,9 +26,9 @@ hinata_smoke_d5_s1001=5.8267/1b3991e5b745bbfd
 dragonstorm_smoke_d0_s1001=5.3940/ed95a590b37d910f
 dragonstorm_smoke_d3_s1001=4.5133/a55d73a0d738832d
 dragonstorm_smoke_d5_s1001=4.4667/4248104898fb9d6c
-auras_smoke_d0_s1001=4.3740/74065d3c5ab8f7b5
-auras_smoke_d3_s1001=4.1433/2042f7b6c7262ede
-auras_smoke_d5_s1001=4.1280/c11d022f7321d21a
+auras_smoke_d0_s1001=4.3740/ec6be34b5c6a75a8
+auras_smoke_d3_s1001=4.1433/adb68c7ffabbc328
+auras_smoke_d5_s1001=4.1280/21a19fa01ee41f3f
 goblins_smoke_d0_s1001=4.0680/851c0506a04bd568
 goblins_smoke_d3_s1001=3.6467/e0a721637d1f14a7
 goblins_smoke_d5_s1001=3.5867/043748861e776a9b
@@ -92,11 +90,11 @@ dragonstorm_regression_d3_s2002=4.3400/0532ca6720862b2e
 dragonstorm_regression_d3_s3003=4.4767/000fed777d5a52fe
 dragonstorm_regression_d5_s2002=4.3080/8698861405c3c443
 dragonstorm_regression_d5_s3003=4.4760/aa7ac4a7cde0a0bb
-auras_regression_d0_s2002=4.3620/cee8e6fb7b359efb
-auras_regression_d3_s2002=4.0980/2d4b2bed8ba86653
-auras_regression_d3_s3003=4.1900/c0cc878b565cfd60
-auras_regression_d5_s2002=4.0940/4453edcd466ba1ab
-auras_regression_d5_s3003=4.1740/57d2e7a7a3a563cc
+auras_regression_d0_s2002=4.3620/c9d6a8e39383bd44
+auras_regression_d3_s2002=4.0980/8c78369633415168
+auras_regression_d3_s3003=4.1900/d16d957f634c359d
+auras_regression_d5_s2002=4.0940/7a3abcc5d24d1594
+auras_regression_d5_s3003=4.1740/74887922e98ce67d
 goblins_regression_d0_s2002=4.1040/5629ee7ea94ddd09
 goblins_regression_d3_s2002=3.8133/6a6b208f1461934d
 goblins_regression_d3_s3003=3.8367/ae27961fa384f7ce
