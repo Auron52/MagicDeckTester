@@ -2051,6 +2051,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                               + 1000003ULL * static_cast<uint64_t>(w) + static_cast<uint64_t>(pd);
             GameState s = GoldFishRunner::SetupGame(deck, rs);
             s.m_required_pieces = &rollout_profile.required_pieces;
+            s.m_card_scores     = rollout_profile.card_scores.empty()
+                                ? nullptr : &rollout_profile.card_scores;
             s.vial_target_mv    = rollout_profile.vial_target_mv;
             s.on_the_play       = (pd == 1);
             Player& ap = s.ActivePlayer();
@@ -2125,6 +2127,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                           + 1000003ULL * static_cast<uint64_t>(w) + static_cast<uint64_t>(pd);
         GameState s = GoldFishRunner::SetupGame(deck, rs);
         s.m_required_pieces = &rollout_profile.required_pieces;
+        s.m_card_scores     = rollout_profile.card_scores.empty()
+                            ? nullptr : &rollout_profile.card_scores;
         s.vial_target_mv    = rollout_profile.vial_target_mv;
         s.on_the_play       = (pd == 1);
         Player& ap = s.ActivePlayer();

@@ -4,6 +4,8 @@
 #include "ManaPool.h"
 #include "DiscardPolicy.h"
 #include <array>
+#include <map>
+#include <string>
 #include <vector>
 #include <optional>
 #include <cstdint>
@@ -349,6 +351,19 @@ struct GameState
     // hoarded lands, over-counting a Land's Edge flood the real game never accumulates (gi=220).
     // nullptr -> no protection (matches a raw GameState with no profile attached).
     const std::vector<std::string>* m_required_pieces = nullptr;
+    // Non-owning pointer to the deck's LEARNED per-card marginals (MulliganProfile::card_scores),
+    // stamped beside m_required_pieces in AIEngine::HandleMulligan and by every analyzer rollout
+    // harness, and propagated through every deep copy. card_scores[name][k] is the measured win-turn
+    // improvement of the (k+1)-th copy IN THE OPENING HAND -- see AnalyzerEngine::ComputeCardScores.
+    //
+    // READ THE UNITS BEFORE USING THIS. It is an unadjusted group-mean difference over opening
+    // hands, so it is (a) an opening-hand quantity, not a "value of playing this card on turn 5",
+    // and (b) confounded with castability -- a hand holding a five-drop holds one fewer cheap card,
+    // which is why AIEngine's own consumer clamps the negative half to zero and calls it selection
+    // bias. It is a keep/bottom feature. Any use as a mid-game VALUE term is a hypothesis to be
+    // measured, not a free upgrade; docs/design/minotaur-discard-policy-proposal.md records one
+    // such measurement. nullptr -> the consumer's own fallback (matches a raw GameState).
+    const std::map<std::string, std::vector<double>>* m_card_scores = nullptr;
     // How widely m_required_pieces is protected from the cleanup discard (profile field
     // mulligan.discard_protect). A plain value member, so every deep copy / rollout trial carries
     // it exactly like m_required_pieces. Default All = the established behaviour, so a raw

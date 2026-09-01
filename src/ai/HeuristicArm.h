@@ -112,6 +112,9 @@ enum Slot : int
     MINOTAUR_DISCARD_DUPES,   // MTG_MINOTAUR_DISCARD_DUPES   k-th copy pays CUMULATIVE mana
     MINOTAUR_DISCARD_EV2,     // MTG_MINOTAUR_DISCARD_EV2     value = the FULL V1 order, not 6 buckets
     MINOTAUR_EV_DISCARD,      // MTG_MINOTAUR_EV_DISCARD      THE ADOPTED MODEL (default ON)
+    MINOTAUR_DISCARD_CSVAL,   // MTG_MINOTAUR_DISCARD_CSVAL   value order = LEARNED card_scores
+    MINOTAUR_DISCARD_CSNOP,   // MTG_MINOTAUR_DISCARD_CSNOP   ...and drop P (card_scores AS the EV)
+    MINOTAUR_DISCARD_CSDUP,   // MTG_MINOTAUR_DISCARD_CSDUP   learned marginal gates the dupe penalty
     COUNT
 };
 
@@ -201,6 +204,9 @@ inline const char* Name(int slot)
         "MTG_MINOTAUR_DISCARD_DUPES",
         "MTG_MINOTAUR_DISCARD_EV2",
         "MTG_MINOTAUR_EV_DISCARD",
+        "MTG_MINOTAUR_DISCARD_CSVAL",
+        "MTG_MINOTAUR_DISCARD_CSNOP",
+        "MTG_MINOTAUR_DISCARD_CSDUP",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

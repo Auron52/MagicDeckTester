@@ -331,3 +331,77 @@ A behavioural diff finds the rule firing in **1 of 462 decisions**, and that one
 doing exactly what the doctrine asks: V1 sheds **Ragemonger** to protect the Vial, the new rule
 sheds the Vial and keeps the Ragemonger — the card the user specifically said to keep for mana.
 So shedding the Vial is NOT established as incorrect; it is barely measurable in either direction.
+
+### Round 4 — is the LEARNED `card_scores` order the better `value`? (measurement in flight)
+
+Round 3 closed with "the `value` term is a proxy", and named the deck's learned `card_scores` as
+what `value(playing)` ought to mean. Round 4 plumbs them through and measures it. Two things had to
+be built first, and both are reusable:
+
+**1. `GameState::m_card_scores`.** A borrowed pointer to `MulliganProfile::card_scores`, stamped
+beside `m_required_pieces` in `AIEngine::HandleMulligan` and at all seven analyzer rollout-harness
+sites, propagated through every deep copy. Stamping *every* site is the point, not tidiness: if play
+saw the scores and the search rollouts did not, the rollout would be evaluating a different policy
+than the one the game executes. Verified inert with the arms off — smoke 48/48, **0 configs changed,
+0 play-changed**. The `Dominance.h` size tripwire fired on the new field and is answered there: the
+whole family of borrowed profile pointers is a per-game constant and cannot distinguish two futures.
+
+**2. A trace-tearing fix, which invalidated the first attempt at this round's own diff.** `TRACE()`
+emitted each line as **three separate `stderr` calls** (prefix, body, newline). Every runner here is
+multi-threaded, so concurrent tracers interleaved MID-LINE: the first behavioural diff of these arms
+reported 40–52% of decisions changed, built on records with other records spliced into them. With
+one buffered write per line the same comparison reports 3–22%. This was never Minotaur-specific —
+**all 17 trace streams in the repo emitted torn lines under any multi-game run**, so any past
+analysis that parsed a trace stream from a threaded run deserves a second look. The discard line
+also now leads with `g<game_seed>`, without which decisions cannot be attributed to a game at all.
+
+**READ THE UNITS BEFORE BELIEVING THE PREMISE.** `card_scores[c][k]` is
+`avg_win_turn(k copies of c in the OPENING HAND) - avg_win_turn(k+1 copies)` — an unadjusted
+group-mean difference (`AnalyzerEngine::ComputeCardScores`). So it is *not* "the value of playing
+this card on turn 5": it is an opening-hand quantity, and it is confounded with castability, since a
+hand holding a five-drop holds one fewer cheap card. `AIEngine`'s own consumer clamps the negative
+half to zero and its comment calls that half selection bias. Using it as `value` therefore risks
+**double-counting mana** — `P(play)` already discounts what is hard to cast, and `card_scores`
+discounts it again. The measurement is designed around that risk rather than ignoring it.
+
+The learned order over this deck's creatures, for reference (first-copy marginal):
+
+    Scarhide .335 > Ragemonger .233 > Kragma .140 > Burning-Fist .069 > Fanatic .008
+      > Slaughter-Priest -.081 > Rageblood -.087 > Neheb -.088 > Raider -.128
+      > Reckoner -.175 > Sethron -.193
+
+It is *not* simply cost-ordered — it puts Kragma (5 mana) third and demotes Rageblood, Neheb and
+Sethron, which the authored order ranks 1/2/3. So it genuinely disagrees with the shipped policy
+about which cards are the payoffs, and the disagreement is not reducible to curve position.
+
+**Three arms, chosen to discriminate** (a mechanism that fits is not one that separates):
+
+| arm | what it changes | what a win would mean |
+|---|---|---|
+| `MTG_MINOTAUR_DISCARD_CSVAL` | value ORDER from `card_scores`, `P` kept, same `0.85^pos` spread | the learned order is better information |
+| `MTG_MINOTAUR_DISCARD_CSNOP` | the same order with `P` DROPPED | `card_scores` were already an EV; multiplying double-counted mana |
+| `MTG_MINOTAUR_DISCARD_CSDUP` | adopted order kept; the learned per-copy marginal decides whether the duplicate penalty applies at all | the learned MARGINAL is usable even if the learned LEVEL is not |
+
+`CSVAL` vs `CSNOP` is the discriminating pair — either alone would be a number that cannot tell the
+two explanations apart. Only the ORDER is swapped, never the spread, so a result attributes to the
+ordering and cannot be confounded by a scale change.
+
+`CSDUP` is the targeted one, and the argument for it is that a *marginal* is a cleaner learned
+quantity than a *level*: both of its groups contain the card, so the castability confound largely
+cancels. It also expresses something no cost-shaped rule can. The shipped `DUPES` rule charges the
+k-th copy cumulative mana, which gets Kragma right (5 mana; learned 2nd copy **-0.275**) but must
+get Rageblood wrong (3 mana; learned 2nd copy **+0.038** — a second lord is genuinely fine).
+
+**Behavioural diff first** (8,000 d0 games, `test/tools/discard_behaviour_diff.py`, paired within a
+game and stopped at each game's first divergence — after that the arms are playing different games):
+
+| arm | changed | signature |
+|---|---|---|
+| `CSVAL` | 312 / 5,725 (5.5%) | sheds Rageblood/Neheb/Sethron more; keeps Slaughter-Priest, Burning-Fist, Ragemonger |
+| `CSNOP` | 1,112 / 4,980 (22.3%) | overwhelmingly **keeps Kragma** — with no `P`, its cost never discounts it |
+| `CSDUP` | 172 / 5,844 (2.9%) | **keeps a second Rageblood** (learned marginal positive → penalty waived), shedding Kragma or Fanatic instead |
+
+Every arm fires, and each signature is the mechanism doing what it was built to do — so the outcome
+A/B is measuring something real in all three cases. Outcome numbers to follow: one pooled batch,
+256 jobs / 1.28M games, arms × {d0, d3} × 32 seeds, on selection seeds 5.0M–5.31M (disjoint from
+every prior Minotaur sweep; 6.0M+ held back for confirmation).

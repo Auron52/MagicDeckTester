@@ -1,4 +1,5 @@
 #include <array>
+#include <optional>
 #include <map>
 #include "HeuristicArm.h"
 #include "ValueArm.h"
@@ -10775,6 +10776,28 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
     const bool v2_ev      = v2_evhard || heurarm::Flag(heurarm::MINOTAUR_DISCARD_EV, s_ev_env);
     const bool v2_dupes   = adopted || heurarm::Flag(heurarm::MINOTAUR_DISCARD_DUPES, s_dup_env);
     const bool v2_ev2     = adopted || heurarm::Flag(heurarm::MINOTAUR_DISCARD_EV2, s_ev2_env);
+    // ---- LEARNED-value arms (see the "value is a proxy" note below) ----------------------------
+    // All three are OFF by default and all three need `s.m_card_scores`, which is nullptr for a deck
+    // analysed without scores -- in which case each falls back to the adopted authored order.
+    static const bool s_csval_env = EnvOn("MTG_MINOTAUR_DISCARD_CSVAL");
+    static const bool s_csnop_env = EnvOn("MTG_MINOTAUR_DISCARD_CSNOP");
+    static const bool s_csdup_env = EnvOn("MTG_MINOTAUR_DISCARD_CSDUP");
+    const bool cs_nop   = heurarm::Flag(heurarm::MINOTAUR_DISCARD_CSNOP, s_csnop_env);
+    const bool cs_val   = cs_nop || heurarm::Flag(heurarm::MINOTAUR_DISCARD_CSVAL, s_csval_env);
+    const bool cs_dup   = heurarm::Flag(heurarm::MINOTAUR_DISCARD_CSDUP, s_csdup_env);
+    const std::map<std::string, std::vector<double>>* cs = s.m_card_scores;
+    // The learned marginal of the (k+1)-th copy of a hand card, or nullopt when the deck carries no
+    // scores for it. Indices past the recorded vector clamp to its last entry, exactly as
+    // AIEngine::CardScore does -- a 3rd copy is at least as redundant as the 2nd.
+    auto learned_marginal = [&](int i, int k) -> std::optional<double>
+    {
+        if (cs == nullptr) { return std::nullopt; }
+        auto it = cs->find(ap.hand[i].m_name.str());
+        if (it == cs->end() || it->second.empty()) { return std::nullopt; }
+        const std::size_t idx = std::min(static_cast<std::size_t>(std::max(0, k)),
+                                         it->second.size() - 1);
+        return it->second[idx];
+    };
     // Filled just before the threat sort (it needs the FINAL threat list, after surplus
     // reducers are folded in). Position of each card in V1's own value order.
     std::vector<int> value_pos(static_cast<std::size_t>(n), 0);
@@ -10913,7 +10936,25 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
         static const double kHard[] = { 1.0, 0.70, 0.35, 0.10, 0.03 };
         const double* kP = v2_evhard ? kHard : kSoft;
         // Cumulative for duplicates: the k-th copy has to be paid for on TOP of the k before it.
-        const int need = eff_mv(i) * (1 + copies_ahead[static_cast<std::size_t>(i)]);
+        int dupes = copies_ahead[static_cast<std::size_t>(i)];
+        // MTG_MINOTAUR_DISCARD_CSDUP -- ask the LEARNED marginal whether this copy is redundant at
+        // all before charging it. Cumulative mana says every extra copy is worse and says it in
+        // proportion to cost, which gets Kragma right by luck (5 mana, learned 2nd copy -0.2754)
+        // and Rageblood Shaman WRONG (3 mana, learned 2nd copy **+0.0378** -- a second lord is
+        // genuinely fine, and no cost-shaped rule can ever say so). Gated on the SIGN only, not the
+        // magnitude: the marginal is in turns and `value` is in arbitrary units, so a magnitude
+        // blend would need an invented conversion constant, whereas "is the k-th copy a liability,
+        // yes or no" is a question the measurement answers directly.
+        //
+        // Approximation, stated: copies_ahead counts battlefield copies too, while the marginal is
+        // over copies in the OPENING HAND. A resolved copy is if anything MORE redundancy than a
+        // held one, so reading the hand marginal there is conservative in the safe direction.
+        if (cs_dup && dupes > 0)
+        {
+            const std::optional<double> m = learned_marginal(i, dupes);
+            if (m.has_value() && m.value() >= 0.0) { dupes = 0; }
+        }
+        const int need = eff_mv(i) * (1 + dupes);
         const int d = need - reach;
         const double p = (d <= 0) ? 1.0 : (d < 5 ? kP[d] : 0.02);
         // VALUE. The 6-bucket `threat_rank` was the model's weak point and the reason EV lost:
@@ -10932,7 +10973,13 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
         {
             const double val = 6.0 * std::pow(0.85, static_cast<double>(
                                    value_pos[static_cast<std::size_t>(i)]));
-            return p * val;
+            // MTG_MINOTAUR_DISCARD_CSNOP -- the discriminating arm. If the learned card_scores are
+            // the right VALUE, keep P and they should beat the authored order (CSVAL). If they are
+            // really an EV already -- an opening-hand marginal is measured over hands you had to be
+            // able to CAST, so castability is baked in -- then multiplying by P double-counts the
+            // mana and dropping P should beat CSVAL. Running both is what tells the two apart;
+            // either one alone would just be a number.
+            return cs_nop ? val : p * val;
         }
         return p * static_cast<double>(6 - threat_rank(i));
     };
@@ -10950,6 +10997,19 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
         std::vector<int> byval = threats;
         std::stable_sort(byval.begin(), byval.end(), [&](int a, int b)
         {
+            // MTG_MINOTAUR_DISCARD_CSVAL -- take the value ORDER from the deck's learned first-copy
+            // marginals instead of the authored one. Only the order is swapped, never the 0.85^pos
+            // spread, so this attributes the ORDERING and cannot be confounded by a scale change.
+            // A card the analysis never scored sinks below every scored one and keeps its authored
+            // place among the other unscored cards (a defined total order; inert on this decklist,
+            // where every creature is scored).
+            if (cs_val)
+            {
+                const std::optional<double> ma = learned_marginal(a, 0);
+                const std::optional<double> mb = learned_marginal(b, 0);
+                if (ma.has_value() != mb.has_value()) { return ma.has_value(); }
+                if (ma.has_value() && ma.value() != mb.value()) { return ma.value() > mb.value(); }
+            }
             const int ra = threat_rank(a), rb = threat_rank(b);
             if (ra != rb) { return ra < rb; }
             if (power_of(a) != power_of(b))       { return power_of(a) > power_of(b); }

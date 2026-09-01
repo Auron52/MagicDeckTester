@@ -84,7 +84,7 @@ static_assert(sizeof(Permanent) == 256,
 static_assert(sizeof(Player) == 160,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
-static_assert(sizeof(GameState) == 680,
+static_assert(sizeof(GameState) == 688,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -395,6 +395,12 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         for (const Card& c : s.exile) { acc += c.m_name_hash; }
         fold(acc);
     }
+    // NOT folded, deliberately: m_card_scores -- and this classification covers the whole family of
+    // borrowed profile pointers it joins (m_provider, m_required_pieces, m_evaluator,
+    // m_value_model). Each is stamped once per game from the deck's profile and is then the SAME
+    // pointer in every state of that game, siblings included, so it cannot distinguish two futures
+    // and folding it would fold a constant. What the pointed-to data DOES to play is already visible
+    // in the fields it moves (a different discard leaves a different hand, which is folded).
     // NOT folded, deliberately: next_token_number. It only hands out ids to FUTURE tokens, and an
     // id decides nothing about an outcome -- two siblings that made different numbers of tokens
     // reach the same position with different counters. (Where an id DOES matter -- attachment

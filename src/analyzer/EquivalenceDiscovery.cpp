@@ -60,6 +60,8 @@ EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& pro
     {
         GameState s = GoldFishRunner::SetupGame(deck, seed_off + static_cast<uint64_t>(i));
         s.m_required_pieces = &rollout_profile.required_pieces;
+        s.m_card_scores     = rollout_profile.card_scores.empty()
+                            ? nullptr : &rollout_profile.card_scores;
         s.vial_target_mv    = rollout_profile.vial_target_mv;
         s.on_the_play       = true;
         std::vector<Card> seven;

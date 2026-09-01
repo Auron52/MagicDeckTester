@@ -428,6 +428,11 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // deep copy / rollout trial (each a copy of this live state). See GameState::m_required_pieces.
     state.m_required_pieces = &m_profile.required_pieces;
     state.m_discard_protect = m_profile.discard_protect;
+    // ... and the deck's learned per-card marginals, same non-owning / deep-copy propagation, so a
+    // provider heuristic can consult them at a decision the profile itself does not make. Read
+    // GameState::m_card_scores' comment first: these are OPENING-HAND marginals, castability-
+    // confounded, and are not a drop-in mid-game value.
+    state.m_card_scores     = m_profile.card_scores.empty() ? nullptr : &m_profile.card_scores;
 
     // Attach the deck's learned mid-game play evaluator (nothing to do with the mulligan itself --
     // this is just the first per-game hook that has BOTH the live state and the profile). Non-owning

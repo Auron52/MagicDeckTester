@@ -586,6 +586,7 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
                                       + 100003ULL * static_cast<uint64_t>(pd);
                     GameState s = GoldFishRunner::SetupGame(a.deck, rs);
                     s.m_required_pieces = &rp.required_pieces;
+                    s.m_card_scores     = rp.card_scores.empty() ? nullptr : &rp.card_scores;
                     s.vial_target_mv    = rp.vial_target_mv;
                     s.on_the_play       = (pd == 1);
                     Player& ap = s.ActivePlayer(); ap.hand.clear();
@@ -682,6 +683,7 @@ static int RunMullEvMode(const AnalyzerArgs& a)
                                   + 100003ULL * static_cast<uint64_t>(pd);
                 GameState base = GoldFishRunner::SetupGame(a.deck, rs);
                 base.m_required_pieces = &rp.required_pieces;
+                base.m_card_scores     = rp.card_scores.empty() ? nullptr : &rp.card_scores;
                 base.vial_target_mv    = rp.vial_target_mv;
                 base.on_the_play       = (pd == 1);
                 Player& ap = base.ActivePlayer();
@@ -764,6 +766,7 @@ static int RunLogHandMode(const AnalyzerArgs& a, const char* hand_spec)
         ++scanned;
         GameState s = GoldFishRunner::SetupGame(a.deck, seed);
         s.m_required_pieces = &rp.required_pieces;
+        s.m_card_scores     = rp.card_scores.empty() ? nullptr : &rp.card_scores;
         s.vial_target_mv    = rp.vial_target_mv;
         s.on_the_play       = on_play;
         GoldFishRunner::AssignCardNumbers(s, numbering);

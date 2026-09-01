@@ -503,7 +503,13 @@ inline std::vector<int> CleanupDiscardRankingWithOrder(
             const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
             if (hd != nullptr && hd->params.no_max_hand_size && hd->card.IsLand()) { tower = 1; }
         }
-        TRACE("discard", "T%d hand=%zu cands=%zu lip=%d landsinhand=%d tower=%d dropopen=%d -> %s",
+        // game_seed leads the line so a BEHAVIOURAL DIFF between two rule arms can pair decisions by
+        // game and stop at each game's first divergence. Without it the lines are unattributable:
+        // a multi-game run interleaves them, and after the first changed discard the two arms are
+        // playing different games, so comparing by position silently diffs unrelated decisions.
+        TRACE("discard",
+              "g%llu T%d hand=%zu cands=%zu lip=%d landsinhand=%d tower=%d dropopen=%d -> %s",
+              static_cast<unsigned long long>(state.game_seed),
               state.turn_number, ap.hand.size(), out.size(), lip, lands_in_hand, tower, drop_open,
               ap.hand[out.front()].m_name.str().c_str());
     }
