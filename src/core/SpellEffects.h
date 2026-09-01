@@ -9105,7 +9105,16 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     // Credited as wild like a Karoo (the one-of-each nuance is exact at tap time in tap_source).
     if (def.params.domain_mana) { amt = static_cast<int>(prod.size()); }
     if (prod.size() == 1)      { pool.Add(prod[0], amt); }
-    else if (!prod.empty())    { pool.wild += amt; }
+    else if (!prod.empty())
+    {
+        pool.wild += amt;
+        // ... and record how much of that wild can also pay a {C} PIP -- only a source whose own
+        // modes include colourless can (a Yavimaya Coast's "{T}: Add {C}" mode, not a Fertile
+        // Ground's "one mana of any colour"). See ManaPool::wild_c. Inert for every deck whose
+        // costs carry no {C} pip.
+        if (std::find(prod.begin(), prod.end(), Color::Colorless) != prod.end())
+        { pool.wild_c += amt; }
+    }
 }
 
 // Total mana the controller can still produce THIS instant: every UNTAPPED land/dork/rock plus any

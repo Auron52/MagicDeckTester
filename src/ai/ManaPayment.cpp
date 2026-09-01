@@ -114,10 +114,25 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         }
         else { amt = consumed = ManaProducedPerTap(def); }
         const std::vector<Color>& prod = EffectiveProduces(state, active, def);
+        // A multi-mode source that could have made {C} stops being able to once it is tapped, so
+        // retire its share of ManaPool::wild_c alongside its `wild` -- otherwise the projection keeps
+        // promising a {C} the board can no longer produce. Only ever nonzero for a source whose
+        // produces list includes Colorless, so every other deck's accounting is untouched.
+        const bool made_c = std::find(prod.begin(), prod.end(), Color::Colorless) != prod.end();
+        auto retire_wild_c = [&](int n)
+        { if (available && made_c) { available->wild_c = std::max(0, available->wild_c - n); } };
         if (amt > 1 && prod.size() > 1)
-        { for (Color c : prod) { floating.Add(c, 1); } if (available) { available->wild -= consumed; } }
+        {
+            for (Color c : prod) { floating.Add(c, 1); }
+            if (available) { available->wild -= consumed; }
+            retire_wild_c(consumed);
+        }
         else
-        { floating.Add(col, amt); if (available) { available->Add(col, -consumed); } }
+        {
+            floating.Add(col, amt);
+            if (available) { available->Add(col, -consumed); }
+            if (prod.size() > 1) { retire_wild_c(consumed); }
+        }
     };
 
     // Ensure floating can satisfy one pip: `any` = generic, else specific colour

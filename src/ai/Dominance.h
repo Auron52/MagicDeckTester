@@ -84,7 +84,11 @@ static_assert(sizeof(Permanent) == 256,
 static_assert(sizeof(Player) == 160,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
-static_assert(sizeof(GameState) == 688,
+// 688 -> 696 (2026-09-01): ManaPool gained `wild_c`, and GameState embeds one as floating_mana.
+// Classification: NOT a new axis and NOT a new exact-match field -- it is a SUBSET COUNT of
+// ManaPool::wild, so wild_c > 0 implies wild > 0 implies floating_mana.Total() > 0, which the
+// boundary assertion at :285 below already stands the whole comparator down on. Nothing to fold.
+static_assert(sizeof(GameState) == 696,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

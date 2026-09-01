@@ -14,6 +14,17 @@ struct ManaPool
     int green     = 0;
     int colorless = 0;  // {C} mana specifically
     int wild      = 0;  // one tap of a multi-color land (satisfies any single color or generic)
+    // A SUBSET COUNT of `wild` (never additional supply, never counted in Total): how many of those
+    // wild units come from a source that can also produce {C}. A {C} PIP is not a colour and no
+    // amount of coloured mana pays it (CR 107.4c) -- so a Fertile Ground's "add one mana of any
+    // colour" cannot pay Eldrazi Displacer's {2}{C}, while a Yavimaya Coast (whose modes are
+    // "{T}: Add {C}" / "{T}: Add {G} or {U}") can. Both credit `wild` (one tap, choice of output);
+    // only the latter credits `wild_c`. Kept as a subset rather than a separate bucket so every
+    // existing `.wild` reader sees the identical value it always did -- and because no cards.json
+    // cost carried a {C} pip before this deck, `cost.colorless` is 0 everywhere else and CanPayFlat
+    // below is provably byte-identical for every other deck. Clamped to `wild` at the one read site,
+    // so the sites that decrement `wild` without maintaining this need no changes.
+    int wild_c    = 0;
 
     int Total() const { return white + blue + black + red + green + colorless + wild; }
 
@@ -30,14 +41,14 @@ struct ManaPool
         }
     }
 
-    void Clear() { white = blue = black = red = green = colorless = wild = 0; }
+    void Clear() { white = blue = black = red = green = colorless = wild = wild_c = 0; }
 
     // Merge another pool into this one, colour for colour (used to retain leftover
     // mana from a payment into the turn-scoped reserve, state.floating_mana).
     void AddPool(const ManaPool& o)
     {
         white += o.white; blue += o.blue; black += o.black; red += o.red;
-        green += o.green; colorless += o.colorless; wild += o.wild;
+        green += o.green; colorless += o.colorless; wild += o.wild; wild_c += o.wild_c;
     }
 
     // Returns true if this pool can pay the given cost. Two-colour hybrid pips are handled by
@@ -58,13 +69,19 @@ struct ManaPool
     // wild covers any shortfall. Assumes no hybrid or Phyrexian mana.
     bool CanPayFlat(const ManaCost& cost) const
     {
+        // {C} pips first, and they are the ONE deficit `wild` alone cannot cover: only a source that
+        // can actually produce colourless pays them (see `wild_c`). Clamped here so the many sites
+        // that adjust `wild` without maintaining the subset can never make it exceed its superset.
+        const int colorless_deficit = std::max(0, cost.colorless - colorless);
+        if (colorless_deficit > std::min(wild_c, wild)) { return false; }
+
         // Deficit per color after using specific-color sources.
         int deficit =  std::max(0, cost.white     - white)
                      + std::max(0, cost.blue      - blue)
                      + std::max(0, cost.black     - black)
                      + std::max(0, cost.red       - red)
                      + std::max(0, cost.green     - green)
-                     + std::max(0, cost.colorless - colorless);
+                     + colorless_deficit;
 
         if (deficit > wild) { return false; }
 
