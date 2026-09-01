@@ -109,6 +109,7 @@ tokens being made and cracked.
 | 5b multi-depth | **monotonic**: d0 8.52 -> d3 7.12 -> d5 7.12 (converged) |
 | 5c2 horizon-honest tie-break | **NO SIGN AT THIS SAMPLE** — 15 changed of 400 paired (3.75%), net -5 turns (10 better / 5 worse). Directionally helping, below the 20-game threshold. Decisive run (`--blocks 4`) queued. |
 | 5h viewer self-guard | **PASSES** — every new param classified; one DISCLOSED GAP (below) |
+| 5d claude-play sweep | 16 games x2 (pre- and post-fix). **6 real bugs found and FIXED**; re-sweep on a frozen binary reproduced none of them |
 | suite | smoke **48/48**, regression **80/80**, 0 configs changed |
 | CI | ubuntu + windows + **Linux/Windows determinism parity** all green |
 
@@ -135,17 +136,88 @@ This is a **rollout-bound** profile (164k rollout calls / 2,326 interior nodes, 
 which is the shape the VALUE LEAF exists for -- the documented next stage, not an enumeration
 problem.
 
+## Stage 5d — the claude-play sweep found four real bugs
+
+Sixteen Sonnet agents, one game each, base seed 8801. **The sweep paid for itself**: every finding
+below was flagged independently by several agents, reproduced by hand, and traced to code written
+in this branch. Full write-up in the commit `dc60cabe`.
+
+| # | bug | how it was caught |
+|---|---|---|
+| 1 | **An ETB refund paid for itself.** The Drake/Faerie cast credited `EtbUntapLandsCredit` as `ritual_float`, which is summed into the pool the subset's combined cost is checked against — so "untap up to N lands" funded the very creature whose ETB does the untapping. | 12 of 16 agents flagged "Drake offered as castable with 2-4 mana"; once the ONLY plan for 11 consecutive decisions, once a decision loop escapable only by passing. Repro: turn 1, EMPTY board, plan 0 = "land=Yavimaya Coast; cast: Cloud of Faeries". |
+| 2 | **A `{cost},{T}` permanent tapped ITSELF** toward its own mana cost (a permanent taps once, CR 602.2a). | Mana arithmetic cross-checked against the LIFE TOTAL — only one painland tap had occurred, so the 4th mana had to have come from the Conservatory paying its own `{4}`. |
+| 3 | **The tap-ahead floated `wild` mana** = free colour fixing. `AddSourceToPool` books a multi-colour land as wild; `RitualTapAheadIntoFloat` deliberately commits a colour and mine did not. | An agent watched Emiel resolve `{W}{W}` off floating `{G:1, wild:2}` with **no white source ever tapped**. |
+| 4 | **Emiel's counters do NOT accumulate.** CR 400.7 — the returned permanent is a NEW OBJECT, so each blink wipes the previous counter. My heuristic and card note both claimed otherwise. | An agent ran a 13-iteration Emiel loop and counted **one** counter, not 13. |
+
+### What the fixes cost, and the split that matters
+
+Paired, 4 seeds x 100 games at d5/b20:
+
+| arm | avg turn |
+|---|---|
+| before any fix (using illegal mana) | 7.12 |
+| the two illegal-mana fixes, credit ON | 7.37 (+0.25) |
+| **shipped** (also credit removed) | **7.80** (+0.43) |
+
+* **+0.25 is a CORRECTION, not a regression** — the deck losing mana it should never have had.
+* **+0.43 is enumeration breadth** from dropping the ETB credit. The credit's *reasoning* was right;
+  only its implementation was unsound. **That 0.43 is a measured improvement still on the table**
+  and is this deck's most valuable follow-up (see below).
+
+`MTG_EDF_ETB_CREDIT=1` restores the unsound credit for attribution only. Default OFF; keep it that way.
+
+### Disclosed methodology defect (caught by an agent, not by me)
+
+I **rebuilt the binary while the first sweep was running**, violating the stateless-replay
+protocol's one-fixed-binary assumption. The four findings were each reproduced independently
+afterwards, but the sweep was re-run on a binary frozen at `f5f664bf` before recording the gate.
+
+## Stage 5d re-sweep (frozen binary `f5f664bf`) — one root cause, two symptoms
+
+All 16 agents re-ran on a binary that did not move. **None of the four earlier bugs reproduced**
+(several agents checked each explicitly). One systemic defect remained, reported by every agent and
+independently traced to source by two of them — and it turned out to be ONE root cause with two
+symptoms, both from reusing `is_aura` for land auras:
+
+| symptom | site | effect |
+|---|---|---|
+| land auras offered targeting a CREATURE ("Wild Growth → Emiel the Blessed") | `AppendCreatureTargetAuraCandidates` gated on `is_aura` without excluding `is_land_aura` | the plan shown to the player described a play CR 303.4 forbids (execution stayed legal — `ResolveEnchantTarget` silently redirected to a land) |
+| **standalone land-aura casts never enumerated at all** | `SubsetHasAuraOnUncastCreature`'s `on_bf` looks for a **creature** with that m_number; a land aura's host is a LAND, so it never matched and the guard **rejected every subset containing one** | the deck's entire ramp package was unreachable — the engine's own `CheckLine` said `legal_not_enumerated`, which three agents quoted |
+
+Also fixed, from the same sweep: `ActivateBlink` had no `SummarizePlan` case and never emitted its
+target, so every blink variant rendered as an identical `"Eldrazi Displacer (other)"`. An agent
+declined every blink option rather than guess — for a deck whose engine IS a targeted repeatable
+activation, that made the combo unverifiable through the protocol. Now emits `blink_target` /
+`blink_target_name` / `blink_count`, and `EnchantTargetName` resolves any controlled permanent (not
+just creatures) so a land host reads "Kitchen" instead of "#31".
+
+### The full measurement arc
+
+| arm | avg turn |
+|---|---|
+| before any fix (using illegal mana, ramp unreachable) | 7.12 |
+| after the four correctness fixes | 7.80 |
+| **after the land-aura fixes (shipped)** | **7.26** |
+
+So the net cost of every correctness fix is **+0.14 turns**, not +0.68: the land-aura repair gave
+back 0.54 of it by making the deck's ramp usable for the first time. Wall time also fell ~20%.
+
 ## Recommended next steps
 
-1. **Value leaf** (`bash scripts/valueleaf.sh run decks/EldraziDisplacerFlicker`) — the deck is
+1. **Credit the ETB refund toward SUBSEQUENT casts only** — worth a MEASURED ~0.43 turns (above).
+   `SubsetPayableSequential` already models the ordering (it calls `EtbUntapTapAheadIntoFloat`
+   before paying), so the work is to let the flat subset gate be optimistic exactly where the
+   sequenced check then confirms it. Needs its own A/B; do NOT restore the version the sweep
+   refuted.
+2. **Value leaf** (`bash scripts/valueleaf.sh run decks/EldraziDisplacerFlicker`) — the deck is
    rollout-bound and its d0 policy is 1.4 turns worse than the search (8.52 vs 7.12), so the leaf is
    the highest-leverage lever available. This is also the gate that decides whether the deck can
    afford mulligan generation at all.
-2. **Decisive 5c2 run** at `--blocks 4`.
-3. **Do NOT add to the regression suite yet** — at ~20 s/game it would dominate the smoke budget.
+3. **Decisive 5c2 run** at `--blocks 4`.
+4. **Do NOT add to the regression suite yet** — at ~20 s/game it would dominate the smoke budget.
    Revisit after the value leaf.
-4. Wire the `etb_untap_lands` chooser (below).
-5. Re-run the discard-analysis stage on a frozen binary (the first run's verdict, `STATUS_QUO_OK`,
+5. Wire the `etb_untap_lands` chooser (below).
+6. Re-run the discard-analysis stage on a frozen binary (the first run's verdict, `STATUS_QUO_OK`,
    was measured across a binary that changed mid-run, and the regeneration used a deliberately
    under-sampled 20-game evidence pass).
 
@@ -168,3 +240,17 @@ problem.
 ## Approved deferrals
 
 (none yet — every proposed deferral above is PROVISIONAL until the user signs it off)
+
+## Claude-play sweep
+- commit: `f5f664bf` (re-sweep, frozen binary; first sweep ran across a moving binary — disclosed)
+- seeds: 8801 games: 16 (x2 sweeps, 32 agent-games total)
+- flags: 0 unresolved
+
+All flags from both sweeps were verified against `cards.json` + the rules skill and resolved:
+**six fixed** (ETB-refund self-funding, `{cost},{T}` self-tap, tap-ahead wild mana, the Emiel-counter
+documentation error, the land-aura creature-target leak, the land-aura subset reject), **two fixed as
+protocol gaps** (blink target not surfaced, land host rendered as `#31`), and the remainder dismissed
+with reasons — chiefly painland tap-order (legal, a known unshipped `MTG_PREPAY_SHRINK` lever),
+`attached_to` m_number-vs-idx misreads, and unaffordable `{4}` Investigate plans being OFFERED but
+cleanly no-oping (the enumerator deliberately carries no affordability gate on activations — the
+Wirewood Lodge precedent — and the payment path is atomic).

@@ -215,9 +215,11 @@ static bool HandIsDraw(const CardDefinition* d)
 // otherwise-identical aura casts read as distinct plans ("Rancor -> Kor Spiritdancer" vs "-> Bogle").
 static std::string EnchantTargetName(const GameState& s, int m_number)
 {
+    // Any permanent you control, not only a creature: an "Enchant land" aura's host is a LAND, and
+    // restricting this to creatures made every land-aura plan read "-> #31" instead of "-> Kitchen"
+    // -- which is precisely the choice the player is being asked to make (WHICH land carries it).
     for (const Permanent& p : s.battlefield)
-        if (p.controller_index == s.active_player_index && p.card.IsCreature()
-            && p.card.m_number == m_number)
+        if (p.controller_index == s.active_player_index && p.card.m_number == m_number)
         { return p.card.m_name.str(); }
     // A same-turn creature target (cast this turn to carry the Aura) is still in hand at enumeration, so
     // resolve its name there too -- else the plan reads "-> #38" instead of "-> Light-Paws".
@@ -325,6 +327,22 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             // from casting it, and with no hint that it DISCARDS two cards. The activation count
             // is the whole difference between two otherwise identical menu entries, exactly as
             // for the sac outlets above (viewer issue #4's lesson).
+            // Blink outlet (Eldrazi Displacer / Emiel the Blessed). The TARGET and the COUNT are
+            // the whole decision, and without them every blink variant renders as an identical
+            // "<name> (other)" -- a Stage 5d agent worked around it by declining every blink option
+            // rather than gamble, which for a deck whose engine IS a targeted repeatable activation
+            // makes the sweep unable to verify the combo at all. sac_victim_id holds the target's
+            // m_number; EnchantTargetName resolves battlefield and hand alike.
+            case Action::Kind::ActivateBlink:
+            {
+                tag = a.card_name + ": blink " + EnchantTargetName(s, a.sac_victim_id);
+                const int bk = std::max(1, a.chosen_x);
+                if (bk > 1) { tag += " x" + std::to_string(bk); }
+                break;
+            }
+            case Action::Kind::ActivatePermAbility:
+                tag = a.card_name + ": " + PermAbilityLabel(a.ability_mode);
+                break;
             case Action::Kind::ActivatePump:
             {
                 const int k = std::max(1, a.chosen_x);
@@ -1057,6 +1075,16 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             {
                 os << ", \"enchant_target\": " << ac.enchant_target
                    << ", \"enchant_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.enchant_target));
+            }
+            // Blink: the target's m_number + resolved name, and the activation count, so the GUI
+            // and the claude-play protocol can tell "blink Peregrine Drake" (the mana-positive loop)
+            // from "blink a Cloud of Faeries" (loses an attacker to renewed summoning sickness) or
+            // from blinking the opponent's creature. Without these the variants are identical.
+            if (ac.kind == Action::Kind::ActivateBlink)
+            {
+                os << ", \"blink_target\": " << ac.sac_victim_id
+                   << ", \"blink_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
+                os << ", \"blink_count\": " << std::max(1, ac.chosen_x);
             }
             if (!ac.chosen_float_color.empty()) { os << ", \"float_color\": "; JsonStr(os, ac.chosen_float_color); }
             // Solo-target trick (Zada/Mirrorwing): the target is chosen at RESOLUTION via the

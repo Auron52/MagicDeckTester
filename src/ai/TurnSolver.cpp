@@ -20218,6 +20218,17 @@ static void AppendCreatureTargetAuraCandidates(const GameState& state, std::vect
         const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
         if (!def || !def->params.is_aura) { continue; }
         if (!def->params.aura_enchant_requires.empty()) { continue; }   // plain auras only (see note above)
+        // "Enchant LAND" auras are is_aura too, and they must never reach this injector: its whole
+        // job is to offer an aura onto a creature being cast in the same plan, which for Wild Growth
+        // / Fertile Ground / Overgrowth / Trace of Abundance is an illegal target class (CR 303.4).
+        //
+        // Found by the Stage 5d re-sweep, unanimously -- every agent on the frozen binary reported
+        // land auras offered as "Wild Growth -> Emiel the Blessed", and one traced it to this exact
+        // predicate. Execution was never illegal (ResolveEnchantTarget re-resolves to a land), but
+        // the plan the player is shown described a play the rules forbid, and these bogus variants
+        // crowded the aura's hand-slot group so the LEGAL land-target casts stopped being offered --
+        // an engine CheckLine confirmed a standalone Wild Growth as "legal_not_enumerated".
+        if (def->params.is_land_aura) { continue; }
         for (int ci : hand_creatures)
         {
             Action a;
@@ -20253,6 +20264,13 @@ static bool SubsetHasAuraOnUncastCreature(const GameState& state,
         if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
         const CardDefinition* cd = CardDatabase::Instance().Lookup(c.card_name);
         if (!cd || !cd->params.is_aura) { continue; }
+        // An "Enchant LAND" aura's target is a LAND, so on_bf (which looks for a CREATURE with that
+        // m_number) can never find it and this guard rejected EVERY subset containing one -- the
+        // deck's whole ramp package became unenumerable. The engine's own CheckLine said so
+        // ("legal_not_enumerated") and three Stage 5d agents quoted it. Their hosts are always
+        // already-on-battlefield lands, so this "aura on a creature cast this turn" guard has
+        // nothing to check for them.
+        if (cd->params.is_land_aura) { continue; }
         if (on_bf(c.enchant_target)) { continue; }   // existing creature -> the normal path handles it
         bool cast_here = false;
         for (int jdx : sel)
