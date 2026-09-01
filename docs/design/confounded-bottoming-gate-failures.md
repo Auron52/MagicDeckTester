@@ -89,11 +89,32 @@ strips the lookahead of its peek at the same time.** It is the table's most favo
 decisive loss there is a very strong signal — which is what made "the table is broken" the only
 reading left once the harness itself was cleared.
 
+## The harness is provably sound — measured, not argued
+
+Same deck, same 16 seeds x 1000 games, same table, only `MTG_CONFOUND_BOTTOM` differs
+(`logs/bottom_confoundOFF_mw/` vs `logs/keepmodel_exh_bottom_Mirrorwing Dragon_r1/`):
+
+| arm | confound OFF | confound ON | what the confound did |
+|---|---|---|---|
+| A — lookahead (clairvoyant) | 4.3522 | 4.8353 | **+0.4831 — crippled, as intended** |
+| B — blind exhaustive table | 4.9407 | 4.9358 | **−0.0049 — untouched, as intended** |
+| delta (B−A) | **+0.5885** | **+0.1005** | |
+
+This is exactly the designed behaviour and it settles the "did we break the test?" question. The
+confound destroys the clairvoyant arm's peek (worth **0.488 turns** on this deck) while leaving the
+blind arm statistically identical — which it must be, since the table never peeked and its labels
+already assume a reshuffled continuation. **The gate does precisely what it claims.**
+
+It also sizes the two effects cleanly: of lookahead's +0.5885t raw advantage, **0.4880t is
+clairvoyance** (correctly removed by the confound) and the **+0.1005t residual is the R=1 table's own
+deficit** — the defect below.
+
 ## Ruled out along the way
 
 * **The confound not reaching the test.** It does: `mullgen.sh` passes it through `run_ab`'s
   `env "$@"`, the harness logs `confound=1` on the bottoming arm and `confound=0` on keep, and the
   engine reshuffles after `BottomCards` under `mulligan_count > 0` with the same seed in both arms.
+  The A/B above then confirms it end-to-end, in outcomes rather than in plumbing.
 * **"The table is fit shallower than it plays."** Minotaur generates at `d1/b3`, *shallower* than
   Mirrorwing's `d2/b3`, and passes. Depth mismatch is not the mechanism.
 * **Bucket coarseness.** Mirrorwing's 16 buckets are **all singletons** — the table is exact per card
