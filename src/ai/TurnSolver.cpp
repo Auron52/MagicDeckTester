@@ -25765,6 +25765,18 @@ struct ForceValueLeafGuard
     ~ForceValueLeafGuard() { g_force_value_leaf = prev; }
 };
 
+// fd-oracle diagnostic (MTG_FD_ORACLE only): the smallest WIN-CLAIMING estimate (w <= max_turns) the
+// VALUE leaf returned during the current top-level decision. The commit-only-verified doctrine reads
+// `line.win_turn <= turn + searched_depth - 1` as "this win was found by real simulation", which held
+// while the leaf was SimulateToEnd (a rollout to game end). The value leaf instead returns a bare
+// prediction, and a prediction landing INSIDE the horizon is indistinguishable from a simulated win --
+// so the search can commit a whole line on an unverified guess. This records the guess so the oracle
+// can say whether the "verified" win it flagged was in fact exactly that. Tracked only under the
+// oracle flag, so normal play does not pay for it.
+inline thread_local long long g_vleaf_min_est = LLONG_MAX;
+void      TurnSolver::ResetLeafEstimate() { g_vleaf_min_est = LLONG_MAX; }
+long long TurnSolver::MinLeafEstimate()   { return g_vleaf_min_est; }
+
 // K-predictor state (MTG_ESC_PREDICT). The PROBE ladders d1..committed for free (cheap value leaf) and, per
 // depth, reveals the leaf count -- the quantity the escalation's dominant rollout cost scales with. The
 // escalation reuses that MEASURED structure to predict its own deepest affordable depth K, runs ONE pass at
@@ -26480,6 +26492,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 if (leafeval::ValueRes()) { leafeval::Publish(score); }
                 w = max_turns + 1;
             }
+            // fd-oracle diagnostic only (see g_vleaf_min_est): remember the best win this leaf GUESSED.
+            static const bool s_fd_leafest = EnvOn("MTG_FD_ORACLE");
+            if (s_fd_leafest && w <= max_turns && w < g_vleaf_min_est) { g_vleaf_min_est = w; }
             return { w, {} };
         }
         // Tail estimate beyond the horizon: roll out to game end at s_fd_leaf_depth

@@ -166,11 +166,46 @@ per-game win-turn drift against the baseline (8/0/0 better/worse/tied), which is
 passing check. One over-projection in 240 games is a real but small imprecision in an evaluator
 that is approximate *by construction* — it replaces the horizon rollout with an O(1) estimate.
 
-*What is NOT established:* WHY that position over-projects. Attribution is not mechanism. The next
-step is the documented one — reproduce the single game
-(`--seed 7001 --game-index 0 --games 1 --log-dir`, deterministic, already captured in
-`logs/mw_fd/`), and diff the rollout's projected line against the executed line to find the card or
-state the leaf misprices.
+*MECHANISM — now established (2026-09-01, instrumented and reproduced):*
+
+```
+[fd-diverge] seed=7001 realized_win=5 predicted_win=4 proven_at_turn=1 leaf_est=4
+             [WIN WAS A LEAF ESTIMATE, NOT SIMULATED]
+```
+
+**The flagged "verified" win was never simulated — it was the value leaf's guess.** The oracle's
+`fd_verified` test is `line.win_turn <= turn + searched_depth - 1`, i.e. "the win falls inside the
+searched horizon, so the search must have found it by real simulation". That inference was sound
+while the horizon leaf was `SimulateToEnd` (a rollout to game end, whose win turn IS simulated). The
+learned value leaf instead returns a bare prediction — `FSLineWin`, `depth <= 0`:
+
+```cpp
+int w = static_cast<int>((score + 500) / 1000);   // milliturns -> a turn
+if (w < state.turn_number) { w = state.turn_number; }
+if (w > max_turns) { ...; w = max_turns + 1; }
+return { w, {} };                                  // SearchLine carries a win_turn and NOTHING else
+```
+
+A prediction landing **inside** the horizon is therefore indistinguishable from a simulated win.
+The oracle's own comment says it deliberately excludes "a beyond-horizon leaf ESTIMATE" — the
+exclusion is real but **incomplete**: it only catches estimates that land *beyond* the horizon.
+
+This explains every observation at once: it appears only with a value leaf attached (0 without, 0 on
+v2's — a different model guesses differently), it is rare (the guess must be both in-horizon and
+wrong), and it is not the ETB-cascade fix.
+
+*Severity — worth a decision, not a shrug.* The consequence is larger than a mis-reported diagnostic:
+**commit-only-verified can commit a whole line on an unverified estimate**, which is the exact thing
+that doctrine exists to prevent (`AIEngine.cpp`: "when the win is only an estimate beyond the searched
+horizon, commit just THIS turn and re-search next turn"). The clean fix is to mark the value leaf's
+return as *estimated*, propagate that flag up through `SearchLine`, and require `!estimated` both for
+the verified-commit decision and for the oracle. That changes commit behaviour (the engine would
+re-search instead of committing more often), so it needs its own measured A/B before adoption — it is
+**not** a free correctness patch, and is left for the user to schedule.
+
+*Diagnostic shipped:* `MTG_FD_ORACLE` now also prints `leaf_est=`, and tags the line when the
+committed win turn equals the leaf's best guess. Gated on the oracle flag; play verified
+byte-identical (`fa8fd530b63f885e`, avg 4.9020, unchanged).
 
 *If the user prefers zero fd-diverges:* rename to `Mirrorwing Dragon.value.DISABLED.json` (renaming
 is what deactivates a presence-gated artifact) and re-accept the three tiers — the GT accepted in

@@ -1122,6 +1122,13 @@ public:
         std::vector<PhasePlan> phases;
     };
 
+    // fd-oracle diagnostic (MTG_FD_ORACLE only, inert otherwise): the smallest WIN-CLAIMING estimate
+    // the VALUE leaf returned since the last ResetLeafEstimate(). Lets the oracle distinguish a win
+    // the search SIMULATED from one the learned leaf merely PREDICTED -- indistinguishable in
+    // SearchLine, which carries only a win_turn. LLONG_MAX => the leaf claimed no win this decision.
+    static void      ResetLeafEstimate();
+    static long long MinLeafEstimate();
+
     // FULL-DEPTH search (experimental, env-gated via MTG_FULL_DEPTH). Unlike
     // SolveWithLookahead — which iterative-deepens the PRE-COMBAT decision and
     // approximates every future turn with a reduced-depth rollout plus a GREEDY

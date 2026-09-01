@@ -327,6 +327,10 @@ private:
     // it was predicted, to flag when a later recompute degrades below it (divergence).
     int m_fd_best_win  = 21;
     int m_fd_best_turn = 0;
+    // The value leaf's best win-claiming GUESS during the decision that set m_fd_best_win
+    // (LLONG_MAX = the leaf claimed no win). Equal to m_fd_best_win => the "verified" win was a leaf
+    // estimate, not a simulated one. Diagnostic; only written under MTG_FD_ORACLE.
+    long long m_fd_best_leafest = LLONG_MAX;
 
     // --- Non-convergence detector (env-gated by MTG_FLAG_NONCONV; read-only) ---
     // Tracks, per game, the EARLIEST exhaustively-verified win turn the search has

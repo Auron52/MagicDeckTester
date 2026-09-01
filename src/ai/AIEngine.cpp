@@ -410,7 +410,17 @@ void AIEngine::OnGameEnd(const GameState& state, int win_turn)
         std::cerr << "[fd-diverge] seed=" << state.game_seed
                   << " realized_win=" << realized
                   << " predicted_win=" << m_fd_best_win
-                  << " proven_at_turn=" << m_fd_best_turn << "\n";
+                  << " proven_at_turn=" << m_fd_best_turn
+                  // SIMULATED vs PREDICTED: leaf_est == predicted_win means the "verified" win was the
+                  // value leaf's guess landing inside the horizon, which fd_verified cannot tell apart
+                  // from a real simulated win. "none" => the leaf claimed no win, so the divergence is a
+                  // genuine commit-the-line replay failure.
+                  << " leaf_est="
+                  << (m_fd_best_leafest == LLONG_MAX ? std::string("none")
+                                                     : std::to_string(m_fd_best_leafest))
+                  << (m_fd_best_leafest == static_cast<long long>(m_fd_best_win)
+                          ? "  [WIN WAS A LEAF ESTIMATE, NOT SIMULATED]" : "")
+                  << "\n";
     }
 }
 
@@ -2139,6 +2149,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // shallow beam was measured on the legacy budget. -1 beam_width => no block => beam off => byte-
                     // identical; d0/d1/d2 are too shallow for any regime so the beam stays off there too.
                     const bool vp_beam = m_profile.value_play.drives();
+                    // Per-decision reset for the fd-oracle's leaf-estimate diagnostic (no-op unless
+                    // MTG_FD_ORACLE, which is the only thing that writes it).
+                    if (s_fd_oracle) { TurnSolver::ResetLeafEstimate(); }
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
                         fd_tt, &budget, &searched_depth, escalate_below, m_budget_ms,
@@ -2177,6 +2190,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     {
                         m_fd_best_win  = line.win_turn;
                         m_fd_best_turn = state.turn_number;
+                        // Was this "verified" win SIMULATED, or merely PREDICTED by the value leaf?
+                        // fd_verified only asks whether the win turn falls inside the searched horizon.
+                        // That was a sound proxy while the leaf was SimulateToEnd (a real rollout to game
+                        // end); the learned value leaf returns a bare estimate, and one landing INSIDE
+                        // the horizon is indistinguishable here -- SearchLine carries a win_turn and
+                        // nothing else. Record whether the committed win turn is exactly the leaf's best
+                        // guess, so a flagged divergence can say which of the two it was.
+                        m_fd_best_leafest = TurnSolver::MinLeafEstimate();
                     }
 
                     // Commit-only-verified: keep the WHOLE line only when it reaches a
