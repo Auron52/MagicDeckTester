@@ -363,7 +363,13 @@ peeked at, so lookahead "wins" for free. **Remove the peek and the table wins.**
   fresh shuffles; lookahead's library-specific deviations are blind-*worse* by 0.5–1.9t.
 So a low-R attribution "loss" to lookahead is mostly the peek confound plus fixable table R-noise, NOT a
 real defect. **Confirm each new profile with the CONFOUNDED A/B** (`MTG_CONFOUND_BOTTOM`) and check that
-blind ≥ lookahead — this has held on every profile so far. There is no ship-off escape hatch, so a
+blind ≥ lookahead. **This NO LONGER holds on every profile.** As of 2026-09-01 the gate FAILS
+decisively on **Dragons (+0.0641t, 0/16 seeds, mean/se +8.84)** and **Mirrorwing v3 (+0.1006t, 0/16
+seeds, mean/se +17.99)**, while Minotaur passes. Both failures are systematic rather than label
+noise, so the "raise R" half of the response below is **not** the answer for them; and the obvious
+gen-depth explanation is REFUTED (Minotaur generates at d1/b3 — shallower than Mirrorwing's d2/b3 —
+and passes). Mechanism unknown: read `docs/design/confounded-bottoming-gate-failures.md` before
+re-deriving a hypothesis. There is no ship-off escape hatch, so a
 profile that ever *failed* the confounded A/B would be a signal to fix the bottoming heuristic or raise R
 (a modeling/quality problem), NOT to disable bottoming. Note the GT tradeoff: because the *standard* (unconfounded) goldfish metric still rewards the peek, enabling blind
 bottoming shows a small win-turn *increase* on mulligan games — a deliberate, honest shift to accept via
