@@ -307,7 +307,7 @@ inline KeepConstraints LoadKeepConstraints(const std::filesystem::path& path)
     if (!file) { return KeepConstraints{}; }
     std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     try   { return KeepConstraintsFromJson(content); }
-    catch (...) { return KeepConstraints{}; }
+    catch (...) { std::cerr << "[profload] SWALLOWED: KeepConstraints parse failed: " << path << "\n"; return KeepConstraints{}; }
 }
 
 // ---- Mulligan JSON object (used by both DeckProfileToJson and AnalyzerEngine) --
@@ -650,7 +650,7 @@ inline MulliganProfile LoadDeckProfile(const std::filesystem::path& path)
     if (!content.empty())
     {
         try   { profile = DeckProfileFromJson(content); }
-        catch (...) { profile = MulliganProfile{}; }
+        catch (...) { std::cerr << "[profload] SWALLOWED: base profile parse failed: " << path << "\n"; profile = MulliganProfile{}; }
     }
     // Durable human constraints live in a SEPARATE sibling file, loaded even when the profile itself
     // is absent/default (a deck can carry constraints without a generated profile). SaveDeckProfile
@@ -970,16 +970,49 @@ inline void AttachExhaustiveSidecar(MulliganProfile& profile, const std::filesys
     { return; }
     const std::string stem = fn.substr(0, fn.size() - suffix.size());
     const std::filesystem::path dir = profile_path.parent_path();
-    for (const char* ext : { ".keepmodel.exhaustive.profile.json.gz", ".keepmodel.exhaustive.profile.json" })
+
+    // Resolve ONCE per profile path and memoize, so the .gz-vs-.json choice cannot flip within a
+    // process: exists() is re-run per attach, and on a networked filesystem (this repo lives on 9p)
+    // a transient exists(.gz) failure would silently route one job of a batch to the .json fallback
+    // -- the best surviving candidate for the 2026-08-26 batch-pool contamination (see
+    // batch-pool-contamination memory / docs). Memoizing also freezes sidecar PRESENCE for the
+    // process lifetime, which is what a measurement run wants (a generation dropping a sidecar
+    // mid-batch must not change the arms already running).
+    static std::mutex s_resolve_mu;
+    static std::unordered_map<std::string, std::string> s_resolved;   // profile path -> sidecar ("" = none)
+    const std::string pkey = profile_path.string();
+    std::string resolved;
     {
-        const std::filesystem::path cand = dir / (stem + ext);
-        if (std::filesystem::exists(cand))
+        // The whole resolve runs under the lock so concurrent first attaches cannot each run
+        // exists() and disagree; exists() here is only paid on the first attach per path.
+        std::lock_guard<std::mutex> lk(s_resolve_mu);
+        auto it = s_resolved.find(pkey);
+        if (it == s_resolved.end())
         {
-            auto cached = CachedExhaustiveKeep(cand);
-            if (cached && !cached->empty()) { profile.exhaustive_keep = std::move(cached); }
-            return;
+            for (const char* ext : { ".keepmodel.exhaustive.profile.json.gz", ".keepmodel.exhaustive.profile.json" })
+            {
+                const std::filesystem::path cand = dir / (stem + ext);
+                if (std::filesystem::exists(cand))
+                {
+                    resolved = cand.string();
+                    // Decks ship this sidecar gzipped, so the uncompressed fallback should never be
+                    // reached: it means either a hand-placed .json (legitimate but worth knowing) or
+                    // a transient exists(.gz) miss. Loud, and only once per path (memoized).
+                    if (std::strcmp(ext, ".keepmodel.exhaustive.profile.json") == 0)
+                    {
+                        std::cerr << "[profile] WARNING: exhaustive sidecar resolved to the UNCOMPRESSED "
+                                     ".json fallback (decks ship .gz): " << resolved << "\n";
+                    }
+                    break;
+                }
+            }
+            it = s_resolved.emplace(pkey, resolved).first;
         }
+        resolved = it->second;
     }
+    if (resolved.empty()) { return; }
+    auto cached = CachedExhaustiveKeep(resolved);
+    if (cached && !cached->empty()) { profile.exhaustive_keep = std::move(cached); }
 }
 
 // --- Learned mid-game eval sidecar (decks/<name>.eval.json) ------------------------------------
@@ -1093,7 +1126,7 @@ inline void AttachEvalSidecar(MulliganProfile& profile, const std::filesystem::p
         std::ifstream f(p);
         if (!f) { return; }
         try { nlohmann::json j; f >> j; profile.eval_model = EvalModelFromJsonObj(j); }
-        catch (...) { profile.eval_model = MidGameEvaluator{}; }
+        catch (...) { std::cerr << "[profload] SWALLOWED: eval sidecar parse failed: " << p << "\n"; profile.eval_model = MidGameEvaluator{}; }
     };
 
     // Per-context override (decouples "the model under test" from the committed sidecar for A/B):
@@ -1212,7 +1245,8 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                 if (vp.contains("heur_cost_ms")) { profile.value_play.heur_cost_ms = parse_costs(vp["heur_cost_ms"]); }
             }
         }
-        catch (...) { profile.value_model = MidGameEvaluator{}; profile.value_trust_depth = 0;
+        catch (...) { std::cerr << "[profload] SWALLOWED: value sidecar parse failed\n";
+                      profile.value_model = MidGameEvaluator{}; profile.value_trust_depth = 0;
                       profile.value_no_fallback = false; profile.value_fallback_take_at.clear();
                       profile.value_fallback_max_depth = 0; profile.value_play = ValuePlay{}; }
     };

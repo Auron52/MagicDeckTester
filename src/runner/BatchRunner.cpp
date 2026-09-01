@@ -1494,6 +1494,52 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     // block; only the AIEngine's copy persists across the job's games.
                     std::shared_ptr<const MulliganProfile> prof =
                         profile_cache.get(job.profile_path, job.arm.value_profile);
+                    // MTG_BATCH_STATE_DUMP=<substr>: pool-invariance instrument (default off; the
+                    // value is a job-name substring filter, so raw getenv, not EnvOn). At every job
+                    // switch whose name matches, print a content fingerprint of the profile handed to
+                    // this worker's engine plus the ambient per-thread config. Diffing these lines
+                    // between a clean and a poisoned pool localises which engine INPUT differs
+                    // (built for the 2026-08-26 batch-pool contamination; kept for the next wild one).
+                    {
+                        static const char* s_sd = std::getenv("MTG_BATCH_STATE_DUMP");
+                        if (s_sd && *s_sd && job.name.find(s_sd) != std::string::npos)
+                        {
+                            const MulliganProfile& mp = *prof;
+                            long long vsum = mp.value_model.intercept;
+                            for (long long c : mp.value_model.coefs) { vsum += c; }
+                            long long esum = mp.eval_model.intercept;
+                            for (long long c : mp.eval_model.coefs) { esum += c; }
+                            double csum = 0; std::size_t cn = 0;
+                            for (const auto& kv : mp.card_scores)
+                            { cn += kv.second.size(); for (double d : kv.second) { csum += d; } }
+                            unsigned hflags = 0;
+                            for (std::size_t i = 0; i < heurarm::t_arm.size(); ++i)
+                            { hflags = hflags * 31u + static_cast<unsigned>(heurarm::t_arm[i] + 1); }
+                            std::fprintf(stderr,
+                                "[statedump] job=%s prof=%p ek=%p ekB=%zu ekN=%zu bot=%d "
+                                "vsum=%lld vtr=%zu esum=%lld etr=%zu vtd=%d vnf=%d vial=%d "
+                                "cs=%zu/%.3f lands=%d..%d thr=%.3f vp=%d/%d/%d "
+                                "arm=%d/%d/%d/%.3f/%s life=%d salt=%lld/%lld num=%p hf=%u depth=%d bud=%d sm=%d\n",
+                                job.name.c_str(), (const void*)prof.get(),
+                                (const void*)mp.exhaustive_keep.get(),
+                                mp.exhaustive_keep ? mp.exhaustive_keep->buckets.size() : 0,
+                                mp.exhaustive_keep ? mp.exhaustive_keep->name_to_bucket.size() : 0,
+                                mp.exhaustive_keep ? (int)mp.exhaustive_keep->bottoming_enabled : -1,
+                                vsum, mp.value_model.trees.size(), esum, mp.eval_model.trees.size(),
+                                mp.value_trust_depth, (int)mp.value_no_fallback, mp.vial_target_mv,
+                                cn, csum, mp.min_lands, mp.max_lands, mp.hand_score_threshold,
+                                mp.value_play.target_depth, mp.value_play.budget_ms,
+                                (int)mp.value_play.enabled,
+                                valuearm::t_arm.value_model, valuearm::t_arm.value_min_depth,
+                                valuearm::t_arm.esc_to_trust, valuearm::t_arm.trust_slack,
+                                valuearm::t_arm.value_profile.empty() ? "-" : valuearm::t_arm.value_profile.c_str(),
+                                gamesetup::t_setup.starting_life,
+                                (long long)gamesetup::t_setup.shuffle_salt,
+                                (long long)gamesetup::t_setup.shuffle_salt_search,
+                                (const void*)decknumbering::t_map, hflags,
+                                job.depth, job.budget_ms, (int)job.second_main);
+                        }
+                    }
                     ai.emplace(*prof, job.depth, job.budget_ms);
                     ai->SetSearchPostCombat(job.second_main);
                     engine.emplace(*ai);

@@ -1,0 +1,67 @@
+# Batch pool contamination (2026-08-26) — dormant defect, hardening shipped
+
+**Status:** DORMANT (2026-08-29), hardening adopted 2026-09-01. The defect was proven real once,
+could not be reproduced three days later under exhaustive reconstruction of every persisted input,
+and the suspected carrier is now closed off in code. This doc exists so the next wild occurrence
+starts from evidence, not from scratch.
+
+## What was observed (proven, same-day differential)
+
+During the M2_RECONSIDER held-out read, `mtg --batch` results were **not pool-composition-
+invariant**: all 12 mirrorwing overnight cells (d0/d3/d5) read FASTER in large pools than
+standalone/GT, while every other deck in the same pool stayed byte-identical to GT. Two different
+poisoned pools produced **byte-identical wrong digests** (deterministic, not a race in the games
+themselves), and the flip was controlled the same day on the same disk:
+
+- pool at default profile-cache cap 3 → poisoned;
+- same pool at `MTG_BATCH_PROFILE_CACHE=16` (no evictions) → clean, every cell == GT.
+
+So the profile LRU cache's **eviction path** (BatchRunner.cpp `ProfileCache`, default cap 3) was
+the carrier. Reload *content* was separately proven fine (cap 1, maximum reload thrash, clean);
+co-tenant game **volume** was required, their profile loads alone were not.
+
+## Why it is dormant, not fixed
+
+On 2026-08-29 every persisted input was reconstructed exactly — the Aug-26 snapshot binary
+(`test/logs/overnight/mtg.run`), the saved manifest, pinned `cards.json`, the exact sidecar set,
+at 8/16/32 threads — and every run came back byte-clean. The engine is deterministic given its
+pool state; what cannot be reconstructed is that day's machine state. The best surviving
+mechanism candidate, unverifiable post-hoc:
+
+> `AttachExhaustiveSidecar` re-ran `std::filesystem::exists()` per attach, `.gz` first then
+> `.json`. On 9p under heavy load, a **transient `exists(.gz`) failure** would silently route that
+> attach to the `.json` fallback — whose pre-12:57 bincache (possibly stale from the Aug-24
+> keepmodel regeneration) was destroyed at 2026-08-26 12:57 by a probe regenerating it. The
+> current `.json` table is content-equal to the `.gz`, so the flip is harmless today — which is
+> exactly why it can no longer be caught in the act.
+
+## Hardening shipped (2026-09-01)
+
+1. **Sidecar resolution is memoized per profile path** (`AttachExhaustiveSidecar`,
+   `src/ai/MulliganProfileIO.h`): the `.gz`-vs-`.json` choice is made once per process under a
+   lock and can never flip between attaches. This also freezes sidecar *presence* for the process
+   lifetime, which is what a measurement run wants (a generation dropping a sidecar mid-batch
+   must not change arms already running).
+2. **The `.json` fallback warns loudly** (once per path). Decks ship the sidecar gzipped; this
+   path firing means a hand-placed `.json` or a transient `.gz` miss — either way, worth a line.
+3. **The four silent catch blocks in profile loading now print `[profload] SWALLOWED: ...`**
+   (base profile, keep constraints, eval sidecar, value sidecar). A parse failure silently
+   degrading a deck to defaults mid-pool is exactly the shape of bug this incident looked like.
+4. **`MTG_BATCH_STATE_DUMP=<substr>`** (default off; value = job-name substring filter): at every
+   job switch whose name matches, the worker prints a content fingerprint of the profile handed
+   to its engine plus the ambient per-thread config (exhaustive-keep pointer/sizes/bottoming,
+   value/eval model sums, card_scores checksum, heurarm hash, salts, numbering pointer, depth/
+   budget). **If the poison reappears in any wild run**: re-run the pool with
+   `MTG_BATCH_STATE_DUMP=<affected deck>` on both a clean and a poisoned configuration and diff
+   the lines — whichever field differs is the contaminated engine input.
+
+## Mitigation (proven) if it ever reappears before a root cause
+
+`MTG_BATCH_PROFILE_CACHE=16` (or any cap ≥ the pool's distinct profiles) removes evictions and
+flipped poisoned→clean in the same-day differential. Cost is RSS (~167 MB per cached profile).
+
+## History link
+
+This class is almost certainly the real carrier behind the older mirrorwing batch-vs-standalone
+divergence (the ab0799ce mystery): the same games reappear at their old "batch fiction" turns.
+The mirrorwing overnight GT is standalone-honest and remains valid.

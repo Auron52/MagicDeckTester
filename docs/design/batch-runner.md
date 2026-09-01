@@ -62,6 +62,13 @@ Output, one line per job (manifest order):
 - **Done:** pooled execution + LPT ordering (`src/runner/BatchRunner.{h,cpp}`,
   wired as `mtg.exe --batch`). **Validated lossless:** every job byte-identical to
   its standalone `mtg.exe` run, and thread-invariant (`--threads 1` ≡ `--threads 0`).
+- **Pool-invariance caveat:** the losslessness above was violated ONCE in the wild
+  (2026-08-26, mirrorwing cells only; carrier = the profile LRU eviction path,
+  dormant since). See `batch-pool-contamination.md` for the evidence, the shipped
+  hardening (memoized sidecar resolution, loud swallowed-parse warnings, the
+  `MTG_BATCH_STATE_DUMP=<substr>` fingerprint instrument), and the proven
+  mitigation (`MTG_BATCH_PROFILE_CACHE=16`, i.e. cap ≥ distinct profiles in the
+  pool) if a pool ever again disagrees with a standalone run.
 - **Next:** Phase C — have `regression.sh` emit its `regression_cases.sh` matrix as
   a manifest and call `mtg.exe --batch` once instead of N invocations (parse the
   per-job lines into the existing `won/avg` fingerprints). Then measure suite
