@@ -830,6 +830,14 @@ default-on `MTG_<DECK>_BUCKET_DISCARD` flag (=0 restores the generic ranking). V
     merely un-run. `MTG_TRACE=discard` (gated on `g_real_resolution`, fires at EVERY real
     discard site) is the instrument that tells you where a deck actually discards;
     `MTG_SHED_STATS` counts the cleanup site only. If they disagree, believe the trace.
+    When the site is unlabellable, **BOUND it instead of building a probe**: pair the
+    ranking against its own inverse (`MTG_SHED_WORST` for the rollout cleanup,
+    `MTG_NONCLEANUP_SHED_WORST` for cost/trigger discards) — no ranking can be worth more
+    than best-vs-worst, so a zero delta closes the question outright. Both are per-job
+    levers in `ai/HeuristicArm.h`, so the A/B is ONE pooled batch, not one per arm. On
+    Minotaur that bound came back +0.00025t (d3) / +0.00042t (d5), i.e. nothing to fix at
+    shipped depth — and it retired the searched-discard axis that looked like the obvious
+    next build, because a bound of zero IS that axis's ceiling.
   And weigh the residual before acting on it: regret is per DECISION, so multiply by the
   per-game decision rate. Dragons' 97.79%/0.0238 sounds like a miss until the surface is
   0.029 sheds/game and the perfect-oracle prize is 0.0007 turns/game — unmeasurable.

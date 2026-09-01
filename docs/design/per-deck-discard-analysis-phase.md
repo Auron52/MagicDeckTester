@@ -262,11 +262,48 @@ rollout one above: the verdict vocabulary (`DISCARD_INERT` / `DISCARD_UNLABELLED
 keyed on the cleanup site, and a deck can be busy at a site the stage never looks at.
 
 **Consequence: the zero-regret check is not merely un-run for Minotaur, it is
-unrunnable as specified.** Closing it is not a lever but a new probe, and not a cheap one:
-the searched pass works because cleanup is a clean `ResumeAt` boundary, whereas these
-discards happen mid-resolution inside an activation cost and a trigger. The policy's
-standing evidence is therefore the OUTCOME A/B (adopted on measured suite wins), which is
-the stronger of the two gates anyway.
+unrunnable as specified.** Labelling it would need a new probe, and not a cheap one: the
+searched pass works because cleanup is a clean `ResumeAt` boundary, whereas these discards
+happen mid-resolution inside an activation cost and a trigger.
+
+**So it was BOUNDED instead, and the bound closed it — no probe needed.** This is the
+same move the `DISCARD_UNLABELLED` section prescribes, applied to a different blind site:
+`MTG_NONCLEANUP_SHED_WORST=1` takes the LAST-ranked eligible candidate at
+`ChooseNonCleanupDiscardIndex` instead of the first. Paired against the default it brackets
+the whole axis — no ranking can be worth more than best-vs-worst. Registered as a per-job
+lever in `ai/HeuristicArm.h`, so both arms run in ONE pooled batch rather than one
+invocation per arm. 28,800 games, 4 seed bases, paired by game index:
+
+| depth | n | mean (worst - best) | t | games changed |
+|---|---|---|---|---|
+| d0 | 8,000 | **+0.01075** | +5.61 | 210 |
+| d3 | 4,000 | +0.00025 | +0.24 | 17 |
+| d5 | 2,400 | +0.00042 | +0.28 | 13 |
+
+**At the depths that ship there is nothing to fix.** The absolute ceiling on any ranking
+change at this site is +0.00025 turns/game (d3) and +0.00042 (d5), both indistinguishable
+from zero, on 17 and 13 changed games out of 4,000 and 2,400. A searched discard axis for
+Burning-Fist — `Plan::discard_choice`'s pattern applied to `Action::Kind::ActivatePump`,
+which is the obvious next build — **cannot pay, because its ceiling IS this bound.** Do not
+build it.
+
+Why the depths differ is the interesting part, and it is reassuring rather than alarming:
+at d3/d5 the search already routes around a bad pick. It owns *whether and how many times*
+to activate Burning-Fist (K variants), so when the provider hands it a card it does not
+want to pitch, it simply declines the activation. At d0 there is no search to route around
+it, and the ranking's quality shows — +0.011 turns/game, t=5.6, positive on 4 of 4 seeds,
+i.e. **the shipped ranking beats its own inverse.** The policy works; the search just makes
+it nearly irrelevant.
+
+The d0 number is also a CLEAN attribution: at d0 the rollout sheds zero times (measured),
+so 100% of that effect is the real Burning-Fist/Neheb site and none of it is the rollout
+cleanup. Conversely at d3/d5 the same policy also drives 10,331 rollout cleanup sheds per
+200 games and the total still lands at ~0 — consistent with the suite-wide `MTG_SHED_WORST`
+result above, where inverting the rollout ranking moved the metric on one deck of twelve.
+
+Neheb's trigger fires in `Combat.cpp` during combat damage, outside any plan's apply, so it
+could never have ridden a plan axis anyway — another reason the bound was the right
+instrument and the probe was not.
 
 ### Dragons — RUN, and it is not zero
 

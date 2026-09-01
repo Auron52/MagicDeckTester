@@ -13,6 +13,7 @@
 #include "../cards/CardDatabase.h"
 #include "../ai/DecisionProviders.h"   // ResolveProvider: route deck decisions through the provider
 #include "../ai/EngineFlags.h"         // FrontlineTriggerFirst: shared executor/rollout flag reader
+#include "../ai/HeuristicArm.h"        // per-job lever overrides, so ONE pooled batch runs both arms
 #include "Trace.h"                     // MTG_TRACE=discard: cleanup-discard tie distribution
 #include <algorithm>
 #include <array>
@@ -4615,8 +4616,33 @@ inline int ChooseNonCleanupDiscardIndex(const GameState& state, int controller,
     const Player& ap = state.players[controller];
     if (ap.hand.empty()) { return -1; }
     const std::vector<int> rank = ResolveProvider(state).CleanupDiscardCandidates(state, nullptr);
-    int pick = (!rank.empty() && rank.front() >= 0
-                && rank.front() < static_cast<int>(ap.hand.size())) ? rank.front() : 0;
+    const int hn = static_cast<int>(ap.hand.size());
+    int pick = (!rank.empty() && rank.front() >= 0 && rank.front() < hn) ? rank.front() : 0;
+
+    // MTG_NONCLEANUP_SHED_WORST=1: TESTING-ONLY anti-heuristic, the MTG_SHED_WORST tradition --
+    // take the LAST-ranked eligible candidate instead of the first. Paired against the default it
+    // BRACKETS this entire axis: no ranking can be worth more than best-vs-worst, so a zero delta
+    // proves the site cannot pay and closes it without building a searched axis for it.
+    //
+    // This site needs its own bound because MTG_SHED_WORST reaches only the ROLLOUT's cleanup
+    // (CleanupDiscardShedSet), and the decks that discard here may never reach a cleanup at all --
+    // Minotaur reaches ChooseDiscard zero times while consulting this function 118 times per 200
+    // games (Burning-Fist's activation cost, Neheb's combat-damage trigger). See
+    // docs/design/per-deck-discard-analysis-phase.md. Never set in play.
+    //
+    // Staged entries are skipped: the ranking's last-resort tier keeps them, but a staged card is
+    // in EXILE and cannot be shed, so rank.back() is not necessarily a legal victim.
+    static const bool s_worst_env = EnvOn("MTG_NONCLEANUP_SHED_WORST");
+    if (heurarm::Flag(heurarm::NONCLEANUP_SHED_WORST, s_worst_env))
+    {
+        for (auto it = rank.rbegin(); it != rank.rend(); ++it)
+        {
+            if (*it < 0 || *it >= hn) { continue; }
+            if (ap.hand[static_cast<std::size_t>(*it)].m_is_staged) { continue; }
+            pick = *it;
+            break;
+        }
+    }
     if (g_play_discard_chooser)
     {
         std::vector<int> idxs(ap.hand.size());

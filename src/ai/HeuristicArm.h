@@ -100,6 +100,7 @@ enum Slot : int
     CANTRIP_ORDER,            // MTG_CANTRIP_ORDER         canonical cantrip order bans permutation chains
     HINATA_SUBSET_CREDIT,     // MTG_HINATA_SUBSET_CREDIT  same-subset Hinata discount credit in enumeration
     EXEC_FEAS,                // MTG_EXEC_FEAS             executor-validated sequential subset payability
+    NONCLEANUP_SHED_WORST,    // MTG_NONCLEANUP_SHED_WORST  cost/trigger discard sheds the WORST-ranked card
     COUNT
 };
 
@@ -177,6 +178,7 @@ inline const char* Name(int slot)
         "MTG_CANTRIP_ORDER",
         "MTG_HINATA_SUBSET_CREDIT",
         "MTG_EXEC_FEAS",
+        "MTG_NONCLEANUP_SHED_WORST",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }
