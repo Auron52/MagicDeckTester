@@ -556,3 +556,71 @@ to T4 -- the PHASE-BOUNDARY free re-pricing (6a root cause) is still the dominan
 now with the misclassification confound removed. The full fix for that remains
 executor-validated feasibility as the ENUMERATOR's order authority (or per-position order
 search), which is the 6/6a conversation, unchanged.
+
+### 6d. ORDER AUTHORITY MEASURED AND REJECTED (2026-08-31): feasibility was never the binding constraint
+
+USER framing that set this up: *"I don't care what approach we take as long as it allows us to
+search the entire window losslessly and dropping the lossy greedy"*, and then the correction that
+matters: *"the ordering is intended to keep the problem tenable while expressing what we actually
+need to consider."*
+
+**The hypothesis.** A plan is a SET but payment is a SEQUENCE, so a set's payability depends on
+order. The engine picks ONE order (CastOrderRank + the cantrip-first collapse) and a set payable
+only in some other order is lost -- the ordering acting as a hard prune. Fix: ask whether ANY order
+pays, and carry the order that does. Built as `MTG_SEQ_ORDER_FEAS` (default OFF, byte-identical,
+heurarm slot): `SubsetPayableAnyOrder` = DFS over orders driving `SeqCastOnScratch` (the same
+executor-grade cost model the fixed-order EF walk uses), preference-first so the first success is
+the most-preferred payable sequence, node-capped (`MTG_SEQ_ORDER_NODES`, default 256).
+Counters: `MTG_SEQ_ORDER_STATS`.
+
+**Refuted at BOTH ends, and the two failures say different things.**
+
+1. *At the enumerator's gate, the order question is not live at all.* Wired into
+   `exec_feas_rescues` (rescue-only, after the fixed-order walk fails): **113,935 searches, 33,842
+   of them exploring past the first cast, 0 capped, ZERO rescues** (20 games, credit armed). A
+   subset the three mana gates reject is unaffordable in EVERY order -- no ordering discipline
+   could have saved it. Subset sizes are tiny (1-3 dominates; 38% are size 1, where order is
+   meaningless).
+2. *At plan emission, repairing the order is QUALITY-NEGATIVE.* Re-sited after every ordering
+   heuristic has spoken (the sequence the apply will really play), validating it and pinning a
+   payable alternative via `Plan::searched_order` when it cannot pay. It fires constantly
+   (71,347 repairs / 150 games) and costs little (**+4.8% units, +3.8% wall**, pinned/uncontended)
+   -- and it makes every arm WORSE. Paired 1200x2, positive = worse:
+
+   | arm | hold d (t) | train d (t) |
+   |---|---|---|
+   | sof (alone, vs shipped) | +0.0100 (3.22) | +0.0083 (1.96) |
+   | recipe -> recipe+sof | +0.0175 -> +0.0225 | +0.0383 -> +0.0458 |
+   | m2 -> m2+sof | +0.0500 -> +0.0533 | +0.0492 -> +0.0575 |
+
+**ROOT CAUSE of the negative (train gi=0, T5 -> T8, root-caused individually).** Base's T4 casts
+Gamble BEFORE Ponder: Gamble's random discard hits a spare Preordain, Ponder then draws Hinata, T5
+wins with Spasm + Crackle. The repaired order casts Ponder first (drawing a Reality Spasm) and
+Gamble LAST -- whose random discard throws away the Reality Spasm it just drew. The repaired order
+pays; it is simply much worse. **The cast order is not a feasibility device with a preference
+attached: it ENCODES VALUE (cast the random-discard spell before you draw the card you care
+about). Repairing it for payability alone discards that knowledge, and the search then commits to
+the repaired line because its static evaluation looks good.**
+
+**What this settles.** Greedy `Solve`'s advantage is NOT that it finds payable orders the search
+cannot express -- it is that it re-decides each cast on VALUE against realised state. Feasibility
+was never the binding constraint, so no feasibility oracle (this one, or executor-validated
+feasibility promoted to order authority) can close the greedy gap. The 6/6a "enumerator's order
+authority" work item is therefore CLOSED AS ANSWERED, not deferred: the answer is no.
+
+**What remains, unchanged and now the only live path:** the PHASE BOUNDARY as a free re-pricing
+point (6a). All-main-2 -- the true single window -- is still the worst arm (+0.045-0.049), and it
+is the one form that gives up the boundary. The principled version is to let a single window
+re-decide mid-turn on REALISED state, which is exactly what breakpoints already do for draws;
+extending that to mana realisation (float / discount) is the remaining idea, and it is a bigger
+change than anything in 6b-6d.
+
+**Cost side-notes measured the same day (uncontended, pinned, serial -- a contended batch cannot
+measure this, see 6c):** on Hinata 150g, `MTG_EXEC_FEAS` alone is FREE (+0.002% units, 0% wall) and
+on Dragonstorm 1000g it is byte-identical (it never rescues). `MTG_HINATA_SUBSET_CREDIT` is the
+expensive arm: **+22% units, +21% wall, and committed ID depth 3.244 -> 3.118** -- because arming it
+BAILS `ManaPruneBound` and skips `MTG_SEL_MANA_GATE`. EF on top of the credit is +7% wall for
++0.004% units, i.e. almost entirely UNCHARGED to the virtual budget (the walk lives in the
+enumerator, where no `ConsumeAt()` site charges). If the credit is ever wanted, the cheap shape is
+an exact upper-bound ADDEND on the bound (the metalcraft / haste-unlock precedent) instead of
+bailing it -- untested.

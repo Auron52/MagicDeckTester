@@ -115,6 +115,11 @@ enum Slot : int
     MINOTAUR_DISCARD_CSVAL,   // MTG_MINOTAUR_DISCARD_CSVAL   value order = LEARNED card_scores
     MINOTAUR_DISCARD_CSNOP,   // MTG_MINOTAUR_DISCARD_CSNOP   ...and drop P (card_scores AS the EV)
     MINOTAUR_DISCARD_CSDUP,   // MTG_MINOTAUR_DISCARD_CSDUP   learned marginal gates the dupe penalty
+
+    IRENCRAG_WASTE,           // MTG_IRENCRAG_WASTE        no cast restrictor with nothing after it
+    IRENCRAG_PAYOFF,          // MTG_IRENCRAG_PAYOFF       ...and the follower must be a PAYOFF
+    IRENCRAG_FINISHER,        // MTG_IRENCRAG_FINISHER     ...or the FINISHER (Crackle) specifically
+    IRENCRAG_NEEDS,           // MTG_IRENCRAG_NEEDS        ...a payoff that could NOT be cast without him
     COUNT
 };
 
@@ -207,6 +212,11 @@ inline const char* Name(int slot)
         "MTG_MINOTAUR_DISCARD_CSVAL",
         "MTG_MINOTAUR_DISCARD_CSNOP",
         "MTG_MINOTAUR_DISCARD_CSDUP",
+
+        "MTG_IRENCRAG_WASTE",
+        "MTG_IRENCRAG_PAYOFF",
+        "MTG_IRENCRAG_FINISHER",
+        "MTG_IRENCRAG_NEEDS",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

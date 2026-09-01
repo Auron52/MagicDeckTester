@@ -228,6 +228,21 @@ static const char* kNames[kSiteCount] = {
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
 
+// Defined below; needed by the MTG_IRENCRAG_WASTE gate, which is only sound for a deck whose
+// PLAY order IS the rank order (see the gate's note).
+static bool OrderingSearchEnabled(const GameState& state);
+
+// MTG_IRENCRAG_WASTE relevance counters (print-only, MTG_ROLLOUT_STATS). The question they answer:
+// of the subsets the waste gate drops, how many hold a payoff that Irencrag's float COULD have paid
+// for if the order let it follow him (Magma Opus / Soulfire, both ranked BEFORE him today)? That is
+// the frequency of the line a rank RANGE on Irencrag would make expressible -- measure it before
+// building the range. USER 2026-09-01: "It might be irrelevant enough to skip."
+static std::atomic<long long> g_iw_drops{0}, g_iw_drops_with_payoff{0};
+static std::atomic<long long> g_iw_subsets{0}, g_iw_subsets_with_payoff{0};
+static std::mutex g_iw_mu;
+static std::map<std::string,long long> g_iw_followers;
+
+
 // COMMITTED-DEPTH histogram (same MTG_ROLLOUT_STATS gate). Iterative deepening commits the DEEPEST
 // pass that fits the budget, so a change that costs 3x the work per pass does not "run slower" at
 // play settings -- it commits SHALLOWER. That is the mechanism by which an UNBUDGETED quality win
@@ -368,6 +383,23 @@ namespace
             long long site_tot = 0;
             for (int i = 0; i < unitsite::kSiteCount; ++i) { site_tot += unitsite::g_units[i].load(); }
             std::cerr << "[rollout-stats] units_total=" << site_tot << "\n";
+            if (g_iw_drops.load() > 0)
+            {
+                std::cerr << "[rollout-stats] iren_waste drops=" << g_iw_drops.load()
+                          << " of_which_hold_an_Opus/Soulfire_payoff=" << g_iw_drops_with_payoff.load()
+                          << "\n";
+                std::cerr << "[rollout-stats] irencrag subsets=" << g_iw_subsets.load()
+                          << " of_which_hold_an_Opus/Soulfire_payoff=" << g_iw_subsets_with_payoff.load()
+                          << "\n";
+                {
+                    std::lock_guard<std::mutex> lk(g_iw_mu);
+                    std::vector<std::pair<std::string,long long>> v(g_iw_followers.begin(), g_iw_followers.end());
+                    std::sort(v.begin(), v.end(), [](const auto&a, const auto&b){ return a.second>b.second; });
+                    std::cerr << "[rollout-stats] irencrag STRICT-ONLY drops by follower (loose keeps these):\n";
+                    for (std::size_t i=0;i<v.size() && i<15;++i)
+                    { std::cerr << "[rollout-stats]     " << v[i].second << "  " << v[i].first << "\n"; }
+                }
+            }
             const long long iw = g_idwaste_units.load();
             if (g_idpass_starts.load() > 0)
             {
@@ -2727,6 +2759,92 @@ static void ProbeColorExactReject(const GameState& state, const std::vector<Acti
     std::fprintf(stderr, "[color-exact] %s turn=%d: %s%s%s\n",
                  really_unpayable ? "reject" : "FALSE REJECT", state.turn_number, names.c_str(),
                  srcs.empty() ? "" : "   UNTAPPED{", srcs.empty() ? "" : (srcs + "}").c_str());
+}
+
+// ---- MTG_CONT_DIFF: the greedy-deletion CASE LIST --------------------------------------------
+// Deleting the greedy breakpoint continuation (MTG_BP_NO_GREEDY_CONT) replaces it with cands[0] --
+// "continue in the deck's cast order". Where the two agree, deleting greedy is free. Where they
+// differ, the cast ORDER decides the line, and each difference is its own case to review: either
+// the order is right (and greedy was the lossy one) or an order rule is not yet built for that
+// state. Deduped by signature so a run yields a CASE LIST, not a flood.
+inline bool ContDiffOn()
+{
+    static const bool v = EnvOn("MTG_CONT_DIFF");
+    return v;
+}
+namespace contdiff
+{
+    struct Case
+    {
+        long long count = 0;
+        int       turn  = 0;   // first occurrence, for the repro
+        std::string hand;
+    };
+    inline std::mutex                            mu;
+    inline std::map<std::string, Case>           cases;
+    inline std::atomic<long long>                seen{0}, same{0};
+
+    inline std::string PlanSig(const TurnSolver::Plan& p)
+    {
+        std::vector<std::string> names;
+        for (const Action& a : p.actions) { names.push_back(a.card_name.str()); }
+        std::string s;
+        for (const std::string& n : names) { s += n; s += ";"; }
+        // CASTS ONLY -- deliberately NOT the land. The two paths play the breakpoint land by
+        // DIFFERENT mechanisms (greedy: play_breakpoint_land() runs BEFORE Solve, so the land is
+        // already down and absent from its plan; searched: the land rides inside the plan and
+        // bp_play_searched_land() plays it), so comparing the land field reports a difference that
+        // does not exist in play. It made "+land X vs nothing" the top case until this was fixed.
+        return s.empty() ? "(nothing)" : s;
+    }
+
+    struct Reporter
+    {
+        ~Reporter()
+        {
+            if (!ContDiffOn() || seen.load() == 0) { return; }
+            std::fprintf(stderr,
+                "[cont-diff] continuations=%lld  same_as_greedy=%lld (%.1f%%)  DISTINCT CASES=%zu\n",
+                seen.load(), same.load(),
+                seen.load() ? 100.0 * static_cast<double>(same.load()) / static_cast<double>(seen.load()) : 0.0,
+                cases.size());
+            // Most frequent first: the case that decides the most lines is the one to fix first.
+            std::vector<std::pair<std::string, Case>> v(cases.begin(), cases.end());
+            std::sort(v.begin(), v.end(),
+                      [](const auto& a, const auto& b) { return a.second.count > b.second.count; });
+            for (std::size_t i = 0; i < v.size() && i < 40; ++i)
+            {
+                std::fprintf(stderr, "[cont-diff] n=%lld T%d %s\n            hand=%s\n",
+                             v[i].second.count, v[i].second.turn, v[i].first.c_str(),
+                             v[i].second.hand.c_str());
+            }
+        }
+    };
+    inline Reporter g_reporter;
+}   // namespace contdiff
+
+// Record one continuation decision: what the cast order chose vs what greedy would have played.
+static void ContDiffRecord(int site, const GameState& state, bool is_pre_combat,
+                           const TurnSolver::Plan& canon)
+{
+    contdiff::seen.fetch_add(1, std::memory_order_relaxed);
+    const TurnSolver::Plan greedy = TurnSolver::Solve(state, is_pre_combat);
+    const std::string cs = contdiff::PlanSig(canon), gs = contdiff::PlanSig(greedy);
+    if (cs == gs) { contdiff::same.fetch_add(1, std::memory_order_relaxed); return; }
+    std::string key = "site=" + std::to_string(site) + "  ORDER=[" + cs + "]  greedy=[" + gs + "]";
+    std::lock_guard<std::mutex> lk(contdiff::mu);
+    auto it = contdiff::cases.find(key);
+    if (it == contdiff::cases.end())
+    {
+        contdiff::Case c;
+        c.turn = state.turn_number;
+        std::vector<std::string> h;
+        for (const Card& card : state.ActivePlayer().hand) { h.push_back(card.m_name); }
+        std::sort(h.begin(), h.end());
+        for (const std::string& n : h) { c.hand += n; c.hand += ";"; }
+        it = contdiff::cases.emplace(key, std::move(c)).first;
+    }
+    ++it->second.count;
 }
 
 // MTG_SEQ_CHAIN_TRACE -- diagnostic (default off, print-only). Traces every enumerated subset that
@@ -13627,20 +13745,91 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // so the realised cast order ...Reality Spasm(15) -> Irencrag(18) -> Crackle(20) is legal and
         // the executor/rollout (which cast in CastOrderRank order) match this judgement -> lockstep.
         // Loop runs lookups only when a restrictor is actually selected (rare); flag-check otherwise.
+        bool iren_waste = false;   // MTG_IRENCRAG_WASTE; applied at the win projection (lethal-exempt)
         for (int j : sel)
         {
             if (cands[j].max_casts_after < 0) { continue; }
             const CardDefinition* rd = cands[j].def;
             const int r_rank = rd ? ResolveProvider(state).CastOrderRank(state, *rd) : 20;
             int after = 0;
+            bool after_finisher = false;   // is the follower the FINISHER the slot is reserved for?
+            bool after_payoff   = false;   // ...or at least a PAYOFF rather than a cantrip?
+            bool after_needs_float = false;   // ...and could it not have been cast without him?
             for (int k : sel)
             {
                 if (k == j) { continue; }
                 const CardDefinition* kd = cands[k].def;
                 const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
-                if (k_rank > r_rank) { ++after; }
+                if (k_rank > r_rank)
+                {
+                    ++after;
+                    if (!kd) { continue; }
+                    if (kd->params.x_damage_multiplier > 1) { after_finisher = true; }
+                    // A PAYOFF is one of the deck's three terminals (Crackle / Soulfire / Opus) --
+                    // the same params the provider's rank tiers key on. USER 2026-09-01 scoped the
+                    // rule to exactly these three.
+                    const bool is_payoff = kd->params.x_damage_multiplier > 1
+                                        || kd->params.damage_equals_top_mv
+                                        || kd->params.cast_draw > 0;
+                    if (!is_payoff) { continue; }
+                    after_payoff = true;
+                    // ...and DID IT NEED THE FLOAT? That is the real question the restrictor asks,
+                    // and the reason the card-identity rules mis-measured (searched-design §6e):
+                    //   * an {X} finisher (Crackle) always converts more mana into more damage, so
+                    //     the float is never wasted on it;
+                    //   * a FIXED-cost payoff needs the float only when the rest of the pool could
+                    //     not have cast it anyway. Soulfire is {6}{R}{R}{R} = NINE, so on turn 3 off
+                    //     ~5 mana Irencrag is the only way to cast the deck's dig -- a real play.
+                    //     With Hinata out it costs 3-4, the pool covers it, and spending Irencrag on
+                    //     it is exactly the waste the USER described ("it seems off to play Soulfire
+                    //     with no Hinata, but ... it is a viable play in the worst cases").
+                    // Approximate by construction (other casts in the subset also draw on the pool),
+                    // which is the safe direction here: over-crediting need keeps a line, never
+                    // deletes one.
+                    if (kd->params.x_damage_multiplier > 1) { after_needs_float = true; continue; }
+                    const int left = pool.Total() - cands[j].cost.ManaValue();
+                    if (cands[k].cost.ManaValue() > left) { after_needs_float = true; }
+                }
             }
             if (after > cands[j].max_casts_after) { return; }   // illegal: too many spells after it
+            // ...and the OTHER end of the same rule (MTG_IRENCRAG_WASTE). A cast RESTRICTOR
+            // exists to fund THE FINISHER, and the USER's order reserves its one allowed follower
+            // for exactly that: "Irencrag Feat must be second last as it can only be cast before
+            // Crackle." So the test is not "is anything after it" but "is the FINISHER after it".
+            // Nothing after -> the subset pays {1}{R}{R}{R} and a card to float seven red nothing
+            // can spend. A NON-finisher after -> it spends the one remaining cast on the wrong
+            // spell, which USER 2026-09-01 ruled out on value: "Irencrag -> Soulfire was a pretty
+            // bad play in the first place. With Hinata out, Soulfire can pretty easily cost 3 or 4
+            // and without Hinata or Crackle (or two main damage sources) Soulfire isn't going to
+            // get the opponent in lethal range... casting Irencrag to play Soulfire is pretty bad
+            // value overall." Both cases are the same defect: the restriction bought nothing. USER 2026-09-01:
+            // "this is exactly why I put Irencrag feat second last before Crackle in my order.
+            // Cases where we want to cast it without are very rare and would pretty much just be
+            // to do the last few damage for lethal." Under that order Crackle (23) is the ONLY
+            // cast ranked after Irencrag (22) -- Soulfire (20) and Opus (21) precede it -- so
+            // `after == 0` means the float has no consumer at all. Measured as the top case in the
+            // greedy-deletion diff: 20,117 of 55,006 continuation differences are the canonical
+            // continuation casting Irencrag where greedy correctly declines.
+            //
+            // A HEURISTIC prune, not a legality one (USER: "A heuristic prune could make sense"):
+            // the turn-scoped float CAN still be spent by a post-breakpoint continuation off a
+            // drawn payoff, so this deletes a real if rare line. Hence flag-gated and measured.
+            // EXEMPT WHEN LETHAL (USER 2026-09-01: "it would use Irencrag to do 3 for lethal if no
+            // Crackle is present") -- deferred to the win projection below, which is the only place
+            // lethality is known. A winning plan is never dropped by this lever.
+            // SCOPE (measured 2026-09-01): only sound where the plan's PLAY order IS the rank
+            // order. Dragonstorm SEARCHES its combo cast order (WantsCastOrderingSearch), so
+            // `after`, counted by CastOrderRank, does not describe what actually follows Irencrag
+            // there -- and the gate measured WORSE on that deck in all four cells (+0.0115, t 5.66,
+            // 2 better : 43 worse, paired 1200x2 at d3/d5 x s2002/s3003). Excluding the
+            // ordering-search decks is the principled scope, not a per-deck exception.
+            const int  rule    = IrencragRule();
+            const bool iren_ok = rule >= 3 ? after_needs_float   // payoff that NEEDED the float
+                               : rule == 2 ? after_finisher      // the finisher only (USER doctrine)
+                               : rule == 1 ? after_payoff        // any payoff, cantrips banned
+                                           : (after > 0);        // anything at all (adopted loose)
+            if (!iren_ok && IrencragWasteGateEnabled() && !OrderingSearchEnabled(state))
+            { iren_waste = true; }
         }
 
         // Eidolon-style on-cast triggers go on top of the spell being cast (CR 603), so they
@@ -13723,6 +13912,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             extra_lethal = provider.ExtraLethalDamage(state, casting);
         }
         bool wins = (projected_atk + direct_dmg + extra_lethal) >= state.Opponent().life;
+        // MTG_IRENCRAG_WASTE, deferred from the restrictor loop: drop a subset that casts the cast
+        // restrictor with nothing after it to spend its float -- unless the plan WINS, which is the
+        // USER's stated exception ("do 3 for lethal if no Crackle is present").
+        if (iren_waste && !wins) { return; }
 
         // Hold a sac-land burn (Shard Volley) unless it wins this turn or enables Spectacle -- see
         // HoldSacLandBurn. The integer test keeps every deck without such a card off the scan.
@@ -16039,6 +16232,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 out      = cands.front();
                 resolved = true;
+                // MTG_CONT_DIFF -- print-only case collector for the greedy-deletion work. Deleting
+                // the greedy continuation means "continue in the deck's cast order" (cands[0]), so
+                // wherever that differs from what the greedy Solve would have played, the ORDER is
+                // what decides the line -- and a difference is either the order being right and the
+                // greedy being the lossy one, or an order rule not yet built for this state. Those
+                // are the cases to fix one at a time, so collect them DEDUPED BY SIGNATURE (each
+                // distinct canonical-vs-greedy pair once, with an occurrence count) rather than
+                // flooding one line per call. Costs a greedy Solve per continuation -> diagnostic
+                // runs only; inert (one bool test) when off.
+                if (ContDiffOn()) { ContDiffRecord(site, state, is_pre_combat, out); }
             }
             else if (greedysite::Enabled())
             { greedysite::why_empty.fetch_add(1, std::memory_order_relaxed); }
@@ -20673,20 +20876,88 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
         // Irencrag "one more spell this turn": reject subsets casting > max_casts_after spells after
         // the restricting ritual (mirrors Solve::consider; keeps the commit-the-line enumerator legal).
+        bool iren_waste = false;   // MTG_IRENCRAG_WASTE; applied at the win projection (lethal-exempt)
         for (int j : sel)
         {
             if (cands[j].max_casts_after < 0) { continue; }
             const CardDefinition* rd = cands[j].def;
             const int r_rank = rd ? ResolveProvider(state).CastOrderRank(state, *rd) : 20;
             int after = 0;
+            bool after_finisher = false;   // is the follower the FINISHER the slot is reserved for?
+            bool after_payoff   = false;   // ...or at least a PAYOFF rather than a cantrip?
+            bool after_needs_float = false;   // ...and could it not have been cast without him?
             for (int k : sel)
             {
                 if (k == j) { continue; }
                 const CardDefinition* kd = cands[k].def;
                 const int k_rank = kd ? ResolveProvider(state).CastOrderRank(state, *kd) : 20;
-                if (k_rank > r_rank) { ++after; }
+                if (k_rank > r_rank)
+                {
+                    ++after;
+                    if (!kd) { continue; }
+                    if (kd->params.x_damage_multiplier > 1) { after_finisher = true; }
+                    // A PAYOFF is one of the deck's three terminals (Crackle / Soulfire / Opus) --
+                    // the same params the provider's rank tiers key on. USER 2026-09-01 scoped the
+                    // rule to exactly these three.
+                    const bool is_payoff = kd->params.x_damage_multiplier > 1
+                                        || kd->params.damage_equals_top_mv
+                                        || kd->params.cast_draw > 0;
+                    if (!is_payoff) { continue; }
+                    after_payoff = true;
+                    // ...and DID IT NEED THE FLOAT? That is the real question the restrictor asks,
+                    // and the reason the card-identity rules mis-measured (searched-design §6e):
+                    //   * an {X} finisher (Crackle) always converts more mana into more damage, so
+                    //     the float is never wasted on it;
+                    //   * a FIXED-cost payoff needs the float only when the rest of the pool could
+                    //     not have cast it anyway. Soulfire is {6}{R}{R}{R} = NINE, so on turn 3 off
+                    //     ~5 mana Irencrag is the only way to cast the deck's dig -- a real play.
+                    //     With Hinata out it costs 3-4, the pool covers it, and spending Irencrag on
+                    //     it is exactly the waste the USER described ("it seems off to play Soulfire
+                    //     with no Hinata, but ... it is a viable play in the worst cases").
+                    // Approximate by construction (other casts in the subset also draw on the pool),
+                    // which is the safe direction here: over-crediting need keeps a line, never
+                    // deletes one.
+                    if (kd->params.x_damage_multiplier > 1) { after_needs_float = true; continue; }
+                    const int left = pool.Total() - cands[j].cost.ManaValue();
+                    if (cands[k].cost.ManaValue() > left) { after_needs_float = true; }
+                }
+            }
+            if (s_rollout_stats)
+            {
+                // Co-occurrence, independent of the waste gate: how often is a payoff Irencrag's
+                // float could pay for even PRESENT in a subset that casts him?
+                g_iw_subsets.fetch_add(1, std::memory_order_relaxed);
+                for (int k : sel)
+                {
+                    const CardDefinition* kd2 = cands[k].def;
+                    if (kd2 && (kd2->params.cast_draw > 0 || kd2->params.damage_equals_top_mv))
+                    { g_iw_subsets_with_payoff.fetch_add(1, std::memory_order_relaxed); break; }
+                }
             }
             if (after > cands[j].max_casts_after) { _ct.label = "irencrag"; return; }
+            // The other end of the same rule -- see the twin in Solve::consider for the full note.
+            // Lockstep: both sites must agree or the enumerator offers a plan the leaf will not score.
+            const int  rule    = IrencragRule();
+            const bool iren_ok = rule >= 3 ? after_needs_float   // payoff that NEEDED the float
+                               : rule == 2 ? after_finisher      // the finisher only (USER doctrine)
+                               : rule == 1 ? after_payoff        // any payoff, cantrips banned
+                                           : (after > 0);        // anything at all (adopted loose)
+            if (s_rollout_stats && after > 0 && !after_finisher)
+            {
+                // The set strict removes and loose keeps: name the follower, so "what does the
+                // doctrine actually forbid" is a read rather than an inference.
+                for (int k : sel)
+                {
+                    if (k == j) { continue; }
+                    const CardDefinition* kd3 = cands[k].def;
+                    if (!kd3) { continue; }
+                    if (ResolveProvider(state).CastOrderRank(state, *kd3) <= r_rank) { continue; }
+                    std::lock_guard<std::mutex> lk(g_iw_mu);
+                    ++g_iw_followers[kd3->card.m_name];
+                }
+            }
+            if (!iren_ok && IrencragWasteGateEnabled() && !OrderingSearchEnabled(state))
+            { iren_waste = true; }   // scope: rank-ordered decks only -- see the twin's note
         }
 
         if (self_damage >= ap.life) { _ct.label = "self-damage"; return; }
@@ -20758,6 +21029,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
+        // MTG_IRENCRAG_WASTE, deferred from the restrictor loop (lethal-exempt) -- see the twin.
+        if (iren_waste && !wins)
+        {
+            if (s_rollout_stats)
+            {
+                g_iw_drops.fetch_add(1, std::memory_order_relaxed);
+                for (int j : sel)
+                {
+                    const CardDefinition* d = cands[j].def;
+                    if (d && (d->params.cast_draw > 0 || d->params.damage_equals_top_mv))
+                    { g_iw_drops_with_payoff.fetch_add(1, std::memory_order_relaxed); break; }
+                }
+            }
+            _ct.label = "iren-waste"; return;
+        }
         // Sac-land burn hold (mirrors Solve::consider) -- see HoldSacLandBurn.
         if (sacrifice_count > 0 && !wins)
         {

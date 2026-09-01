@@ -88,6 +88,71 @@ inline bool ExecFeasEnabled()
     return heurarm::Flag(heurarm::EXEC_FEAS, env_on);
 }
 
+// MTG_IRENCRAG_WASTE -- ADOPTED DEFAULT-ON 2026-09-01 (USER: "let's adopt the Irencrag gate");
+// `=0` restores the old behaviour. Adoption evidence, paired 1200x2 at play settings (d5/20ms),
+// negative = better: SHIPPED engine hold -0.0167 (t -3.26, 20 better : 4 worse) / train -0.0117
+// (t -2.75, 16:4). It also closes most of the greedy-deletion gap: the greedy-free arm goes from
+// +0.0175/+0.0383 vs shipped to +0.0033 (t 0.32, indistinguishable) / +0.0233. The lethal
+// exemption was verified FREE (identical results, zero games moved -- no dropped plan was ever
+// lethal), and the Opus/Soulfire concern was measured out: of 587,676 gate drops over 300 games,
+// ZERO hold either payoff.
+//
+// WHAT IT DOES: reject a subset that casts a cast-
+// RESTRICTING ritual (Irencrag Feat, max_casts_after) with NOTHING ranked after it. The restrictor
+// exists to fund the spell that follows; with no follower the plan spends a card and {1}{R}{R}{R}
+// to float seven red nothing can consume, and spends the turn's one remaining cast doing it.
+// USER's order ruling makes this exact: Irencrag is SECOND LAST (rank 22) and Crackle (23) is the
+// only cast that may follow, so `after == 0` means no consumer exists. Found as the top case in
+// the greedy-deletion continuation diff (MTG_CONT_DIFF): 20,117 of 55,006 differences are the
+// canonical continuation casting Irencrag where the greedy continuation correctly declines it,
+// which is a large part of why deleting the greedy costs quality on this deck today.
+// HEURISTIC, not legality: a post-breakpoint continuation could still spend the float off a drawn
+// payoff, so this can delete a real (rare) line -- hence a lever to be measured, not a rule.
+// Read by BOTH the enumerator's subset gate and its Solve::consider twin -- lockstep.
+// MTG_IRENCRAG_FINISHER -- STRICTER variant of the gate (default OFF): require the follower to be
+// the FINISHER (Crackle), not merely some spell. This is the USER's doctrine exactly ("it can only
+// be cast before Crackle"; with a Crackle, Irencrag is worth 5+ damage, and Irencrag -> Soulfire /
+// -> Opus are bad value because neither gets the opponent into lethal range without Hinata or
+// Crackle). MEASURED WORSE than the loose gate anyway: strict vs loose +0.0150 hold (t 2.41) /
+// +0.0075 train, and it introduces a new loss class (14-15 worse games where loose had 4).
+// Kept as a lever so the doctrine-vs-measurement gap stays testable -- see the Crackle-timing
+// hypothesis (USER: "the only way this could cause a bit of an issue is by playing the Crackle for
+// damage early, but with search we should be able to find the 'hold it' route").
+// Which follower justifies casting the restrictor. 0 = ANY cast, 1 = a PAYOFF (Crackle / Soulfire
+// / Opus) i.e. no cantrips, 2 = the FINISHER only (Crackle), 3 = ADOPTED DEFAULT: a payoff that
+// COULD NOT HAVE BEEN CAST WITHOUT THE FLOAT.
+//
+// Rule 3 is the one that states the actual principle, and the others are kept because the route to
+// it was measured, not guessed (searched-design-deck-rollout.md 6e). Rule 2 is the USER's stated
+// doctrine -- "it can only be cast before Crackle" -- and it measured WORSE at every budget rung
+// (20/80/320 ms), which root-caused to a real play it forbids: Soulfire Eruption is {6}{R}{R}{R} =
+// NINE mana and exiles+stages a card per target, so on turn 3 off ~5 mana Irencrag is the only way
+// to cast the deck's DIG (hold gi=664: the loose arm casts it, digs into two lands, and wins T5;
+// the doctrine arm cannot, draws two dead counterspells, and never wins). With Hinata out Soulfire
+// costs 3-4, the pool covers it, and spending Irencrag on it IS the waste the doctrine describes.
+// Rule 3 separates those two cases by asking whether the float was NEEDED rather than which card
+// followed. USER 2026-09-01: "we'll go with your rule, but just those 3 cards."
+// Measured 1200x2 vs the loose rule: hold -0.0008, train -0.0017 (6 better : 2 worse) -- quality-
+// neutral, and it deletes a class of plays nobody defends (the restrictor spent on a cantrip).
+inline int IrencragRule()
+{
+    // heurarm slots (not an env int) so ONE pooled batch can carry all three arms -- the manifest
+    // can only override boolean slots, and CLAUDE.md forbids splitting a sweep into per-arm runs.
+    static const bool env_pay = EnvOn("MTG_IRENCRAG_PAYOFF");
+    static const bool env_fin = EnvOn("MTG_IRENCRAG_FINISHER");
+    static const bool env_ned = EnvOn("MTG_IRENCRAG_NEEDS", true);   // ADOPTED DEFAULT (rule 3)
+    if (heurarm::Flag(heurarm::IRENCRAG_NEEDS,    env_ned)) { return 3; }
+    if (heurarm::Flag(heurarm::IRENCRAG_FINISHER, env_fin)) { return 2; }
+    if (heurarm::Flag(heurarm::IRENCRAG_PAYOFF,   env_pay)) { return 1; }
+    return 0;
+}
+
+inline bool IrencragWasteGateEnabled()
+{
+    static const bool env_on = EnvOn("MTG_IRENCRAG_WASTE", true);   // DEFAULT ON; =0 reverts
+    return heurarm::Flag(heurarm::IRENCRAG_WASTE, env_on);
+}
+
 // MTG_DORK_GROWTH -- same-turn SCALED-MANA-DORK growth (Priest of Titania / Elvish Archdruid):
 // a dork whose one-tap yield is the live count of its subtype grows with every matching creature
 // cast this turn, so (a) EnumeratePlans credits a subset's matching casts into each live dork's
