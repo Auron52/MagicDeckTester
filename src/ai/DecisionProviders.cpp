@@ -10786,17 +10786,29 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
     const bool cs_val   = cs_nop || heurarm::Flag(heurarm::MINOTAUR_DISCARD_CSVAL, s_csval_env);
     const bool cs_dup   = heurarm::Flag(heurarm::MINOTAUR_DISCARD_CSDUP, s_csdup_env);
     const std::map<std::string, std::vector<double>>* cs = s.m_card_scores;
-    // The learned marginal of the (k+1)-th copy of a hand card, or nullopt when the deck carries no
-    // scores for it. Indices past the recorded vector clamp to its last entry, exactly as
-    // AIEngine::CardScore does -- a 3rd copy is at least as redundant as the 2nd.
+    // The learned marginal of the (k+1)-th copy of a hand card -- nullopt when the deck carries no
+    // scores for it, AND nullopt when it carries no entry for THIS copy count.
+    //
+    // NO CLAMP HERE, deliberately, and this is not a style choice -- clamping is what
+    // AIEngine::CardScore does and it is right for SCORING (marginals diminish, so reusing the last
+    // known one is a safe understatement). It is wrong for the question asked here, "is the k-th
+    // copy a liability?", because ComputeCardScores stops the vector at the first copy count with
+    // under 30 samples. A one-entry vector therefore means we have NO EVIDENCE about the second
+    // copy -- and clamping would answer with the FIRST copy's value, which for a card whose first
+    // copy is good says "a second one is fine" on the strength of nothing.
+    //
+    // That is not hypothetical. On this decklist the 3-ofs and 2-ofs (Fanatic of Mogis, Neheb,
+    // Boros Reckoner, Sethron) all stop at one entry, and Fanatic's is POSITIVE -- so a clamped
+    // read waived its duplicate penalty outright. A behavioural diff caught it doing exactly that
+    // 30 times in 172 changes, contaminating about a sixth of the arm. Absent evidence, fall
+    // through to the shipped cumulative-mana rule rather than inventing a permission.
     auto learned_marginal = [&](int i, int k) -> std::optional<double>
     {
-        if (cs == nullptr) { return std::nullopt; }
+        if (cs == nullptr || k < 0) { return std::nullopt; }
         auto it = cs->find(ap.hand[i].m_name.str());
-        if (it == cs->end() || it->second.empty()) { return std::nullopt; }
-        const std::size_t idx = std::min(static_cast<std::size_t>(std::max(0, k)),
-                                         it->second.size() - 1);
-        return it->second[idx];
+        if (it == cs->end() || static_cast<std::size_t>(k) >= it->second.size())
+        { return std::nullopt; }
+        return it->second[static_cast<std::size_t>(k)];
     };
     // Filled just before the threat sort (it needs the FINAL threat list, after surplus
     // reducers are folded in). Position of each card in V1's own value order.
