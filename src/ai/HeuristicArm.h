@@ -106,6 +106,10 @@ enum Slot : int
     MINOTAUR_DISCARD_PLAY,    // MTG_MINOTAUR_DISCARD_PLAY  ...half 2: threats by graded playability
     MINOTAUR_DISCARD_PLAY2,   // MTG_MINOTAUR_DISCARD_PLAY2 ...half 2, gentler: slack 2 not 1
     SPASM_UNTAP_LITERAL,      // MTG_SPASM_UNTAP_LITERAL   untap ritual resolves as a LITERAL untap
+    MINOTAUR_DISCARD_REDUCER, // MTG_MINOTAUR_DISCARD_REDUCER a HELD, deployable reducer discounts too
+    MINOTAUR_DISCARD_EV,      // MTG_MINOTAUR_DISCARD_EV      EV = P(play) x value(play), soft decay
+    MINOTAUR_DISCARD_EVHARD,  // MTG_MINOTAUR_DISCARD_EVHARD  ...steeper decay
+    MINOTAUR_DISCARD_DUPES,   // MTG_MINOTAUR_DISCARD_DUPES   k-th copy pays CUMULATIVE mana
     COUNT
 };
 
@@ -189,6 +193,10 @@ inline const char* Name(int slot)
         "MTG_MINOTAUR_DISCARD_PLAY",
         "MTG_MINOTAUR_DISCARD_PLAY2",
         "MTG_SPASM_UNTAP_LITERAL",
+        "MTG_MINOTAUR_DISCARD_REDUCER",
+        "MTG_MINOTAUR_DISCARD_EV",
+        "MTG_MINOTAUR_DISCARD_EVHARD",
+        "MTG_MINOTAUR_DISCARD_DUPES",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

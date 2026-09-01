@@ -10747,13 +10747,90 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
     for (int i : lands) { if (!is_karoo(i) || karoo_live) { ++live_hand_lands; } }
     const int reach = board_sources + live_hand_lands;
 
+    // MTG_MINOTAUR_DISCARD_REDUCER -- a reducer we HOLD and can actually deploy discounts the curve
+    // too, not only a resolved one. User 2026-09-01: "dropping Kragma Warcaller because we can't
+    // quite cast it with our existing mana would be wrong, but shedding a warcaller when we have
+    // 2 mana total AND NO RAGEMONGER is much more likely to be right." The reducer's availability
+    // is part of the playability question, and V1 only ever counted `board_reducers` -- so with a
+    // Ragemonger in hand and three sources it still judged Kragma unreachable and demoted it, when
+    // in fact Ragemonger resolves and Kragma costs {3}. Gated on the held reducer being castable
+    // within reach: an uncastable Ragemonger discounts nothing.
+    //
+    // Scanned eagerly into plain values, NOT read out of `reducers` inside the lambda: the surplus-
+    // reducer split below RESIZES that vector, and a by-reference capture would silently see the
+    // shortened list at sort time.
+    static const bool s_red_env  = EnvOn("MTG_MINOTAUR_DISCARD_REDUCER");
+    static const bool s_ev_env   = EnvOn("MTG_MINOTAUR_DISCARD_EV");
+    static const bool s_evh_env  = EnvOn("MTG_MINOTAUR_DISCARD_EVHARD");
+    static const bool s_dup_env  = EnvOn("MTG_MINOTAUR_DISCARD_DUPES");
+    const bool v2_reducer = heurarm::Flag(heurarm::MINOTAUR_DISCARD_REDUCER, s_red_env);
+    const bool v2_evhard  = heurarm::Flag(heurarm::MINOTAUR_DISCARD_EVHARD, s_evh_env);
+    const bool v2_ev      = v2_evhard || heurarm::Flag(heurarm::MINOTAUR_DISCARD_EV, s_ev_env);
+    const bool v2_dupes   = heurarm::Flag(heurarm::MINOTAUR_DISCARD_DUPES, s_dup_env);
+
+    // MTG_MINOTAUR_DISCARD_DUPES -- how many copies of this card we already have committed ahead of
+    // it (earlier in hand, or already on the battlefield). User 2026-09-01: "we don't want multiple
+    // Warcallers, since they aren't that easy to play and end the game quickly with 1."
+    // Expressed inside the EV model rather than as a flat spare-copy rule: to cast the SECOND copy
+    // you must pay for both, so the k-th copy's mana requirement is CUMULATIVE and its P(play)
+    // collapses on its own. That is why this needs no per-card constant and does not punish cheap
+    // bodies -- two Deathbellow Raiders at four sources are both still castable, two Kragma
+    // Warcallers need ten. (The shared ranking has no spare-copy tier by design; it lost as an
+    // ENGINE rule and belongs in a deck's own provider, which is exactly where this is.)
+    std::vector<int> copies_ahead(static_cast<std::size_t>(n), 0);
+    if (v2_dupes)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            if (ap.hand[i].m_is_staged) { continue; }
+            int k = 0;
+            for (int j = 0; j < i; ++j)
+            { if (!ap.hand[j].m_is_staged && ap.hand[j].m_name == ap.hand[i].m_name) { ++k; } }
+            for (const Permanent& perm : s.battlefield)
+            {
+                if (perm.controller_index == s.active_player_index
+                    && perm.card.m_name == ap.hand[i].m_name) { ++k; }
+            }
+            copies_ahead[static_cast<std::size_t>(i)] = k;
+        }
+    }
+    int         hand_red_amt = 0;
+    std::string hand_red_tribe;
+    if (v2_reducer)
+    {
+        for (int i : reducers)
+        {
+            const CardDefinition* d = def_of(ap.hand[i]);
+            if (d == nullptr || !IsSubtypeCostReducer(*d)) { continue; }
+            if (mv_of(i) > reach) { continue; }          // we could not deploy it anyway
+            int amt = 0; std::string tribe;
+            if (!d->params.reduces_subtype_colored_subtype.empty()
+                && d->params.reduces_subtype_colored_cost.has_value())
+            {
+                amt   = d->params.reduces_subtype_colored_cost.value().ManaValue();
+                tribe = d->params.reduces_subtype_colored_subtype;
+            }
+            else if (!d->params.reduces_spell_subtype.empty())
+            {
+                amt   = d->params.reduces_spell_subtype_amount;
+                tribe = d->params.reduces_spell_subtype;
+            }
+            if (amt > hand_red_amt) { hand_red_amt = amt; hand_red_tribe = tribe; }
+        }
+    }
+
     // Effective cost: a resolved reducer takes its discount off every spell of ITS named subtype.
     auto eff_mv = [&](int i)
     {
         const CardDefinition* d = def_of(ap.hand[i]);
-        const bool matches = board_reducers > 0 && d != nullptr && !reduced_tribe.empty()
-                          && CardHasSubtype(d->card, reduced_tribe);
-        return mv_of(i) - (matches ? reducer_amount : 0);
+        if (d == nullptr) { return mv_of(i); }
+        if (board_reducers > 0 && !reduced_tribe.empty()
+            && CardHasSubtype(d->card, reduced_tribe))
+        { return mv_of(i) - reducer_amount; }
+        if (hand_red_amt > 0 && !hand_red_tribe.empty()
+            && CardHasSubtype(d->card, hand_red_tribe))
+        { return mv_of(i) - hand_red_amt; }
+        return mv_of(i);
     };
     // MTG_MINOTAUR_DISCARD_V2 -- the user's revised doctrine (2026-09-01), two changes:
     //   1. AETHER VIAL sheds WITH the mana, not kept above the second land. "Aether vial is a good
@@ -10804,6 +10881,33 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
         if (!p.etb_damage_devotion_color.empty())                          { return 4; }  // Fanatic
         return 5;                                                                         // bodies
     };
+    // MTG_MINOTAUR_DISCARD_EV / _EVHARD -- the user's model, 2026-09-01:
+    //     "expected value = probability of playing * value of playing"
+    // This supersedes the lexicographic playability sort, which was the wrong SHAPE and measured
+    // worse for exactly the reason the user gave: "Warcaller is also very high value, so almost
+    // being able to play it means it should be kept". Ordering playability ABOVE value sheds the
+    // deck's best card the moment it is two sources short; multiplying keeps it, because a high
+    // value survives a modest probability discount. The same product also gets the other case
+    // right -- "shedding a warcaller when we have 2 mana total and no Ragemonger is much more
+    // likely to be right" -- because at three short the discount is deep enough to sink it.
+    //
+    // value: the authored deck order inverted (rank 0 = Kragma is the most valuable, rank 5 a
+    // plain body). P(play): 1.0 when castable now, decaying in the number of further sources
+    // needed -- each one is another land drop that has to arrive AND another turn the game has to
+    // last, and this deck wins around turn 5. The two curves differ only in how fast that decays;
+    // which is right is a judgment call, so both are measured rather than asserted.
+    auto threat_ev = [&](int i)
+    {
+        static const double kSoft[] = { 1.0, 0.85, 0.60, 0.30, 0.12 };
+        static const double kHard[] = { 1.0, 0.70, 0.35, 0.10, 0.03 };
+        const double* kP = v2_evhard ? kHard : kSoft;
+        // Cumulative for duplicates: the k-th copy has to be paid for on TOP of the k before it.
+        const int need = eff_mv(i) * (1 + copies_ahead[static_cast<std::size_t>(i)]);
+        const int d = need - reach;
+        const double p = (d <= 0) ? 1.0 : (d < 5 ? kP[d] : 0.02);
+        return p * static_cast<double>(6 - threat_rank(i));
+    };
+
     // A surplus reducer is a body: still a Minotaur with a stacking discount, so it competes for the
     // threat slots rather than being shed as a spare enabler.
     const int reducer_keep = board_reducers > 0 ? 0 : 1;
@@ -10823,9 +10927,18 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
         // ONE land short is not the same kind of problem: this deck makes a land drop most turns, so
         // deficit 1 is "castable next turn", not "stranded", and punishing it would shed Kragma (the
         // deck's best card, and the whole reason to reach five) to keep a one-drop body.
-        const int da = (v2_play || v2_play2) ? deficit_bucket(a) : ((reach <= 3 && eff_mv(a) >= 5) ? 1 : 0);
-        const int db = (v2_play || v2_play2) ? deficit_bucket(b) : ((reach <= 3 && eff_mv(b) >= 5) ? 1 : 0);
-        if (da != db) { return da < db; }
+        if (v2_ev)
+        {
+            const double ea = threat_ev(a), eb = threat_ev(b);
+            if (ea > eb) { return true; }
+            if (eb > ea) { return false; }
+        }
+        else
+        {
+            const int da = (v2_play || v2_play2) ? deficit_bucket(a) : ((reach <= 3 && eff_mv(a) >= 5) ? 1 : 0);
+            const int db = (v2_play || v2_play2) ? deficit_bucket(b) : ((reach <= 3 && eff_mv(b) >= 5) ? 1 : 0);
+            if (da != db) { return da < db; }
+        }
         const int ra = threat_rank(a), rb = threat_rank(b);
         if (ra != rb) { return ra < rb; }
         // Within the body tier: biggest first, then the one worth more devotion to the deck's burn,

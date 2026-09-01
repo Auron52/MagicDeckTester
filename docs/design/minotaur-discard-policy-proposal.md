@@ -232,7 +232,62 @@ in 80,000, and **at shipped depth every arm is null by construction** — the ax
 there is 0.00025t. So this is not "the doctrine is wrong"; it is "the metric cannot endorse it, and
 where it can see anything at all it leans the other way."
 
-**Status: levers exist, all default OFF, engine byte-identical.** Adopting them is a doctrine call,
-not a measurement one, and it belongs to the user: at d3/d5 it is free, at d0 it costs ~0.0002t.
-The one caveat worth weighing is that **the play viewer runs at d0**, so the d0 ordering is the
-default a human is offered.
+**Status: levers exist, all default OFF, engine byte-identical.**
+
+### Round 2 — the EV model, and a correction to the Vial claim
+
+The user refined the doctrine across several passes, ending at the right formulation:
+
+> "Essentially we want something like expected value = probability of playing * value of playing."
+> ... "dropping Kragma Warcaller because we can't quite cast it with our existing mana would be
+> wrong, but shedding a warcaller when we have 2 mana total and no Ragemonger is much more likely to
+> be right." ... "Warcaller is also very high value, so almost being able to play it means it should
+> be kept." ... "we don't want multiple Warcallers, since they aren't that easy to play and end the
+> game quickly with 1."
+
+This diagnosed the round-1 failure exactly. A lexicographic "playability, then effectiveness" sort
+is the wrong SHAPE: it sheds the deck's best card the moment it is two sources short. Multiplying
+keeps it, because a high value survives a modest probability discount. Three new levers:
+
+- `MTG_MINOTAUR_DISCARD_EV` / `_EVHARD` — `EV = P(play) x value`, value = inverted `threat_rank`,
+  `P` decaying in sources-still-needed. Two decay curves, because the steepness is a judgment call.
+- `MTG_MINOTAUR_DISCARD_DUPES` — the k-th copy's mana requirement is CUMULATIVE (to cast the second
+  Warcaller you pay for both), so P collapses on its own. Needs no per-card constant and leaves
+  cheap bodies alone: two Raiders at four sources are both castable, two Kragmas need ten.
+- `MTG_MINOTAUR_DISCARD_REDUCER` — a Ragemonger we HOLD and can deploy discounts the curve, not
+  only a resolved one. V1 counted `board_reducers` only, so it judged Kragma unreachable at three
+  sources even with a Ragemonger in hand.
+
+**Every arm is clearly worse at d0 and a wash at d3** (160,000 / 16,000 games per arm, paired,
+fresh seeds; positive = slower):
+
+| arm | d0 mean | t | changed | sign p | d3 mean | t | sign p |
+|---|---|---|---|---|---|---|---|
+| ev | +0.000894 | +6.52 | 412 | <0.0001 | -0.000125 | -0.41 | 0.84 |
+| evhard | +0.000362 | +2.87 | 351 | 0.025 | -0.000063 | -0.28 | 1.00 |
+| ev+dupes | +0.001000 | +6.77 | 506 | <0.0001 | -0.000375 | -1.22 | 0.31 |
+| evhard+dupes | +0.000562 | +3.80 | 516 | 0.0005 | -0.000188 | -0.77 | 0.61 |
+| ev+dupes+reducer | +0.000994 | +6.70 | 511 | <0.0001 | -0.000375 | -1.22 | 0.31 |
+| evhard+dupes+reducer | +0.000619 | +4.24 | 499 | 0.0001 | -0.000188 | -0.77 | 0.61 |
+
+Unlike round 1 these fire often enough to be properly measured (351-516 changed games, not 12).
+The d0 verdict is unambiguous and the d3 column is null in every row. Note the signs are OPPOSITE
+across depths — d0 prefers V1, d3 leans (insignificantly) toward EV. Do not build a story on the
+d3 column; it is not significant anywhere.
+
+**The `value` term is the weak link, and it is the honest next step.** `value` is currently the
+authored `threat_rank` inverted, i.e. a linear 6..1 guess. The deck's profile carries LEARNED
+`card_scores`, which is what the user's `value(playing)` actually means — but they live on the
+profile (`AIEngine`), not `GameState`, so the provider cannot reach them without plumbing the
+profile into the hook. Until that is done, "EV measured worse" is really "EV *with a guessed value
+scale* measured worse", and the model itself is not fairly tested.
+
+### CORRECTION — the round-1 Vial claim was over-read
+
+Round 1 reported the Vial change as measuring worse (+0.00010, t=2.31). **That does not hold up.**
+Re-run at 4x the sample (160,000 d0 games, 32 seeds): mean +0.000081, **t=1.94** — it went DOWN —
+39 changed games of 160,000, exact sign test p=0.024. At d3: 3 changed games of 16,000, p=1.00.
+A behavioural diff finds the rule firing in **1 of 462 decisions**, and that one swap is the rule
+doing exactly what the doctrine asks: V1 sheds **Ragemonger** to protect the Vial, the new rule
+sheds the Vial and keeps the Ragemonger — the card the user specifically said to keep for mana.
+So shedding the Vial is NOT established as incorrect; it is barely measurable in either direction.
