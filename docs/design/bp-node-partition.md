@@ -214,6 +214,44 @@ whether "stop here" is in the option set, so that one restored option is worth ~
 **Greedy has never beaten the sound greedy-free form on QUALITY on this deck; the whole case
 against the class is compute.**
 
+### The right comparison: cost at EQUAL QUALITY, not at equal budget
+
+Equal-`budget_ms` flatters the node (it takes 48% more units for the same setting) and
+equal-units flatters the control. The USER's bar is stated in WALL, so the honest question is:
+**how much wall does the control need to reach the node's quality?** Control budget ladder,
+paired, 5000 games/cell on the same seed blocks, walls from the uncontended probe:
+
+| arm | wall | hold | train | vs node20 (paired t) |
+|---|---|---|---|---|
+| base@20 (shipped) | 54.0 s | 5.6394 | 5.6668 | +0.0070 (1.34) / +0.0104 (2.04) — worse |
+| **base@26** | **64.1 s** | 5.6286 | 5.6580 | **−0.0038 (−0.72) / +0.0016 (0.31) — TIED** |
+| base@34 | 68.4 s | 5.6210 | 5.6490 | −0.0114 (−2.13) / −0.0074 (−1.45) — better |
+| base@45 | 77.4 s | 5.6126 | 5.6420 | −0.0198 (−3.69) / −0.0144 (−2.84) — better |
+| node@20 | 81.9 s | 5.6324 | 5.6564 | — |
+
+**`base@26` is statistically indistinguishable from `node@20` on both blocks, at 64.1 s against
+81.9 s. Removing greedy therefore costs +28% wall at equal quality** — materially less than the
++52% the raw `budget_ms` comparison suggests, because part of the node's extra cost does buy
+quality (node beats shipped by −0.0070/−0.0104 at its own budget; the class does NOT lose on
+quality). But the control dominates it across the whole range: base@34 is BETTER than node while
+still costing 16% less wall.
+
+Two consequences:
+
+1. **The node's remaining problem is exactly the duplicate child applies.** Fresh anatomy at HEAD
+   (200 games, `MTG_ROLLOUT_STATS`): children 3,660,751 (= `fs_bp_node` units — one unit per
+   child), of which **child_dupes 1,541,982 = 13.2% of the node's 11.69M total units**, split
+   dupes_cross 1,192,267 / dupes_innode 349,715 / fp_predictable 252,992. Removing all of them
+   lands the node at ~10.15M units ≈ 71 s, i.e. **+11% over base@26 instead of +28%** — the
+   difference between "not worth it" and "cheap enough to buy the doctrine with". 77% of the
+   prize is the CROSS-node bucket, which the doc previously wrote off as "not predictable without
+   applying"; that claim is now the thing to test rather than assume.
+2. **Hinata is BUDGET-STARVED, and that is the best available use of extra wall today.** base@45
+   buys −0.0268/−0.0248 for 1.43x wall — a better return than the node offers for the same money.
+   This corroborates `cantrip-class-affordability.md` (crossover at 80 ms = 4x the shipped
+   budget). Raising the shipped budget is a separate USER decision (it rebaselines every tier),
+   but any "should we spend 1.4x wall on Hinata" conversation should compare against it.
+
 ## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
 
 The generic-lever collateral check the v1 caveats called for: **14 of 15 decks + all 25
