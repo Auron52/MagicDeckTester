@@ -470,13 +470,17 @@ TEST_CASE("filter {C} mode pays a generic pip first in HUMAN play; the search ke
         CHECK(ex.ok); CHECK(ro.ok); CHECK(ex == ro);
         CHECK(ex.tapped == std::vector<bool>{false, true});   // autonomous: the mono land pays
     }
-    // A COLOURED pip: the filter's coloured mode ranks past the direct sources in both worlds.
+    // A COLOURED pip: the Island is the Bluffs' LAST feeder, so the adopted feed-aware reroute
+    // (MTG_FEED_FILTER_FIRST, 2026-09-01) routes it THROUGH the filter -- both tap, and the
+    // conversion's second unit floats for the turn's later casts instead of the filter
+    // stranding as a {C}-only source. (Pre-adoption: Island paid directly, Bluffs stayed up.)
     {
         GameState s = MakeBoard({"Cascade Bluffs", "Island"});
         const PayEnd ex = RunExecutor(s, Cost(0, 0, /*u=*/1), false);
         const PayEnd ro = RunRollout(s, Cost(0, 0, /*u=*/1), false);
         CHECK(ex.ok); CHECK(ro.ok); CHECK(ex == ro);
-        CHECK(ex.tapped == std::vector<bool>{false, true});   // Island pays {U}; Bluffs stays up
+        CHECK(ex.tapped == std::vector<bool>{true, true});    // Island feeds the Bluffs
+        CHECK(ex.floating_total == 1);                        // the banked leftover {U}
     }
 }
 

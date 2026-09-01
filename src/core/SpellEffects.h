@@ -7632,7 +7632,8 @@ inline bool FilterFeedStrictOn()
     return heurarm::Flag(heurarm::FILTER_FEED_STRICT, env_on);
 }
 
-// MTG_FEED_FILTER_FIRST (EXPERIMENT, default OFF; =1 enables): feed-aware per-pip tap choice --
+// MTG_FEED_FILTER_FIRST -- ADOPTED DEFAULT-ON 2026-09-01 (=0 restores the feed-blind greedy):
+// feed-aware per-pip tap choice --
 // the greedy rule for the stranding the strict feed exposed (docs/design/feed-aware-tap-choice.md).
 // When a coloured pip's chosen DIRECT source is the LAST untapped non-filter source producing any
 // of an also-candidate filter's colours (and no such colour floats), tapping it directly strands
@@ -7648,7 +7649,7 @@ inline bool FilterFeedStrictOn()
 // so the lever does not enter ManaCacheKey.
 inline bool FeedFilterFirstOn()
 {
-    static const bool env_on = EnvOn("MTG_FEED_FILTER_FIRST");
+    static const bool env_on = EnvOn("MTG_FEED_FILTER_FIRST", true);
     return heurarm::Flag(heurarm::FEED_FILTER_FIRST, env_on);
 }
 

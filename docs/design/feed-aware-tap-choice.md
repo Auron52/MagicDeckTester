@@ -1,6 +1,13 @@
 # Feed-aware tap choice — MTG_FEED_FILTER_FIRST (built + measured 2026-09-01)
 
-**Status:** BUILT, measured suite-wide, staged for adoption (default OFF until user sign-off).
+**Status:** ADOPTED default-ON (2026-09-01, user: "if there are no drawbacks let's adopt" —
+the drawbacks on record being the small measured ones below: hinata gi39 d3 / gi95 d5 +1 turn
+each, the gi1225 d0 knock-on, a couple of d0 ±1s, against 13 faster games and both residuals
+fixed). `=0` restores the feed-blind greedy. All three GT tiers rebaselined at the flip; the
+tier diffs matched the battery's per-game expectations exactly (only hinata/th cells moved;
+the known slower games and no others). One unit pin updated for the new contract: on
+{Bluffs, Island} a lone {U} pip now routes the Island THROUGH the Bluffs (both tap, leftover
+{U} floats) instead of stranding the filter.
 Recovers both true residuals of the strict-filter-feed adoption (`filter-feed-strict.md` §4c/§4d):
 th gi249 (6→5) and th gi448 (4→3), at d3 AND d5, with strictly-legal lines (matcher-verified).
 
@@ -85,10 +92,12 @@ manifest flag beats env by design). **When reusing a prior manifest, strip its `
 a control arm is FLAGLESS.** The tell that resolved it: `MTG_BATCH_STATE_DUMP`'s `hf` heurarm
 hash ≠ 0 on a supposedly-flagless job.
 
-## Adoption decision (staged for the user)
+## Adoption (done 2026-09-01)
 
-Recommendation: ADOPT default-ON. It exists to fix real search-quality misses the strict feed
-exposed (both fixed, legally); suite-wide it is net-neutral-to-positive with the residual cost
-concentrated in two hinata searched +1s and the gi1225 knock-on above. Adoption steps when
-approved: flip `FeedFilterFirstOn()` to `EnvOn(..., true)`, rebaseline the three GT tiers
-(hinata/th cells move), record here.
+User approved; `FeedFilterFirstOn()` flipped to `EnvOn("MTG_FEED_FILTER_FIRST", true)` and all
+three GT tiers re-run and accepted at the flip. Tier-by-tier: smoke — only th/hinata cells
+moved (th d0 −0.002 = the battery's gi699 6→4; the rest same-score tap-order churn), searched
+slower=0. Regression — the three known slower games exactly (gi39 d3 5→6, gi95 d5 5→6, gi348
+d0 7→8) and nothing else. Overnight — see the accept log (`logs/feed_aware/adopt_overnight*`).
+Deferred follow-up (out of scope, noted for whoever picks it up): the gi1225 knock-on is a d0
+cast-rank question — a mana rock vs a cantrip when float is up — not a payment defect.
