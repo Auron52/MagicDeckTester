@@ -122,3 +122,14 @@ bulk is cause 2 wearing its label, and the `{X}` bucket is largely Spasm's own c
 There is no missing-production-path pile to audit. The single unlock for the hinata unpriced mass
 is the Spasm model rework + ledger support, now designed in
 [`reality-spasm-phase2.md`](reality-spasm-phase2.md) (the link above that used to dangle).
+
+## 2026-09-01 RESOLUTION: the rework is BUILT and the hinata unpriced mass collapses 149/149
+
+`MTG_SPASM_UNTAP_LITERAL` (commit 53fa08eb, default OFF pending adoption) resolves Reality Spasm
+as a literal untap and logs an `UNTAP_SOURCES` event that this ledger now consumes as an EXACT
+credit. Re-running all 149 formerly-UNPRICED hinata rows on today's engine: float arm 139
+UNPRICED / 10 LEGAL; literal arm **149/149 LEGAL** (zero LAUNDERED in either arm;
+`logs/mana_robust/spasm/collapse/results.json`). The prediction above held exactly — the
+short-count bucket WAS the float. Full measurement + the adoption bill (hinata GT gets honestly
+slower; sidecar regeneration) live in `reality-spasm-phase2.md` §7. Until the default flips, the
+committed tsv's hinata UNPRICED rows remain as-is: they price only under the flag.

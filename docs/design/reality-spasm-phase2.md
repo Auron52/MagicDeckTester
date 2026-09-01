@@ -1,8 +1,10 @@
 # Reality Spasm phase 2 — the untap model, what it still launders, and the rework plan
 
-**Status:** designed, not built (2026-08-30). This is the doc `unpriced-prepay-rows.md` links as
-"cause 2's blocker" — it did not exist until now. Read this before touching the Spasm model or
-spending any effort on the unpriced-rows "production table audit" (§3 kills that step).
+**Status:** BUILT + MEASURED (2026-09-01, commit 53fa08eb) — see §7 for the results. The lever is
+`MTG_SPASM_UNTAP_LITERAL`, **default OFF**; flipping it (with the GT rebaseline and the sidecar
+question) is the USER's adoption call. Originally designed 2026-08-30. This is the doc
+`unpriced-prepay-rows.md` links as "cause 2's blocker". Read this before touching the Spasm model
+or spending any effort on the unpriced-rows "production table audit" (§3 kills that step).
 
 ## 1. Current state — CORRECTING two stale claims
 
@@ -99,3 +101,57 @@ can finally price the turns. Do NOT treat hinata GT regressions as failures to r
 Engine change in hinata's core kill path + a log-format addition + ledger support: a half-day
 of work plus the measurement battery. NOT a quick item — parked here until the box and the
 queue allow it.
+
+## 7. BUILT + MEASURED (2026-09-01, commit 53fa08eb) — awaiting the USER's adoption call
+
+**What was built** (all flag-gated on `MTG_SPASM_UNTAP_LITERAL`, default OFF):
+- The literal untap lives in `ApplyRitualFloat`'s untap branch (`RitualUntapSources`,
+  SpellEffects.h): up to X TAPPED sources untap, float-model selection rule restricted to the
+  tapped subset. ONE shared resolution function ⇒ executor / rollout apply / plan apply /
+  `SubsetPayableSequential` are lockstep **by construction** — no per-site mirroring was needed,
+  and the sequential-feasibility gate (MTG_EXEC_FEAS) prices Spasm chains exactly for free.
+- The enumeration credit (`a.ritual_float`) was deliberately LEFT as the float formula = an
+  **optimistic upper bound** (§4's "conservative first cut" landed on the other side: the
+  rollout's TapForCostDirect failure path drops an over-credited cast and the plan scores
+  honestly, so the bound costs plan-ranking quality only, never phantom mana).
+- A heurarm slot (`SPASM_UNTAP_LITERAL`), so ONE pooled batch carries both A/B arms.
+- The `UNTAP_SOURCES` game-log event (g_reveal_logger-gated ⇒ real resolutions only) records
+  exactly which sources untapped, and `prepay_recheck`'s `_turn_ledger` consumes it as an
+  **exact** credit (no `soft` note — a balancing turn proves LEGAL), superseding the generous
+  chosenX bound whenever events are present.
+
+**Flag-off is byte-identical everywhere** (hinata d0 1000g + d3 150g vs the pre-change binary;
+the A/B's control arm == committed GT **per-game** in all 8 hinata train cells; scenarios 44/44;
+unit 702/702).
+
+**The A/B** (one pooled 18-job / 5950-game batch, `logs/mana_robust/spasm/`): every hinata train
+cell moves SLOWER, at every depth — smoke d0 6.9690→7.3180, d3 5.6733→6.0600, d5 5.8533→6.1867;
+regression d0 7.0480→7.4320, d3 s2002 5.6800→6.0300, d3 s3003 5.6800→6.1100, d5 s2002
+5.6800→6.0400, d5 s3003 5.6900→6.0600 (Δ +0.33..+0.43/cell). Per-game: 890 slower / 18 faster /
+**80 newly-unwon** of 2725. Dragonstorm is digest-identical even flag-ON (Irencrag = the fixed-
+burst branch, untouched); burn likewise. Per §4's pre-registered expectation this is the fix
+WORKING: the off-arm wins were part-funded by mana the rules never granted (worked example:
+gi33's off-arm T3 "kill" pays {U}{U} + {8}{R}{R} — 12 mana — off a board producing ~6).
+
+**The §5 success criterion is met at 100%**: re-running all 149 formerly-UNPRICED hinata ledger
+rows on today's engine, the float arm still reads 139 UNPRICED / 10 LEGAL, while the literal arm
+reads **149/149 LEGAL** (zero LAUNDERED in either arm; `logs/mana_robust/spasm/collapse/`). The
+"short on raw count" bucket was the Spasm float wearing that label, exactly as §3 sampled, and
+with the untap logged the ledger prices every one of those turns exactly.
+
+**Known first-cut artifact** (accepted, refinement deferred): the optimistic enum credit lets
+~7% of flag-on Spasm turns end with NO same-turn follow-up cast (8/121 at d3, 9/130 at d0
+greedy; flag-off ~1%) — a wasted {U}{U}. The refinement, if wanted later, is §4's payment-aware
+projection at the consider/credit sites. Also note `crackle-reality-spasm-overgeneration.md`'s
+enum/apply edge is MOOT under the literal model (there is no float to over-generate).
+
+**The adoption bill, for the USER**:
+1. Flip the default (EnvOn(...,true) + hatch) and rebaseline all tiers — hinata GT gets
+   honestly worse by ~+0.35–0.43/cell including unwon-at-T8 games (80 in train alone). Per the
+   prepay doctrine these are NOT regressions to recover.
+2. Hinata's sidecars were generated under FLOAT-model play and embed it: `Hinata2.value.json`
+   (ACTIVE by presence) and the exhaustive keep table both graded states in a world with free
+   Spasm mana. Honest adoption should regenerate the value leaf (`valueleaf.sh run`) and at
+   least re-ask the keep-table question (mulligan-profile.md's commit-bound rule: a play-logic
+   fix invalidates prior sidecars).
+3. After adoption, re-run the unpriced split to retire the ledger's hinata section for good.
