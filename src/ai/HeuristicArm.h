@@ -121,6 +121,7 @@ enum Slot : int
     IRENCRAG_FINISHER,        // MTG_IRENCRAG_FINISHER     ...or the FINISHER (Crackle) specifically
     IRENCRAG_NEEDS,           // MTG_IRENCRAG_NEEDS        ...a payoff that could NOT be cast without him
     FILTER_FEED_STRICT,       // MTG_FILTER_FEED_STRICT    backtracker filter feed pays the real hybrid cost
+    BP_PREFIX_PREPAY,         // MTG_BP_PREFIX_PREPAY      node-host prepay covers only the PRE-breakpoint casts
     COUNT
 };
 
@@ -219,7 +220,13 @@ inline const char* Name(int slot)
         "MTG_IRENCRAG_FINISHER",
         "MTG_IRENCRAG_NEEDS",
         "MTG_FILTER_FEED_STRICT",
+        "MTG_BP_PREFIX_PREPAY",
     };
+    // The enum and this table are ONE mapping split across two lists: a slot added to one and not
+    // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
+    // Make that a compile error rather than a measurement mystery.
+    static_assert(sizeof(kNames) / sizeof(kNames[0]) == static_cast<std::size_t>(COUNT),
+                  "HeuristicArm: slot enum and kNames are out of sync -- add the new slot to BOTH");
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }
 

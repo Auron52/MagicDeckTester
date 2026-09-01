@@ -294,6 +294,36 @@ premium from +28% toward ~+15% before the in-node fingerprint lever (2.2%) is ev
 also removes duplicate PENDS, whose applies are charged to `fs_main2`/`fs_pre`, so the realised
 saving should exceed the child-side arithmetic.
 
+### MTG_BP_PREFIX_PREPAY -- BUILT, MEASURED, REJECTED (2026-09-01)
+
+The float half of the cross bucket has a cause: `BatchPrepayMainCasts` taps for the WHOLE plan and
+leaves the surplus floating, and it FAST-DECLINES on single-cast turns (`eligible < 2`). So
+`[Ponder]` pends with `pool=0` while `[Ponder;Ornithopter]` pends with `pool=2` from identical
+pre-breakpoint casts -- different pend key, prefix dedup misses, children reconverge once the float
+is spent. Diagnostic `MTG_NO_BATCH_PAY=1` (kills the float globally; changes play, so not a
+candidate) more than doubled the dedup catch rate, 16.8% -> 37.1% of pends, and cut cross dupes 42%.
+
+`MTG_BP_PREFIX_PREPAY` (heurarm slot, default OFF) scopes the prepay to the pre-breakpoint casts
+whenever `bp_capture` is armed -- search-internal only, the executor passes no capture. It works
+mechanically: prefix_dupes 17.7% -> 28.5% of pends, children **-12.4%**, cross dupes **-31%**,
+units **-2.6%**, `id_depth` unchanged at 2.98074.
+
+**And it is REJECTED on quality: +0.0200 hold (t 6.20) / +0.0214 train (t 6.41), paired 5000/cell**
+-- as large as the entire benefit of deleting greedy, and consistent across both blocks (36/104 and
+34/111 better/worse). **The lesson is worth more than the lever: the "wasted" float is NOT waste.**
+The mana a base plan taps for its tail is chosen jointly across the whole turn, and that joint
+allocation is better for the node's CONTINUATIONS than a prefix-only payment is. So those
+duplicate-looking pends differ for a load-bearing reason, and the float share of the cross bucket
+is not recoverable by scoping the prepay. Do not re-propose this without a payment model that keeps
+the joint allocation while dropping only the truly-dead tail.
+
+Corrected sizing after this: a duplicate child costs ONE unit, so even the -12.4% children this
+bought was only -2.6% units. The earlier note that the cross bucket is "not a transposition
+problem" was too strong -- it holds for the float and land sub-cases, but the dominant survivor is
+a genuine order transposition (`[X;Ornithopter]` casting the dork BEFORE the cantrip vs `[X]` whose
+continuation casts it AFTER; Ornithopter is a mana dork so it ranks ahead of the cantrip). That
+half needs a commutativity argument, exactly as the cost menu originally said.
+
 ## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
 
 The generic-lever collateral check the v1 caveats called for: **14 of 15 decks + all 25

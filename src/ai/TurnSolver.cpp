@@ -2785,6 +2785,25 @@ inline bool DupeTraceOn()
 // there the land is noise (the two paths play it by different mechanisms), here it is exactly the
 // thing that decides whether two plans share a partition state, so omitting it makes plans that
 // differ look identical and hides why the prefix dedup let both through.
+// Compact pend-state descriptor for the MTG_BP_DUPE_TRACE case list -- the fields most likely to
+// explain why two plans with identical pre-breakpoint casts landed on DIFFERENT prefix keys.
+inline std::string PendDesc(const GameState& st)
+{
+    int untapped = 0, lands = 0;
+    for (const auto& perm : st.battlefield)
+    {
+        if (!perm.card.IsLand()) { continue; }
+        ++lands;
+        if (!perm.tapped) { ++untapped; }
+    }
+    char buf[160];
+    std::snprintf(buf, sizeof(buf), "unt=%d/%d pool=%d hand=%zu gy=%zu lib=%zu",
+                  untapped, lands, st.floating_mana.Total(),
+                  st.ActivePlayer().hand.size(), st.ActivePlayer().graveyard.size(),
+                  st.ActivePlayer().library.size());
+    return std::string(buf);
+}
+
 inline std::string DupeSig(const TurnSolver::Plan& p)
 {
     std::string s;
@@ -5954,6 +5973,29 @@ namespace bpnode
     using OriginMap = std::unordered_map<TranspositionTable::Key,
                                          std::pair<uint8_t, std::string>,
                                          TranspositionTable::KeyHash>;
+    // PEND descriptor (MTG_BP_DUPE_TRACE). Why did the PREFIX dedup not already collapse two plans
+    // whose casts before the breakpoint are identical? Whatever differs must be visible in the pend
+    // STATE, so dump a compact descriptor beside the key and let the case list say which field it is.
+    // (Both mana-side suspects were checked and are inert here: g_line_unpaid_cost binds only under
+    // HumanPlayActive, and ColorCriticalReserve is gated on MTG_COLOR_RESERVE, default off.)
+    inline std::mutex                      pend_mu;
+    inline std::map<std::string, uint64_t> pend_cases;
+
+    // Record one PEND: its plan signature, the dedup key that decides whether the prefix dedup
+    // collapses it, and a descriptor of the state behind that key. Two rows with the SAME sig but
+    // different key= are the pends that should have collapsed and did not -- and the descriptor
+    // fields say what differs.
+    inline void PendTraceRecord(const TranspositionTable::Key& k, const std::string& sig,
+                                const GameState& st)
+    {
+        char kb[24];
+        std::snprintf(kb, sizeof(kb), "%08llx",
+                      (unsigned long long)(TranspositionTable::KeyHash{}(k) & 0xffffffffull));
+        const std::string row = "[" + sig + "] key=" + kb + "  " + PendDesc(st);
+        std::lock_guard<std::mutex> lk(pend_mu);
+        ++pend_cases[row];
+    }
+
     // Record one cross-node dupe against whoever first claimed its key. Shared by both hosts so
     // the case list is one list, not two.
     inline void DupeTraceRecord(const OriginMap& origin, const TranspositionTable::Key& k,
@@ -6010,9 +6052,16 @@ namespace bpnode
             std::vector<std::pair<std::string, uint64_t>> v(dt_cases.begin(), dt_cases.end());
             std::sort(v.begin(), v.end(),
                       [](const auto& a, const auto& b) { return a.second > b.second; });
-            for (std::size_t i = 0; i < v.size() && i < 30; ++i)
+            for (std::size_t i = 0; i < v.size() && i < 20; ++i)
             { std::fprintf(stderr, "[bp-dupe] n=%llu %s\n",
                            (unsigned long long)v[i].second, v[i].first.c_str()); }
+            std::vector<std::pair<std::string, uint64_t>> pv(pend_cases.begin(), pend_cases.end());
+            std::sort(pv.begin(), pv.end(),
+                      [](const auto& a, const auto& b) { return a.second > b.second; });
+            std::fprintf(stderr, "[bp-pend] distinct_pend_rows=%zu\n", pend_cases.size());
+            for (std::size_t i = 0; i < pv.size() && i < 24; ++i)
+            { std::fprintf(stderr, "[bp-pend] n=%llu %s\n",
+                           (unsigned long long)pv[i].second, pv[i].first.c_str()); }
         }
     };
     inline Dumper g_dumper;
@@ -15799,6 +15848,56 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
     return total;
 }
 
+// ---- Prefix-scoped prepay (MTG_BP_PREFIX_PREPAY) ---------------------------------------------
+// See the call site inside ApplyPlanDirect for the why. Default OFF.
+static bool BpPrefixPrepayEnabled()
+{
+    static const bool env_on = EnvOn("MTG_BP_PREFIX_PREPAY");
+    return heurarm::Flag(heurarm::BP_PREFIX_PREPAY, env_on);
+}
+
+// The casts this apply will actually make BEFORE it stops at the plain-cantrip partition point, in
+// the apply's OWN order: the vector order for a searched_order plan, otherwise the canonical
+// CastOrderLess sort. That is the SHARED comparator apply_plan_actions sorts with (ManaPayment.h),
+// not a re-derivation of it -- predicting the realised order with separate logic is the lockstep
+// hazard PlanOpensBreakpoint warns about, so this must never grow its own ordering rules.
+// A plan with no plain cantrip returns unchanged, so the prepay is byte-identical there.
+// Non-cast actions (vial, sac-for-mana, suspend) ride along: they fund the prefix rather than
+// competing with it.
+static std::vector<Action> BpPrepayPrefix(const GameState& state, const TurnSolver::Plan& plan)
+{
+    std::vector<int> casts;
+    for (std::size_t i = 0; i < plan.actions.size(); ++i)
+    {
+        const Action& a = plan.actions[i];
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+        { casts.push_back(static_cast<int>(i)); }
+    }
+    if (!plan.searched_order)
+    {
+        std::stable_sort(casts.begin(), casts.end(), [&](int x, int y)
+        { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
+    }
+    std::vector<char> keep(plan.actions.size(), 0);
+    bool found = false;
+    for (int i : casts)
+    {
+        keep[static_cast<std::size_t>(i)] = 1;
+        if (IsPlainCantrip(plan.actions[static_cast<std::size_t>(i)])) { found = true; break; }
+    }
+    if (!found) { return plan.actions; }
+    std::vector<Action> out;
+    out.reserve(plan.actions.size());
+    for (std::size_t i = 0; i < plan.actions.size(); ++i)
+    {
+        const Action& a = plan.actions[i];
+        const bool is_cast = (a.kind == Action::Kind::CastFromHand
+                           || a.kind == Action::Kind::CastFromGraveyard);
+        if (!is_cast || keep[i] != 0) { out.push_back(a); }
+    }
+    return out;
+}
+
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
                             BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume)
@@ -18302,7 +18401,36 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // floating (see BatchPrepayMainCasts). The main casts below then drain the pool -- scarce colours
     // allocated jointly, filters fed, unneeded sources left up -- instead of the stranding per-cast
     // greedy. Declined turns leave state untouched and fall through to the identical greedy path.
-    TurnSolver::BatchPrepayMainCasts(state, plan.actions);
+    // PREFIX-SCOPED PREPAY under a node host (MTG_BP_PREFIX_PREPAY, default OFF).
+    //
+    // The whole-turn prepay taps for EVERY cast in the plan and leaves the surplus floating. When
+    // this apply is going to STOP at a plain-cantrip partition point (bp_capture armed), the casts
+    // after that point are about to be discarded and re-derived by the node -- so the mana pre-tapped
+    // for them is float that exists only because of a tail we threw away. That float is part of the
+    // pend state, which is why the node's PREFIX dedup fails to collapse two plans whose
+    // pre-breakpoint casts are identical: `[Ponder]` fast-declines the prepay (eligible < 2) and
+    // pends with pool=0, while `[Ponder;Ornithopter]` takes it and pends with pool=2. Their children
+    // then reconverge once the float is spent -- measured as the CROSS-dupe bucket, 77% of the
+    // node's duplicate child applies (MTG_BP_DUPE_TRACE case list; see bp-node-partition.md).
+    //
+    // Scoping the prepay to the prefix makes those two pends identical so the existing dedup
+    // collapses them. Diagnostic A/B that motivated it: MTG_NO_BATCH_PAY=1 (which kills the float
+    // globally, and changes play, so it is NOT a candidate) more than doubles the prefix dedup's
+    // catch rate, 16.8% -> 37.1% of pends, and drops cross dupes 42%.
+    //
+    // SAFETY: the prepay is an optimization of PAYMENT, not a gate on it. Covering fewer casts
+    // routes the rest to the per-cast fallback that already runs on every declined turn, so a
+    // mis-scoped prefix costs payment quality, never payability. Gated on bp_capture, so it can
+    // only ever affect a search-internal node pend -- the executor's committed apply passes no
+    // capture and is untouched by construction.
+    if (bp_capture != nullptr && BpPrefixPrepayEnabled())
+    {
+        TurnSolver::BatchPrepayMainCasts(state, BpPrepayPrefix(state, plan));
+    }
+    else
+    {
+        TurnSolver::BatchPrepayMainCasts(state, plan.actions);
+    }
 
     apply_plan_actions(plan.actions, plan.searched_order);
 
@@ -25571,7 +25699,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 // normal EOT + next-turn recursion under the node's own B&B cutoff. No rank
                 // width, no waves -- completeness is the enumeration itself.
                 if (s_rollout_stats) { bpnode::g_pends.fetch_add(1, std::memory_order_relaxed); }
-                if (!node_prefix_seen.insert(BuildDedupKey(node_snap.state)).second)
+                const TranspositionTable::Key pend_key = BuildDedupKey(node_snap.state);
+                if (dupe_trace) { bpnode::PendTraceRecord(pend_key, DupeSig(q), node_snap.state); }
+                if (!node_prefix_seen.insert(pend_key).second)
                 { if (s_rollout_stats) { bpnode::g_prefix_dupes.fetch_add(1, std::memory_order_relaxed); } continue; }
                 // Level 2: the PEND state itself -- hand (so the cantrip's actual draw is visible)
                 // and library top, before any child is enumerated. Pairs with the child-state dump.
@@ -26204,7 +26334,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // scored at this node (bp_seen_states, ordinary plans recording below).
             int node_best_val = max_turns + 1;   // node_vals alignment for the probe/beam pair
             if (s_rollout_stats) { bpnode::g_pends.fetch_add(1, std::memory_order_relaxed); }
-            const bool node_fresh = node_prefix_seen.insert(BuildDedupKey(node_snap.state)).second;
+            const TranspositionTable::Key pend_key = BuildDedupKey(node_snap.state);
+            if (dupe_trace_pre) { bpnode::PendTraceRecord(pend_key, DupeSig(p), node_snap.state); }
+            const bool node_fresh = node_prefix_seen.insert(pend_key).second;
             if (s_rollout_stats && !node_fresh) { bpnode::g_prefix_dupes.fetch_add(1, std::memory_order_relaxed); }
             if (node_fresh)
             {
