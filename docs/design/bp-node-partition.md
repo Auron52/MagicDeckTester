@@ -349,6 +349,39 @@ commutativity argument. The exactly-buildable piece is the in-node fingerprint d
 (fp_predictable = 204k of 1.56M dupes), worth ~2% units, i.e. **~+24%**. So the realistic landing
 zone for this class is +24%, not +15%, unless someone invents sound transposition detection.
 
+### The in-node fingerprint dedup is BLOCKED on the prefix-resume cache (2026-09-01)
+
+The cost menu's "in-node exact content dedup (~2.3% units)" was attempted and is parked, not
+because the idea is wrong but because the CHANNEL cannot reach the consumer. Recorded so the next
+attempt starts from the blocker rather than rediscovering it. Work is in `git stash` (message:
+"WIP: MTG_BP_NODE_FPSKIP ...").
+
+The design is sound and cheap: on the k=0 apply, fingerprint every entry of the continuation list
+(`BpCandFingerprint`, which folds the plan's whole content) and mark any entry that repeats an
+earlier one. Applying content-identical plans to the SAME resume state is deterministic, so a
+marked child is a guaranteed post-apply dupe and its apply -- 94.5% of it real work -- is waste.
+`MTG_BP_NODE_FPVERIFY` was built alongside to prove exactness empirically (audit, do not skip;
+count marked children that land on a FRESH key -- must be zero) rather than trusting the argument.
+
+**It never got to run, because the marks never survive to the host.** `g_bp_cands_fp_dupe` is a
+thread_local filled inside the apply, and:
+
+* the k=0 child apply RECURSES, so a nested breakpoint re-assigns the channel for ITS (usually
+  tiny) list. Measured: the host snapshotted lists of average length **0.73** against a real list
+  of ~2.6, with **zero** marks, while the fill side was demonstrably working (`fill_marks` equals
+  `fp_predictable` exactly, 26,030 on 25 games);
+* a one-shot ARM (host arms before the apply, first fill consumes it) did not change the snapshot
+  by a single element -- byte-identical `snap_len` across two different fill regimes;
+* the reason is the **deferred-breakpoint PREFIX-RESUME cache** above: variants re-enter
+  `ApplyPlanDirect` in RESUME mode with the prefix skipped, so the enumeration whose marks the host
+  needs is not the enumeration that runs.
+
+Next attempt should carry the marks through the resume path itself (alongside the cached snapshot,
+which is the thing that actually persists per (base, at)), not through a thread_local written
+during an apply that recurses. Sizing is unchanged and modest: fp_predictable is 204k of 1.56M
+dupe children, ~2% of units -- it moves the equal-quality premium from +27% to about +24%, so it
+is worth doing only as part of a package, never on its own.
+
 ## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
 
 The generic-lever collateral check the v1 caveats called for: **14 of 15 decks + all 25
