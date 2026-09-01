@@ -6015,6 +6015,15 @@ namespace bpnode
     // authority (see g_condemn_root_turn: deeper turns are budget-starved and their passes are the
     // unreliable kind). If cost spreads across depth while adoptions concentrate at the root, then
     // depth-gating the host is free headroom. Counters only, MTG_ROLLOUT_STATS.
+    // TURNS AHEAD OF THE ROOT (the question `depth` does NOT answer). FSLineTail recurses with
+    // depth-1, so `depth` is REMAINING lookahead: depth 0 is the horizon leaf plus the pass-0 root,
+    // not the committed decision. What actually distinguishes "the turn we are choosing" from
+    // "a turn we are only projecting" is state.turn_number vs the root turn the outermost solve was
+    // asked about (g_condemn_root_turn). Bucket on that.
+    inline std::atomic<uint64_t> g_children_rollout{0}, g_children_search{0};
+    inline std::atomic<uint64_t> g_adopted_rollout{0}, g_adopted_search{0};
+    inline std::atomic<uint64_t> g_children_ahead[8];
+    inline std::atomic<uint64_t> g_adopted_ahead[8];
     inline std::atomic<uint64_t> g_children_at[8];
     inline std::atomic<uint64_t> g_adopted_at[8];
     inline std::atomic<uint64_t> g_pends_at[8];
@@ -6060,6 +6069,40 @@ namespace bpnode
         {
             const uint64_t p = g_pends.load();
             if (p == 0) { return; }
+            if (g_children_rollout.load() + g_children_search.load() != 0)
+            {
+                const double cr = (double)g_children_rollout.load();
+                const double cs = (double)g_children_search.load();
+                std::fprintf(stderr,
+                             "[bp-where] children: rollout=%llu (%.1f%%) search=%llu (%.1f%%)"
+                             " | adopted: rollout=%llu search=%llu\n",
+                             (unsigned long long)g_children_rollout.load(), 100.0 * cr / (cr + cs),
+                             (unsigned long long)g_children_search.load(),  100.0 * cs / (cr + cs),
+                             (unsigned long long)g_adopted_rollout.load(),
+                             (unsigned long long)g_adopted_search.load());
+            }
+            {
+                uint64_t hc = 0, ha = 0;
+                for (int i = 0; i < 8; ++i)
+                { hc += g_children_ahead[i].load(); ha += g_adopted_ahead[i].load(); }
+                if (hc != 0)
+                {
+                    std::fprintf(stderr, "[bp-ahead] turns ahead of ROOT: children / adopted\n");
+                    for (int i = 0; i < 8; ++i)
+                    {
+                        const uint64_t c = g_children_ahead[i].load();
+                        if (c == 0) { continue; }
+                        std::fprintf(stderr,
+                                     "[bp-ahead] +%d: %9llu / %8llu  (%5.1f%% of children,"
+                                     " %5.1f%% of adopted, adopt-rate %4.1f%%)\n",
+                                     i, (unsigned long long)c,
+                                     (unsigned long long)g_adopted_ahead[i].load(),
+                                     100.0 * (double)c / (double)hc,
+                                     ha ? 100.0 * (double)g_adopted_ahead[i].load() / (double)ha : 0.0,
+                                     100.0 * (double)g_adopted_ahead[i].load() / (double)c);
+                    }
+                }
+            }
             {
                 uint64_t tc = 0, ta = 0;
                 for (int i = 0; i < 8; ++i)
@@ -16156,6 +16199,26 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
 // ordinary inline continuation exactly as before -- so this trades a greedy-free evaluation at
 // d>=1 for cost, and it is a DOCTRINE call, not just a lever: the committed line stays greedy-free,
 // the lookahead does not. Default OFF pending that decision.
+// MTG_BP_NODE_ROOTTURN: host the breakpoint node ONLY on the turn the outermost solve is actually
+// choosing (state.turn_number == g_condemn_root_turn), not on the lookahead turns behind it.
+//
+// Measured (200 games): only **0.6%** of the node's children are on the root turn -- 22,910 of
+// 3,729,307 -- while +2/+3/+4 turns ahead take 92%. The search recurses turn by turn and the node
+// hosts at every turn it visits, so nearly all of the class's cost buys a better EVALUATION of
+// turns that get re-decided from scratch when the game reaches them. Only the root turn's plan is
+// ever played.
+//
+// This is the same authority argument condemnation already makes (g_condemn_root_turn: "only ONE
+// decision per search has that authority: the root turn the outermost solve was asked about"),
+// applied to the node -- and unlike MTG_BP_NODE_D0ONLY (which gates on REMAINING depth and so
+// keeps the node at the HORIZON while dropping it at the committed decision), this keeps it
+// exactly where the committed line is chosen.
+static bool BpNodeRootTurnOnly()
+{
+    static const bool env_on = EnvOn("MTG_BP_NODE_ROOTTURN");
+    return heurarm::Flag(heurarm::BP_NODE_ROOTTURN, env_on);
+}
+
 static bool BpNodeD0Only()
 {
     static const bool env_on = EnvOn("MTG_BP_NODE_D0ONLY");
@@ -16163,6 +16226,23 @@ static bool BpNodeD0Only()
 }
 
 static inline int BpDepthBucket(int d) { return d < 0 ? 0 : (d > 7 ? 7 : d); }
+// Are we inside a ROLLOUT? SimulateToEnd is not a cheap policy playout in this engine -- it calls
+// SolveWithLookahead once per simulated turn (s_fd_leaf_depth, default 1), which re-enters
+// FullSearchLine and so can host breakpoint NODES. That makes "is the node's cost search work or
+// rollout work?" a real question the depth/turn buckets cannot answer, so count it directly.
+static thread_local int g_rollout_nest = 0;
+struct RolloutNestGuard
+{
+    RolloutNestGuard()  { ++g_rollout_nest; }
+    ~RolloutNestGuard() { --g_rollout_nest; }
+};
+// Turns ahead of the root turn the outermost solve was asked about; 0 == the turn being CHOSEN.
+static inline int BpAheadBucket(const GameState& st)
+{
+    if (g_condemn_root_turn < 0) { return 7; }          // outside a solve: park it in the tail bucket
+    const int a = st.turn_number - g_condemn_root_turn;
+    return a < 0 ? 0 : (a > 7 ? 7 : a);
+}
 static bool BpChildTimingOn()
 {
     static const bool v = EnvOn("MTG_BP_CHILD_TIMING");
@@ -25221,6 +25301,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     static const int s_roll_horizon = []{ const char* e = std::getenv("MTG_ROLLOUT_HORIZON");
                                           return (e && *e) ? std::atoi(e) : -1; }();
     const int roll_start = state.turn_number;
+    RolloutNestGuard _rollout_nest;   // see g_rollout_nest: this rollout re-enters SolveWithLookahead
     if (s_rollout_stats) { g_rollout_calls.fetch_add(1, std::memory_order_relaxed); }   // deterministic telemetry
     while (state.turn_number <= max_turns)
     {
@@ -26069,7 +26150,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // main pend at a plain-cantrip partition point? Decides whether the apply gets a capture
         // pointer at all -- off (the default), every apply below is byte-identical to before.
         bool node_host_here = false;
-        if (BpNodeEnabled() && !(BpNodeD0Only() && depth > 0))
+        if (BpNodeEnabled() && !(BpNodeD0Only() && depth > 0)
+            && !(BpNodeRootTurnOnly() && g_condemn_root_turn >= 0
+                 && state.turn_number != g_condemn_root_turn))
         {
             for (const TurnSolver::Plan& q : post)
             { if ((PlanOpensBreakpoint(state, q) & (1 << 3)) != 0) { node_host_here = true; break; } }
@@ -26204,6 +26287,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     {
                         bpnode::g_children.fetch_add(1, std::memory_order_relaxed);
                         bpnode::g_children_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+                        bpnode::g_children_ahead[BpAheadBucket(state)].fetch_add(1, std::memory_order_relaxed);
+                        (g_rollout_nest > 0 ? bpnode::g_children_rollout
+                                            : bpnode::g_children_search).fetch_add(1, std::memory_order_relaxed);
                     }
                     const TranspositionTable::Key child_key = BuildDedupKey(s3);
                     if (!node_child_seen.insert(child_key).second)
@@ -26275,6 +26361,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         {
                             bpnode::g_adopted.fetch_add(1, std::memory_order_relaxed);
                             bpnode::g_adopted_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+                            bpnode::g_adopted_ahead[BpAheadBucket(state)].fetch_add(1, std::memory_order_relaxed);
+                            (g_rollout_nest > 0 ? bpnode::g_adopted_rollout
+                                                : bpnode::g_adopted_search).fetch_add(1, std::memory_order_relaxed);
                             if (v.bp_choice == kBpEmptyChoice)
                             { bpnode::g_empty_adopted.fetch_add(1, std::memory_order_relaxed); }
                         }
@@ -26705,7 +26794,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // loop below is byte-identical. When hosting, ordinary plans RECORD into bp_seen_states (never
     // skip) so node children dedup against them too -- same contract as the variant dedup above.
     bool node_host_here = false;
-    if (BpNodeEnabled() && !(BpNodeD0Only() && depth > 0))
+    if (BpNodeEnabled() && !(BpNodeD0Only() && depth > 0)
+        && !(BpNodeRootTurnOnly() && g_condemn_root_turn >= 0
+             && state.turn_number != g_condemn_root_turn))
     {
         for (const TurnSolver::Plan& p : pre)
         { if ((PlanOpensBreakpoint(state, p) & (1 << 3)) != 0) { node_host_here = true; break; } }
@@ -26834,6 +26925,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     {
                         bpnode::g_children.fetch_add(1, std::memory_order_relaxed);
                         bpnode::g_children_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+                        bpnode::g_children_ahead[BpAheadBucket(state)].fetch_add(1, std::memory_order_relaxed);
+                        (g_rollout_nest > 0 ? bpnode::g_children_rollout
+                                            : bpnode::g_children_search).fetch_add(1, std::memory_order_relaxed);
                     }
                     const TranspositionTable::Key child_key = BuildDedupKey(s3);
                     if (!bp_seen_states.insert(child_key).second)
@@ -26882,6 +26976,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         {
                             bpnode::g_adopted.fetch_add(1, std::memory_order_relaxed);
                             bpnode::g_adopted_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+                            bpnode::g_adopted_ahead[BpAheadBucket(state)].fetch_add(1, std::memory_order_relaxed);
+                            (g_rollout_nest > 0 ? bpnode::g_adopted_rollout
+                                                : bpnode::g_adopted_search).fetch_add(1, std::memory_order_relaxed);
                             if (v.bp_choice == kBpEmptyChoice)
                             { bpnode::g_empty_adopted.fetch_add(1, std::memory_order_relaxed); }
                         }

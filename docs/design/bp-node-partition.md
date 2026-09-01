@@ -4,6 +4,14 @@
 lose at the shipped 20 ms budget — hold +0.0142 (t +1.21), train 0.0000, where every prior form
 lost. Default OFF; adoption is a USER decision.**
 
+**SUPERSEDED 2026-09-01 -- READ "MTG_BP_NODE_ROOTTURN" BELOW FIRST. The class's cost was never the
+node; it was hosting the node on turns that are never played.** 99.4% of its children sit on
+lookahead turns (+1..+4) that get re-searched on arrival. Gating on the ROOT TURN gives
+**+3.1% units and BETTER quality than the full node** (-0.0162 / -0.0174 vs shipped, t 6.0 / 6.8,
+10000/cell) -- so deleting greedy is effectively free, not the "+27% wall at equal quality" the
+sections below conclude. Those sections all measure node-at-every-turn; keep them for the method,
+not the verdict.
+
 **COST RE-MEASURED ON A QUIET BOX (2026-09-01) — the wall figures below were CONTENDED and are
 superseded. `1.52x wall`, not 2.10x, and the per-unit overhead is ~ZERO.** Every wall number in
 this doc predating 2026-09-01 was taken while a second container shared the host; they scattered
@@ -432,6 +440,63 @@ measurement -- flagged, not assumed.
 A 2-child (order + EMPTY) mini-node at d>=1 was costed and rejected on arithmetic: ~651k pends x 2
 children = +1.3M children, landing ~+20% units over shipped -- worse than the +15% bar it would be
 trying to reach, for at most half of a 0.005 gap.
+
+### MTG_BP_NODE_ROOTTURN -- gate on the TURN, not the depth (2026-09-01). The answer.
+
+**Correction first, because the D0ONLY section above reasons from a wrong premise.** `FSLineTail`
+recurses with `depth - 1`, so `depth` is REMAINING lookahead: `depth == 0` is the HORIZON leaf (plus
+the pass-0 root), NOT the committed decision, which sits at `depth == pass_depth`. So
+`MTG_BP_NODE_D0ONLY` keeps the node at the far end of the lookahead and DROPS it where the line is
+actually chosen -- the opposite of the `g_condemn_root_turn` doctrine that section invoked. Its
+measurements stand; its explanation did not.
+
+**What the node's work is really spent on** (`bpnode::g_children_ahead`, bucketed by
+`state.turn_number - g_condemn_root_turn`, 200 games):
+
+| turns ahead of the root | children | share |
+|---|---|---|
+| **+0 (the turn being CHOSEN)** | **22,910** | **0.6%** |
+| +1 | 281,501 | 7.5% |
+| +2 | 1,304,818 | 35.0% |
+| +3 | 1,423,006 | 38.2% |
+| +4 | 697,072 | 18.7% |
+
+**99.4% of the node's work is on turns whose plans are never played.** The engine does not "search
+the current turn and roll out the rest": it full-searches a multi-turn tree (turn+1 / depth-1) and
+hosts a node at EVERY searched turn, rolling out only at the leaf. Turns +1..+4 exist solely to
+RANK the root's options and are re-searched from scratch when the game reaches them.
+
+And it is not rollout work: `[bp-where] children: rollout=0 (0.0%) search=1,868,676 (100.0%)`
+(`g_rollout_nest`, an RAII guard on `SimulateToEndImpl`). `SimulateToEnd` does call
+`SolveWithLookahead` per simulated turn, but those solves never reach a breakpoint node -- so the
+cost is the searched tree, not the playout.
+
+`MTG_BP_NODE_ROOTTURN` (heurarm slot, default OFF) hosts only when
+`state.turn_number == g_condemn_root_turn` -- the same authority argument condemnation already
+makes, now applied where it actually holds.
+
+| | full node | D0ONLY (horizon) | **ROOTTURN** | shipped |
+|---|---|---|---|---|
+| children | 3,729,307 | 973,721 | **15,797** | -- |
+| units | 11.93M (+50.7%) | 8.22M (+3.8%) | **8.16M (+3.1%)** | 7.92M |
+| id_depth | 2.981 | 3.367 | **3.366** | 3.448 |
+
+Quality, paired **10000/cell** vs shipped: **-0.0162 hold (t -6.01) / -0.0174 train (t -6.80)**.
+Head to head it beats D0ONLY (-0.0097 / -0.0119, t 4.35 / 5.50) and it beats the FULL node
+(-0.0086 / -0.0122 at 5000/cell) **while costing +3.1% instead of +50.7%**.
+
+**Why less node is MORE quality:** the class's cost was never buying much per node, and it stole
+plies -- full node commits `id_depth` 2.981 against shipped's 3.448. Restricting it to the one turn
+that is actually committed keeps the sound, greedy-free option set exactly where the decision is
+made, and hands the depth back (3.366). Note also that children fall 62x from D0ONLY to ROOTTURN
+while units move only 8.22M -> 8.16M: `budget_ms` is a VIRTUAL allowance, so freed work is simply
+reallocated to ordinary plan exploration. The node's problem was never its per-node cost -- it was
+that hosting everywhere OVERSHOT the allowance (11.93M against a 20 ms budget the control meets
+with 7.92M).
+
+**So deleting greedy is essentially free and is a quality WIN**: +3.1% units for -0.016/-0.017.
+This supersedes the "+27% wall at equal quality" verdict, which measured the node hosting at every
+turn. Wall still wants a quiet-box confirmation (expect ~+3-4% at the measured 1.02 wall/units).
 
 ## Suite-wide screen (2026-08-30, smoke tier, MTG_BP_NODE=1 over the whole matrix)
 
