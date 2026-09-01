@@ -447,3 +447,44 @@ This does not invalidate the measurement, it bounds the conclusion:
   re-measure. (Regeneration is a generation stage, so it must run alone on the box — it cannot be
   folded into this run.) Precedent cuts both ways: the value-leaf work found regeneration staleness
   to be neutral on five decks, so staleness is not automatically fatal.
+
+#### Round 4 outcome: STOPPED at 23/256 jobs. No adoption. The run was mis-sized and mis-ordered.
+
+The user cut it: *"I don't want to run something that heavy."* That is the right call and the
+reasoning is worth keeping, because the mistake was in the planning, not the execution.
+
+**It was mis-SIZED.** 256 jobs / 1.28M games / ~7 h of a 24-core box, to resolve a difference on a
+surface whose measured ceiling is ~0.00025 t/game (the best-vs-worst bound) and whose adopted model
+is worth -0.00037. The arms were reading ±0.0001. Seven hours cannot be justified by an axis that
+small, and the d3 half was provisioned at 32 seeds where round 3 used 16 — a doubling nobody asked
+for.
+
+**It was mis-ORDERED, which is worse.** The staleness caveat above was written as advice on how to
+READ the result. It is really a fact about SEQUENCING: `card_scores` here predate this deck's own
+provider by 127 `src` commits, so the run was measuring a stale artifact to four decimal places.
+Precision on the wrong table is not precision. If this axis is ever worth revisiting, the order is
+**regenerate `card_scores` on the current engine FIRST, then measure** — and only if a cheap read
+suggests there is anything there.
+
+**The partial read, recorded for what it is** — 6 seeds of 32, d3 only, no d0 at all, all three arms
+inside the noise floor. NOT a result; kept so a future attempt knows where the needle sat:
+
+| arm | Δ t/game | se | t | seed blocks | games whose play changed |
+|---|---|---|---|---|---|
+| `csval` | -0.00010 | 0.00007 | -1.34 | 3-/0+ | 157 / 30,000 |
+| `csdup` | +0.00008 | 0.00006 | 1.41 | 0-/2+ | 54 / 25,000 |
+| `csnop` | +0.00047 | 0.00029 | 1.61 | 2-/4+ | 956 / 30,000 |
+
+The only thing worth carrying forward is a *direction*, explicitly not a finding: `csnop` (drop `P`)
+was the worst arm in every partial read taken, and `csval` was faster in all three of its own seed
+blocks. If that were to hold, the discriminating pair would be answering that `P(play)` does real
+work and `card_scores` are NOT already an EV. It is 4 faster games against 1 slower out of 30,000 —
+exactly the tiny changed-game count that made the round-1 Vial claim collapse from t=2.31 to t=1.94
+at 4x sample. Nobody should act on it.
+
+**What DID survive round 4, and it is not nothing:** the `TRACE` tearing fix (every stream in the
+repo, not just this one), `GameState::m_card_scores` with its units documented at the field, the
+CSDUP clamp defect, the deferred `card-scores-truncated-marginal-clamp.md`, and two reusable tools
+(`test/tools/paired_arms.py`, `test/tools/discard_behaviour_diff.py`). All of that came out of the
+*cheap* half of the work — the behavioural diff, which costs seconds. The expensive half produced
+nothing the cheap half had not already told us.
