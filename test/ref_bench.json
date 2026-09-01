@@ -10,7 +10,7 @@
    "search": 4.1667,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "auras": {
    "hand_mismatch": 0,
@@ -22,7 +22,7 @@
    "search": 4.2333,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "burn": {
    "hand_mismatch": 0,
@@ -34,7 +34,7 @@
    "search": 4.375,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "creature_giving": {
    "hand_mismatch": 0,
@@ -46,7 +46,7 @@
    "search": 4.9,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "dragons": {
    "hand_mismatch": 0,
@@ -58,7 +58,7 @@
    "search": 5.9,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "dragonstorm": {
    "hand_mismatch": 0,
@@ -70,7 +70,7 @@
    "search": 4.4103,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "fivecolour": {
    "hand_mismatch": 0,
@@ -82,7 +82,7 @@
    "search": 4.5,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "goblins": {
    "hand_mismatch": 0,
@@ -94,7 +94,7 @@
    "search": 3.871,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "hinata2": {
    "hand_mismatch": 0,
@@ -106,19 +106,19 @@
    "search": 5.6667,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "kittyequipment": {
    "hand_mismatch": 0,
    "hand_mismatch_games": [],
-   "human": 6.0,
+   "human": 4.75,
    "max_turns": 8,
-   "n": 1,
+   "n": 8,
    "policy": "committed value_play",
-   "search": 5.0,
+   "search": 4.5,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "knights": {
    "hand_mismatch": 0,
@@ -130,7 +130,7 @@
    "search": 4.3548,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "minotaur": {
    "hand_mismatch": 0,
@@ -142,7 +142,7 @@
    "search": 5.3,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "mirrorwing_dragon": {
    "hand_mismatch": 0,
@@ -166,7 +166,19 @@
    "search": 4.875,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
+  },
+  "mirrorwing_dragon_v2_instigator_entrance": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 5.3333,
+   "max_turns": 8,
+   "n": 9,
+   "policy": "committed value_play",
+   "search": 5.2222,
+   "short": 0,
+   "shortfalls": [],
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "slivers_vial": {
    "hand_mismatch": 0,
@@ -175,10 +187,10 @@
    "max_turns": 8,
    "n": 10,
    "policy": "committed value_play",
-   "search": 4.1,
+   "search": 4.2,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "stompysurprise": {
    "hand_mismatch": 0,
@@ -190,7 +202,7 @@
    "search": 4.4545,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   },
   "treasure_hunt": {
    "hand_mismatch": 0,
@@ -202,7 +214,7 @@
    "search": 3.9091,
    "short": 0,
    "shortfalls": [],
-   "src": "85256125be56d3540c972054e1f09fcedc891c9e"
+   "src": "5ccf17943a82d9b57d04a84c0bd8eb4315414a07"
   }
  }
 }
