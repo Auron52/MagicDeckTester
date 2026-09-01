@@ -1,7 +1,9 @@
 # Strict filter feed (MTG_FILTER_FEED_STRICT) — the gi164 laundering channel, closed
 
-**Status:** BUILT + MEASURED (2026-09-01), default OFF, **adoption recommended** (flip +
-rebaseline is the user's call). The companion cache fix (§4) is live unconditionally.
+**Status:** ADOPTED (2026-09-01) -- default ON, all three GT tiers rebaselined after the
+full-suite adjudication in §4b (user's condition: "check a lot of examples, since I don't want
+to risk any true regression slipping through" -- zero true regressions found). `=0` restores
+the lenient feed byte-exactly. The companion cache fix (§5) is live unconditionally.
 
 ## 1. The defect
 
@@ -36,9 +38,13 @@ Sol-Ring-only board's {R}{R} is refused strictly and paid leniently (the documen
 | reg d5 s2002 | 5.6600 | 5.6700 | +0.0100 |
 | reg d5 s3003 | 5.6600 | 5.6900 | +0.0300 |
 
-Per-game: 42 slower / 13 faster of 2825. Dragonstorm flag-ON is digest-identical (no other
-deck plays a filter). **Ledger collapse: the strict arm prices 149/149 of the formerly-UNPRICED
-hinata rows LEGAL** (lenient: 148 + gi164 LAUNDERED).
+Per-game: 42 slower / 13 faster of 2825. **Ledger collapse: the strict arm prices 149/149 of
+the formerly-UNPRICED hinata rows LEGAL** (lenient: 148 + gi164 LAUNDERED).
+
+CORRECTION to the first cut: the dragonstorm flag-ON canary was NOT sufficient to conclude
+"no other deck plays a filter" -- **Treasure Hunt plays 4 Cascade Bluffs** (and 4 Ferrous
+Lake), caught when the flip's first smoke moved th's cells. Unpredictable Cyclone also plays
+Bluffs but is not in the regression suite. §4b covers th.
 
 ## 4. Adjudication — the slowdown is the removal of illegal credit, not an engine gap
 
@@ -58,6 +64,39 @@ the CONTROL arm's own line:
 - The completeness worry (strict DFS failing to find legal feeds) is covered the other way: the
   unit test proves the strict branch finds on-colour feed orderings, and 13 games got FASTER.
 
+## 4b. Full-suite adjudication (the adoption gate) -- ZERO true regressions
+
+Both filter decks' ENTIRE suite footprint (all 20 hinata cells + all 20 th cells, smoke +
+regression + overnight) was re-measured two-arm in pooled batteries (every ctl cell
+byte-identical to GT), and EVERY slower game was pushed through three gates: (1) the flat
+per-turn colour ledger on the control's own line, (2) a sequencing-aware re-price (rock mana
+does not exist before the rock's cast; Spasm's untap credit not before Spasm; a filter cannot
+feed itself -- acyclic chains only), (3) strict-arm recovery probes (4x/16x budget, then
+d3/d4/d5 at b10000).
+
+hinata (13,625 games/arm): 241 slower / 46 faster. 143 LAUNDERED outright; 57 assignment-legal
+but SEQUENCING-illegal; 3 recover at higher budget; 30 d0 residue -- of which the
+MTG_FILTER_FEED_AUDIT instrument (engine-side ground truth: the lenient branch reports every
+COMMITTED off-colour feed) proved 29/30 rode off-colour feeds, 1 pure greedy solution-choice
+churn; 5 unique searched games persist at unbounded search with fully strict-legal control
+lines -- adjudicated as honest PLAN DIVERGENCE: each diverges at an early cantrip turn where
+both arms' plans are legal (unit test pins the exact gi68-T2 joint bill as strict-payable),
+the strict search's launder-free projections legitimately re-rank plans, and the draws then
+differ. Capability loss: none found anywhere.
+
+th (20,825 games/arm): searched cells essentially FLAT (worst +0.004, one cell -0.002 faster)
+-- with search the deck reroutes around the lost launder. The cost concentrates at d0
+(+0.065..+0.11): the greedy player leaned on Reliquary Tower / Saprazzan Skerry / Sandstone
+Needle {C} feeding the Bluffs. Adjudication: 231 LAUNDERED by the flat ledger; **all 533 d0
+residue games audited as committing off-colour feeds** (533/533); of 5 unique searched
+persists, 4 hand-proven LAUNDER-REQUIRED (win turns tap ONLY colourless sources beside the
+Bluffs -- gi657 needed two illegal feeds) and 1 (gi249) strict-legal on every turn = plan
+divergence.
+
+Two adjudication-tool lessons recorded: the flat ledger lets a filter's own output satisfy its
+own feed (the self-feed hole -- why th showed 533 false-RESIDUE), and game repro is
+`--seed base+gi --game-index gi` (adjudicating at the base seed prices the WRONG games).
+
 ## 5. The mixed-pool cache lesson (fixed unconditionally, and a rule for future levers)
 
 First battery run: the CONTROL arm failed to reproduce GT in 3 cells, nondeterministically. The
@@ -74,10 +113,9 @@ via the mana cache) must be hashed into that cache's key. Levers outside the cac
 clean. No earlier battery is believed affected (prior payment levers were env-per-process, not
 heurarm-per-job).
 
-## 6. Adoption
+## 6. Adoption -- done
 
-Recommended: flip `EnvOn("MTG_FILTER_FEED_STRICT", true)` and rebaseline (hinata-only movement,
-expected cell values in §3's strict column for smoke/regression; overnight unmeasured). The
-"cost" is fictional wins repriced honestly; there is no legal capability removed. After
-adoption, re-run the 3 hinata prepay-residue rows (they were flag-inert pre-adoption) and
-consider retiring the gi164 entry in the prepay-defect list as FIXED.
+Flipped `EnvOn("MTG_FILTER_FEED_STRICT", true)` and rebaselined all three tiers (hinata + th
+movement only; both decks' tier fingerprints match their battery strict arms exactly). The
+"cost" is fictional wins repriced honestly; no legal capability is removed. Follow-ups: re-run
+the 3 hinata prepay-residue rows; the gi164 prepay-defect entry is FIXED.

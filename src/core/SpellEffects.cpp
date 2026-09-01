@@ -2205,7 +2205,28 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                         ManaPool f = floating; Color took;
                         if (!ConsumeFloatingAny(f, took)) { break; }
                         f.Add(c1, 1); f.Add(c2, 1);
-                        if (activate(f)) { return true; }
+                        if (activate(f))
+                        {
+                            // MTG_FILTER_FEED_AUDIT (diagnosis only, default off): on the SUCCESS
+                            // unwind only -- i.e. this feed is part of the payment actually taken --
+                            // report a feed the strict model would refuse (the consumed unit is not
+                            // one of the filter's own colours). Ground truth for adjudicating
+                            // whether a lenient (=0) line's outcome rode the launder: decisive at
+                            // d0, where there are no rollouts (562/563 d0 adoption-residue games
+                            // audited off-colour this way); under search it also fires for rollout
+                            // lines, so treat searched output as an upper bound only. (A reveal-
+                            // logger gate was tried and reported nothing: the executor's batch
+                            // prepay runs with the logger paused.)
+                            static const bool s_ffa = EnvOn("MTG_FILTER_FEED_AUDIT");
+                            if (s_ffa
+                                && std::find(produces.begin(), produces.end(), took) == produces.end())
+                            {
+                                std::fprintf(stderr, "[feed-audit] T%d %s fed off-colour (%d)\n",
+                                             state.turn_number, def->card.m_name.str().c_str(),
+                                             static_cast<int>(took));
+                            }
+                            return true;
+                        }
                     }
                 }
             }

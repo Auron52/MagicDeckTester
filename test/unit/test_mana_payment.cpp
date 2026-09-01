@@ -537,3 +537,20 @@ TEST_CASE("strict filter feed: on-colour feeds work, off-colour laundering is re
         CheckTwinsAgree(ring_board, rr, /*for_creature=*/false, /*expect_ok=*/true);
     }
 }
+
+TEST_CASE("strict filter feed: a DORK's mana feeds the filter inside a joint bill (gi68 T2 shape)")
+{
+    EnsureCards();
+    struct ArmScope
+    {
+        ArmScope() { heurarm::t_arm[heurarm::FILTER_FEED_STRICT] = 1; }
+        ~ArmScope() { heurarm::Clear(); }
+    } strict;
+    // gi68's control T2: Cascade Bluffs + Sol Ring + Ornithopter of Paradise paying the joint bill
+    // of Preordain {U} + Ornithopter {2} + Ponder {U}. Strictly legal: the dork makes {U}, feeds
+    // the Bluffs -> {U}{U}; Sol Ring's {C}{C} covers the generics.
+    const GameState board = MakeBoard({"Cascade Bluffs", "Sol Ring", "Ornithopter of Paradise"});
+    CheckTwinsAgree(board, Cost(2, 0, /*u=*/2), /*for_creature=*/false, /*expect_ok=*/true);
+    // A third U is genuinely out of reach (the feed spends the dork's unit).
+    CheckTwinsAgree(board, Cost(2, 0, /*u=*/3), /*for_creature=*/false, /*expect_ok=*/false);
+}

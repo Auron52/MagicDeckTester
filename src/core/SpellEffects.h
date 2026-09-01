@@ -7615,18 +7615,20 @@ inline bool SpasmUntapLiteralOn()
     return heurarm::Flag(heurarm::SPASM_UNTAP_LITERAL, env_on);
 }
 
-// MTG_FILTER_FEED_STRICT=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
+// MTG_FILTER_FEED_STRICT -- ADOPTED DEFAULT-ON 2026-09-01 (=0 restores the lenient feed):
 // the backtracker's is_filter feed pays the card's real HYBRID cost -- one of the filter's own
 // colours, or a wild unit -- instead of ConsumeFloatingAny's any-unit feed. The lenient feed lets
 // an off-colour float (a Sol Ring {C}) launder into two on-colour mana through Cascade Bluffs
-// ("{U/R},{T}: Add ..."), which is the gi164 prepay laundering channel. Read only at the worker's
+// ("{U/R},{T}: Add ..."), which was the gi164 prepay laundering channel. Adopted after the
+// full-suite adjudication (docs/design/filter-feed-strict.md): every slower game traced to
+// removal of illegal credit; payment capability proven intact. Read only at the worker's
 // is_filter branch, the single shared filter-feed site (the greedy path skips filters entirely and
 // ManaPayment's tap_source already feeds colour-strictly), so executor and rollout are in lockstep
 // by construction. The feasibility ORACLE's gross filter model is deliberately unchanged: it only
 // ever claims INFEASIBLE, so its over-credit stays sound.
 inline bool FilterFeedStrictOn()
 {
-    static const bool env_on = EnvOn("MTG_FILTER_FEED_STRICT");
+    static const bool env_on = EnvOn("MTG_FILTER_FEED_STRICT", true);
     return heurarm::Flag(heurarm::FILTER_FEED_STRICT, env_on);
 }
 
