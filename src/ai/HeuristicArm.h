@@ -101,6 +101,10 @@ enum Slot : int
     HINATA_SUBSET_CREDIT,     // MTG_HINATA_SUBSET_CREDIT  same-subset Hinata discount credit in enumeration
     EXEC_FEAS,                // MTG_EXEC_FEAS             executor-validated sequential subset payability
     NONCLEANUP_SHED_WORST,    // MTG_NONCLEANUP_SHED_WORST  cost/trigger discard sheds the WORST-ranked card
+    MINOTAUR_DISCARD_V2,      // MTG_MINOTAUR_DISCARD_V2   both halves below (convenience arm)
+    MINOTAUR_DISCARD_VIAL,    // MTG_MINOTAUR_DISCARD_VIAL  ...half 1: Vial sheds with the mana
+    MINOTAUR_DISCARD_PLAY,    // MTG_MINOTAUR_DISCARD_PLAY  ...half 2: threats by graded playability
+    MINOTAUR_DISCARD_PLAY2,   // MTG_MINOTAUR_DISCARD_PLAY2 ...half 2, gentler: slack 2 not 1
     COUNT
 };
 
@@ -179,6 +183,10 @@ inline const char* Name(int slot)
         "MTG_HINATA_SUBSET_CREDIT",
         "MTG_EXEC_FEAS",
         "MTG_NONCLEANUP_SHED_WORST",
+        "MTG_MINOTAUR_DISCARD_V2",
+        "MTG_MINOTAUR_DISCARD_VIAL",
+        "MTG_MINOTAUR_DISCARD_PLAY",
+        "MTG_MINOTAUR_DISCARD_PLAY2",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

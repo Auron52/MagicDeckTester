@@ -10742,6 +10742,42 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
                           && CardHasSubtype(d->card, reduced_tribe);
         return mv_of(i) - (matches ? reducer_amount : 0);
     };
+    // MTG_MINOTAUR_DISCARD_V2 -- the user's revised doctrine (2026-09-01), two changes:
+    //   1. AETHER VIAL sheds WITH the mana, not kept above the second land. "Aether vial is a good
+    //      choice given that we will be later than turn 1 when we do so" -- a Vial is a turn-1 play;
+    //      drawn or held into the turns where this deck actually discards (measured T3-T6) it needs
+    //      several turns of ticking before it deploys anything, so it is the cheapest thing to give
+    //      up once the mana is settled. V1 kept one at ladder slot 3, above land2 AND threat2.
+    //   2. THREATS sort by PLAYABILITY first, then effectiveness (see the sort below).
+    // "When you have enough mana we should ditch mana sources" is already what the land quota does
+    // -- it keeps at most kLandTarget sources counting BOARD AND HAND together (user's clarification),
+    // so hand lands past that are surplus and already shed first at S1. Unchanged in V2.
+    // The two halves are SEPARATELY leverable, because adopting or rejecting them as a bundle would
+    // hide which one is carrying the effect (they turned out to pull in opposite directions).
+    static const bool s_v2_env   = EnvOn("MTG_MINOTAUR_DISCARD_V2");
+    static const bool s_vial_env = EnvOn("MTG_MINOTAUR_DISCARD_VIAL");
+    static const bool s_play_env = EnvOn("MTG_MINOTAUR_DISCARD_PLAY");
+    const bool v2_all  = heurarm::Flag(heurarm::MINOTAUR_DISCARD_V2, s_v2_env);
+    const bool v2_vial = v2_all || heurarm::Flag(heurarm::MINOTAUR_DISCARD_VIAL, s_vial_env);
+    const bool v2_play = v2_all || heurarm::Flag(heurarm::MINOTAUR_DISCARD_PLAY, s_play_env);
+    // PLAY2 -- same shape, gentler threshold. `slack` is how many sources short still counts as
+    // "playable": 1 = castable now or after the next land drop; 2 also forgives two-away. V1's
+    // implicit threshold was effectively 3 (it demoted only eff_mv>=5 at reach<=3), so slack 1 was a
+    // real tightening and slack 2 sits between the two. This deck makes a land drop most turns, so
+    // how far ahead "playable" should look is a genuine judgment call, not a derivable constant.
+    static const bool s_play2_env = EnvOn("MTG_MINOTAUR_DISCARD_PLAY2");
+    const bool v2_play2 = heurarm::Flag(heurarm::MINOTAUR_DISCARD_PLAY2, s_play2_env);
+    const int  play_slack = v2_play2 ? 2 : 1;
+
+    // How many more mana sources this card still needs. 0 = castable now.
+    auto deficit_bucket = [&](int i)
+    {
+        const int d = eff_mv(i) - reach;
+        if (d <= play_slack)     { return 0; }   // reachable soon enough to be worth keeping
+        if (d == play_slack + 1) { return 1; }   // one turn beyond that
+        return 2;                                // stranded
+    };
+
     // Deck value order, best kept FIRST. Every test is a gated param, so nothing here is name-bound.
     auto threat_rank = [&](int i)
     {
@@ -10765,10 +10801,18 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
 
     std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
     {
-        // Out of reach sinks below everything castable (see DISTANCE-TO-PLAYABLE above).
-        const int fa = (reach <= 3 && eff_mv(a) >= 5) ? 1 : 0;
-        const int fb = (reach <= 3 && eff_mv(b) >= 5) ? 1 : 0;
-        if (fa != fb) { return fa < fb; }
+        // PLAYABILITY, then effectiveness (user 2026-09-01: "we should focus on dropping threats in
+        // order of playability and effectiveness").
+        //
+        // V1 was a BINARY far-flag that only fired at reach<=3 && eff_mv>=5, so at reach 4 a 5-drop
+        // and a 2-drop counted as equally playable and the deck-value rank alone decided. V2 grades
+        // it by how many sources the card is still short. Bucketed rather than raw, because being
+        // ONE land short is not the same kind of problem: this deck makes a land drop most turns, so
+        // deficit 1 is "castable next turn", not "stranded", and punishing it would shed Kragma (the
+        // deck's best card, and the whole reason to reach five) to keep a one-drop body.
+        const int da = (v2_play || v2_play2) ? deficit_bucket(a) : ((reach <= 3 && eff_mv(a) >= 5) ? 1 : 0);
+        const int db = (v2_play || v2_play2) ? deficit_bucket(b) : ((reach <= 3 && eff_mv(b) >= 5) ? 1 : 0);
+        if (da != db) { return da < db; }
         const int ra = threat_rank(a), rb = threat_rank(b);
         if (ra != rb) { return ra < rb; }
         // Within the body tier: biggest first, then the one worth more devotion to the deck's burn,
@@ -10800,15 +10844,25 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
     const int kThreatCap   = 4;   // "always keep at least 3-4 threats" (user): 3 hard, the 4th soft
 
     enum Slot { S_LAND, S_THREAT, S_VIAL, S_REDUCER };
-    static const Slot kFill[] = {
+    static const Slot kFillV1[] = {
         S_LAND, S_THREAT, S_VIAL, S_LAND, S_REDUCER, S_THREAT, S_LAND, S_THREAT, S_LAND, S_LAND,
         S_THREAT
     };
+    // V2 -- the Vial slot is GONE, so a Vial is never quota-protected and falls to the surplus shed
+    // right behind the surplus lands (S2), which is where the user grouped it: mana first, and the
+    // Vial with the mana. Everything else keeps its place.
+    static const Slot kFillV2[] = {
+        S_LAND, S_THREAT, S_LAND, S_REDUCER, S_THREAT, S_LAND, S_THREAT, S_LAND, S_LAND,
+        S_THREAT
+    };
+    const Slot* kFill     = v2_vial ? kFillV2 : kFillV1;
+    const std::size_t kNF = v2_vial ? (sizeof(kFillV2) / sizeof(kFillV2[0]))
+                               : (sizeof(kFillV1) / sizeof(kFillV1[0]));
 
     // A resolved reducer takes {B}{R} off the whole curve, so four sources cast everything.
     int land_need    = std::max(0, kLandTarget - (board_reducers > 0 ? 1 : 0) - board_sources);
     int threat_need  = kThreatCap;
-    int vial_need    = board_vials > 0 ? 0 : 1;
+    int vial_need    = v2_vial ? 0 : (board_vials > 0 ? 0 : 1);
     int reducer_need = reducer_keep;
 
     std::vector<char> keep(static_cast<std::size_t>(n), 0);
@@ -10817,8 +10871,9 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
     auto take = [&](int i)
     { keep[static_cast<std::size_t>(i)] = 1; taken_order.push_back(i); };
 
-    for (Slot slot : kFill)
+    for (std::size_t fi = 0; fi < kNF; ++fi)
     {
+        const Slot slot = kFill[fi];
         switch (slot)
         {
             case S_LAND:

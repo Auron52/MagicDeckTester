@@ -181,5 +181,58 @@ starts pitching dead Karoos and spare 2-drops, which is the behaviour change the
 It does NOT stop shedding the 5-drops entirely, because the distance-to-playable rule deliberately
 demotes them while reach is 3 or less — and 100% of this deck's sheds happen land-light.
 
-**The skill's rule-vs-searched zero-regret check is UN-RUN** (it needs a FAN lever this provider
-does not have), exactly as for Dragons. Recorded as un-run, not as passed.
+~~**The skill's rule-vs-searched zero-regret check is UN-RUN** (it needs a FAN lever this provider
+does not have), exactly as for Dragons.~~ **Both halves of that sentence were wrong** — see
+`per-deck-discard-analysis-phase.md`. No FAN lever was ever needed (this provider returns the full
+hand already); the real obstacle is that the labeller probes only the CR 514.1 cleanup, which this
+deck reaches ZERO times. Its 118 real discards per 200 games happen at Burning-Fist's activation
+cost and Neheb's trigger. The axis was BOUNDED instead: best-vs-worst is +0.00025t at d3 and
++0.00042t at d5 (nothing to fix at shipped depth), +0.01075t at d0.
+
+## Revised doctrine (user, 2026-09-01) — implemented, measured, NOT adopted
+
+> "When you have enough mana we should ditch mana sources... enough sources between hand and board
+> that is. Aether vial is a good choice given that we will be later than turn 1 when we do so.
+> Otherwise we should focus on dropping threats in order of playability and effectiveness."
+
+The user also ruled out searching this decision: *"I would rather not do that where we can come up
+with an effective heuristic"* — which the bound above independently agrees with, since a searched
+axis could not beat +0.00025t at d3.
+
+1. **"Enough mana → ditch mana sources"** is ALREADY what ships. `land_need` keeps at most
+   `kLandTarget` sources counting **board and hand together**, so hand lands past the quota are
+   surplus and shed first at S1. No change made.
+2. **Aether Vial sheds with the mana** (`MTG_MINOTAUR_DISCARD_VIAL`): drop the `S_VIAL` slot from the
+   ladder, so a Vial is never quota-protected and falls to the surplus shed behind the lands. V1 kept
+   one at ladder slot 3, above land2 and threat2.
+3. **Threats by playability, then effectiveness** (`MTG_MINOTAUR_DISCARD_PLAY`): replace V1's binary
+   far-flag (which fired only at `reach<=3 && eff_mv>=5`, i.e. deficit >= 3, so at reach 4 a 5-drop
+   and a 2-drop counted equally playable) with a graded `deficit = eff_mv - reach` bucket.
+   `MTG_MINOTAUR_DISCARD_PLAY2` is the same with a looser slack (2 instead of 1).
+
+**It changes the right decisions.** 9 of 291 genuine choices (3.1%) flip, and the first divergence is
+the doctrine working exactly as stated: at `lip=2`, V1 sheds Boros Reckoner (MV 3, one land short) to
+keep Fanatic of Mogis (MV 4, two short) on deck-rank alone; the playability rule sheds the Fanatic.
+
+**But every arm measures WORSE, and the gradient is monotone in how hard playability is weighted:**
+
+| arm (d0, 80,000 games, 16 seeds, paired) | mean vs V1 | t | changed | faster | slower |
+|---|---|---|---|---|---|
+| Vial sheds with the mana | +0.00010 | +2.31 | 12 | 2 | 10 |
+| playability, slack 1 | +0.00015 | +2.83 | 18 | 3 | 15 |
+| playability, slack 2 | +0.00089 | +5.46 | 157 | 45 | 112 |
+
+(positive = slower = worse; d3 is 0 or 2 changed games out of 4,000 for every arm, as the bound
+requires). The slack-2 row is the informative one: loosening the threshold makes the rule fire ~9x
+more often and get ~6x worse, so this is a direction, not a calibration accident. My first guess was
+the opposite — that slack 1 was too harsh — and the measurement refuted it.
+
+**Read the size before reading the sign.** The worst arm costs 0.0009 turns/game at d0 on 157 games
+in 80,000, and **at shipped depth every arm is null by construction** — the axis's whole headroom
+there is 0.00025t. So this is not "the doctrine is wrong"; it is "the metric cannot endorse it, and
+where it can see anything at all it leans the other way."
+
+**Status: levers exist, all default OFF, engine byte-identical.** Adopting them is a doctrine call,
+not a measurement one, and it belongs to the user: at d3/d5 it is free, at d0 it costs ~0.0002t.
+The one caveat worth weighing is that **the play viewer runs at d0**, so the d0 ordering is the
+default a human is offered.
