@@ -74,7 +74,7 @@
   // only carries the old flag still resolves to sacout=.
   //   cast=       Krenko's tap, a loyalty ability, Call of the Wild            (orderNames match)
   //   sacout=     Skirk Prospector / Siege-Gang / Pashalik                     (LineSpec::sac_outlets)
-  //   equip=      attach an Equipment ALREADY IN PLAY to a creature            (LineSpec::equips)
+  //   equip=      attach an Equipment to a creature, "<name>[#src][@host]"     (LineSpec::equips)
   //   attachall=  Balan's "attach all Equipment"                               (LineSpec::attach_all)
   //   sfput=      Stoneforge Mystic's put-from-hand (names the EQUIPMENT)      (LineSpec::sf_puts)
   //   jittemode=  Umezawa's Jitte counter-spend (names the MODE INT)           (LineSpec::jitte_modes)
@@ -109,6 +109,20 @@
     return lands.slice(0, -1).map(l => 'land=' + l.name).concat([encodeLine(rest)]);
   }
 
+  // The "#<equipment m_number>@<host m_number>" suffix an `equip=` token carries. Both halves are
+  // OPTIONAL and each is omitted when the viewer does not know it:
+  //   * `srcNum` — which copy is being attached. Absent when the Equipment is not on the battlefield
+  //     yet, i.e. a cast-and-equip queued by dragging the card straight from HAND: the permanent it
+  //     becomes has no m_number to name until the cast resolves. The engine reads 0 as "any".
+  //   * `target` — the host the human dropped it on. Always present for a drag.
+  // Stamping them is what makes two same-named creatures (or two copies of one Equipment) separable:
+  // the engine's `equip` sub-decision keys on the host NAME, so without these the variants share a
+  // signature and all but one are silently dropped -- the second Kor Duelist could not be equipped
+  // at all (user-reported, KittyEquipment seed 6). No MTG card name contains '#' or '@'.
+  function equipIds(p) {
+    return (p.srcNum ? '#' + p.srcNum : '') + (p.target ? '@' + p.target : '');
+  }
+
   function encodeLine(plan) {
     const parts = []; const l = planLand(plan); if (l) parts.push('land=' + l.name);
     for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && lineVerb(p) === 'cast') parts.push('cast=' + p.name);
@@ -120,7 +134,7 @@
     for (const p of plan) {
       const v = lineVerb(p);
       if (v === 'cast') continue;
-      parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode) : p.name));
+      parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode) : p.name) + (v === 'equip' ? equipIds(p) : ''));
     }
     const n = leCount(plan); if (n > 0) parts.push('landsedge=' + n);
     return parts.length ? parts.join(';') : 'pass';
@@ -194,7 +208,10 @@
       const seen = [];
       remaining.forEach(x => {
         const c = choiceOf(x, k.key);
-        if (!seen.some(z => z.choice === c)) { const s = subOf(x, k.key); seen.push({ choice: c, card: s ? s.card : '' }); }
+        // `num` (the m_number the choice names, 0 when it names no board object) rides along so the
+        // caller can auto-resolve a dragged attach target by IDENTITY -- two same-named creatures
+        // produce two choices whose display strings differ only by the engine's " #k" suffix.
+        if (!seen.some(z => z.choice === c)) { const s = subOf(x, k.key); seen.push({ choice: c, card: s ? s.card : '', num: s ? (s.num || 0) : 0 }); }
       });
       if (seen.length > 1) return { dim: k, choices: seen };
     }

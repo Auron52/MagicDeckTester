@@ -1,0 +1,27 @@
+{
+  "deck": "decks/KittyEquipment/KittyEquipment.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Kor Duelist",      "controller": 0, "tapped": false },
+    { "name": "Kor Duelist",      "controller": 0, "tapped": false },
+    { "name": "Bonesplitter",     "controller": 0, "tapped": false },
+    { "name": "Grafted Wargear",  "controller": 0, "tapped": false },
+    { "name": "Plains",           "controller": 0, "tapped": false },
+    { "name": "Plains",           "controller": 0, "tapped": false },
+    { "name": "Plains",           "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 200,
+  "max_turns": 6,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "equip=Bonesplitter;equip=Grafted Wargear",
+  "expect_verdict": "choose",
+  "expect_variants": 4,
+  "comment": "TWO CREATURES WITH THE SAME NAME. The `equip` sub-decision's choice string is the HOST'S NAME, and CheckLine dedups plan variants by a signature built from those strings -- so with two Kor Duelists in play all four (Bonesplitter host, Wargear host) pairings collapsed to ONE and the viewer silently played whichever enumerated first. The user reported it as 'it doesn't allow me to equip Grafted Wargear followed by Lightning Greaves to the second Kor Duelist; instead it ends up equipping the Lightning Greaves to the first' (KittyEquipment seed 6, 2026-09-01). Both halves of the fix are pinned here: the verdict must be `choose` (the variants survive at all), and there must be exactly FOUR of them (each host pairing is separately reachable) -- a fixture asserting only `choose` would still pass if two of the four were dropped. The host is disambiguated in the label as 'Kor Duelist #1' / '#2' (SubChoiceHostLabel); the viewer no longer relies on that at all, because its drag now stamps the host m_number straight into the `equip=<name>#<src>@<host>` line. A constructed board because a duplicate-name board with two loose Equipment is not reliably reached by seed-driven play. MTG_HUMAN_PLAY is on because CheckLine is a human-play-only path and the equip host-width cap only opens there -- without it the enumerator offers a single pairing and the fixture would be vacuous."
+}

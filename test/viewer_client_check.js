@@ -504,6 +504,61 @@ function testMdfcLandFace(win) {
   return fails;
 }
 
+// MOVING an ATTACHED Equipment onto a SECOND creature with the SAME NAME (synthetic board, no
+// binary). Two defects meet in this one gesture, both user-reported 2026-09-01:
+//   * "When equipping, the equipment remains in two places, in the plan and separately on the
+//     field" — the queued equip drew stacked on its intended host while the Equipment ALSO kept its
+//     old spot (here, its stack under the creature it is being moved OFF).
+//   * "It doesn't allow me to equip ... to the second Kor Duelist" — with two same-named hosts the
+//     host could not be named at all, because it rode a sub-decision keyed on the host's NAME.
+// Synthetic because a board with two same-named creatures AND an attached Equipment is not reliably
+// reached by seed-driven play; the engine half is pinned by test/scenarios/kitty_equip_two_same_named_hosts.json.
+function testEquipMoveRendersOnce(win) {
+  const S = win.__getS(), fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const GREAVES = 23, DUELIST_A = 19, DUELIST_B = 20;
+  const dec = {
+    type: 'main_phase', decision_index: 7, turn: 5, phase: 'pre_main', on_the_play: true,
+    me: { life: 20, library_size: 40, land_drops_left: 1, graveyard: [], hand: [],
+          battlefield: [
+            { name: 'Kor Duelist', idx: 0, num: DUELIST_A, is_land: false },
+            { name: 'Kor Duelist', idx: 1, num: DUELIST_B, is_land: false },
+            { name: 'Lightning Greaves', idx: 2, num: GREAVES, is_land: false,
+              is_equip: true, attached_to: DUELIST_A },
+          ] },
+    opponent: { life: 20, battlefield: [] },
+    // The engine offers moving THIS Greaves onto the OTHER Duelist. Both hosts are called
+    // "Kor Duelist", so only equip_host/equip_src can tell them apart.
+    plans: [{ index: 0, summary: 'cast: equip Lightning Greaves', land: null, casts: [],
+              actions: [{ card: 'Lightning Greaves', activate: true, verb: 'equip',
+                          equip_host: DUELIST_B, equip_host_name: 'Kor Duelist', equip_src: GREAVES }] }],
+  };
+  S.decision = dec; S.prev = null; S.plan = []; S.over = false; S.busy = false;
+  S.handOrder = []; S.leMode = false; S.vialMode = null; win.renderBoard();
+  const greaves = () => [...win.document.querySelectorAll('#playfield .thumb[data-name]')]
+                          .filter(t => t.dataset.name === 'Lightning Greaves');
+  chk(greaves().length === 1, `attached, unqueued: 1 Greaves thumb expected, got ${greaves().length}`);
+
+  const tgts = win.equipTargetsFor('Lightning Greaves', GREAVES);
+  chk(Object.keys(tgts).length === 1 && (DUELIST_B in tgts),
+      `the offered host is the OTHER Duelist by NUMBER, got ${JSON.stringify(tgts)}`);
+  chk(win.tryEquipDrop('Lightning Greaves', DUELIST_B, GREAVES), 'the move is queued');
+  const q = S.plan[0];
+  chk(S.plan.length === 1 && q && q.srcNum === GREAVES && q.target === DUELIST_B,
+      `the queued entry names both numbers, got ${JSON.stringify(S.plan)}`);
+  chk(win.LineBuild.encodeLine(S.plan) === `equip=Lightning Greaves#${GREAVES}@${DUELIST_B}`,
+      `line should name the second Duelist, got "${win.LineBuild.encodeLine(S.plan)}"`);
+  // THE duplication check: it must have LEFT the creature it is being moved off.
+  chk(greaves().length === 1, `queued move: 1 Greaves thumb expected, got ${greaves().length}`);
+  chk(greaves().length === 1 && greaves()[0].classList.contains('planned'),
+      'the one that remains is the PLANNED attachment on the new host');
+  const group = greaves()[0].closest('.enchgroup');
+  const host  = group && group.querySelector('.thumb.base[data-num]');
+  chk(host && +host.dataset.num === DUELIST_B,
+      `it is stacked on the SECOND Duelist (#${host && host.dataset.num}, wanted #${DUELIST_B})`);
+  return fails;
+}
+
 // Equipment: the KittyEquipment deck's central action. The engine enumerates an Equip for every
 // legal (Equipment, host) pair, but nothing told the GUI which permanent to click or which LineSpec
 // verb to write, so an equipment deck simply could not be played by hand (user-reported 2026-08-23).
@@ -537,22 +592,38 @@ async function testEquip() {
   chk(Object.keys(hosts).length > 0, 'the engine offers at least one legal host for Shadowspear');
   if (!spear || !Object.keys(hosts).length) return fails;
 
+  const srcNum = +(spear.dataset.equipnum || 0);
+  chk(srcNum > 0, 'the drag carries the EQUIPMENT permanent’s own m_number (data-equipnum)');
   const hostNum = +Object.keys(hosts)[0];
-  chk(win.tryEquipDrop('Shadowspear', hostNum), 'dropping it on a legal creature queues the equip');
+  chk(win.tryEquipDrop('Shadowspear', hostNum, srcNum), 'dropping it on a legal creature queues the equip');
   const q = st().plan[0];
   chk(st().plan.length === 1 && q && q.kind === 'activate' && q.verb === 'equip',
       'the drop queues an activate entry carrying the equip verb');
   chk(q && q.target === hostNum && q.targetName === hosts[hostNum],
       'the HOST rides on the queued entry, so no dialog has to re-ask it');
-  chk(win.LineBuild.encodeLine(st().plan) === 'equip=Shadowspear',
-      `the line still encodes as equip=<name>, got "${win.LineBuild.encodeLine(st().plan)}"`);
+  // ...and it rides on the LINE, not just on the client entry. Leaving the host to the `equip`
+  // sub-decision is what made two same-named hosts indistinguishable: the sub's choice is the host
+  // NAME, so both variants shared a signature and the dedup dropped one (KittyEquipment seed 6,
+  // "it doesn't allow me to equip ... to the second Kor Duelist").
+  chk(win.LineBuild.encodeLine(st().plan) === `equip=Shadowspear#${srcNum}@${hostNum}`,
+      `the line stamps source+host, got "${win.LineBuild.encodeLine(st().plan)}"`);
+  // A queued equip is drawn ONCE -- stacked on the host it is about to attach to, NOT also where it
+  // sits now ("the equipment remains in two places, in the plan and separately on the field").
+  // Scoped to #playfield: #board also holds the HAND row, where a queued card legitimately stays
+  // visible (with its queued count badge) until the commit resolves.
+  const spearThumbs = [...win.document.querySelectorAll('#playfield .thumb[data-name]')]
+                        .filter(t => t.dataset.name === 'Shadowspear');
+  chk(spearThumbs.length === 1,
+      `a queued equip renders the Equipment once, got ${spearThumbs.length} Shadowspear thumbs`);
+  chk(spearThumbs.length === 1 && spearThumbs[0].classList.contains('planned'),
+      'and the one that remains is the PLANNED attachment on its host');
   // Dropping it again MOVES it rather than queueing a second attach (an Equipment has one host).
   const otherNum = Object.keys(hosts).map(Number).find(n => n !== hostNum);
   if (otherNum != null) {
-    win.tryEquipDrop('Shadowspear', otherNum);
+    win.tryEquipDrop('Shadowspear', otherNum, srcNum);
     chk(st().plan.length === 1 && st().plan[0].target === otherNum,
         're-dropping on another creature RE-AIMS the queued equip instead of duplicating it');
-    win.tryEquipDrop('Shadowspear', hostNum);
+    win.tryEquipDrop('Shadowspear', hostNum, srcNum);
   }
 
   await win.commitLine(); await settle(win);
@@ -573,6 +644,61 @@ async function testEquip() {
   const grouped = [...win.document.querySelectorAll('#board .enchgroup .thumb[data-name]')]
                     .some(t => t.dataset.name === 'Shadowspear');
   chk(grouped, 'the attached Equipment renders stacked behind its host (.enchgroup), like an Aura');
+  return fails;
+}
+
+// Equipping decided FROM HAND (USER 2026-09-01: "Ideally we would allow equipping to be decided
+// from hand or by dragging the equipment on the field. That would mean two operations, playing it
+// plus equipping."). The engine has always enumerated the pair as ONE plan ("cast: Bonesplitter,
+// equip Bonesplitter -> Kor Duelist"), but it was unreachable from the GUI: the only equip gesture
+// was dragging a permanent that does not exist until the cast resolves, and the encoded line could
+// not say the host anyway. Now dropping the HAND card on a creature queues both operations.
+// KittyEquipment seed 6 T2 is the minimal shape: Kor Duelist in play, Bonesplitter in hand.
+async function testEquipFromHand() {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const win = buildDom(); await settle(win);
+  await startGame(win, { deck: 'KittyEquipment', seed: 6, turns: 8 });
+  const st = () => S(win);
+  let guard = 0;
+  while (guard++ < 40 && !(st().decision && st().decision.type === 'main_phase' && st().decision.turn === 2)) {
+    if (!(await stepForward(win, 'ai'))) break;
+  }
+  chk(st().decision && st().decision.turn === 2, 'reached KittyEquipment s6 turn 2');
+  if (fails.length) return fails;
+
+  const hosts = win.handEquipTargetsFor('Bonesplitter');
+  chk(Object.keys(hosts).length > 0, 'the engine offers a cast-AND-equip plan for the Bonesplitter in hand');
+  if (!Object.keys(hosts).length) return fails;
+  const hostNum = +Object.keys(hosts)[0];
+  // The land first: the combined plan the engine enumerates plays one, and without it the line is
+  // a real (correctly reported) mana shortfall rather than the gesture being wrong.
+  win.queueCard('Plains', 'land');
+  chk(win.tryEquipFromHandDrop('Bonesplitter', 'permanent', hostNum),
+      'dropping the HAND Equipment on a creature is accepted as a cast-and-equip');
+  const cast = st().plan.find(p => p.name === 'Bonesplitter' && p.kind !== 'activate');
+  const eq   = st().plan.find(p => p.kind === 'activate' && p.verb === 'equip');
+  chk(!!cast && !!eq, 'it queues BOTH operations: the cast and the equip');
+  chk(eq && eq.fromHand === true && eq.target === hostNum,
+      'the equip is tagged fromHand and carries the dropped host');
+  const line = win.LineBuild.encodeLine(st().plan);
+  chk(/^land=Plains;cast=Bonesplitter;equip=Bonesplitter#\d+@\d+$/.test(line),
+      `the line encodes cast + host-stamped equip, got "${line}"`);
+  // ...and the card is drawn ONCE (on its host), not as a planned cast AND a planned attachment.
+  const boneThumbs = [...win.document.querySelectorAll('#playfield .thumb[data-name]')]
+                       .filter(t => t.dataset.name === 'Bonesplitter');
+  chk(boneThumbs.length === 1,
+      `the queued cast-and-equip renders once, got ${boneThumbs.length} Bonesplitter thumbs`);
+
+  await win.commitLine(); await settle(win);
+  // No dialog should be needed at all -- the host is in the line, so exactly one plan matches.
+  chk(!win.document.querySelector('#decpanel .varpick'),
+      'no choose dialog: the stamped host leaves exactly one matching plan');
+  chk(!S(win).hadReject, 'the cast-and-equip line is ACCEPTED by the engine');
+  const bf = ((st().decision && st().decision.me) || {}).battlefield || [];
+  const bone = bf.find(p => p.name === 'Bonesplitter');
+  chk(bone && bone.attached_to === hostNum,
+      `the Bonesplitter resolved ATTACHED to the dropped host (attached_to=${bone && bone.attached_to}, wanted ${hostNum})`);
   return fails;
 }
 
@@ -664,6 +790,10 @@ async function testColorlessFirstTapOrder() {
     const lfFails = testMdfcLandFace(win);
     if (lfFails.length) { anyFail = true; console.log(`✗ mdfc land face: ${lfFails.length} fail`); lfFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ MDFC land back playable from the palette (badge → land= line, gated on the offer)'); }
+    // Moving an attached Equipment onto a SECOND same-named creature (fast, DOM-only).
+    const emFails = testEquipMoveRendersOnce(win);
+    if (emFails.length) { anyFail = true; console.log(`✗ equip move: ${emFails.length} fail`); emFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ equip move (re-host to the SECOND same-named creature; drawn once, not in two places)'); }
   }
   // Board-activated ability reachable + resolving (needs a real game walk, so it runs on its own).
   {
@@ -680,6 +810,14 @@ async function testColorlessFirstTapOrder() {
     catch (e) { console.error(`✗ equip: harness error: ${e.stack || e}`); process.exit(2); }
     if (eqFails.length) { anyFail = true; console.log(`✗ equip: ${eqFails.length} fail`); eqFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ equip (Equipment: DRAGGED onto a creature → equip= line + stamped host → accepted → attached)'); }
+  }
+  // Equipping decided from HAND: one drop queues the cast AND the equip (needs a real game walk).
+  {
+    let ehFails;
+    try { ehFails = await testEquipFromHand(); }
+    catch (e) { console.error(`✗ equip from hand: harness error: ${e.stack || e}`); process.exit(2); }
+    if (ehFails.length) { anyFail = true; console.log(`✗ equip from hand: ${ehFails.length} fail`); ehFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ equip from hand (drop a hand Equipment on a creature → cast + host-stamped equip → attached)'); }
   }
   // Colourless-first tap order: an exactly-payable line must not lose a coloured pip to a generic one.
   {

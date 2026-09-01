@@ -256,11 +256,15 @@ external-chooser surface exposes:
   mode); everything decided *after* the commit — which loyalty ability, how many times a repeatable
   ability fires — is asked by the ordinary choose-variant dialog. An ability is offered only when it
   can really resolve *now*: the menu must never hold a silent no-op.
-- **Equipping is a DRAG, like an Aura** — grab the Equipment on the battlefield (it carries a
-  ⚔ drag badge) and drop it on one of your creatures. The legal hosts light up while you drag, the
-  queued equip renders stacked behind the creature it will attach to, and dragging it again moves it
-  rather than queueing a second one. An **attached** Equipment stays draggable, which is how you
-  re-host it. Because the drop already names the host, no post-commit dialog asks for it.
+- **Equipping is a DRAG, like an Aura — from the battlefield OR straight from hand.** Grab the
+  Equipment (it carries a ⚔ drag badge) and drop it on one of your creatures. The legal hosts light up
+  while you drag, the queued equip renders stacked behind the creature it will attach to (and only
+  there — it leaves the spot it came from, so the same card is never drawn twice on the field), and
+  dragging it again moves it rather than queueing a second one. An **attached** Equipment stays
+  draggable, which is how you re-host it. Dropping one from **hand** onto a creature queues the two
+  operations the play needs — cast it, then attach it — as a single line, matching the combined plan
+  the engine enumerates. The drop names the host by its card number, so equipping the *second* of two
+  same-named creatures works and no post-commit dialog asks for it.
   See `DECISIONS.md` → *Board activations* for the wiring sites a new activation needs.
 - **A card with two playable faces gets a route for each** — an MDFC whose back is a land (Turntimber
   Symbiosis // Turntimber, Serpentine Wood) shows a **▣ land** badge; click it to take the land drop

@@ -1011,12 +1011,16 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                     JsonStr(os, EnchantTargetName(s, ac.sac_source_id));
                 }
                 // Equip: the host this variant attaches to, so the plan list reads "Bonesplitter ->
-                // Kor Duelist" rather than a bare card name. WHICH host the human actually gets is
-                // the `equip` sub-decision CheckLine emits (the choose dialog picks it).
+                // Kor Duelist" rather than a bare card name -- and, since 2026-09-01, `equip_src`,
+                // the m_number of the EQUIPMENT itself. The viewer stamps both onto its `equip=`
+                // token, which is what lets a drag name one of two same-named Kor Duelists (or move
+                // one of two Bonesplitters) instead of leaving it to a by-NAME sub-decision that
+                // cannot tell them apart.
                 if (ac.kind == Action::Kind::Equip && ac.sac_victim_id != 0)
                 {
                     os << ", \"equip_host\": " << ac.sac_victim_id << ", \"equip_host_name\": ";
                     JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
+                    if (ac.sac_source_id != 0) { os << ", \"equip_src\": " << ac.sac_source_id; }
                 }
             }
             // A hand card with more than ONE way to be played needs a route in the palette for each
@@ -1941,7 +1945,8 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
 
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "cast=<name>", "vial=<name>", "retrace=<name>", "landsedge=<n>",
-// "sacout=<outlet name>" (repeat for repeat activations), "equip=<equipment name>",
+// "sacout=<outlet name>" (repeat for repeat activations),
+// "equip=<equipment name>[#<source m_number>][@<host m_number>]",
 // "attachall=<name>", "sfput=<equipment name>", "jittemode=<1|2>", "gyexile=<1|2>",
 // "channel=<card name>", or the bare word "pass". Card
 // names may contain spaces and commas (no MTG name contains ';' or '='), so they pass through
@@ -1972,7 +1977,22 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "attachall") { ls.attach_all.push_back(val); }    // Balan attach-all
         else if (key == "sfput")     { ls.sf_puts.push_back(val); }       // Stoneforge put (card name)
         else if (key == "jittemode") { ls.jitte_modes.push_back(std::atoi(val.c_str())); }
-        else if (key == "equip")     { ls.equips.push_back(val); }        // equip an Equipment in play
+        // "equip=<name>[#<source num>][@<host num>]": equip an Equipment already in play. The two
+        // optional m_numbers pin WHICH copy attaches to WHICH creature -- see LineSpec::EquipSpec.
+        // No MTG card name contains '#' or '@', so splitting on them cannot tear a name in half;
+        // a bare "equip=<name>" still parses to the any-source/any-host wildcard it always was.
+        else if (key == "equip")
+        {
+            TurnSolver::LineSpec::EquipSpec es;
+            const size_t at = val.rfind('@');
+            if (at != std::string::npos)
+            { es.host = std::atoi(val.c_str() + at + 1); val = val.substr(0, at); }
+            const size_t hash = val.rfind('#');
+            if (hash != std::string::npos)
+            { es.source = std::atoi(val.c_str() + hash + 1); val = val.substr(0, hash); }
+            es.name = val;
+            ls.equips.push_back(std::move(es));
+        }
         else if (key == "gyexile")   { ls.gy_exiles.push_back(std::atoi(val.c_str())); }  // Deathrite mode
         else if (key == "gyreturn")  { ls.gy_returns.push_back(val); }    // Haven rebuy (returned card)
         else if (key == "channel")   { ls.channels.push_back(val); }      // from-hand channel ability
@@ -2449,6 +2469,11 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
                         std::cout << ", \"choice\": "; JsonStr(std::cout, sub.choice);
                         std::cout << ", \"card\": ";   JsonStr(std::cout, sub.card);
                         std::cout << ", \"kind\": ";   JsonStr(std::cout, sub.kind);
+                        // `num` = the m_number the choice names (an enchant/equip host, a sacrifice
+                        // victim), so the GUI can auto-resolve a DRAGGED attach target by identity
+                        // rather than by a display name two creatures can share. Omitted when the
+                        // choice names no board object (an X value, a mode, a count).
+                        if (sub.num != 0) { std::cout << ", \"num\": " << sub.num; }
                         std::cout << " }";
                     }
                     std::cout << "] }";
@@ -3934,6 +3959,9 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //                                    // Guards a line the SEARCH would not pick on its own (a
 //                                    // goldfish values a do-nothing permanent at 0), which a
 //                                    // win-turn assertion structurally cannot see.
+//     "expect_variants": 4,          // optional: pin how many sub-decision variants a `choose`
+//                                    // offers -- "choose" alone cannot see variants silently
+//                                    // DEDUPED away (two same-named hosts sharing a choice string)
 //     "log_out": "logs/play/scenario.json" }            // optional: write the per-turn trace
 static int RunScenario(const std::filesystem::path& scenario_path)
 {
@@ -4104,11 +4132,28 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                                                     "illegal";
         const std::string want = j.value("expect_verdict", std::string("accept"));
         std::cout << "scenario: validate_line verdict=" << got
+                  << " variants=" << chk.variants.size()
                   << (chk.reason.empty() ? "" : (" reason=\"" + chk.reason + "\"")) << "\n";
+        for (const TurnSolver::LineVariant& lv : chk.variants)
+        { std::cout << "scenario:   variant " << lv.plan_index << " " << lv.label << "\n"; }
         if (want != got)
         {
             std::cout << "scenario: FAIL expected line verdict " << want << ", got " << got << "\n";
             return 1;
+        }
+        // Optional COUNT assertion. `choose` alone cannot tell "every sub-decision variant survived"
+        // from "some were silently deduped away" -- and a same-name collapse (two creatures with one
+        // name sharing a sub-decision choice string) is exactly the second shape, so a fixture that
+        // exists to pin it has to say how many it expects.
+        if (j.contains("expect_variants"))
+        {
+            const int want_n = j.at("expect_variants").get<int>();
+            if (want_n != static_cast<int>(chk.variants.size()))
+            {
+                std::cout << "scenario: FAIL expected " << want_n << " line variants, got "
+                          << chk.variants.size() << "\n";
+                return 1;
+            }
         }
         std::cout << "scenario: PASS (line " << got << ")\n";
     }

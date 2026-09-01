@@ -953,13 +953,23 @@ public:
         std::vector<std::string> attach_all;    // "attachall=<Balan name>": AttachAllEquipment
         std::vector<std::string> sf_puts;       // "sfput=<equipment name>": PutFromHandAbility
         std::vector<int>         jitte_modes;   // "jittemode=<1|2>": JitteModeAbility activations
-        // "equip=<equipment name>": Equip, one entry per activation. Needed as its own verb because
-        // an Equipment on the battlefield and a copy of it in hand share a NAME: with Equip matched
-        // inside the ordinary `cast=` multiset (the legacy behaviour, still used when this is empty),
-        // "equip the Bonesplitter in play" and "cast the Bonesplitter in hand" encode identically, so
-        // the viewer could not express the first without maybe getting the second. WHICH creature it
-        // attaches to is NOT encoded here -- that is the `equip` sub-decision the choose dialog asks.
-        std::vector<std::string> equips;
+        // "equip=<equipment name>[#<source m_number>][@<host m_number>]": Equip, one entry per
+        // activation. Needed as its own verb because an Equipment on the battlefield and a copy of it
+        // in hand share a NAME: matched inside the ordinary `cast=` multiset, "equip the Bonesplitter
+        // in play" and "cast the Bonesplitter in hand" encode identically, so the viewer could not
+        // express the first without maybe getting the second.
+        //
+        // The HOST rides here too (2026-09-01). It used to be left to the `equip` sub-decision, whose
+        // choice string is the host's NAME -- so with two Kor Duelists in play every host variant
+        // carried the SAME sub, shared a signature, and CheckLine's dedup silently dropped all but the
+        // first: the human could not equip the second Duelist at all (user-reported, KittyEquipment
+        // seed 6). The viewer's drag already knows exactly which permanent was dropped on, so it says
+        // so; `host` == 0 means "any host" (an unstamped legacy line), which still fans out as the
+        // sub-decision. `source` is the same disambiguation for the EQUIPMENT itself -- two
+        // Bonesplitters in play are not interchangeable when one is already attached elsewhere,
+        // because equipping that one MOVES it. 0 == any.
+        struct EquipSpec { std::string name; int source = 0; int host = 0; };
+        std::vector<EquipSpec> equips;
         // "gyexile=<mode>": Deathrite Shaman's graveyard-exile activations, one entry per activation,
         // carrying the MODE (1 = exile an instant/sorcery, each opponent loses 2; 2 = exile a creature,
         // gain 2). Its own verb for the same reason `equip=` has one: the action names the SOURCE
@@ -1003,7 +1013,12 @@ public:
     // is the art to show. Structured so the GUI can ask one dimension at a time and FILTER the
     // remaining variants after each pick -- this respects couplings (a fetch target gates which
     // tutor targets are affordable this turn), so no illegal combination is ever offered.
-    struct SubChoice { std::string key, choice, card, kind; };
+    // `num` is the m_number of the permanent/card the choice NAMES, when it names one (an enchant or
+    // equip host, a sacrifice victim). 0 = the choice is not a board object (an X value, a mode, a
+    // count) . It exists because `choice` is a display string: with two Kor Duelists in play the two
+    // hosts read alike, so the GUI could not tell "the creature the human dragged onto" from "the
+    // other one with the same name" and auto-resolved the drag to whichever came first.
+    struct SubChoice { std::string key, choice, card, kind; int num = 0; };
     struct LineVariant { int plan_index = -1; std::string label;
                          std::vector<std::string> cards;      // card names to show as art
                          std::vector<SubChoice> subs; };      // structured sub-decision dimensions

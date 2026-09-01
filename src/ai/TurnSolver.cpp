@@ -29739,15 +29739,16 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         { return "'" + name + "' has no animate ability"; }
     }
 
-    // --- equip= : source presence + it actually being an Equipment. WHICH host it attaches to is
-    // the `equip` sub-decision, so no host test here (that is a choose, not an illegality).
-    for (const std::string& name : spec.equips)
+    // --- equip= : source presence + it actually being an Equipment. The declared HOST is NOT tested
+    // here: an unenumerated-but-legal host is a reachability gap the caller must be free to report,
+    // and a false Illegal would mask it (the soundness rule at the top of this function).
+    for (const TurnSolver::LineSpec::EquipSpec& e : spec.equips)
     {
-        if (!live(name))
-        { return "you control no '" + name + "' to equip"; }
-        const CardDefinition* d = def_of(name);
+        if (!live(e.name))
+        { return "you control no '" + e.name + "' to equip"; }
+        const CardDefinition* d = def_of(e.name);
         if (d && !d->params.is_equipment)
-        { return "'" + name + "' is not an Equipment"; }
+        { return "'" + e.name + "' is not an Equipment"; }
     }
 
     // --- jittemode= : a charged Equipment must exist, and it must actually HAVE the named mode.
@@ -29847,6 +29848,68 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
     return {};
 }
 
+// A battlefield permanent's name as a sub-decision CHOICE string, suffixed " #k" when its controller
+// has more than one permanent of that name. The choice string is what the variant DEDUP keys on, so
+// without the suffix two same-named creatures produce an IDENTICAL sub: the variants share a
+// signature and every one but the first is silently dropped. With two Kor Duelists in play that made
+// the second one unequippable -- the line "equip Wargear, equip Greaves" collapsed to whichever host
+// pairing happened to enumerate first (user-reported, KittyEquipment seed 6). k is the 1-based
+// ordinal in battlefield order, stable within one decision. Returns "" when `num` names nothing on
+// the battlefield, so callers keep their existing "skip the sub" behaviour.
+static std::string SubChoiceHostLabel(const GameState& s, int num)
+{
+    const Permanent* hit = nullptr;
+    for (const Permanent& p : s.battlefield)
+    { if (p.card.m_number == num) { hit = &p; break; } }
+    if (!hit) { return {}; }
+    const std::string name = hit->card.m_name.str();
+    int total = 0, ordinal = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != hit->controller_index || p.card.m_name != hit->card.m_name)
+        { continue; }
+        ++total;
+        if (p.card.m_number == num) { ordinal = total; }
+    }
+    return total <= 1 ? name : (name + " #" + std::to_string(ordinal));
+}
+
+// Backtracking assignment behind EquipsMatch: can want[i..] each be paired with a distinct unused
+// have[j]? Exhaustive rather than greedy because a WILDCARD spec entry (a legacy `equip=<name>` with
+// no m_numbers) can be satisfied by several actions, and first-fit would then reject a matchable
+// pair -- "Bonesplitter@19" + "Bonesplitter" against actions "Bonesplitter->20" + "Bonesplitter->19"
+// fails if the wildcard eats ->19 first. n is the equip count of ONE main phase: one or two.
+static bool EquipAssign(const std::vector<TurnSolver::LineSpec::EquipSpec>& want,
+                        const std::vector<TurnSolver::LineSpec::EquipSpec>& have,
+                        std::vector<bool>& used, size_t i)
+{
+    if (i == want.size()) { return true; }
+    for (size_t j = 0; j < have.size(); ++j)
+    {
+        if (used[j] || have[j].name != want[i].name) { continue; }
+        if (want[i].source != 0 && want[i].source != have[j].source) { continue; }
+        if (want[i].host   != 0 && want[i].host   != have[j].host)   { continue; }
+        used[j] = true;
+        if (EquipAssign(want, have, used, i + 1)) { return true; }
+        used[j] = false;
+    }
+    return false;
+}
+
+// Does a plan's set of Equip actions perform exactly the equips the line DECLARED? A spec entry's
+// 0 source/host is a wildcard, so an unstamped `equip=<name>` degenerates to the name-multiset
+// compare this used to be. Sizes must be equal in BOTH directions: a plan that equips when the line
+// asked for no equip is a different play, not a variant of the human's (that asymmetry is what let
+// "cast=Bonesplitter" match an equip-only plan -- see the note at spec.equips' use in CheckLine).
+static bool EquipsMatch(const std::vector<TurnSolver::LineSpec::EquipSpec>& want,
+                        const std::vector<TurnSolver::LineSpec::EquipSpec>& have)
+{
+    if (want.size() != have.size()) { return false; }
+    if (want.empty()) { return true; }
+    std::vector<bool> used(have.size(), false);
+    return EquipAssign(want, have, used, 0);
+}
+
 TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_combat,
                                             const LineSpec& spec)
 {
@@ -29893,13 +29956,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     const bool attachall_declared = !spec.attach_all.empty();
     const bool sfput_declared     = !spec.sf_puts.empty();
     const bool jitte_declared     = !spec.jitte_modes.empty();
-    // Equip, same declared-vs-legacy split. Declared (the viewer's `equip=` verb) matches Equip
-    // actions against their OWN multiset, so a hand cast of the same-named Equipment no longer
-    // collides with equipping the copy already in play; empty keeps the legacy card-name-in-casts
-    // behaviour every saved reference was recorded under.
-    std::vector<std::string> sortedEquips = spec.equips;
-    std::sort(sortedEquips.begin(), sortedEquips.end());
-    const bool equip_declared     = !spec.equips.empty();
+    // Equip is matched against its OWN verb ALWAYS -- there is no declared-vs-legacy split here, and
+    // the absence of one is the fix for a real mis-match (2026-09-01). Under the old legacy fallback,
+    // a line with no `equip=` folded each Equip action's card name into the ordinary cast multiset, so
+    // "cast=Bonesplitter" (cast the copy in HAND) also matched a plan that only EQUIPS the copy in
+    // play -- two plays with nothing in common beyond a name. The human got a "choose how to resolve"
+    // dialog on a plain equipment cast, and picking wrong left the card in hand (user-reported,
+    // KittyEquipment seed 7 T3). An empty spec.equips now means exactly what it says: this line
+    // performs NO equip, so a plan that equips is not a match for it.
     // Deathrite's graveyard-exile activations (by MODE) and Twinshot's from-hand channel (by card
     // NAME), each with the same declared-vs-legacy split every verb above uses -- so a line that does
     // not mention them keeps matching exactly as it did and every saved reference is unaffected.
@@ -29958,7 +30022,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         //                         prefers the no-sac plan (saving the one-shot source; see the pool sort).
         int planLE = 0, planSacs = 0;
         std::vector<std::string> orderNames, vialNames, retraceNames, sacOutNames;
-        std::vector<std::string> attachAllNames, sfPutNames, equipNames, channelNames, suspendNames;
+        std::vector<std::string> attachAllNames, sfPutNames, channelNames, suspendNames;
+        // One entry per Equip action: (equipment name, equipment m_number, host m_number). Matched
+        // against spec.equips by EquipsMatch below, which honours the 0 wildcards.
+        std::vector<LineSpec::EquipSpec> equipActs;
         std::vector<std::string> animateNames, tapTokenNames, gyReturnNames;
         std::vector<int> jitteModes, gyExileModes;
         for (const Action& a : p.actions)
@@ -29985,8 +30052,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             { sfPutNames.push_back(a.card_name); continue; }
             if (jitte_declared && a.kind == Action::Kind::JitteModeAbility)
             { jitteModes.push_back(a.gy_exile_mode); continue; }
-            if (equip_declared && a.kind == Action::Kind::Equip)
-            { equipNames.push_back(a.card_name); continue; }
+            if (a.kind == Action::Kind::Equip)
+            { equipActs.push_back({ a.card_name, a.sac_source_id, a.sac_victim_id }); continue; }
             if (gyexile_declared && a.kind == Action::Kind::GraveyardExileAbility)
             { gyExileModes.push_back(a.gy_exile_mode); continue; }
             if (gyreturn_declared && a.kind == Action::Kind::GraveyardReturnAbility)
@@ -30026,12 +30093,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedJitteModes) { continue; }
         }
-        if (equip_declared)
-        {
-            std::vector<std::string> v2 = equipNames;
-            std::sort(v2.begin(), v2.end());
-            if (v2 != sortedEquips) { continue; }
-        }
+        if (!EquipsMatch(spec.equips, equipActs)) { continue; }
         if (gyexile_declared)
         {
             std::vector<int> v2 = gyExileModes;
@@ -30088,9 +30150,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         // `tok` is the exact sig/label token (unchanged from before); key/choice/card are the
         // structured breakdown the GUI groups by. They are kept separate because the token spacing
         // (e.g. "X=2", "+2 own") is not a plain "key SPACE choice", and sig/label must stay identical.
+        // `num` (optional, default 0) is the m_number the choice names -- see SubChoice. Only the
+        // board-object dimensions pass it; every other call site is unchanged.
         auto addSub = [&](const std::string& tok, const std::string& key, const std::string& choice,
-                          const std::string& card, const std::string& kind) {
-            subs.push_back({ key, choice, card, kind });
+                          const std::string& card, const std::string& kind, int num = 0) {
+            subs.push_back({ key, choice, card, kind, num });
             toks.push_back(tok);
             artCards.push_back(card);
         };
@@ -30117,13 +30181,17 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                 if (vdef && !vdef->params.sac_additional_creature_color.empty()
                     && a.soulfire_own_targets > 0)
                 {
-                    std::string vn;
+                    // Disambiguated (" #k") for the same reason the equip host is: two same-named
+                    // creatures would otherwise share a choice string and the dedup would silently
+                    // decide WHICH ONE dies.
+                    const std::string vn = SubChoiceHostLabel(state, a.soulfire_own_targets);
+                    std::string art;
                     for (const Permanent& perm : state.battlefield)
-                    { if (perm.card.m_number == a.soulfire_own_targets) { vn = perm.card.m_name.str(); break; } }
+                    { if (perm.card.m_number == a.soulfire_own_targets) { art = perm.card.m_name.str(); break; } }
                     if (!vn.empty())
                     {
                         addSub(a.card_name + " sacrifices " + vn, a.card_name + " sacrifices",
-                               vn, vn, "sacrifice");
+                               vn, art, "sacrifice", a.soulfire_own_targets);
                     }
                 }
             }
@@ -30185,18 +30253,22 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             // creatures on the battlefield (LegalEnchantTargets), so this always resolves.
             if (a.enchant_target > 0 && !is_trick)
             {
-                std::string etn;
+                std::string etn, art;
                 for (const Permanent& perm : state.battlefield)
                     if (perm.controller_index == state.active_player_index && perm.card.IsCreature()
                         && perm.card.m_number == a.enchant_target)
-                    { etn = perm.card.m_name.str(); break; }
+                    { art = perm.card.m_name.str(); break; }
+                // Two same-named hosts need distinct CHOICE strings or the dedup drops one of them --
+                // the equipment defect, which an Aura on a board of two Kor Duelists has verbatim.
+                if (!art.empty()) { etn = SubChoiceHostLabel(state, a.enchant_target); }
                 // A same-turn creature target (AppendCreatureTargetAuraCandidates) is still in hand here;
                 // resolve its name from hand so the choose grid offers it (else the sub is dropped).
                 if (etn.empty())
                     for (const Card& hc : state.ActivePlayer().hand)
-                        if (hc.m_number == a.enchant_target) { etn = hc.m_name.str(); break; }
+                        if (hc.m_number == a.enchant_target) { etn = art = hc.m_name.str(); break; }
                 if (!etn.empty())
-                    addSub(a.card_name + " \xE2\x86\x92 " + etn, a.card_name + " \xE2\x86\x92", etn, etn, "enchant");
+                    addSub(a.card_name + " \xE2\x86\x92 " + etn, a.card_name + " \xE2\x86\x92", etn, art, "enchant",
+                            a.enchant_target);
             }
             // Unite the Coalition (modal_choose_n): the MODE SPLIT rides Action::chosen_x, so the
             // generic {X} branch below labelled it "X=3" -- which tells a player nothing (there is
@@ -30338,17 +30410,20 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                 // the thing being decided (the Equipment is already named in the line summary).
                 if (a.kind == Action::Kind::Equip && a.sac_victim_id != 0)
                 {
-                    std::string hn;
+                    std::string hn, art;
                     for (const Permanent& perm : state.battlefield)
                     {
                         if (perm.controller_index == state.active_player_index
                             && perm.card.m_number == a.sac_victim_id)
-                        { hn = perm.card.m_name.str(); break; }
+                        { art = perm.card.m_name.str(); break; }
                     }
+                    // `choice` disambiguates same-named hosts (" #k"); `card` stays the bare name so
+                    // the dialog still finds the Scryfall art.
+                    if (!art.empty()) { hn = SubChoiceHostLabel(state, a.sac_victim_id); }
                     if (!hn.empty())
                     {
                         addSub(a.card_name + " \xE2\x86\x92 " + hn, a.card_name + " equips to",
-                               hn, hn, "equip");
+                               hn, art, "equip", a.sac_victim_id);
                     }
                 }
                 // Umezawa's Jitte's non-combat modes: mode 1 shrinks a creature (sac_victim_id names
@@ -30360,9 +30435,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     std::string desc = "gain 2 life";
                     if (a.gy_exile_mode == 1)
                     {
-                        std::string tn;
-                        for (const Permanent& perm : state.battlefield)
-                        { if (perm.card.m_number == a.sac_victim_id) { tn = perm.card.m_name.str(); break; } }
+                        // " #k"-disambiguated: two same-named victims must not share a choice string,
+                        // or the dedup picks which creature gets shrunk (the equip-host defect).
+                        const std::string tn = SubChoiceHostLabel(state, a.sac_victim_id);
                         desc = "-1/-1 to " + (tn.empty() ? std::string("a creature") : tn);
                     }
                     else if (a.gy_exile_mode == 3)
@@ -30380,7 +30455,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                         desc = "+2/+2 to " + (hn.empty() ? std::string("the equipped creature") : hn);
                     }
                     addSub(a.card_name + " " + desc, a.card_name + " counter", desc,
-                           a.card_name, "jitte");
+                           a.card_name, "jitte", a.gy_exile_mode == 1 ? a.sac_victim_id : 0);
                 }
                 if (state.free_casts_available > 0
                     && a.kind == Action::Kind::CastFromHand && !a.alt_cost)

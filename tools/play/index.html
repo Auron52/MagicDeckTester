@@ -567,30 +567,75 @@ function enchantTargetsFor(name) {
 // host) pair, each carrying equip_host + equip_host_name. Returns num -> creature name; empty for
 // anything that is not an Equipment with a live equip. USER 2026-08-24: equipping should work like
 // an Aura -- drag the Equipment onto the creature -- rather than click-then-answer-a-dialog.
-function equipTargetsFor(name) {
+// `srcNum` (the Equipment's own m_number, carried on the action as equip_src) narrows the answer to
+// THAT copy. It matters whenever two copies are not interchangeable -- equipping the Bonesplitter
+// already attached to Balan MOVES it off Balan, equipping the loose one does not -- and, since the
+// hosts of a cast-and-equip plan ride the same card name, it is also what stops a battlefield copy
+// from advertising a host that only the copy in HAND can reach.
+function equipTargetsFor(name, srcNum) {
   const d = S.decision, out = {};
   if (!d || !Array.isArray(d.plans)) return out;
   d.plans.forEach(pl => (pl.actions||[]).forEach(a => {
-    if (a.card===name && a.verb==='equip' && a.equip_host>0)
-    { out[a.equip_host] = a.equip_host_name || ('#'+a.equip_host); }
+    if (!(a.card===name && a.verb==='equip' && a.equip_host>0)) return;
+    if (srcNum && a.equip_src && a.equip_src !== srcNum) return;
+    out[a.equip_host] = a.equip_host_name || ('#'+a.equip_host);
   }));
   return out;
+}
+// Legal hosts for an Equipment still in HAND -- harvested only from plans that CAST it, so the offer
+// is "play it and attach it", the two operations the user asked for as one gesture (2026-09-01:
+// "allow equipping to be decided from hand ... that would mean two operations, playing it plus
+// equipping"). The engine already enumerates the pair as ONE plan ("cast: Bonesplitter, equip
+// Bonesplitter -> Kor Duelist"), which was unreachable from the GUI: the only way to ask for an
+// equip was to drag a permanent that did not exist yet.
+function handEquipTargetsFor(name) {
+  const d = S.decision, out = {};
+  if (!d || !Array.isArray(d.plans)) return out;
+  d.plans.forEach(pl => {
+    const acts = pl.actions||[];
+    if (!acts.some(a => a.card===name && !a.activate)) return;   // this plan does not CAST it
+    acts.forEach(a => { if (a.card===name && a.verb==='equip' && a.equip_host>0)
+      { out[a.equip_host] = a.equip_host_name || ('#'+a.equip_host); } });
+  });
+  return out;
+}
+// The equip_src of the CAST-AND-EQUIP plan for (equipment in hand, host) -- 0 when the engine named
+// none. m_numbers are stable across zones, so the hand card's number IS the permanent's number once
+// the cast resolves; stamping it keeps the queued equip unambiguous even when a same-named copy is
+// already on the battlefield.
+function handEquipSrcFor(name, hostNum) {
+  const d = S.decision; let src = 0;
+  if (!d || !Array.isArray(d.plans)) return 0;
+  d.plans.forEach(pl => {
+    const acts = pl.actions||[];
+    if (src || !acts.some(a => a.card===name && !a.activate)) return;
+    acts.forEach(a => { if (!src && a.card===name && a.verb==='equip'
+                         && a.equip_host===hostNum && a.equip_src>0) { src = a.equip_src; } });
+  });
+  return src;
 }
 // The attach targets for a QUEUED plan entry, whichever kind of attachment it is. One funnel so the
 // #playfield drop handler and the dragstart wiring never have to branch on aura-vs-equipment.
 function attachTargetsForEntry(e) {
   if (!e) return {};
-  return (e.kind==='activate' && e.verb==='equip') ? equipTargetsFor(e.name) : enchantTargetsFor(e.name);
+  if (!(e.kind==='activate' && e.verb==='equip')) return enchantTargetsFor(e.name);
+  return e.fromHand ? handEquipTargetsFor(e.name) : equipTargetsFor(e.name, e.srcNum);
 }
 // Queue (or RE-AIM) one Equip of a battlefield Equipment onto a specific host -- the drag-and-drop
 // counterpart of queueActivation for the `equip` verb. The host rides on `target`/`targetName`, the
 // same fields a dragged Aura stamps, so the planned-attachment grouping in renderBoard and the
 // choose-dialog auto-resolve (attachPrefFor) both work for equipment with no extra cases.
-function queueEquip(name, num, hostName) {
+// `srcNum` is the Equipment permanent's own m_number (0/undefined when it is still in hand and this
+// equip rides a cast in the same line -- see `fromHand`). It rides on the entry and is written into
+// the `equip=` token, which is what makes two copies of one Equipment separately aimable.
+function queueEquip(name, num, hostName, srcNum, fromHand) {
   if (S.over || !S.decision || S.decision.type!=='main_phase') return false;
   hideVerdict();
-  const cap = activatableSources()[name]||0;
-  const mine = S.plan.map((p,i)=>({p,i})).filter(x=>x.p.kind==='activate' && x.p.verb==='equip' && x.p.src===name);
+  const cap = fromHand ? 1 : (activatableSources()[name]||0);
+  // Keyed by (name, srcNum): a battlefield copy and a copy being cast this turn are DIFFERENT
+  // equips, so a drop aimed at one must never re-aim the other.
+  const mine = S.plan.map((p,i)=>({p,i})).filter(x=>x.p.kind==='activate' && x.p.verb==='equip'
+               && x.p.src===name && (x.p.srcNum||0)===(srcNum||0) && !!x.p.fromHand===!!fromHand);
   // An Equipment can only be attached to ONE creature, so a second drop is a CORRECTION, not an
   // addition: re-aim the queued equip instead of refusing (or worse, queueing a duplicate).
   if (mine.length >= Math.max(1, cap)) {
@@ -600,19 +645,34 @@ function queueEquip(name, num, hostName) {
     renderBoard();
     return true;
   }
-  S.plan.push({ name, src:name, kind:'activate', verb:'equip', mode:null, target:num, targetName:hostName });
+  S.plan.push({ name, src:name, kind:'activate', verb:'equip', mode:null, target:num,
+                targetName:hostName, srcNum:srcNum||0, fromHand:!!fromHand });
   flashHint(`Equipping ${hostName} with ${name}. Commit the phase to resolve it.`);
   renderBoard();
   return true;
 }
-// Attempt a drag-drop of the battlefield Equipment `name` onto the creature with m_number `num`.
-function tryEquipDrop(name, num) {
-  const tgts = equipTargetsFor(name);
+// Attempt a drag-drop of the battlefield Equipment `name` (permanent `srcNum`) onto the creature
+// with m_number `num`.
+function tryEquipDrop(name, num, srcNum) {
+  const tgts = equipTargetsFor(name, srcNum);
   if (!(num in tgts)) {
     flashHint(`${name} can’t be equipped to that${Object.keys(tgts).length?'':' — no legal creature this phase'}.`);
     return false;
   }
-  return queueEquip(name, num, tgts[num]);
+  return queueEquip(name, num, tgts[num], srcNum, false);
+}
+// Attempt a drag-drop of the HAND card `name` onto the creature `num` as a cast-AND-equip: the two
+// operations the play needs, expressed as one gesture. Queues both entries; they encode as
+// `cast=<name>;equip=<name>#<src>@<host>`, which matches the single plan the engine already
+// enumerates for the pair. Returns false (so the caller falls through to a plain queue) whenever the
+// engine offers no such plan -- the affordance is never a silent no-op.
+function tryEquipFromHandDrop(name, kind, num) {
+  const tgts = handEquipTargetsFor(name);
+  if (!(num in tgts)) return false;
+  queueCard(name, kind);                                      // operation 1: play it
+  queueEquip(name, num, tgts[num], handEquipSrcFor(name, num), true);   // operation 2: attach it
+  flashHint(`Casting ${name} and equipping ${tgts[num]} with it. Commit the phase to resolve both.`);
+  return true;
 }
 // Attempt a drag-drop of hand card `name` onto the creature with m_number `num`. Only auras with `num`
 // among their legal targets enchant; anything else falls through so the caller queues it normally.
@@ -623,12 +683,14 @@ function tryEnchantDrop(name, kind, num) {
   flashHint(`Enchanting ${tgts[num]} with ${name}.`);
   return true;
 }
-// The creature name the user dragged `cardName` onto this turn (null if it was queued without a
-// drag). Used by the choose dialog to auto-resolve the attach target instead of re-asking -- for an
-// Aura's `enchant` sub and, since 2026-08-24, an Equipment's `equip` sub.
+// The creature the user dragged `cardName` onto this turn, as {num, name} (null if it was queued
+// without a drag). Used by the choose dialog to auto-resolve the attach target instead of re-asking
+// -- for an Aura's `enchant` sub and, since 2026-08-24, an Equipment's `equip` sub. The NUM is what
+// the match keys on: with two Kor Duelists in play the name is shared, so matching by name resolved
+// the drag to whichever host the engine enumerated first (the seed-6 defect).
 function attachPrefFor(cardName) {
   const e = (S.plan||[]).find(p=>p.name===cardName && p.targetName);
-  return e ? e.targetName : null;
+  return e ? { num: e.target||0, name: e.targetName } : null;
 }
 // Re-aim an ALREADY-PLANNED attachment (Aura or Equipment) by dragging its plan chip / board overlap
 // onto a legal creature. Unlike tryEnchantDrop (which queues a fresh copy from hand), this just
@@ -811,10 +873,19 @@ function jitteModeLabel(m){ return JITTE_MODE_LABEL[m] || ('mode ' + m); }
 // source whose ONLY activation is Equip (a plain Bonesplitter) has no click affordance at all, while
 // a Jitte -- Equip plus two counter modes -- still opens the picker for the modes alone.
 function clickActivationOptions(name){ return activationOptions(name).filter(o=>o.verb!=='equip'); }
-// Can this battlefield Equipment be dragged onto a creature right now?
-function isEquipDragSource(name){
+// Can THIS battlefield Equipment (permanent `srcNum`) be dragged onto a creature right now? Scoped
+// to the copy, so a loose Bonesplitter does not advertise the hosts that only the copy in hand (via
+// a cast-and-equip plan) can reach -- a menu entry that is a silent no-op is exactly what the
+// board-activation rule forbids.
+function isEquipDragSource(name, srcNum){
   return !S.over && S.decision && S.decision.type==='main_phase'
-      && Object.keys(equipTargetsFor(name)).length > 0;
+      && Object.keys(equipTargetsFor(name, srcNum)).length > 0;
+}
+// Equipment permanents (by m_number) whose equip is QUEUED this phase. They are drawn stacked on the
+// host they are about to attach to, so they must NOT also be drawn where they are now: the reported
+// "the equipment remains in two places, in the plan and separately on the field" (2026-09-01).
+function queuedEquipSrcNums(){
+  return new Set((S.plan||[]).filter(p=>p.kind==='activate'&&p.verb==='equip'&&p.srcNum).map(p=>p.srcNum));
 }
 function activateCount(name){ return S.plan.filter(p=>p.kind==='activate' && p.src===name).length; }
 // Same count restricted to the CLICK-driven activations, so a queued (dragged) equip neither eats a
@@ -890,8 +961,8 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const actCap = clickOpts.length ? (activatableSources()[o.name]||0) : 0;
   const actN = actCap ? clickActivateCount(o.name) : 0;
   // Drag-to-equip source: an Equipment (attached or not) the engine offers an Equip for this phase.
-  const eqDrag = !le && !isVial && !canSac && isEquipDragSource(o.name);
-  const eqN = eqDrag ? S.plan.filter(p=>p.kind==='activate'&&p.verb==='equip'&&p.src===o.name).length : 0;
+  const eqDrag = !le && !isVial && !canSac && isEquipDragSource(o.name, o.num);
+  const eqN = eqDrag ? S.plan.filter(p=>p.kind==='activate'&&p.verb==='equip'&&p.srcNum===o.num).length : 0;
   const cls = (le ? `spell le-src${S.leMode?' active':''}` : (land?'land':'spell'))
             + (canSac?' sac-src':'') + (actCap?' act-src':'') + (actN?' act-on':'')
             + (eqDrag?' equip-src':'') + (eqN?' act-on':'');
@@ -903,7 +974,9 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   // Equipment drags onto a creature, the way an Aura does. draggable + data-equip is all wireBoard
   // needs; a source that ALSO has click activations (a Jitte) keeps both, so its thumb is clickable
   // for the counter modes and draggable for the attach.
-  const eqAttr = eqDrag ? ` draggable="true" data-equip="${esc(o.name)}"`
+  // data-equipnum pins WHICH copy is being dragged (two Bonesplitters are not interchangeable when
+  // one is already attached -- equipping that one MOVES it).
+  const eqAttr = eqDrag ? ` draggable="true" data-equip="${esc(o.name)}" data-equipnum="${o.num||0}"`
                         + (actCap?'':` title="${esc(o.name)} — drag onto one of your creatures to equip it"`) : '';
   const idxAttr = (o.idx!=null) ? ` data-idx="${o.idx}"` : '';
   // data-num = stable m_number; it is the drop target key for drag-to-attach (a creature only — lands
@@ -956,12 +1029,12 @@ function auraAttThumb(o, z, top) {
   // An ATTACHED Equipment stays a drag source: dragging it onto another creature is how you MOVE it
   // (Grafted Wargear's re-host, parking the Greaves on the next threat). Before, that was a click;
   // it is the same gesture as the first attach now, which is the point of the change.
-  const eqDrag = isEquipDragSource(o.name);
-  const eqN    = eqDrag ? S.plan.filter(p=>p.kind==='activate'&&p.verb==='equip'&&p.src===o.name).length : 0;
+  const eqDrag = isEquipDragSource(o.name, o.num);
+  const eqN    = eqDrag ? S.plan.filter(p=>p.kind==='activate'&&p.verb==='equip'&&p.srcNum===o.num).length : 0;
   const attrs  = actCap ? ` data-activate="${esc(o.name)}" title="${esc(o.name)} — ${what}; click to use its ability this phase${actN?' (click again to remove)':''}"`
                : eqDrag ? ` title="${esc(o.name)} — ${what}; drag onto another of your creatures to move it"`
                         : ` title="${esc(o.name)} — ${what}"`;
-  const eqAttr = eqDrag ? ` draggable="true" data-equip="${esc(o.name)}"` : '';
+  const eqAttr = eqDrag ? ` draggable="true" data-equip="${esc(o.name)}" data-equipnum="${o.num||0}"` : '';
   return `<span class="thumb spell aura-att${actCap?' act-src':''}${eqDrag?' equip-src':''}${(actN||eqN)?' act-on':''}" style="z-index:${z};top:${top}px" data-name="${esc(o.name)}"${attrs}${eqAttr}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/>`+
     (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
@@ -972,7 +1045,11 @@ function auraAttThumb(o, z, top) {
 // an order badge and a remove ✕ (reuses the .thumb.planned .rm[data-rm] handler wired after render).
 function plannedAuraThumb(entry, planIdx, ord, z, top) {
   const equip = entry.kind==='activate' && entry.verb==='equip';
-  const tip = `${entry.name} — queued ${equip?'equip':'aura'}; drag onto another creature to re-aim`;
+  // A from-HAND equip is two queued operations (cast, then attach) drawn as ONE thumb on the host,
+  // so say so -- otherwise its ✕ reads as "remove the cast" when it only drops the attach.
+  const tip = entry.fromHand
+    ? `${entry.name} — queued: cast it, then equip this creature with it (✕ drops just the equip)`
+    : `${entry.name} — queued ${equip?'equip':'aura'}; drag onto another creature to re-aim`;
   return `<span class="thumb spell planned aura-plan" draggable="true" data-pi="${planIdx}" style="z-index:${z};top:${top}px" data-name="${esc(entry.name)}" title="${esc(tip)}">`+
     `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(entry.name)}</em></span>`;
@@ -1041,6 +1118,18 @@ function renderBoard() {
   const plannedAurasByHost = {};
   S.plan.forEach((p,i)=>{ if(p.target && p.kind!=='land' && p.kind!=='le'){ (plannedAurasByHost[p.target]=plannedAurasByHost[p.target]||[]).push({entry:p, planIdx:i, ord:ord[i]}); } });
   const meBf = me.battlefield||[];
+  // An Equipment whose equip is QUEUED is drawn stacked on the host it is about to attach to, so it
+  // must not ALSO be drawn where it sits now -- that is the reported "the equipment remains in two
+  // places, in the plan and separately on the field" (2026-09-01). Covers both shapes: a loose one
+  // (its own thumb in the permanents row) and an ATTACHED one being re-hosted (stacked under its
+  // current host). The suppression is by m_number, so a second copy staying put is unaffected.
+  const eqQueuedSrc = queuedEquipSrcNums();
+  // ...and the same rule for the from-HAND cast-and-equip: the queued CAST would render as its own
+  // planned thumb next to the planned attachment on the host, which is the identical duplication.
+  // Count-matched by name so a second, un-equipped copy queued in the same line still shows.
+  const fromHandEquipLeft = {};
+  S.plan.forEach(p=>{ if(p.kind==='activate'&&p.verb==='equip'&&p.fromHand)
+    { fromHandEquipLeft[p.name]=(fromHandEquipLeft[p.name]||0)+1; } });
   const boardHostNums = new Set(meBf.filter(x=>!x.is_land && !((x.is_aura||x.is_equip)&&x.attached_to>0)).map(x=>x.num));
 
   const plannedLands = [], plannedPerms = [], plannedSpells = [], plannedLE = [];
@@ -1057,6 +1146,9 @@ function renderBoard() {
     // puts nothing onto the battlefield and belongs in the spells row, not the planned-permanents row.
     if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
     if(p.target){ return; }   // a queued aura with a target -> drawn overlapping its host (below)
+    // The CAST half of a from-hand cast-and-equip: its equip half is already drawn on the host, so
+    // drawing this too would put the same card in two places on the field.
+    if(fromHandEquipLeft[p.name]>0){ fromHandEquipLeft[p.name]--; return; }
     // A queued CREATURE that has queued Auras on it (and isn't already a board creature) renders as a
     // planned enchant group; otherwise a plain planned thumb. ('vial' deploy is a creature -> perms zone.)
     if(p.num && !boardHostNums.has(p.num) && (plannedAurasByHost[p.num]||[]).length){
@@ -1068,7 +1160,7 @@ function renderBoard() {
   // Group attached Auras AND attached Equipment UNDER their host creature (by m_number; equipment
   // added 2026-08-14). A host with no attachment renders as a plain
   // thumb; an Aura whose host isn't found falls back to a standalone thumb so nothing is ever hidden.
-  const mePermsRaw = meBf.filter(x=>!x.is_land);
+  const mePermsRaw = meBf.filter(x=>!x.is_land && !eqQueuedSrc.has(x.num));
   const aurasByHost = {};
   mePermsRaw.forEach(p=>{ if((p.is_aura||p.is_equip) && p.attached_to>0){ (aurasByHost[p.attached_to]=aurasByHost[p.attached_to]||[]).push(p); } });
   const hostNums = new Set(mePermsRaw.filter(p=>!((p.is_aura||p.is_equip) && p.attached_to>0)).map(p=>p.num));
@@ -1399,7 +1491,10 @@ function renderHand() {
       S._clickT = setTimeout(()=>{ S._clickT=null; activateAbility(card); }, 220); });
     t.addEventListener('dblclick', () => { if (S._clickT){ clearTimeout(S._clickT); S._clickT=null; } queueCard(card, kind); });
     t.addEventListener('dragstart', e => { e.dataTransfer.setData('text/card', card); e.dataTransfer.setData('text/kind', kind);
-      S._dragCard=card; S._dragKind=kind; S._dragTargets=enchantTargetsFor(card); });   // stash for creature drop-highlight
+      // Drop-highlight set: the Auras' legal hosts PLUS, for an Equipment in hand, the creatures a
+      // cast-and-equip plan can attach it to (the drop queues both operations).
+      S._dragCard=card; S._dragKind=kind;
+      S._dragTargets=Object.assign({}, handEquipTargetsFor(card), enchantTargetsFor(card)); });
     t.addEventListener('dragend', () => { S._dragCard=null; S._dragKind=null; S._dragTargets=null; clearEnchDropHi(); });
   });
 }
@@ -1424,8 +1519,10 @@ function wireBoard() {
   // inside its host's .enchgroup, so without it the host would start the drag instead.
   $('board').querySelectorAll('.thumb[data-equip]').forEach(t=>{
     t.addEventListener('dragstart', e=>{ e.stopPropagation(); const nm=t.dataset.equip;
+      const src=+(t.dataset.equipnum||0);
       e.dataTransfer.setData('text/equip', nm);
-      S._dragCard=null; S._dragKind=null; S._dragTargets=equipTargetsFor(nm); });
+      e.dataTransfer.setData('text/equipnum', String(src));
+      S._dragCard=null; S._dragKind=null; S._dragTargets=equipTargetsFor(nm, src); });
     t.addEventListener('dragend', ()=>{ S._dragCard=null; S._dragKind=null; S._dragTargets=null; clearEnchDropHi(); });
   });
   // click the Land's Edge permanent (the ability source) to enter/exit discard mode
@@ -1569,8 +1666,19 @@ async function commitLine() {
 // given tutor target was never enumerated together, so that combination is simply never offered.
 function renderChooseDialog(v, line){
   const variants=(v.variants||[]).slice();
-  // Fallback: a variant with no structured subs can't be decomposed (degenerate / older engine).
-  if (!variants.length || variants.some(x=>!x.subs || !x.subs.length)) return renderChooseFlat(v, line);
+  // A `choose` with no variants is a protocol error, not a decision -- there is nothing to pick.
+  if (!variants.length) return showError('the engine returned a "choose" with no variants', JSON.stringify(v));
+  // NO FLAT FALLBACK (USER 2026-09-01: "I would actually like to kill every one of those confusing
+  // and ugly dialogs with overlapping text and random pictures, for all decklists"). The old
+  // renderChooseFlat dumped every variant into one grid of card art labelled by its FULL line
+  // summary in a nowrap badge -- overlapping text over pictures that repeat, with no statement of
+  // what was actually being decided. It fired whenever ANY variant lacked a structured `subs`
+  // breakdown, which is a mixed set the dimension walk handles perfectly well: a variant missing a
+  // dimension simply has no value in it, and `choiceOf` already reports that as '—'. So the walk now
+  // owns every shape, and the dimension is rendered as a LIST when any choice has no card art
+  // (which is what made the grid ugly). If two variants ever differ with NO distinguishing
+  // dimension at all, stepChoose's existing defensive branch commits the first -- it cannot happen,
+  // because the dedup signature is derived from the same subs the walk reads.
   // The dimension walk itself lives in linebuild.js (shared + headlessly testable) -- see the note
   // there. index.html keeps only the rendering and the auto-resolve shortcuts.
   const subOf=(x,key)=>LB.subOf(x,key);
@@ -1605,7 +1713,12 @@ function renderChooseDialog(v, line){
     if (dim.kind==='enchant' || dim.kind==='equip'){
       const card = dim.key.replace(/\s*(→|equips to)\s*$/,'').trim();
       const pref = attachPrefFor(card);
-      const hit  = pref && choices.find(c=>c.choice===pref);
+      // By m_number first (exact), by name only as a fallback for a payload with no `num` -- an
+      // older engine's variants. Never by name when the name is ambiguous among the choices: that is
+      // the mis-resolution this is here to stop, and asking is the right answer when we cannot tell.
+      const hit  = pref && (choices.find(c=>pref.num && c.num===pref.num)
+                        || (choices.filter(c=>c.choice===pref.name).length===1
+                            ? choices.find(c=>c.choice===pref.name) : null));
       if (hit){ const next=remaining.filter(x=>choiceOf(x,dim.key)===hit.choice);
                 return stepChoose(next, picks.concat([{key:dim.key, choice:hit.choice}])); }
     }
@@ -1628,8 +1741,16 @@ function renderChooseDialog(v, line){
     // not a card). Keep this in sync with the addSub() keys in TurnSolver::CheckLine.
     const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|replicate|face|sacrifices|activations|equips to|counter|ability|modes|mode|strive|cost)\s*$/,'').trim();
     const crumbs = picks.length
-      ? `<div class="chosen">${picks.map(p=>`<span class="crumb">${esc(p.key)} <b>${esc(p.choice)}</b></span>`).join('')}</div>`
+      ? `<div class="chosen">${picks.map(p=>`<span class="crumb">${esc(p.key)} <b>${esc(p.label||p.choice)}</b></span>`).join('')}</div>`
       : '';
+    // `choiceOf` reports '—' for a variant that simply does not HAVE this dimension (a mixed set:
+    // one variant equips, another does not). Rendered raw that is an unexplained dash — the shape
+    // that used to drop the whole dialog into the deleted flat picker — so say what it means.
+    const choiceText = c => c.choice!=='—' ? c.choice
+      : dim.kind==='equip'     ? 'don’t equip it'
+      : dim.kind==='enchant'   ? 'leave it unattached'
+      : dim.kind==='sacrifice' ? 'sacrifice nothing'
+      : 'this line doesn’t do that';
     // WHICH SHAPE? A grid of card art only communicates something when the choices ARE different
     // cards (fetch/tutor/enchant/face). For a dimension whose every choice is the SAME card -- a
     // mode split (Unite the Coalition), an X value, a splice count, pay-vs-free, a loyalty ability --
@@ -1638,8 +1759,13 @@ function renderChooseDialog(v, line){
     // the reported "it overlaps". Those dimensions get the LIST shape instead -- the same
     // .optlist/button.opt rows the Ponder / scry / surveil reorder dialog uses -- with the source
     // card shown ONCE in the header where it is actually informative.
+    // A choice with NO card art gets the list shape too: in a grid it renders as a blank tile whose
+    // only content is the overflowing badge -- the exact ugliness above, and the shape the deleted
+    // flat picker produced for every mixed variant set (a variant that simply does not have this
+    // dimension reports '—').
     const sameCard = choices.every(c => (c.card||'') === (choices[0].card||''));
-    const listShape = sameCard || ['modal','x','splice','replicate','free','loyalty'].indexOf(dim.kind) >= 0;
+    const listShape = sameCard || choices.some(c => !c.card)
+                   || ['modal','x','splice','replicate','free','loyalty'].indexOf(dim.kind) >= 0;
     let h=`<div class="dimhead">${srcName?cardMini(srcName,'dimsrc'):''}`+
           `<div class="dimtext"><h3>${esc(dim.key)}?</h3>`+
           `<div class="sub">${total>1?`Decision ${step} of ${total} for this line — `:''}`+
@@ -1647,20 +1773,23 @@ function renderChooseDialog(v, line){
     if (listShape){
       h+=`<div class="optlist">`;
       choices.forEach((c,i)=>{
-        h+=`<button class="opt varpick" data-i="${i}" title="${esc(c.choice)}">${esc(c.choice)}</button>`;
+        h+=`<button class="opt varpick" data-i="${i}" title="${esc(choiceText(c))}">${esc(choiceText(c))}</button>`;
       });
       h+=`</div>`;
     } else {
       h+=`<div class="tutgrid">`;
       choices.forEach((c,i)=>{
-        // The badge only adds value when the choice differs from the card name shown below (X=2,
-        // +2 own). For fetch/tutor the choice IS the card name, so the badge just duplicates the
-        // <em> label and its nowrap pill overflows into neighbours -- skip it there.
-        const showBadge = c.card && c.choice!==c.card;
+        // The badge shows only what the choice says BEYOND the card name under it -- "#2" for the
+        // second of two same-named hosts, "X=2" for a value. When the choice IS the card name
+        // (fetch/tutor) there is nothing left, so no badge: it would duplicate the <em> label and
+        // its nowrap pill would overflow into the neighbouring tile.
+        const detail = (c.card && c.choice.indexOf(c.card)===0)
+                     ? c.choice.slice(c.card.length).replace(/^[\s:·—-]+/,'') : c.choice;
+        const showBadge = c.card && detail && detail!==c.card;
         h+=`<span class="cardmini varpick" data-i="${i}"${c.card?` data-name="${esc(c.card)}"`:''} title="${esc(c.choice)}">`+
-           (showBadge?`<span class="varbadge">${esc(c.choice)}</span>`:'')+
-           (c.card?`<img loading="lazy" src="${scryImg(c.card,'small')}" onerror="this.style.opacity=.15"/>`:`<span style="display:block;height:96px"></span>`)+
-           `<em>${esc(c.card||c.choice)}</em></span>`;
+           (showBadge?`<span class="varbadge">${esc(detail)}</span>`:'')+
+           `<img loading="lazy" src="${scryImg(c.card,'small')}" onerror="this.style.opacity=.15"/>`+
+           `<em>${esc(c.card)}</em></span>`;
       });
       h+=`</div>`;
     }
@@ -1671,7 +1800,7 @@ function renderChooseDialog(v, line){
     panel.querySelectorAll('.varpick').forEach(b=>b.onclick=()=>{
       const c=choices[+b.dataset.i];
       const next=remaining.filter(x=>choiceOf(x,dim.key)===c.choice);
-      stepChoose(next, picks.concat([{key:dim.key, choice:c.choice}]));
+      stepChoose(next, picks.concat([{key:dim.key, choice:c.choice, label:choiceText(c)}]));
     });
     if (picks.length) $('chooseback').onclick=()=>replay(picks.slice(0,-1));
     $('choosecancel').onclick=()=>{ hideDecPanel(); renderBoard(); };
@@ -1686,30 +1815,12 @@ function renderChooseDialog(v, line){
 
   stepChoose(variants, []);
 }
-// Legacy flat picker (all variants in one grid) — retained as a fallback for variants that lack a
-// structured `subs` breakdown, and for any degenerate case the sequential picker can't split.
-function renderChooseFlat(v, line){
-  const panel=$('decpanel'), back=$('decback');
-  back.className='modal'; back.style.display='block'; panel.className='show modal';
-  let h=`<h3>Choose how to resolve</h3>`+
-    `<div class="sub">This line resolves several ways — pick one (the AI chooses among these too).</div>`+
-    `<div class="tutgrid">`;
-  (v.variants||[]).forEach(x=>{
-    const card=(x.cards||[])[0]||'';
-    // The distinguishing detail (e.g. "X=2", "→ Target") is the part of the label past the card name.
-    // Show it as a prominent badge so otherwise-identical card images (Crackle X=1 vs X=2) are tellable.
-    let detail = x.label||'';
-    if (card && detail.indexOf(card)===0) detail = detail.slice(card.length).replace(/^[\s:·-]+/,'');
-    h+=`<span class="cardmini varpick" data-pi="${x.plan_index}" data-lab="${esc(x.label)}"${card?` data-name="${esc(card)}"`:''} title="${esc(x.label)}">`+
-       (detail?`<span class="varbadge">${esc(detail)}</span>`:'')+
-       (card?`<img loading="lazy" src="${scryImg(card,'small')}" onerror="this.style.opacity=.15"/>`:`<span style="display:block;height:96px"></span>`)+
-       `<em>${esc(card||x.label)}</em></span>`;
-  });
-  h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span><button id="choosecancel" class="ghost">Cancel</button></div>`;
-  panel.innerHTML=h;
-  panel.querySelectorAll('.varpick').forEach(b=>b.onclick=()=>{ hideDecPanel(); applyAccepted(+b.dataset.pi, b.dataset.lab); });
-  $('choosecancel').onclick=()=>{ hideDecPanel(); renderBoard(); };
-}
+// (The legacy flat picker -- one grid of every variant, each labelled by its whole line summary in
+// an overflowing badge over a repeated card image, under the heading "Choose how to resolve" -- was
+// DELETED 2026-09-01 at the user's request: "kill every one of those confusing and ugly dialogs with
+// overlapping text and random pictures for all decklists". Real decisions still get a dialog or
+// board targeting; what is gone is the undifferentiated dump. renderChooseDialog's dimension walk
+// now handles every shape, including the mixed sub/no-sub variant sets that used to land here.)
 function applyAccepted(planIndex, label) {
   S.history.push({ turn:S.decision.turn, label });
   // Remember which cards this line CAST, so the graveyard-add log can exclude them and surface only
@@ -3275,12 +3386,15 @@ async function loadDecks() {
     // empty field it is a miss, not a play: an Equipment already IS on the battlefield, so there is
     // nothing sensible to queue without a host.
     const eq=e.dataTransfer.getData('text/equip');
-    if(eq!==''){ if(ct) tryEquipDrop(eq, +ct.dataset.num);
+    if(eq!==''){ if(ct) tryEquipDrop(eq, +ct.dataset.num, +(e.dataTransfer.getData('text/equipnum')||0));
                  else flashHint(`Drop ${eq} ON one of your creatures to equip it.`); return; }
     const card=e.dataTransfer.getData('text/card'); if(!card) return;
     const kind=e.dataTransfer.getData('text/kind')||'permanent';
-    // Dropped ON a legal creature -> enchant it; otherwise queue the card as a plain play.
+    // Dropped ON a legal creature -> enchant it, or (an Equipment in hand) CAST it and equip that
+    // creature with it in the same line -- "playing it plus equipping" as one gesture. Otherwise
+    // queue the card as a plain play.
     if(ct && tryEnchantDrop(card, kind, +ct.dataset.num)) return;
+    if(ct && tryEquipFromHandDrop(card, kind, +ct.dataset.num)) return;
     queueCard(card, kind); });
 })();
 

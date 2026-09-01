@@ -1,0 +1,25 @@
+{
+  "deck": "decks/KittyEquipment/KittyEquipment.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Kor Duelist",  "controller": 0, "tapped": false },
+    { "name": "Bonesplitter", "controller": 0, "tapped": false },
+    { "name": "Plains",       "controller": 0, "tapped": false },
+    { "name": "Plains",       "controller": 0, "tapped": false },
+    { "name": "Plains",       "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Bonesplitter" ],
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 200,
+  "max_turns": 6,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "cast=Bonesplitter",
+  "expect_verdict": "accept",
+  "expect_variants": 1,
+  "comment": "CASTING an Equipment from hand is not EQUIPPING the copy already in play. CheckLine used to fall back to matching an Equip action's card NAME inside the ordinary `cast=` multiset whenever the line declared no `equip=`, so this line -- 'cast the Bonesplitter in my hand' -- also matched the plans that only attach the Bonesplitter already on the battlefield. The user got a 'Choose how to resolve' dialog on a plain equipment cast and, picking wrong, would have left the card in hand (KittyEquipment seed 7 T3, 2026-09-01). Equip is now matched against spec.equips ALWAYS, in both directions: an empty spec.equips means 'this line performs no equip', so a plan that equips is not a match for it. One variant => accept => no dialog. The board deliberately holds BOTH copies (one in play, one in hand), which is the only arrangement where the two plays are expressible by the same token."
+}

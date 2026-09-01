@@ -156,19 +156,82 @@ its `enchant` sub, and it now also emits an explicit `bestow` mode sub so the ch
 which of the two it is (before, the mixed sub/no-sub set fell into the flat fallback picker and the
 two modes rendered as the same card name twice).
 
+**THE FLAT FALLBACK PICKER IS GONE (USER 2026-09-01).** *"I would actually like to kill every one of
+those confusing and ugly dialogs with overlapping text and random pictures for all decklists. Keep in
+mind that for real decisions that need to be made we want a dialog or targeting on the board, but we
+never want one of these dialogs."* `renderChooseFlat` — the "Choose how to resolve" grid that dumped
+every variant into one row of repeated card art labelled by its whole line summary in a nowrap badge
+— is deleted. Several engine comments still say a missing sub "drops the dialog into the flat
+fallback picker"; read those as *the dimension walk cannot separate the variants cleanly*, which is
+still a reason to emit the sub. What changed is only what happens when one is missing:
+`renderChooseDialog` no longer bails, because a variant that lacks a dimension simply has no value in
+it and `choiceOf` already reports that as `'—'` (rendered with a per-kind label like *"don't equip
+it"*). The walk now owns every shape, and a dimension whose choices are not all distinct card art is
+rendered as a LIST rather than a grid — the grid is what overlapped. Nothing else about real
+decisions changed: they still get this dialog or a board click.
+
 **EQUIP is the exception: it is a DRAG, not a click (USER 2026-08-24).** *"Change the means to equip
 equipment to resemble the approach used for auras — rather than activate them normally you would drag
 them onto a creature."* An Equipment in play (attached or not) renders `draggable` + `data-equip` and
 is dropped onto one of your creatures; `equipTargetsFor` reads the legal hosts straight out of the
 enumerated plans (`equip_host` / `equip_host_name` on the Equip action) exactly as `enchantTargetsFor`
 does for Auras, and the drop stamps the host on the queued entry's `target`/`targetName` — the SAME
-fields a dragged Aura uses. Three things follow from reusing those fields rather than inventing new
-ones: the queued equip renders stacked behind its host like a planned Aura, dragging it again re-aims
-it in place (`retargetPlanAura`, never a duplicate — an Equipment has ONE host), and the choose
-dialog's `equip` dimension auto-resolves to the dragged host instead of asking again (`attachPrefFor`,
-the same shortcut the `enchant` dimension has always had). `clickActivationOptions` filters `equip`
-out of the click path, so an equip-only Equipment has no click affordance at all while a Jitte — Equip
-plus two counter modes — still opens the picker for the modes and is dragged for the attach.
+fields a dragged Aura uses. Two things follow from reusing those fields rather than inventing new
+ones: the queued equip renders stacked behind its host like a planned Aura, and dragging it again
+re-aims it in place (`retargetPlanAura`, never a duplicate — an Equipment has ONE host).
+`clickActivationOptions` filters `equip` out of the click path, so an equip-only Equipment has no
+click affordance at all while a Jitte — Equip plus two counter modes — still opens the picker for the
+modes and is dragged for the attach.
+
+**The host rides on the LINE, not on a sub-decision (2026-09-01).** `equip=` now writes
+`equip=<name>[#<equipment m_number>][@<host m_number>]`, and the drag stamps both. It used to write a
+bare name and leave the host to the `equip` sub-decision, which the viewer then auto-resolved from
+the drag. That worked only while every host had a distinct NAME: the sub's `choice` string IS the
+host's name, `CheckLine` dedups plan variants by a signature built from those strings, so with **two
+Kor Duelists** in play all four (Wargear host, Greaves host) pairings shared a signature and three
+were silently dropped before the viewer ever saw them — *"it doesn't allow me to equip Grafted Wargear
+followed by Lightning Greaves to the second Kor Duelist; instead it ends up equipping the Lightning
+Greaves to the first"* (KittyEquipment seed 6). No client-side shortcut can recover a variant the
+engine already collapsed, which is why the fix is in the line. Consequences, all of them wanted:
+a stamped line matches exactly ONE plan, so equipping is an **accept** with no dialog at all; the
+source number distinguishes two copies of one Equipment (moving the attached Bonesplitter is not the
+same play as attaching the loose one); and `EquipsMatch` treats a 0 as a wildcard, so an unstamped
+legacy line still fans out as before. Belt-and-braces on the engine side: `SubChoiceHostLabel`
+appends `#1`/`#2` to a same-named host in every board-object sub (`equip`, `enchant`, `sacrifice`,
+the Jitte's `-1/-1` victim), so *no* dimension can silently collapse two creatures into one; and
+`SubChoice.num` carries the m_number to the client, so the `attachPrefFor` auto-resolve matches by
+identity rather than by a display string two creatures can share. Pinned by
+`test/scenarios/kitty_equip_two_same_named_hosts.json` (four variants must survive) — asserting only
+`choose` would still pass if two of the four vanished.
+
+**An Equip is NEVER part of the `cast=` multiset (2026-09-01).** `CheckLine` used to fall back to
+matching an Equip action by its card name inside `spec.casts` whenever the line declared no `equip=`.
+Under that rule `cast=Bonesplitter` — *cast the copy in my hand* — also matched the plans that only
+**attach** the Bonesplitter already in play, two plays with nothing in common beyond a name. The user
+got a variant dialog on a plain equipment cast and, picking wrong, would have left the card in hand
+(KittyEquipment seed 7 T3). Equip is now matched against `spec.equips` in **both** directions: an
+empty `spec.equips` means *this line performs no equip*, so a plan that equips is not a match for it.
+Pinned by `test/scenarios/kitty_cast_equipment_is_not_an_equip.json`.
+
+**Equipping can also be decided FROM HAND (USER 2026-09-01).** *"Ideally we would allow equipping to
+be decided from hand or by dragging the equipment on the field. That would mean two operations,
+playing it plus equipping."* Dropping a hand Equipment on one of your creatures queues **both**
+operations — the cast and the equip — and they encode as one line,
+`cast=<name>;equip=<name>#<src>@<host>`, which matches the single plan the engine has always
+enumerated for the pair (`land=Plains; cast: Bonesplitter, equip Bonesplitter → Kor Duelist`). That
+plan was previously unreachable from the GUI: the only equip gesture was dragging a permanent that
+does not exist until the cast resolves. `handEquipTargetsFor` gates the affordance on a plan that
+really casts the card, so the drop is never a silent no-op; `equipSrc`/`equip_src` supplies the
+m_number even from hand (numbers are stable across zones). The pair renders as ONE thumb on the host
+— see the duplication note below.
+
+**A queued equip is drawn ONCE (2026-09-01).** *"When equipping, the equipment remains in two places,
+in the plan and separately on the field."* The queued equip has always rendered stacked on its
+intended host, but the Equipment ALSO kept its own battlefield thumb (or its stack under its current
+host, when being re-hosted), so the same card appeared twice on the field. `queuedEquipSrcNums()`
+suppresses the resolved copy by m_number while its equip is queued, and the from-hand pair suppresses
+the planned CAST thumb by the same rule. The HAND thumb deliberately stays visible with its queued
+count badge — that is a different zone, not a duplicate.
 
 **Umezawa's Jitte's +2/+2 is a main-phase activation like its other two modes (USER 2026-08-24).**
 *"Pump for Umezawa's Jitte should be handled like the others. I should be able to activate them any

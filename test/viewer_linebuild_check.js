@@ -198,6 +198,41 @@ function checkSacrificeDimension() {
   return fails;
 }
 
+// ---- A MIXED variant set is still walked, never dumped flat ----------------------------------
+// Some variants of a line carry a dimension and others simply do not: "cast Bonesplitter" versus
+// "cast Bonesplitter AND equip the copy in play" is the shape that got reported (KittyEquipment
+// seed 7). index.html used to bail to a flat "Choose how to resolve" grid whenever ANY variant
+// lacked `subs` -- a row of repeated card art labelled by whole line summaries in overflowing
+// badges, which the user asked to be killed outright (2026-09-01). The walk handles the shape fine:
+// a variant with no value in a dimension reports '—', which is just another choice. This pins that,
+// binary-free, so the fallback cannot creep back in by way of a walk that can't cope.
+function checkMixedSubVariantWalk() {
+  const variants = [
+    { plan_index: 0, label: 'cast: Bonesplitter', cards: [], subs: [] },                       // no equip at all
+    { plan_index: 1, label: 'cast: equip Bonesplitter — Bonesplitter → Balan', cards: ['Balan'],
+      subs: [{ key: 'Bonesplitter equips to', choice: 'Balan', card: 'Balan', kind: 'equip', num: 5 }] },
+    { plan_index: 2, label: 'cast: equip Bonesplitter — Bonesplitter → Puresteel Paladin', cards: ['Puresteel Paladin'],
+      subs: [{ key: 'Bonesplitter equips to', choice: 'Puresteel Paladin', card: 'Puresteel Paladin', kind: 'equip', num: 9 }] },
+  ];
+  const fails = [];
+  const nd = LB.nextDimension(variants);
+  if (!nd) { fails.push('no dimension found in a MIXED sub/no-sub set (the flat picker case)'); return fails; }
+  if (nd.choices.length !== 3)
+    fails.push(`mixed set offered ${nd.choices.length} choices, expected 3 (two hosts + the no-equip '—')`);
+  if (!nd.choices.some(c => c.choice === '—'))
+    fails.push("the variant WITHOUT the dimension is not offered as '—' (it would be unreachable)");
+  // The m_number rides through the walk, which is what lets the dialog auto-resolve a DRAG by
+  // identity instead of by a display name two creatures can share.
+  const balan = nd.choices.find(c => c.choice === 'Balan');
+  if (!balan || balan.num !== 5) fails.push(`the choice's num did not survive the walk (${balan && balan.num})`);
+  // Every choice must actually narrow to something.
+  nd.choices.forEach(c => {
+    const left = LB.filterByChoice(variants, nd.dim.key, c.choice);
+    if (left.length !== 1) fails.push(`choice "${c.choice}" left ${left.length} variants, expected 1`);
+  });
+  return fails;
+}
+
 // ---- Board activations encode with the RIGHT LineSpec verb ------------------------------------
 // An activation of a permanent already in play is committed by a verb the engine chose (see the
 // `verb` field on the plan action). Writing the wrong one makes CheckLine reject a legal line: an
@@ -212,6 +247,17 @@ function checkActivationVerbs() {
     [{ name: 'Skirk Prospector', src: 'Skirk Prospector', kind: 'activate', verb: 'sacout', sacout: true }, 'sacout=Skirk Prospector'],
     [{ name: 'Skirk Prospector', src: 'Skirk Prospector', kind: 'activate', sacout: true }, 'sacout=Skirk Prospector'],  // legacy entry, no verb
     [{ name: 'Bonesplitter', src: 'Bonesplitter', kind: 'activate', verb: 'equip' }, 'equip=Bonesplitter'],
+    // The HOST (and the copy being moved) ride on the token as m_numbers. Leaving the host to the
+    // `equip` sub-decision -- whose choice string is the host's NAME -- meant two same-named hosts
+    // shared a dedup signature and all but one variant was silently dropped, so the second Kor
+    // Duelist could not be equipped at all (2026-09-01). Each id is independently optional: a
+    // from-HAND cast-and-equip knows the host but the source is only 0 until the cast resolves.
+    [{ name: 'Bonesplitter', src: 'Bonesplitter', kind: 'activate', verb: 'equip', srcNum: 7, target: 19 },
+     'equip=Bonesplitter#7@19'],
+    [{ name: 'Bonesplitter', src: 'Bonesplitter', kind: 'activate', verb: 'equip', target: 19 },
+     'equip=Bonesplitter@19'],
+    [{ name: 'Bonesplitter', src: 'Bonesplitter', kind: 'activate', verb: 'equip', srcNum: 7 },
+     'equip=Bonesplitter#7'],
     [{ name: 'Balan, Wandering Knight', src: 'Balan, Wandering Knight', kind: 'activate', verb: 'attachall' }, 'attachall=Balan, Wandering Knight'],
     [{ name: 'Colossus Hammer', src: 'Stoneforge Mystic', kind: 'activate', verb: 'sfput' }, 'sfput=Colossus Hammer'],
     [{ name: "Umezawa's Jitte", src: "Umezawa's Jitte", kind: 'activate', verb: 'jittemode', mode: 1 }, 'jittemode=1'],
@@ -311,7 +357,11 @@ function main() {
   verbFails.forEach(m => console.log(`  FAIL  activation verb: ${m}`));
   console.log(`Viewer activation verbs: ${verbFails.length ? 'WRONG' : 'cast/sacout/equip/attachall/sfput/jittemode all encode'} ` +
               `(${verbFails.length} FAIL)`);
-  return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length) ? 1 : 0;
+  const mixFails = checkMixedSubVariantWalk();
+  mixFails.forEach(m => console.log(`  FAIL  mixed-sub walk: ${m}`));
+  console.log(`Viewer mixed-sub walk: ${mixFails.length ? 'WRONG' : "a variant lacking the dimension is offered as '—', not dumped flat"} ` +
+              `(${mixFails.length} FAIL)`);
+  return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length + mixFails.length) ? 1 : 0;
 }
 
 process.exit(main());
