@@ -134,6 +134,40 @@ swaps**:
 | kept on 7 (mull 0) | +0.0183 | +0.0267 |
 | mull 3 / mull 4 | +0.0326 / +0.0775 | +0.0299 / +0.0704 |
 
+### What "a copier" means here
+
+A permanent **already on the battlefield** that makes one solo-target trick resolve more than once.
+This deck has exactly three, working in two different ways:
+
+| card | how it copies | extra instances |
+|---|---|---|
+| **Mirrorwing Dragon** | `copies_solo_targeted_spells` — a spell targeting **only it** is copied for *each other creature you control* | N (scales with board width) |
+| **Zada, Hedron Grinder** | same parameter, same behaviour | N |
+| **Frontline Heroism** | `frontline_copy_tokens` — any cast targeting only a single creature you control makes a 1/1 **hasty** Soldier, *then copies the spell onto it* | exactly 1, and it supplies its own target |
+
+Mirrorwing and Zada are **magnets**: they must *be* the target, and the fan-out is as wide as the
+board. Heroism is not a magnet — it triggers on any solo-target trick and adds one flat copy. All
+three are grouped as "copier" above because what decides Libation's worth is simply *does this spell
+resolve once or many times*, and that grouping separates the data better than magnet-only
+(+0.0833 vs +0.2498, against +0.0943 vs +0.1857 for magnet alone).
+
+Split three ways, at the moment Libation is cast:
+
+| board when Libation was cast | Anger: games / Δ | Oracle's: games / Δ |
+|---|---|---|
+| magnet out, narrow board | 885 / +0.0780 | 873 / +0.1168 |
+| magnet out, ≥3 other creatures | 133 / **+0.2030** | 159 / +0.1195 |
+| Frontline Heroism only (one copy) | 650 / **+0.0662** | 694 / +0.1354 |
+| **nothing that copies** | **1,213 / +0.2498** | **1,307 / +0.2540** |
+
+On the Anger swap a **wide** magnet board is *worse* for Libation (+0.2030) than a narrow one
+(+0.0780) — the mechanism confirming itself, since Ancestral Anger with N other creatures draws N+1
+cards, so the wider the fan-out the bigger the cantrip given up.
+
+Two caveats on this axis: it reads the board at the **end of the previous turn**, so a magnet cast on
+the same turn as Libation is not counted; and a copier being in play is *availability*, not proof
+the copies happened — the magnets only fan out if the AI actually targets them.
+
 The magnet cut is the one to trust: **no magnet in the opener is ~1.6× worse for Libation** on the
 Anger swap and ~2.4× on the Oracle's swap, which is the same story as group 3 above — with nothing
 to copy the trick, a cantrip that digs toward a magnet beats a token that does not. The land and
@@ -217,7 +251,48 @@ the shared last turn, and the mean X paid is higher (1.66–1.77 vs 1.30–1.39)
 with mana to spare and a thin board: Libation buys width the magnet then multiplies. It is simply
 outnumbered ~3.4 : 1 by the turns where the chain wanted a card instead.
 
-## 5. Limitations — what this measurement cannot say
+## 5. Open conjecture — haste (user, 2026-09-02)
+
+> *"I suspect in the case where we have haste-gaining, Libation is better than it is here, but still
+> falls short in similar cases (especially when you have no other pump/trick)."*
+
+**The mechanism this rests on is real and verified in the card data**, and it is the one thing §3
+does not name explicitly:
+
+* `Luxurious Libation`'s parameters are `trick_token_power/toughness/subtypes` only — **there is no
+  haste**. Its Citizens arrive summoning-sick, so on the turn it is cast they deal **zero damage**.
+* `Frontline Heroism`'s are `cast_token_* + created_token_haste: true` — its Soldiers **can attack
+  the turn they are made**.
+* `created_token_haste` is read **per creating card** (`def->params.created_token_haste` at
+  `SpellEffects.h:2237`, `:2258`, `:3507`, `:6845`), never as a blanket grant. So Heroism being in
+  play does **not** give Libation's Citizens haste. There is no card in this deck that would.
+
+So on the combo turn Libation buys N+1 bodies that cannot attack. They are not *wasted* — the magnet
+copies for each other creature, so each extra Citizen adds one more copy of the *next* trick, which
+still draws a card for Anger/Oracle's/Fists — but for a pure pump that copy lands on a body that
+cannot swing. The width only converts to damage from the following turn.
+
+**Prediction, stated so it can be checked rather than assumed.** Haste on the Citizens should help
+roughly in proportion to the fan-out width, so it should:
+
+* help most in the **wide magnet** setups — the very bucket that measures *worst* today (+0.2030 on
+  the Anger swap), because that is where N+1 hasty bodies would attack;
+* help **barely at all in group 3** (nothing that copies, no other pump). With no copier Libation
+  makes exactly *one* Citizen, so haste is worth about 1 damage that turn against Ancestral Anger's
+  +1/+0 **and a card**. That is the user's "still falls short in similar cases", and it follows
+  directly from the copy count rather than from any measurement.
+
+**This cannot be tested on the data here** — no card in this deck grants the Citizens haste, and the
+engine has no `trick_token_haste` parameter (only `trick_token_power/toughness/subtypes`). Testing it
+needs either a haste granter in the decklist or that parameter added, and then a fresh screen.
+
+*A proxy I tried and rejected:* splitting by how many turns the Citizens lived before the game ended
+looked supportive (+0.0221 when made on the kill turn vs +0.5408 when made 3+ turns before it), but
+it is **circular** — that lead is computed from the arm's own win turn, which is half of the delta
+being measured, so a long lead mechanically implies a large positive delta. It is not evidence and
+is not used.
+
+## 6. Limitations — what this measurement cannot say
 
 * **The apparatus bias floor is unmeasured.** `--with-floor` brackets it by generating a table per
   arm, which is regeneration and therefore out of scope under the standing constraint. Both effects
