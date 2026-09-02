@@ -87,7 +87,12 @@ static_assert(sizeof(Permanent) == 256,
 // what the next wish can fetch, and no direction can be declared over "fewer cards left" (having
 // spent the wish on the right card is better, on the wrong one worse). Folded gated on non-empty,
 // so every deck that does not wish keeps its exact prior key.
-static_assert(sizeof(Player) == 184,
+// 184 -> 192 (2026-09-02): Player gained `energy_counters` (Aether Hub). Classification: an
+// EXACT-MATCH field, folded below beside rad_counters. It is future-determining -- each unit buys
+// one any-colour tap, and under the blink loop's untaps that is what separates "this Hub can still
+// fix" from "it is a plain {C} source" -- and it is NOT monotone in the goldfish sense we could
+// declare a direction over, because a state that SPENT its energy bought a coloured mana with it.
+static_assert(sizeof(Player) == 192,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // 688 -> 696 (2026-09-01): ManaPool gained `wild_c`, and GameState embeds one as floating_mana.
@@ -97,7 +102,9 @@ static_assert(sizeof(Player) == 184,
 // 696 -> 744 (2026-09-02): GameState embeds two Players, each of which grew by the `sideboard`
 // vector above. No new GameState field of its own beyond the two deck-out bools, which are folded
 // at the top of Build() gated on opponent_library_dealt.
-static_assert(sizeof(GameState) == 744,
+// 744 -> 760 (2026-09-02): the two embedded Players each gained energy_counters, above (8 bytes
+// each once padding settles).
+static_assert(sizeof(GameState) == 760,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -461,6 +468,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // Mariposa's draw, and they mill + cost life at every precombat main). Gated on nonzero so
         // every deck that never takes the rad mode keeps the EXACT prior key.
         if (p.rad_counters > 0) { fold(0x2AD0ull); fold(static_cast<std::uint64_t>(p.rad_counters)); }
+        // ENERGY (Aether Hub): each unit buys one any-colour tap, so two states differing here can
+        // pay different costs. Gated on nonzero, so every deck with no energy source keeps its
+        // exact prior key.
+        if (p.energy_counters > 0)
+        { fold(0xE9E7ull); fold(static_cast<std::uint64_t>(p.energy_counters)); }
         // Staged (Light Up the Stage) and suspended (Lotus Bloom) cards are future-determining
         // zones with timers; exact match rather than a subset rule (a timer is not monotone).
         fold(static_cast<std::uint64_t>(p.staged_cards.size()));

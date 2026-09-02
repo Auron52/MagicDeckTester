@@ -9483,6 +9483,21 @@ inline bool PaySacSpendableNow(const GameState& state, const Permanent& p, const
 // zero cost, byte-identical) for every normal source; the dynamic Reflecting-Pool union only for
 // a `reflecting` source; the dynamic colour-domain union for a `domain_mana` source (Faeburrow /
 // Bloom Tender). controller = the source's controller (active player on the battlefield).
+// The colours an energy-gated source still makes with NO energy left: its colourless modes only.
+// Aether Hub's "{T}: Add {C}" is a separate, free ability, so a spent-out Hub degrades to a plain
+// {C} source rather than producing nothing -- and its {C} is never energy-gated, which matters
+// because that is what pays Eldrazi Displacer's {2}{C} pip.
+//
+// thread_local, consumed immediately by the caller, exactly like ReflectedColors' buffer.
+inline const std::vector<Color>& EnergySpentColors(const CardDefinition& def)
+{
+    static thread_local std::vector<Color> buf;
+    buf.clear();
+    for (Color c : def.params.produces)
+    { if (c == Color::Colorless) { buf.push_back(c); } }
+    return buf;
+}
+
 inline const std::vector<Color>& EffectiveProduces(const GameState& state, int controller,
                                                    const CardDefinition& def, bool in_hand = false)
 {
@@ -9517,6 +9532,15 @@ inline const std::vector<Color>& EffectiveProduces(const GameState& state, int c
         static const std::vector<Color> kAnyColor{ Color::White, Color::Blue, Color::Black,
                                                    Color::Red,   Color::Green };
         return kAnyColor;
+    }
+    // ENERGY-GATED COLOURS (Aether Hub). The coloured half of "{T}, Pay {E}: Add one mana of any
+    // color" is available only while the controller can pay, so strip to the colourless modes when
+    // they cannot. IN HAND the card is not stripped: a Hub in hand brings its own energy with it
+    // (etb_energy), so the mulligan/fixing heuristics should see it as the real fixer it is.
+    if (def.params.energy_per_colored_tap > 0 && !in_hand
+        && state.players[controller].energy_counters < def.params.energy_per_colored_tap)
+    {
+        return EnergySpentColors(def);
     }
     if (!def.params.reflecting) { return def.params.produces; }
     return ReflectedColors(state, controller, in_hand);
@@ -11053,6 +11077,13 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     state.battlefield.push_back(perm);
     if (def.params.etb_scry > 0)    { ScryTop(state, def.params.etb_scry); }
     if (def.params.etb_surveil > 0) { SurveilTop(state, def.params.etb_surveil); }
+    // "When this land enters, you get {E}" (Aether Hub). Added here as well as in the land DROP
+    // (LandPlay.cpp) because this is the separate FETCH entry path -- a fetched land skips
+    // PlayLandFromHand entirely. Unreachable in this deck (no fetchlands), but the divergence is
+    // real and pre-existing for etb_lifegain / etb_bounce_land / the rad mode, so at least do not
+    // grow it.
+    if (def.params.etb_energy > 0)
+    { state.players[state.active_player_index].energy_counters += def.params.etb_energy; }
 }
 
 // Execute a fetchland (Windswept Heath etc.): pull `target_name` (empty -> the heuristic's

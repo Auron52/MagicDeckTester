@@ -6089,6 +6089,29 @@
     "wish_from_sideboard": true,
     "exiles_self_on_resolve": true
    }
+  },
+  {
+   "name": "Aether Hub",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When this land enters, you get {E} (an energy counter).\n{T}: Add {C}.\n{T}, Pay {E}: Add one mana of any color. [All three clauses modelled. ENERGY is a PLAYER resource (Player::energy_counters), like rad counters and unlike a permanent's counters -- three Hubs pool three {E} and any ONE of them may spend all three. That is not pedantry here: Peregrine Drake and Cloud of Faeries untap lands every blink iteration, so correct play is to tap one Hub three times through the whole pool, which a per-permanent counter cannot express. MODELLING THE SPEND IS WHAT KEEPS IT HONEST. Under that same untap loop a Hub is re-tapped an unbounded number of times per turn, so an unmetered any-colour mode would make it an INFINITE rainbow source -- switching on the {2}{R} Shivan Gorge kill for free and making the deck look far faster than it is. Modelled as produces [C,W,U,B,R,G] plus energy_per_colored_tap: the COLOURED half is stripped while the controller cannot pay, so a spent-out Hub degrades to a plain {C} source rather than to nothing. The strip is applied at all THREE produces sites -- EffectiveProduces, the payment DFS and the flow oracle -- because the latter two inline their own resolution and bypass the first. 'One mana of any COLOR' is the five colours only ({C} is not a colour, CR 105.1), and the free '{T}: Add {C}' ability covers colourless -- so a {C} PIP (Eldrazi Displacer's {2}{C}, both Eldrazi sinks' {1}{C}) is NEVER energy-gated, which is half of why this land is in the deck. The other half is red: Fertile Ground and Trace of Abundance are the deck's only other red, and an energy tap is a one-shot Shivan Gorge enabler on an aura-less board. In HAND the card is deliberately NOT stripped -- it brings its own energy with it (etb_energy), so the mulligan and colour-fixing heuristics correctly see a real fixer. [PARTIAL: the pool PROJECTIONS (AvailableManaPool and friends) credit each Hub its full colour set independently, so three Hubs sharing one energy project 3 wild where reality is 1 wild + 2 colourless. Over-credit only, which is the engine's standard optimistic-bound direction: the PAYMENT is exact, so an over-projected line is enumerated and then dropped as unpayable rather than played illegally. Threading an energy budget through the seven pool builders is the gy_fuel pattern and is deferred; the ceiling here is 3 energy for the whole game, so the over-credit is at most 2.]]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C",
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "etb_energy": 1,
+    "energy_per_colored_tap": 1
+   }
   }
  ]
 }

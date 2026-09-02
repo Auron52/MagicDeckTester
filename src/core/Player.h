@@ -52,6 +52,12 @@ struct Player
     // they lose 1 life and remove one rad counter -- so the resource decays as it is used. Also
     // reduces the Base's own "{5}, {T}: Draw a card" by {1} each. 0 for every other deck.
     int rad_counters               = 0;
+    // ENERGY counters (Aether Hub: "When this land enters, you get {E}"). A PLAYER resource like
+    // rad counters -- any Hub may spend any Hub's energy, which is the correct model and matters
+    // under a blink loop that untaps one Hub repeatedly. Spent one per COLOURED tap of an
+    // energy_per_colored_tap source; NEVER reset at untap (unlike cards_drawn_this_turn) and gained
+    // only when an etb_energy permanent enters. 0 for every other deck.
+    int energy_counters            = 0;
 
     // Cards exiled by "Light Up the Stage" and similar; playable until their expiry turn.
     std::vector<StagedCard> staged_cards;

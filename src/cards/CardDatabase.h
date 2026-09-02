@@ -1647,6 +1647,29 @@ struct CardParams
     // recorded as a bracket note on the card, not silently dropped.
     bool                    exile_opponent_top_may_bounce_on_land = false;
 
+    // AETHER HUB. "When this land enters, you get {E} (an energy counter). / {T}: Add {C}. /
+    // {T}, Pay {E}: Add one mana of any color."
+    //
+    // ENERGY IS A PLAYER RESOURCE (Player::energy_counters), not a permanent's -- three Hubs pool
+    // three {E} and any ONE of them may spend all three. That distinction is reachable here rather
+    // than academic: Peregrine Drake and Cloud of Faeries untap lands on every blink iteration, so
+    // correct play is to tap ONE Hub three times spending the whole pool through it, which a
+    // per-permanent counter cannot express.
+    //
+    // AND THE METERING IS THE WHOLE POINT. Under that same untap loop a Hub is re-tapped an
+    // unbounded number of times per turn, so modelled as a plain 6-colour land it becomes an
+    // INFINITE any-colour source -- which switches on the {2}{R} Shivan Gorge kill for free and
+    // makes the deck look far faster than it is. That is the over-acceptance class the rad-mode
+    // comment warns about, at a much larger magnitude.
+    //
+    // Modelled as produces = [C,W,U,B,R,G] + this cost: the coloured half is STRIPPED while the
+    // controller holds less than energy_per_colored_tap, so a spent-out Hub degrades to a plain
+    // {C} source rather than vanishing. "One mana of any COLOR" is the five colours only ({C} is
+    // not a colour, CR 105.1), and the free "{T}: Add {C}" mode covers colourless -- so a {C} pip
+    // (Eldrazi Displacer's {2}{C}) is NEVER energy-gated. 0 = every other source -> byte-identical.
+    int  etb_energy             = 0;   // energy gained when this permanent enters
+    int  energy_per_colored_tap = 0;   // energy ONE coloured tap of this source costs
+
     // Mariposa Military Base: "{5}, {T}: Draw a card. This ability costs {1} less to activate for
     // each rad counter you have", plus "You may have this land enter tapped. If you do, you get two
     // rad counters." Rad counters are a PLAYER resource (Player::rad_counters), not a permanent's.

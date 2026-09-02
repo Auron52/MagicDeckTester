@@ -113,6 +113,11 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     // Counters are gained as the land enters, so AFTER it is on the battlefield -- and before any
     // ETB below can read them.
     if (rad_gain > 0) { ap.rad_counters += rad_gain; }
+    // "When this land enters, you get {E}" (Aether Hub). A PLAYER resource, like rad counters, and
+    // gained here for the same reason: as the land enters, before any ETB below can read it. This
+    // is THE land drop for all three callers (the executor's searched drop, its greedy drop, and
+    // the rollout), so one edit covers both worlds.
+    if (fdef.params.etb_energy > 0) { ap.energy_counters += fdef.params.etb_energy; }
 
     // ETB effects, after the land is on the battlefield (face definition; see fdef above).
     if (fdef.params.etb_scry > 0)

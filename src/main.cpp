@@ -3977,6 +3977,7 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "hand": [ "Aria of Flame", "Invigorate" ],
 //     "graveyard": [ "Scourge of Valkas" ],       // stage cards in the graveyard (gy-reading abilities)
 //     "library_filler": "Forest", "library_size": 40,   // so draws / rollouts don't run dry
+//     "energy_counters": 1,          // stage {E} (Aether Hub's any-colour tap is gated on it)
 //     "opponent_library_size": 2,    // stage the OPPONENT'S library (forces opponent_library_dealt
 //                                    // on); they draw one at the end of each of OUR turns, and
 //                                    // drawing from empty is a deck-out win on THAT turn
@@ -4069,6 +4070,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // search normally DECLINES, so the rad mill is otherwise unreachable from a fixture -- and
     // unreachable code is untested code.
     state.players[0].rad_counters = j.value("rad_counters", 0);
+    // Stage ENERGY directly (Aether Hub). Same reason rad_counters is settable: energy arrives only
+    // from a land's ETB, and a fixture STAGES its battlefield rather than playing lands out, so the
+    // energy-gated colour mode would otherwise be unreachable from a fixture -- and unreachable
+    // code is untested code.
+    state.players[0].energy_counters = j.value("energy_counters", 0);
     state.players[1].life       = j.value("opponent_life", 20);
     // Stage the OPPONENT'S library at an arbitrary size (core/OpponentDeck.h). Same reason
     // rad_counters is settable: reaching a deck-out through real play means milling 53 cards, which

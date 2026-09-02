@@ -1335,7 +1335,17 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         { rp_colors = &ReflectedColors(state, active, /*in_hand=*/false); rp_ready = true; }
         const std::vector<Color>& produces = def->params.reflecting ? *rp_colors : def->params.produces;
         std::uint8_t bits = 0;
-        if (def->params.colored_creature_only && !for_creature)
+        // ENERGY-GATED COLOURS (Aether Hub). This site INLINES its own produces resolution and so
+        // bypasses EffectiveProduces entirely -- gating only there would leave the oracle claiming
+        // a payment the DFS below cannot make. The bound stays a superset: the pool is a floor on
+        // what is payable, so pricing the colours the CURRENT energy can buy never prunes a line
+        // the solver could have found.
+        if (def->params.energy_per_colored_tap > 0
+            && state.players[active].energy_counters < def->params.energy_per_colored_tap)
+        {
+            bits |= (1u << static_cast<int>(Color::Colorless));   // only its free {C} mode survives
+        }
+        else if (def->params.colored_creature_only && !for_creature)
         {
             bits |= (1u << static_cast<int>(Color::Colorless));   // only its {C} survives
         }
@@ -2097,6 +2107,19 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             for (Color c : produces_base) { if (c == Color::Colorless) { ccov.push_back(c); } }
             produces_ptr = &ccov;
         }
+        // ENERGY-GATED COLOURS (Aether Hub), same strip shape. THIS is the site that decides what is
+        // really payable -- it inlines its own produces resolution and bypasses EffectiveProduces,
+        // so gating only there would leave the solver happily tapping three Hubs for three colours
+        // off one energy. Read against the CURRENT energy, which the recursion decrements and
+        // restores below, so a second coloured tap in the same line correctly sees the spent pool.
+        static thread_local std::vector<Color> enrv;
+        if (def->params.energy_per_colored_tap > 0
+            && state.players[active].energy_counters < def->params.energy_per_colored_tap)
+        {
+            enrv.clear();
+            for (Color c : *produces_ptr) { if (c == Color::Colorless) { enrv.push_back(c); } }
+            produces_ptr = &enrv;
+        }
         const std::vector<Color>& produces = *produces_ptr;
         // Undo across this source's options. `activate` only ever modifies THIS source (its
         // tapped flag + a depletion counter); deeper recursion taps OTHER sources but each level
@@ -2126,8 +2149,15 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // a Remedy) so it does not pay the opponent life; its {R}/{G} branches leave it true.
         // `storage_burn` (> 0 only for a storage-counter land) is how many counters this tap removes:
         // the PARTIAL shortfall, not all of them, so the rest persist (mirrors the greedy tap_source).
-        auto activate = [&](const ManaPool& next, bool drip_ok = true, int storage_burn = 0) -> bool
+        // ENERGY is paid as part of the ACTIVATION cost (Aether Hub's "{T}, Pay {E}"), so it is
+        // spent here and restored on failure like the life/counter snapshots above. `energy_spend`
+        // is nonzero only on a COLOURED branch of an energy-gated source -- its free "{T}: Add {C}"
+        // mode costs nothing, which is what keeps a spent-out Hub a live {C} source.
+        const int energy_snap = state.players[active].energy_counters;
+        auto activate = [&](const ManaPool& next, bool drip_ok = true, int storage_burn = 0,
+                            int energy_spend = 0) -> bool
         {
+            state.players[active].energy_counters -= energy_spend;
             state.battlefield[i].tapped = true;
             DecrementDepletionOnTap(state.battlefield[i]);
             if (def->params.storage_land) { state.battlefield[i].storage_counters -= storage_burn; }
@@ -2186,6 +2216,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             state.players[active].life = life_snap;
             state.players[1 - active].life      = opp_life_snap;
             state.opponent_lost_life_this_turn  = oll_snap;
+            state.players[active].energy_counters = energy_snap;
             return false;
         };
 
@@ -2373,7 +2404,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                     }
                     CcoAuditTap(*def, c, for_creature);   // audit: `produces` is cco-stripped above
                     ManaPool f = floating; f.Add(c, amt);
-                    if (activate(f, /*drip_ok=*/true, storage_burn))
+                    // Aether Hub: a COLOURED tap pays {E}; the {C} mode is free. `produces` is
+                    // already energy-stripped above, so reaching a coloured branch here means the
+                    // energy is there to spend.
+                    const int espend = (def->params.energy_per_colored_tap > 0 && c != Color::Colorless)
+                                     ? def->params.energy_per_colored_tap : 0;
+                    if (activate(f, /*drip_ok=*/true, storage_burn, espend))
                     {
                         // LEGACY-KAROO FORENSICS: this branch just took `amt` mana of ONE colour off a
                         // multi-colour bundle source, and the recursion found a full payment from it --
@@ -2628,6 +2664,7 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     const int active = state.active_player_index;
     const int n = static_cast<int>(state.battlefield.size());
     int gy_fuel = -1;       // lazy, hashed once on the first Deathrite-style source
+    int energy_fuel = -1;   // lazy, hashed once on the first energy-gated source (Aether Hub)
     int drip_useful = -1;   // lazy, hashed once on the first drip source
     bool domain_done = false;   // lazy, hashed once on the first domain source (Elder / Bloom Tender)
     bool scaled_done = false;   // lazy, hashed once on the first scaled source (Three Tree City)
@@ -2723,6 +2760,16 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
             gy_fuel = GraveyardLandFuel(state, active);
             mix(h1, 0x6F'F1ull + static_cast<std::uint64_t>(gy_fuel));
             mix(h2, 0x6F'F2ull ^ (static_cast<std::uint64_t>(gy_fuel) << 16));
+        }
+        // Aether Hub (energy_per_colored_tap): exactly the Deathrite shape. The coloured mode is
+        // gated on a PLAYER resource the source loop cannot see, and each coloured tap consumes
+        // one -- so without this a cached solution would replay a coloured Hub tap on a board with
+        // no energy left. Hashed once, on the first energy-gated source.
+        if (d->params.energy_per_colored_tap > 0 && energy_fuel < 0)
+        {
+            energy_fuel = state.players[active].energy_counters;
+            mix(h1, 0xE9'E71ull + static_cast<std::uint64_t>(energy_fuel));
+            mix(h2, 0xE9'E72ull ^ (static_cast<std::uint64_t>(energy_fuel) << 16));
         }
         // Drip land (Grove of the Burnwillows): the worker's branch ORDER depends on the provider's
         // OpponentLifegainUseful(state) -- state outside (def, tapped) -- so the found solution (its

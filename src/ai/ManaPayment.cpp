@@ -68,6 +68,13 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
         p.tapped = true;
         DecrementDepletionOnTap(p);
+        // Aether Hub: "{T}, Pay {E}: Add one mana of any color." Energy is part of the ACTIVATION
+        // cost, so it is spent here beside the depletion counter. Only the COLOURED mode costs it --
+        // the separate free "{T}: Add {C}" ability does not -- which is the same Colorless guard the
+        // painland damage below uses, and is what keeps a spent-out Hub a live {C} source for
+        // Eldrazi Displacer's {2}{C} pip.
+        if (def.params.energy_per_colored_tap > 0 && col != Color::Colorless)
+        { state.players[active].energy_counters -= def.params.energy_per_colored_tap; }
         // Deathrite Shaman ability 1: the mana tap exiles a graveyard land (usable() guaranteed
         // one exists). A failed payment restores the graveyard from gy_pre below.
         if (def.params.gy_land_exile_mana) { ExileGraveyardLandForMana(state, active); }

@@ -1,0 +1,36 @@
+{
+  "_comment": [
+    "Aether Hub's two tap modes: '{T}: Add {C}' is free, '{T}, Pay {E}: Add one mana of any color'",
+    "costs an energy counter. Shivan Gorge's '{2}{R}, {T}: deals 1 damage to each opponent' is the",
+    "only red demand on the board, and the Hub is the only red source, so the Gorge fires if and",
+    "only if the energy is there to pay for it.",
+    "",
+    "With energy_counters 1 the opponent takes exactly 1. Verified DISCRIMINATING: at",
+    "energy_counters 0 the Hub strips to its colourless mode, {R} is unpayable, and the opponent",
+    "stays on 20 -- the two Mariposas still make {2}, so the difference is the colour and nothing",
+    "else.",
+    "",
+    "This is what stops the Hub becoming an infinite rainbow source under the blink loop's untaps,",
+    "which would switch on the Gorge kill for free."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "energy_counters": 1,
+  "battlefield": [
+    { "name": "Shivan Gorge", "controller": 0, "tapped": false },
+    { "name": "Aether Hub", "controller": 0, "tapped": false },
+    { "name": "Mariposa Military Base", "controller": 0, "tapped": false },
+    { "name": "Mariposa Military Base", "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_no_win": true,
+  "expect_opponent_life": 19
+}

@@ -25593,6 +25593,11 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // EXACT prior key.
         if (p.rad_counters > 0)
         { Fold(k, 0x2AD0); Fold(k, static_cast<uint64_t>(p.rad_counters)); }
+        // ENERGY (Aether Hub). Each unit buys one any-colour tap off a source that is otherwise a
+        // plain {C} land, so two states differing only here can pay different costs and must not
+        // share a memo entry. Gated on nonzero -> byte-identical for every deck with no energy.
+        if (p.energy_counters > 0)
+        { Fold(k, 0xE9E7); Fold(k, static_cast<uint64_t>(p.energy_counters)); }
         // OUTSIDE THE GAME (the wish pool). Which SINGLETONS remain decides what a later Living
         // Wish can fetch, so two states that spent their wishes differently reach different
         // futures and must not share a memo entry. Order-insensitive (nothing reads the pool's
