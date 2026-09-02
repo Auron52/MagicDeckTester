@@ -243,3 +243,14 @@ net-positive on hinata but bought with th losses and the Dragonstorm cost pathol
 (USER to be asked for the window), USER sign-off. Greedy `Solve` is gone from every DECISION
 apply on every deck: hosted (node, root turn) at site 3, canonical-with-sound-pass (canon)
 elsewhere; rollout applies keep greedy per the USER scope ruling of 2026-09-02.
+
+### COST CONFIRMED + post-rebase checks (2026-09-02, same session)
+
+Units cells (300 hinata games, one process/cell, play settings, measurement binary):
+**base 11,096,472 -> sound recipe 11,389,594 = +2.64% units** (id_depth 3.475 -> 3.369). Under the
+recorded ROOTTURN profile (+3.1%) and far under the USER's "+15% is potentially good enough" bar;
+`budget_ms` is virtual so this converts ~1:1 to wall (node wall/units was measured 1.02).
+Post-rebase (EDF src work): rebuild + smoke 48/48 byte-identical, gt_logs 320 consistent / 0 stale.
+Flag-on REGRESSION preview launched to enumerate the cells adoption would rebaseline.
+REMAINING BEFORE ADOPTION: regression preview read; overnight-tier preview; QUIET-BOX wall
+confirmation (needs the USER's window); USER sign-off. Nothing adopted yet -- all flags OFF.
