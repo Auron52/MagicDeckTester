@@ -78,14 +78,149 @@ analyzer must do the card work, and it cannot analyze cards it cannot see.
 6. **DONE** — **Go-off recognizer learns both `{C}` sinks**, plus `ProjectsAlternateWin` for the
    deck-out (which `ExtraLethalDamage` structurally cannot express) and
    `ManaSinkActivationCounts` so the search can propose the finishing count.
-7. **IN PROGRESS** — **Regenerate the profile** (the committed one is fitted to the old list) and
-   re-run the measurement stages.
+7. **DONE** — **Profile regenerated** against the corrected list (19 `card_scores`, no hand gate)
+   and the measurement stages re-run. **The headline number is below, and it does not meet the
+   user's estimate.**
+
+## THE FIRST HONEST MEASUREMENT OF THE CORRECTED LIST (2026-09-02)
+
+4 seeds x 100 games, ship settings, the regenerated profile:
+
+| depth | avg win turn | unwon | floor | mode |
+|---|---|---|---|---|
+| d0 (greedy) | 8.777 | 340/400 (85.0%) | t6 | — |
+| d3 | **7.206** | 37/399 (9.3%) | **t5** (2 games) | t7 (192) |
+| d5 | **7.205** | 37/400 (9.2%) | t5 (2 games) | t7 (193) |
+
+**The corrected list measures 7.21 against the old list's 7.12 — i.e. essentially unchanged, and
+2+ turns short of the user's 4-5 estimate.** The combo itself is not broken: the full chain fires
+end-to-end (a logged turn-6 win assembles Emiel + Cloud of Faeries, wishes for Dimensional
+Infiltrator on T5, lands Training Grounds on T6 and DECKS the opponent with `oppLife=9` — the new
+win condition carrying a game on its own). It is the AVERAGE that is slow, not the ceiling.
+
+### d3 and d5 are BYTE-IDENTICAL — the search never gets past depth 1
+
+Every seed returns the same play digest at both depths (`2edc534107c13e8f`, `6c6e46c03c301bf3`,
+`82b255f7a7334649`, `ef6777f6715da5ed`). That is not convergence, it is **starvation**:
+`MTG_ROLLOUT_STATS` on a profiled game reports `id_depth hist=1:8` — all eight top-level decisions
+committed depth **1** — and `units_total=449881` against a b20 budget of 8 x 18,000. One
+un-abortable first pass overruns the whole decision budget 3x, so no deeper pass is ever started
+and `--depth` is inert. **The ledger's earlier "converged by depth 3" for the old list was the same
+artifact read the other way round.**
+
+### But un-starving it by brute force buys ~nothing (the discriminating test)
+
+The starvation hypothesis FITS; it does not DISCRIMINATE. Paired ladder, 4 seeds x 20 games, d3:
+
+| seed | b20 | b60 | b180 |
+|---|---|---|---|
+| 4101 | 7.30 | 7.30 | 7.25 |
+| 4202 | 7.45 | 7.40 | 7.30 |
+| 4303 | 7.00 | 7.05 | 7.00 |
+| 4404 | 7.25 | 7.20 | 7.20 |
+| **mean** | **7.250** | **7.238** | **7.188** |
+
+**A 9x budget buys 0.063 turns for ~6x the wall clock**, and even then the profiled game only
+reaches depth 2 on 2 of 7 decisions (`id_depth hist=1:5 2:2`). So the gap to 4-5 is **not** search
+depth, and pouring budget at it is refuted, not merely unattractive.
+
+**What has NOT been tested is the one thing the user's estimate is explicitly conditioned on** —
+"4-5 avg win turn *with a mulligan profile*". There is no keep table on this deck yet; the profile
+is card-scores-only with `hand_score_threshold = -1e18`, i.e. no hand gate at all. A 4-card combo
+deck is exactly the shape where hand selection dominates, so that stage is the live hypothesis and
+it has not run. See the tractability item below — it is what stands between here and running it.
+
+### TRACTABILITY: the wish axis is ~72% of the cost, and it is a RANKING problem
+
+This deck is now far too slow for the generation stages: 58% of d5 games and 63% of d3 games exceed
+5 s, with single games at 65 s, 194 s and one at **801 s**. Attribution on one profiled game
+(`--seed 4269 --game-index 67`), each arm a separate process because the levers are process-wide:
+
+| arm | ms | note |
+|---|---|---|
+| base (width 8) | 90,940 | |
+| `MTG_NO_ELDRAZI_GOFF=1` | 100,934 | **slower** — the go-off recognizer is not the cost |
+| `MTG_TUTOR_WIDTH=1` | 26,061 | |
+| both | 18,824 | |
+
+and the width curve: w1 26.1 s, w2 26.8, w3 38.1, w4 48.5, w6 56.6, **w8 90.9**. The tutor axis is
+a straight multiplier on the root plan set (it emits `k-1` extra plans per base plan), so **~72% of
+this game's cost is the wish axis alone** — and width 8 is only required because the candidate list
+is UNRANKED (see the trap section: the two win conditions sit at ranks 6 and 7 of the sideboard's
+decklist order). Ranking converts a width problem into an order problem, which is this repo's
+standing lesson on this axis: **narrow, do not widen.**
+
+Built and NOT yet adopted: `EldraziFlickerProvider::TutorCandidates`, a board-aware ranking behind
+`MTG_EDF_TUTOR_RANK` (0 off = shipped, 1 flat tiers, 2 tiers with the kill gated on an assemblable
+loop; default off, so the shipped path is byte-identical — smoke **48/48, 0 configs changed**). It
+ranks by card **params** — `drain_cost`/`exile_opponent_top_cost` = the kill, `blink_cost` = the
+outlet, `etb_untap_lands` = the payload — never by name, and demotes any piece already on the
+battlefield or in hand, so the head of the list is always what the combo is MISSING.
+
+**Why a gated variant exists at all.** Under the flat tiers the wish takes a sink on turn 2, several
+turns before there is any mana to pour into it; the unranked engine took a karoo land that ramps
+immediately. Mode 2 therefore only promotes the kill once an outlet AND a payload are already in
+play or in hand.
+
+Train A/B, 4 seeds x 20 games, d3/b20. Cost is `units_total` under `MTG_ROLLOUT_STATS` — the
+DETERMINISTIC meter, not wall clock, because five arms sharing a box makes ms meaningless (an
+earlier ms-based pass had the narrow arm reading *more expensive* than the wide one):
+
+| arm | avg win turn | units | vs base |
+|---|---|---|---|
+| base (unranked, w8) — shipped | 7.2500 | 25,694,320 | 1.000x |
+| rank 1, w8 | 7.2625 | 24,826,247 | 0.966x |
+| rank 1, w3 | 7.2750 | 20,040,610 | 0.780x |
+| **rank 0 (unranked), w3** | **7.4375** | 21,442,441 | 0.835x |
+| rank 2, w8 | **7.2375** | 23,570,597 | 0.917x |
+| rank 2, w3 | 7.3125 | 19,804,794 | 0.771x |
+
+**The one effect that is bigger than the noise is the CONTROL.** Narrowing to width 3 *without* a
+ranking costs **+0.1875 turns** — 3 to 7 times every other delta here, and the direct measurement of
+the coverage trap that was previously only argued. With a ranking the same narrowing costs +0.025 to
++0.06 for ~22% fewer units.
+
+Held-out confirmation, **disjoint seeds 5101-5404 x 50 games** (200 games/arm), replicates all of it:
+
+| arm | avg win turn | vs base | units | vs base |
+|---|---|---|---|---|
+| base (unranked, w8) | 7.0450 | — | 60,738,202 | 1.000x |
+| **rank 0 (unranked), w3** | **7.3250** | **+0.2800** | 50,974,798 | 0.839x |
+| **rank 2, w8 — ADOPTED** | **7.0150** | **−0.0300** | 58,752,520 | 0.967x |
+| rank 2, w3 | 7.0900 | +0.0450 | 47,669,434 | 0.785x |
+
+### ADOPTED: rank mode 2 at width 8 — and the reason is the CONTROL, not the delta
+
+`MTG_EDF_TUTOR_RANK` now defaults to **2** (`=0` restores the old zone-order list). Smoke **48/48,
+0 configs changed** — no other deck routes through this provider and this deck is not in the
+regression suite.
+
+**−0.0300 turns is inside the noise and is not the case for shipping it** (t≈1.6 on 4 seeds; it is
+better on 3 of the 4, and −0.0125 on train, so the sign is at least consistent). The case is the
+control arm: unranked narrowing costs **+0.2800 turns held-out / +0.1875 train**, measured twice on
+disjoint seeds. The ranking is what converts the width from a coverage cliff into a priced dial —
+width 3 is now a measured option at +0.045 turns for −21.5% units, available if generation cost
+demands it.
+
+**And the behaviour change is worth reading, because it did not do what it was supposed to.** Over
+12 logged games the wish went from taking a LAND 7 times of 12 (and a win condition twice) to taking
+a win condition 6 times of 11 — exactly the intent — **and the deck did not get faster.** So owning
+the sink is not this deck's bottleneck; having the loop to feed it is. The logged turn-6 kill was
+gated on Training Grounds landing, not on the Infiltrator.
 
 ### Open items carried forward
 
-* **A 30 s SLOW-GAME appeared** in a 12-game probe once the wish and the sink count axis were live
-  (`--seed 4244 --game-index 2`). Not yet diagnosed. It must be understood before any long run —
-  this deck has a history here (an earlier blink fan-out OOM-killed the box at 46 GB).
+* ~~**A 30 s SLOW-GAME appeared**~~ — **DIAGNOSED** (see the tractability section). The wish axis is
+  ~72% of the pathological game's cost; the go-off recognizer is not implicated (disabling it made
+  the game *slower*). Adopting the ranking took the arm to 0.967x units and puts a measured
+  0.785x on the table via width 3. **The deck is still expensive in absolute terms** — the full
+  measurement saw single games at 65 s, 194 s and one at **801 s** — so a feasibility check is still
+  required before the value-leaf and mulligan generations, and that is now the open item.
+* **THE HEADLINE GAP IS NOT CLOSED.** 7.21 measured against the user's 4-5 estimate, and the two
+  things that would most obviously explain it are both refuted: more search budget buys 0.063 turns,
+  and pointing the wish at the win condition (which the adopted ranking does — 6 of 11 wishes vs 2
+  of 12) buys nothing. **The untested candidate is the mulligan profile**, which is exactly what the
+  user's estimate was conditioned on and which has not been generated.
 * **The pool projections over-credit energy** (three Hubs sharing one energy project 3 wild).
   Over-credit only, so a line is enumerated and then dropped rather than played illegally; the
   ceiling is 3 energy for the whole game. Threading an energy budget through the seven pool
@@ -93,9 +228,9 @@ analyzer must do the card work, and it cannot analyze cards it cannot see.
 * **`g_play_land_rad_chooser` is dead** — the hook and call site exist, nothing sets the pointer.
 * **`EnumeratePlans` does not add `ExtraLethalDamage`** where its twin in `Solve` does. Pre-existing
   asymmetry, its own question; the alternate-win check was added to both.
-* **The wish target ranking is generic (decklist order).** Width is fixed at 8 so nothing is
-  unreachable, but whether the provider should RANK the pool is a measured question, not an
-  assumed one.
+* ~~**The wish target ranking is generic (decklist order).**~~ — **CLOSED, and it was a measured
+  question with a measured answer.** Ranked (mode 2) and ADOPTED; the width stays 8 because
+  narrowing is now a priced choice rather than a forced one.
 
 ### THE TRAP the Stage-2 fan-out found: the wish cannot reach either win condition
 

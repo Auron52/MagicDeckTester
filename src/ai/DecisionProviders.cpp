@@ -13619,3 +13619,120 @@ int EldraziFlickerProvider::CastOrderRank(const GameState& s, const CardDefiniti
     if (def.params.blink_cost.has_value())       { return 7; }   // then the outlet
     return GenericProvider::CastOrderRank(s, def);
 }
+
+// WHICH card the wish takes -- the RANKING that a narrow width rests on.
+//
+// The width-8 that ships today is a COVERAGE patch, not a policy: the generic hook returns the pool
+// in zone order (for a sideboard, decklist order, identical in every game), and the two win
+// conditions sit at ranks 6 and 7, so only a width that spans the WHOLE pool can reach them. That
+// patch works and it is expensive -- the axis is a straight multiplier on the root plan set, and on
+// one profiled game width 8 cost 90.9 s against 26.1 s at width 1 (measured: w2 26.8, w3 38.1,
+// w4 48.5, w6 56.6). Ranking is what converts "reach the kill" from a width question into an
+// ORDER question, which is the repo's standing lesson on this axis: narrow, do not widen.
+//
+// GENERIC BY CONSTRUCTION -- every tier below is read from the card's own PARAMS, never from a
+// name. "A repeatable sink" is `drain_cost`/`exile_opponent_top_cost`, "an outlet" is `blink_cost`,
+// "a payload" is `etb_untap_lands`. So the same ranking is correct for any wish pool in any deck
+// that this provider ever covers, and a swapped sideboard needs no edit here.
+//
+// The tiers are RELATIVE TO THE BOARD, which is what makes a narrow width safe: a piece we already
+// control drops to the bottom, so the top of the list is always the pieces the combo is MISSING.
+// The ranking only has to put the contenders inside the width -- the search still simulates each
+// one and decides.
+//
+// ADOPTED (MTG_EDF_TUTOR_RANK, default 2; `=0` restores the old zone-order list). No other deck
+// routes through this provider, so every other deck is byte-identical -- smoke 48/48, 0 configs
+// changed, and this deck is not in the regression suite.
+//
+// What it changed in PLAY, which is the honest way to read it: over 12 logged games the wish went
+// from fetching a LAND 7 times of 12 and a win condition twice, to fetching a win condition 6 times
+// of 11. It points the wish at the kill, as designed -- and that DID NOT make the deck faster
+// (-0.03 turns, inside the noise). The bottleneck is not owning the sink, it is having the loop to
+// feed it; the logged turn-6 kill was gated on Training Grounds, not on the Infiltrator.
+std::vector<std::string>
+EldraziFlickerProvider::TutorCandidates(const GameState& s, int controller,
+                                        const CardParams& pp) const
+{
+    // Human play / unpruned sees every legal name in the pool, unranked and unnarrowed: this hook
+    // NARROWS in effect (the width prune reads its order), and a human must never lose a legal
+    // target to a search heuristic.
+    if (DecisionUnpruned(UnprunedGate::Tutor))
+    { return GenericProvider::TutorCandidates(s, controller, pp); }
+
+    std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+    // 0 = off (the old zone-order list). 1 = flat tiers. 2 = the same tiers with the KILL gated on
+    // the loop being assemblable -- see the sink tier below for why that gate is the variant worth
+    // having. ADOPTED at 2: -0.0300 turns on 4 held-out seeds x 50 games (better on 3 of the 4) and
+    // -0.0125 on train, for 3.3% fewer work units. The quality delta is inside the noise at that
+    // sample and is NOT the reason to ship it -- the reason is the control arm, which narrowing
+    // WITHOUT this ranking cost +0.2800 turns held-out / +0.1875 train. See
+    // docs/design/analysis-EldraziDisplacerFlicker.md.
+    static const int s_rank = EnvInt("MTG_EDF_TUTOR_RANK", 2);
+    if (s_rank <= 0 || all.size() <= 1) { return all; }
+
+    // What the board already has. Hand counts too: a second copy of a piece we are about to deploy
+    // is worth far less than the piece we are missing, and the wish resolves before we cast it.
+    bool have_outlet = false, have_payload = false, have_sink = false;
+    int  lands       = 0;
+    auto note = [&](const Card& c, bool on_battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { return; }
+        if (d->params.blink_cost.has_value())      { have_outlet  = true; }
+        if (d->params.etb_untap_lands > 0)         { have_payload = true; }
+        if (d->params.drain_cost.has_value()
+            || d->params.exile_opponent_top_cost.has_value()) { have_sink = true; }
+        if (on_battlefield && d->card.IsLand())    { ++lands; }
+    };
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == controller) { note(p.card, true); } }
+    for (const Card& c : s.players[controller].hand) { note(c, false); }
+
+    // A land is only worth a wish while the mana is the binding constraint. Six is where this
+    // deck's loop stops needing more lands than it untaps, so the tier decays to nothing there
+    // rather than competing with a missing combo piece on a developed board.
+    const int land_want = std::max(0, 6 - lands);
+
+    struct Ranked { int score; int mv; std::string name; };
+    std::vector<Ranked> ranked;
+    ranked.reserve(all.size());
+    for (const std::string& n : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+        if (d == nullptr) { ranked.push_back(Ranked{ 0, 0, n }); continue; }
+        const CardParams& q = d->params;
+        int score = 0;
+        if (q.drain_cost.has_value() || q.exile_opponent_top_cost.has_value())
+        {
+            // THE KILL. Unbounded mana does nothing without one, and nothing else in the pool can
+            // substitute -- so a missing sink outranks a missing combo piece, which at worst makes
+            // more of a resource we already cannot cash.
+            //
+            // MODE 2 gates that on the loop being ASSEMBLABLE, and the reason is empirical: under
+            // mode 1 the wish takes a sink on turn 2, several turns before there is any mana to
+            // pour into it, where the unranked engine took a karoo land that ramps immediately.
+            // A sink is worth nothing until something can feed it, so on a bare board mode 2 lets
+            // it fall to the "already have one" tier and the ramp/pieces outrank it.
+            const bool live = (s_rank < 2) || (have_outlet && have_payload);
+            score = (have_sink || !live) ? 25 : 100;
+        }
+        else if (q.blink_cost.has_value())        { score = have_outlet  ? 20 : 90; }
+        else if (q.etb_untap_lands > 0)           { score = have_payload ? 20 : 80; }
+        else if (d->card.IsLand())                { score = 30 + land_want * 5; }
+        else                                      { score = 10; }
+        ranked.push_back(Ranked{ score, d->card.m_mana_cost.ManaValue(), n });
+    }
+    // Cheaper first within a tier (it is castable sooner), then by name -- a TOTAL order, so the
+    // list cannot depend on pool order and two states with the same board rank identically.
+    std::stable_sort(ranked.begin(), ranked.end(),
+                     [](const Ranked& a, const Ranked& b)
+                     {
+                         if (a.score != b.score) { return a.score > b.score; }
+                         if (a.mv    != b.mv)    { return a.mv    < b.mv;    }
+                         return a.name < b.name;
+                     });
+    std::vector<std::string> out;
+    out.reserve(ranked.size());
+    for (const Ranked& r : ranked) { out.push_back(r.name); }
+    return out;
+}

@@ -1160,6 +1160,11 @@ public:
     // sideboard that is decklist order, so it is deterministic rather than merely likely. This is a
     // COVERAGE fix, not a heuristic one.
     int  TutorSearchWidth() const override { return 8; }
+    // The board-aware ranking a NARROWER width rests on (MTG_EDF_TUTOR_RANK: 0 off = the old
+    // zone-order list, 1 flat tiers, 2 tiers with the kill gated on an assemblable loop). ADOPTED
+    // at 2. Ranks by card PARAMS, never by name, so it is correct for any wish pool.
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller,
+                                             const CardParams& pp) const override;
 
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
 };
