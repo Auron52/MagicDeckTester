@@ -1136,9 +1136,48 @@ static bool BpNoGreedyContinuationEnabled()
 // all three are mutually exclusive A/B arms of the same fallback.
 static bool BpCanonContEnabled()
 {
+    // ADOPTION CANDIDATE (sound recipe, 2026-09-02): quality gates passed (neutral alone on all
+    // 16 suite decks at 186k games; in the recipe hinata -0.0126/-0.0146 at t 4.8/5.9) but the
+    // QUIET-BOX WALL failed the USER's <10-15% bar, so the default stays OFF until the gap
+    // closes. See docs/design/bp-greedy-continuation-deletion.md.
     static const bool on = EnvOn("MTG_BP_CANON_CONT");
     return heurarm::Flag(heurarm::BP_CANON_CONT, on);
 }
+
+// MTG_BP_CANON_ROLLOUT -- canon fires in PLAIN rollout applies too (default OFF = canon is
+// scoped to decision/recorded/resumed/hosted applies; see the scope note at the canon block).
+static bool BpCanonRolloutToo()
+{
+    static const bool on = EnvOn("MTG_BP_CANON_ROLLOUT");
+    return heurarm::Flag(heurarm::BP_CANON_ROLLOUT, on);
+}
+
+// MTG_BP_CANON_REC -- canon fires at RECORDING rollout applies (out_breakpoint set, not root).
+// DEFAULT ON; =0 is the TIGHT-scope probe arm (canon at root/resume/capture only, rec-rollouts
+// back to greedy). Exists because 91.5% of hinata's canon fires are [rollout+rec] and each pays a
+// BuildBreakpointKey walk even on a verdict-memo hit -- whether that traffic carries any of the
+// recipe's quality is a paired-gate question, not one more scope guess.
+static bool BpCanonRecToo()
+{
+    static const bool on = EnvOn("MTG_BP_CANON_REC", true);
+    return heurarm::Flag(heurarm::BP_CANON_REC, on);
+}
+
+// One breakpoint-enum cache entry (see BpEnumEntryFor, defined with the enum memo far below).
+struct BpEnumEntry
+{
+    std::vector<TurnSolver::Plan> plans;
+};
+// Build the enum-memo key (all folds included). Returns false when the cache is disabled
+// (MTG_NO_BP_ENUM_CACHE) -- callers then skip every memo layer.
+static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
+                           TranspositionTable::Key* out);
+static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
+                                   const TranspositionTable::Key* pre_key = nullptr);
+// Canon's ACT-vs-PASS verdict memo, SEPARATE from the plan cache on purpose: a PASS state must
+// never pay a plan-list derivation (the entry-rider form did, and measured WORSE on hinata --
+// 56% of its 4.03M fires pass). Slot index = (site==1 | karoo_deferred<<1); -1 = unknown.
+struct CanonVerdict { int8_t v[4] = { -1, -1, -1, -1 }; };
 
 // MTG_BP_BASE_EMPTY -- the BASE plan's continuation is the EMPTY one, not a greedy Solve.
 //
@@ -1853,6 +1892,15 @@ inline void RecordWhy(int site, int w)
 inline std::atomic<unsigned long long> nohost_kind[8] = {};
 inline void RecordNoHost(int kind)
 { if (Enabled() && kind >= 0 && kind < 8) { nohost_kind[kind].fetch_add(1, std::memory_order_relaxed); } }
+// WHERE canon fires and what it pays, by the same ROOT|REC|RESUME kind bitmap (+8 = a capture was
+// present). fires = canon-eligible entries; copies = probe GameState deep-copies paid; enums =
+// EnumerateBreakpointPlans paid on ACT; scoped_out = entries the rollout scope declined. The wall
+// decomposition said canon IS the recipe's wall (ds +50.7% alone at -1.09% units) -- these split
+// the residue after scoping so the next cut aims at the right context.
+inline std::atomic<unsigned long long> canon_fires[16] = {}, canon_copies[16] = {},
+                                       canon_enums[16] = {}, canon_scoped_out[16] = {};
+inline void RecordCanon(std::atomic<unsigned long long> (&a)[16], int kind)
+{ if (Enabled() && kind >= 0 && kind < 16) { a[kind].fetch_add(1, std::memory_order_relaxed); } }
 inline void RecordOutcome(int site, bool acted)
 { if (Enabled() && acted && site >= 0 && site < 100) { act[site].fetch_add(1, std::memory_order_relaxed); } }
 struct Dumper
@@ -1903,6 +1951,29 @@ struct Dumper
             }
             std::fprintf(stderr, "\n");
         }
+        // Canon's own traffic by apply-kind bitmap (root|rec|resume|capture) -- the wall lives in
+        // the copies+enums columns, so this says which context the next scope cut should target.
+        auto canon_row = [](const char* label, std::atomic<unsigned long long> (&a)[16])
+        {
+            unsigned long long tot = 0;
+            for (int k = 0; k < 16; ++k) { tot += a[k].load(); }
+            if (!tot) { return; }
+            std::fprintf(stderr, "    canon %s (total %llu):", label, tot);
+            for (int k = 0; k < 16; ++k)
+            {
+                const unsigned long long v = a[k].load();
+                if (!v) { continue; }
+                std::fprintf(stderr, "  [%s%s%s%s]=%llu(%.1f%%)",
+                             (k & 1) ? "root" : "rollout", (k & 2) ? "+rec" : "",
+                             (k & 4) ? "+resume" : "", (k & 8) ? "+cap" : "",
+                             v, 100.0 * v / tot);
+            }
+            std::fprintf(stderr, "\n");
+        };
+        canon_row("fires", canon_fires);
+        canon_row("copies", canon_copies);
+        canon_row("enums", canon_enums);
+        canon_row("scoped-out", canon_scoped_out);
     }
 };
 inline Dumper g_dumper;
@@ -5933,6 +6004,8 @@ static int BpSearchDepth()
 // ZERO and silently disables EVERY site; a boolean has no such foot-gun.
 static bool BpPlainCantripSiteEnabled()
 {
+    // ADOPTION CANDIDATE (sound recipe, 2026-09-02) -- default stays OFF until the recipe's
+    // quiet-box wall gap closes; see BpCanonContEnabled.
     static const bool on = EnvOn("MTG_BP_SITE3");
     return heurarm::Flag(heurarm::BP_SITE3, on);
 }
@@ -6001,6 +6074,8 @@ static bool BpPartitionCantripEnabled()
 // MTG_BP_NO_GREEDY_CONT) -- the L*W-not-W^L trade, one searched link per line, unchanged.
 static bool BpNodeEnabled()
 {
+    // ADOPTION CANDIDATE (sound recipe, 2026-09-02) -- default stays OFF until the recipe's
+    // quiet-box wall gap closes; see BpCanonContEnabled.
     static const bool on = EnvOn("MTG_BP_NODE");
     return heurarm::Flag(heurarm::BP_NODE, on);
 }
@@ -6514,6 +6589,8 @@ static int BpWave0SiteMask()
     // and avg returns to 5.8833 -- byte-identical to the baseline, where the eager arm was 5.9000.
     // Note this is the OPPOSITE outcome to the site-6 deferral above, which measured worse; the two
     // sites differ in how universally they fire, so the result had to be measured, not inherited.
+    // ADOPTION CANDIDATE (sound recipe, 2026-09-02) -- default stays OFF until the recipe's
+    // quiet-box wall gap closes; see BpCanonContEnabled.
     static const bool s3_defer_env = EnvOn("MTG_BP_SITE3_DEFER");
     if (heurarm::Flag(heurarm::BP_SITE3_DEFER, s3_defer_env)) { out &= ~(1 << 3); }
     // MTG_BP_NODE: the plain-cantrip continuation is a real search node, so the (base x k) wave-0
@@ -16511,6 +16588,9 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
 // exactly where the committed line is chosen.
 static bool BpNodeRootTurnOnly()
 {
+    // ADOPTION CANDIDATE (sound recipe, 2026-09-02) -- default stays OFF until the recipe's
+    // quiet-box wall gap closes; see BpCanonContEnabled. 99.4% of the full node's work was on
+    // lookahead turns never played; root-turn hosting keeps the quality at +3.1% units.
     static const bool env_on = EnvOn("MTG_BP_NODE_ROOTTURN");
     return heurarm::Flag(heurarm::BP_NODE_ROOTTURN, env_on);
 }
@@ -17130,8 +17210,54 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // canonical cands[0]; on PASS fall through to the greedy path verbatim. Stands down inside
         // a derivation (the uncharged-recursion wall) -- there the base greedy fallback runs, as
         // it does in the shipped engine.
-        if (!resolved && class_on && BpCanonContEnabled() && g_bp_enum_depth == 0)
+        //
+        // SCOPE (2026-09-02): canon also stands down in a PLAIN ROLLOUT apply -- no root enum, no
+        // recording, no node resume, no capture -- where the USER's scope ruling keeps greedy as
+        // the playout policy anyway. The quiet-box wall decomposition caught why this matters:
+        // canon-everywhere pays a GameState copy + Solve probe per apply and an uncharged
+        // EnumerateBreakpointPlans per ACT at states rollouts visit constantly, which alone was
+        // +50.7% wall on dragonstorm (its s2 impulse re-solve is 96.6% plain-rollout traffic)
+        // against a -1.09% units read. Decision/recorded/resumed applies keep canon -- greedy
+        // still decides nothing there. MTG_BP_CANON_ROLLOUT=1 restores canon-everywhere (the
+        // form the 2026-09-02 quality gates measured) for A/B.
+        const bool canon_scope_ok = g_bp_root_enum
+                                 || (out_breakpoint != nullptr && BpCanonRecToo())
+                                 || bp_resume != nullptr || bp_capture != nullptr
+                                 || BpCanonRolloutToo();
+        const int canon_kind = (g_bp_root_enum ? 1 : 0) | (out_breakpoint != nullptr ? 2 : 0)
+                             | (bp_resume != nullptr ? 4 : 0) | (bp_capture != nullptr ? 8 : 0);
+        if (!resolved && class_on && BpCanonContEnabled() && g_bp_enum_depth == 0
+            && !canon_scope_ok)
+        { greedysite::RecordCanon(greedysite::canon_scoped_out, canon_kind); }
+        if (!resolved && class_on && BpCanonContEnabled() && g_bp_enum_depth == 0
+            && canon_scope_ok)
         {
+            greedysite::RecordCanon(greedysite::canon_fires, canon_kind);
+            // The ACT-vs-PASS verdict is MEMOIZED (see CanonVerdict): it is deterministic in the
+            // mid-turn-exact enum key plus the probe's land mechanism (site==1 uses the flood-keep
+            // lambda) and the deferred-Karoo reservation, which index the slot. Without this,
+            // every revisit of the same state re-paid a GameState deep-copy + Solve -- measured
+            // 2026-09-02 as canon's entire wall cost (+50.7% dragonstorm alone; 91.5% of hinata's
+            // 4.03M fires on [rollout+rec] applies revisiting the same states). The map is
+            // SEPARATE from the plan cache so a PASS state never pays a plan-list derivation (the
+            // entry-rider form did, and measured WORSE on hinata, where 56% of fires pass); a
+            // PASS revisit costs one key walk and a lookup, an ACT revisit adds one cache hit and
+            // a single-Plan copy. Cap rides MTG_BP_ENUM_CACHE_CAP x4 (verdicts are 4 bytes).
+            static thread_local std::unordered_map<TranspositionTable::Key, CanonVerdict,
+                                                   TranspositionTable::KeyHash> canon_memo;
+            static const std::size_t s_canon_cap =
+                static_cast<std::size_t>(std::max(1, EnvInt("MTG_BP_ENUM_CACHE_CAP", 8192))) * 4;
+            const int ci = ((site == 1) ? 1 : 0) | (karoo_deferred ? 2 : 0);
+            TranspositionTable::Key ckey;
+            const bool ckeyed = BpEnumBuildKey(state, is_pre_combat, &ckey);
+            int8_t acted8 = -1;
+            if (ckeyed)
+            {
+                const auto vit = canon_memo.find(ckey);
+                if (vit != canon_memo.end()) { acted8 = vit->second.v[ci]; }
+            }
+            if (acted8 < 0)
+            {
             // Probe at the state greedy will actually solve: if a breakpoint land could still be
             // played, replay the site's own land mechanism on a COPY first (deciding on the
             // pre-land state mis-reads every cast that land unlocks as a pass -- the same bug the
@@ -17149,6 +17275,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     && lp0.lands_played_this_turn < lp0.LandDropsAvailable();
                 if (drop_possible)
                 {
+                    greedysite::RecordCanon(greedysite::canon_copies, canon_kind);
                     GameState probe = state;
                     if (site == 1) { play_drawn_flood_keep_land(probe, nullptr); }
                     else           { play_breakpoint_land(probe, nullptr); }
@@ -17157,24 +17284,31 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 else
                 { acted = !TurnSolver::Solve(state, is_pre_combat).actions.empty(); }
             }
-            if (acted)
+            greedysite::RecordCanon(greedysite::canon_enums, canon_kind);   // real probe work paid
+            acted8 = acted ? 1 : 0;
+            if (ckeyed)
             {
-                const std::vector<TurnSolver::Plan> ccands =
-                    TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
-                if (!ccands.empty())
+                if (canon_memo.size() >= s_canon_cap) { canon_memo.clear(); }
+                canon_memo[ckey].v[ci] = acted8;
+            }
+            }
+            if (acted8 == 1)
+            {
+            BpEnumEntry* ent = BpEnumEntryFor(state, is_pre_combat, ckeyed ? &ckey : nullptr);
+            if (!ent->plans.empty())
+            {
+                out      = ent->plans.front();
+                resolved = true;
+                if (ContDiffOn())
                 {
-                    out      = ccands.front();
-                    resolved = true;
-                    if (ContDiffOn())
-                    {
-                        GameState gst = state;
-                        if (site == 1) { play_drawn_flood_keep_land(gst, nullptr); }
-                        else           { play_breakpoint_land(gst, nullptr); }
-                        ContDiffRecord(site, gst, is_pre_combat, out);
-                    }
+                    GameState gst = state;
+                    if (site == 1) { play_drawn_flood_keep_land(gst, nullptr); }
+                    else           { play_breakpoint_land(gst, nullptr); }
+                    ContDiffRecord(site, gst, is_pre_combat, out);
                 }
-                // ccands empty while Solve acts: the enumeration offers nothing here, so the
-                // greedy Solve below remains the only answer (same residue NGC left).
+            }
+            // plans empty while the probe acts: the enumeration offers nothing here, so the
+            // greedy Solve below remains the only answer (same residue NGC left).
             }
         }
         if (!resolved && !class_on && BpNoGreedyContinuationEnabled() && greedysite::Enabled())
@@ -30865,8 +30999,110 @@ namespace bpdesign
     inline Dumper g_dumper;
 }
 
+// One cache entry per breakpoint state: the continuation list, plus MTG_BP_CANON_CONT's memoized
+// ACT-vs-PASS verdict for that state (-1 unknown). The verdict is deterministic in exactly the
+// inputs the key folds (the key is mid-turn exact) plus the probe's land mechanism and the
+// deferred-Karoo reservation, so it is indexed by (site==1 | karoo_deferred<<1) rather than
+// widening the key. Memoizing it is what makes canon affordable at RECORDED rollout applies: the
+// 2026-09-02 wall decomposition measured canon-everywhere at +50.7% dragonstorm wall against a
+// -1.09% units read, and the context counters put 91.5% of hinata's 4.03M fires (1.78M
+// enumerations, 644k GameState probe copies per 300 games) on [rollout+rec] applies that revisit
+// the same states -- the repeat cost collapses to one key walk and one Plan copy.
+// MTG_NO_BP_ENUM_CACHE disables storage entirely (canon then re-probes every fire); results must
+// be identical either way, and the smoke digests are the check.
 std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameState& state,
                                                                    bool is_pre_combat)
+{
+    return BpEnumEntryFor(state, is_pre_combat)->plans;
+}
+
+static bool BpEnumCacheOn()
+{
+    static const bool s = !EnvOn("MTG_NO_BP_ENUM_CACHE");
+    return s;
+}
+
+// The enum-memo key, ALL folds included -- shared by the plan cache (BpEnumEntryFor) and canon's
+// verdict memo so the two layers can never disagree about what "the same state" means, and so a
+// caller needing both pays ONE BuildBreakpointKey walk.
+static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
+                           TranspositionTable::Key* out)
+{
+    if (!BpEnumCacheOn()) { return false; }
+    TranspositionTable::Key key = BuildBreakpointKey(state, is_pre_combat);
+    // MTG_CANTRIP_ORDER: the continuation list depends on the bound site (its ban filters
+    // CollectActions), so the same state under different sites must not share an entry.
+    if (g_cantrip_order_site != nullptr) { Fold(key, g_cantrip_order_site->card.m_name_hash); }
+    // The PRE-DRAW hand decides which cards are exempt (new) and which MTG_BP_CLASSIFY drops,
+    // so the same state under a different snapshot emits a different list and must not share
+    // an entry. Order-sensitive fold is fine: the snapshot is built in hand order in both
+    // worlds, from the same hand.
+    if (g_bp_hand_before != nullptr)
+    {
+        Fold(key, 0xB17Full);
+        // NARROWED TO THE INTERSECTION WITH THE CURRENT HAND (MTG_BP_KEY_WIDE=1 restores the
+        // whole-snapshot fold). Folding the ENTIRE pre-draw hand splits the key on cards that
+        // cannot affect the answer: every consumer of the snapshot -- the condemnation filter's
+        // BpCardWasInHandBefore and the drawn-card exemption -- only ever asks about cards that
+        // are in hand AT THIS ENUMERATION. A snapshot entry already cast, discarded or bottomed
+        // is unreachable by all of them, so two states differing only in such entries emit an
+        // IDENTICAL list and were being denied a shared entry for nothing.
+        //
+        // This is not a micro-optimisation. The fold is armed only when the snapshot exists,
+        // i.e. only when condemnation (or the cantrip order) is live, so turning condemnation
+        // ON was itself fragmenting the cache: measured 218,586 -> 240,439 full
+        // EnumeratePlansWithLand derivations (+10.0%) over 60 Hinata games. That enumeration is
+        // NOT a search node and never appears in interior_nodes, which is exactly why the tree
+        // read flat while the work did not fall -- the prune's saving was being handed back as
+        // cache misses.
+        //
+        // DEFAULT OFF (MTG_BP_KEY_NARROW=1), and the reason is a hazard, not caution for its
+        // own sake. "Not in hand now" is NOT the same as "unreachable": a card can COME BACK.
+        // Hinata alone plays Distorting Wake (returns permanents to hand), Memory Lapse and
+        // Remand (return the spell to hand), and Izzet Boilerworks (bounces a land). If a
+        // snapshot entry leaves the hand and later returns, BpCardWasInHandBefore becomes
+        // reachable for it again -- so two states identical NOW but differing in that entry
+        // would emit different lists later while sharing one cache entry. The base key is
+        // mid-turn exact, so both worlds agree on every ZONE; what they can disagree on is
+        // membership of the pre-draw snapshot, which is precisely what this fold carries.
+        //
+        // That makes the narrowing sound only for snapshot entries that can never re-enter the
+        // hand, which is a per-deck question this fold has no business answering. So it stays
+        // behind a flag until digest-identity over a large sample says otherwise -- the same
+        // standard MTG_NO_BP_ENUM_CACHE is held to ("results must be identical either way, and
+        // the smoke digests are the check").
+        static const bool s_narrow = EnvOn("MTG_BP_KEY_NARROW");
+        if (s_narrow)
+        {
+            // Order-stable: walked in CURRENT-hand order, and the current hand is already part
+            // of the key, so both worlds walk the same sequence.
+            for (const Card& c : state.ActivePlayer().hand)
+            {
+                if (BpCardWasInHandBefore(c.m_number))
+                { Fold(key, static_cast<uint64_t>(c.m_number)); }
+            }
+        }
+        else
+        {
+            for (int num : *g_bp_hand_before) { Fold(key, static_cast<uint64_t>(num)); }
+        }
+    }
+    // A RESERVED (deferred Karoo) drop is not a declined one, so it changes which lands
+    // MTG_BP_CONDEMN_LAND emits -- and it is NOT visible in the state, which is exactly why it
+    // has to be folded. The two worlds are otherwise byte-identical mid-turn: a plan that
+    // committed Gruul Turf and a plan that passed on its drop both reach the breakpoint with the
+    // Karoo still in hand and lands_played_this_turn == 0. Without this fold they would share a
+    // cache entry and the second would be served the first's plan list.
+    if (g_land_drop_reserved) { Fold(key, 0x1A4Dull); }
+    // Same reason as the reservation: two continuations identical mid-turn but snapshotted at
+    // DIFFERENT mana-source counts condemn different sets, so they must not share a cache entry.
+    if (g_bp_mana_sources_before >= 0) { Fold(key, 0x2B71ull + static_cast<unsigned long long>(g_bp_mana_sources_before)); }
+    *out = key;
+    return true;
+}
+
+static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
+                                   const TranspositionTable::Key* pre_key)
 {
     // static, not a per-call EnvOn: this runs millions of times per game and a getenv here is the
     // hot-path wart that has already had to be fixed twice in this file.
@@ -30887,85 +31123,19 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
     // way, and the smoke digests are the check. See docs/design/post-breakpoint-search.md.
     // MTG_BP_ENUM_CACHE_CAP overrides the cap (value-carrying; A/B probe for the memo-thrash
     // question above -- results must be identical at ANY cap, only the wall clock may move).
-    static const bool s_cache = !EnvOn("MTG_NO_BP_ENUM_CACHE");
-    using BpEnumMap = std::unordered_map<TranspositionTable::Key, std::vector<Plan>,
+    using BpEnumMap = std::unordered_map<TranspositionTable::Key, BpEnumEntry,
                                          TranspositionTable::KeyHash>;
     static thread_local BpEnumMap cache;
     static const std::size_t s_bp_enum_cap =
         static_cast<std::size_t>(std::max(1, EnvInt("MTG_BP_ENUM_CACHE_CAP", 8192)));
 
     TranspositionTable::Key key;
-    if (s_cache)
+    const bool keyed = (pre_key != nullptr)
+        ? (key = *pre_key, true)
+        : BpEnumBuildKey(state, is_pre_combat, &key);
+    if (keyed)
     {
-        key = BuildBreakpointKey(state, is_pre_combat);
-        // MTG_CANTRIP_ORDER: the continuation list depends on the bound site (its ban filters
-        // CollectActions), so the same state under different sites must not share an entry.
-        if (g_cantrip_order_site != nullptr) { Fold(key, g_cantrip_order_site->card.m_name_hash); }
-        // The PRE-DRAW hand decides which cards are exempt (new) and which MTG_BP_CLASSIFY drops,
-        // so the same state under a different snapshot emits a different list and must not share
-        // an entry. Order-sensitive fold is fine: the snapshot is built in hand order in both
-        // worlds, from the same hand.
-        if (g_bp_hand_before != nullptr)
-        {
-            Fold(key, 0xB17Full);
-            // NARROWED TO THE INTERSECTION WITH THE CURRENT HAND (MTG_BP_KEY_WIDE=1 restores the
-            // whole-snapshot fold). Folding the ENTIRE pre-draw hand splits the key on cards that
-            // cannot affect the answer: every consumer of the snapshot -- the condemnation filter's
-            // BpCardWasInHandBefore and the drawn-card exemption -- only ever asks about cards that
-            // are in hand AT THIS ENUMERATION. A snapshot entry already cast, discarded or bottomed
-            // is unreachable by all of them, so two states differing only in such entries emit an
-            // IDENTICAL list and were being denied a shared entry for nothing.
-            //
-            // This is not a micro-optimisation. The fold is armed only when the snapshot exists,
-            // i.e. only when condemnation (or the cantrip order) is live, so turning condemnation
-            // ON was itself fragmenting the cache: measured 218,586 -> 240,439 full
-            // EnumeratePlansWithLand derivations (+10.0%) over 60 Hinata games. That enumeration is
-            // NOT a search node and never appears in interior_nodes, which is exactly why the tree
-            // read flat while the work did not fall -- the prune's saving was being handed back as
-            // cache misses.
-            //
-            // DEFAULT OFF (MTG_BP_KEY_NARROW=1), and the reason is a hazard, not caution for its
-            // own sake. "Not in hand now" is NOT the same as "unreachable": a card can COME BACK.
-            // Hinata alone plays Distorting Wake (returns permanents to hand), Memory Lapse and
-            // Remand (return the spell to hand), and Izzet Boilerworks (bounces a land). If a
-            // snapshot entry leaves the hand and later returns, BpCardWasInHandBefore becomes
-            // reachable for it again -- so two states identical NOW but differing in that entry
-            // would emit different lists later while sharing one cache entry. The base key is
-            // mid-turn exact, so both worlds agree on every ZONE; what they can disagree on is
-            // membership of the pre-draw snapshot, which is precisely what this fold carries.
-            //
-            // That makes the narrowing sound only for snapshot entries that can never re-enter the
-            // hand, which is a per-deck question this fold has no business answering. So it stays
-            // behind a flag until digest-identity over a large sample says otherwise -- the same
-            // standard MTG_NO_BP_ENUM_CACHE is held to ("results must be identical either way, and
-            // the smoke digests are the check").
-            static const bool s_narrow = EnvOn("MTG_BP_KEY_NARROW");
-            if (s_narrow)
-            {
-                // Order-stable: walked in CURRENT-hand order, and the current hand is already part
-                // of the key, so both worlds walk the same sequence.
-                for (const Card& c : state.ActivePlayer().hand)
-                {
-                    if (BpCardWasInHandBefore(c.m_number))
-                    { Fold(key, static_cast<uint64_t>(c.m_number)); }
-                }
-            }
-            else
-            {
-                for (int num : *g_bp_hand_before) { Fold(key, static_cast<uint64_t>(num)); }
-            }
-        }
-        // A RESERVED (deferred Karoo) drop is not a declined one, so it changes which lands
-        // MTG_BP_CONDEMN_LAND emits -- and it is NOT visible in the state, which is exactly why it
-        // has to be folded. The two worlds are otherwise byte-identical mid-turn: a plan that
-        // committed Gruul Turf and a plan that passed on its drop both reach the breakpoint with the
-        // Karoo still in hand and lands_played_this_turn == 0. Without this fold they would share a
-        // cache entry and the second would be served the first's plan list.
-        if (g_land_drop_reserved) { Fold(key, 0x1A4Dull); }
-    // Same reason as the reservation: two continuations identical mid-turn but snapshotted at
-    // DIFFERENT mana-source counts condemn different sets, so they must not share a cache entry.
-    if (g_bp_mana_sources_before >= 0) { Fold(key, 0x2B71ull + static_cast<unsigned long long>(g_bp_mana_sources_before)); }
-        BpEnumMap::const_iterator it = cache.find(key);
+        BpEnumMap::iterator it = cache.find(key);
         if (it != cache.end())
         {
             if (BpEnumProbeOn())
@@ -30974,15 +31144,15 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
                 if (g_bp_enum_depth > 0)
                 { g_bp_enum_probe.nested_hits.fetch_add(1, std::memory_order_relaxed); }
             }
-            return it->second;
+            return &it->second;
         }
     }
 
     ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
-    std::vector<Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
+    std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
     --g_bp_enum_depth;
 
-    if (s_cache)
+    if (keyed)
     {
         if (BpEnumProbeOn())
         {
@@ -30997,9 +31167,16 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
             if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }
             cache.clear();
         }
-        cache.emplace(key, plans);
+        BpEnumEntry ent;
+        ent.plans = std::move(plans);
+        return &cache.emplace(key, std::move(ent)).first->second;
     }
-    return plans;
+    // Cache disabled: hand back a thread_local scratch entry (fresh verdict slots each fill, so
+    // nothing is reused across calls -- the no-cache world stays a true re-probe-every-time A/B).
+    static thread_local BpEnumEntry scratch;
+    scratch = BpEnumEntry{};
+    scratch.plans = std::move(plans);
+    return &scratch;
 }
 
 // One-line "land=...; cast: a, b" summary of a plan (for the human-play accept verdict).
