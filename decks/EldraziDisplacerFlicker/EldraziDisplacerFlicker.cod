@@ -3,9 +3,9 @@
     <deckname></deckname>
     <comments></comments>
     <zone name="main">
-        <card number="4" name="Eldrazi Displacer"/>
+        <card number="3" name="Eldrazi Displacer"/>
         <card number="4" name="Emiel the Blessed"/>
-        <card number="4" name="Cloud of Faeries"/>
+        <card number="3" name="Cloud of Faeries"/>
         <card number="4" name="Peregrine Drake"/>
         <card number="4" name="Wild Growth"/>
         <card number="4" name="Overgrowth"/>
@@ -13,32 +13,24 @@
         <card number="4" name="Brushland"/>
         <card number="4" name="Yavimaya Coast"/>
         <card number="2" name="Adarkar Wastes"/>
-        <card number="1" name="Mariposa Military Base"/>
+        <card number="3" name="Mariposa Military Base"/>
         <card number="4" name="Trace of Abundance"/>
         <card number="4" name="Conservatory"/>
         <card number="2" name="Kitchen"/>
-        <card number="4" name="Shivan Gorge"/>
-        <card number="3" name="Eladamri's Call"/>
-        <card number="1" name="Stroke of Genius"/>
+        <card number="1" name="Shivan Gorge"/>
         <card number="2" name="Training Grounds"/>
-        <card number="1" name="Azorius Chancery"/>
+        <card number="4" name="Living Wish"/>
+        <card number="1" name="Eladamri's Call"/>
+        <card number="3" name="Aether Hub"/>
     </zone>
     <zone name="side">
-        <card number="1" name="Mirari's Wake"/>
-        <card number="4" name="Mind Spring"/>
-        <card number="1" name="Mystic Gate"/>
-        <card number="1" name="Wooded Bastion"/>
-        <card number="2" name="Market Festival"/>
-        <card number="2" name="Overgrowth"/>
-        <card number="4" name="Silver Scrutiny"/>
-        <card number="1" name="Training Grounds"/>
-        <card number="1" name="Forest"/>
-        <card number="1" name="Island"/>
-        <card number="1" name="Plains"/>
-        <card number="4" name="Ingenious Mastery"/>
-        <card number="2" name="Azorius Chancery"/>
-        <card number="1" name="Flooded Grove"/>
-        <card number="1" name="Study"/>
-        <card number="3" name="Dawn's Reflection"/>
+        <card number="1" name="Azorius Chancery"/>
+        <card number="1" name="Adarkar Wastes"/>
+        <card number="1" name="Cloud of Faeries"/>
+        <card number="1" name="Eldrazi Displacer"/>
+        <card number="1" name="Mariposa Military Base"/>
+        <card number="1" name="Vexing Shusher"/>
+        <card number="1" name="Essence Depleter"/>
+        <card number="1" name="Dimensional Infiltrator"/>
     </zone>
 </cockatrice_deck>
