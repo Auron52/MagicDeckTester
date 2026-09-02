@@ -62,16 +62,40 @@ analyzer must do the card work, and it cannot analyze cards it cannot see.
    act, which is a faithful simplification, not an oversight.
    Covered by `test/scenarios/opponent_deckout.json`, verified DISCRIMINATING: 2 cards →
    `win_turn=3` with `opponent_life=20` (so it is the deck-out, not damage); 100 cards → no win.
-4. **IN PROGRESS** — **The five cards, VIA THE STANDARD ANALYZER** (user: "I recommend strongly that
+4. **DONE** — **The five cards, VIA THE STANDARD ANALYZER** (user: "I recommend strongly that
    we use the standard analyzer to handle it"): Living Wish, Aether Hub, Vexing Shusher, Essence
    Depleter, Dimensional Infiltrator. Oracle text fetched and verified from Scryfall (below);
    per-card research fanned out across four Opus agents per the skill's Stage 2 protocol.
-5. **Sideboard zone + wish mechanic.** Neither exists: the sideboard is parsed into
-   `Decklist::sideboard` and used ONLY to print a startup line; there is no wish support anywhere.
-6. **Go-off recognizer learns both `{C}` sinks.** It currently knows Gorge damage, Emiel counters
-   and an `{X}` draw — this deck runs ONE Gorge and no Stroke.
-7. **Regenerate the profile** (the committed one is fitted to the old list) and re-run the
-   measurement stages.
+   `--coverage-only` is now **CLEAN: 0 missing, 0 partial, 23 cards** (19 mainboard + 4
+   sideboard-only), down from five missing. Every clause is implemented or carries a bracket note
+   naming **which modelling limitation** makes it inert — never "it doesn't matter for a goldfish",
+   which is a claim about the card wearing the costume of a claim about the engine.
+5. **DONE** — **Sideboard zone + wish mechanic.** `Player::sideboard` is a real per-game zone, and
+   Living Wish is modelled as a TUTOR whose search zone is the sideboard, so it inherits the entire
+   searched-tutor apparatus (index axis, five signature folds, pin, viewer chooser) rather than
+   growing a parallel one. Verified on real games: the wish fires and picks DIFFERENT targets
+   across games, so the axis is genuinely searched.
+6. **DONE** — **Go-off recognizer learns both `{C}` sinks**, plus `ProjectsAlternateWin` for the
+   deck-out (which `ExtraLethalDamage` structurally cannot express) and
+   `ManaSinkActivationCounts` so the search can propose the finishing count.
+7. **IN PROGRESS** — **Regenerate the profile** (the committed one is fitted to the old list) and
+   re-run the measurement stages.
+
+### Open items carried forward
+
+* **A 30 s SLOW-GAME appeared** in a 12-game probe once the wish and the sink count axis were live
+  (`--seed 4244 --game-index 2`). Not yet diagnosed. It must be understood before any long run —
+  this deck has a history here (an earlier blink fan-out OOM-killed the box at 46 GB).
+* **The pool projections over-credit energy** (three Hubs sharing one energy project 3 wild).
+  Over-credit only, so a line is enumerated and then dropped rather than played illegally; the
+  ceiling is 3 energy for the whole game. Threading an energy budget through the seven pool
+  builders is the `gy_fuel` pattern and is deferred.
+* **`g_play_land_rad_chooser` is dead** — the hook and call site exist, nothing sets the pointer.
+* **`EnumeratePlans` does not add `ExtraLethalDamage`** where its twin in `Solve` does. Pre-existing
+  asymmetry, its own question; the alternate-win check was added to both.
+* **The wish target ranking is generic (decklist order).** Width is fixed at 8 so nothing is
+  unreachable, but whether the provider should RANK the pool is a measured question, not an
+  assumed one.
 
 ### THE TRAP the Stage-2 fan-out found: the wish cannot reach either win condition
 
