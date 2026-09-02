@@ -823,6 +823,18 @@ the head of the **next** precombat main — before that draw ever becomes activa
 - seeds: 8801 games: 16 (x2 sweeps, 32 agent-games total)
 - flags: 0 unresolved
 
+> **STALE, AND THE RE-SWEEP IS UN-RUN (2026-09-02).** The record above predates the corrected
+> decklist, the sideboard/wish mechanic, both `{C}` sinks, the opponent library, energy, and the
+> adopted wish ranking — i.e. essentially all of this deck's current play. It must be re-run before
+> it means anything.
+>
+> It has **NOT** been re-run, and the reason is a harness constraint, not a judgement call: this
+> session is instructed not to use the Agent or Workflow tools unless the user asks. Stage 5d's
+> documented mechanism is a Workflow fan-out of one player agent per game. Per CLAUDE.md this is
+> recorded as **UN-RUN** rather than as "deferred" — nobody has signed anything off. The mechanical
+> half of the verification (`play_invariants`, determinism/integrity/progress) is unaffected and is
+> still enforced.
+
 All flags from both sweeps were verified against `cards.json` + the rules skill and resolved:
 **six fixed** (ETB-refund self-funding, `{cost},{T}` self-tap, tap-ahead wild mana, the Emiel-counter
 documentation error, the land-aura creature-target leak, the land-aura subset reject), **two fixed as
