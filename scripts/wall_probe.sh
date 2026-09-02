@@ -64,6 +64,18 @@ declare -A ARMENV=(
   [d56]="MTG_BP_NODE=1 MTG_BP_NODE_D56=1"
   [node0]="MTG_BP_NODE=1 MTG_BP_NODE_D0ONLY=1"
   [d560]="MTG_BP_NODE=1 MTG_BP_NODE_D0ONLY=1 MTG_BP_NODE_D56=1"
+  # The SOUND recipe (2026-09-02 adoption gate) and its EF extension. Every flag is pinned
+  # EXPLICITLY in both directions so the arms mean the same thing on a default-OFF and a
+  # default-ON (adopted) binary -- [base]="" does not have that property once defaults flip.
+  [off]="MTG_BP_SITE3=0 MTG_BP_SITE3_DEFER=0 MTG_BP_NODE=0 MTG_BP_NODE_ROOTTURN=0 MTG_BP_CANON_CONT=0"
+  [screcipe]="MTG_BP_SITE3=1 MTG_BP_SITE3_DEFER=1 MTG_BP_NODE=1 MTG_BP_NODE_ROOTTURN=1 MTG_BP_CANON_CONT=1"
+  # Sound-recipe WALL DECOMPOSITION arms (2026-09-02: recipe wall = hinata +31% / ds +50% while
+  # units read +2.6% / -1.1% -- find which lever burns the uncharged time). Cumulative ladder
+  # plus canon isolated; every flag pinned both ways as above.
+  [s3d]="MTG_BP_SITE3=1 MTG_BP_SITE3_DEFER=1 MTG_BP_NODE=0 MTG_BP_NODE_ROOTTURN=0 MTG_BP_CANON_CONT=0"
+  [noderoot]="MTG_BP_SITE3=1 MTG_BP_SITE3_DEFER=1 MTG_BP_NODE=1 MTG_BP_NODE_ROOTTURN=1 MTG_BP_CANON_CONT=0"
+  [canononly]="MTG_BP_SITE3=0 MTG_BP_SITE3_DEFER=0 MTG_BP_NODE=0 MTG_BP_NODE_ROOTTURN=0 MTG_BP_CANON_CONT=1"
+  [efrecipe]="MTG_BP_SITE3=1 MTG_BP_SITE3_DEFER=1 MTG_BP_NODE=1 MTG_BP_NODE_ROOTTURN=1 MTG_BP_CANON_CONT=1 MTG_EXEC_FEAS=1"
 )
 
 run_one() {   # $1=rep $2=deck $3=arm $4=stats(0/1) [$5..=extra argv]

@@ -345,3 +345,27 @@ A3-verified: **hatch smoke (all five =0) 48/48 byte-identical to shipped GT; cle
 exactly 6 cells** (hinata d5 -0.0134 better, 5 digest-only) matching the recipe previews. Staged,
 uncommitted -- the quiet-box wall check is the one remaining gate before commit + 3-tier
 rebaseline, per the USER's 2026-09-02 criteria message (<10% wall; met => adopt).
+
+### QUIET-BOX WALL: FAILS the USER's bar -- ADOPTION BLOCKED (2026-09-02 ~16:45, load 0.05)
+
+`scripts/wall_probe.sh` protocol (serial, 1 thread, CPU-pinned, 3 reps, startup calibration
+subtracted, arms pinned both directions -- `logs/ngc_sound/wall_final/results.tsv`):
+
+| deck | off | screcipe | delta | efrecipe |
+|---|---|---|---|---|
+| hinata (200g d5/20ms) | 54.05s | 70.60s | **+30.6%** | +32.7% |
+| dragonstorm (200g d5/20ms) | 7.82s | 11.71s | **+49.7%** | +53.2% |
+
+Rep spread < 1% -- the numbers are solid. **UNITS LIED BY AN ORDER OF MAGNITUDE** (+2.64% / -1.09%
+on these same decks): the recipe's real cost is UNCHARGED enumerator/apply work outside the
+ConsumeAt sites, exactly the wall_probe header's warning, and consistent with the recorded "+28%
+wall at equal quality" greedy-removal price -- the node-era "wall/units ~1.02" conversion does NOT
+hold for the full recipe. The stats pass agrees the charged side is innocent (`units.fs_bp_node`
+share 0.2%, `units.greedy_fallback` 4.7%).
+
+Against the USER's criteria (<10%, 15% tolerable with notable quality): **+31%/+50% fails.
+NOT ADOPTED; defaults stay staged-off.** Per the USER's instruction the work moves to closing the
+gap before any discussion: wall DECOMPOSITION by lever launched (off / s3d / canononly / noderoot /
+screcipe, same protocol, `logs/ngc_sound/wall_decomp/`), then the known cost dials (enum-memo
+coverage at canon's call site -- the lever's own design premise says it should be a memo HIT;
+the 8192-cap wholesale-clear thrash; nested stand-down widening).
