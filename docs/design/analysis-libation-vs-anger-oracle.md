@@ -31,10 +31,12 @@ profile, substituting our card(s) into an existing slot(s). That is currently th
 route."* Libation's name is aliased into the bucket of the card it replaces, so the shipped
 155,978-cell keep table covers every arm, K stays at 16, and nothing is generated.
 
-* **every number here was taken on one frozen binary, engine commit `664efac3`** (recorded in each
-  screen's `.results.json`). The branch has since pulled opponent-deck work (`45d4e6a0`) that
-  touches `src/`; rebuild before reproducing anything below, and expect to re-measure rather than
-  compare across that boundary
+* the two screens were measured on engine commit **`664efac3`** (recorded in each
+  `.results.json`). The 60,000-game logging run behind §2 and §2a was made *after* the branch pulled
+  opponent-deck work (`45d4e6a0`, touches `src/`) and a rebuild — and it reproduces **every one of
+  the 40,000 win turns** the screens recorded (`mw_libation_setups.py` checks this and prints
+  `MATCH`, it is not assumed). So that engine change does not touch this deck's play and the two
+  halves of the analysis are directly comparable
 * apparatus: shipped keep table (K=16, R=40), pooled card scores, deck's value sidecar, d5 / 20 ms
 * seeds 2,600,000 + 0…19,999; the arm's Libation **inherits the vacated library slot number**, so
   both arms deal the identical library order and exactly one physical card differs, in place
@@ -51,25 +53,92 @@ Omitting the latter reproduced 89% of games and silently mis-played 11%, determi
 looks like a clean repro and repeats identically. A `--games 600` single-process run matching the
 batch 600/600 is what localised it. See `scripts/mw_libation_logs.sh`.
 
-## 2. Every divergent game, filed under its mechanism
+## 2. Every game, filed under its mechanism
 
-`scripts/mw_libation_classify.py <anger|oracle>` produces this; the per-game lines are in
-`logs/mw_libation/<which>_games.txt`.
+Over **all 20,000 games per arm**, not just the divergent ones — the ~95% that came out identical
+are the games where the swap did nothing and they belong in every denominator below.
+`scripts/mw_libation_setups.py <anger|oracle>`.
 
-| class | what it means | Anger: games / share of loss | Oracle's: games / share of loss |
+| class | what it means | Anger: games / net turns | Oracle's: games / net turns |
 |---|---|---|---|
-| **BOTH_CAST** | each arm cast its own card — the difference is what the card *did* | 831 (82.4%) / **74.8%** | 901 (86.7%) / **84.7%** |
-| **REPLACED_ONLY** | base cast its card; the arm never cast Libation at all | 60 (6.0%) / 11.1% | 44 (4.2%) / 5.2% |
-| **SEARCH_ONLY** | the swapped card never reached either hand — the *lookahead* saw a different library | 84 (8.3%) / 10.1% | 67 (6.4%) / 5.8% |
-| **LIBATION_ONLY** | only Libation was cast | 31 (3.1%) / 3.7% | 25 (2.4%) / 4.0% |
-| **NEITHER_CAST** | held, cast by neither | 2 (0.2%) / 0.4% | 2 (0.2%) / 0.3% |
-| **TOTAL** | | 1,008 — 769 worse / 239 better | 1,039 — 807 worse / 232 better |
+| **SEARCH_ONLY** | the swapped library slot never reached hand | 15,771 (78.9%) / **+5** | 15,555 (77.8%) / **+2** |
+| **BOTH_CAST** | each arm cast its own card — the difference is what the card *did* | 2,704 (13.5%) / **+422 (82%)** | 2,939 (14.7%) / **+523 (90%)** |
+| **NEITHER_CAST** | held, cast by neither | 883 (4.4%) / +2 | 936 (4.7%) / +1 |
+| **REPLACED_ONLY** | base cast its card; the arm never cast Libation | 465 (2.3%) / +66 (13%) | 476 (2.4%) / +32 (5%) |
+| **LIBATION_ONLY** | only Libation was cast | 177 (0.9%) / +20 | 94 (0.5%) / +24 |
+| **TOTAL** | | 20,000 / **+515** | 20,000 / **+582** |
 
-The swap is not a coin-flip: the arm loses ~3.4 games for every 1 it wins, in both screens.
+**The swap is inert in four games out of five and costs ~0.16 turns in the one where the card is
+actually cast.** `SEARCH_ONLY` is worth **+5 turns out of 515** — the lookahead seeing a different
+library composition is not a mechanism here, it is noise.
 
-`REPLACED_ONLY` is the most one-sided class of all — **55 of 60** (Anger) and **38 of 44** (Oracle's)
-go against Libation. That is the pure "dead card" case: base cast a one-mana cantrip, the arm held a
-card it never cast. In 27 of the 60 (Anger) the arm was holding Libation from the opening hand.
+> **Correction.** An earlier version of this table ran on the ~5% divergent games only and decided
+> "did this card reach hand" from the log's `DRAW` actions. Those record the **draw step only** — a
+> card put in hand by a cantrip rider leaves no `DRAW` action, and in this deck the magnet copies
+> the cantrip, so most cards arrive that way. That undercounted "seen" and inflated `SEARCH_ONLY`
+> to 84 games / 10% of the loss, when the true figure is 2 games / 1%. The `boardAfter` hand
+> snapshot is authoritative and is what the numbers above use. The mechanism conclusions in §3 are
+> unaffected — they were computed on `BOTH_CAST` games, whose membership does not depend on that
+> test — and `BOTH_CAST`'s share of the loss rises from 75% to 82%.
+
+The swap is not a coin-flip: among divergent games the arm loses ~3.4 for every 1 it wins.
+
+## 2a. Which setups — the answer to "is it when we have no other pump spells?"
+
+**Yes, and it is nearly the whole story.** Crossing the two axes that separate the strata — is there
+anything in play to **copy** the trick (a magnet, or Frontline Heroism), and is there **another pump
+available that turn** — partitions all 20,000 games into six groups that sum to the measured
+aggregate:
+
+| setup (arm-read) | Anger: games | mean Δ | net | Oracle's: games | mean Δ | net |
+|---|---|---|---|---|---|---|
+| 1. never drew it | 15,771 (78.9%) | +0.0003 | +5 | 15,555 (77.8%) | +0.0001 | +2 |
+| 2. held it, never cast it | 1,348 (6.7%) | +0.0504 | +68 | 1,412 (7.1%) | +0.0234 | +33 |
+| **3. cast with NO copier, no other pump** | **869 (4.3%)** | **+0.3280** | **+285** | **914 (4.6%)** | **+0.2681** | **+245** |
+| 4. cast with NO copier, other pumps up | 344 (1.7%) | +0.0523 | +18 | 393 (2.0%) | +0.2214 | +87 |
+| 5. cast with a copier, no other pump | 959 (4.8%) | +0.1564 | +150 | 1,032 (5.2%) | +0.1831 | +189 |
+| **6. cast with a copier, other pumps up** | **709 (3.5%)** | **−0.0155** | **−11** | 694 (3.5%) | +0.0375 | +26 |
+
+("no other pump" = at most one other trick available that turn.)
+
+**Group 3 is 4.3% of games and 55% of the entire loss** (42% on the Oracle's swap). A Libation cast
+with nothing to copy it and nothing else to chain into costs a **third of a turn**. Group 6 — a
+copier out and other pumps in hand — is the one setup where Libation is **not worse than the 4th
+Ancestral Anger** (−0.0155), and is only mildly worse than the 3rd Oracle's.
+
+The same gradient shows up in the strictly **exogenous** cut, where the stratum label is a property
+of the deal and is identical in both arms by construction (the kept opening hand, swapped slot
+excluded), so it cannot be an artefact of how either arm played:
+
+| other pumps in the kept opening hand | Anger mean Δ | Oracle's mean Δ |
+|---|---|---|
+| swapped slot in hand, **0** other pumps | **+0.2494** (n=389) | **+0.3039** (n=408) |
+| swapped slot in hand, 1 other pump | +0.1975 (n=866) | +0.1526 (n=832) |
+| swapped slot in hand, 2 other pumps | +0.0793 (n=429) | +0.1834 (n=469) |
+| swapped slot in hand, 3 other pumps | +0.0638 (n=47) | +0.0405 (n=74) |
+| not in the opening hand | +0.0115 (n=18,269) | +0.0133 (n=18,217) |
+
+The gradient is clean and monotone on the Anger swap; on the Oracle's swap the 1-vs-2 rows invert
+(+0.1526 vs +0.1834) while the endpoints hold. The **0-other-pumps and not-in-hand rows are the load
+bearing ones**, and they are unambiguous in both.
+
+The other exogenous cuts are consistent but **much weaker, and only the magnet cut holds on both
+swaps**:
+
+| exogenous stratum | Anger mean Δ | Oracle's mean Δ |
+|---|---|---|
+| 0 magnets in the opening hand | +0.0328 | +0.0428 |
+| 1 / 2 magnets in the opening hand | +0.0207 / +0.0161 | +0.0179 / +0.0208 |
+| 1 land in the opening hand | +0.0403 | +0.0351 |
+| 4 lands in the opening hand | +0.0147 | +0.0239 |
+| kept on 7 (mull 0) | +0.0183 | +0.0267 |
+| mull 3 / mull 4 | +0.0326 / +0.0775 | +0.0299 / +0.0704 |
+
+The magnet cut is the one to trust: **no magnet in the opener is ~1.6× worse for Libation** on the
+Anger swap and ~2.4× on the Oracle's swap, which is the same story as group 3 above — with nothing
+to copy the trick, a cantrip that digs toward a magnet beats a token that does not. The land and
+mulligan cuts lean the same way on the Anger swap and are essentially flat on the Oracle's swap
+(mull 0→2 even rises there), so they should not be quoted as evidence on their own.
 
 ## 3. The mechanism, from the logs
 
@@ -174,6 +243,9 @@ outnumbered ~3.4 : 1 by the turns where the chain wanted a card instead.
 | 4,094 paired game logs | `logs/mw_libation/glogs/{anger,oracle}/{base,lib_over_*}/` |
 | per-game filing | `logs/mw_libation/{anger,oracle}_games.txt` |
 | full reports | `logs/mw_libation/{anger,oracle}_report.txt` |
-| log collector | `scripts/mw_libation_logs.sh` |
-| classifier | `scripts/mw_libation_classify.py` |
+| setup stratification (all 20,000) | `logs/mw_libation/{anger,oracle}_setups.txt` |
+| all 60,000 game logs (3 arms × 20,000) | `logs/mw_libation/full/{base,anger,oracle}/` |
+| log collector (divergent games, paired) | `scripts/mw_libation_logs.sh` |
+| mechanism classifier (divergent sample) | `scripts/mw_libation_classify.py` |
+| setup stratifier (all games) | `scripts/mw_libation_setups.py` |
 | alias tool | `scripts/alias_card_into_bucket.py` |
