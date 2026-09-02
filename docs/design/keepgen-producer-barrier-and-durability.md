@@ -1,31 +1,14 @@
 # Keepgen: the producer-side barrier and the size-7 durability gap
 
-Status (2026-08-28, second pass — all three defects now closed):
-* **Defect 1 (producer-side barrier) — FIXED.** The speculation filler is now a bounded, cursor-driven
-  sweep (`spec_cursor` / `spec_chunk`) so the producer returns to `sub_refine_step()` every few QCAP's
-  worth of feeds instead of once per `NC*2*spec_budget` sweep. Measured on slivers_vial: the first
-  sub-refine wave now dispatches with **0.7 %** of the sweep done, against **100 %** before. See §10.
+Status (2026-08-28):
+* **Defect 1 (producer-side barrier) — DIAGNOSED, OPEN at HEAD.** Verified still present:
+  `sub_refine_step()` is called once per outer iteration above an unbounded speculation pass
+  (`ExhaustiveKeep.cpp:3413`, `:3420-3427` at `9fbd47a2`).
 * **Defect 2 (size-7 durability gap) — FIXED UPSTREAM 2026-08-23 (`a47f75dd`)**, independently, by
   the work written up in `keepgen-resume-exactness.md`. HEAD has a third journal case `jprog`
-  (`:3126-3127`, `:3141`) carrying `sv` — the per-rollout speculative values for `[r0, n)`. §4 below
-  is retained because it is the analysis of *why* the gap existed and what it costs, and because it
-  is the state of any run frozen before 2026-08-23.
-* **Defect 3 (RESUME did not check play identity) — FIXED.** Named only in passing in the first pass
-  (§8, fourth bullet) and it was the most dangerous of the three: it is the only one that corrupts
-  the OUTPUT rather than the schedule. See §11.
-
-**Two framing corrections to the first pass**, both of which change how you triage a live run:
-
-1. **The barrier was one-shot, not permanent.** `fed[]` is a monotone cursor and the speculation
-   limit is the CONSTANT `r0 + spec_budget`, so once a sweep saturates, every later iteration's
-   filler is a pure scan with zero feeds and the waves fire normally. A stalled run WILL clear; the
-   cost is a single delay of one sweep (FiveColour: ~15.8M feeds ≈ 140–230 h), not an indefinite
-   wedge. The table in §3 is right about the magnitude and wrong to imply the run never proceeds.
-2. **The speculation work is not wasted, it is misordered.** Those rollouts bank into each cell's
-   `cnt` and the reconcile freeze-tests them; mean final R is ~10 against a speculation bound of
-   `r0+4 = 6`, so most of it is prefetch the refine phase would have done anyway. The true waste is
-   only the tail past a cell's eventual freeze point. What the barrier actually costs is the *wave
-   clock*, and with it the phase flip — not the rollouts.
+  (`:3127`, `:3141`) carrying `sv` — the per-rollout speculative values for `[r0, n)`. §4 below is
+  retained because it is the analysis of *why* the gap existed and what it costs, and because it is
+  the state of any run frozen before 2026-08-23.
 
 Found live on the FiveColour generation (frozen at `2f7822a2`, 2026-08-21 — **two days before the
 Defect 2 fix**, which is exactly why that run's journal is silent). Both defects are in
@@ -276,31 +259,12 @@ work*. Those agree only when the live-cell population is small.
    exceeds the tail it covers — the scale rule in §3, checked at startup where all the inputs are
    already known.
 
-Status of the five, after the second pass:
-
-| fix | state |
-|---|---|
-| 1. Bound the filler | **DONE** — `spec_cursor` + `spec_chunk = QCAP*4`, plus the `spec_active` interlock (§9) |
-| 2. Make it preemptible by what it fills for | **DONE** — subsumed by 1: a bounded chunk returns to the top of the loop, where `sub_refine_step()` already sits. No second call site was needed. |
-| 3. Journal size-7 on progress | **DONE upstream** (`a47f75dd`, the `jprog` case) |
-| 4. Instrument progress, not busyness | **DONE** — and most of it had already shipped before the first pass was written (see below) |
-| 5. Startup guard on filler-cost / tail-cost ratio | **not done** — the bounded filler removes the need; a sweep can no longer outrun the progress step whatever the ratio |
-
-**Fix 4 was largely already shipped when the first pass called it "the highest-value remaining
-item".** That assessment was made against the 2026-08-21 binary the FiveColour run was frozen on and
-did not survive contact with HEAD:
-* `subwave=NxM` / `subwave=N conv` was already printed (`:1607-1611`). **That stuck wave count is the
-  Defect-1 tell** — no SLOW-ROLLOUT histogram needed. It is what reproduced the defect in §9.
-* The `fed`-with-no-denominator complaint was already fixed: the line reads
-  `roll7=N (r/s) rollsub=N (r/s) frozen=fr/cells (%) sub=sd/st (%)`. There is no `fed=` field.
-* What was genuinely missing, and is now added: **`journal=<records> (<age>s ago)`**, plus a loud
-  WARNING when rollouts are fed while the journal has been silent for more than two monitor periods.
-  Feeding work while the journal is quiet IS the violation of "resumable at any point", so the
-  monitor now says that in those words rather than leaving it to be inferred from an mtime.
-
-Note that after fix 3 the journal advances during speculation, so **"journal mtime frozen" was never
-the tell for Defect 1 on a post-`a47f75dd` binary** — it was the tell on the frozen FiveColour run
-only because that run predated `jprog`.
+Fixes 1–2 address Defect 1 and are **still outstanding**; fix 3 addressed Defect 2 and is done; fix
+4 makes both self-reporting and is the highest-value remaining item — it alone would have surfaced
+this within minutes instead of a day later via a stale mtime. Note that after fix 3 the journal now
+advances during speculation, so **"journal mtime frozen" is no longer the tell for Defect 1 on a
+post-`a47f75dd` binary** — use the SLOW-ROLLOUT `size<7` histogram (§2) and the `sub_*` counters that
+fix 4 would expose.
 
 ---
 
@@ -358,15 +322,15 @@ Use ~36–42% of `total_cells * 2 * r_max` to size a new deck's total rollout co
 
 * The floor is safe. `journal_f.flush()` runs per record (`:1843`) — a process kill or a clean
   reboot keeps it; only a hard power cut can truncate the tail (it is `flush()`, not `fsync()`).
-* ~~A reboot does **not** cost a day — it costs the whole pass. `fed[]` reseeds from `cnt = r0`,
-  so speculation restarts from scratch and the producer re-enters the same barrier.~~
-  **STALE — true only before `a47f75dd`.** `fed[k] = S7.cnt[i][pd]` (`:2952`), and since `jprog`
-  landed, `cnt` comes back *speculated* rather than pinned at `r0`, so `feed_upto` skips every cell
-  already at the bound and the sweep is NOT redone. This bullet described the pre-`jprog` FiveColour
-  run and does not apply to any run started after 2026-08-23.
+* A reboot does **not** cost a day — it costs the whole pass. `fed[]` reseeds from `cnt = r0`
+  (`:2791`), so speculation restarts from scratch and the producer re-enters the same barrier. The
+  run only completes if it gets one uninterrupted window longer than the pass.
 * There are **no signal handlers** in the analyzer, so a live process cannot be asked to checkpoint.
-* ~~Journal resume does **not** compare `commit` or `play_digest`.~~ **FIXED — see §11.** It is now
-  an enforced check rather than a convention, on both resume paths.
+* Journal resume does **not** compare `commit` or `play_digest` (`:2284-2290` checks `bucket_fp`,
+  `deck_fp`, `seed_base`, `K`, `max_mull`, `equiv_seed`, `R`, and depth/budget/max_turns/start_life).
+  So a scheduling or instrumentation fix can land without stranding a journal — but a **play-logic**
+  change would be silently accepted and mixed with samples rolled under the old engine. That
+  asymmetry should become an enforced check, not a convention.
 * Generation boxes run near their memory ceiling (this one: **8.42 GB peak RSS in a 10 GB WSL2 VM**,
   `memory.events: oom_kill 1`). Diagnose with `tail`, `ls`, and `/proc` reads — never a whole-file
   sort over the journal.
@@ -429,6 +393,33 @@ safe on disk.
    paused and sleep is disabled on the host.
 6. **Implementation of fixes 1, 2 and 4 is deferred by the user** until this run lands. Do not start
    them on this box.
+7. **Never run `--gen-mulligan` against `decks/FiveColour/` while this is live — any recipe,
+   especially `recommend`.** A scout writes to the SAME `<deck>.keepmodel.exhaustive.raw.json.journal`
+   path this process holds open, and this binary predates `9f8d74fe` ("a recommend scout no longer
+   leaves a journal behind"). A second writer would corrupt 275 h of work.
+
+### Sub-table starvation (`keepgen-subtable-starvation-detection.md`) — CHECKED, NOT AFFECTED
+
+That bug shipped two bad tables (Dragons 2026-08-30, Mirrorwing 2026-09-01) and fires **only** on a
+journal resume that restores fixed refs, which starts in the refine phase and skips the floor branch
+where the sub-table drain lives. Verified against this run 2026-09-02:
+
+```
+RESUME(journal) | resuming refine | refs restored  ->  0 occurrences   (started fresh 2026-08-21)
+refs record in journal                             ->  0              (flip has not happened)
+H<7 records in journal                             ->  2,096,622
+fused_sub_tasks total (gen.log:128)                ->  1,317,366      => sub = 100%, plus ~779k
+                                                                         sub-REFINE records on top
+```
+
+The doc's `rollsub=` / `sub=N/M` greps do not work here — this binary predates those counters. The
+journal count above is the equivalent evidence and the doc endorses the journal as a valid source.
+
+**It cannot become affected later either.** Resumed now (pre-flip) there is no refs record, so
+`refs_loaded=false` and it takes the floor path. Resumed after the flip it would skip the floor
+branch, but the flip at `:3212` *requires* `sub_remaining == 0 && sub_converged`, so every sub-table
+batch and wave is already done before refs are written — skipping the drain is then a no-op. The
+binary is vulnerable code; this run is protected by its history, not by its build.
 
 ### Pushing without touching the working tree
 
@@ -464,161 +455,3 @@ stalling near 25,052,142 — would mean something really is wedged rather than b
 Refinement, R=2 → cap 30, which is the larger half. Size it from §7: **57.5M–67.2M total rollouts**
 (36–42% of `2,636,581 x 2 x 30`), mean final R ≈ 10. `fed` is a throughput counter, **not** progress
 — see fix 4.
----
-
-## 10. The fix for Defect 1, and what it was measured against
-
-### The shape
-
-The filler is now a single linear sweep with a persistent cursor and a per-iteration FEED budget
-(`spec_chunk = QCAP*4`). It can be a plain monotone cursor rather than a re-scan because `fed[]` is
-monotone and the limit is the *constant* `r0 + spec_budget`: a cell-side fed to the bound never needs
-visiting again. Two details carry the correctness:
-
-* **`spec_resweep`.** A cell below `r0` when the cursor passes it cannot be speculated yet (floor
-  pass 1 is still driving it there). The old re-scanning sweep caught it on a later iteration; a
-  monotone cursor would walk past it forever. So the sweep remembers it skipped one and runs once
-  more. Terminates because floor pass 1 is concurrently driving exactly those cells to `r0`.
-* **`spec_active`, the interlock on the refs gate.** This is the part that is easy to get wrong.
-  `compute_refs`' reconcile replays the freeze test over `(r0, cnt]` and TRUNCATES at the first hit,
-  reading `S7.cnt` as it stands. Under the old unbounded filler, a started sweep always ran to
-  completion inside one iteration, so by the time the gate was evaluated every live cell sat at the
-  constant bound — the reconcile's input was stable *incidentally*. Chunking destroys that: without
-  the interlock the gate could fire mid-sweep and truncate from wherever the cursor happened to be.
-  So the filler is **latched** on entry (it ignores `floor_incomplete` once started) and the gate
-  refuses to fix refs while `spec_active`. Net effect: the reconcile sees exactly the state it saw
-  before, and what changes is only that the sub-refine waves now overlap the sweep.
-
-### Why `cmp` is the wrong acceptance gate here — and what was used instead
-
-`keepgen-resume-exactness.md` establishes byte-identity (`cmp` on the raw) as the gate, having
-measured `A == A2` on burn. **That does not generalise: two uninterrupted runs of the UNMODIFIED
-binary differ on slivers_vial.** Measured here, 280,539 vs 280,543 rollouts. The cause is the same
-`S7.cnt`-at-reconcile-time read described above — on burn the cells are fast enough that the sweep
-has always fully folded by the time the gate fires, so the input is stable by luck.
-
-The property that actually has to hold is the one that doc calls **same-count-different-value == 0**:
-a rollout is a pure function of `(seed_base, cell, pd, r)`, so a cell's `sum` is fully determined by
-its final `count`. A cell that ends at a different count is schedule drift; a cell that ends at the
-SAME count with a different sum is a real defect. `test/keepgen_compare_raw.py` asserts it.
-
-### Result (slivers_vial, `MTG_EQUIV_DEPTH=1 MTG_EQUIV_BUDGET=1`, R=16, adaptive bottoming, 24 cores)
-
-| comparison | cell-sides differing (of 46,100) | rollouts | same-count-different-value |
-|---|---|---|---|
-| A vs A2 — baseline binary, twice | 2 (1 more, 1 fewer) | 409,857 → 409,857 | **0** |
-| A vs N — baseline vs fixed | **1** | 409,857 → 409,858 | **0** |
-| A2 vs N — baseline vs fixed | **1** | 409,857 → 409,858 | **0** |
-
-All drift is at H=7 and nowhere else, which is exactly the reconcile path. **The fix is inside the
-unmodified binary's own run-to-run noise** — tighter than it, in fact.
-
-### The defect, reproduced and then absent
-
-| | baseline (A) | fixed (N) |
-|---|---|---|
-| first sub-refine wave dispatched at | 625 s | **600 s** |
-| speculation feeds done at that moment | 105,648 of 105,648 (**100 %**) | 768 of 105,648 (**0.7 %**) |
-| `subwave` for the preceding 10 min | `0x0` while `roll7` ran 211–282/s | waves flowing |
-
-The baseline reproduces the FiveColour symptom exactly, at 1/150th the scale: ~10.4 min of
-100 %-busy cores, `frozen=0`, `subwave=0x0`. That is the whole defect, and it is what `spec_chunk`
-removes.
-
-### What is NOT established: wall clock
-
-A=1402 s, A2=2025 s, N=2739 s. **This does not show a regression and does not show a win** — the
-baseline's own two runs are 623 s apart (44 %), n=1 per arm, and all three did the same work
-(280,539 / 280,543 / 280,543 rollouts). Do not quote these as a speed result.
-
-Mechanically there is nothing to win on a deck this size: the sweep is only ~10 min, and since the
-producer serialises the sweep against the wave dispatch either way, the fix reorders
-`sweep → waves` into `waves → sweep` rather than overlapping them. **The gain is proportional to
-sweep length**, which is the entire point — on FiveColour the sweep is 140–230 h and the waves are
-hours, so starting the waves at 0.7 % instead of 100 % is the difference between `sweep + waves` and
-`sweep`. On Slivers that difference is noise.
-
-### Resume, on the fixed binary
-
-A SIGKILLed twin (`logs/resume_proof/run_kill.sh`, killed every 120 s, **23 kills**, finished on its
-own) against the uninterrupted fixed run:
-
-| | cell-sides differing (of 46,100) | under-sampled | rollouts | same-count-different-value |
-|---|---|---|---|---|
-| N vs K — 0 kills vs 23 kills | 1,778 (3.9 %) | 1,696 | 409,858 → 406,478 (−0.83 %) | **0** |
-
-**No value is ever corrupted**, which is the property that matters. The drift, and specifically its
-under-sampled direction, is the `recompute_vg` residual `keepgen-resume-exactness.md` identified as
-defect 3 and deliberately left — it is the same character and comparable magnitude to that doc's
-own measurement (3,410 of 37,706 at 9 kills). Nothing here touches the vg schedule or the refine
-producer's state, so the fix is neutral on it. **A paired baseline kill-twin was not run**, so this
-is a check that resume still behaves as documented, not a before/after comparison of resume drift.
-
-Three follow-ups deliberately NOT taken:
-* **Chunk the wave dispatch too.** `sub_refine_step()` pushes a whole wave (9,043 tasks on Slivers)
-  through the same QCAP throttle before returning, so it is a producer-side barrier of exactly the
-  same shape as the one just fixed — it is simply bounded by wave size rather than by `NC`. It did
-  not need fixing for correctness and prioritising waves over filler is the right order anyway.
-* **Chunk `feed_sub()` too — the THIRD instance of the shape.** Observed live on the StompySurprise
-  gen (2026-08-28): `feed_sub()` walks `sub_cursor` over all `fused_sub_tasks` in one unbounded
-  QCAP-throttled loop, and it sits ABOVE both `sub_refine_step()` and the speculation filler, so
-  until every sub-batch is queued neither runs. On Stompy that is 75,912 batches and the monitor
-  reads `roll7=… (0/s)` for hours with `frozen=0`.
-
-  **This one is benign and should probably stay that way.** The sub-tables are required work that
-  gates the phase flip (`compute_refs` cannot fix refs until `sub_remaining == 0`), so the producer
-  is saturating the box on the critical path while starving pure filler — which is the correct
-  priority, and the opposite of Defect 1 (where the filler starved the critical path). Recorded
-  because the *symptom* is identical to Defect 1 and a future reader watching `roll7=0/s, frozen=0`
-  will otherwise re-diagnose it as a regression of this fix. The discriminator: check whether
-  `sub=` is advancing. If it is, the box is on the critical path and nothing is wrong.
-* **Let refs fix as soon as sub-refine converges, abandoning the rest of the sweep.** This would skip
-  the sweep tail outright (a real saving), but it makes the reconcile's input schedule-dependent by
-  construction — the opposite of what `spec_active` is for. This one *would* move every generated
-  profile; the two above would not.
-
----
-
-## 11. Defect 3 — RESUME never checked play identity
-
-### Mechanism
-
-The journal header stamps `commit` AND `play_digest`, deliberately, with a comment saying it is done
-"so a journal merged as a partial chunk is checked exactly like a finished raw". The replay then
-compared `bucket_fp`, `deck_fp`, `seed_base`, `K`, `max_mull`, `equiv_seed`, `R` and
-`RolloutCfgAllows(...)` — and **neither of those two fields**. Same gap on the raw-checkpoint resume.
-
-So a gen restarted after a play-logic change continued straight into the same accumulators: one raw
-sidecar holding rollouts from two different engines, carrying fingerprints that assert they are
-poolable. Nothing downstream can detect this, because the sidecar's whole provenance apparatus is
-built on trusting those fingerprints.
-
-This is worse in kind than Defects 1 and 2. Both of those cost time and leave the numbers correct;
-this one silently corrupts the output. It is also the only one with a real chance of firing during
-ordinary work — "edit a card, rebuild, restart the gen" is a normal thing to do.
-
-### Why it survived
-
-Every REUSE route already gates play identity: prior-raw attribution (`:1114-1120`), probe-carry
-(`:1420`), the equiv cache (`:507-510`), and merge (`play_compatible()`). The distinction that got
-lost is that RESUME was treated as "the same run continuing" rather than as a form of reuse — and
-under that reading the check looks tautological. The raw-checkpoint path even says so out loud:
-*"resume gates on the fingerprints, not the digest -- it is inherently the same commit."* It is not,
-the moment anyone rebuilds.
-
-### The fix
-
-`PlayIdentityAllows()` (next to `RolloutCfgAllows`), applied to both resume paths. Same rule the
-merge gate already used, which matters for a reason specific to this codebase:
-
-* **Prefer `play_digest`; fall back to `commit` only when a side lacks one.** Gating on `commit`
-  alone would strand a multi-day journal over a doc-only commit — its own defect, and the thing the
-  original "resume is inherently the same commit" comment was implicitly protecting against. The
-  digest is the sharper test *and* the more permissive one.
-* This is also what lets a **scheduling or instrumentation fix land mid-run without invalidating a
-  live journal** — including the fix in §9. Verified: a journal written by the pre-fix binary
-  resumes cleanly under the post-fix one, because play did not change and the digest is identical.
-* No play identity on either side → warn loudly and proceed, matching `CfgVerdict::Unverifiable`.
-
-Tested four ways in `logs/resume_proof/gate_test.sh` — doctored and untouched digests, on both the
-raw and the journal path.
