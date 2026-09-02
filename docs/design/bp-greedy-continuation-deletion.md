@@ -212,3 +212,34 @@ quality-neutral-or-better; **hinata keeps a real gain** (NGC's only quality, -0.
 and the lever has no upside); **th's +0.0016 regression gone**; **no one-sided dragonstorm
 SLOW-GAME tail**. Flag-off byte-identity smoke ran first (the land-lambda refactor touches the
 play path).
+
+### THE GATES (2026-09-02, binary = f14312f7's src, both batches same binary, contention-proof)
+
+**Phase 1 -- canon alone vs shipped, 186,000 games, 16 decks, paired, play settings.** Quality-
+NEUTRAL everywhere: no |t| >= 2 on any deck/block. hinata +0.0007/-0.0007 at 10k/block; th
++0.0000/-0.0002 (**NGC's +0.0016 th regression: GONE**); dragonstorm -0.0004/+0.0004 with
+near-base enum counters; ELEVEN decks byte-identical (0 games changed). SLOW-GAME tail symmetric
+(and the box was contended -- USER's warning -- so tail read as indicative only; the counter
+evidence carries the cost verdict).
+
+**Phase 2 -- the SOUND RECIPE (SITE3+DEFER+CANON+NODE+ROOTTURN) vs shipped, 140,000 games.**
+hinata ladder at 10,000/block, paired (base/canon cells reused from phase 1, same seeds):
+
+| arm | hold | train |
+|---|---|---|
+| canon alone | +0.0007 (t 1.12) | -0.0007 (t -1.53) |
+| **sound recipe** | **-0.0126 (t -4.82)** | **-0.0146 (t -5.89)** |
+| NGC recipe (reference) | -0.0168 (t -6.20) | -0.0174 (t -6.77) |
+
+The reference arm REPRODUCES the recorded ROOTTURN result (-0.0162/-0.0174), validating the
+setup. The sound recipe keeps ~75-85% of the old recipe's hinata gain while being
+lossless-by-construction; the ~0.004 gap is the price of soundness (NGC's forced-cast was
+net-positive on hinata but bought with th losses and the Dragonstorm cost pathology).
+**All five movers clean**: th +0.0000/-0.0002, burn and kitty BYTE-IDENTICAL, dragonstorm
+-0.0004/+0.0004, mirrorwing -0.0002/-0.0004 -- nothing significant anywhere.
+
+**This is the class's adoption candidate.** Remaining before proposing adoption: units cells
+(expect ~+3% per the ROOTTURN record), regression+overnight tiers, quiet-box wall confirmation
+(USER to be asked for the window), USER sign-off. Greedy `Solve` is gone from every DECISION
+apply on every deck: hosted (node, root turn) at site 3, canonical-with-sound-pass (canon)
+elsewhere; rollout applies keep greedy per the USER scope ruling of 2026-09-02.
