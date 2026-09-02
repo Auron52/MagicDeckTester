@@ -9982,7 +9982,8 @@ inline bool OneShotReserveEnabled()
     return v;
 }
 
-// MTG_HEROISM_MAGNET_TRAIT (EXPERIMENT, default OFF; =1 enables): a live copy-token enchantment
+// MTG_HEROISM_MAGNET_TRAIT (ADOPTED 2026-09-02, default ON; =0 restores the pre-adoption
+// behaviour): a live copy-token enchantment
 // (frontline_copy_tokens -- Frontline Heroism) counts toward PlanTraits::copy_magnet_live. Its
 // trick turns have the same go-off shape as a magnet's (every trick mints a hasted body, the copy
 // doubles a Gold Rush's mint, and the whole board wants to swing), so the one-shot spend bias and
@@ -9992,7 +9993,7 @@ inline bool OneShotReserveEnabled()
 // instead -- MTG_MAGNET_PLAN_TRAIT -- and measured net-worse, 1 faster / 11 slower; deleted.)
 inline bool HeroismMagnetTraitOn()
 {
-    static const bool env_on = EnvOn("MTG_HEROISM_MAGNET_TRAIT");
+    static const bool env_on = EnvOn("MTG_HEROISM_MAGNET_TRAIT", true);
     return heurarm::Flag(heurarm::HEROISM_MAGNET_TRAIT, env_on);
 }
 

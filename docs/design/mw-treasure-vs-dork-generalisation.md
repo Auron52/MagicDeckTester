@@ -9,7 +9,7 @@ example with Frontline Heroism or with no Mirrorwing/Zada the dork is the right 
    copy-magnet `ReserveCreatureHold` moved from `MirrorwingProvider` into the `DecisionProvider`
    base. Both conditions are param-keyed (`copies_solo_targeted_spells` x `solo_target_trick`), so
    any future magnet deck inherits them and every magnet-less deck is untouched by construction.
-2. **`MTG_HEROISM_MAGNET_TRAIT` (default OFF, staged for adoption): a live copy-token enchantment
+2. **`MTG_HEROISM_MAGNET_TRAIT` (ADOPTED 2026-09-02, default ON): a live copy-token enchantment
    (`frontline_copy_tokens` -- Frontline Heroism) counts toward `PlanTraits::copy_magnet_live`.**
    Its trick turns have a magnet's go-off shape: every qualifying cast mints a hasted body, the
    copy doubles a Gold Rush's mint, and the whole board wants to swing -- so the one-shot spend
@@ -50,9 +50,10 @@ creatures-first, which is also what Mirrorwing's own pre-magnet turns measured a
 genuinely magnet-less treasure deck ever joins the suite, re-derive from this record — do not
 re-build the ladder flip blind (the TurnSolver ladder comment points here).
 
-## Adoption (staged)
+## Adoption
 
-Recommendation: ADOPT `MTG_HEROISM_MAGNET_TRAIT` default-ON (flip the reader to
-`EnvOn(..., true)`, rebaseline — only Mirrorwing cells move). Deferred follow-up: the fresh-hold
+ADOPTED 2026-09-02 (user approved): the reader now defaults ON (`EnvOn("MTG_HEROISM_MAGNET_TRAIT",
+true)`); all three GT tiers rebaselined at the flip — only Mirrorwing cells moved, matching the
+`her` arm's measured per-game movers. Deferred follow-up: the fresh-hold
 `CopyMagnetLive` (SpellEffects board scan gating same-turn spendability of minted Treasures) still
 counts only true magnets; extending it to Heroism is a separate measurable variant.

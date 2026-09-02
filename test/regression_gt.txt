@@ -1,4 +1,4 @@
-# Regression ground truth -- commit dae9b298  date 2026-09-02
+# Regression ground truth -- commit 7e5a480e  date 2026-09-02
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -34,9 +34,9 @@ goblins_smoke_d5_s1001=3.5867/043748861e776a9b
 creature_giving_smoke_d0_s1001=5.5160/dbd1edeb6f3ec1b8
 creature_giving_smoke_d3_s1001=4.7133/9d90e407eda5d8f2
 creature_giving_smoke_d5_s1001=4.6800/793e512b6e51ae19
-mirrorwing_smoke_d0_s1001=5.8790/9b161c692ef97f38
-mirrorwing_smoke_d3_s1001=4.2600/78002b4bec3fe4e2
-mirrorwing_smoke_d5_s1001=4.3600/056e63493d7bba5f
+mirrorwing_smoke_d0_s1001=5.8780/1593b1b8eb9f4519
+mirrorwing_smoke_d3_s1001=4.2400/9c9e9c6eae82025f
+mirrorwing_smoke_d5_s1001=4.3467/5093235bb959f1ae
 fivecolour_smoke_d0_s1001=5.7830/26299104ad40b026
 fivecolour_smoke_d3_s1001=4.9667/e78c58adbad71403
 fivecolour_smoke_d5_s1001=5.1333/f6d7ed5a947b839a
@@ -104,11 +104,11 @@ creature_giving_regression_d3_s2002=4.6533/92df7bfb366239f4
 creature_giving_regression_d3_s3003=4.6800/619afcd304afa26a
 creature_giving_regression_d5_s2002=4.6320/0f8f5b59837f4411
 creature_giving_regression_d5_s3003=4.6720/2c8d19ae35e86362
-mirrorwing_regression_d0_s2002=5.9870/5bf3013c3f53beae
-mirrorwing_regression_d3_s2002=4.3100/af92297c2a777914
-mirrorwing_regression_d3_s3003=4.1600/e1b9690b83d9875e
+mirrorwing_regression_d0_s2002=5.9860/84d82f275e4356ba
+mirrorwing_regression_d3_s2002=4.3050/8d9d047b9f997c26
+mirrorwing_regression_d3_s3003=4.1650/1aed33f32f2246ee
 mirrorwing_regression_d5_s2002=4.3400/1748e1d7a3b60cae
-mirrorwing_regression_d5_s3003=4.2100/4621fcc90dea455e
+mirrorwing_regression_d5_s3003=4.2100/4c0874bef5ae5e7c
 fivecolour_regression_d0_s2002=5.8360/a06a28a53b4f874b
 fivecolour_regression_d3_s2002=4.8700/7bc29bdf0de4e17f
 fivecolour_regression_d3_s3003=4.9500/3a9202c780ee2d3f
@@ -256,18 +256,18 @@ creature_giving_overnight_d5_s4004=4.6380/1711b4855023c06d
 creature_giving_overnight_d5_s5005=4.6280/a2949a95d6e036e5
 creature_giving_overnight_d5_s6006=4.6760/c559bceec26594ad
 creature_giving_overnight_d5_s7007=4.6440/c9cd88ecd4da5c2f
-mirrorwing_overnight_d0_s4004=5.9090/cf27747a5661db00
-mirrorwing_overnight_d0_s6006=5.9255/8e97c48f4ac68860
-mirrorwing_overnight_d0_s8008=5.9115/2580e34701845b2d
-mirrorwing_overnight_d0_s10010=5.9155/b375d5c91b3067e9
-mirrorwing_overnight_d3_s4004=4.2225/6d25b54ef1008230
-mirrorwing_overnight_d3_s5005=4.2625/229286de87c39969
-mirrorwing_overnight_d3_s6006=4.2550/bce631a7ff7d5f73
-mirrorwing_overnight_d3_s7007=4.3075/985d7e64cb898e30
-mirrorwing_overnight_d5_s4004=4.2533/669ba95f9354a5e0
-mirrorwing_overnight_d5_s5005=4.2300/547fd30aae138f09
-mirrorwing_overnight_d5_s6006=4.2500/06a9b690c6ff3342
-mirrorwing_overnight_d5_s7007=4.3000/ddf6dad8c45202eb
+mirrorwing_overnight_d0_s4004=5.9085/b3242fc8d13c19c3
+mirrorwing_overnight_d0_s6006=5.9265/1b735f1969e8a41b
+mirrorwing_overnight_d0_s8008=5.9120/671e342755e24952
+mirrorwing_overnight_d0_s10010=5.9170/9580a04041c3a6da
+mirrorwing_overnight_d3_s4004=4.2175/c4126d017f882dce
+mirrorwing_overnight_d3_s5005=4.2525/8a34bd8212bcfabd
+mirrorwing_overnight_d3_s6006=4.2525/e6d688d953b42ebe
+mirrorwing_overnight_d3_s7007=4.3000/e93c1fdb2e92043b
+mirrorwing_overnight_d5_s4004=4.2500/0b12a2a60b105fd8
+mirrorwing_overnight_d5_s5005=4.2233/4a0a46be2f9719fd
+mirrorwing_overnight_d5_s6006=4.2467/c1030c23adf0a254
+mirrorwing_overnight_d5_s7007=4.2933/0ecb937da4f258a1
 fivecolour_overnight_d0_s4004=5.7480/fe96f63262524489
 fivecolour_overnight_d0_s6006=5.7815/b8a2ef8452a68525
 fivecolour_overnight_d0_s8008=5.7575/35aafd57228e0c09
