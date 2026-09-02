@@ -1257,3 +1257,32 @@ hosting hook (the pend arm requires `bp_capture != nullptr && plan.bp_choice < 0
 optionally refactor 27723, and stop -- the rest of the rec bucket is either by-design nested,
 wave-mechanism, or dead-sink noise. That is a much smaller lever than the 46-84% bucket suggested;
 re-measure the nohost split after the dead sinks are dropped before sizing any further work.
+
+## USER SCOPE RULING (2026-09-02) -- idea 3 ANSWERED, and what it does to the map
+
+The USER, verbatim: *"greedy is okay in rollouts and current it is also allowed for some attack
+and mana decisions. Everything else should be searched-with-heuristics."* (And, one message
+earlier: no LOSSY greedy in the search/budget window; measured heuristic PRUNES remain fine.)
+
+Consequences for this arc, walking the inventory under that rule:
+
+* **The reachability target is `acted -> 0` at DECISION/RECORDED applies only.** Bare-rollout
+  breakpoint greedy (SimulateToEndImpl future turns, the lookahead candidate loops when running
+  inside rollouts) is the leaf policy's business -- a QUALITY surface, not a correctness hole. Do
+  not build reachability machinery for it.
+* **At shipped defaults, the biggest decision-side greedy is the two win-line loops themselves**:
+  `FSLineWin` pre and `FSLineTail` m2 host only under `MTG_BP_NODE`, which is default OFF. So the
+  ruling makes the NODE (at site 3, its quality-validated site) the REQUIRED shape at those two
+  loops, and question 4 stops being "structure vs compute in the abstract" -- the structure is
+  mandated; what remains is driving its cost down (truncate-at-emission, prefix-resume cache, EF)
+  and the per-deck opt-in question for decks where it is provably inert.
+* **CORRECTION to the idea-2 host list**: the "drop-in" candidate at ~26971 sits inside
+  `MTG_CONDEMN_TRANCHE`, a DEFAULT-OFF audit instrument (USER 2026-08-21) -- it never runs in
+  shipped play, so hosting it buys nothing. The real remaining decision-side host work is the
+  group-wave scorer (~27723, refactor) and nothing else; the D56 lesson still stands (widening the
+  node's SITE set to 5/6 was quality-rejected -- hosting must not stand the wave machinery down).
+* **`MTG_BP_CANON_CONT` is, by this ruling, a ROLLOUT-POLICY lever**: at decision applies it is
+  still a one-plan policy, so its end-state role is covering the rollout applies UNDER a node that
+  hosts the decision applies. The two compose by construction (a hosted apply pends before the
+  fallback chain is reached). The 186k gate measures canon alone; if it passes, the follow-up
+  measurement is node+canon on hinata vs node vs base.
