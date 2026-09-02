@@ -1,6 +1,7 @@
 #include "../core/EnvFlags.h"
 #include "../core/GameSetup.h"
 #include "GoldFishRunner.h"
+#include "../core/OpponentDeck.h"
 #include "../core/GameEngine.h"
 #include "../core/GameLogger.h"
 #include "../core/HardwareConcurrency.h"
@@ -156,6 +157,31 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
             || p.counters_on_target > 0)                                     { return true; }
     }
     return false;
+}
+
+// Does this deck have any way to touch the OPPONENT'S library or hand? If so they are dealt a real
+// library and opening hand (core/OpponentDeck.h); if not they keep the historical model -- a life
+// total and nothing else -- which is what makes every existing deck byte-identical.
+//
+// BOTH BOARDS ARE SCANNED, and that is load-bearing rather than incidental. This deck's only
+// library-toucher (Dimensional Infiltrator) sits in the SIDEBOARD, reachable off Living Wish. A
+// mainboard-only scan would leave the opponent with no library, so the Infiltrator would exile from
+// an empty zone forever and the deck's second win condition would silently not exist -- the exact
+// failure the coverage scan used to have (see scripts/analyze_deck.py, SideboardReachability).
+// Scanning the sideboard unconditionally is safe: a card that cannot touch the opponent's zones
+// does not set these params, so the five decks carrying vestigial sideboards are unaffected.
+bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
+{
+    auto scan = [](const std::vector<Card>& board) {
+        for (const Card& c : board)
+        {
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+            if (!def) { continue; }
+            if (def->params.exile_opponent_top_cost.has_value()) { return true; }
+        }
+        return false;
+    };
+    return scan(deck.mainboard) || scan(deck.sideboard);
 }
 
 // Card-dependency-map closure (docs/design/card-dependency-map.md, USER design 2026-08-15): a
@@ -696,7 +722,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     state.dep_enabler_main1    = dep_pulls.enabler_main1;
     state.dep_castpayoff_main1 = dep_pulls.castpayoff_main1;
     state.deck_gy_readers      = DeckGraveyardReaders(deck); // EOT dominance's graveyard projection
+    state.opponent_library_dealt = DeckTouchesOpponentZones(deck);
 }
+
 
 GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
 {
@@ -762,6 +790,11 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     {
         AssignCardNumbers(state, BuildCardNumbering(deck));
     }
+
+    // The passive opponent's own library + opening hand, on a DERIVED seed so player 0's shuffle
+    // above is untouched (core/OpponentDeck.h). Gated on the deck being able to reach those zones,
+    // so this is a no-op for every deck that cannot mill.
+    opponentdeck::Deal(state, seed);
 
     state.active_player_index   = 0;
     state.priority_player_index = 0;

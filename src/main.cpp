@@ -22,6 +22,7 @@
 #include "ai/AIEngine.h"
 #include "ai/TurnSolver.h"
 #include "core/GameEngine.h"
+#include "core/OpponentDeck.h"
 #include "core/GameLogger.h"
 #include "core/SpellEffects.h"   // LookKind / TopDisposition / EnumerateTopDispositions for look-top decisions
 #include "core/HardwareConcurrency.h"
@@ -3976,6 +3977,9 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "hand": [ "Aria of Flame", "Invigorate" ],
 //     "graveyard": [ "Scourge of Valkas" ],       // stage cards in the graveyard (gy-reading abilities)
 //     "library_filler": "Forest", "library_size": 40,   // so draws / rollouts don't run dry
+//     "opponent_library_size": 2,    // stage the OPPONENT'S library (forces opponent_library_dealt
+//                                    // on); they draw one at the end of each of OUR turns, and
+//                                    // drawing from empty is a deck-out win on THAT turn
 //     "depth": 5, "budget_ms": 100, "max_turns": 4,
 //     "expect_win_turn": 4,          // optional: nonzero exit if the actual win turn is later (a FAIL)
 //     "expect_no_win": true,         // optional: nonzero exit if the engine DID win (negative guard)
@@ -4066,6 +4070,28 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // unreachable code is untested code.
     state.players[0].rad_counters = j.value("rad_counters", 0);
     state.players[1].life       = j.value("opponent_life", 20);
+    // Stage the OPPONENT'S library at an arbitrary size (core/OpponentDeck.h). Same reason
+    // rad_counters is settable: reaching a deck-out through real play means milling 53 cards, which
+    // no fixture can do in a handful of turns -- so without this the entire deck-out path, the win
+    // check and its win-turn convention would be untestable, i.e. untested. Setting it also forces
+    // opponent_library_dealt on, overriding the deck-derived trait, so a fixture can exercise the
+    // path on any deck. Absent -> whatever StampDeckTraits derived (0 for every deck today).
+    if (j.contains("opponent_library_size"))
+    {
+        const int n = j.at("opponent_library_size").get<int>();
+        state.opponent_library_dealt = true;
+        std::vector<Card> empty;
+        state.players[1].library.assign(empty.begin(), empty.end());
+        int number = opponentdeck::kNumberBase;
+        for (int i = 0; i < n; ++i)
+        {
+            Card c;
+            c.m_name = "Forest";   // contents are irrelevant to a deck-out; only the COUNT is
+            c.RehashName();
+            c.m_number = number++;
+            state.players[1].library.push_back(c);
+        }
+    }
     state.active_player_index   = 0;
     state.priority_player_index = 0;
     state.turn_number           = turn - 1;   // PlayOut steps INTO `turn`

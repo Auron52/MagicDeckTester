@@ -1605,6 +1605,22 @@ struct CardParams
     int                     drain_amount    = 0;   // life the opponent loses per activation
     int                     drain_self_gain = 0;   // life we gain per activation
 
+    // "{cost}: Target opponent exiles the top card of their library." (Dimensional Infiltrator's
+    // "{1}{C}: ... If it's a land card, you may return this creature to its owner's hand.")
+    // nullopt = no such ability. Like drain_cost there is NO {T}, so it is repeatable within a turn
+    // and bounded only by mana -- which is what makes it a real deck-out clock off an infinite loop.
+    //
+    // This param is ALSO the deck trait that gives the opponent a library at all
+    // (GoldFishRunner::DeckTouchesOpponentZones -> GameState::opponent_library_dealt). Any future
+    // mill / forced-draw / discard param must be added to that detector too, or the effect will
+    // resolve against an EMPTY zone and silently do nothing.
+    std::optional<ManaCost> exile_opponent_top_cost;
+    // "If it's a land card, you may return this creature to its owner's hand." A MAY, and declining
+    // is provably dominant here (bouncing costs us the permanent and re-casting it, buying nothing
+    // a goldfish can use), so it is modelled as always-declined rather than as a searched choice --
+    // recorded as a bracket note on the card, not silently dropped.
+    bool                    exile_opponent_top_may_bounce_on_land = false;
+
     // Mariposa Military Base: "{5}, {T}: Draw a card. This ability costs {1} less to activate for
     // each rad counter you have", plus "You may have this land enter tapped. If you do, you get two
     // rad counters." Rad counters are a PLAYER resource (Player::rad_counters), not a permanent's.

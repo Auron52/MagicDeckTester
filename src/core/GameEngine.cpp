@@ -1,4 +1,5 @@
 #include "GameEngine.h"
+#include "OpponentDeck.h"
 #include "EffectHandler.h"
 #include "SpellEffects.h"
 #include "../ai/AIEngine.h"
@@ -185,6 +186,11 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     if (at <= static_cast<int>(ResumeAt::Main2)) { MainPhase(state, /*is_pre_combat=*/false); }
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
+    // The passive opponent's notional draw for THEIR turn, which falls between ours (see
+    // core/OpponentDeck.h for why here, and why that makes a deck-out's win turn OUR turn).
+    // No-op for every deck that was not dealt an opponent library. Lockstep with the rollout's
+    // TurnSolver::SimulateEndAndStartNextTurn.
+    opponentdeck::EndOfTurnDraw(state);
 }
 
 void GameEngine::UntapStep(GameState& state)
@@ -786,5 +792,5 @@ void GameEngine::CheckStateBasedActions(GameState& state)
 
 bool GameEngine::CheckWinCondition(const GameState& state) const
 {
-    return state.Opponent().HasLost();
+    return OpponentHasLost(state);   // life/poison OR decked -- see GameState.h
 }

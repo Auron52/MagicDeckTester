@@ -130,6 +130,11 @@ public:
     // Deck-level input to the main-phase classifier: any attack-feeding card in the deck?
     // Stamped onto GameState::deck_feeds_combat by SetupGame (see the .cpp note).
     static bool DeckFeedsCombat(const Decklist& deck);
+
+    // Can this deck mill / exile-from-library / discard the OPPONENT? Gates whether they are dealt
+    // a library and opening hand at all (see core/OpponentDeck.h). Scans BOTH boards -- this deck's
+    // only library-toucher is a SIDEBOARD card reachable off Living Wish.
+    static bool DeckTouchesOpponentZones(const Decklist& deck);
     // Card-dependency-map closure (docs/design/card-dependency-map.md): which dependency
     // classes the main-phase classifier pulls to Main1 for this deck. Stamped onto
     // GameState::dep_enabler_main1 / dep_castpayoff_main1 by SetupGame.

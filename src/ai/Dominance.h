@@ -337,6 +337,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     fold(static_cast<std::uint64_t>(s.step));
     fold(static_cast<std::uint64_t>(s.consecutive_passes));
     fold(s.player_lost_on_draw ? 1u : 0u);
+    // Deck-out is terminal, so two states differing here are not comparable. Guarded on the deck
+    // having an opponent library at all: an unconditional fold would shift every key for every
+    // deck and give up byte-identity to record a field that is permanently false for them.
+    if (s.opponent_library_dealt) { fold(s.opponent_decked ? 0xD3CDull : 0xD3CEull); }
     fold(s.on_the_play ? 1u : 0u);
     fold(s.opponent_lost_life_this_turn ? 1u : 0u);
     fold(static_cast<std::uint64_t>(s.vial_target_mv));
@@ -423,8 +427,19 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // Same draws consumed: without equal library POSITION the comparison is unsound (an extra
         // draw changes every future). The full order is folded, not just the size, so the
         // comparison holds under MTG_SEARCH_SHUFFLE too, where size no longer implies content.
-        fold(static_cast<std::uint64_t>(p.library.size()));
-        for (const Card& c : p.library) { fold(c.m_name_hash); }
+        //
+        // The OPPONENT's library is skipped unless the deck was actually dealt one
+        // (opponent_library_dealt). Two reasons, and the first is not just tidiness: folding 53
+        // extra card hashes per key, on every dominance key, is real cost on the hot path for
+        // every deck that can never touch that zone. The second is that skipping makes those decks
+        // byte-identical BY CONSTRUCTION rather than by an argument about hash equality classes.
+        // When the opponent DOES have a library its size and order are future-determining -- a mill
+        // deck's whole clock lives there -- so it is folded in full, same rule as ours.
+        if (pi == 0 || s.opponent_library_dealt)
+        {
+            fold(static_cast<std::uint64_t>(p.library.size()));
+            for (const Card& c : p.library) { fold(c.m_name_hash); }
+        }
         // Per-turn counters: equal across siblings at the same boundary, folded so they cannot
         // silently differ.
         fold(static_cast<std::uint64_t>(p.lands_played_this_turn));

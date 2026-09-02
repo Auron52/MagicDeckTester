@@ -12,6 +12,7 @@
 #include "KeepModel.h"              // MidGameEvaluator / ExtractMidGameFeatures (learned d0 eval)
 #include "Profiler.h"
 #include "../core/ManaPool.h"
+#include "../core/OpponentDeck.h"
 #include "../core/EffectHandler.h"
 #include "../core/SpellEffects.h"
 #include "../core/Trace.h"
@@ -14789,7 +14790,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             {
                 GameState copy = state;
                 ApplyPlanDirect(copy, best, is_pre_combat);
-                if (copy.Opponent().life <= 0) { return best; }   // verified lethal -> skip the powerset
+                if (OpponentHasLost(copy)) { return best; }   // verified lethal -> skip the powerset
             }
             best      = saved_best;
             best_mask = saved_mask;
@@ -19929,6 +19930,13 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (d && d->params.storage_land) { ++p.storage_counters; }
     }
 
+    // The passive opponent's notional draw for their turn, which falls between ours. Fired BEFORE
+    // the turn increment so `opponent_decked` is set while state.turn_number is still the turn we
+    // just finished -- the same instant the executor sets it (GameEngine::RunTurnFrom), so the
+    // rollout's win turn for a deck-out equals the realised one. No-op for every deck that was not
+    // dealt an opponent library. See core/OpponentDeck.h.
+    opponentdeck::EndOfTurnDraw(state);
+
     // Start of next turn
     ++state.turn_number;
     state.opponent_lost_life_this_turn = false;
@@ -22020,7 +22028,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 GameState copy = state;
                 ApplyPlanDirect(copy, probe, is_pre_combat);
                 if (is_pre_combat) { SimulateCombat(copy); }
-                const bool really_lethal = (copy.Opponent().life <= 0);
+                const bool really_lethal = (OpponentHasLost(copy));
                 // Is the sac-land burn a STAGED (Light Up the Stage) card? Those expire at the end of
                 // our next turn, so "hold it" can mean "lose it" -- the one real drawback to holding.
                 bool staged = false;
@@ -22227,7 +22235,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 {
                     GameState copy = state;
                     ApplyPlanDirect(copy, plans.back(), is_pre_combat);
-                    if (copy.Opponent().life <= 0)
+                    if (OpponentHasLost(copy))
                     {
                         return { std::move(plans.back()) };   // verified lethal -> skip powerset + Plan-B
                     }
@@ -22831,7 +22839,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // Combat is order-independent, so inherit the base plan's combat-based win; a reordering
                 // can only ADD direct damage (e.g. the rebuild), so also mark a win if this ordering
                 // kills outright. Keeps winning orderings sorted first (not cut under budget).
-                cand.wins_this_turn = p.wins_this_turn || (copy.Opponent().life <= 0);
+                cand.wins_this_turn = p.wins_this_turn || (OpponentHasLost(copy));
                 ordered.push_back(std::move(cand));
             }
         }
@@ -25705,7 +25713,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
 
         // Combat
         SimulateCombat(state);
-        if (state.Opponent().life <= 0)
+        if (OpponentHasLost(state))
         {
             leafeval::Publish(leafeval::kInvalid);   // a win needs no tie-break
             return state.turn_number;
@@ -25747,7 +25755,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                                                     /*in_rollout=*/true);
             }
             ApplyPlanDirect(state, post_plan, false);
-            if (state.Opponent().life <= 0)
+            if (OpponentHasLost(state))
             { leafeval::Publish(leafeval::kInvalid); return state.turn_number; }
         }
 
@@ -26636,7 +26644,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     { node_key_origin.emplace(child_key, std::make_pair(uint8_t(1), DupeSig(v))); }
                     if (s_rollout_stats) { pend_local.insert(child_key); }
                     if (s3.ActivePlayer().life <= 0) { continue; }
-                    if (s3.Opponent().life <= 0)
+                    if (OpponentHasLost(s3))
                     {
                         if (m2t_here)
                         { std::fprintf(stderr, "[m2t] T%d d%d PEND q=%s child k=%d WIN-THIS-TURN\n",
@@ -26707,7 +26715,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // Self-lethal second main (Eidolon on-cast self-damage) -> we die to the
             // triggers before the spell resolves; not a viable line. See FSLineWin.
             if (s2.ActivePlayer().life <= 0) { continue; }
-            if (s2.Opponent().life <= 0)
+            if (OpponentHasLost(s2))
             {
                 TurnSolver::Plan q_rec = q;
                 q_rec.breakpoint_actions = std::move(bp);
@@ -26866,7 +26874,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     std::vector<Action> bp;
                     ApplyPlanDirect(s2, q, false, &bp);
                     if (s2.ActivePlayer().life <= 0) { continue; }
-                    if (s2.Opponent().life <= 0)
+                    if (OpponentHasLost(s2))
                     {
                         tranchestats::g_rescues.fetch_add(1, std::memory_order_relaxed);
                         if (s_tr_trace) { tr_emit(q, true, best.win_turn, state.turn_number); }
@@ -27285,7 +27293,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     AnimateLandsShared(s3, nullptr);
                     ActivateTapTokensShared(s3, nullptr);
                     SimulateCombat(s3);
-                    if (s3.Opponent().life <= 0)   // wins THIS turn -> the earliest possible
+                    if (OpponentHasLost(s3))   // wins THIS turn -> the earliest possible
                     {
                         TurnSolver::Plan p_rec = std::move(v);
                         p_rec.breakpoint_actions = std::move(bp3);
@@ -27387,7 +27395,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         GameState s_rel;
         if (dork_contested) { s_rel = s; }   // pre-combat snapshot for the release variant
         SimulateCombat(s);
-        if (s.Opponent().life <= 0)  // win this turn -> floor
+        if (OpponentHasLost(s))  // win this turn -> floor
         {
             TurnSolver::Plan p_rec = p;
             if (dork_contested) { p_rec.atk_dork_release = 0; }
@@ -27408,7 +27416,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             g_dork_atk_override = alt_override;
             SimulateCombat(s_rel);
             g_dork_atk_override = -1;
-            if (s_rel.Opponent().life <= 0)   // released swing IS lethal -> earliest possible
+            if (OpponentHasLost(s_rel))   // released swing IS lethal -> earliest possible
             {
                 TurnSolver::Plan p_rec = p;
                 p_rec.atk_dork_release = alt_rec;
@@ -27616,7 +27624,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 AnimateLandsShared(s, nullptr);
                 ActivateTapTokensShared(s, nullptr);
                 SimulateCombat(s);
-                if (s.Opponent().life <= 0)       // wins THIS turn -> the earliest possible from here
+                if (OpponentHasLost(s))       // wins THIS turn -> the earliest possible from here
                 {
                     if (BpWaveProbeOn()) { g_bp_wave_probe.improved.fetch_add(1); }
                     TurnSolver::Plan p_rec = v;
@@ -27722,7 +27730,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 AnimateLandsShared(s, nullptr);
                 ActivateTapTokensShared(s, nullptr);
                 SimulateCombat(s);
-                if (s.Opponent().life <= 0)       // wins THIS turn -> the earliest possible from here
+                if (OpponentHasLost(s))       // wins THIS turn -> the earliest possible from here
                 {
                     if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
                     won_now = true;
@@ -29388,7 +29396,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
             AnimateLandsShared(s, nullptr);
             ActivateTapTokensShared(s, nullptr);
             SimulateCombat(s);
-            if (s.Opponent().life <= 0) { ladder_wt[i] = state.turn_number; settled[i] = 1; continue; }
+            if (OpponentHasLost(s)) { ladder_wt[i] = state.turn_number; settled[i] = 1; continue; }
             ++unsettled;
         }
         // dd STARTS AT 0, not 1. Pass 0 is `FSLineTail(s, 0)`, which with second_main enumerates
@@ -29465,7 +29473,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
             AnimateLandsShared(s, nullptr);
             ActivateTapTokensShared(s, nullptr);
             SimulateCombat(s);
-            if (s.Opponent().life <= 0)
+            if (OpponentHasLost(s))
             {
                 wt = state.turn_number;                 // wins THIS turn
             }
@@ -29601,7 +29609,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                     ActivateTapTokensShared(s, nullptr);
                     SimulateCombat(s);
                 }
-                if (s.Opponent().life <= 0)         // wins THIS turn (library-independent -> all k agree)
+                if (OpponentHasLost(s))         // wins THIS turn (library-independent -> all k agree)
                 {
                     wt = turn;
                 }
@@ -29617,7 +29625,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                             second_main, nullptr);
                         ApplyPlanDirect(s, post, false);
                     }
-                    if (s.Opponent().life <= 0) { wt = turn; }
+                    if (OpponentHasLost(s)) { wt = turn; }
                     else
                     {
                         GameState r = s;
@@ -29974,7 +29982,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
                 // Combat this turn
                 SimulateCombat(copy);
-                if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
+                if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
 
                 // Post-combat (second) main if this deck wants one. SEARCHED, not greedy: this is
                 // the decisive site for "cast now vs hold for after combat" -- the candidate being
@@ -29985,7 +29993,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
                                                         second_main, tt, /*in_rollout=*/false);
                     ApplyPlanDirect(copy, post, false);
-                    if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
+                    if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
                 }
             }
             else
@@ -29994,7 +30002,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // happened this turn, so apply the candidate as a post-combat play
                 // and DON'T re-simulate combat (that would be a phantom second one).
                 ApplyPlanDirect(copy, plan, false);
-                if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
+                if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
                 // Count-bounder (post-combat main): dedup by post-apply state AFTER the win check so a
                 // unique winner is never skipped. Reframe-only. See the pre-combat branch above.
                 if (CostReframeEnabled() && !reframe_seen.insert(BuildDedupKey(copy)).second) { continue; }
@@ -30133,7 +30141,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         AnimateLandsShared(copy, nullptr);
                         ActivateTapTokensShared(copy, nullptr);
                         SimulateCombat(copy);
-                        if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return v; }
+                        if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
                         if (second_main)
                         {
                             // Searched, exactly as in the main candidate loop above -- a deferred
@@ -30141,14 +30149,14 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                             Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
                                                                 second_main, tt, /*in_rollout=*/false);
                             ApplyPlanDirect(copy, post, false);
-                            if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return v; }
+                            if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
                         }
                     }
                     else
                     {
                         ApplyPlanDirect(copy, v, false);
                         if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last)) { continue; }
-                        if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return v; }
+                        if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
                         if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { continue; }
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
                     }
@@ -30231,19 +30239,19 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     AnimateLandsShared(copy, nullptr);
                     ActivateTapTokensShared(copy, nullptr);
                     SimulateCombat(copy);
-                    if (copy.Opponent().life <= 0) { won_out = true; return true; }
+                    if (OpponentHasLost(copy)) { won_out = true; return true; }
                     if (second_main)
                     {
                         Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
                                                             second_main, tt, /*in_rollout=*/false);
                         ApplyPlanDirect(copy, post, false);
-                        if (copy.Opponent().life <= 0) { won_out = true; return true; }
+                        if (OpponentHasLost(copy)) { won_out = true; return true; }
                     }
                 }
                 else
                 {
                     ApplyPlanDirect(copy, v, false);
-                    if (copy.Opponent().life <= 0) { won_out = true; return true; }
+                    if (OpponentHasLost(copy)) { won_out = true; return true; }
                     if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { return true; }
                 }
                 if (!SimulateEndAndStartNextTurn(copy)) { return true; }
@@ -30357,20 +30365,20 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     AnimateLandsShared(copy, nullptr);
                     ActivateTapTokensShared(copy, nullptr);
                     SimulateCombat(copy);
-                    if (copy.Opponent().life <= 0) { return state.turn_number; }
+                    if (OpponentHasLost(copy)) { return state.turn_number; }
                     if (second_main)
                     {
                         Plan post = SolveSecondMainInSearch(copy, committed_sub_depth, max_turns,
                                                             budget, second_main, &esc_tt,
                                                             /*in_rollout=*/false);
                         ApplyPlanDirect(copy, post, false);
-                        if (copy.Opponent().life <= 0) { return state.turn_number; }
+                        if (OpponentHasLost(copy)) { return state.turn_number; }
                     }
                 }
                 else
                 {
                     ApplyPlanDirect(copy, plan, false);
-                    if (copy.Opponent().life <= 0) { return state.turn_number; }
+                    if (OpponentHasLost(copy)) { return state.turn_number; }
                 }
                 if (!SimulateEndAndStartNextTurn(copy)) { return max_turns + 1; }
                 return SimulateToEnd(std::move(copy), committed_sub_depth, max_turns, budget,

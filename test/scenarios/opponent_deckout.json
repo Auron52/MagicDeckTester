@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "Deck-out: the passive opponent runs out of library and loses (CR 104.3c).",
+    "Before core/OpponentDeck.h existed the opponent had NO library at all, so milling or",
+    "decking them could not win and could not even be attempted -- see",
+    "docs/design/passive-opponent-no-library.md.",
+    "",
+    "Two cards left. They draw at the END of each of OUR turns, so: our T1 -> 2->1,",
+    "our T2 -> 1->0, our T3 -> empty -> decked. The expected win turn is 3, OUR turn,",
+    "per the user's rule (2026-09-02): a decked opponent never gets a main phase, so the",
+    "game is over as of our last turn rather than their next one.",
+    "",
+    "The board is deliberately EMPTY of any clock -- no attacker, no burn -- so the only",
+    "thing that can produce a win here is the deck-out. Auras is a deck with no way to touch",
+    "the opponent's library, which makes the point twice: the opponent_library_size field is",
+    "what turns the path on, and every deck without it is unaffected."
+  ],
+  "deck": "decks/Auras/Auras.cod",
+  "turn": 1,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 2,
+  "battlefield": [],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 6,
+  "expect_win_turn": 3
+}

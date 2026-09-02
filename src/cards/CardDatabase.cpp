@@ -1014,6 +1014,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.drain_cost = ManaCostFromString(params["drain_cost"].get<std::string>());
     p.drain_amount                  = params.value("drain_amount", 0);
     p.drain_self_gain               = params.value("drain_self_gain", 0);
+    if (params.contains("exile_opponent_top_cost"))
+        p.exile_opponent_top_cost = ManaCostFromString(params["exile_opponent_top_cost"].get<std::string>());
+    p.exile_opponent_top_may_bounce_on_land =
+        params.value("exile_opponent_top_may_bounce_on_land", false);
     p.tap_draw_cost_less_per_rad    = params.value("tap_draw_cost_less_per_rad", false);
     p.etb_optional_tapped_rad       = params.value("etb_optional_tapped_rad", 0);
     if (params.contains("tap_investigate_cost"))

@@ -179,6 +179,20 @@ struct GameState
     int                      turn_number                  = 0;
     bool                     player_lost_on_draw          = false;
     bool                     opponent_lost_life_this_turn = false;
+    // Was the opponent DEALT a library (and an opening hand)? See core/OpponentDeck.h. Stamped by
+    // GoldFishRunner::StampDeckTraits from the decklist: false for every deck that cannot touch the
+    // opponent's library or hand, which is what keeps those decks byte-identical.
+    //
+    // THIS FLAG IS THE DECK-OUT GATE, and it is not optional. `players[1].library` is EMPTY, not
+    // absent, on an ungated deck -- so the obvious test `Opponent().library.empty()` is TRUE on turn
+    // 0 and would hand out a spurious instant win in every game of every deck. Never test emptiness
+    // without this flag; use OpponentHasLost() below, which does it for you.
+    bool                     opponent_library_dealt       = false;
+    // The opponent was asked to draw from an empty library (CR 104.3c). Set by the simulated
+    // opponent draw at the END of our turn -- which is also WHY the win turn for a deck-out is OUR
+    // turn number and not the next one: the opponent never gets a main phase in this model, so on
+    // the user's instruction (2026-09-02) the game is over as of our last turn.
+    bool                     opponent_decked              = false;
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
     // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack
@@ -397,3 +411,19 @@ struct GameState
     Player&       Opponent()           { return players[1 - active_player_index]; }
     const Player& Opponent()     const { return players[1 - active_player_index]; }
 };
+
+// THE win predicate. Every "have we won?" test in BOTH worlds goes through here.
+//
+// It exists because the check was scattered: the executor asked GameEngine::CheckWinCondition
+// (== Opponent().HasLost()) while the rollout open-coded `Opponent().life <= 0` at ~40 sites. Add a
+// non-damage win condition to only one of those and you get the worst possible failure -- an
+// executor that RECOGNISES the win and a search that never PURSUES it, so the line is played only
+// by accident. That is the exact shape of the Dragonstorm go-off that executed as a kill zero times
+// (docs/design/, dragonstorm-goff-lethal-bug), and deck-out would have repeated it.
+//
+// `opponent_decked` is false unless the deck was stamped opponent_library_dealt, so this is
+// byte-identical to the old `life <= 0` for every deck that cannot mill.
+inline bool OpponentHasLost(const GameState& s)
+{
+    return s.Opponent().HasLost() || s.opponent_decked;
+}
