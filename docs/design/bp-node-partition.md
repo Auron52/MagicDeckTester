@@ -560,3 +560,137 @@ snapshot copy: hoisted-buffer reuse (committed) bought only ~1.4%.
 Honest total for the safe exact levers: ~6–8% units (overlapping), i.e. 1.35x → ~1.25x. There is
 no single big lever left inside the node itself; the remaining big buckets are fs_main2 40% +
 fs_pre 18% — the host plan loops, whose product the node already collapsed once.
+
+## The adoption gate (2026-09-02)
+
+Rebased onto `dde84b31` (another agent's EldraziDisplacerFlicker deck, `ManaPool::wild_c` for
+{C} pips, `MTG_FEED_FILTER_FIRST` adopted, and a 3-tier GT rebaseline). Only `HeuristicArm.h`
+conflicted, both sides having appended a slot; `TurnSolver.cpp` auto-merged. Verified the merge
+did not perturb the default path: **smoke 48/48 byte-identical to the rebased GT, units 52/52,
+`check_gt_logs.py` 320 consistent / 0 stale**. The Hinata figures above predate those engine
+changes, so the gate re-measures Hinata alongside everything else rather than trusting them.
+
+**The gate is not about the node.** `MTG_BP_NODE_ROOTTURN` only restricts *where* the node hosts,
+and the node itself is Hinata's site 3. What the recipe ships to **every deck** is
+`MTG_BP_NO_GREEDY_CONT`: the greedy `Solve` is replaced by `cands[0]` at every breakpoint site,
+and that is **lossy on its own** — `EnumeratePlans` drops the empty combination, so `cands[0]` can
+never be "cast nothing" (it measured +0.0200/+0.0214 worse on Hinata alone, t 6.2/6.4).
+`MTG_BP_NODE` restores `kBpEmptyChoice`, but only where it hosts. So on the nine decks with no
+site-3 cantrip class, and on every non-root turn everywhere, sites 0/5/6 run the lossy form with
+nothing restoring the empty arm. **That, not the node, is what the cross-deck measurement is
+for**, and it is the one way this recipe could regress a deck that the Hinata work would never
+have seen.
+
+`MTG_BP_NODE_ROOTTURN`'s gate reads `g_condemn_root_turn`, which `CondemnRootTurnGuard` sets
+unconditionally at all three search entries (`SolveWithLookahead`, `FullSearchLine`, and the
+hybrid's direct `FSLineWin`) — it is not condemnation-flag-gated, so the restriction is live on
+every deck rather than silently inert where condemnation is off.
+
+Gate manifest: `logs/seq_order/adopt_gate.json`, one pooled batch, 44 jobs / 136k games.
+Depth and budget are **omitted per job on purpose** so `ResolvePlaySettings` reads each deck's
+own `value_play` lock — the `[play]` line records what each resolved to, and both arms of every
+pair resolved identically (the paired-ness precondition). Six movers (hinata, burn, th,
+dragonstorm, mirrorwing, kitty) at 5000 games x two disjoint seed blocks; the other ten at an
+800-game screen. Read with `scripts/paired_wins.py` off `MTG_DUMP_WINS` output — job averages
+alone cannot produce the paired t, which is the gate.
+
+## The gate's verdict: NGC is the whole problem, and it is NOT the node (2026-09-02)
+
+The 136k-game gate says the recipe is a **quality win** — hinata -0.0162 hold / -0.0164 train
+(t -4.16 / -4.50, the two blocks agreeing to 0.0002), mirrorwing -0.0014 both blocks (7 better /
+0 worse on train), eleven of sixteen decks byte-identical. But two decks were not clean, and
+BOTH root-cause to `MTG_BP_NO_GREEDY_CONT` ALONE.
+
+**th -- a REACHABILITY loss, not a tuning loss.** The six-arm ladder (base / s3 / ngc / s3ngc /
+node / roott, 5000 games x 2 blocks, same seeds as the gate) is unambiguous:
+
+| arm | train | hold | |
+|---|---|---|---|
+| base | 4.0752 | 4.0978 | |
+| s3 (SITE3+DEFER) | 4.0752 | 4.0978 | **byte-identical to base** |
+| ngc | 4.0768 | 4.0996 | +0.0016 / +0.0018 |
+| s3ngc, node, roott | 4.0768 | 4.0996 | **byte-identical to ngc** |
+
+Opening the class does nothing on th; the node and ROOTTURN add nothing (th has no site-3
+cantrip class, so the node never hosts). The regression is entirely NGC replacing the greedy
+`Solve` with `cands[0]` where nothing restores `kBpEmptyChoice` -- i.e. **"cast nothing" stops
+being reachable**. The 55 worse games are ±1-turn drifts (26x 4->5, 19x 5->6) with a single
+win->unwon, which is the signature of a systematically narrowed option set rather than one
+deleted line. This lands on the standing NO-LOSSY-TRUNCATION bar (`no-lossy-truncation-user-bar`:
+rare-but-possible is reason enough), so it is a defect to fix, NOT a delta to net against hinata.
+
+**dragonstorm -- an UNCHARGED cost blowup the budget cannot see.** Quality is inert
+(-0.0004 / +0.0004) but pooled wall was **11.80x** (16.96x on hold), driven by a one-sided tail:
+gi=3019 ran **1.52 h** and returned the SAME win turn as base (wt=7). Per-game, both arms, at the
+deck's play settings:
+
+| game | base | ngc | units base -> ngc | win turn |
+|---|---|---|---|---|
+| gi=2686 | 11.0 s | **159 s** | 59456 -> 53350 (0.90x) | 5 -> 5 |
+| gi=1726 | 14.1 s | 143 s | 80360 -> 69088 (0.86x) | 7 -> 7 |
+| gi=4020 | 15.7 s | 134 s | 70606 -> 83843 (1.19x) | 6 -> 6 |
+
+`s3` is byte-identical to base; `s3ngc`/`node`/`roott` are all the same as `ngc`. **Units go DOWN
+while wall goes up 10-14x, at an identical answer.** That is the `budget_ms`-is-virtual trap in
+its worst form: the enumerator work NGC provokes charges no units, so the virtual budget cannot
+throttle it and the run has no cost signal at all. A 300-game units probe MISSED this entirely
+(dragonstorm 0.992x units) because the pathology lives in rare games in the hold block -- an
+average-units measurement is the wrong instrument for a tail.
+
+**Method note for whoever reads the numbers above.** A batch game's repro is
+`--seed (job.seed + gi)` AND `--game-index gi` -- the shuffle comes from `job.seed + wi.game`
+(BatchRunner: `SetupGame(job.deck, job.seed + wi.game)`), while `--game-index` only drives
+`PopulateOpponentSpawns`. Passing the base seed with `--game-index gi` silently plays game 0 and
+reports ~17 units of a trivial game, which is how the first attempt at this table came back
+uniform and meaningless.
+
+**Consequence.** NGC is the flag that actually implements the USER's "delete all greedy"
+directive; the node only restores soundness at ONE site on ONE turn. So the recipe's value
+(hinata) and the recipe's harm (th, dragonstorm) come from DIFFERENT flags, and they are
+separable. `logs/seq_order/nongc.json` measures the recipe MINUS NGC. First result in:
+`dragonstorm_nongc.train` digest `4f28b16f844780c8` == `dragonstorm.base.train` -- byte-identical,
+so dropping NGC removes the blowup completely.
+
+## Why every greedy-deletion form has been lossy: the base plan's greedy is a WIDTH-2 ESCAPE HATCH
+
+`MTG_BP_BASE_EMPTY` (built 2026-09-02, heurarm slot, default OFF) gave the BASE plan the EMPTY
+continuation instead of a greedy Solve -- the shape suggested by the USER's "we should make empty
+continuation reachable". The reasoning was that a base plan already means "cast this subset", its
+variants enumerate the extensions, and so base + variants would cover the whole space including
+empty, with no greedy and no enumeration. **It measured WORSE nearly everywhere and is REJECTED**
+(600 games/cell, seed 5500001, play settings):
+
+| deck | base | BASE_EMPTY | +node+roott | wall |
+|---|---|---|---|---|
+| hinata | 5.7233 | 5.7467 (+0.023) | **5.8567 (+0.133)** | 1.04x / 1.18x |
+| th | 4.0567 | 4.0817 (+0.025) | 4.0817 | 1.02x |
+| kitty | 4.3167 | 4.3200 (+0.003) | 4.3200 | 0.99x / 0.93x |
+| dragonstorm | 4.3650 | 4.3667 (+0.002) | 4.3667 | 1.09x / 1.13x |
+| mirrorwing | 4.4267 | 4.4100 (-0.017) | 4.4100 | 0.96x / 0.93x |
+
+The COST half of the argument held (no blowup: 0.93-1.18x, versus NGC's 10-14x -- it runs neither
+the Solve nor the enumeration). The QUALITY half did not, and the reason generalises to the whole
+arc.
+
+**`BpSearchWidth()` is 2.** Wave 0's variants cover `cands[0]` and `cands[1]` only (deeper ranks
+need the deferred wave phase and spare budget). The greedy `Solve` at the base plan is therefore
+NOT merely "a greedy step": it is an **unbounded-width oracle** -- free to return any continuation
+in the enumeration, including rank 3+ that no variant can reach. Deleting it does not remove
+heuristic influence, it removes REACHABILITY:
+
+* **NGC** answers `cands[0]`, which is exactly variant k=0. So the base plan becomes a DUPLICATE
+  and the effective option set shrinks {greedy's free pick, cands[0], cands[1]} -> {cands[0],
+  cands[1]}. Losing "cast nothing" is the visible half; losing the free pick is the bigger half.
+* **BASE_EMPTY** gives {empty, cands[0], cands[1]}. Empty IS now reachable -- the stated goal --
+  and it is still worse, because greedy's free pick was worth more than the empty arm.
+
+This is why the class has resisted every substitution: each one trades an unbounded chooser for a
+width-2 ranked list. It is the same shape as `cantrip-class-affordability.md`'s finding that the
+class is STARVED rather than expensive, now with a mechanism.
+
+**Consequence for the USER directive ("no greedy components in the search").** Greedy cannot be
+deleted at these sites until the continuation search can REACH what greedy reaches -- i.e. raise
+`MTG_BP_SEARCH` / make the deferred wave exhaustive, verify the width is no longer binding, and
+only then remove the Solve. Deleting first is a lossy truncation dressed as a purification, and it
+violates the no-lossy-truncation bar in the name of satisfying the no-greedy one. The affordability
+of the wider search is the open question, and it is the right next measurement.

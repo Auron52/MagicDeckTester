@@ -126,6 +126,7 @@ enum Slot : int
     EDF_SEQ_ETB,              // MTG_EDF_SEQ_ETB           an ETB-untap chain reaches the SEQUENCED payability walk
     BP_NODE_D0ONLY,           // MTG_BP_NODE_D0ONLY        host the breakpoint node only at zero REMAINING depth
     BP_NODE_ROOTTURN,         // MTG_BP_NODE_ROOTTURN      host the breakpoint node only on the ROOT TURN
+    BP_BASE_EMPTY,            // MTG_BP_BASE_EMPTY         a BASE plan's continuation is EMPTY, not greedy
     COUNT
 };
 
@@ -229,6 +230,7 @@ inline const char* Name(int slot)
         "MTG_EDF_SEQ_ETB",
         "MTG_BP_NODE_D0ONLY",
         "MTG_BP_NODE_ROOTTURN",
+        "MTG_BP_BASE_EMPTY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

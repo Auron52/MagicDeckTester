@@ -1115,6 +1115,42 @@ static bool BpNoGreedyContinuationEnabled()
     return heurarm::Flag(heurarm::BP_NO_GREEDY_CONT, on);
 }
 
+// MTG_BP_BASE_EMPTY -- the BASE plan's continuation is the EMPTY one, not a greedy Solve.
+//
+// WHY THIS IS THE RIGHT SHAPE, and why MTG_BP_NO_GREEDY_CONT was not. At an open-class breakpoint
+// the search ALREADY branches: wave 0 emits the (base x bp_choice) product, and each variant
+// resolves to cands[bp_choice] -- a searched continuation. The only plan that fell through to a
+// greedy Solve is the BASE plan itself, which is the asymmetry NGC's comment names ("a base plan is
+// SCORED on a greedy continuation while its own variants are scored on searched ones"). But a base
+// plan already MEANS "cast this subset"; its extensions are exactly what the variants enumerate. So
+// the honest continuation for a base plan is to cast NOTHING more, and base + variants then cover
+// the whole space -- empty included -- with no greedy step anywhere.
+//
+// NGC instead answered cands[0], which is strictly WORSE than the greedy it replaced: EnumeratePlans
+// drops the empty combination by contract (see "The empty combination (skip everything) is not a
+// plan and is dropped"), so cands[0] can NEVER be "cast nothing", while the greedy Solve could.
+// Measured 2026-09-02: that reachability loss costs treasure_hunt +0.0016/+0.0018 (the six-arm
+// ladder pins it on NGC alone -- s3 is byte-identical to base, and s3ngc/node/roott are all
+// byte-identical to ngc), and it lands on the standing no-lossy-truncation bar.
+//
+// It is also CHEAPER than either predecessor, which is the second half of the case. NGC replaced a
+// greedy Solve with a full EnumerateBreakpointPlans per base plan; its comment predicted that would
+// be "near-free ... an enum-memo HIT", and Dragonstorm refutes that outright -- 10-14x WALL on the
+// tail games at IDENTICAL win turns and LOWER units (gi=2686: 11.0s -> 159s, units 59456 -> 53350).
+// That work charges no units, so budget_ms cannot throttle it. This lever runs NEITHER the Solve nor
+// the enumeration: it hands back an empty plan.
+//
+// SCOPE. Only base plans (bp_choice < 0) at an OPEN class (class_on): with the class closed no
+// variants are emitted, so an empty base plan would delete the continuation outright rather than
+// relocate it. A VARIANT sitting at a breakpoint it is not targeting keeps its greedy continuation
+// too -- it has to reach its own bp_at, and stopping early would make the nested slot unreachable
+// (the deliberate L*W-not-W^L trade).
+static bool BpBaseEmptyContinuation()
+{
+    static const bool on = EnvOn("MTG_BP_BASE_EMPTY");
+    return heurarm::Flag(heurarm::BP_BASE_EMPTY, on);
+}
+
 static bool BpCondemnOrderAwareEnabled()
 {
     // DEFAULT ON. This is the fix for bug 1 and condemnation is UNSOUND without it -- leaving it
@@ -16800,6 +16836,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Cost should be near-free rather than a new enumeration: the variants of this same base
         // plan already enumerated this exact breakpoint state, so this is an enum-memo HIT and a
         // vector index in place of a greedy Solve. That is the measurement, not the assumption.
+        // MTG_BP_BASE_EMPTY -- see BpBaseEmptyContinuation. Ahead of the NGC block on purpose: when
+        // both are on this claims the base plan (the dominant greedy site) and NGC is left covering
+        // only the non-targeting variants, so the two compose instead of racing for the same plan.
+        if (!resolved && class_on && plan.bp_choice < 0 && BpBaseEmptyContinuation())
+        {
+            out              = TurnSolver::Plan{};
+            out.land_decided = true;   // as kBpEmptyChoice: nothing downstream greedy-plays a drop
+            resolved         = true;
+        }
         if (!resolved && !class_on && BpNoGreedyContinuationEnabled() && greedysite::Enabled())
         { greedysite::why_class.fetch_add(1, std::memory_order_relaxed); }
         if (!resolved && class_on && BpNoGreedyContinuationEnabled())
