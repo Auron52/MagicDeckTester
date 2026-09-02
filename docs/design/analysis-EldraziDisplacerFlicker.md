@@ -1,10 +1,93 @@
 # Analysis ledger — EldraziDisplacerFlicker
 
-Per-deck ledger for the `analyze-deck` run started **2026-09-01**. Durable state for the run
-(survives compaction and hand-off).
+> **2026-09-02: THE DECKLIST CHANGED. Everything below the "PLAN" section describes the OLD list and
+> is retained only for the engine findings it records.** The user supplied a corrected list (list 3),
+> now canonical at `decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod`; lists 1 and 2 are
+> deleted but preserved in commit `7d8bddc5`. Every MEASUREMENT below (7.20 avg, the win-turn
+> distribution, the A/B deltas) is for a deck we no longer play. The ENGINE work below is still
+> valid and carries over.
 
-Deck: [decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod](../../decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod)
-Provider: **`EldraziFlickerProvider`** ([src/ai/DecisionProviders.cpp](../../src/ai/DecisionProviders.cpp))
+## What the real deck is, and why the old numbers were meaningless
+
+`EldraziDisplacerFlicker` is a **Living Wish toolbox combo deck**. 4x Living Wish maindeck fetches an
+8-card creature/land sideboard, and BOTH real win conditions live in that sideboard:
+
+| sink | cost | note |
+|---|---|---|
+| Essence Depleter | `{1}{C}`: opponent loses 1 life, you gain 1 | ~20 activations to kill |
+| Dimensional Infiltrator | `{1}{C}`: opponent exiles the top card of their library | ~53 to deck them |
+
+**Neither has `{T}` in its cost**, so neither is once-per-untap: they are pure mana sinks, exactly
+what an unbounded-mana deck wants. Both floor to `{C}` under Training Grounds. Contrast the old
+list's Shivan Gorge (`{2}{R}`, **`{T}`**), which needed a fresh untap for every one of ~20
+activations and rode the blink loop's untap priority.
+
+**Why the old list measured 7.20 with a hard floor at turn 5 and 14% never winning:** its intended
+fast kill was Stroke of Genius decking the opponent, and that was impossible TWICE OVER — the card
+was implemented as a no-op (`template: draw_x`, empty `parameters`), and the opponent has no library
+to deck (see [passive-opponent-no-library.md](passive-opponent-no-library.md)). Fixing either half
+alone would still have produced zero wins from that line. The user's estimate for the real deck is
+**4-5 avg win turn** with a mulligan profile.
+
+## PLAN (2026-09-02) — agreed with the user
+
+Dependency order. Step 0 is a PREREQUISITE for step 4, on the user's instruction: the standard
+analyzer must do the card work, and it cannot analyze cards it cannot see.
+
+0. **Coverage/analyzer must scan REACHABLE SIDEBOARD cards.** Today `analyze_deck.py
+   --coverage-only` scans the mainboard only: on this deck it reported `missing: [Living Wish,
+   Aether Hub]` and stayed SILENT on all four toolbox cards, including both win conditions. In a
+   wish deck the sideboard IS the deck, so this is a correctness bug.
+1. **Shared `OpponentHasLost(state)` predicate**, routed through BOTH worlds. The executor
+   centralises it (`CheckWinCondition` == `Opponent().HasLost()`), but the ROLLOUT has a dozen-plus
+   scattered `players[1-active].life <= 0` sites. Deck-out landing only in `HasLost()` would let the
+   executor see the win while the search never pursues it — the exact shape of the bug that made the
+   Gorge go-off execute as a kill ZERO times.
+   Gate deck-out on `library_dealt`: `players[1].library` is **empty rather than absent** today, so
+   a naive `library.empty()` test reads as an instant win in every game of every deck.
+2. **Fixed "realish" opponent library** (user: "a fixed deck of some sort... realish so hand
+   manipulation like discard can be relevant, but otherwise it doesn't matter too much"). 60 cards
+   from existing `cards.json` entries, ~24 lands (Forest/Island/Mountain/Plains exist; no Swamp),
+   7-card opening hand. Shuffled from a **DERIVED seed** — `Library::Shuffle` takes an explicit
+   seed, so player 0's stream is untouched and every existing deck should stay byte-identical,
+   meaning NO GT rebaseline. Prove that with smoke; do not assume it.
+3. **Deck-out win turn = OUR LAST TURN** (user: "because the [opponent] doesn't get any main
+   phases"). Their upkeep could technically act, but that is rare enough to be a faithful
+   simplification, not an oversight.
+4. **The five cards, VIA THE STANDARD ANALYZER** (user: "I recommend strongly that we use the
+   standard analyzer to handle it"): Living Wish, Aether Hub, Vexing Shusher, Essence Depleter,
+   Dimensional Infiltrator. Oracle text already fetched and verified from Scryfall (below).
+5. **Sideboard zone + wish mechanic.** Neither exists: the sideboard is parsed into
+   `Decklist::sideboard` and used ONLY to print a startup line; there is no wish support anywhere.
+6. **Go-off recognizer learns both `{C}` sinks.** It currently knows Gorge damage, Emiel counters
+   and an `{X}` draw — this deck runs ONE Gorge and no Stroke.
+7. **Regenerate the profile** (the committed one is fitted to the old list) and re-run the
+   measurement stages.
+
+### Verified oracle text (Scryfall, 2026-09-02)
+
+| card | cost | text |
+|---|---|---|
+| Living Wish | `{1}{G}` Sorcery | "You may reveal a creature or land card you own from outside the game and put it into your hand. Exile Living Wish." |
+| Aether Hub | Land | "When this land enters, you get {E} (an energy counter). / {T}: Add {C}. / {T}, Pay {E}: Add one mana of any color." |
+| Vexing Shusher | `{R/G}{R/G}` 2/2 | "This spell can't be countered. / {R/G}: Target spell can't be countered." |
+| Essence Depleter | `{2}{B}` 2/3 Devoid | "{1}{C}: Target opponent loses 1 life and you gain 1 life." |
+| Dimensional Infiltrator | `{1}{U}` 2/1 Devoid, Flash, Flying | "{1}{C}: Target opponent exiles the top card of their library. If it's a land card, you may return this creature to its owner's hand." |
+
+Infiltrator's optional bounce is **always declined**, and unlike Mariposa's rad mode that is
+provably dominant rather than a judgement call: it has no ETB to re-trigger, there is no removal to
+dodge, and returning it mid-combo just costs `{1}{U}` to recast.
+
+### In the working tree (builds clean, NOT yet measured)
+
+Essence Depleter's engine half: `drain_cost` / `drain_amount` / `drain_self_gain` params,
+`PermAbilityMode::Drain` + its resolver, and `SpendSurplusOnDrain` — which carries an inner loop
+where `SpendSurplusOnDamageSinks` does not, because a `{T}`-less sink should spend EVERYTHING at
+once rather than fire once per untap.
+
+---
+
+# (BELOW: the OLD list's analysis, retained for its engine findings)
 
 ## What the deck is
 

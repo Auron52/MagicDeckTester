@@ -19,6 +19,11 @@ enum class PermAbilityMode
     TapInvestigate,  // {cost}, {T}: Investigate                        (Conservatory / Kitchen)
     TapDraw,         // {cost}, {T}: Draw a card                        (Mariposa Military Base)
     SacDraw,         // {cost}, Sacrifice this: Draw a card             (Clue Token -- no {T})
+    // {cost}: Target opponent loses N life and you gain N life  (Essence Depleter)
+    // NO {T} and NO sacrifice, so unlike every mode above it is REPEATABLE without limit within a
+    // turn -- the activation count is bounded only by available mana. That is what makes it this
+    // deck's real kill: unbounded mana converts straight into life loss with no untap required.
+    Drain,
 };
 
 struct Permanent

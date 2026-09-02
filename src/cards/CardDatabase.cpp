@@ -1010,6 +1010,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tap_damage_each_opponent      = params.value("tap_damage_each_opponent", 0);
     if (params.contains("tap_draw_cost"))
         p.tap_draw_cost = ManaCostFromString(params["tap_draw_cost"].get<std::string>());
+    if (params.contains("drain_cost"))
+        p.drain_cost = ManaCostFromString(params["drain_cost"].get<std::string>());
+    p.drain_amount                  = params.value("drain_amount", 0);
+    p.drain_self_gain               = params.value("drain_self_gain", 0);
     p.tap_draw_cost_less_per_rad    = params.value("tap_draw_cost_less_per_rad", false);
     p.etb_optional_tapped_rad       = params.value("etb_optional_tapped_rad", 0);
     if (params.contains("tap_investigate_cost"))

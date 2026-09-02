@@ -8123,6 +8123,74 @@ inline ManaCost AddManaCosts(const ManaCost& a, const ManaCost& b)
     return c;
 }
 
+inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode);
+
+// Spend surplus mana on a REPEATABLE DRAIN (Essence Depleter: "{1}{C}: Target opponent loses 1 life
+// and you gain 1 life"). Returns the life drained.
+//
+// Structurally unlike SpendSurplusOnDamageSinks, and the difference is the point. A damage sink has
+// {T} in its cost, so it fires ONCE per untap and the blink loop's value is that it untaps the sink
+// again each pass. A drain has no {T}: it is a pure mana sink, so the right move is to spend
+// EVERYTHING at once. That is why this carries an inner loop where the damage version does not, and
+// why it is the only win condition here that does not care how many times the loop untaps anything.
+//
+// Termination, since "repeat while payable" against unbounded mana would not stop on its own:
+//   * stop once the opponent is dead -- draining a corpse is wasted mana and, worse, an unbounded
+//     no-op loop inside a rollout;
+//   * stop when a payment fails (the real bound in a finite-mana game);
+//   * a hard cap as a backstop, so a mis-modelled free activation cannot hang a rollout the way the
+//     draw-breakpoint recursion once did.
+// The keep_payable guard mirrors the damage version: never spend the loop's own entry price.
+inline int SpendSurplusOnDrain(GameState& state, int controller, const ManaCost& keep_payable,
+                               const std::function<bool(const ManaCost&)>& pay)
+{
+    int drained = 0;
+    std::vector<int> ids;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.drain_cost.has_value() && d->params.drain_amount > 0)
+        { ids.push_back(p.card.m_number); }
+    }
+    if (ids.empty()) { return 0; }
+    // Re-find by id before each use: pay() can tap sources AND remove permanents, so no index or
+    // reference survives a payment (the same hazard SpendSurplusOnDamageSinks documents).
+    constexpr int kMaxActivations = 512;
+    for (int guard = 0; guard < kMaxActivations; ++guard)
+    {
+        if (state.players[1 - controller].life <= 0) { break; }
+        bool any = false;
+        for (int id : ids)
+        {
+            if (state.players[1 - controller].life <= 0) { break; }
+            int i = -1;
+            for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+            {
+                if (state.battlefield[bi].card.m_number == id
+                    && state.battlefield[bi].controller_index == controller) { i = bi; break; }
+            }
+            if (i < 0) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[i].card);
+            if (!d || !d->params.drain_cost.has_value()) { continue; }
+            const ManaCost c = EffectiveActivationCost(state, controller, state.battlefield[i].card,
+                                                       d->params.drain_cost.value());
+            // Projection check first, so a decline leaves no half-spent pool behind.
+            {
+                ManaPool have = AvailableManaPool(state, nullptr);
+                have.AddPool(state.floating_mana);
+                if (!have.CanPay(AddManaCosts(c, keep_payable))) { continue; }
+            }
+            if (!pay(c)) { continue; }
+            ApplyPermAbility(state, controller, id, PermAbilityMode::Drain);
+            drained += d->params.drain_amount;
+            any = true;
+        }
+        if (!any) { break; }
+    }
+    return drained;
+}
+
 inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const ManaCost& keep_payable,
                                      const std::function<bool(const ManaCost&)>& pay)
 {
@@ -8283,6 +8351,26 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
         case PermAbilityMode::TapDraw:
             TrickDraw(state, controller, 1);
             break;
+        case PermAbilityMode::Drain:
+        {
+            // "Target opponent loses N life and you gain N life." The life LOSS is the clock; the
+            // gain is real but inert for a goldfish (nothing reads our life against a passive
+            // opponent). Set opponent_lost_life_this_turn like TapDamage so every consumer that
+            // watches for progress sees it -- life LOSS is not damage (no damage-prevention or
+            // lifelink hooks), which is why this does not route through the damage path.
+            const int amt = d->params.drain_amount;
+            state.players[1 - controller].life -= amt;
+            state.opponent_lost_life_this_turn = true;
+            if (d->params.drain_self_gain > 0)
+            { state.players[controller].life += d->params.drain_self_gain; }
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "damage",
+                              "\xF0\x9F\x94\xA5 " + src_name + ": opponent loses "
+                              + std::to_string(amt) + " life");
+            }
+            break;
+        }
         case PermAbilityMode::SacDraw:
         {
             // "Sacrifice this token" is part of the COST, so the permanent is gone before the draw.

@@ -1587,6 +1587,24 @@ struct CardParams
     std::optional<ManaCost> tap_damage_cost;
     int                     tap_damage_each_opponent = 0;
 
+    // Essence Depleter: "{1}{C}: Target opponent loses 1 life and you gain 1 life." nullopt = no
+    // such ability.
+    //
+    // STRUCTURALLY DIFFERENT FROM tap_damage_cost ABOVE, and the difference is the whole reason this
+    // deck wants it: there is **no {T} in the cost**, so it is not once-per-untap. It is a pure mana
+    // sink -- N activations cost N x the price and nothing else -- which makes it the ONLY win
+    // condition in the deck that converts unbounded mana into a kill without the blink loop having
+    // to untap anything. Shivan Gorge needs a fresh untap per activation and therefore rides the
+    // loop's untap priority; this just needs mana. Under Training Grounds the generic half is
+    // reduced and the {C} pip survives ({1}{C} -> {C}), the same arithmetic as Displacer's cost.
+    //
+    // Consequences that any consumer must respect: the activation COUNT is unbounded (so it needs a
+    // count axis, like ActivateBlink, not a single emission), and the lifegain half is real but
+    // inert for the clock against a passive opponent.
+    std::optional<ManaCost> drain_cost;
+    int                     drain_amount    = 0;   // life the opponent loses per activation
+    int                     drain_self_gain = 0;   // life we gain per activation
+
     // Mariposa Military Base: "{5}, {T}: Draw a card. This ability costs {1} less to activate for
     // each rad counter you have", plus "You may have this land enter tapped. If you do, you get two
     // rad counters." Rad counters are a PLAYER resource (Player::rad_counters), not a permanent's.
