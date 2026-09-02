@@ -11312,43 +11312,93 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
             }
 
-            // ---- "{cost}, {T}: <effect>" permanent abilities -------------------------------------
+            // ---- "{cost}[, {T}]: <effect>" permanent abilities -----------------------------------
             // Shivan Gorge's "deals 1 damage to each opponent", Conservatory/Kitchen's Investigate,
-            // Mariposa's Draw, and a Clue token's tap-free "Sacrifice this: Draw a card". One Kind
-            // with an AbilityMode because the wiring is identical for all four: check the source is
-            // available, pay, apply. Every tap mode requires an UNTAPPED source ({T} is part of the
-            // cost); SacDraw does not (a Clue made this turn can be cracked this turn -- artifacts
-            // have no summoning sickness and there is no tap symbol).
+            // Mariposa's Draw, a Clue token's "Sacrifice this: Draw a card", and the two Eldrazi
+            // mana sinks (Essence Depleter's drain, Dimensional Infiltrator's library exile). One
+            // Kind with an AbilityMode because the wiring is identical for all six: check the source
+            // is available, pay, apply.
+            //
+            // TAPPING vs NOT is the axis that matters here, and PermAbilityTaps is the single source
+            // of truth for it (Permanent.h). A tap mode needs an UNTAPPED, untappable source ({T} is
+            // part of the cost); SacDraw, Drain and ExileTop do not -- a Clue made this turn can be
+            // cracked this turn, and a just-wished Essence Depleter can drain the turn it lands and
+            // on a turn it attacks (CR 302.6 restricts {T} abilities and attacking; neither applies).
+            //
+            // The same distinction makes the two sinks REPEATABLE within a turn -- nothing about
+            // them is once-per-untap, so the count is bounded only by mana. That is why they carry a
+            // K axis and the four older modes do not.
             {
-                struct ModeSpec { Action::AbilityMode mode; const std::optional<ManaCost>* cost; bool taps; };
+                struct ModeSpec { Action::AbilityMode mode; const std::optional<ManaCost>* cost; };
                 const ModeSpec modes[] = {
-                    { Action::AbilityMode::TapDamage,      &sd->params.tap_damage_cost,      true  },
-                    { Action::AbilityMode::TapInvestigate, &sd->params.tap_investigate_cost, true  },
-                    { Action::AbilityMode::TapDraw,        &sd->params.tap_draw_cost,        true  },
-                    { Action::AbilityMode::SacDraw,        &sd->params.sac_draw_cost,        false },
+                    { Action::AbilityMode::TapDamage,      &sd->params.tap_damage_cost      },
+                    { Action::AbilityMode::TapInvestigate, &sd->params.tap_investigate_cost },
+                    { Action::AbilityMode::TapDraw,        &sd->params.tap_draw_cost        },
+                    { Action::AbilityMode::SacDraw,        &sd->params.sac_draw_cost        },
+                    { Action::AbilityMode::Drain,          &sd->params.drain_cost           },
+                    { Action::AbilityMode::ExileTop,       &sd->params.exile_opponent_top_cost },
                 };
                 for (const ModeSpec& m : modes)
                 {
                     if (!m.cost->has_value()) { continue; }
-                    if (m.taps && (src.tapped || !src.CanTap())) { continue; }
-                    Action a;
-                    a.kind           = Action::Kind::ActivatePermAbility;
-                    a.card_name      = src.card.m_name;
-                    a.def            = sd;
-                    a.hand_index     = -1;
-                    a.sac_source_id  = src.card.m_number;
-                    a.ability_mode   = m.mode;
-                    a.cost           = EffectiveActivationCost(state, state.active_player_index,
-                                                               src.card, m.cost->value());
+                    const bool taps = PermAbilityTaps(m.mode);
+                    if (taps && (src.tapped || !src.CanTap())) { continue; }
+                    ManaCost cost = EffectiveActivationCost(state, state.active_player_index,
+                                                            src.card, m.cost->value());
                     if (m.mode == Action::AbilityMode::TapDraw && sd->params.tap_draw_cost_less_per_rad)
-                    { a.cost.generic = std::max(0, a.cost.generic
-                                                   - state.players[state.active_player_index].rad_counters); }
-                    a.eval           = (m.mode == Action::AbilityMode::TapDamage)
-                                     ? sd->params.tap_damage_each_opponent * 2 : 1;
-                    a.direct_damage  = (m.mode == Action::AbilityMode::TapDamage)
-                                     ? sd->params.tap_damage_each_opponent : 0;
-                    a.is_noncreature = true;
-                    actions.push_back(std::move(a));
+                    { cost.generic = std::max(0, cost.generic
+                                                 - state.players[state.active_player_index].rad_counters); }
+
+                    // The repeatable mana sinks get a searched activation COUNT; every other mode is
+                    // once-per-untap and stays a single emission. Folded to {1} under human play /
+                    // unpruned for the same reason the blink count is: the main phase re-prompts
+                    // after each activation, so "drain three times" is reached by choosing it three
+                    // times, which is strictly more expressive than a fixed menu -- and 53 exile
+                    // variants would be a plan explosion on the deck that already OOM-killed the box.
+                    std::vector<int> counts{ 1 };
+                    if (!taps && m.mode != Action::AbilityMode::SacDraw)
+                    {
+                        const bool fold_fanout =
+                            HumanPlayActive() || DecisionUnpruned(UnprunedGate::BlinkTarget);
+                        if (!fold_fanout)
+                        {
+                            const int per_mv = std::max(1, cost.ManaValue());
+                            ManaPool have = AvailableManaPool(state);
+                            have.AddPool(state.floating_mana);
+                            counts = ResolveProvider(state).ManaSinkActivationCounts(
+                                state, src, m.mode,
+                                static_cast<int>(have.Total()) / per_mv);
+                        }
+                    }
+                    for (int k : counts)
+                    {
+                        if (k <= 0) { continue; }
+                        Action a;
+                        a.kind           = Action::Kind::ActivatePermAbility;
+                        a.card_name      = src.card.m_name;
+                        a.def            = sd;
+                        a.hand_index     = -1;
+                        a.sac_source_id  = src.card.m_number;
+                        a.ability_mode   = m.mode;
+                        a.chosen_x       = k;
+                        // ONE activation on the subset's books, like ActivateBlink: the rest are
+                        // paid inside the apply loop out of whatever the turn actually produces.
+                        a.cost           = cost;
+                        a.eval           = (m.mode == Action::AbilityMode::TapDamage)
+                                         ? sd->params.tap_damage_each_opponent * 2
+                                         : (m.mode == Action::AbilityMode::Drain)
+                                         ? sd->params.drain_amount * 2 * k : k;
+                        // Life LOSS is indistinguishable from damage to the win projection -- this
+                        // is "life the opponent loses this turn", which is what direct_damage means.
+                        // ExileTop deliberately contributes 0: its kill is a DECK-OUT, and claiming
+                        // damage for it would corrupt every consumer that reads a damage rate.
+                        a.direct_damage  = (m.mode == Action::AbilityMode::TapDamage)
+                                         ? sd->params.tap_damage_each_opponent
+                                         : (m.mode == Action::AbilityMode::Drain)
+                                         ? sd->params.drain_amount * k : 0;
+                        a.is_noncreature = true;
+                        actions.push_back(std::move(a));
+                    }
                 }
             }
 
@@ -14614,6 +14664,14 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             extra_lethal = provider.ExtraLethalDamage(state, casting);
         }
         bool wins = (projected_atk + direct_dmg + extra_lethal) >= state.Opponent().life;
+        // A NON-DAMAGE win this turn (Dimensional Infiltrator decking them out). Rides the same
+        // has_extra_lethal gate, so a deck with no such model never calls it and stays
+        // byte-identical. This is a separate channel on purpose: a deck-out is a different loss
+        // condition, and expressing it as a huge damage number would corrupt every consumer below
+        // that reads the projection as a damage rate (HoldSacLandBurn, the Irencrag waste guard,
+        // the ritual-payoff guard).
+        if (!wins && has_extra_lethal && provider.ProjectsAlternateWin(state, casting))
+        { wins = true; }
         // MTG_IRENCRAG_WASTE, deferred from the restrictor loop: drop a subset that casts the cast
         // restrictor with nothing after it to spend its float -- unless the plan WINS, which is the
         // USER's stated exception ("do 3 for lethal if no Crackle is present").
@@ -19260,7 +19318,31 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 const bool taps = PermAbilityTaps(a.ability_mode);   // SacDraw/Drain/ExileTop have no {T}
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
                 if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
-                { ApplyPermAbility(state, state.active_player_index, a.sac_source_id, a.ability_mode); }
+                {
+                    ApplyPermAbility(state, state.active_player_index, a.sac_source_id, a.ability_mode);
+                    // Repeatable {T}-less sinks: the plan asked for K activations and only the FIRST
+                    // is on the subset's books, so pay the rest here out of what the turn actually
+                    // produced. Re-cost every pass (a Training Grounds can land mid-plan) and stop
+                    // at the first unpayable one rather than dropping the whole activation -- the
+                    // ApplyBlinkLoop discipline. Stop early once they are dead or decked: further
+                    // activations are pure waste and the count is only an upper bound.
+                    for (int rep = 1; rep < a.chosen_x && !taps; ++rep)
+                    {
+                        if (OpponentHasLost(state)) { break; }
+                        if (!PermAbilitySourceLive(state, state.active_player_index,
+                                                   a.sac_source_id, a.ability_mode)) { break; }
+                        const CardDefinition* rd = a.def;
+                        const std::optional<ManaCost>* rc =
+                            (a.ability_mode == Action::AbilityMode::Drain)
+                              ? &rd->params.drain_cost : &rd->params.exile_opponent_top_cost;
+                        if (!rc->has_value()) { break; }
+                        const ManaCost step = EffectiveActivationCost(
+                            state, state.active_player_index, rd->card, rc->value());
+                        if (!TapForCostDirect(state, step, /*for_creature=*/false)) { break; }
+                        ApplyPermAbility(state, state.active_player_index, a.sac_source_id,
+                                         a.ability_mode);
+                    }
+                }
                 else if (taps)
                 { SetPermTapped(state, state.active_player_index, a.sac_source_id, false); }
             }
@@ -22099,6 +22181,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
+        // A NON-DAMAGE win this turn (a deck-out). Board-level, so it needs no `casting` list and
+        // costs one virtual call behind the has_extra_lethal gate; false for every deck without an
+        // alternate-win model -> byte-identical. NOTE this site deliberately does NOT add
+        // ExtraLethalDamage, which its twin in Solve does -- that asymmetry is pre-existing and is
+        // its own question; widening it here would change other decks.
+        if (!wins && has_extra_lethal
+            && ResolveProvider(state).ProjectsAlternateWin(state, {})) { wins = true; }
         // MTG_IRENCRAG_WASTE, deferred from the restrictor loop (lethal-exempt) -- see the twin.
         if (iren_waste && !wins)
         {
@@ -22756,11 +22845,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     msf.push_back("BLINK#" + std::to_string(act.sac_source_id)
                                   + ">" + std::to_string(act.sac_victim_id)
                                   + "x" + std::to_string(act.chosen_x)); break;
-                // Permanent ability: which source AND which mode (a Conservatory could in principle
-                // offer more than one; a Clue and a Gorge are different sources anyway).
+                // Permanent ability: which source, which mode (a Conservatory could in principle
+                // offer more than one; a Clue and a Gorge are different sources anyway) AND the
+                // activation COUNT. K is load-bearing for the two repeatable {T}-less sinks for
+                // exactly the reason it is on ActivateBlink above: without it the dedup collapses a
+                // 20-activation kill into a single value drain. It is a no-op for the four
+                // once-per-untap modes, which always emit chosen_x == 1.
                 case Action::Kind::ActivatePermAbility:
                     msf.push_back("PABIL#" + std::to_string(act.sac_source_id)
-                                  + "m" + std::to_string(static_cast<int>(act.ability_mode)));
+                                  + "m" + std::to_string(static_cast<int>(act.ability_mode))
+                                  + "x" + std::to_string(act.chosen_x));
                     break;
             }
         }

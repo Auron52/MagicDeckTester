@@ -1,0 +1,73 @@
+{
+  "_comment": [
+    "Dimensional Infiltrator converts mana into a DECK-OUT: '{1}{C}: Target opponent exiles the",
+    "top card of their library.' No {T} and no sacrifice, so it is repeatable within one turn and",
+    "bounded only by mana -- which is what makes it a win condition rather than a slow drip.",
+    "",
+    "Three cards left in their library and six mana of which four are colourless: exactly three",
+    "activations, so the library empties THIS turn and the win turn is this turn (their draw at the",
+    "end of it is the loss, CR 104.3c; the user's rule is that a decked opponent's win turn is OUR",
+    "last turn, since they never get a main phase).",
+    "",
+    "This exercises the whole chain end to end -- the ModeSpec enumeration, the searched activation",
+    "COUNT axis, the plan-signature fold that keeps three activations from deduping down to one,",
+    "the apply loop that pays activations 2 and 3 out of the turn's real mana, opponentdeck's mill",
+    "primitive, and the deck-out win check. The opponent is at FULL life, so nothing here can be",
+    "confused with a damage kill: they end on 18 life, i.e. the 2 the Infiltrator's body hit for in combat, nowhere near lethal. The win is the empty library.",
+    "",
+    "Verified DISCRIMINATING: at opponent_library_size 4 (one more than the mana can reach) the",
+    "engine correctly finds no win."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 3,
+  "battlefield": [
+    {
+      "name": "Dimensional Infiltrator",
+      "controller": 0,
+      "tapped": false,
+      "sick": true
+    },
+    {
+      "name": "Brushland",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Brushland",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 6,
+  "expect_win_turn": 4,
+  "expect_opponent_life": 18
+}

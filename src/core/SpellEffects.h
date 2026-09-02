@@ -10,6 +10,7 @@
 #include "GameState.h"
 #include "ManaPool.h"
 #include "GameLogger.h"                // g_reveal_logger: capture scry/dig reveals (real play only)
+#include "OpponentDeck.h"               // TakeFromTop: THE mill primitive (sets opponent_decked)
 #include "../cards/CardDatabase.h"
 #include "../ai/DecisionProviders.h"   // ResolveProvider: route deck decisions through the provider
 #include "../ai/EngineFlags.h"         // FrontlineTriggerFirst: shared executor/rollout flag reader
@@ -8314,6 +8315,11 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::TapInvestigate: return "investigate";
         case PermAbilityMode::TapDraw:        return "draw a card";
         case PermAbilityMode::SacDraw:        return "sacrifice: draw a card";
+        // Without these two the claude-play plan menu and the executor's LogAbility both print the
+        // bare "activate" default -- a human (or the claude-play oracle) would be asked to approve
+        // an unnamed ability on the deck's two win conditions.
+        case PermAbilityMode::Drain:          return "target opponent loses life";
+        case PermAbilityMode::ExileTop:       return "opponent exiles their top card";
         default:                              return "activate";
     }
 }
@@ -8373,6 +8379,39 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                               "\xF0\x9F\x94\xA5 " + src_name + ": opponent loses "
                               + std::to_string(amt) + " life");
             }
+            break;
+        }
+        case PermAbilityMode::ExileTop:
+        {
+            // "Target opponent exiles the top card of their library. If it's a land card, you may
+            // return this creature to its owner's hand." The exile goes through the shared mill
+            // primitive so the deck-out is recognised the instant the zone empties (see
+            // opponentdeck::TakeFromTop) -- putting that logic here instead would leave the next
+            // mill card to rediscover it.
+            const Card* top = state.players[1 - controller].library.size() > 0
+                            ? &state.players[1 - controller].library.front() : nullptr;
+            // LAND-ness comes from the DEFINITION. A card outside the battlefield carries empty
+            // type masks, so `top->IsLand()` is false for every library card -- the same trap
+            // ApplyRadMill documents. Read before the take, since the take invalidates the pointer.
+            bool was_land = false;
+            if (top != nullptr)
+            {
+                const CardDefinition* td = CardDatabase::Instance().LookupCached(*top);
+                was_land = (td != nullptr) && td->card.IsLand();
+            }
+            const int took = opponentdeck::TakeFromTop(state, 1);
+            if (took > 0 && g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "exile",
+                              "\xF0\x9F\x93\x9A " + src_name + ": opponent exiles their top card"
+                              + std::string(was_land ? " (a land -- return declined)" : ""));
+            }
+            // The optional return is ALWAYS DECLINED, and `was_land` exists only to say so in the
+            // log. Declining is dominant in every line this engine can realise, and decisively so
+            // here: bouncing would remove the ability from the battlefield mid-loop on the ~40% of
+            // activations that hit a land, which is the difference between the deck-out existing
+            // and not. The param is read so the clause is visibly modelled rather than dropped.
+            (void)d->params.exile_opponent_top_may_bounce_on_land;
             break;
         }
         case PermAbilityMode::SacDraw:

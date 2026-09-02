@@ -1140,12 +1140,26 @@ public:
     std::vector<int> BlinkTargetCandidates(const GameState& s,
                                            const Permanent& source) const override;
     std::vector<int> LandAuraHostCandidates(const GameState& s, int controller) const override;
+    std::vector<int> ManaSinkActivationCounts(const GameState& s, const Permanent& source,
+                                              PermAbilityMode mode,
+                                              int max_affordable) const override;
 
-    // The go-off recognizer: with the loop assembled and a SINK to cash the mana on
-    // (Shivan Gorge damage, or an {X} draw), the kill is arithmetic, not search.
+    // The go-off recognizer: with the loop assembled and a SINK to cash the mana on (Shivan Gorge
+    // damage, an {X} draw, or either of the two {T}-less Eldrazi sinks), the kill is arithmetic,
+    // not search. ProjectsAlternateWin is the Infiltrator's half -- a DECK-OUT, which is a
+    // different loss condition rather than more damage.
     bool HasExtraLethalModel() const override;
     int  ExtraLethalDamage(const GameState& s,
                            const std::vector<const CardDefinition*>& casting) const override;
+    bool ProjectsAlternateWin(const GameState& s,
+                              const std::vector<const CardDefinition*>& casting) const override;
+
+    // The wish pool is EIGHT cards and the default width is SIX, which would leave ranks 6-7 --
+    // Essence Depleter and Dimensional Infiltrator, i.e. BOTH win conditions -- unreachable by the
+    // search at every depth, in every game, forever. Candidates come back in zone order, and for a
+    // sideboard that is decklist order, so it is deterministic rather than merely likely. This is a
+    // COVERAGE fix, not a heuristic one.
+    int  TutorSearchWidth() const override { return 8; }
 
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
 };

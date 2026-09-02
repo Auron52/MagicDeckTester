@@ -13128,6 +13128,13 @@ struct FlickerLoop
     int  net           = 0;   // refund - cost_mv; > 0 means unbounded
     int  gorge_cost_mv = 0;   // mana per Shivan Gorge activation (0 = no Gorge available)
     int  gorge_dmg     = 0;   // damage per Gorge activation
+    // The two REPEATABLE {T}-less mana sinks (Essence Depleter's drain, Dimensional Infiltrator's
+    // library exile). Structurally unlike the Gorge and that is the whole point: the Gorge needs a
+    // fresh UNTAP per activation, so it rides the loop's untap priority and its damage is capped by
+    // iterations; these need only MANA, so one iteration's surplus can buy many activations.
+    int  drain_cost_mv = 0;   // mana per drain activation (0 = no drain sink on board)
+    int  drain_amount  = 0;   // life the opponent loses per drain activation
+    int  exile_cost_mv = 0;   // mana per library-exile activation (0 = no exile sink on board)
 };
 
 // Sum of the controller's TOP-N land yields -- the same order EtbUntapLands untaps in and the same
@@ -13192,6 +13199,29 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
         { best.gorge_cost_mv = mv; best.gorge_dmg = d->params.tap_damage_each_opponent; }
     }
 
+    // The cheapest live REPEATABLE sinks, priced the same way. A tapped or summoning-sick body is
+    // fine here -- unlike the Gorge these have no {T} in the cost (PermAbilityTaps), which is
+    // exactly what makes them the deck's real kills.
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
+        {
+            const int mv = EffectiveActivationCost(s, controller, p.card,
+                                                   d->params.drain_cost.value()).ManaValue();
+            if (best.drain_amount == 0 || mv < best.drain_cost_mv)
+            { best.drain_cost_mv = mv; best.drain_amount = d->params.drain_amount; }
+        }
+        if (d->params.exile_opponent_top_cost.has_value())
+        {
+            const int mv = EffectiveActivationCost(s, controller, p.card,
+                                                   d->params.exile_opponent_top_cost.value()).ManaValue();
+            if (best.exile_cost_mv == 0 || mv < best.exile_cost_mv) { best.exile_cost_mv = mv; }
+        }
+    }
+
     for (const Permanent& src : s.battlefield)
     {
         if (src.controller_index != controller) { continue; }
@@ -13232,7 +13262,19 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
 // With NEITHER, extra mana buys nothing a goldfish can spend and the answer is 0 -- fall back to
 // the generic small counts. That case matters: it is most of the game, and an un-cashable 40-blink
 // loop was the single most expensive thing the first version of this heuristic did.
-constexpr int kFlickerMaxIterations = 30;
+// 60, not 30, and the reason is the deck-out. Every other route computes an EXACT requirement and
+// clamps, so raising the ceiling changes nothing for them -- it only matters where the exact
+// requirement genuinely exceeds 30, which is emptying a 53-card library at {1}{C} a card: 106 mana,
+// so ~36 iterations at net 3. A cap of 30 there does not play the deck badly, it makes the kill
+// unreachable, which is the same failure as a tutor width that cannot see the win condition.
+constexpr int kFlickerMaxIterations = 60;
+
+// Iterations needed to bank `want_mana` of surplus, given the loop's per-iteration net.
+static int FlickerIterationsForMana(int want_mana, int net)
+{
+    if (net <= 0 || want_mana <= 0) { return 0; }
+    return std::clamp((want_mana + net - 1) / net, 1, kFlickerMaxIterations);
+}
 
 int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
 {
@@ -13244,6 +13286,29 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         // The loop must fund the sink as well as itself, or the damage never fires.
         if (loop.refund > loop.cost_mv + loop.gorge_cost_mv)
         { return std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, kFlickerMaxIterations); }
+    }
+
+    // THE TWO {T}-LESS SINKS. Sized by MANA rather than by iterations, which is the structural
+    // difference from the Gorge above: a Gorge activation needs a fresh untap, so it takes one
+    // iteration each, while these take only mana and one fat iteration can buy several. Both are
+    // reachable only off Living Wish, and without these two branches the recognizer returns 0 on a
+    // board holding either of them and no Gorge -- so BlinkActivationCounts never offers a go-off
+    // count and the deck's kill is unreachable at every depth. The real decklist runs ONE Gorge and
+    // no {X} draw at all, so that is the common case, not a corner.
+    if (loop.drain_amount > 0 && loop.drain_cost_mv >= 0)
+    {
+        const int activations = (life + loop.drain_amount - 1) / loop.drain_amount;
+        const int iters = FlickerIterationsForMana(activations * std::max(1, loop.drain_cost_mv),
+                                                   loop.net);
+        if (iters > 0) { return iters; }
+    }
+    if (loop.exile_cost_mv > 0 && s.opponent_library_dealt)
+    {
+        // One activation per card left in their library. Not their whole deck: the count shrinks as
+        // the game goes on (they draw one at the end of each of our turns) and as we exile.
+        const int cards = static_cast<int>(s.players[1 - s.active_player_index].library.size());
+        const int iters = FlickerIterationsForMana(cards * loop.exile_cost_mv, loop.net);
+        if (iters > 0) { return iters; }
     }
 
     // NO COUNTER-WATCHER ROUTE. An earlier version of this heuristic sized the loop to "enough
@@ -13360,6 +13425,47 @@ std::vector<int> EldraziFlickerProvider::BlinkActivationCounts(const GameState& 
     return out;   // n == 0 (nothing to cash the mana on) falls through to the generic counts
 }
 
+// How many times to fire a {T}-less mana sink. Generic caps at 3, which is right for a value
+// ability and exactly wrong for these two: they ARE the kill, and the kill needs ~20 drains or up
+// to 53 exiles. Same shape as the blink counts above -- generic small counts so the sink stays
+// available as an ordinary play, plus ONE proposed "finish it" count when the board can pay for it.
+//
+// The finishing count is an upper bound, not a promise: the apply loop re-prices every activation
+// and stops at the first unpayable one, so proposing 53 on a board that can only afford 9 costs a
+// mis-ranked plan at worst, never a phantom win.
+std::vector<int> EldraziFlickerProvider::ManaSinkActivationCounts(const GameState& s,
+                                                                 const Permanent& source,
+                                                                 PermAbilityMode mode,
+                                                                 int max_affordable) const
+{
+    std::vector<int> out;
+    const int kmax = std::min(3, max_affordable);
+    for (int k = 1; k <= kmax; ++k) { out.push_back(k); }
+    if (!s_edf_goff) { return out; }
+
+    const int me = source.controller_index;
+    int finish = 0;
+    if (mode == PermAbilityMode::Drain)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
+        const int amt = (d && d->params.drain_amount > 0) ? d->params.drain_amount : 0;
+        if (amt > 0) { finish = (std::max(1, s.players[1 - me].life) + amt - 1) / amt; }
+    }
+    else if (mode == PermAbilityMode::ExileTop && s.opponent_library_dealt)
+    {
+        finish = static_cast<int>(s.players[1 - me].library.size());
+    }
+    // Only worth proposing if a recognised, self-funding loop can actually bank the mana -- absent
+    // one the count is bounded by the pool and the generic 1..3 already covers what is payable.
+    if (finish > kmax)
+    {
+        const FlickerLoop loop = RecogniseFlickerLoop(s, me);
+        if (loop.ok && loop.net > 0) { out.push_back(finish); }
+        else if (finish <= max_affordable) { out.push_back(finish); }
+    }
+    return out;
+}
+
 // WHICH land an "Enchant land" Aura goes on. The bonus is the AURA's, in the aura's own colour, and
 // it is collected whenever the host is tapped -- so on a board whose lands neither die nor go
 // unused, the host barely matters. Two things do, and both are captured by the ordering below:
@@ -13422,19 +13528,73 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
     if (!s_edf_goff) { return 0; }
     const int me = s.active_player_index;
     const FlickerLoop loop = RecogniseFlickerLoop(s, me);
-    if (!loop.ok || loop.gorge_dmg <= 0) { return 0; }
+    if (!loop.ok) { return 0; }
 
-    // The loop must fund BOTH halves of an iteration: the activation and the Gorge. Otherwise the
-    // mana grows but the damage never fires, and claiming lethal off it would be a pure fiction.
-    if (loop.refund <= loop.cost_mv + loop.gorge_cost_mv) { return 0; }
-
-    // It must also be STARTABLE from what is on the board right now -- one full iteration's worth.
     ManaPool have = AvailableManaPool(s);
     have.AddPool(s.floating_mana);
-    if (have.Total() < loop.cost_mv + loop.gorge_cost_mv) { return 0; }
 
-    const long long dmg = static_cast<long long>(kFlickerMaxIterations) * loop.gorge_dmg;
-    return dmg > 1000000 ? 1000000 : static_cast<int>(dmg);
+    if (loop.gorge_dmg > 0)
+    {
+        // The loop must fund BOTH halves of an iteration: the activation and the Gorge. Otherwise
+        // the mana grows but the damage never fires, and claiming lethal off it would be fiction.
+        // It must also be STARTABLE from the board right now -- one full iteration's worth.
+        if (loop.refund > loop.cost_mv + loop.gorge_cost_mv
+            && have.Total() >= static_cast<unsigned>(loop.cost_mv + loop.gorge_cost_mv))
+        {
+            const long long dmg = static_cast<long long>(kFlickerMaxIterations) * loop.gorge_dmg;
+            return dmg > 1000000 ? 1000000 : static_cast<int>(dmg);
+        }
+    }
+
+    // ESSENCE DEPLETER. Life LOSS, so it belongs in this channel exactly as the Gorge's damage
+    // does -- "life the opponent loses this turn" is what the win projection reads, and the
+    // distinction between loss and damage is invisible to it. The arithmetic differs from the
+    // Gorge's in one way that matters: a drain needs no fresh untap, so one iteration's surplus
+    // buys `net / drain_cost` activations rather than exactly one.
+    if (loop.drain_amount > 0)
+    {
+        const int per = std::max(1, loop.drain_cost_mv);
+        if (loop.net > 0 && have.Total() >= static_cast<unsigned>(loop.cost_mv + per))
+        {
+            const long long acts = (static_cast<long long>(kFlickerMaxIterations) * loop.net) / per;
+            const long long dmg  = acts * loop.drain_amount;
+            return dmg > 1000000 ? 1000000 : static_cast<int>(dmg);
+        }
+    }
+
+    // DIMENSIONAL INFILTRATOR is deliberately NOT projected here. Its kill is a DECK-OUT, and
+    // returning a large number from a function named ExtraLethalDamage would be a lie that
+    // propagates into every consumer reading a damage rate. It is recognised instead by
+    // ProjectsAlternateWin below, which is a boolean about a different loss condition.
+    return 0;
+}
+
+// Can this board deck the opponent out THIS turn? The Infiltrator's answer to the question
+// ExtraLethalDamage cannot express.
+//
+// Same conservative contract as the damage projection, and the same reason it can only ever help:
+// this is an input to the win PROJECTION, never a win. Execution stays the arbiter -- the exiles
+// are realised by the apply loop actually paying for them, and the go-off short-circuits
+// re-simulate with ApplyPlanDirect before believing a lethal. An over-claim costs a mis-ranked
+// plan; it cannot report a win the game did not produce.
+bool EldraziFlickerProvider::ProjectsAlternateWin(
+    const GameState& s, const std::vector<const CardDefinition*>& casting) const
+{
+    (void)casting;
+    if (!s_edf_goff || !s.opponent_library_dealt || s.opponent_decked) { return false; }
+    const FlickerLoop loop = RecogniseFlickerLoop(s, s.active_player_index);
+    if (!loop.ok || loop.exile_cost_mv <= 0 || loop.net <= 0) { return false; }
+
+    // Startable from the board right now: one iteration plus one exile.
+    ManaPool have = AvailableManaPool(s);
+    have.AddPool(s.floating_mana);
+    if (have.Total() < static_cast<unsigned>(loop.cost_mv + loop.exile_cost_mv)) { return false; }
+
+    // And the loop must actually be able to bank enough mana within the iteration ceiling to empty
+    // the zone. Below that it is a clock, not a kill, and the ordinary search can price it.
+    const long long cards = static_cast<long long>(s.players[1 - s.active_player_index].library.size());
+    const long long need  = cards * loop.exile_cost_mv;
+    return need <= static_cast<long long>(kFlickerMaxIterations) * loop.net;
 }
 
 // Deploy the combo before anything else: an outlet or a payload on the battlefield is what every

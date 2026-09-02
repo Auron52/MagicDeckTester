@@ -394,6 +394,19 @@ public:
     virtual int  ExtraLethalDamage(const GameState& s,
                                    const std::vector<const CardDefinition*>& casting) const = 0;
 
+    // ProjectsAlternateWin -- does this board win THIS turn by a loss condition that is NOT damage?
+    // Today that means decking the opponent out (CR 104.3c), which no amount of ExtraLethalDamage
+    // can express: returning a huge number from a function named "damage" to signal a deck-out
+    // would be a lie propagating into every consumer that reads a damage rate.
+    //
+    // Same contract as ExtraLethalDamage: an input to the win PROJECTION, never a win. Execution
+    // stays the arbiter, so an over-claim costs a mis-ranked plan and cannot report a win the game
+    // did not produce. Gated behind HasExtraLethalModel() like the addend, so a deck with no such
+    // model pays nothing and stays byte-identical. Generic = false.
+    virtual bool ProjectsAlternateWin(const GameState& s,
+                                      const std::vector<const CardDefinition*>& casting) const
+    { (void)s; (void)casting; return false; }
+
     // ArchetypeCardValue -- archetype-specific per-card VALUE for the candidate-ordering heuristic
     // (TurnSolver's EvalCard), for cards whose worth is a combo / clairvoyant assumption rather
     // than a generic single-card estimate. The Treasure Hunt provider values a Treasure Hunt
@@ -652,6 +665,27 @@ public:
                                                   const Permanent& target, int max_affordable) const
     {
         (void)s; (void)source; (void)target;
+        std::vector<int> out;
+        const int kmax = std::min(3, max_affordable);
+        for (int k = 1; k <= kmax; ++k) { out.push_back(k); }
+        return out;
+    }
+
+    // ManaSinkActivationCounts -- how many times to activate a REPEATABLE, {T}-less permanent
+    // ability ("{1}{C}: target opponent loses 1 life" / "... exiles the top card of their library")
+    // on `source` this turn. Exactly the BlinkActivationCounts contract, and it exists for exactly
+    // the same reason: these two are the EldraziDisplacerFlicker deck's win conditions, and both
+    // are cashed by an unbounded blink loop, so a generic cap of 3 would not merely play the deck
+    // badly -- it would make the kill invisible to the search (the kill needs ~20 drains or ~53
+    // exiles). The provider proposes the go-off count; the search picks.
+    //
+    // Generic returns 1..min(3, max_affordable), the same hard bound every other K-count activation
+    // carries. `max_affordable` is what the CURRENT pool could pay for outright, ignoring any
+    // refund, so it is a floor on a self-funding loop and never a ceiling.
+    virtual std::vector<int> ManaSinkActivationCounts(const GameState& s, const Permanent& source,
+                                                     PermAbilityMode mode, int max_affordable) const
+    {
+        (void)s; (void)source; (void)mode;
         std::vector<int> out;
         const int kmax = std::min(3, max_affordable);
         for (int k = 1; k <= kmax; ++k) { out.push_back(k); }

@@ -1,0 +1,79 @@
+{
+  "_comment": [
+    "Essence Depleter converts mana into life loss: '{1}{C}: Target opponent loses 1 life and you",
+    "gain 1 life.' No {T} and no sacrifice, so it is repeatable within one turn -- the structural",
+    "difference from Shivan Gorge, which needs a fresh untap for every single activation.",
+    "",
+    "Opponent at 4, and eight mana of which four are colourless: four activations exactly, so the",
+    "kill lands this turn. The Depleter is left SUMMONING SICK on purpose (it also cannot attack",
+    "here) -- CR 302.6 restricts {T} abilities and attacking, and this ability has neither, so a",
+    "just-wished Depleter draining the turn it arrives is legal. That is the exact case the old",
+    "`taps = mode != SacDraw` shortcut would have silently forbidden.",
+    "",
+    "our life ends at 23: the drains' lifegain rider, net of one point of Brushland pain paid for a",
+    "coloured tap. That rider is inert for the clock, and asserting it is the only way the harness",
+    "can see it applied at all.",
+    "see it at all."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 4,
+  "battlefield": [
+    {
+      "name": "Essence Depleter",
+      "controller": 0,
+      "tapped": true,
+      "sick": true
+    },
+    {
+      "name": "Brushland",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Brushland",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Brushland",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Brushland",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 6,
+  "expect_win_turn": 4,
+  "expect_active_life": 23
+}
