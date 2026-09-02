@@ -34,29 +34,38 @@ alone would still have produced zero wins from that line. The user's estimate fo
 Dependency order. Step 0 is a PREREQUISITE for step 4, on the user's instruction: the standard
 analyzer must do the card work, and it cannot analyze cards it cannot see.
 
-0. **Coverage/analyzer must scan REACHABLE SIDEBOARD cards.** Today `analyze_deck.py
-   --coverage-only` scans the mainboard only: on this deck it reported `missing: [Living Wish,
+0. **DONE** (`2055631a`) — **Coverage/analyzer scans REACHABLE SIDEBOARD cards.** `analyze_deck.py
+   --coverage-only` scanned the mainboard only: on this deck it reported `missing: [Living Wish,
    Aether Hub]` and stayed SILENT on all four toolbox cards, including both win conditions. In a
-   wish deck the sideboard IS the deck, so this is a correctness bug.
-1. **Shared `OpponentHasLost(state)` predicate**, routed through BOTH worlds. The executor
-   centralises it (`CheckWinCondition` == `Opponent().HasLost()`), but the ROLLOUT has a dozen-plus
-   scattered `players[1-active].life <= 0` sites. Deck-out landing only in `HasLost()` would let the
-   executor see the win while the search never pursues it — the exact shape of the bug that made the
-   Gorge go-off execute as a kill ZERO times.
-   Gate deck-out on `library_dealt`: `players[1].library` is **empty rather than absent** today, so
-   a naive `library.empty()` test reads as an instant win in every game of every deck.
-2. **Fixed "realish" opponent library** (user: "a fixed deck of some sort... realish so hand
-   manipulation like discard can be relevant, but otherwise it doesn't matter too much"). 60 cards
-   from existing `cards.json` entries, ~24 lands (Forest/Island/Mountain/Plains exist; no Swamp),
-   7-card opening hand. Shuffled from a **DERIVED seed** — `Library::Shuffle` takes an explicit
-   seed, so player 0's stream is untouched and every existing deck should stay byte-identical,
-   meaning NO GT rebaseline. Prove that with smoke; do not assume it.
-3. **Deck-out win turn = OUR LAST TURN** (user: "because the [opponent] doesn't get any main
-   phases"). Their upkeep could technically act, but that is rare enough to be a faithful
-   simplification, not an oversight.
-4. **The five cards, VIA THE STANDARD ANALYZER** (user: "I recommend strongly that we use the
-   standard analyzer to handle it"): Living Wish, Aether Hub, Vexing Shusher, Essence Depleter,
-   Dimensional Infiltrator. Oracle text already fetched and verified from Scryfall (below).
+   wish deck the sideboard IS the deck, so this was a correctness bug. Reachability is a real gate
+   (three detectors: a `wish_from_sideboard` param, "outside the game" in the oracle text, then a
+   name list — the name list is load-bearing because at Stage 1 the wish itself is usually one of
+   the MISSING cards). Verified the five decks with vestigial sideboards are unaffected; EDF now
+   reports all five missing cards.
+1. **DONE** (`9f56f5de`) — **Shared `OpponentHasLost(state)` predicate**, routed through BOTH
+   worlds. The executor centralised it (`CheckWinCondition`); the ROLLOUT open-coded
+   `Opponent().life <= 0` at **30 sites**, all now routed. Deck-out landing only in `HasLost()`
+   would have let the executor see the win while the search never pursued it — the exact shape of
+   the bug that made the Gorge go-off execute as a kill ZERO times.
+   Gated on `opponent_library_dealt`: `players[1].library` was **empty rather than absent**, so a
+   naive `library.empty()` test would read as an instant win in every game of every deck.
+2. **DONE** (`9f56f5de`) — **Fixed "realish" opponent library** (`src/core/OpponentDeck.h`). 60
+   cards, 24 lands / 20 creatures / 16 spells, 7-card opening hand, all from existing `cards.json`
+   entries. Fixed rather than a mirror so deck-out depth is a CONSTANT (53) and comparable across
+   decks. Shuffled from a **DERIVED seed**, and that is why it cost nothing: `Library::Shuffle`
+   takes an explicit seed rather than drawing from a shared stream, so player 0's permutation cannot
+   move. **Smoke came back 48/48 byte-identical** — same digests, 0 play changes — so NO GT
+   rebaseline. Regression tier running.
+3. **DONE** (`9f56f5de`) — **Deck-out win turn = OUR LAST TURN** (user: "because the [opponent]
+   doesn't get any main phases"). Falls out for free from firing the simulated draw at the end of
+   our turn, before the turn increment — no special-casing anywhere. Their upkeep could technically
+   act, which is a faithful simplification, not an oversight.
+   Covered by `test/scenarios/opponent_deckout.json`, verified DISCRIMINATING: 2 cards →
+   `win_turn=3` with `opponent_life=20` (so it is the deck-out, not damage); 100 cards → no win.
+4. **IN PROGRESS** — **The five cards, VIA THE STANDARD ANALYZER** (user: "I recommend strongly that
+   we use the standard analyzer to handle it"): Living Wish, Aether Hub, Vexing Shusher, Essence
+   Depleter, Dimensional Infiltrator. Oracle text fetched and verified from Scryfall (below);
+   per-card research fanned out across four Opus agents per the skill's Stage 2 protocol.
 5. **Sideboard zone + wish mechanic.** Neither exists: the sideboard is parsed into
    `Decklist::sideboard` and used ONLY to print a startup line; there is no wish support anywhere.
 6. **Go-off recognizer learns both `{C}` sinks.** It currently knows Gorge damage, Emiel counters
