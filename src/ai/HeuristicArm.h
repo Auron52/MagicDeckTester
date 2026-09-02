@@ -129,6 +129,7 @@ enum Slot : int
     BP_BASE_EMPTY,            // MTG_BP_BASE_EMPTY         a BASE plan's continuation is EMPTY, not greedy
     BP_NODE_D56,              // MTG_BP_NODE_D56           the node hosts deferred sites 5 and 6 too, not just 3
     BP_NODE_KEEPWAVE,         // MTG_BP_NODE_KEEPWAVE      ...and the RANK machinery keeps covering 5/6 anyway
+    BP_NODE_KEEPWAVE3,        // MTG_BP_NODE_KEEPWAVE3     ...the same for SITE 3, the shipped candidate's own site
     COUNT
 };
 
@@ -235,6 +236,7 @@ inline const char* Name(int slot)
         "MTG_BP_BASE_EMPTY",
         "MTG_BP_NODE_D56",
         "MTG_BP_NODE_KEEPWAVE",
+        "MTG_BP_NODE_KEEPWAVE3",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

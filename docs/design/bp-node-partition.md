@@ -860,7 +860,13 @@ The earlier version of this section said "NOT a quality delta". That was meant a
 correctness fix SOLELY by win rate", but as written it licensed shipping a complete search that
 plays worse or costs 10x. It does not.
 
-## Scoping the node generalization (2026-09-02, next session starts here)
+## Scoping the node generalization (2026-09-02)
+
+> **DONE AND REJECTED.** Stage 1 was built exactly as scoped below and measured worse at t 10.7-13.7
+> -- see "STAGE 1 BUILT AND MEASURED" at the end of this document. Keep this section for the code
+> map (the two pins are accurate and the `BpNodeSites()` wiring follows it), but **do not treat the
+> stage 2 / stage 3 plan below as live**: all three stages widen the SITE set, and the `kNoHost`
+> split showed the site set is not the binding constraint. The live axis is the HOST set.
 
 The node is restricted to site 3 in **TWO** places, and both must move:
 
@@ -1047,3 +1053,59 @@ The rejection has two candidate causes and they need opposite follow-ups:
 `MTG_BP_NODE_KEEPWAVE` separates them: it keeps 5/6 in the wave masks so the node ADDS to their
 coverage instead of replacing it, leaving site 3 untouched so `node0`'s own recorded numbers still
 stand. If it recovers the loss, cause 1; if not, cause 2. Same 4-arm x 2-block x 5,000-game shape.
+
+### The diagnosis SPLIT BY DECK, and it re-opens the shipped candidate (2026-09-02, 100,000 games)
+
+`MTG_BP_NODE_KEEPWAVE` (keep sites 5/6 in wave 0 and the deferred waves so the node ADDS to their
+coverage instead of replacing it), same 5-arm x 2-block x 5,000-game shape:
+
+| deck | d56 | d56 + KEEPWAVE | d560 | d560 + KEEPWAVE |
+|---|---|---|---|---|
+| mirrorwing | +0.0648 / +0.0672 (t 12.5/13.2) | **+0.0180 / +0.0240** (t 4.0/5.6) | +0.0546 / +0.0654 | **+0.0080 / +0.0134** (t 2.0/4.0) |
+| kitty | +0.0246 / +0.0254 (t 10.9/10.7) | +0.0252 / +0.0256 (t 11.0/10.8) | -0.0002 / +0.0006 | +0.0006 / -0.0004 |
+
+**The two decks answer differently, and the split is LIST WIDTH.** On mirrorwing (site 5, wide --
+83.6% overrun means the continuation list is far longer than W) restoring the rank machinery
+recovers **64-85%** of the hosting loss. On kitty (site 6, narrow) it recovers **nothing**: 0.0006
+of a 0.0250 loss, same 130/136 games worse. So for a wide site the dominant cost is the LOST RANK
+COVERAGE, and for a narrow one it is the PARTITION itself. Do not generalise either deck's answer.
+
+#### The child-walk-cut hypothesis: REFUTED
+
+The obvious mechanism for "hosting made it worse" was that hosting replaces a free full-tail greedy
+plan with an enumerated child list walked under the same `budget->Overrun()` abort, so a wide site
+could end up truncated with only a PREFIX of its replacement continuations. Built the counter
+(`bpnode::g_child_cut` / `g_child_cut_at`, `[bp-cut]` line under MTG_ROLLOUT_STATS) and it is not
+happening: **2 cuts in 380,230 pends on hinata, ZERO on mirrorwing (both arms) and kitty.** The
+child list is walked in full. Recorded so nobody rebuilds this.
+
+#### What it DOES implicate: `node0`, the standing adoption candidate
+
+`nohost by apply kind` (the 3-bit split: root / recorded / resume), 60 games each:
+
+| cell | nohost total | [rollout] | [rollout+rec] | [root...] |
+|---|---|---|---|---|
+| hinata `node` | 193,146 | 53.8% | 46.2% | **0%** |
+| hinata `node0` | **513,137** | 15.6% | **84.4%** | **0%** |
+| hinata `nodekw3` | 172,330 | 55.5% | 44.5% | **0%** |
+| mirrorwing `d56` | 508,743 | **100%** | -- | 0% |
+| mirrorwing `d56kw` | 275,434 | **100%** | -- | 0% |
+| kitty `d56` | 91,174 | **100%** | -- | 0% |
+
+Three things fall out:
+
+* **No fallback is ever at the committed root.** Hosting works exactly where it is offered; the
+  residual is entirely in non-root applies. That is the sizing answer for "grow the host set": the
+  `rollout+rec` half are search plan-loop applies (same caller shape as the two that already host),
+  the bare `rollout` half is the expensive half.
+* **D0ONLY nearly TRIPLES the residual** (193,146 -> 513,137) and 84.4% of it lands in exactly the
+  `rollout+rec` applies the depth gate excludes -- the stand-down mechanism, measured rather than
+  argued.
+* **Sites 5/6 have no `rec` half at all** (100% bare rollout), which is why KEEPWAVE could not help
+  kitty: there was no plan-loop coverage to restore.
+
+`MTG_BP_NODE_KEEPWAVE3` (default OFF) applies the same restoration to **site 3** -- the shipped
+candidate's own site, whose lists reach n=962 on hinata, the widest in the repo. On the plain node
+it already reads -10.8% nohost for +3.7% units. Its gate (hinata 5 arms, antilife/creature_giving
+3 arms, 13-deck screen, 100,800 games) is what decides whether `node0` has been leaving quality on
+the table since it was built.

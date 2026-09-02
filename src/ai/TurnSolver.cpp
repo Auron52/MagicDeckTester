@@ -6031,9 +6031,18 @@ static int BpNodeSites()
 // follow-ups.
 static int BpNodeWaveDrop()
 {
-    static const bool kw = EnvOn("MTG_BP_NODE_KEEPWAVE");
-    return heurarm::Flag(heurarm::BP_NODE_KEEPWAVE, kw) ? (BpNodeSites() & (1 << 3))
-                                                        : BpNodeSites();
+    static const bool kw  = EnvOn("MTG_BP_NODE_KEEPWAVE");
+    static const bool kw3 = EnvOn("MTG_BP_NODE_KEEPWAVE3");
+    int drop = BpNodeSites();
+    if (heurarm::Flag(heurarm::BP_NODE_KEEPWAVE,  kw))  { drop &= (1 << 3); }
+    // MTG_BP_NODE_KEEPWAVE3 -- the SITE-3 twin, and the one that matters, because site 3 is the
+    // shipped candidate's own site and it has stood down unconditionally since the node was built.
+    // MEASURED 2026-09-02: on mirrorwing (site 5, a WIDE list -- 83.6% overrun) restoring the rank
+    // machinery recovered 64-85% of the hosting loss (+0.0648/+0.0672 -> +0.0180/+0.0240), while on
+    // kitty (site 6, narrow) it recovered nothing. So the stand-down's cost scales with LIST WIDTH,
+    // and hinata's site-3 lists reach n=962 -- the widest in the repo.
+    if (heurarm::Flag(heurarm::BP_NODE_KEEPWAVE3, kw3)) { drop &= ~(1 << 3); }
+    return drop;
 }
 
 // The node's explicit EMPTY continuation: resume the prefix and cast nothing more (no drop, no
@@ -6147,6 +6156,15 @@ namespace bpnode
     inline std::atomic<uint64_t> g_dupes_empty{0};
     inline std::atomic<uint64_t> g_fp_predictable{0};
     inline std::atomic<uint64_t> g_empty_preskips{0};  // EMPTY arms skipped pre-apply (exact)
+    // THE PARTITION'S OWN TRUNCATION RISK (MTG_ROLLOUT_STATS). Hosting REPLACES a free full-tail
+    // greedy plan with an enumerated child list -- and that list is walked under the same
+    // budget->Overrun() abort every other pass takes. On a WIDE site the walk can therefore stop
+    // partway, leaving the base plan with a truncated tail and only a PREFIX of the continuations
+    // that were supposed to pay for it: strictly less than it had before hosting. g_child_cut
+    // counts pends whose child loop aborted; g_child_cut_at sums how many children they had got
+    // through, so "cut" can be told from "cut early".
+    inline std::atomic<uint64_t> g_child_cut{0};
+    inline std::atomic<uint64_t> g_child_cut_at{0};
     // CROSS-dupe ORIGIN split (MTG_BP_DUPE_TRACE). The cross bucket is 77% of the dupe prize and
     // this doc previously wrote it off as "different prefixes converging post-continuation, not
     // predictable without applying". That is an assumption, and it lumps together two very
@@ -6243,6 +6261,21 @@ namespace bpnode
         {
             const uint64_t p = g_pends.load();
             if (p == 0) { return; }
+            // Did the child walk actually FINISH? A pend whose loop was cut by the budget left the
+            // base plan truncated but only searched a PREFIX of the continuations that were meant
+            // to replace its tail -- strictly worse than not hosting it. See g_child_cut.
+            {
+                const uint64_t cut = g_child_cut.load();
+                if (cut != 0)
+                {
+                    std::fprintf(stderr,
+                                 "[bp-cut] child walks CUT by budget: %llu of %llu pends (%.1f%%)"
+                                 "  mean k reached %.1f\n",
+                                 (unsigned long long)cut, (unsigned long long)p,
+                                 100.0 * (double)cut / (double)p,
+                                 (double)g_child_cut_at.load() / (double)cut);
+                }
+            }
             if (g_children_rollout.load() + g_children_search.load() != 0)
             {
                 const double cr = (double)g_children_rollout.load();
@@ -26514,7 +26547,16 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 {
                     // Mid-pass overrun: same abort the recursion's entry guards take.
                     if (budget != nullptr && budget->Overrun())
-                    { ++g_fs_trunc_events; break; }
+                    {
+                        ++g_fs_trunc_events;
+                        if (s_rollout_stats)
+                        {
+                            bpnode::g_child_cut.fetch_add(1, std::memory_order_relaxed);
+                            bpnode::g_child_cut_at.fetch_add(static_cast<uint64_t>(k),
+                                                             std::memory_order_relaxed);
+                        }
+                        break;
+                    }
                     // EMPTY pre-skip: the k loop reached the EMPTY arm (so every cands index was
                     // visited) and the list holds an apply-empty entry -- the EMPTY arm's state
                     // is already in the dedup set, so the resume apply it would pay is pure
@@ -27163,8 +27205,19 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 g_bp_cands_has_empty   = false;
                 for (int k = 0; node_n < 0 || k <= node_n; ++k)
                 {
-                    // Mid-pass overrun: same abort the recursion's entry guards take.
-                    if (budget != nullptr && budget->Overrun()) { ++g_fs_trunc_events; break; }
+                    // Mid-pass overrun: same abort the recursion's entry guards take (see the
+                    // m2 host for what g_child_cut is measuring).
+                    if (budget != nullptr && budget->Overrun())
+                    {
+                        ++g_fs_trunc_events;
+                        if (s_rollout_stats)
+                        {
+                            bpnode::g_child_cut.fetch_add(1, std::memory_order_relaxed);
+                            bpnode::g_child_cut_at.fetch_add(static_cast<uint64_t>(k),
+                                                             std::memory_order_relaxed);
+                        }
+                        break;
+                    }
                     // EMPTY pre-skip -- see the m2 host (exact: a guaranteed post-apply dupe).
                     if (k == node_n && g_bp_cands_has_empty && BpNodeEmptySkip())
                     {
