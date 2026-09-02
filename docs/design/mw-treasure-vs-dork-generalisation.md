@@ -54,6 +54,27 @@ re-build the ladder flip blind (the TurnSolver ladder comment points here).
 
 ADOPTED 2026-09-02 (user approved): the reader now defaults ON (`EnvOn("MTG_HEROISM_MAGNET_TRAIT",
 true)`); all three GT tiers rebaselined at the flip — only Mirrorwing cells moved, matching the
-`her` arm's measured per-game movers. Deferred follow-up: the fresh-hold
-`CopyMagnetLive` (SpellEffects board scan gating same-turn spendability of minted Treasures) still
-counts only true magnets; extending it to Heroism is a separate measurable variant.
+`her` arm's measured per-game movers.
+
+## The payment-layer follow-up (measured 2026-09-02): MTG_HEROISM_FRESH_HOLD wins, staged
+
+The deferred question — the fresh-hold `CopyMagnetLive` gate and the Gold-Rush-positive net-mana
+rule still counted only true magnets — was measured on the same 20-cell footprint (13,625
+games/arm, pooled 4-arm batch, ctl byte-matched GT):
+
+| variant | idea | result |
+|---|---|---|
+| **hfresh** | **live Heroism unlocks same-turn spend of fresh Treasures (`PaySacSpendableNow`)** | **−0.00257, 46F/10S — winner, staged** |
+| hnet | +1 `TreasureSpellNetMana` resolution per live Heroism (Gold Rush net-0) | EXACT NULL — 0 changed games; deleted |
+| hboth | both | identical to hfresh (consistent with the null) |
+
+`hfresh` is double the magnet-trait adoption's effect: searched 18F/4S with the same games faster
+at both d3 and d5 (gi156, gi9, gi80, gi281 across disjoint seed blocks), d0 28F/6S including
+**3 unwon→won** (gi47, gi259, gi1272) against one marginal 7→unwon (regression d3 gi34) and
+knife-edge churn (gi126 4→5 gives back a game the trait adoption sped up; gi247 4→5 at both
+depths). Mechanism trace (overnight d3 s6006 gi9, seed 6015, 4→3): both lines cast T2 Heroism +
+T3 double Gold Rush, but only with the lever may the Heroism-doubled fresh mints pay same-turn —
+the ON line attacks T3 for exactly 20 instead of 16.
+
+Recommendation: ADOPT `MTG_HEROISM_FRESH_HOLD` default-ON (flip the reader, rebaseline — only
+Mirrorwing cells move). Staged default-OFF pending the user's approval.

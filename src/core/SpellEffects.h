@@ -9416,6 +9416,38 @@ inline bool CopyMagnetLive(const GameState& state, int controller)
     return false;
 }
 
+// Live copy-token enchantments (frontline_copy_tokens -- Frontline Heroism). Each one copies a
+// qualifying solo-target cast exactly once (onto the Soldier it mints), so unlike a magnet the
+// count matters: N live Heroisms add N resolutions, not "one per body".
+inline int HeroismCopiesLive(const GameState& state, int controller)
+{
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd && qd->params.frontline_copy_tokens > 0) { n += qd->params.frontline_copy_tokens; }
+    }
+    return n;
+}
+
+// MTG_HEROISM_FRESH_HOLD (EXPERIMENT, default OFF; =1 enables): a live Heroism also unlocks the
+// fresh-hold -- Treasures minted this turn may pay while one is out, as under a true magnet. The
+// doctrine's magnet carve-out exists because fan-minted Treasures legitimately fund same-turn
+// continuation; a Heroism doubles every qualifying mint, which is the same funding shape at
+// smaller scale. Extends the adopted MTG_HEROISM_MAGNET_TRAIT (plan traits) to the payment layer.
+inline bool HeroismFreshHoldOn()
+{
+    static const bool env_on = EnvOn("MTG_HEROISM_FRESH_HOLD");
+    return heurarm::Flag(heurarm::HEROISM_FRESH_HOLD, env_on);
+}
+
+// (A sibling variant, MTG_HEROISM_NET_MANA -- TreasureSpellNetMana counting one extra resolution
+// per live Heroism, making Gold Rush net-0 under a Heroism for the early-cast rung and the
+// condemnation exemption -- measured an EXACT NULL: 0 changed games of 13,625 on the 20-cell
+// Mirrorwing footprint, 2026-09-02. Deleted; see
+// docs/design/mw-treasure-vs-dork-generalisation.md before re-deriving it.)
+
 // ---- The "GOLD RUSH POSITIVE" rule (USER, 2026-08-27) -----------------------------------------
 //
 // USER: "use the 'Gold Rush positive' rule to decide whether we need to consider casting it
@@ -9556,7 +9588,8 @@ inline bool PaySacSpendableNow(const GameState& state, const Permanent& p, const
 {
     if (!IsPaySacSource(def)) { return false; }
     if (!FreshHoldActive() || !p.entered_this_turn) { return true; }
-    return CopyMagnetLive(state, p.controller_index);
+    if (CopyMagnetLive(state, p.controller_index)) { return true; }
+    return HeroismFreshHoldOn() && HeroismCopiesLive(state, p.controller_index) > 0;
 }
 
 // The colours a mana source currently produces. Identical to def.params.produces (by const ref,
