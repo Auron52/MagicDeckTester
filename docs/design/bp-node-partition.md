@@ -1186,3 +1186,40 @@ plainly that "every arm carries MTG_BP_NO_GREEDY_CONT". It was that the arm's NA
 "D0ONLY") described one flag while the arm carried five, so once NGC was independently rejected
 months later nothing re-examined the result that had been resting on it. When a lever is rejected,
 re-check every recorded win whose arm contained it.
+
+## IDEAS MENU after the attribution (2026-09-02, pre-compaction record)
+
+Where things stand: no validated adoption candidate. NGC delivered the only real quality
+(hinata -0.006, t~3) but is lossy + cost-unguarded; the full node is quality-positive on hinata
+only (-0.0065/-0.0070, t~2) at 1.2-1.6x wall; node0 alone is WORSE than shipped; site widening
+(D56), KEEPWAVE3, and child-walk-cut are all measured dead. The residual greedy is 52-100%
+`nohost`, split rollout+rec (recorded applies, cheap half) vs bare rollout (playout, expensive).
+
+1. **SOUND-NGC (recommended first).** Fix NGC's two known defects at source instead of deleting
+   the lever: (a) add the EMPTY option to the canonical continuation (EnumeratePlans drops the
+   empty combination, so cands[0] can never be "cast nothing" -- the measured lossiness); (b)
+   cost-gate the enumeration (enum-memo hit for same-base variants; explicit guard for
+   dragonstorm-style storm-turn combinatorics -- its 11.8x TAIL WALL was pinned on NGC alone).
+   Gate: 136k-style cross-deck, INCLUDING tail wall. If it passes, the class has its cheap
+   candidate back, no node required.
+2. **Host the cheap `nohost` half.** rollout+rec (46-84% of hinata residual) = RECORDED applies
+   (wave-walker / variant applies in the two search loops) that get out_breakpoint but no capture.
+   Same caller shape as the two hosting sites. FIRST STEP IS INVENTORY: enumerate which
+   ApplyPlanDirect callers those actually are (the &bp-passing, capture-less sites) before sizing.
+3. **USER SCOPE RULING (surfaced, not blocking).** Bare-rollout breakpoint greedy is the playout
+   policy's continuation, not a scored decision -- same category as greedy land drop, which the
+   USER accepted as "a rollout policy, not a decision". If that ruling extends here, the
+   reachability target becomes acted->0 at DECISION/RECORDED applies only, and the expensive half
+   is reclassified rather than solved.
+4. **Full node per-deck (USER structure-vs-compute call).** Quality-positive on hinata, provably
+   inert elsewhere -> provider opt-in per repo doctrine, wall cost lands on hinata cells only.
+   Unbuilt cost levers if taken: truncate-at-emission (~+15% units back, cross-dupe root cause),
+   prefix-resume cache (unblocks in-node fingerprint dedup). EF is nearly free (+2.8%) and attacks
+   the sequential-re-pricing root cause -- measure node+EF as one arm.
+5. **Budget-priority reframing.** Reachability formally holds via the deferred waves at unbounded
+   budget; the practical hole is rank-order scheduling starving ranks past W. Value-ordered
+   continuation scheduling ("the best 3 of n, not the first 3") attacks the width problem without
+   new structure.
+
+Recommended order: 1, with 2's inventory in parallel; 3 asked; 4 available to the USER regardless;
+5 as the fallback frame if 1 fails its gate.
