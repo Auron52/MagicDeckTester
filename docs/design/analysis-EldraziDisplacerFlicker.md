@@ -124,11 +124,36 @@ The starvation hypothesis FITS; it does not DISCRIMINATE. Paired ladder, 4 seeds
 reaches depth 2 on 2 of 7 decisions (`id_depth hist=1:5 2:2`). So the gap to 4-5 is **not** search
 depth, and pouring budget at it is refuted, not merely unattractive.
 
-**What has NOT been tested is the one thing the user's estimate is explicitly conditioned on** —
-"4-5 avg win turn *with a mulligan profile*". There is no keep table on this deck yet; the profile
-is card-scores-only with `hand_score_threshold = -1e18`, i.e. no hand gate at all. A 4-card combo
-deck is exactly the shape where hand selection dominates, so that stage is the live hypothesis and
-it has not run. See the tractability item below — it is what stands between here and running it.
+**The remaining hypothesis is the one the user's estimate is explicitly conditioned on** — "4-5 avg
+win turn *with a mulligan profile*". There is no keep table on this deck; the profile is
+card-scores-only with `hand_score_threshold = -1e18`, i.e. no hand gate at all. A 4-card combo deck
+is exactly the shape where hand selection should dominate.
+
+### But a RULE-BASED hand selection buys nothing either (800 games)
+
+Cheap upper-bound probe before committing hours to generation: four `mulligan` rule variants, pooled
+in ONE batch (the manifest takes a per-job `profile`, so all four arms share one tail), 4 held-out
+seeds x 50 games each.
+
+| profile arm | s5101 | s5202 | s5303 | s5404 | mean | vs base |
+|---|---|---|---|---|---|---|
+| P0 base — `min_lands` 1-5, no required pieces | 6.86 | 7.20 | 7.04 | 6.96 | **7.015** | — |
+| P1 any combo piece, lands 2-5, `stop_at` 3 | 6.98 | 7.10 | 7.06 | 6.94 | 7.020 | +0.005 |
+| P2 payload required, lands 2-5 | 7.08 | 7.04 | 7.30 | 7.02 | 7.110 | +0.095 |
+| P3 outlet required, lands 3-4 | 6.98 | 7.26 | 7.04 | 7.04 | 7.080 | +0.065 |
+
+**Every selective rule is neutral or worse** — the extra mulligans cost more than the selection
+gains. **This does NOT refute the mulligan stage**, and the distinction matters: `required_pieces` is
+a name filter applied to a 7-card hand, whereas the exhaustive keep table is a learned per-hand
+keep/bottom decision with bottoming on. It does mean the "a mulligan profile will find the missing
+2 turns" story now has a negative datapoint against its cheap proxy, and the generation should be
+entered with that in mind rather than as a foregone conclusion.
+
+**So all three cheap explanations for the 7.2 are now measured and none of them is it**: search
+depth (+0.063 turns for 9x budget), wish targeting (the ranking tripled win-condition fetches and
+changed nothing), and rule-based mulligans (neutral-to-worse). What is left is a genuine modelling
+gap, the learned keep table, or an optimistic estimate — and those are distinguished by the Stage 5
+verification and the generation stages, not by more measurement of the current configuration.
 
 ### TRACTABILITY: the wish axis is ~72% of the cost, and it is a RANKING problem
 
