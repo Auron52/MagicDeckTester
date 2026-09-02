@@ -852,3 +852,37 @@ exists to close.
 The earlier version of this section said "NOT a quality delta". That was meant as "do not judge a
 correctness fix SOLELY by win rate", but as written it licensed shipping a complete search that
 plays worse or costs 10x. It does not.
+
+## Scoping the node generalization (2026-09-02, next session starts here)
+
+The node is restricted to site 3 in **TWO** places, and both must move:
+
+1. **The host gates** -- `(PlanOpensBreakpoint(state, q) & (1 << 3))` in BOTH hosts (`FSLineTail`'s
+   m2 loop and `FSLineWin`'s pre loop). Widen to the set of sites the node should host.
+2. **`partition_here`** -- gated on `plain_cantrip`, so the pend/truncate that MAKES hosting
+   possible (`bp_truncate` -> `BpPrefixSnap.pending`) only ever arms for site 3. Without this the
+   host gate alone does nothing: no plan ever pends, so no node is ever created.
+
+**The remaining sites split along a line the code already measured**, so this is two jobs:
+
+* **STAGE 1 -- the DEFERRED sites (3/5/6).** These already share the defer+truncate machinery
+  (`deferred_cantrip_resolve` / `deferred_trick_armed` distinguishes site 5 from 3; site 6 has its
+  own arming that already sets `bp_truncate`). Work is: arm `partition_here` for 5/6 as well as 3,
+  and open the host gates to them. Coverage from the WHY table: kitty s6 (73.2% base + 26.8%
+  overrun = **100%**), mirrorwing s5 (91.3%), hinata s3 (100% masked today; 90.1% base+overrun once
+  opened), antilife/creature_giving s3 (100% base once opened). This is the high-yield, low-risk
+  half.
+* **STAGE 2 -- the INLINE sites (0/1/2/4).** These re-solve IN PLACE rather than deferring, and the
+  partition comment records the measurement that makes this risky: on Hinata, 60 games, *deferred
+  5.7000, inline without truncation 6.0333, inline WITH truncation 7.0333*. So truncating an inline
+  site is worth **+1.33 turns of damage** on its own -- the continuation sees less mana because the
+  deferred re-solve runs after the trailing passes (Hinata's reserved Karoo drop among them). A
+  node at an inline site therefore needs its own design (make the site deferred first, or host
+  WITHOUT truncating), NOT a copy of stage 1. Covers hinata s0, burn s0, th s1, dragonstorm s2,
+  auras s4.
+* **STAGE 3 -- nested** (`seen_before != plan.bp_at`): mirrorwing s0 at 70.3%, elsewhere 7-21%.
+  A variant must still reach its own `bp_at`, so hosting does not help; this is the
+  L*W-not-W^L trade and needs the nested-hosting design.
+
+Do stage 1 first and gate it on all three acceptance gates above. It is the only part where the
+machinery already exists and the measurement already says the shape is right.
