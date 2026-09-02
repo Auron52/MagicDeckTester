@@ -825,8 +825,30 @@ the enumeration itself", i.e. it drives `unreachable` to ZERO by construction.
   is the one place where zero in-tree greedy needs the harder nested-hosting work (the
   L*W-not-W^L trade).
 
-### Acceptance test for the fix
+### Acceptance test for the fix -- THREE gates, all of which must pass
 
-`unreachable -> 0` at hosted sites and `acted -> 0` at s0-s8, NOT a quality delta. This arc has
-twice mistaken a quality number for a correctness verdict; reachability is the property the USER
-asked for and it is directly measurable with the two probes above.
+USER 2026-09-02, correcting an earlier over-statement of this section: *"we do need to consider
+quality and performance under budget as well, but it is also crucial that unreachable -> 0.
+unreachable -> 0 is the reason I am pushing so hard on this problem, but it doesn't change our
+needs on the other end."*
+
+1. **REACHABILITY** -- `unreachable -> 0` at hosted sites, `acted -> 0` at s0-s8. The objective,
+   and the reason the work is being done. Directly measurable with the two probes above.
+2. **QUALITY** -- still the standing adoption bar (`change-adoption-bar`): improve the overall
+   average at PLAY settings on a large sample, or be quality-NEUTRAL with other upside. A
+   completeness fix does NOT get a quality exemption.
+3. **PERFORMANCE** -- affordable under the SHIPPED budget, gated on **WALL ON TAIL GAMES**, not
+   average units (units read dragonstorm at 0.992x while its real cost was 11.8x -- enumeration is
+   uncharged, so `budget_ms` cannot throttle it and an average cannot see it).
+
+**The tension between 1 and 2 is real and must not be wished away.** Under a FIXED budget,
+enumerating all `n` continuations at the root spends budget that would otherwise buy depth, so a
+strictly-more-correct search can PLAY WORSE -- which is exactly what node-at-every-turn measured
+(+35% units, worse quality, id_depth 2.981 vs 3.448). When that happens the answer is to make the
+enumeration CHEAPER (prefix/child dedup, enum memo, hosting only where it pays) or to allocate the
+budget better -- **never to truncate the option set back**, which just reopens the hole this work
+exists to close.
+
+The earlier version of this section said "NOT a quality delta". That was meant as "do not judge a
+correctness fix SOLELY by win rate", but as written it licensed shipping a complete search that
+plays worse or costs 10x. It does not.
