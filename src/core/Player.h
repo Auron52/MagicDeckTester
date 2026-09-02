@@ -60,6 +60,16 @@ struct Player
     // Empty for every deck without a suspend card -> byte-identical.
     std::vector<SuspendedCard> suspended_cards;
 
+    // OUTSIDE THE GAME (CR 400.11b): the sideboard, as a wish (Living Wish) sees it. Per-GAME state
+    // rather than a static read of Decklist::sideboard, because each card is a SINGLETON consumed on
+    // fetch -- four Living Wishes must see a shrinking pool, or the same one-of gets fetched four
+    // times. Sits beside staged_cards / suspended_cards, the other two out-of-play zones, so it
+    // rides every deep copy for free.
+    //
+    // Populated only for a deck that actually wishes (GoldFishRunner::DeckWishesFromSideboard), so
+    // for every other deck it is an empty vector: no allocation on copy, and byte-identical.
+    std::vector<Card> sideboard;
+
     bool HasLost() const { return life <= 0 || poison_counters >= 10; }
 
     // Static land-drop effects (e.g. Exploration) are evaluated by GameEngine

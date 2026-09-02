@@ -81,14 +81,23 @@
 static_assert(sizeof(Permanent) == 256,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
-static_assert(sizeof(Player) == 160,
+// 160 -> 184 (2026-09-02): Player gained `sideboard`, the OUTSIDE-THE-GAME zone a wish searches
+// (Living Wish). Classification: an EXACT-MATCH zone, folded below beside staged_cards /
+// suspended_cards. It is future-determining and NOT monotone -- which singletons remain decides
+// what the next wish can fetch, and no direction can be declared over "fewer cards left" (having
+// spent the wish on the right card is better, on the wrong one worse). Folded gated on non-empty,
+// so every deck that does not wish keeps its exact prior key.
+static_assert(sizeof(Player) == 184,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // 688 -> 696 (2026-09-01): ManaPool gained `wild_c`, and GameState embeds one as floating_mana.
 // Classification: NOT a new axis and NOT a new exact-match field -- it is a SUBSET COUNT of
 // ManaPool::wild, so wild_c > 0 implies wild > 0 implies floating_mana.Total() > 0, which the
 // boundary assertion at :285 below already stands the whole comparator down on. Nothing to fold.
-static_assert(sizeof(GameState) == 696,
+// 696 -> 744 (2026-09-02): GameState embeds two Players, each of which grew by the `sideboard`
+// vector above. No new GameState field of its own beyond the two deck-out bools, which are folded
+// at the top of Build() gated on opponent_library_dealt.
+static_assert(sizeof(GameState) == 744,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -460,6 +469,19 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         fold(static_cast<std::uint64_t>(p.suspended_cards.size()));
         for (const SuspendedCard& sc : p.suspended_cards)
         { fold(sc.card.m_name_hash); fold(static_cast<std::uint64_t>(sc.arrive_turn)); }
+        // OUTSIDE THE GAME (the wish pool). Exact match, order-insensitive: which SINGLETONS remain
+        // decides what a later wish can fetch, so two states that have spent their wishes
+        // differently are not comparable. Unlike the two zones above there is no timer, so the sum
+        // of name hashes is enough. Gated on non-empty -- staged/suspended are folded
+        // unconditionally, and adding a third unconditional fold would shift every deck's key.
+        if (!p.sideboard.empty())
+        {
+            fold(0x5B0Aull);
+            fold(static_cast<std::uint64_t>(p.sideboard.size()));
+            std::uint64_t sb = 0;
+            for (const Card& c : p.sideboard) { sb += c.m_name_hash; }
+            fold(sb);
+        }
         // GRAVEYARD PROJECTION -- fold only what this deck's readers can observe (see gy_bits).
         // Every accumulator is order-insensitive: a graveyard's ORDER is not future-determining.
         // Each is EXACT rather than the doc's proposed subset rule, because the model reader makes

@@ -170,6 +170,24 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
 // failure the coverage scan used to have (see scripts/analyze_deck.py, SideboardReachability).
 // Scanning the sideboard unconditionally is safe: a card that cannot touch the opponent's zones
 // does not set these params, so the five decks carrying vestigial sideboards are unaffected.
+// Does this deck WISH -- i.e. can anything in it fetch a card from outside the game? If so the
+// sideboard is dealt as a real per-game zone (Player::sideboard); if not it stays empty, which is
+// what keeps every other deck byte-identical.
+//
+// Mainboard only, deliberately, and the asymmetry with DeckTouchesOpponentZones below is the point:
+// the question here is "does the deck hold a wish", and a wish sitting in the sideboard could never
+// be cast. (A wish that fetches a wish is a real Magic line, but it needs a mainboard wish first.)
+bool GoldFishRunner::DeckWishesFromSideboard(const Decklist& deck)
+{
+    if (deck.sideboard.empty()) { return false; }
+    for (const Card& c : deck.mainboard)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        if (def && def->params.wish_from_sideboard) { return true; }
+    }
+    return false;
+}
+
 bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
 {
     auto scan = [](const std::vector<Card>& board) {
@@ -798,6 +816,23 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // above is untouched (core/OpponentDeck.h). Gated on the deck being able to reach those zones,
     // so this is a no-op for every deck that cannot mill.
     opponentdeck::Deal(state, DeckTouchesOpponentZones(deck), seed);
+
+    // OUTSIDE THE GAME: the wish pool (Living Wish). Per-game state so each singleton is consumed
+    // on fetch. Numbered from its own base, far above the deck's dense-from-1 numbering, for the
+    // same reason the opponent's cards are: BuildCardNumbering keys an alphabetical set built from
+    // the MAINBOARD, so feeding sideboard names into it would shift `next` and renumber the whole
+    // deck -- which moves ShuffleByKey's CRN keys and changes every existing game of this deck.
+    if (DeckWishesFromSideboard(deck))
+    {
+        constexpr int kWishNumberBase = 200000;   // deck 1..60, tokens 1000+, opponent 100000+
+        int number = kWishNumberBase;
+        for (const Card& c : deck.sideboard)
+        {
+            Card w = c;
+            w.m_number = number++;
+            state.players[0].sideboard.push_back(w);
+        }
+    }
 
     state.active_player_index   = 0;
     state.priority_player_index = 0;

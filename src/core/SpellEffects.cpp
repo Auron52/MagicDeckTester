@@ -143,20 +143,38 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         }
     }
     Player& ap = state.players[controller_index];
+    // A WISH takes its card from OUTSIDE THE GAME (the sideboard), not the library. Each such card
+    // is a SINGLETON, and erasing it here is what makes four Living Wishes see a shrinking pool
+    // instead of fetching the same one-of four times.
+    const bool wish = pp.wish_from_sideboard;
     int idx = -1;
-    for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+    if (wish)
     {
-        if (ap.library[i].m_name == want) { idx = i; break; }
+        for (int i = 0; i < static_cast<int>(ap.sideboard.size()); ++i)
+        { if (ap.sideboard[i].m_name == want) { idx = i; break; } }
+    }
+    else
+    {
+        for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+        { if (ap.library[i].m_name == want) { idx = i; break; } }
     }
     if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
-    Card c = ap.library[idx];
+    Card c = wish ? ap.sideboard[idx] : ap.library[idx];
     const int         fetched_num  = c.m_number;   // capture before the move into hand/library
     const std::string fetched_name = c.m_name;
-    ap.library.erase(ap.library.begin() + idx);
+    if (wish) { ap.sideboard.erase(ap.sideboard.begin() + idx); }
+    else      { ap.library.erase(ap.library.begin() + idx); }
     // Searching the library shuffles it (CR 701.19) -- BEFORE a "put on top" placement
     // (you shuffle, then put the card on top). Deterministic + lockstep, ON BY DEFAULT
     // (opt-OUT is MTG_NO_SEARCH_SHUFFLE).
-    ShuffleAfterSearch(state, controller_index);
+    //
+    // A WISH IS EXEMPT, and this gate is REQUIRED rather than a nicety: a wish does not search a
+    // library at all, so CR 701.19c never triggers -- and note the call is unconditional, NOT gated
+    // on tutor_shuffle_after, so simply leaving that param false would not have skipped it. Letting
+    // it run would shuffle a library nobody searched AND advance search_count, which seeds every
+    // later fetch's deterministic reshuffle, so one wish would silently re-order every subsequent
+    // fetch in the game.
+    if (!wish) { ShuffleAfterSearch(state, controller_index); }
     if (pp.tutor_to_hand)     { ap.hand.push_back(std::move(c)); }
     else if (pp.tutor_to_top)
     {

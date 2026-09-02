@@ -221,9 +221,12 @@ GenericProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // until then the general search decides, never whiffs. (Previously returned {} -> a
     // generic tutor silently fetched nothing.)
     const Player& ap = s.players[controller];
+    // A WISH searches OUTSIDE THE GAME (the sideboard); every other tutor searches the library.
+    // Only the zone differs -- type filter, colour filter and ranking are shared.
+    const std::vector<Card>* wish_pool = pp.wish_from_sideboard ? &ap.sideboard : nullptr;
     std::vector<std::string>        all;
     std::unordered_set<std::string> seen;
-    for (const Card& lc : ap.library)
+    for (const Card& lc : TutorZoneView(ap, wish_pool))
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
         const Card&           card = def ? def->card : lc;

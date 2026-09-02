@@ -46,6 +46,12 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
 
 void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
 {
+    // "Exile Living Wish": a self-exiling spell goes to EXILE instead. LOCKSTEP with the rollout's
+    // instant/sorcery line in TurnSolver's apply_one. See CardParams::exiles_self_on_resolve for
+    // why this is implemented rather than bracket-noted as inert.
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(entry.source);
+    if (d != nullptr && d->params.exiles_self_on_resolve)
+    { state.exile.push_back(entry.source); return; }
     state.players[entry.controller_index].graveyard.push_back(entry.source);
 }
 

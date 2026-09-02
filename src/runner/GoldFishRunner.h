@@ -131,6 +131,10 @@ public:
     // Stamped onto GameState::deck_feeds_combat by SetupGame (see the .cpp note).
     static bool DeckFeedsCombat(const Decklist& deck);
 
+    // Does this deck WISH (fetch from outside the game)? Gates whether the sideboard is dealt as a
+    // real per-game zone at all. Mainboard only -- a wish in the sideboard could never be cast.
+    static bool DeckWishesFromSideboard(const Decklist& deck);
+
     // Can this deck mill / exile-from-library / discard the OPPONENT? Gates whether they are dealt
     // a library and opening hand at all (see core/OpponentDeck.h). Scans BOTH boards -- this deck's
     // only library-toucher is a SIDEBOARD card reachable off Living Wish.

@@ -492,6 +492,32 @@ struct CardParams
     // deterministic CRN reshuffle (Library::ShuffleByKey via ShuffleAfterSearch) exactly like a
     // fetch, so post-Dragonstorm draws come from a shuffled deck. Off -> no reshuffle.
     bool                     tutor_shuffle_after  = false;
+    // WISH (Living Wish, "reveal a creature or land card you own from OUTSIDE THE GAME and put it
+    // into your hand"). A wish is mechanically a tutor whose search ZONE is the sideboard rather
+    // than the library (CR 400.11b: in constructed, a sideboard card is outside the game), so it
+    // rides the whole searched-tutor apparatus -- tutor_to_hand + tutor_types, the Plan::tutor_choice
+    // index axis, the plan-signature folds, the pin, the viewer chooser -- with only the pool
+    // swapped. Building a parallel wish axis instead would have re-created the dedup bug that once
+    // made the tutor target unsearched, and would need all five signature folds re-added by hand.
+    //
+    // Two consequences a reader must not miss. (1) Each sideboard card is a SINGLETON consumed on
+    // fetch, so the pool is per-game state (Player::sideboard), not a static read of the decklist --
+    // four Living Wishes must see a shrinking pool. (2) A wish does NOT search a library, so
+    // CR 701.19c's shuffle never triggers: PerformTutor's ShuffleAfterSearch is explicitly SKIPPED
+    // on this path. That is not covered by leaving tutor_shuffle_after false -- the call there is
+    // unconditional -- and letting it run would advance search_count, which seeds every later
+    // fetch's deterministic reshuffle.
+    //
+    // scripts/analyze_deck.py reads this param name as its most authoritative sideboard-reachability
+    // detector, so renaming it silently un-scans a wish deck's toolbox.
+    bool                     wish_from_sideboard  = false;
+    // "Exile <this card>" on resolution, instead of the graveyard (Living Wish). NOT inert, though
+    // nothing in this deck can interact with an exiled card: MidGameFeature::GraveyardSize and
+    // ExileSize are real learned-model features, and EOT dominance folds each zone when the attached
+    // model reads it -- so four Living Wishes in the graveyard is a different state from four in
+    // exile to any value leaf that splits on either size. Recording it as inert would be recording
+    // an engine gap as a card fact, and would be wrong the day this deck's value leaf lands.
+    bool                     exiles_self_on_resolve = false;
     // Tutor target selection. The intended DEFAULT (empty) is a SEARCHED choice -- the
     // search branches over fetch targets and keeps the best (a Tier-2 search-choice like
     // dig-as-search-choice; pending, see follow-up). A non-empty value names a HEURISTIC

@@ -1057,10 +1057,33 @@ inline bool CardMatchesTypeName(const Card& card, const std::string& type_name)
 // cannot yet pay for is NOT). The one genuinely uncertain case -- a held-but-unaffordable
 // Plague Drone as our ONLY enabler -- is returned as TWO candidates (enabler + wincon) for the
 // search to decide, rather than guessed.
+// A flat, read-only view of whichever zone a tutor searches. The library and the sideboard are
+// different container types (Library vs std::vector<Card>), and copying either on the rollout hot
+// path is not acceptable, so this hands back pointers-to-Card in zone order.
+inline std::vector<std::reference_wrapper<const Card>>
+TutorZoneView(const Player& ap, const std::vector<Card>* wish_pool)
+{
+    std::vector<std::reference_wrapper<const Card>> out;
+    if (wish_pool != nullptr)
+    {
+        out.reserve(wish_pool->size());
+        for (const Card& c : *wish_pool) { out.emplace_back(c); }
+        return out;
+    }
+    out.reserve(ap.library.size());
+    for (const Card& c : ap.library) { out.emplace_back(c); }
+    return out;
+}
+
 inline std::vector<std::string> TutorCandidates(const GameState& state, int controller_index,
                                                 const CardParams& pp)
 {
     const Player& ap = state.players[controller_index];
+    // THE SEARCH ZONE. A wish looks OUTSIDE THE GAME (Living Wish -> Player::sideboard); every
+    // other tutor looks at the library. Only the pool differs -- the type filter, the colour
+    // filter, the ranking and the whole searched-index axis are shared, which is the entire reason
+    // a wish is modelled as a tutor rather than as its own mechanic.
+    const std::vector<Card>* wish_pool = pp.wish_from_sideboard ? &ap.sideboard : nullptr;
 
     // Unpruned audit (MTG_UNPRUNED): return EVERY legal tutor target (distinct names)
     // so the search branches over all of them, instead of the heuristic-narrowed pick.
@@ -1068,7 +1091,7 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
     {
         std::vector<std::string>        all;
         std::unordered_set<std::string> seen;
-        for (const Card& lc : ap.library)
+        for (const Card& lc : TutorZoneView(ap, wish_pool))
         {
             const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
             const Card&           card = def ? def->card : lc;
@@ -1081,9 +1104,9 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
         return all;
     }
 
-    // Best enabler / wincon / any matching card available in the library.
+    // Best enabler / wincon / any matching card available in the search zone.
     std::string enabler_name, wincon_name, any_name;
-    for (const Card& lc : ap.library)
+    for (const Card& lc : TutorZoneView(ap, wish_pool))
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
         const Card& card = def ? def->card : lc;

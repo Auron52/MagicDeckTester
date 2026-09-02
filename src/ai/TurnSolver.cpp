@@ -18797,7 +18797,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // graveyard faithful; nothing reads the graveyard for decks without retrace.
         if (def.card.IsInstant() || def.card.IsSorcery())
         {
-            ap.graveyard.push_back(def.card);
+            // "Exile Living Wish" -- a self-exiling spell goes to EXILE, not the graveyard.
+            // LOCKSTEP with EffectHandler::MoveToGraveyard. Not cosmetic even though nothing in
+            // this deck can interact with an exiled card: GraveyardSize and ExileSize are learned
+            // model features and EOT dominance folds each zone when the attached model reads it,
+            // so four wishes in the graveyard is a different state from four in exile.
+            if (def.params.exiles_self_on_resolve) { state.exile.push_back(def.card); }
+            else                                   { ap.graveyard.push_back(def.card); }
         }
 
         if (is_sacrifice && !def.params.tutor_land_to_battlefield)
@@ -25587,6 +25593,18 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // EXACT prior key.
         if (p.rad_counters > 0)
         { Fold(k, 0x2AD0); Fold(k, static_cast<uint64_t>(p.rad_counters)); }
+        // OUTSIDE THE GAME (the wish pool). Which SINGLETONS remain decides what a later Living
+        // Wish can fetch, so two states that spent their wishes differently reach different
+        // futures and must not share a memo entry. Order-insensitive (nothing reads the pool's
+        // order) and gated on non-empty, so every deck without a wish keeps the EXACT prior key.
+        if (!p.sideboard.empty())
+        {
+            Fold(k, 0x5B0A);
+            Fold(k, static_cast<uint64_t>(p.sideboard.size()));
+            uint64_t sb = 0;
+            for (const Card& c : p.sideboard) { sb += c.m_name_hash; }
+            Fold(k, sb);
+        }
         Fold(k, static_cast<uint64_t>(p.library.size()));
         if (!p.library.empty()) { Fold(k, p.library.front().m_name_hash); }
         // Live-library ORDERED digest (added 2026-08-20, enum-memo verify find #3): the

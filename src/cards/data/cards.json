@@ -6069,6 +6069,26 @@
     "exile_opponent_top_cost": "{1}{C}",
     "exile_opponent_top_may_bounce_on_land": true
    }
+  },
+  {
+   "name": "Living Wish",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "You may reveal a creature or land card you own from outside the game and put it into your hand. Exile Living Wish. [THE deck's engine -- 4 copies, and BOTH win conditions live in the sideboard it fetches (Essence Depleter, Dimensional Infiltrator). A WISH is mechanically a TUTOR whose search ZONE is the sideboard rather than the library (CR 400.11b: in constructed, a sideboard card is 'outside the game'), so it reuses the entire searched-tutor apparatus -- tutor_to_hand + tutor_types read Player::sideboard when wish_from_sideboard is set, and the Plan::tutor_choice INDEX AXIS, the five plan-signature folds, the breakpoint pin and the viewer chooser all apply unchanged. Building a parallel wish axis instead would have re-created the dedup bug that once left the tutor target unsearched. The type filter goes through the card DEFINITION: a zone Card is a bare placeholder with an EMPTY type mask, so a raw IsCreature()/IsLand() on it is always false. Each sideboard card is a SINGLETON consumed on fetch, which is why the pool is per-game state and not a static read of the decklist -- four Living Wishes must see it shrink. NO shuffle: a wish does not search a library, so CR 701.19c never triggers, and PerformTutor's ShuffleAfterSearch is explicitly skipped (that call is unconditional, so leaving tutor_shuffle_after false would NOT have been enough, and letting it run would advance search_count and silently re-order every later fetch). The provider widens TutorSearchWidth to 8 so the whole pool is reachable -- at the default 6, candidates arriving in decklist order would leave both win conditions unsearchable in every game. [PARTIAL: 'You may' -- declining is offered to a HUMAN (the tutor chooser returns -1) but is not emitted as an autonomous variant. A to-hand fetch costs nothing beyond the spell already cast, and since a later wish would want a different singleton anyway, taking the best card now forecloses nothing a decline would preserve. Disclosed, not silently dropped.] [PARTIAL: 'reveal' -- the information half is inert; the limitation is that the passive opponent makes no decisions and nothing reads 'was revealed'. The VIEWER half is implemented, riding PerformTutor's existing '(searched)' reveal.]]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [
+     "Creature",
+     "Land"
+    ],
+    "wish_from_sideboard": true,
+    "exiles_self_on_resolve": true
+   }
   }
  ]
 }
