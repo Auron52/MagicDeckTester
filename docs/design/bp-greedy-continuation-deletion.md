@@ -459,3 +459,13 @@ cost everywhere); (2) the ~0.005 hinata quality left in playout-side canon, reco
 depth/budget per the USER's own argument, or by the incremental key making REC affordable;
 (3) MTG_EXEC_FEAS -- separate, fully-gated follow-up candidate (hinata -0.0017/-0.0016 t~3.3,
 -0.55% units, 14/15 decks game-identical), awaiting its own sign-off.
+
+**Dragonstorm characterized from the new baseline (2026-09-02, first post-adoption probe):
+NOT cache thrash.** At ship settings the enum memo runs at a 94% hit rate (176,079 hits /
+11,374 misses / 1 clear / 0 nested per 200 games), and MTG_BP_ENUM_CACHE_CAP=262144 is
+wall-NEUTRAL vs 8192 (9.73 vs 9.88s, within rep noise) -- the recorded "1M cap halves the wall"
+finding belonged to NGC's uncharged recursion, which canon's derivation stand-down deleted. The
++12.9% is the VOLUME itself: ~187k BuildBreakpointKey walks (each "costs as much as a small
+enumeration" -- the enummemo record) plus 11.4k real derivations. Conclusion: the INCREMENTAL
+KEY project is the one lever that addresses ds's wall, hinata's scoped residue, AND the REC
+re-widening at once; no cheaper dial exists in the current structure.
