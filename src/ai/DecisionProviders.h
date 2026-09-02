@@ -769,23 +769,10 @@ public:
     // (d) redundancy (>=2 GR in hand + a board: "no point holding back").
     // MTG_UNPRUNE=treasuretrickcast opens it for audit.
     bool TrickCastSensible(const GameState&, int, const CardDefinition&) const override;
-    // COPY-MAGNET reserve override (USER 2026-08-25, mana-order-and-reserve-overhaul.md): when the
-    // plan casts a pump/trick and a magnet is live, EVERY untapped creature is a copy target and
-    // an attacker, so the base "hold only the pump target" narrowing is exactly wrong here -- keep
-    // holding the whole board of creatures and pay off everything else. With no pump in the plan
-    // (or no magnet on board) the base rule applies unchanged.
-    std::uint64_t ReserveCreatureHold(const GameState& s, const PlanTraits& t,
-                                      std::uint64_t crea_mask) const override
-    { return (t.plan_has_own_pump && t.copy_magnet_live) ? crea_mask
-                                                         : GenericProvider::ReserveCreatureHold(s, t, crea_mask); }
-    // Treasures-before-creatures on the go-off turn (lump doc §9, USER: "Especially in Mirrorwing
-    // Treasures should be used before creatures"): when bodies are multipliers, a tapped creature
-    // forfeits its trick copy AND its swing, while a cracked Treasure costs one future mana -- so
-    // spend the one-shots freely and let the reserve keep the bodies instead. On a durdle turn the
-    // base §2b hold applies (keep the Treasure, tap the dorks -- they untap anyway; the gi81 rule,
-    // mana-creature-tap-order.md §6b).
-    bool SpendOneShotsFreely(const GameState& /*s*/, const PlanTraits& t) const override
-    { return t.bodies_are_multipliers; }
+    // (The copy-magnet ReserveCreatureHold and the bodies-are-multipliers SpendOneShotsFreely
+    // overrides that used to live here were generalised into the DecisionProvider base on
+    // 2026-09-02 -- both conditions are param-keyed and deck-agnostic, so any magnet deck now
+    // gets them; byte-identical for this deck and inert for magnet-less ones.)
     // Exalted-aware attack declaration (shared with AntiLifegainProvider): hold back a 0-power,
     // no-trigger mana dork rather than swinging it next to the real attacker -- it deals nothing and
     // cancels Ignoble Hierarch's lone-attacker bonus. Became load-bearing when the whole-turn dork

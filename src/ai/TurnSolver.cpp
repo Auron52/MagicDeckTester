@@ -15762,6 +15762,13 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         if (d->params.copies_solo_targeted_spells) { t.copy_magnet_live = true; }
+        // MTG_HEROISM_MAGNET_TRAIT (see HeroismMagnetTraitOn): a live copy-token enchantment's
+        // trick turns have a magnet's go-off shape (each trick mints a hasted body; the copy
+        // doubles a Gold Rush's mint), so it counts as one for the one-shot spend bias and the
+        // whole-board creature hold (mw gi284 T4: the Treasure held through a Heroism +
+        // double-Draught turn tapped the dorks and forfeited the winning attack).
+        if (HeroismMagnetTraitOn() && d->params.frontline_copy_tokens > 0)
+        { t.copy_magnet_live = true; }
         if (!p.tapped && IsScaledManaDork(*d) && n_scalers < 4) { scalers[n_scalers++] = d; }
     }
 
@@ -16117,12 +16124,19 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     if (DorkReserveEnabled())
     {
         // Class priority creatures > one-shots > depletion: release the lowest class first.
+        // MEASURED AND KEPT (2026-09-02): flipping the top two -- hold the Treasure harder, tap
+        // the dork, the intuitive "it untaps next turn while a spent Treasure is gone forever" --
+        // was built three ways (unconditional; magnet-gated; Heroism-magnet-gated) and lost every
+        // time on the Mirrorwing suite (best coding +0.0028 weighted, 18 faster / 50 slower,
+        // 4 games won->unwon): on a deck that RE-MINTS Treasures, an attacker tapped today costs
+        // more than a Treasure banked for tomorrow, even before a magnet lands. Do not re-derive
+        // the flip; the record is docs/design/mw-treasure-vs-dork-generalisation.md.
         push(reserved_crea | reserved_shot);           // release depletion
         push(reserved_crea);                           // release one-shots too
         // Provider-narrowed creature hold (MTG_PUMP_TARGET_HOLD): once holding EVERY creature has
         // failed, retreat to the body worth holding hardest -- the projected pump target (generic)
-        // or the whole board again (copy-magnet override, where narrow == crea and dedup elides
-        // these rungs). Tried first with the consumable classes still held, then alone.
+        // or the whole board again (the bodies-are-multipliers base rule, where narrow == crea and
+        // dedup elides these rungs). Tried first with the consumable classes still held, then alone.
         if (PumpTargetHoldEnabled() && pt && reserved_crea)
         {
             const std::uint64_t narrow =

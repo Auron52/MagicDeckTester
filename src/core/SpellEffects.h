@@ -9982,6 +9982,20 @@ inline bool OneShotReserveEnabled()
     return v;
 }
 
+// MTG_HEROISM_MAGNET_TRAIT (EXPERIMENT, default OFF; =1 enables): a live copy-token enchantment
+// (frontline_copy_tokens -- Frontline Heroism) counts toward PlanTraits::copy_magnet_live. Its
+// trick turns have the same go-off shape as a magnet's (every trick mints a hasted body, the copy
+// doubles a Gold Rush's mint, and the whole board wants to swing), so the one-shot spend bias and
+// the whole-board creature hold should treat it as one -- measured on mw gi284 T4, where holding
+// the Treasure through a Heroism + double-Draught turn tapped the dorks, forfeited the attack and
+// turned a T4 win into a drifting loss. (A first variant counted a magnet CAST IN THE PLAN
+// instead -- MTG_MAGNET_PLAN_TRAIT -- and measured net-worse, 1 faster / 11 slower; deleted.)
+inline bool HeroismMagnetTraitOn()
+{
+    static const bool env_on = EnvOn("MTG_HEROISM_MAGNET_TRAIT");
+    return heurarm::Flag(heurarm::HEROISM_MAGNET_TRAIT, env_on);
+}
+
 // SCALER PLAN BIAS (MTG_SCALER_PLAN_BIAS): a subtype scaler's tap order depends on WHAT THE PLAN
 // DOES (USER 2026-08-24). Casting its food this turn (more Elves for Priest of Titania) -> tap it
 // LAST so the burst counts them. Attack turn with no food -> tap it FIRST among creatures: one

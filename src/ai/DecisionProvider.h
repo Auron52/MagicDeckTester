@@ -1149,11 +1149,15 @@ public:
     // Base rule (USER 2026-08-25: "with targeted pumps I would have the default only reserve the
     // pumped creature"): when the plan casts an own-creature pump, hold ONLY its projected target
     // (the body the pump lands on -- losing it to a mana tap wastes the trick); with no pump, no
-    // narrowing. A copy-magnet archetype overrides this the other way (Mirrorwing: EVERY untapped
-    // creature is a copy target, so hold them all -- see MirrorwingProvider).
+    // narrowing. On a bodies-are-multipliers plan (a live copy magnet + a targeted trick -- the
+    // former MirrorwingProvider override, generalised 2026-09-02 because the condition is
+    // param-keyed and deck-agnostic) the narrowing is exactly wrong: EVERY untapped creature is a
+    // copy target and an attacker, so keep holding the whole board. Byte-identical for any deck
+    // without a copies_solo_targeted_spells magnet (the trait is then always false).
     virtual std::uint64_t ReserveCreatureHold(const GameState& s, const PlanTraits& t,
                                               std::uint64_t crea_mask) const
     {
+        if (t.bodies_are_multipliers) { return crea_mask; }
         if (t.pump_target_card == 0) { return crea_mask; }
         std::uint64_t hold = 0;
         const int n = static_cast<int>(std::min<std::size_t>(s.battlefield.size(), 64));
@@ -1173,11 +1177,17 @@ public:
     // legitimately be a default-constructed PlanTraits when no plan is in scope (per-payment path
     // outside an apply), which the base rule treats as "no reason to spend" -> hold.
     //
-    // The override case this exists for (lump doc §9, USER: "Especially in Mirrorwing Treasures
-    // should be used before creatures"): on a go-off turn whose bodies are multipliers, the
-    // Treasure should be SPENT so the bodies stay untapped -- see MirrorwingProvider.
-    virtual bool SpendOneShotsFreely(const GameState& /*s*/, const PlanTraits& /*t*/) const
-    { return false; }
+    // The go-off case (lump doc §9, USER: "Especially in Mirrorwing Treasures should be used
+    // before creatures"): on a turn whose bodies are multipliers (a live copy magnet + a targeted
+    // trick in the plan), a tapped creature forfeits its trick copy AND its swing while a cracked
+    // Treasure costs one future mana -- so spend the one-shots freely and let the reserve keep the
+    // bodies. Formerly a MirrorwingProvider override; generalised 2026-09-02 (the trait is
+    // param-keyed -- copies_solo_targeted_spells x solo_target_trick -- so it is deck-agnostic and
+    // false for every magnet-less deck, byte-identical by construction). On any other plan the
+    // base doctrine holds: a spent one-shot is gone forever, a held one is worth exactly one mana
+    // on any later turn -- and the dork it spares untaps anyway (the gi81 rule).
+    virtual bool SpendOneShotsFreely(const GameState& /*s*/, const PlanTraits& t) const
+    { return t.bodies_are_multipliers; }
 
     // OpponentLifegainUseful -- is making the OPPONENT gain life USEFUL to us right now? A
     // Grove-of-the-Burnwillows- style drip land (tap_opponent_lifegain) normally GIFTS the opponent life -- a
