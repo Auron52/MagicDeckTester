@@ -213,6 +213,20 @@ run_regression(){
   local rc=$?
   grep -E '^Result:|^ALL PASS|^REGRESSION DETECTED' "$OUT/regression.log" | while read -r l; do log "  $l"; done
   grep -E '^\s+\[(searched|d0)\s*\]' "$OUT/regression.log" | while read -r l; do log "  $l"; done
+  # A NONZERO rc is NOT necessarily "GT moved". A scenario-sanity ABORT returns nonzero too, and it
+  # happens BEFORE a single game is played -- so the "EXPECTED, and NOT a rejection" text below,
+  # ending in an invitation to --accept, would be telling the operator to promote ground truth over a
+  # run that never ran. That is a GT-corruption path, not a reporting nit. It bit the Dragons chain
+  # on 2026-09-02 (five edf_* fixtures failing, all three tiers aborted, all three accepted; nothing
+  # moved only because there was nothing to promote), which is where the sibling guard in
+  # dragons_chain.sh came from; that commit flagged THIS blind spot as still open. Closed here, the
+  # same way: distinguish the two cases and refuse the ambiguous one.
+  if grep -q "^ABORT: scenario sanity failed" "$OUT/regression.log"; then
+    log "  SCENARIO SANITY ABORTED -- no games were run, so this says NOTHING about GT."
+    log "  Do NOT accept. Fix the failing fixture(s) (bash test/scenarios.sh), then re-run."
+    log "  full output: $OUT/regression.log"
+    return 0
+  fi
   if [ "$rc" -ne 0 ]; then
     # Report the direction MEASURED, not an assumed one. The first version of this text asserted
     # that GT would look like a slowdown (the standard metric still rewards lookahead's peek, so a
