@@ -82,21 +82,38 @@ def ParseArgs():
 # Decklist parsing — plain text and Cockatrice .cod XML
 # ---------------------------------------------------------------------------
 
-def LoadDeckCounts(path: Path) -> dict[str, int]:
-    """Return {card_name: count} for mainboard cards, preserving insertion order."""
-    if path.suffix.lower() == ".cod":
-        return _LoadCockatriceDeckCounts(path)
-    return _LoadTextDeckCounts(path)
+def LoadDeckCounts(path: Path, board: str = "main") -> dict[str, int]:
+    """Return {card_name: count} for one board, preserving insertion order.
 
-def _LoadTextDeckCounts(path: Path) -> dict[str, int]:
+    `board` is "main" or "side". The zone names mirror DeckLoader.cpp exactly (Cockatrice
+    `<zone name="side">`; text `Sideboard` / `SB:` section headers), so the script and the
+    engine never disagree about which card sits on which board.
+    """
+    if path.suffix.lower() == ".cod":
+        return _LoadCockatriceDeckCounts(path, board)
+    return _LoadTextDeckCounts(path, board)
+
+def _LoadTextDeckCounts(path: Path, board: str = "main") -> dict[str, int]:
     counts: dict[str, int] = {}
+    in_sideboard = False
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("//") or line.startswith("#"):
                 continue
+            low = line.lower()
+            if low in ("sideboard", "sideboard:") or low.startswith("sb:"):
+                in_sideboard = True
+                if low.startswith("sb:"):
+                    line = line[3:].strip()
+                    if not line:
+                        continue
+                else:
+                    continue
             match = re.match(r"^(\d+)x?\s+(.*)", line)
             if not match:
+                continue
+            if in_sideboard != (board == "side"):
                 continue
             count = int(match.group(1))
             name  = match.group(2).strip()
@@ -105,12 +122,13 @@ def _LoadTextDeckCounts(path: Path) -> dict[str, int]:
                 counts[name] = counts.get(name, 0) + count
     return counts
 
-def _LoadCockatriceDeckCounts(path: Path) -> dict[str, int]:
+def _LoadCockatriceDeckCounts(path: Path, board: str = "main") -> dict[str, int]:
     tree = ET.parse(path)
     root = tree.getroot()
+    wanted = ("side", "sideboard") if board == "side" else ("main",)
     counts: dict[str, int] = {}
     for zone in root.findall("zone"):
-        if zone.get("name") != "main":
+        if zone.get("name") not in wanted:
             continue
         for card in zone.findall("card"):
             name  = card.get("name", "").strip()
@@ -122,6 +140,65 @@ def _LoadCockatriceDeckCounts(path: Path) -> dict[str, int]:
 def LoadDeckNames(path: Path) -> list[str]:
     """Return a deduplicated list of mainboard card names (order-preserving)."""
     return list(LoadDeckCounts(path).keys())
+
+# ---------------------------------------------------------------------------
+# Sideboard reachability
+# ---------------------------------------------------------------------------
+
+# Cards that fetch from OUTSIDE THE GAME, i.e. from the sideboard. Needed as a NAME list, not
+# just a cards.json lookup, because the whole point is to work BEFORE the card is implemented --
+# on a wish deck the wish itself is typically one of the missing cards, so a param-based test
+# would answer "no sideboard access" precisely when the answer matters most.
+WISH_CARD_NAMES = frozenset({
+    "Living Wish", "Burning Wish", "Cunning Wish", "Death Wish", "Golden Wish",
+    "Glittering Wish", "Fae of Wishes // Awaken the Ancient", "Fae of Wishes",
+    "Wish", "Mastermind's Acquisition", "Spawnsire of Ulamog", "Ring of Ma'ruf",
+    "Ring of Ma'rûf", "Karn, the Great Creator", "Garth One-Eye",
+})
+
+def SideboardReachability(main_names: list[str], side_names: list[str],
+                          cards_json: Path) -> dict:
+    """Can anything in the mainboard fetch a sideboard card during a game?
+
+    In this simulator there is no game 2 and no sideboarding, so a sideboard is reachable
+    ONLY through a wish effect. That makes reachability a real gate rather than a formality:
+    scanning every sideboard unconditionally would hard-fail `--coverage-only` on the five
+    decks whose sideboards are vestigial import residue (Knights, Minotaur, Hinata2, Goblins,
+    Unpredictable Cyclone), while NOT scanning a wish deck's sideboard hides its win condition.
+
+    Three detectors, most authoritative first. All three are name/board level -- a wish's type
+    restriction ("creature or land card" for Living Wish) is deliberately NOT applied, because
+    an unimplemented card has no known types, so filtering by type would skip exactly the cards
+    that still need implementing.
+    """
+    entries = {}
+    if cards_json.exists():
+        with open(cards_json, encoding="utf-8") as f:
+            data = json.load(f)
+        for card in data.get("cards", []):
+            if card.get("name") in main_names:
+                entries[card["name"]] = card
+
+    via: list[dict] = []
+    for name in main_names:
+        entry = entries.get(name)
+        if entry and (entry.get("parameters", {}) or {}).get("wish_from_sideboard"):
+            via.append({"card": name, "detected_by": "wish_from_sideboard parameter"})
+        elif entry and "outside the game" in entry.get("oracle_text", "").lower():
+            via.append({"card": name, "detected_by": "oracle text 'outside the game'"})
+        elif name in WISH_CARD_NAMES:
+            via.append({"card": name, "detected_by": "known wish card (not yet implemented)"})
+
+    if not side_names:
+        reason = "deck has no sideboard"
+    elif via:
+        reason = (f"{len(side_names)} sideboard card(s) reachable via "
+                  + ", ".join(v["card"] for v in via))
+    else:
+        reason = ("no mainboard card fetches from outside the game -- sideboard is unreachable "
+                  "in this simulator (no game 2, no sideboarding) and is NOT scanned")
+
+    return {"reachable": bool(via and side_names), "via": via, "reason": reason}
 
 # ---------------------------------------------------------------------------
 # Vial target computation
@@ -206,12 +283,17 @@ def LoadCardEntry(name: str, cards_json: Path) -> dict | None:
             return card
     return None
 
-def CheckExistingCoverage(card_names: list[str], cards_json: Path) -> list[dict]:
+def CheckExistingCoverage(card_names: list[str], cards_json: Path,
+                          boards: dict[str, str] | None = None) -> list[dict]:
     """
     Deterministic oracle-text pattern check for cards already in the database.
     Checks: spectacle_cost, sacrifice_land, landfall_damage, stages_cards,
             death_trigger_damage, on_cast_trigger, attack_trigger_damage,
             upkeep_adds_charge, static effects, unbracketed triggers.
+
+    `boards` optionally maps card name -> "main"/"side" so the report says which board a
+    finding came from. A reachable sideboard card is held to the SAME standard as a mainboard
+    one -- in a wish deck the sideboard is part of the deck.
     """
     coverage = []
     for name in card_names:
@@ -281,6 +363,8 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path) -> list[dict]
                     break
 
         record: dict = {"card": name, "status": "partial" if gaps else "full"}
+        if boards and boards.get(name, "main") != "main":
+            record["board"] = boards[name]
         if deferred:
             record["deferred"] = deferred
         if gaps:
@@ -821,16 +905,34 @@ def Main():
     # 1. Parse
     deck_counts = LoadDeckCounts(deck_path)
     card_names  = list(deck_counts.keys())
+    side_counts = LoadDeckCounts(deck_path, "side")
+    side_names  = list(side_counts.keys())
 
-    # 2. Coverage
+    # 2. Coverage -- over the mainboard PLUS any sideboard the deck can actually reach.
+    # A wish deck's sideboard is not optional colour: on EldraziDisplacerFlicker both win
+    # conditions (Essence Depleter, Dimensional Infiltrator) live there, and scanning the
+    # mainboard alone reported a clean two-card gap while staying silent on them.
+    reach       = SideboardReachability(card_names, side_names, cards_json)
+    scanned     = card_names + ([n for n in side_names if n not in card_names]
+                                if reach["reachable"] else [])
+    boards      = {n: "main" for n in card_names}
+    for n in side_names:
+        boards.setdefault(n, "side")
+
     implemented = LoadImplementedNames(cards_json)
-    missing     = [n for n in card_names if n not in implemented]
-    existing    = [n for n in card_names if n in implemented]
-    coverage    = CheckExistingCoverage(existing, cards_json)
+    missing     = [n for n in scanned if n not in implemented]
+    existing    = [n for n in scanned if n in implemented]
+    coverage    = CheckExistingCoverage(existing, cards_json, boards)
 
     report = {
         "deck":     deck_path.stem,
         "cards":    card_names,
+        "sideboard": {
+            "cards":     side_names,
+            "reachable": reach["reachable"],
+            "via":       reach["via"],
+            "reason":    reach["reason"],
+        },
         "missing":  missing,
         "coverage": coverage,
         # Engine-inferred card dependency edges (review item: a missing edge here means the

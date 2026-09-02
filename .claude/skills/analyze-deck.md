@@ -126,6 +126,20 @@ Parse the JSON output:
 - `coverage[*].status == "partial"`:
   - `gaps`: oracle text features missing from the current implementation → must fix before analysis
   - `deferred`: bracket-noted items → **read every bracket note and classify it** (see below)
+- `sideboard.reachable`: whether a wish effect can fetch the sideboard *during a game* (there is
+  no game 2 here, so a wish is the only route). When true, every sideboard card is scanned and
+  held to the same standard as a mainboard one, and appears in `missing`/`coverage` with
+  `"board": "side"`.
+
+**In a wish deck the sideboard IS the deck — never skip it.** This scan used to be mainboard-only,
+which on `EldraziDisplacerFlicker` reported a tidy two-card gap and stayed **silent on both of the
+deck's win conditions** (Essence Depleter and Dimensional Infiltrator, reachable off 4 Living Wish).
+The deck then measured 2.5 turns slower than the user expected, and no coverage output pointed at
+why. Reachability is detected by a `wish_from_sideboard` parameter, by "outside the game" in the
+oracle text, or — because the wish is usually itself unimplemented at Stage 1 — by a name list in
+`analyze_deck.py`. If a deck's wish is not on that list, **add it**; a silent `reachable: false` on
+a deck that plainly wishes is a bug in the scan, not a fact about the deck. Sideboards on non-wish
+decks are correctly left unscanned (five decks here carry vestigial import residue there).
 
 **Classifying bracket notes — this is mandatory, not optional:**
 
