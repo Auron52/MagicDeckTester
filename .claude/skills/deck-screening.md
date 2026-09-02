@@ -464,12 +464,42 @@ plays a **different** game from shipped play, and on Mirrorwing the level is **+
 | + `value_model: false`, `ladder_value_leaf: true` | **4.3273** | **+0.0828 — the whole gap** |
 | + the pooled card-scores profile | 4.3273 | 0.0000 — the pool profile costs nothing |
 
-The cause is the one deck_compare sets on purpose: the committed pass stays **pure heuristic** and
-the value model only accelerates warm-up ("ladder mode … never decides"), so one pooled model can
-serve every combination without re-validating per combination. That is the right call *for the
-comparison* — the measured residual coupling between arms is 0.0008 t — but it means the arms are
-both playing ~0.08 t below shipping strength. Both arms share the handicap, so the **delta is
-sound**; the **level is not**.
+**The delta is unaffected — this was MEASURED, not argued.** Same swap (Libation over the 4th
+Ancestral Anger), same 20,000 seeds, same aliased table, run under both configurations:
+
+| condition | base | arm | delta | identical |
+|---|---|---|---|---|
+| screening rig | 4.3273 | 4.3530 | **+0.0257 ± 0.0021** | 95.0% |
+| shipped play | 4.2445 | 4.2700 | **+0.0255 ± 0.0016** | 95.9% |
+
+Difference-of-differences, paired on the same game indices: **+0.0003 ± 0.0015, t = +0.17** —
+indistinguishable from zero. The handicap is shared, it cancels, and a screen's delta is what it
+claims to be. Quote the **delta**, never the **level**.
+
+#### Why the level moves, which is not the obvious reason
+
+It is *not* "distrusting the value leaf". Decomposed one knob at a time, 20,000 games each, shipped
+profile, no numbering:
+
+| arm | avg | vs shipped | wall | note |
+|---|---|---|---|---|
+| shipped (model ON, ladder OFF) | 4.2750 | — | 1.00x | |
+| ladder ON only | 4.2750 | **+0.0000** | 1.09x | **byte-identical digest** — a pure no-op when the model is on |
+| model OFF only | 4.2908 | +0.0158 | **3.03x** | rollout leaves everywhere |
+| no sidecar at all | 4.2908 | +0.0158 | 3.07x | **identical digest to model-OFF** — the two are the same thing |
+| **model OFF + ladder ON** (deck_compare) | **4.3539** | **+0.0789** | 1.29x | five times the sum of its parts |
+
+So the cost is an **interaction**, not either knob. `TurnSolver.cpp`'s leaf choice is
+`(UseValueModel() || g_force_value_leaf) && state.m_value_model` — with the sidecar still attached,
+the ladder turns the learned leaf **on** for warm-up passes even while `UseValueModel()` is off. The
+committed pass then falls back to the rollout. That is deliberate and it is what the config is for
+(one pooled model can serve every combination without re-validating per combination; measured
+residual coupling between arms 0.0008 t) — but warm-up passes ordered by one value function and a
+committed pass judged by another costs 0.063 t *more* than simply using rollouts throughout.
+
+Worth knowing if the rig is ever revisited: `model OFF, ladder OFF` is only +0.0158 t from shipped
+and carries no model-favours-base bias, at 3x the wall clock. Not urgent — the delta transfers
+either way.
 
 If someone asks what the deck actually does, run it standalone against its own profile
 (`mtg <deck>.cod --games N --profile <deck>.profile.json`, no numbering, no value flags). On
