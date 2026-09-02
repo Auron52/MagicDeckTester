@@ -404,3 +404,24 @@ ratio; (2) NEVER edit source while a background build runs -- the object lands N
 source and the next build silently reuses it (cost: a defaults-revert that "didn't take", found
 only because clean-env play failed byte-identity); (3) sed range args print in FILE order, not
 argument order.
+
+### TIGHT QUALITY GATE + THE FULL WALL TABLE (2026-09-02 late night)
+
+**Tight keeps a REAL hinata gain at roughly half the full recipe's size** (140k-game gate,
+`logs/ngc_sound/tight_gate.err`, all arms fresh on one binary): screcipe REPRODUCES
+-0.0126/-0.0137 (t 4.9/5.5); **tightrecipe -0.0057 hold (t -2.67) / -0.0096 train (t -4.52)**;
+movers th/kitty GAME-IDENTICAL under tight, mirrorwing 2 games better, ds jitter-neutral. So the
+[rollout+rec] canon traffic carries about half the quality -- it is partially load-bearing, and
+the choice is now a priced menu, not a blocker.
+
+**Definitive quiet-box wall sweep** (4 arms x 4 decks x 3 reps, `logs/ngc_sound/wall_sweep/`,
+rep spread ~1%): hinata off->tight +6.4% / recroot +6.3% / screcipe +18.6%; ds +12.9 / +10.6 /
++16.4; kitty +0.2 / +0.0 / +6.3; mirrorwing +2.9 / +2.6 / +3.1.
+
+**MTG_BP_CANON_RECROOT built (the middle arm): tight + rec applies on the ROOT TURN only** (same
+authority test as the node's ROOTTURN gate, `g_condemn_root_turn`). Its wall EQUALS tight's --
+root-turn rec traffic is nearly free, the ROOTTURN discovery repeating one level down. The
+recroot quality probe (hinata off/tight/recroot, 10k/block x 2, one binary) is the night's last
+measurement: if recroot recovers quality over tight, it is FREE quality; if not, tight is the
+candidate. NOTE dragons smoke cells moved 2026-09-02 late -- that is the OTHER agent's adopted
+Dragons keep table (`c25d45b1`), their rebaseline, not this arc's.

@@ -133,6 +133,7 @@ enum Slot : int
     BP_CANON_CONT,            // MTG_BP_CANON_CONT         sound-NGC: greedy judges ACT-vs-PASS, order picks the cast
     BP_CANON_ROLLOUT,         // MTG_BP_CANON_ROLLOUT      canon fires in PLAIN rollout applies too (unscoped form)
     BP_CANON_REC,             // MTG_BP_CANON_REC          canon fires at RECORDING rollout applies (default ON)
+    BP_CANON_RECROOT,         // MTG_BP_CANON_RECROOT      with REC=0, rec applies still fire on the ROOT TURN
     COUNT
 };
 
@@ -243,6 +244,7 @@ inline const char* Name(int slot)
         "MTG_BP_CANON_CONT",
         "MTG_BP_CANON_ROLLOUT",
         "MTG_BP_CANON_REC",
+        "MTG_BP_CANON_RECROOT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

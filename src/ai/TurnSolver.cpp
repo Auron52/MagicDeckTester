@@ -1163,6 +1163,18 @@ static bool BpCanonRecToo()
     return heurarm::Flag(heurarm::BP_CANON_REC, on);
 }
 
+// MTG_BP_CANON_RECROOT -- the middle arm between REC=1 (canon at every recording rollout apply;
+// hinata +18.7% wall, quality -0.0126/-0.0137) and the TIGHT scope REC=0 (hinata +6.1% wall,
+// quality -0.0057/-0.0096, so the rec traffic carries ~half the gain): with REC=0, still fire
+// canon at recording applies ON THE ROOT TURN (state.turn_number == g_condemn_root_turn -- the
+// same authority test the node's ROOTTURN gate uses). The committed decision's own rollout lines
+// get canonical continuations; lookahead-turn rollouts keep greedy. Default OFF.
+static bool BpCanonRecRootOnly()
+{
+    static const bool on = EnvOn("MTG_BP_CANON_RECROOT");
+    return heurarm::Flag(heurarm::BP_CANON_RECROOT, on);
+}
+
 // One breakpoint-enum cache entry (see BpEnumEntryFor, defined with the enum memo far below).
 struct BpEnumEntry
 {
@@ -17221,7 +17233,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // still decides nothing there. MTG_BP_CANON_ROLLOUT=1 restores canon-everywhere (the
         // form the 2026-09-02 quality gates measured) for A/B.
         const bool canon_scope_ok = g_bp_root_enum
-                                 || (out_breakpoint != nullptr && BpCanonRecToo())
+                                 || (out_breakpoint != nullptr
+                                     && (BpCanonRecToo()
+                                         || (BpCanonRecRootOnly() && g_condemn_root_turn >= 0
+                                             && state.turn_number == g_condemn_root_turn)))
                                  || bp_resume != nullptr || bp_capture != nullptr
                                  || BpCanonRolloutToo();
         const int canon_kind = (g_bp_root_enum ? 1 : 0) | (out_breakpoint != nullptr ? 2 : 0)
