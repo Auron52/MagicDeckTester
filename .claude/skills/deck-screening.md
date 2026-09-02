@@ -273,6 +273,66 @@ has whole-pool warm-start (`MTG_KEEP_PRIOR_RAW`), but it is for the same decklis
 refuses otherwise — *"a changed decklist needs bucket translation, not yet built"*. The cell counts
 say that would pay: a raised bucket needs only ~6% new cells.
 
+## THE APPROVED ROUTE for a card the shipped table does not bucket: substitute it into a slot
+
+**User directive, 2026-09-02: "We don't need to regenerate any mulligan profiles! Just use the
+existing table." / "we just do the best we can with the existing profile, substituting our card(s)
+into an existing slot(s)." / "That is currently the only approved route."**
+
+Mulligan-profile regeneration has been **deemed too slow to be of use for this comparison
+use-case**. So when a screen introduces a card the shipped table does not bucket, do **not**:
+
+* generate a pool/union table (banned by Rule 0a, and the automatic path — disable it explicitly),
+* generate per-decklist tables to pool with `keepstore.py` (still generation),
+* use `--with-floor` / `--floor` (they call `gen_table` **per arm** — generation),
+* drop the table (`"pool_table": false`) unless you have a reason: it is symmetric and therefore
+  *valid*, but it costs ~0.063t of play quality on both arms and ~22x per-game wall, and it
+  regresses bottoming to the lookahead.
+
+**Instead alias the new card into the bucket of the card it replaces:**
+
+```bash
+python3 scripts/alias_card_into_bucket.py \
+    "decks/<Deck>/<Deck>.keepmodel.exhaustive.profile.json.gz" \
+    "<new card>" "<card it replaces>" logs/<scratch>/alias_<host>
+```
+
+It copies the shipped table and adds the new name to one bucket's member list. **K is unchanged and
+nothing is generated** (seconds, not hours).
+
+**Why this is sound, not a bodge.** A swap that keeps the bucket total constant makes the arm's
+composition space *identical to base's*: `Anger 3 + Libation 1` occupies the same slot as base's
+`Anger 4`. So every hand in every arm resolves — `use_table` stays true, coverage is exact, the
+fall-through rate is 0, and the apparatus is genuinely shared rather than approximately shared.
+That is the configuration the skill has always wanted (sharing one table halves the se); the alias
+is what makes it reachable without paying for a table.
+
+**The assumption, stated plainly.** The mulligan decision treats the substitute *as* the card it
+replaces. That **holds the keep/bottom policy fixed across arms by construction**, which is exactly
+what ISOLATES the in-play difference — the thing a card-swap screen is asking about. What it cannot
+see is that the new card might want a *different* keep policy; if the swap's whole thesis is
+"this card changes which hands you keep", this route will not measure it, and you must say so.
+
+**Two traps:**
+
+1. **Copy `value.json` into the scratch directory alongside the profile.** The engine resolves every
+   sibling model **directory-relative off the profile path**, so pointing `profile` at a scratch copy
+   silently detaches the value leaf — worth **1.35–84.8x** (`value-leaf.md`), and nothing warns you.
+   Copy `<stem>.profile.json` and `<stem>.value.json` next to the aliased table, and confirm the
+   driver echoes the value model under `apparatus:`.
+2. **The floor goes unmeasured, so do not report `t` as if it were a verdict.** `--with-floor` is
+   unavailable here (it generates), and this skill's standing rule is that an effect must clear the
+   measured bias floor. Say the floor is unmeasured. The one mitigation worth stating: with the alias,
+   every arm runs the *same table over the same composition space*, so the apparatus asymmetry that
+   the floor exists to bracket is far smaller by construction than under a pool table — but "smaller
+   by construction" is an argument, not a measurement.
+
+**Why not partial coverage (just letting the uncovered hands fall through)?** Because it is
+**asymmetric**: only the arm holding the new card has uncovered hands, and those fall back to the
+static keep. On Mirrorwing that is ~12% of hands at the ~0.26t the exhaustive table is worth — a bias
+the same size as the effect being measured, landing entirely on one arm. The alias costs nothing and
+removes it.
+
 ## The four things that make it fast, and why none is optional
 
 1. **Inherited numbering.** The opening shuffle is a positional Fisher–Yates, so a count edit
