@@ -497,9 +497,45 @@ committed pass then falls back to the rollout. That is deliberate and it is what
 residual coupling between arms 0.0008 t) — but warm-up passes ordered by one value function and a
 committed pass judged by another costs 0.063 t *more* than simply using rollouts throughout.
 
-Worth knowing if the rig is ever revisited: `model OFF, ladder OFF` is only +0.0158 t from shipped
-and carries no model-favours-base bias, at 3x the wall clock. Not urgent — the delta transfers
-either way.
+#### The mixed evaluator is a bad use of the wall clock — measured against the alternative
+
+Both configurations swept across budgets, 20,000 games per cell, wall normalised to the shipped
+operating point (d5/b20, model ON = 1.00x). `se x` is the standard error you would get at a **fixed
+total wall budget**, since a cheaper cell affords more games:
+
+| config | budget | avg | vs shipped | wall | se at fixed wall |
+|---|---|---|---|---|---|
+| **MIXED** — model OFF + ladder ON (**today's rig**) | 20 | 4.3539 | +0.0789 | 1.30x | 1.14 |
+| MIXED | 30 | 4.3318 | +0.0568 | 1.63x | 1.28 |
+| MIXED | 40 | 4.3177 | +0.0427 | 2.00x | 1.41 |
+| MIXED | 60 | 4.3046 | +0.0296 | 2.38x | 1.54 |
+| **ROLLOUT** — model OFF, ladder OFF | **5** | **4.3402** | +0.0652 | **0.89x** | **0.94** |
+| ROLLOUT | 8 | 4.3219 | +0.0469 | 1.36x | 1.16 |
+| ROLLOUT | 10 | 4.3137 | +0.0387 | 1.68x | 1.30 |
+| ROLLOUT | 14 | 4.3022 | +0.0272 | 2.30x | 1.52 |
+| ROLLOUT | 20 | 4.2908 | +0.0158 | 3.03x | 1.74 |
+| SHIPPED — model ON, ladder OFF | 20 | **4.2750** | 0.0000 | **1.00x** | **1.00** |
+
+**Pure rollout leaves dominate the mixed evaluator at every equal-wall point**, and the gap is
+widest exactly where the rig runs today:
+
+```
+MIXED b20 (1.30x, 4.3539)  vs  ROLLOUT b8  (1.36x, 4.3219)  -> rollout better by 0.0320
+MIXED b30 (1.63x, 4.3318)  vs  ROLLOUT b10 (1.68x, 4.3137)  -> rollout better by 0.0181
+MIXED b60 (2.38x, 4.3046)  vs  ROLLOUT b14 (2.30x, 4.3022)  -> rollout better by 0.0024
+```
+
+**`ROLLOUT b5` strictly dominates today's rig on all three axes** — 0.89x the wall (a 32% saving),
+0.014 t *better* play, and 1.46x the games for the same total budget (se x0.83). Raising the budget
+instead of banking the saving is equally available and is not a problem: `ROLLOUT b8` costs what the
+rig costs today and plays 0.032 t better.
+
+No model-free configuration reaches shipped strength even at 3x. **Shipped conditions are both the
+cheapest and the strongest cell in the table** — the value leaf is not merely a speed-up, it plays
+better. The reason the rig avoids it is the model-favours-base worry, and there is now one direct
+measurement bearing on that: the Libation delta measured under shipped conditions matched the rig's
+to **+0.0003 ± 0.0015**. One swap on one deck is not a general result, but it is the only evidence
+either way, and it points at the bias being far smaller than the 0.079 t the rig pays to avoid it.
 
 If someone asks what the deck actually does, run it standalone against its own profile
 (`mtg <deck>.cod --games N --profile <deck>.profile.json`, no numbering, no value flags). On
