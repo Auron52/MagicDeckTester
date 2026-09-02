@@ -542,6 +542,9 @@ class Spec:
         # an omitted `profile` reads exactly like a deliberate one (it is not -- see the header).
         self.profile       = self.path("profile")       or self.sibling(".profile.json")
         self.value_profile = self.path("value_profile") or self.sibling(".value.json")
+        # "ladder_rig": true restores the pre-2026-09-02 screening rig (model attached but NEVER
+        # deciding). Default false = the model decides, exactly as shipped play does. See job().
+        self.ladder_rig    = bool(s.get("ladder_rig", False))
 
         # PLAY SETTINGS COME FROM THE DECK, not from a constant here. Every deck's value model carries
         # a `value_play` block that IS its adopted, measured policy (burn: d6/b20, escalation_cap 6,
@@ -622,13 +625,27 @@ class Spec:
             # so a later reader can tell the hatch apart from the bug.
             j["_no_profile_deliberate"] = True
         if self.value_profile:
-            # Ladder mode: the model makes warm-up passes cheap, the COMMITTED pass stays pure
-            # heuristic. Verified byte-identical under a deliberately wrong model at unbounded budget;
-            # residual budget coupling at budget>0 measured 0.0008t. That guarantee is what lets one
-            # pool model serve every combination without re-validating per combination.
             j["value_profile"] = os.path.relpath(self.value_profile, ROOT)
-            j["value_model"] = False
-            j["ladder_value_leaf"] = True
+            if self.ladder_rig:
+                # LEGACY RIG (opt-in via spec "ladder_rig": true). Ladder mode: the model makes
+                # warm-up passes cheap and the COMMITTED pass stays pure heuristic, so the committed
+                # decision is provably independent of the model and one pool model can serve every
+                # combination without re-validating per combination.
+                #
+                # Off by default since 2026-09-02, because that proof is bought at a price nobody had
+                # priced: measured on Mirrorwing over 20,000 games, this configuration plays 0.079 t
+                # WORSE than letting the model decide, at 1.30x the wall clock -- and pure rollout
+                # leaves beat it at every equal-wall point, so it is not even the best model-free
+                # option. Kept as a hatch for re-checking a suspicious screen under the old rig.
+                j["value_model"] = False
+                j["ladder_value_leaf"] = True
+            # DEFAULT: let the model decide, exactly as shipped play does. What the rig was avoiding
+            # -- a base-fitted model flattering the base arm -- is not a thing the leaf can do: the
+            # MidGameFeature vector is a fixed enum with NO card-name feature, and at a leaf the plan
+            # is empty so every card-aware Plan* term (incl. PlanBaselineEval) is 0. A same-category
+            # swap moves no composition count either. Measured four ways on the Oracle's swap: own
+            # model +0.0280, a DRAGONS model +0.0282, rollout +0.0295, legacy rig +0.0291 -- the
+            # wrong-deck model differs from the own-deck model by +0.0001 +-0.0003.
         return j
 
 
@@ -1019,7 +1036,9 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     print(f"  play profile   {os.path.relpath(spec.profile, ROOT) if spec.profile else 'NONE (deliberate)'}")
     print(f"  play settings  d{spec.depth} / {spec.budget}ms   <- {spec.play_source}")
     print(f"  value model    {os.path.relpath(spec.value_profile, ROOT) if spec.value_profile else 'none'}"
-          + ("  (ladder mode: accelerates warm-up passes, never decides)" if spec.value_profile else ""))
+          + ("" if not spec.value_profile else
+             "  (LEGACY ladder rig: attached but never decides -- plays 0.079t below shipped)"
+             if spec.ladder_rig else "  (DECIDES, as shipped play does)"))
     # The apparatus is never silently downgraded. If the shipped table cannot answer every arm, the
     # pool gets its OWN table over the union deck rather than every arm losing the table -- dropping
     # it costs ~0.063t of play quality on both arms, ~22x per-game wall, AND regresses bottoming to

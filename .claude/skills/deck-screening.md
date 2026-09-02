@@ -451,18 +451,31 @@ back to generating, saying which and why.
 The screen prints, per combination: `delta` (negative = faster), `se`, `t`, `% identical`, and the
 games needed for 3σ on a 0.03t effect. Report **avg win turn**, never win/loss language.
 
-### A screen's ABSOLUTE average is not the deck's shipped number — only the delta transfers
+### The value model DECIDES in a screen — as it does in shipped play (changed 2026-09-02)
 
-Never quote a screen's `base` average as "what this deck does". The screening rig deliberately
-plays a **different** game from shipped play, and on Mirrorwing the level is **+0.083 t slower**
-(4.3273 vs 4.2750, same 20,000 seeds, decomposed one knob at a time 2026-09-02):
+**The screen plays the deck the way you ship it.** The value model is attached *and deciding*; it is
+not hobbled. `"ladder_rig": true` in a spec restores the old behaviour, and exists only so a
+suspicious result can be re-checked under the rig it was historically measured on.
 
-| configuration (same seed block) | avg | knob |
+**Screen levels before and after 2026-09-02 are not comparable.** The old rig played ~0.079 t below
+shipped, so an older screen's `base` average reads slow by about that much. **Deltas are comparable**
+— they were measured to transfer (below). Do not diff a new screen's level against an old one.
+
+Even under the new default, a screen's `base` is still not exactly a standalone number: the paired
+shuffle (`MTG_DECK_NUMBERING`) is a comparison mode that moves every opening hand, worth −0.0305 on
+Mirrorwing's seed block — a different *sample*, not a different strength. For "what does this deck
+do", run it standalone (bottom of this section).
+
+<details><summary>What the old rig cost, and why it was dropped (measured 2026-09-02)</summary>
+
+| configuration (same 20,000 seeds) | avg | knob |
 |---|---|---|
 | shipped: deck's own profile, engine defaults | **4.2750** | — |
 | + `MTG_DECK_NUMBERING` (the paired shuffle) | 4.2445 | −0.0305 — a different sample, not a real effect |
 | + `value_model: false`, `ladder_value_leaf: true` | **4.3273** | **+0.0828 — the whole gap** |
 | + the pooled card-scores profile | 4.3273 | 0.0000 — the pool profile costs nothing |
+
+</details>
 
 **The delta is unaffected — this was MEASURED, not argued.** Same swap (Libation over the 4th
 Ancestral Anger), same 20,000 seeds, same aliased table, run under both configurations:
