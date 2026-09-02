@@ -31,6 +31,10 @@ profile, substituting our card(s) into an existing slot(s). That is currently th
 route."* Libation's name is aliased into the bucket of the card it replaces, so the shipped
 155,978-cell keep table covers every arm, K stays at 16, and nothing is generated.
 
+* **every number here was taken on one frozen binary, engine commit `664efac3`** (recorded in each
+  screen's `.results.json`). The branch has since pulled opponent-deck work (`45d4e6a0`) that
+  touches `src/`; rebuild before reproducing anything below, and expect to re-measure rather than
+  compare across that boundary
 * apparatus: shipped keep table (K=16, R=40), pooled card scores, deck's value sidecar, d5 / 20 ms
 * seeds 2,600,000 + 0…19,999; the arm's Libation **inherits the vacated library slot number**, so
   both arms deal the identical library order and exactly one physical card differs, in place
