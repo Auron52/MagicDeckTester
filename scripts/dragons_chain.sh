@@ -46,7 +46,19 @@ for MODE in --smoke "" --overnight; do
   LABEL=${MODE:---regression}
   say "regression $LABEL --deck=dragons (run)"
   bash test/regression.sh $MODE --deck=dragons >> "$LOG" 2>&1
-  say "regression $LABEL rc=$? -- accepting"
+  RRC=$?
+  # A NONZERO rc here is NOT "GT moved" -- it is also what a scenario-sanity ABORT returns, and that
+  # abort happens BEFORE a single game is played. Accepting after one promotes whatever stale
+  # results file the last run left behind (regression.sh's own comment names this hazard for the
+  # --deck path). It bit this chain on 2026-09-02: five unrelated edf_* fixtures were failing, all
+  # three tiers aborted, and the chain accepted all three anyway. Nothing moved only because there
+  # was nothing to promote. Distinguish the two cases and refuse the ambiguous one.
+  if grep -q "^ABORT: scenario sanity failed" "$LOG"; then
+    say "REFUSING to accept $LABEL: scenario sanity ABORTED -- no games were run."
+    say "  Fix the failing fixtures, then re-run this chain's step 3 by hand."
+    exit 2
+  fi
+  say "regression $LABEL rc=$RRC -- accepting"
   bash test/regression.sh $MODE --deck=dragons --accept >> "$LOG" 2>&1
   say "accept $LABEL rc=$?"
 done
