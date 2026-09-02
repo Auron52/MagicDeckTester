@@ -254,3 +254,12 @@ Post-rebase (EDF src work): rebuild + smoke 48/48 byte-identical, gt_logs 320 co
 Flag-on REGRESSION preview launched to enumerate the cells adoption would rebaseline.
 REMAINING BEFORE ADOPTION: regression preview read; overnight-tier preview; QUIET-BOX wall
 confirmation (needs the USER's window); USER sign-off. Nothing adopted yet -- all flags OFF.
+
+### Regression-tier flag-on preview (2026-09-02, new-HEAD binary post-EDF-rebase)
+
+59 pass / 21 move. Per-cell: hinata all four cells BETTER-or-hold (-0.005..-0.015, matching the
+gate); dragonstorm 3 better + 1 digest-only; burn/antilife/creature_giving avg-IDENTICAL
+digest-only churn; th/mirrorwing +/-0.002-0.005 on 200-300-game cells (noise; the 5k paired gate
+answered both as neutral). Net searched delta 20 faster / 16 slower. Healthy rebaseline profile --
+improvement concentrated where the gates measured it. OVERNIGHT preview launched. Adoption still
+awaits: quiet-box wall + USER sign-off.
