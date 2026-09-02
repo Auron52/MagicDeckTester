@@ -245,8 +245,36 @@ the recorded win turn was correct in all 30 games. The game now ends immediately
   when the sweep section was appended. Nothing here is outstanding.
 * **5c2 CLOSED** at 121,000 paired games — default kept ON, see the table above. Re-open only if
   someone wants the ~8 h `--blocks 270` run to resolve a 4e-5 turns/game effect.
-* **Not in the regression suite.** Adding Dragons to `test/regression_cases.sh` costs shared
-  per-mode time budget, so it is the user's call (same status as FiveColour and Creature Giving
-  when they were analyzed).
-* **Mulligan generation not run** — deliberately: it is the LAST stage and the user kicks it off
-  (`.claude/skills/mulligan-profile.md`), after perf and viewer testing settle.
+* **IN the regression suite** (this bullet used to say "not in the suite"; that went stale). Dragons
+  carries cases in all three tiers — `test/regression_cases.sh` d0/d3/d5 at smoke, regression and
+  overnight seeds.
+
+* **Mulligan generation: RUN 2026-08-30, QUARANTINED, and the quarantine was a GENERATOR BUG, not a
+  tuning result.** This bullet used to say "not run"; that predated the run and was left stale.
+
+  | half | delta | verdict |
+  |---|---|---|
+  | keep (exhaustive vs static) | **−0.0472t** | a real win |
+  | bottoming (blind vs lookahead, CONFOUNDED) | **+0.0641t**, 0/16 seeds, mean/se +8.84 | reject |
+
+  `mullgen.sh` auto-quarantined the whole profile (the gate is all-or-nothing and there is no
+  bottoming off switch), so **Dragons has shipped with no mulligan table since 2026-08-30** and falls
+  back to the static/default keep with lookahead bottoming. Verified inert: shipping digest
+  `48fa398e41658513` (avg 5.7640) vs `98495caacd33e5e3` (avg 6.0280) with the table force-loaded —
+  different play, and the table would have COST 0.26 turns.
+
+  **The cause was `feed_sub()` being unreachable on a journal resume, not a bad heuristic** — see
+  `confounded-bottoming-gate-failures.md`. Dragons was the FIRST deck hit (Mirrorwing repeated it
+  three days later): a `recommend` scout left an R=1 journal with fixed refs, the `complete` run
+  resumed it and started in the refine phase, and the bottoming sub-tables were never sampled
+  (`sub=0/156506` for the entire run — every one of its 156,506 sub cell-sides holds a single
+  rollout). `DecideBottom`'s argmin then selected on noise.
+
+  **Owed: regenerate.** Fixed in `8592cb18` (feed + exit guard + artifact check) and `9f8d74fe`
+  (the scout no longer leaves a journal), so a fresh run is sound. Regeneration should recover the
+  −0.0472t keep win the all-or-nothing gate is currently discarding.
+
+  *Process note, because this is how it stayed invisible:* the failure was written only to
+  `logs/dragons_mullgen/VALIDATION.txt` — never committed, never surfaced — so it read as a closed
+  tuning outcome for three days while the same bug silently ruined Mirrorwing's generation too. A
+  failed gate belongs in the deck's doc, not just in a log.
