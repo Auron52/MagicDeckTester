@@ -1152,3 +1152,37 @@ arm of this class moves at all. Note which arm looked good above: the **full nod
 -0.0120), i.e. the expensive form. If that survives, the class's question returns to exactly where
 the earlier equal-quality work left it -- a structure-vs-compute call at ~1.2-1.6x wall -- rather
 than the free win D0ONLY appeared to offer.
+
+### ATTRIBUTION SETTLED: the D0ONLY win was NGC's, and `node0` alone is WORSE than shipped
+
+hinata, 10,000 games/cell x two disjoint blocks, at its own play settings, paired per game:
+
+| arm | hold | train | t | better | worse |
+|---|---|---|---|---|---|
+| `node` (full) | -0.0065 | -0.0070 | 1.91 / 2.02 | 494 / 509 | 423 / 426 |
+| `node0` (NODE + D0ONLY) | **+0.0035** | **+0.0040** | **2.38 / 2.74** | 69 / 65 | 104 / 101 |
+| `recipe0` (SITE3+DEFER+NGC+NODE+D0ONLY) | **-0.0063** | **-0.0061** | 2.84 / 2.82 | 244 / 234 | 176 / 176 |
+
+`recipe0` reproduces the recorded D0ONLY figure almost exactly (**-0.0063/-0.0061 here vs the
+recorded -0.0065/-0.0059**), which settles the attribution: the number in this document under
+"D0ONLY quality CONFIRMED" is the RECIPE's, and the recipe's hinata gain is
+`MTG_BP_NO_GREEDY_CONT`'s. Strip NGC and the same configuration is **worse than shipped**, not
+better -- `node0` alone loses +0.0035/+0.0040 at t 2.4/2.7, on both blocks.
+
+**So this class has no validated adoption candidate.** NGC is not available to carry it: it is
+lossy by construction (`EnumeratePlans` drops the empty combination, so `cands[0]` can never be
+"cast nothing"), and the 136k gate rejected the recipe on it -- th +0.0017 and dragonstorm's 11.8x
+WALL both pinned on NGC alone. Its hinata gain was always a single-deck effect bought with a
+cross-deck loss.
+
+What survives is the **full node**, -0.0065/-0.0070 at t 1.91/2.02 -- real but marginal, and it is
+the expensive form the equal-quality work already priced at ~1.2-1.6x wall (+28% at matched
+quality). That returns the class's question to precisely where that work left it: a
+structure-vs-compute call, not a free win. The affordable form (`D0ONLY`) does not exist as a
+quality improvement once its NGC is removed.
+
+**Process note worth keeping.** The error was not in any single measurement -- `37fe4b90` states
+plainly that "every arm carries MTG_BP_NO_GREEDY_CONT". It was that the arm's NAME ("noded0",
+"D0ONLY") described one flag while the arm carried five, so once NGC was independently rejected
+months later nothing re-examined the result that had been resting on it. When a lever is rejected,
+re-check every recorded win whose arm contained it.
