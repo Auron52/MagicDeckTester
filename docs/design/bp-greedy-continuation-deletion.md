@@ -425,3 +425,37 @@ recroot quality probe (hinata off/tight/recroot, 10k/block x 2, one binary) is t
 measurement: if recroot recovers quality over tight, it is FREE quality; if not, tight is the
 candidate. NOTE dragons smoke cells moved 2026-09-02 late -- that is the OTHER agent's adopted
 Dragons keep table (`c25d45b1`), their rebaseline, not this arc's.
+
+## ADOPTED: the TIGHT sound recipe (2026-09-02, USER conditional sign-off, live conversation)
+
+**recroot measured QUALITY-IDENTICAL to tight** (train literally 217:128 / -0.0096 in both arms;
+hold within 2 games) -- the rec traffic's quality lives on LOOKAHEAD turns, not the root turn.
+Recorded negative; the lever stays as a probe arm.
+
+**The USER's rulings settled the design:** (1) *"Rollouts being greedy is fine... I can always
+increase depth and budget to rely on them less. That is not true for the searched part."* --
+TIGHT is the correct scope: canon covers the searched structure (root enum, node resume,
+captured applies), every playout apply (recording or not) keeps greedy. (2) *"If quality is
+always improved or neutral and dragonstorm is the only one over my limit I think we could adopt
+and then look into dragonstorm performance from the new baseline."*
+
+**Both conditions verified before flipping anything:**
+* Quality: hinata -0.0057 hold (t -2.67) / -0.0096 train (t -4.52) at 10k/block paired; the 4
+  gate movers clean; the other 11 suite decks GAME-IDENTICAL at 1500/block x 2
+  (`logs/ngc_sound/tight_screen.err`) -- improved-or-neutral everywhere.
+* Wall (quiet box, pinned, cal-subtracted): hinata +6.4%, mirrorwing +2.9%, goblins +2.1%,
+  knights +1.3%, dragons +1.4%, everything else <= +-0.6% (th +0.6%, fivecolour -0.2%) --
+  **dragonstorm +12.9% is the ONLY deck over 10%** (`logs/ngc_sound/wall_spot.tsv` + wall_sweep).
+
+**Shipped:** five recipe defaults ON + `MTG_BP_CANON_REC` default OFF (each with its =0/=1
+hatch). A3-verified: hatch (five =0) 48/48 byte-identical to pre-adoption GT; flipped clean env
+byte-identical to the env-pinned form. All three GT tiers run clean, inspected against the tight
+previews (cell-for-cell identical), accepted; `check_gt_logs.py` 320 consistent / 0 stale.
+Executor evidence at ship settings: main-phase greedy decisions NONE, zero ROOT-kind fallbacks.
+
+**Open from the new baseline:** (1) dragonstorm's +12.9% (capture-context canon at the node's
+children; the honest lever is the INCREMENTAL KEY -- the BuildBreakpointKey walk is the repeat
+cost everywhere); (2) the ~0.005 hinata quality left in playout-side canon, recoverable by
+depth/budget per the USER's own argument, or by the incremental key making REC affordable;
+(3) MTG_EXEC_FEAS -- separate, fully-gated follow-up candidate (hinata -0.0017/-0.0016 t~3.3,
+-0.55% units, 14/15 decks game-identical), awaiting its own sign-off.

@@ -1136,11 +1136,16 @@ static bool BpNoGreedyContinuationEnabled()
 // all three are mutually exclusive A/B arms of the same fallback.
 static bool BpCanonContEnabled()
 {
-    // ADOPTION CANDIDATE (sound recipe, 2026-09-02): quality gates passed (neutral alone on all
-    // 16 suite decks at 186k games; in the recipe hinata -0.0126/-0.0146 at t 4.8/5.9) but the
-    // QUIET-BOX WALL failed the USER's <10-15% bar, so the default stays OFF until the gap
-    // closes. See docs/design/bp-greedy-continuation-deletion.md.
-    static const bool on = EnvOn("MTG_BP_CANON_CONT");
+    // ADOPTED 2026-09-02 (=0 disables) as part of the TIGHT sound recipe: SITE3 + DEFER + NODE +
+    // ROOTTURN + CANON with MTG_BP_CANON_REC off -- canon covers the SEARCHED structure (root
+    // enum, node resume, captured applies), every playout-side apply keeps greedy per the USER's
+    // ruling ("rollouts being greedy is fine... I can always increase depth and budget to rely
+    // on them less. That is not true for the searched part"). Dossier: hinata -0.0057/-0.0096
+    // (t 2.7/4.5, 10k/block paired), 4 movers clean, 11 decks game-identical; quiet-box wall
+    // hinata +6.4%, dragonstorm +12.9% (the one deck over the bar -- USER accepted, perf work
+    // continues from this baseline), every other deck <= +2.9%. Executor main-phase greedy
+    // decisions: NONE; zero ROOT-kind fallbacks. docs/design/bp-greedy-continuation-deletion.md.
+    static const bool on = EnvOn("MTG_BP_CANON_CONT", true);
     return heurarm::Flag(heurarm::BP_CANON_CONT, on);
 }
 
@@ -1152,14 +1157,16 @@ static bool BpCanonRolloutToo()
     return heurarm::Flag(heurarm::BP_CANON_ROLLOUT, on);
 }
 
-// MTG_BP_CANON_REC -- canon fires at RECORDING rollout applies (out_breakpoint set, not root).
-// DEFAULT ON; =0 is the TIGHT-scope probe arm (canon at root/resume/capture only, rec-rollouts
-// back to greedy). Exists because 91.5% of hinata's canon fires are [rollout+rec] and each pays a
-// BuildBreakpointKey walk even on a verdict-memo hit -- whether that traffic carries any of the
-// recipe's quality is a paired-gate question, not one more scope guess.
+// MTG_BP_CANON_REC -- canon fires at RECORDING rollout applies too (out_breakpoint set, not
+// root). DEFAULT OFF since the 2026-09-02 tight-scope adoption (=1 restores canon-everywhere-
+// but-plain-rollouts, the form the first 140k gate measured at -0.0126 hinata / +18.6% wall):
+// recording applies in rollout context are still PLAYOUT territory per the USER's ruling, and
+// their canon traffic (91.5% of hinata's 4.03M fires, a BuildBreakpointKey walk each even on a
+// verdict-memo hit) is what made the full recipe fail the wall bar. The quality they carry
+// (~0.005 of hinata's gain) is recoverable by depth/budget instead.
 static bool BpCanonRecToo()
 {
-    static const bool on = EnvOn("MTG_BP_CANON_REC", true);
+    static const bool on = EnvOn("MTG_BP_CANON_REC");
     return heurarm::Flag(heurarm::BP_CANON_REC, on);
 }
 
@@ -6016,9 +6023,8 @@ static int BpSearchDepth()
 // ZERO and silently disables EVERY site; a boolean has no such foot-gun.
 static bool BpPlainCantripSiteEnabled()
 {
-    // ADOPTION CANDIDATE (sound recipe, 2026-09-02) -- default stays OFF until the recipe's
-    // quiet-box wall gap closes; see BpCanonContEnabled.
-    static const bool on = EnvOn("MTG_BP_SITE3");
+    // ADOPTED 2026-09-02 as part of the tight sound recipe (=0 disables); see BpCanonContEnabled.
+    static const bool on = EnvOn("MTG_BP_SITE3", true);
     return heurarm::Flag(heurarm::BP_SITE3, on);
 }
 
@@ -6086,9 +6092,9 @@ static bool BpPartitionCantripEnabled()
 // MTG_BP_NO_GREEDY_CONT) -- the L*W-not-W^L trade, one searched link per line, unchanged.
 static bool BpNodeEnabled()
 {
-    // ADOPTION CANDIDATE (sound recipe, 2026-09-02) -- default stays OFF until the recipe's
-    // quiet-box wall gap closes; see BpCanonContEnabled.
-    static const bool on = EnvOn("MTG_BP_NODE");
+    // ADOPTED 2026-09-02 as part of the tight sound recipe (=0 disables); root-turn hosting only
+    // by default -- see BpNodeRootTurnOnly and BpCanonContEnabled.
+    static const bool on = EnvOn("MTG_BP_NODE", true);
     return heurarm::Flag(heurarm::BP_NODE, on);
 }
 
@@ -6601,9 +6607,8 @@ static int BpWave0SiteMask()
     // and avg returns to 5.8833 -- byte-identical to the baseline, where the eager arm was 5.9000.
     // Note this is the OPPOSITE outcome to the site-6 deferral above, which measured worse; the two
     // sites differ in how universally they fire, so the result had to be measured, not inherited.
-    // ADOPTION CANDIDATE (sound recipe, 2026-09-02) -- default stays OFF until the recipe's
-    // quiet-box wall gap closes; see BpCanonContEnabled.
-    static const bool s3_defer_env = EnvOn("MTG_BP_SITE3_DEFER");
+    // ADOPTED 2026-09-02 as part of the tight sound recipe (=0 disables); see BpCanonContEnabled.
+    static const bool s3_defer_env = EnvOn("MTG_BP_SITE3_DEFER", true);
     if (heurarm::Flag(heurarm::BP_SITE3_DEFER, s3_defer_env)) { out &= ~(1 << 3); }
     // MTG_BP_NODE: the plain-cantrip continuation is a real search node, so the (base x k) wave-0
     // fan-out for site 3 would only duplicate the node's own children. Unlike the DEFER form this
@@ -16614,10 +16619,10 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
 // exactly where the committed line is chosen.
 static bool BpNodeRootTurnOnly()
 {
-    // ADOPTION CANDIDATE (sound recipe, 2026-09-02) -- default stays OFF until the recipe's
-    // quiet-box wall gap closes; see BpCanonContEnabled. 99.4% of the full node's work was on
-    // lookahead turns never played; root-turn hosting keeps the quality at +3.1% units.
-    static const bool env_on = EnvOn("MTG_BP_NODE_ROOTTURN");
+    // ADOPTED 2026-09-02 as part of the tight sound recipe (=0 disables); see BpCanonContEnabled.
+    // 99.4% of the full node's work was on lookahead turns never played; root-turn hosting keeps
+    // the quality at a fraction of the full node's cost.
+    static const bool env_on = EnvOn("MTG_BP_NODE_ROOTTURN", true);
     return heurarm::Flag(heurarm::BP_NODE_ROOTTURN, env_on);
 }
 
