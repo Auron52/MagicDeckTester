@@ -52,8 +52,41 @@ byte-identical across that commit, and the A/Bs reproduce bit-for-bit on the new
 (`653901ad8e3d2ee6`, `dd8d6e02be2ecb8c`). The labels were nonetheless fit under shallow play that no
 longer exists; a future regeneration should not try to pool with this sidecar.
 
-**Dragons is not yet repaired.** Its raw has the same intact size-7 data and starved sub-tables, so
-the identical fill-in applies.
+## RESOLVED for Dragons (2026-09-02) — repaired in place, both gates now pass, ADOPTED
+
+Same repair, same shape, and it took **69 minutes** (12:48–13:57) rather than Mirrorwing's hours —
+Dragons generates at `d1/b3` against Mirrorwing's `d2/b3`, so each rollout is far cheaper.
+
+The resume took the good path and the log says so: `RESUME: reloaded 485258 sampled cell-sides from
+the floor checkpoint …raw.json -> continuing`, **not** `RESUME(journal) … resuming refine`. Loading
+the raw restores no fixed refs, so the run starts in the **floor** phase where `feed_sub()` is
+reachable. The stored play digest `e9d58688fabf947f` still matched on the current binary, so nothing
+had to be regenerated from scratch.
+
+```
+artifact check OK: K=17 entries=164376 bottoming_enabled=True
+                   sub_cells=156506 min_rollouts=40 sub_target=40
+```
+
+**Both gates pass decisively, and bottoming flips sign exactly as it did on Mirrorwing:**
+
+| gate | starved table (R=1) | repaired table (R=40) |
+|---|---|---|
+| keep vs static | −0.0472t | **−0.2096t**, 16/16 seeds, mean/se −22.06 |
+| bottoming, blind vs lookahead, CONFOUNDED | **+0.0641t, 0/16 — FAIL** | **−0.1176t, 16/16, mean/se −32.36** |
+
+A **0.18-turn swing** on the gate that failed. Both decks hit by the bug are now repaired, both by
+raw-resume, and in both cases the blind table ends up *beating* blinded lookahead — which is what the
+theory said all along. `decks/Dragons/Dragons.keepmodel.exhaustive.profile.json` is live.
+
+**Ground truth for `dragons` is NOT yet rebaselined, and is stale by construction.** All three
+tiers aborted before playing a game: `ABORT: scenario sanity failed` — 47 passed, **5 failed**, all
+of them `edf_*` fixtures, from in-flight EDF/opponent-deck work on this branch (the likely trigger is
+`afa7100a`, "give the passive opponent a library, a hand and a draw", 2026-09-02 08:46; three of the
+five are `expect_no_win` fixtures that now win, and `edf_infiltrator_deckout` expects a turn-4
+deckout win and now gets none). Scenario sanity is a **hard abort**, so this blocks the regression
+harness for *every* deck, not just Dragons. Rebaseline once those fixtures are settled by their
+owner; do not edit them from here.
 
 ## Root cause: `feed_sub()` is unreachable on a journal resume
 
