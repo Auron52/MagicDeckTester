@@ -333,3 +333,15 @@ DECISION/RECORDED applies; rollout applies keep greedy by ruling.
 **Net: with the recipe on, greedy decides NOTHING at any decision/recorded apply on the three
 instrumented decks (incl. the two known worst cases); every remaining greedy act is the rollout
 playout policy the USER's ruling allows.**
+
+### Per-deck units + the staged adoption checks (2026-09-02 overnight)
+
+Units at play settings, 300-game cells, base (five flags =0) vs recipe, flipped-defaults binary:
+**dragonstorm 1,165,581 -> 1,152,906 = -1.09% (CHEAPER); th 2,026,382 -> 2,016,679 = -0.48%;
+kitty 4,225,626 -> 4,225,109 = flat.** Hinata's +2.64% is the suite-wide WORST case -- everywhere
+else canon+node either pays for itself (the deleted greedy Solves and NGC-free enumeration) or is
+inert. The five defaults are flipped per coding-conventions (`EnvOn(..., true)`, `=0` hatch) and
+A3-verified: **hatch smoke (all five =0) 48/48 byte-identical to shipped GT; clean-env smoke moves
+exactly 6 cells** (hinata d5 -0.0134 better, 5 digest-only) matching the recipe previews. Staged,
+uncommitted -- the quiet-box wall check is the one remaining gate before commit + 3-tier
+rebaseline, per the USER's 2026-09-02 criteria message (<10% wall; met => adopt).
