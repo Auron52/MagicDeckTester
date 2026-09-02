@@ -532,10 +532,41 @@ rig costs today and plays 0.032 t better.
 
 No model-free configuration reaches shipped strength even at 3x. **Shipped conditions are both the
 cheapest and the strongest cell in the table** — the value leaf is not merely a speed-up, it plays
-better. The reason the rig avoids it is the model-favours-base worry, and there is now one direct
-measurement bearing on that: the Libation delta measured under shipped conditions matched the rig's
-to **+0.0003 ± 0.0015**. One swap on one deck is not a general result, but it is the only evidence
-either way, and it points at the bias being far smaller than the 0.079 t the rig pays to avoid it.
+better.
+
+#### Is the value leaf actually biased toward the deck it was fitted on? No — it cannot see the swap
+
+The rig hobbles the model to avoid a model-favours-base effect. That worry is mis-specified, for a
+structural reason: **`MidGameFeature` is a fixed enum with no card-name feature in it.** (The
+by-name `FeatureKind::CardCount` lives in the KEEP model's data-defined hand features, not here.)
+The mid-game vector is life/turn/hand/library sizes, our and the opponent's creatures/power/lands/
+sources, plan summary terms, and library+hand COMPOSITION counted by category — lands, creatures,
+damage sources, draw engines. At a **leaf** the plan is empty, so every `Plan*` term is 0 —
+including `PlanBaselineEval`, the one card-aware input.
+
+For a swap between two one-mana noncreature spells, every one of those composition terms is
+*identical*: neither is a land, a creature, nor a damage source, and `cast_draw` is not in the
+draw-engine test (`draw > 0 || stages_cards || cascade || retrace || expressive_iteration ||
+DrawUntilNonland`). The model therefore cannot tell which card is in the deck. It sees only the
+board each deck actually reaches — which is exactly what we want judged.
+
+Measured, on the Oracle's-Restoration swap, 20,000 paired games under **four different evaluators**:
+
+| evaluator | base | arm | delta | se |
+|---|---|---|---|---|
+| mixed rig (no model decides) | 4.3273 | 4.3563 | +0.0291 | 0.0021 |
+| Mirrorwing's **own** model decides | 4.2445 | 4.2725 | +0.0280 | 0.0016 |
+| **Dragons'** model decides (wrong deck entirely) | 4.2430 | 4.2711 | +0.0282 | 0.0016 |
+| pure rollout, no model | 4.2630 | 4.2926 | +0.0295 | 0.0016 |
+
+Difference-of-differences against the own-model condition, paired per game: mixed rig
+**+0.0010 ± 0.0015**, Dragons' model **+0.0001 ± 0.0003**, rollout **+0.0014 ± 0.0009**. None is
+significant. A model fitted on a *completely different deck* plays Mirrorwing just as well
+(4.2430 vs 4.2445) and returns a statistically identical delta.
+
+**So the rig is paying 0.079 t of play strength and ~30% wall clock to avoid a bias that is not
+there.** Two swaps, four evaluators, one deck — not a universal proof, but the structural argument
+and the measurement agree, and nothing yet points the other way.
 
 If someone asks what the deck actually does, run it standalone against its own profile
 (`mtg <deck>.cod --games N --profile <deck>.profile.json`, no numbering, no value flags). On
