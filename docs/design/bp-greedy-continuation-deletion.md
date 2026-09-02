@@ -277,3 +277,47 @@ cell (th x3, auras x5 -- auras nets +0.004, i.e. 4 games in 6000; its 5k gate ce
 No new SLOW-GAME tail. Same healthy rebaseline profile as the regression tier: gains concentrated
 on hinata, jitter-level churn elsewhere. All three tiers now enumerated for the rebaseline;
 adoption still awaits the quiet-box wall number + USER sign-off.
+
+### EF-on-top probe (2026-09-02 overnight, post-EDF-rebase binary, both arms fresh)
+
+`MTG_EXEC_FEAS` added on top of the sound recipe, hinata 10k/block paired x train+hold, one pooled
+batch (`logs/ngc_sound/ef_probe.json/.err`), 24/24 workers at the 10-min heartbeat:
+**efrecipe -0.0017 hold (t -3.27) / -0.0016 train (t -3.41)** vs screcipe; 39 better : 7 worse
+across both blocks. Small but real and consistent -- EF's executor-validated sequential payability
+buys a little more of the sequential-re-pricing gap even after the node+canon take most of it. The
+SLOW-GAME tail is baseline-owned (5 screcipe.train + 3 screcipe.hold vs 3 efrecipe.train), no
+EF-caused tail. EF stays a SEPARATE follow-up candidate -- it was not part of the gated recipe and
+does not ride along with the recipe adoption. Units pricing inside the recipe measured next
+(units.efrecipe cell); EF standalone was +2.8% wall when measured in isolation.
+
+**EF units (same session): CHEAPER inside the recipe, not dearer** -- screcipe 11,389,594 ->
+efrecipe 11,326,878 = **-0.55% units** (300-game hinata cell, one process, play settings). The
+executor-feasibility test prunes infeasible subsets the node would otherwise expand, so inside the
+recipe EF pays for itself. (The screcipe re-run on the post-EDF-rebase binary reproduced
+11,389,594 EXACTLY -- binary equivalence on hinata confirmed at the units level, not just smoke.)
+Neutrality gate across the other 15 suite decks launched (`scripts/gen_ef_gate.py` -> 60 jobs /
+146k games, base arm = the sound recipe; hinata reused from ef_probe, same binary+seeds).
+
+### "Is greedy deleted" -- the ACTED evidence at recipe settings (2026-09-02 overnight)
+
+`MTG_M2_YIELD_STATS` cells, recipe env on, 300 games each, one process per cell
+(`logs/ngc_sound/acted.{hinata,kitty,ds}.err`). The USER's criterion is acted->0 at
+DECISION/RECORDED applies; rollout applies keep greedy by ruling.
+
+* **hinata: s0 acted=0 of 976,131; s3 acted=0 of 1,567,976.** Executor: "REAL main-phase
+  decisions by depth: NONE". Only s90 (SolveWithLookahead depth<=0 = the rollout LEAF policy,
+  allowed) acts.
+* **kitty: s6 acted=0 of 154,660** (the engine's once-dominant greedy site, 82.5% of all greedy
+  calls at shipped settings -- now decides nothing). Executor NONE; s90 only.
+* **dragonstorm: s2 (the impulse-draw re-solve) still acts 31,945 of 48,304** -- but the
+  nohost-kind split is the decisive read: **ZERO ROOT-kind fallbacks on all three decks.** Every
+  s2 fallback is [rollout] 96.6% / [rollout+rec] 3.4% (wave entries inside rollouts) -- the
+  committed decision's own enumeration NEVER falls to unhosted greedy. Canon's derivation
+  stand-down (g_bp_enum_depth > 0) plus rollout applies fully account for the residue, and both
+  are rollout-side under the scope ruling. Executor NONE here too.
+* fell-to-greedy attribution: class-masked 0, empty-cands 0 on all three decks -- no coverage
+  hole is hiding behind the mask or an empty enumeration.
+
+**Net: with the recipe on, greedy decides NOTHING at any decision/recorded apply on the three
+instrumented decks (incl. the two known worst cases); every remaining greedy act is the rollout
+playout policy the USER's ruling allows.**
