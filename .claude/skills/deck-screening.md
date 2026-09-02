@@ -451,6 +451,30 @@ back to generating, saying which and why.
 The screen prints, per combination: `delta` (negative = faster), `se`, `t`, `% identical`, and the
 games needed for 3σ on a 0.03t effect. Report **avg win turn**, never win/loss language.
 
+### A screen's ABSOLUTE average is not the deck's shipped number — only the delta transfers
+
+Never quote a screen's `base` average as "what this deck does". The screening rig deliberately
+plays a **different** game from shipped play, and on Mirrorwing the level is **+0.083 t slower**
+(4.3273 vs 4.2750, same 20,000 seeds, decomposed one knob at a time 2026-09-02):
+
+| configuration (same seed block) | avg | knob |
+|---|---|---|
+| shipped: deck's own profile, engine defaults | **4.2750** | — |
+| + `MTG_DECK_NUMBERING` (the paired shuffle) | 4.2445 | −0.0305 — a different sample, not a real effect |
+| + `value_model: false`, `ladder_value_leaf: true` | **4.3273** | **+0.0828 — the whole gap** |
+| + the pooled card-scores profile | 4.3273 | 0.0000 — the pool profile costs nothing |
+
+The cause is the one deck_compare sets on purpose: the committed pass stays **pure heuristic** and
+the value model only accelerates warm-up ("ladder mode … never decides"), so one pooled model can
+serve every combination without re-validating per combination. That is the right call *for the
+comparison* — the measured residual coupling between arms is 0.0008 t — but it means the arms are
+both playing ~0.08 t below shipping strength. Both arms share the handicap, so the **delta is
+sound**; the **level is not**.
+
+If someone asks what the deck actually does, run it standalone against its own profile
+(`mtg <deck>.cod --games N --profile <deck>.profile.json`, no numbering, no value flags). On
+Mirrorwing that is **4.2730 over 100,000 games** (se 0.0029; 99.5% win rate within 8 turns).
+
 A shared apparatus carries *some* bias, so `t` alone does not settle anything — at 20,000 paired
 games a 0.02t effect is wildly "significant" and may still be apparatus. The question is always
 **does the effect clear the apparatus bias floor?** The one edit measured correctly end to end
