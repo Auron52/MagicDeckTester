@@ -136,6 +136,29 @@ Three analyzer runs died (-9 OOM at 33-44 GB; one -11). Root-caused:
 
 ## Approved deferrals (user sign-off 2026-08-11, Stage 6 review)
 
+### Mulligan profile: ADOPTED 2026-09-02 (exhaustive keep + blind bottoming)
+
+Generated 2026-09-01, **quarantined** when the confounded bottoming gate failed (+0.1006t, 0/16) —
+which turned out to be a generator bug, not a bad heuristic: every bottoming sub-cell held a single
+rollout (`docs/design/keepgen-subtable-starvation-detection.md`). Repaired in place by resuming from
+the raw, which fills only the deficit (`rollsub = 142464 x 39` exactly, `roll7=0`).
+
+| gate | starved (R=1) | repaired (R=40) |
+|---|---|---|
+| keep vs static | −0.0587t | **−0.2635t**, 16/16, mean/se −31.84 |
+| bottoming, CONFOUNDED | **+0.1006t, 0/16 FAIL** | **−0.0918t**, 16/16, mean/se −18.13 |
+
+Both clear the bar; the profile is live. **GT rebaselined** across all three tiers (20 cells,
+`--deck=mirrorwing`): every cell improved, mean **−0.1594 t** (d0 −0.162, d3 −0.166, d5 −0.151), no
+other deck's keys touched. Ships as `.keepmodel.exhaustive.profile.json.gz` (the `.gz` is resolved
+first); verified the accepted GT reproduces bit-for-bit with the `.gz` in place.
+
+**Caveat — stale generation provenance.** The table was fit at `d2/b3`, and `9927c730` (Mariposa rad
+mode, pulled the same morning) changed d2/b3 play `fd0264fe65c2805d` → `3a2f252c8ec95e04`. Its stored
+`play_digest` is therefore stale and it will not pool/resume with future runs. Kept because the
+shipping condition is unaffected: d5 play is byte-identical across that commit and the A/Bs reproduce
+exactly on the new binary. A future regeneration must not pool with this sidecar.
+
 ### PENDING SIGN-OFF (agent-recorded 2026-09-01, NOT yet user-approved)
 
 **`mismatch` gate: 1 fd-diverge, attributed to the adopted value leaf.**

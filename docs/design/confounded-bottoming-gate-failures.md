@@ -14,6 +14,47 @@ That reasoning is correct, and it is why the result had to be a defect rather th
 The confound is *designed* to put the blind table in exactly the world it was fit for (below), so a
 0/16 loss at mean/se +18 could not be the table merely being a bit coarse.
 
+## RESOLVED for Mirrorwing (2026-09-02) — repaired in place, both gates now pass, ADOPTED
+
+The table did not need regenerating from scratch. The raw sidecar still held **correct size-7 data**;
+only the sub-tables were starved. Resuming the generation from that raw loads no refs, so the run
+starts in the **floor** phase — where `feed_sub()` is reachable — and Pass A builds each sub task as
+`[have, cap)` = `[1, 40)`. The result is a pure deficit fill:
+
+```
+monitor: ...  phase=floor  roll7=0 (0/s)  rollsub=5556096  sub=142464/142464 (100.0%)
+```
+
+`5556096 = 142464 x 39` exactly — the missing rollouts and nothing else.
+
+**The gate flips, decisively, on the same 16 seeds:**
+
+| gate | starved table (R=1) | repaired table (R=40) |
+|---|---|---|
+| artifact check | 142464 sub-cells at **1** | `min_rollouts=40 sub_target=40` |
+| keep vs static | −0.0587t | **−0.2635t**, 16/16 seeds, mean/se −31.84 |
+| bottoming, blind vs lookahead, CONFOUNDED | **+0.1006t, 0/16 — FAIL** | **−0.0918t, 16/16, mean/se −18.13** |
+
+A **0.19-turn swing** on the exact gate that failed, and the blind table now *beats* blinded
+lookahead — which is what the theory said it should do all along. This is the root cause confirmed by
+construction, not by argument. The keep half improved 4.5x as a side effect, because resuming into
+the floor phase also engages the speculation filler, which lifts size-7 cells from the bare floor of
+2 to `r0 + cont_lookahead` = 6 rollouts.
+
+**GT rebaselined** (`--deck=mirrorwing`, all three tiers, 20 cells): **every cell improved**, mean
+**−0.1594 t** (d0 −0.162, d3 −0.166, d5 −0.151), nothing worse, no other deck's keys touched.
+
+**One caveat recorded rather than buried:** the table was fit at `d2/b3`, and a concurrently-pulled
+engine adoption (`9927c730`, Mariposa rad mode) *changed* d2/b3 play (`fd0264fe65c2805d` →
+`3a2f252c8ec95e04`). The table's stored `play_digest` is therefore stale, so it will not pool or
+resume with future runs. It was kept because the **shipping** condition is unaffected — d5 play is
+byte-identical across that commit, and the A/Bs reproduce bit-for-bit on the new binary
+(`653901ad8e3d2ee6`, `dd8d6e02be2ecb8c`). The labels were nonetheless fit under shallow play that no
+longer exists; a future regeneration should not try to pool with this sidecar.
+
+**Dragons is not yet repaired.** Its raw has the same intact size-7 data and starved sub-tables, so
+the identical fill-in applies.
+
 ## Root cause: `feed_sub()` is unreachable on a journal resume
 
 `src/analyzer/ExhaustiveKeep.cpp`, producer loop:

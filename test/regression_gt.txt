@@ -1,6 +1,5 @@
-# Regression ground truth -- commit f2994872  date 2026-09-01
+# Regression ground truth -- commit a6308c6f  date 2026-09-02
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-09-01): DECK CHANGE, not a regression: the mirrorwing key now measures the Anger-4 / Oracle-3 list (3faf5c76) instead of the archived v2-instigator-entrance one, so all 20 mirrorwing cells are a fresh measurement of a DIFFERENT deck. ZERO non-mirrorwing cells moved in any tier -- the change is perfectly isolated. Direction is unanimous within each depth: d0 +0.2101 (6 cells, all worse), d3 -0.3030 (7 cells, all better), d5 -0.3014 (7 cells, all better); overall -0.1485, searched-only -0.3022. That split is the deck's signature rather than noise -- the list's value is Frontline Heroism's ETB Soldier plus Ancestral Anger/Fortifying Draught through a Zada/Mirrorwing magnet, which only the search can sequence, so greedy d0 gets worse while every searched cell gets ~0.30 turns faster. Consistent in sign with the Instigator-slot screen's -0.4431 for the 4-Heroism arm, which was itself measured with Heroism's ETB under-projected (fixed in c3be94f6). Deck ships: new baseline profile, adopted value leaf (-0.0220t, 8/8 seeds, 0.64x cost), static/default keep -- the exhaustive keep table was QUARANTINED by mullgen's confounded bottoming gate (+0.1006t, 0/16 seeds), see docs/design/confounded-bottoming-gate-failures.md. User pre-approved this rebaseline 2026-09-01.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -35,9 +34,9 @@ goblins_smoke_d5_s1001=3.5867/043748861e776a9b
 creature_giving_smoke_d0_s1001=5.5160/dbd1edeb6f3ec1b8
 creature_giving_smoke_d3_s1001=4.7133/9d90e407eda5d8f2
 creature_giving_smoke_d5_s1001=4.6800/793e512b6e51ae19
-mirrorwing_smoke_d0_s1001=6.0540/ed3d20084284f1f3
-mirrorwing_smoke_d3_s1001=4.4667/518b95c6cafbb9b8
-mirrorwing_smoke_d5_s1001=4.4933/97c0278562d9fa94
+mirrorwing_smoke_d0_s1001=5.8790/9b161c692ef97f38
+mirrorwing_smoke_d3_s1001=4.2600/78002b4bec3fe4e2
+mirrorwing_smoke_d5_s1001=4.3600/056e63493d7bba5f
 fivecolour_smoke_d0_s1001=5.7830/26299104ad40b026
 fivecolour_smoke_d3_s1001=4.9667/e78c58adbad71403
 fivecolour_smoke_d5_s1001=5.1333/f6d7ed5a947b839a
@@ -105,11 +104,11 @@ creature_giving_regression_d3_s2002=4.6533/92df7bfb366239f4
 creature_giving_regression_d3_s3003=4.6800/619afcd304afa26a
 creature_giving_regression_d5_s2002=4.6320/0f8f5b59837f4411
 creature_giving_regression_d5_s3003=4.6720/2c8d19ae35e86362
-mirrorwing_regression_d0_s2002=6.0810/17a81c81fb262003
-mirrorwing_regression_d3_s2002=4.4050/e313f100e398b918
-mirrorwing_regression_d3_s3003=4.4050/ecaa98a06728cdca
-mirrorwing_regression_d5_s2002=4.3900/34a3490cb390a7a3
-mirrorwing_regression_d5_s3003=4.4700/f8f73dd948c6ce8b
+mirrorwing_regression_d0_s2002=5.9870/5bf3013c3f53beae
+mirrorwing_regression_d3_s2002=4.3100/94f2355e3c813597
+mirrorwing_regression_d3_s3003=4.1600/e1b9690b83d9875e
+mirrorwing_regression_d5_s2002=4.3400/1748e1d7a3b60cae
+mirrorwing_regression_d5_s3003=4.2100/4621fcc90dea455e
 fivecolour_regression_d0_s2002=5.8360/a06a28a53b4f874b
 fivecolour_regression_d3_s2002=4.8700/7bc29bdf0de4e17f
 fivecolour_regression_d3_s3003=4.9500/3a9202c780ee2d3f
@@ -257,18 +256,18 @@ creature_giving_overnight_d5_s4004=4.6380/1711b4855023c06d
 creature_giving_overnight_d5_s5005=4.6280/a2949a95d6e036e5
 creature_giving_overnight_d5_s6006=4.6760/c559bceec26594ad
 creature_giving_overnight_d5_s7007=4.6440/c9cd88ecd4da5c2f
-mirrorwing_overnight_d0_s4004=6.0710/09969b0fb0cb0c29
-mirrorwing_overnight_d0_s6006=6.0700/16b8edfb431b1015
-mirrorwing_overnight_d0_s8008=6.1095/f53b5901d0e10042
-mirrorwing_overnight_d0_s10010=6.1125/6b9679bf53efd1db
-mirrorwing_overnight_d3_s4004=4.3675/39950ad9d288c692
-mirrorwing_overnight_d3_s5005=4.4700/0204b9ce2a050491
-mirrorwing_overnight_d3_s6006=4.4175/935a55bd736c8528
-mirrorwing_overnight_d3_s7007=4.4100/2f5ec119451f9e50
-mirrorwing_overnight_d5_s4004=4.3967/9120bcb6fa366bdd
-mirrorwing_overnight_d5_s5005=4.4967/038e7d94719d68e5
-mirrorwing_overnight_d5_s6006=4.4000/ec01fdb57f5b6ecf
-mirrorwing_overnight_d5_s7007=4.3500/de5a8a219fee63bf
+mirrorwing_overnight_d0_s4004=5.9090/cf27747a5661db00
+mirrorwing_overnight_d0_s6006=5.9255/8e97c48f4ac68860
+mirrorwing_overnight_d0_s8008=5.9115/2580e34701845b2d
+mirrorwing_overnight_d0_s10010=5.9155/b375d5c91b3067e9
+mirrorwing_overnight_d3_s4004=4.2225/6d25b54ef1008230
+mirrorwing_overnight_d3_s5005=4.2625/229286de87c39969
+mirrorwing_overnight_d3_s6006=4.2550/c130b6c53fff56d8
+mirrorwing_overnight_d3_s7007=4.3075/985d7e64cb898e30
+mirrorwing_overnight_d5_s4004=4.2533/669ba95f9354a5e0
+mirrorwing_overnight_d5_s5005=4.2300/547fd30aae138f09
+mirrorwing_overnight_d5_s6006=4.2500/49331455d1492be4
+mirrorwing_overnight_d5_s7007=4.3000/ddf6dad8c45202eb
 fivecolour_overnight_d0_s4004=5.7480/fe96f63262524489
 fivecolour_overnight_d0_s6006=5.7815/b8a2ef8452a68525
 fivecolour_overnight_d0_s8008=5.7575/35aafd57228e0c09
