@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a6308c6f  date 2026-09-02
+# Regression ground truth -- commit 30933891  date 2026-09-02
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -49,9 +49,9 @@ minotaur_smoke_d5_s1001=4.9000/3187f873e3835454
 kitty_smoke_d0_s1001=4.9900/4b96809105a7d663
 kitty_smoke_d3_s1001=4.4520/2c6413628c53a42c
 kitty_smoke_d5_s1001=4.4667/48012e909205eb57
-dragons_smoke_d0_s1001=6.3160/e823b83de318e2c9
-dragons_smoke_d3_s1001=5.8360/4429f217a0e949df
-dragons_smoke_d5_s1001=5.7733/19181839cdefe423
+dragons_smoke_d0_s1001=6.0490/6439e26f4146920f
+dragons_smoke_d3_s1001=5.7240/a8378da8730a2bf2
+dragons_smoke_d5_s1001=5.6200/cc17e47288263e2d
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/91abd0b536a1c263
@@ -129,11 +129,11 @@ kitty_regression_d3_s2002=4.3300/b65f5921a855eeb5
 kitty_regression_d3_s3003=4.3800/fef85df2a993212a
 kitty_regression_d5_s2002=4.3160/31d722140532ebf3
 kitty_regression_d5_s3003=4.3320/2b96686c8a4114d3
-dragons_regression_d0_s2002=6.3110/bc1d441fa7cabacb
-dragons_regression_d3_s2002=5.7333/5331a86348a2c774
-dragons_regression_d3_s3003=5.6800/00c1ba4250e44d71
-dragons_regression_d5_s2002=5.7560/4b392ddb4897acb2
-dragons_regression_d5_s3003=5.6560/36d41d20e495fc12
+dragons_regression_d0_s2002=6.0290/95fd4fa52c51aae8
+dragons_regression_d3_s2002=5.5800/4a62ec6ace6c2e8b
+dragons_regression_d3_s3003=5.6600/6b796d849ee93273
+dragons_regression_d5_s2002=5.5440/597d1993cb31fe77
+dragons_regression_d5_s3003=5.6800/c320f4b686739364
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/b53c1150b0bd6df6
@@ -316,15 +316,15 @@ kitty_overnight_d5_s4004=4.3640/fb27a50f3d7729b3
 kitty_overnight_d5_s5005=4.3740/3806721dae0e1f44
 kitty_overnight_d5_s6006=4.3060/a5efbef7a131ec88
 kitty_overnight_d5_s7007=4.3420/c99065476fd0b713
-dragons_overnight_d0_s4004=6.2900/11659218a5ae8ecc
-dragons_overnight_d0_s6006=6.2725/140b52dfc95e6cd1
-dragons_overnight_d0_s8008=6.2635/5d7d5d220604cc21
-dragons_overnight_d0_s10010=6.2770/3aed18edcbd06a8d
-dragons_overnight_d3_s4004=5.7540/7bcf1fd4e7ba4491
-dragons_overnight_d3_s5005=5.7580/e3e4a1047ef897e4
-dragons_overnight_d3_s6006=5.7170/805854d785231fbe
-dragons_overnight_d3_s7007=5.7340/69ee27749993d3ab
-dragons_overnight_d5_s4004=5.7520/b8eadd427b861953
-dragons_overnight_d5_s5005=5.7160/9373aa145ba01069
-dragons_overnight_d5_s6006=5.6880/9d09ee5a5dbb8602
-dragons_overnight_d5_s7007=5.7120/158341ace8328d98
+dragons_overnight_d0_s4004=5.9960/65b1aeb34d0eb96d
+dragons_overnight_d0_s6006=6.0120/92ab52a5c2bab1e4
+dragons_overnight_d0_s8008=6.0165/6faf7a3bb124b458
+dragons_overnight_d0_s10010=6.0120/377969517cf069c6
+dragons_overnight_d3_s4004=5.5610/b23937cd42c60932
+dragons_overnight_d3_s5005=5.6540/6c06badf1a437963
+dragons_overnight_d3_s6006=5.6020/220fad1b12328293
+dragons_overnight_d3_s7007=5.6340/abb86b6af517da6c
+dragons_overnight_d5_s4004=5.5700/d4eaff916492ef7e
+dragons_overnight_d5_s5005=5.6700/ff8e8e449d134ed8
+dragons_overnight_d5_s6006=5.6280/f0cb3ad97cddad18
+dragons_overnight_d5_s7007=5.6400/85ae0693049f8938
