@@ -1116,6 +1116,30 @@ static bool BpNoGreedyContinuationEnabled()
     return heurarm::Flag(heurarm::BP_NO_GREEDY_CONT, on);
 }
 
+// MTG_BP_CANON_CONT -- "sound-NGC": the greedy-deletion form built after BOTH prior forms were
+// measured lossy for KNOWN, distinct reasons, fixing each at its root instead of picking a new
+// point on the same trade:
+//   * NGC (cands[0] always) lost "cast nothing" -- greedy's Solve can decline every cast and
+//     measurably does (treasure_hunt's regression was pinned on NGC alone). Here ACT-vs-PASS is
+//     judged by the SAME Solve the greedy path runs, at the SAME post-breakpoint-land state, so a
+//     genuine pass falls through to the greedy path and reproduces it byte-for-byte (the land is
+//     replayed on the real state and the Solve memo-hits the probe's).
+//   * NGC's cost was UNCHARGED RECURSIVE enumeration: an apply inside EnumeratePlansWithLand hits
+//     a breakpoint, NGC enumerates again, at every level, none of it billed to units (Dragonstorm
+//     gi=2686: 96% of its 1.15M lookups and 45k derivations arrived with g_bp_enum_depth > 0;
+//     11.8x tail wall at LOWER units). Here the lever stands down inside a derivation
+//     (g_bp_enum_depth > 0), where the greedy fallback is the base engine's own behaviour anyway.
+// What remains deleted: greedy's FREE PICK of WHICH casts to make -- when Solve says act, the
+// continuation is the canonical cands[0], "continue in the deck's cast order". Only ACT-vs-PASS
+// stays with Solve, the same judgement class as the accepted greedy land drop.
+// Do not combine with MTG_BP_NO_GREEDY_CONT / MTG_BP_BASE_EMPTY (they'd race for the same plans);
+// all three are mutually exclusive A/B arms of the same fallback.
+static bool BpCanonContEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CANON_CONT");
+    return heurarm::Flag(heurarm::BP_CANON_CONT, on);
+}
+
 // MTG_BP_BASE_EMPTY -- the BASE plan's continuation is the EMPTY one, not a greedy Solve.
 //
 // WHY THIS IS THE RIGHT SHAPE, and why MTG_BP_NO_GREEDY_CONT was not. At an open-class breakpoint
@@ -2934,6 +2958,8 @@ namespace contdiff
         long long count = 0;
         int       turn  = 0;   // first occurrence, for the repro
         std::string hand;
+        std::string desc;   // PendDesc at first occurrence: pool/untapped/hand/gy/lib, so an
+                            // affordability difference reads directly off the case list
     };
     inline std::mutex                            mu;
     inline std::map<std::string, Case>           cases;
@@ -2969,9 +2995,9 @@ namespace contdiff
                       [](const auto& a, const auto& b) { return a.second.count > b.second.count; });
             for (std::size_t i = 0; i < v.size() && i < 40; ++i)
             {
-                std::fprintf(stderr, "[cont-diff] n=%lld T%d %s\n            hand=%s\n",
+                std::fprintf(stderr, "[cont-diff] n=%lld T%d %s\n            hand=%s\n            state=%s\n",
                              v[i].second.count, v[i].second.turn, v[i].first.c_str(),
-                             v[i].second.hand.c_str());
+                             v[i].second.hand.c_str(), v[i].second.desc.c_str());
             }
         }
     };
@@ -2997,6 +3023,7 @@ static void ContDiffRecord(int site, const GameState& state, bool is_pre_combat,
         for (const Card& card : state.ActivePlayer().hand) { h.push_back(card.m_name); }
         std::sort(h.begin(), h.end());
         for (const std::string& n : h) { c.hand += n; c.hand += ";"; }
+        c.desc = PendDesc(state);
         it = contdiff::cases.emplace(key, std::move(c)).first;
     }
     ++it->second.count;
@@ -16844,7 +16871,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // branch -- for Treasure Hunt's DrawUntilNonland the revealed lands are Land's
     // Edge ammo, not a land drop. Always mutates state; records only while building a
     // committed line (out_breakpoint && sink non-null).
-    auto play_breakpoint_land = [&](std::vector<Action>* sink)
+    // Both land lambdas take the TARGET state explicitly (normally `state`): MTG_CONT_DIFF needs to
+    // rebuild greedy's post-land decision state on a COPY, because comparing greedy at the PRE-land
+    // state mis-reports every continuation the breakpoint land makes affordable as "greedy declines"
+    // (measured: it made an unaffordable-without-the-land Treasure Hunt the top "empty" case).
+    auto play_breakpoint_land = [&](GameState& st, std::vector<Action>* sink)
     {
         // Default engine behavior (mirrors s_fd_opp_spawns); MTG_LEGACY_SEARCH opts
         // back into the held-out baseline (byte-frozen old ground truth) for A/Bs.
@@ -16856,9 +16887,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // plan enumerator alone cannot reach this decision. Honour the override here too, else a
         // deferred-drop turn silently ignores it.
         std::string played;
-        const std::string forced = ForcedLandForTurn(state.turn_number);
-        if (!forced.empty() && PlayLandByName(state, forced, std::string{})) { played = forced; }
-        else { played = SimulateLandPlay(state); }
+        const std::string forced = ForcedLandForTurn(st.turn_number);
+        if (!forced.empty() && PlayLandByName(st, forced, std::string{})) { played = forced; }
+        else { played = SimulateLandPlay(st); }
         if (!played.empty() && out_breakpoint != nullptr && sink != nullptr)
         {
             Action la;
@@ -16876,27 +16907,27 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // drawn Temple of Epiphany was discarded only because the deferred drop was never played).
     // Only when the land drop is still open (the plan deferred); records the play for
     // commit-the-line replay. Legacy keeps the frozen behavior (no land here).
-    auto play_drawn_flood_keep_land = [&](std::vector<Action>* sink)
+    auto play_drawn_flood_keep_land = [&](GameState& st, std::vector<Action>* sink)
     {
         static const bool s_fd = !EnvOn("MTG_LEGACY_SEARCH");
         if (!s_fd || !is_pre_combat) { return; }
         if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
-        Player& lp = state.ActivePlayer();
+        Player& lp = st.ActivePlayer();
         if (lp.lands_played_this_turn >= lp.LandDropsAvailable()) { return; }   // drop already used
 
         // Hold the drop entirely when the lands in hand are the marginal Land's Edge ammo for a lethal this
         // turn: playing one would push the count below lethal and the fire-count heuristic (below, in this
         // same ApplyPlanDirect) would then hold the rest, slipping the win a turn (s1 gi0 T4-vs-T3).
         // Provider-owned (HoldDeferredDropForLethal); default off for every other deck.
-        if (ResolveProvider(state).HoldDeferredDropForLethal(state, state.active_player_index)) { return; }
+        if (ResolveProvider(st).HoldDeferredDropForLethal(st, st.active_player_index)) { return; }
 
         // The keep-ammo land CHOICE is deck logic -> ask the provider (PostDrawKeepLandName); the engine
         // keeps the open-drop precondition above and the land-play mechanism below.
         std::string reliquary =
-            ResolveProvider(state).PostDrawKeepLandName(state, state.active_player_index);
+            ResolveProvider(st).PostDrawKeepLandName(st, st.active_player_index);
         if (!reliquary.empty())
         {
-            if (PlayLandByName(state, reliquary, std::string{}) && out_breakpoint != nullptr && sink != nullptr)
+            if (PlayLandByName(st, reliquary, std::string{}) && out_breakpoint != nullptr && sink != nullptr)
             {
                 Action la;
                 la.kind      = Action::Kind::PlayLand;
@@ -16910,7 +16941,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // dig too early, so a Tower revealed by the NEXT dig is unplayable and the flood is discarded at
         // cleanup (s2 gi1). This step runs again after that dig, so a whiff still develops -- just one dig
         // later.
-        if (ResolveProvider(state).HoldDeferredDropForFurtherDig(state, state.active_player_index)) { return; }
+        if (ResolveProvider(st).HoldDeferredDropForFurtherDig(st, st.active_player_index)) { return; }
         // NO RULE FIRED -> the static ranker picks the drop (SimulateLandPlay: first multi-colour
         // land in HAND ORDER, blind to yield). This is the SEARCH RESTRICTION documented in
         // clairvoyant-reference-shortfalls.md A6: the post-dig continuation is resolved by the GREEDY
@@ -16919,7 +16950,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // breakpoint is a real search node that is strictly worse (no land is played at all), so it
         // is opt-in for diagnosis only, NOT a fix.
         static const bool s_searched = EnvOn("MTG_BP_DROP_SEARCHED");
-        if (!s_searched) { play_breakpoint_land(sink); }
+        if (!s_searched) { play_breakpoint_land(st, sink); }
     };
 
     // ---- Searched breakpoint continuation (Plan::bp_choice) ------------------------------------
@@ -17036,6 +17067,58 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             out.land_decided = true;   // as kBpEmptyChoice: nothing downstream greedy-plays a drop
             resolved         = true;
         }
+        // MTG_BP_CANON_CONT (sound-NGC; rationale at BpCanonContEnabled). ACT-vs-PASS from the
+        // greedy path's own Solve at its own post-land state; on ACT the continuation is the
+        // canonical cands[0]; on PASS fall through to the greedy path verbatim. Stands down inside
+        // a derivation (the uncharged-recursion wall) -- there the base greedy fallback runs, as
+        // it does in the shipped engine.
+        if (!resolved && class_on && BpCanonContEnabled() && g_bp_enum_depth == 0)
+        {
+            // Probe at the state greedy will actually solve: if a breakpoint land could still be
+            // played, replay the site's own land mechanism on a COPY first (deciding on the
+            // pre-land state mis-reads every cast that land unlocks as a pass -- the same bug the
+            // CONT_DIFF instrument had). The copy is skipped whenever no drop is possible.
+            bool acted = false;
+            {
+                const Player& lp0     = state.ActivePlayer();
+                bool land_in_hand     = false;
+                for (const Card& c : lp0.hand)
+                {
+                    auto cd = CardDatabase::Instance().LookupCached(c);
+                    if ((cd && cd->card.IsLand()) || c.IsLand()) { land_in_hand = true; break; }
+                }
+                const bool drop_possible = is_pre_combat && !karoo_deferred && land_in_hand
+                    && lp0.lands_played_this_turn < lp0.LandDropsAvailable();
+                if (drop_possible)
+                {
+                    GameState probe = state;
+                    if (site == 1) { play_drawn_flood_keep_land(probe, nullptr); }
+                    else           { play_breakpoint_land(probe, nullptr); }
+                    acted = !TurnSolver::Solve(probe, is_pre_combat).actions.empty();
+                }
+                else
+                { acted = !TurnSolver::Solve(state, is_pre_combat).actions.empty(); }
+            }
+            if (acted)
+            {
+                const std::vector<TurnSolver::Plan> ccands =
+                    TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
+                if (!ccands.empty())
+                {
+                    out      = ccands.front();
+                    resolved = true;
+                    if (ContDiffOn())
+                    {
+                        GameState gst = state;
+                        if (site == 1) { play_drawn_flood_keep_land(gst, nullptr); }
+                        else           { play_breakpoint_land(gst, nullptr); }
+                        ContDiffRecord(site, gst, is_pre_combat, out);
+                    }
+                }
+                // ccands empty while Solve acts: the enumeration offers nothing here, so the
+                // greedy Solve below remains the only answer (same residue NGC left).
+            }
+        }
         if (!resolved && !class_on && BpNoGreedyContinuationEnabled() && greedysite::Enabled())
         { greedysite::why_class.fetch_add(1, std::memory_order_relaxed); }
         if (!resolved && class_on && BpNoGreedyContinuationEnabled())
@@ -17055,7 +17138,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // distinct canonical-vs-greedy pair once, with an occurrence count) rather than
                 // flooding one line per call. Costs a greedy Solve per continuation -> diagnostic
                 // runs only; inert (one bool test) when off.
-                if (ContDiffOn()) { ContDiffRecord(site, state, is_pre_combat, out); }
+                //
+                // AT GREEDY'S OWN STATE: the greedy path plays the breakpoint land BEFORE its
+                // Solve, so diffing at the pre-land `state` mis-reports every cast the land makes
+                // affordable as "greedy declines" (first measured case list: an
+                // unaffordable-without-the-land Treasure Hunt was the top "empty" case at
+                // unt=1/2 pool=0). Rebuild the post-land state on a copy with the SAME site-
+                // appropriate mechanism the fallback below would use, and diff there.
+                if (ContDiffOn())
+                {
+                    GameState gst = state;
+                    if (site == 1) { play_drawn_flood_keep_land(gst, nullptr); }
+                    else           { play_breakpoint_land(gst, nullptr); }
+                    ContDiffRecord(site, gst, is_pre_combat, out);
+                }
             }
             else if (greedysite::Enabled())
             { greedysite::why_empty.fetch_add(1, std::memory_order_relaxed); }
@@ -17971,7 +18067,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 TurnSolver::Plan extra;
                 if (!bp_searched_plan(0, extra))
                 {
-                    play_breakpoint_land(my_bp_sink);
+                    play_breakpoint_land(state, my_bp_sink);
                     greedysite::Record(0);
                     extra = TurnSolver::Solve(state, is_pre_combat);
                     greedysite::RecordOutcome(0, !extra.actions.empty()
@@ -18012,7 +18108,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 TurnSolver::Plan extra;
                 if (!bp_searched_plan(1, extra))
                 {
-                    play_drawn_flood_keep_land(my_bp_sink);
+                    play_drawn_flood_keep_land(state, my_bp_sink);
                     greedysite::Record(1);
                     extra = TurnSolver::Solve(state, is_pre_combat);
                     greedysite::RecordOutcome(1, !extra.actions.empty()
@@ -18350,7 +18446,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 TurnSolver::Plan extra;
                 if (!bp_searched_plan(2, extra))
                 {
-                    play_breakpoint_land(my_bp_sink);
+                    play_breakpoint_land(state, my_bp_sink);
                     greedysite::Record(2);
                     extra = TurnSolver::Solve(state, is_pre_combat);
                     greedysite::RecordOutcome(2, !extra.actions.empty()
@@ -18414,7 +18510,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     TurnSolver::Plan extra;
                     if (!bp_searched_plan(0, extra))
                     {
-                        play_breakpoint_land(my_bp_sink);
+                        play_breakpoint_land(state, my_bp_sink);
                         greedysite::Record(0);
                         extra = TurnSolver::Solve(state, is_pre_combat);
                         greedysite::RecordOutcome(0, !extra.actions.empty()
@@ -18598,7 +18694,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         TurnSolver::Plan extra;
                         if (!bp_searched_plan(6, extra))
                         {
-                            play_breakpoint_land(my_bp_sink);
+                            play_breakpoint_land(state, my_bp_sink);
                             greedysite::Record(6);
                             extra = TurnSolver::Solve(state, is_pre_combat);
                             greedysite::RecordOutcome(6, !extra.actions.empty()
@@ -19474,7 +19570,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const bool bp5_from_rank = bp_searched_plan(deferred_site_index(), extra);
         if (!bp5_from_rank)
         {
-            play_breakpoint_land(out_breakpoint);
+            play_breakpoint_land(state, out_breakpoint);
             greedysite::Record(8);
             extra = TurnSolver::Solve(state, is_pre_combat);
             greedysite::RecordOutcome(8, !extra.actions.empty()
@@ -30573,13 +30669,22 @@ namespace
         std::atomic<uint64_t> hits{0};      // memo returns
         std::atomic<uint64_t> misses{0};    // full EnumeratePlansWithLand derivations
         std::atomic<uint64_t> clears{0};    // wholesale cache clears (the suspected thrash)
+        // NESTED = calls arriving with g_bp_enum_depth > 0, i.e. from an apply INSIDE a
+        // derivation. Base play never does this; MTG_BP_NO_GREEDY_CONT does it at every
+        // in-derivation fallback, which is the recursive-cascade half of its Dragonstorm wall
+        // (a miss runs EnumeratePlansWithLand, whose applies hit breakpoints, whose NGC
+        // fallbacks enumerate again -- uncharged at every level).
+        std::atomic<uint64_t> nested_hits{0};
+        std::atomic<uint64_t> nested_misses{0};
         ~BpEnumProbe()
         {
             if (!EnvOn("MTG_BP_ENUM_PROBE")) { return; }
-            std::fprintf(stderr, "[bp-enum] hits=%llu misses=%llu clears=%llu\n",
+            std::fprintf(stderr, "[bp-enum] hits=%llu misses=%llu clears=%llu nested_hits=%llu nested_misses=%llu\n",
                          static_cast<unsigned long long>(hits.load()),
                          static_cast<unsigned long long>(misses.load()),
-                         static_cast<unsigned long long>(clears.load()));
+                         static_cast<unsigned long long>(clears.load()),
+                         static_cast<unsigned long long>(nested_hits.load()),
+                         static_cast<unsigned long long>(nested_misses.load()));
         }
     };
     BpEnumProbe g_bp_enum_probe;
@@ -30725,7 +30830,12 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
         BpEnumMap::const_iterator it = cache.find(key);
         if (it != cache.end())
         {
-            if (BpEnumProbeOn()) { g_bp_enum_probe.hits.fetch_add(1, std::memory_order_relaxed); }
+            if (BpEnumProbeOn())
+            {
+                g_bp_enum_probe.hits.fetch_add(1, std::memory_order_relaxed);
+                if (g_bp_enum_depth > 0)
+                { g_bp_enum_probe.nested_hits.fetch_add(1, std::memory_order_relaxed); }
+            }
             return it->second;
         }
     }
@@ -30736,7 +30846,14 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
 
     if (s_cache)
     {
-        if (BpEnumProbeOn()) { g_bp_enum_probe.misses.fetch_add(1, std::memory_order_relaxed); }
+        if (BpEnumProbeOn())
+        {
+            g_bp_enum_probe.misses.fetch_add(1, std::memory_order_relaxed);
+            // depth was ++/-- around the derivation above, so "am I nested" is read from the
+            // caller's frame: nested iff depth is still > 0 after our own decrement.
+            if (g_bp_enum_depth > 0)
+            { g_bp_enum_probe.nested_misses.fetch_add(1, std::memory_order_relaxed); }
+        }
         if (cache.size() >= s_bp_enum_cap)
         {
             if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }

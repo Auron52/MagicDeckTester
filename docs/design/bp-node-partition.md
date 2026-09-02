@@ -1223,3 +1223,37 @@ only (-0.0065/-0.0070, t~2) at 1.2-1.6x wall; node0 alone is WORSE than shipped;
 
 Recommended order: 1, with 2's inventory in parallel; 3 asked; 4 available to the USER regardless;
 5 as the fallback frame if 1 fails its gate.
+
+## Idea 2's INVENTORY: the host-able caller set is TWO SITES, not a class (2026-09-02)
+
+Full sweep of every `ApplyPlanDirect` call site (the function is file-static to TurnSolver.cpp, so
+the set is closed). **39 real call sites** -- the recorded "42" was a raw grep counting 2
+declarations and 1 comment. `out_breakpoint` is purely a RECORDING sink; `bp_capture` alone is the
+hosting hook (the pend arm requires `bp_capture != nullptr && plan.bp_choice < 0`).
+
+* **(A) capture-passing: 4 sites**, of which only 2 are node hosts (`FSLineTail` m2 loop 26505,
+  `FSLineWin` pre loop 27182, both conditional on `MTG_BP_NODE`). The other two (27608 deferred
+  bp-wave cache-miss, 30134 SolveWithLookahead twin) pass a capture for the PREFIX-RESUME CACHE
+  only: their plans always carry `bp_choice >= 0`, so the pend arm can never fire there.
+* **(B) records-but-does-not-host: 10 sites.** Only ONE is a drop-in host candidate:
+  **26875, the condemnation tranche-rescue m2 loop** -- its own comment says "same body as the
+  wave-0 loop above", i.e. the same shape as the host at 26505; adding the capture + pend block is
+  mechanical. **27723 (group-wave `score_tranche_plan`)** is host-able but needs its "one plan ->
+  one score" lambda to become "one plan -> N children" -- a real refactor. The node CHILD resumes
+  (26589/27249) are non-hostable BY DESIGN (nested = the deliberate L*W-not-W^L trade). The
+  bp-wave variant applies (27604/27611) go through the rank/wave walker -- the mechanism the node
+  replaces, not a hosting gap.
+* **(B, noise) FOUR sites pass a DEAD `&bp`**: `EnumerateEarliestWins` x3 (29394/29430/29465) and
+  `ReshuffleAvgChoosePlan` (29598) declare a local `bp`, pass it, never read it. They are OFFLINE
+  labelling tools (value-leaf ladder / honest-teacher reshuffle), not play -- but they set the REC
+  bit in the nohost split, so the "rollout+rec = plausibly host-able" bucket reads HIGHER than the
+  play-relevant truth in any labelling run. Dropping `&bp` there is behaviour-free sharpening.
+* **(C) blind applies: 25 sites**, and this is where the expensive half lives: the rollout's
+  future-turn applies (25710/25757) and `SolveWithLookahead`'s per-candidate loops
+  (29972/29995/30004). Hosting there requires a ROLLOUT to pend and resume -- not a site change,
+  an architecture change. This is exactly the half idea 3's scope ruling would reclassify.
+
+**Consequence for idea 2:** "host the cheap nohost half" concretely means: host 26875 (cheap),
+optionally refactor 27723, and stop -- the rest of the rec bucket is either by-design nested,
+wave-mechanism, or dead-sink noise. That is a much smaller lever than the 46-84% bucket suggested;
+re-measure the nohost split after the dead sinks are dropped before sizing any further work.

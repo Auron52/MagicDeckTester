@@ -130,6 +130,7 @@ enum Slot : int
     BP_NODE_D56,              // MTG_BP_NODE_D56           the node hosts deferred sites 5 and 6 too, not just 3
     BP_NODE_KEEPWAVE,         // MTG_BP_NODE_KEEPWAVE      ...and the RANK machinery keeps covering 5/6 anyway
     BP_NODE_KEEPWAVE3,        // MTG_BP_NODE_KEEPWAVE3     ...the same for SITE 3, the shipped candidate's own site
+    BP_CANON_CONT,            // MTG_BP_CANON_CONT         sound-NGC: greedy judges ACT-vs-PASS, order picks the cast
     COUNT
 };
 
@@ -237,6 +238,7 @@ inline const char* Name(int slot)
         "MTG_BP_NODE_D56",
         "MTG_BP_NODE_KEEPWAVE",
         "MTG_BP_NODE_KEEPWAVE3",
+        "MTG_BP_CANON_CONT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

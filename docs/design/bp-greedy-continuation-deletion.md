@@ -158,3 +158,57 @@ rises 5x (all overrun) and cost rises 42%. The budget binds first; widening only
    depth 0 there is no search left, so the replacement is a leaf evaluator, not more search.
 6. **The OVERNIGHT GT tier is STALE** (20 kitty cells) -- smoke and regression were regenerated and
    accepted after the rebase, overnight was not.
+
+## 9. SOUND-NGC: `MTG_BP_CANON_CONT` (2026-09-02, BUILT -- gate pending)
+
+Idea 1 of the post-attribution menu (`bp-node-partition.md`, "IDEAS MENU"). Both prior deletion
+forms failed for reasons that were finally ROOT-CAUSED this session, and each root cause dictated
+one piece of the new lever's shape:
+
+### Root cause A -- NGC's "lossiness" was two-thirds an INSTRUMENT BUG, one-third real
+
+`MTG_CONT_DIFF` compared greedy at the PRE-LAND state, while the real greedy path plays the
+breakpoint land BEFORE its Solve. Every continuation the land makes affordable therefore
+mis-reported as "greedy declines": th's top case (n=11,568, `ORDER=[Treasure Hunt] greedy=[(nothing)]`)
+sat at `unt=1/2 pool=0` -- Treasure Hunt ({1}{U}) is UNAFFORDABLE there without the land. The
+instrument now rebuilds greedy's post-land state on a copy (the land lambdas took a `GameState&`
+target param for this). Corrected th picture: agreement 93.4% -> **98.0%**, and the TRUE empty
+class (greedy genuinely casts nothing) is 3,226 of 5,261 diffs (61%) -- real, but a third of what
+the buggy instrument showed.
+
+### Root cause B -- the Dragonstorm wall is UNCHARGED RECURSIVE enumeration
+
+gi=2686 (`--seed 6602687 --game-index 0`), base vs NGC: 36k -> **1.20M** bp-enum lookups, 582 ->
+**46,992** full derivations, **5 wholesale cache clears** (cap 8192), 8.85s -> ~150s wall at LOWER
+units. The nested split (new `[bp-enum] nested_*` counters) pins it: **96% of the lookups AND the
+misses arrive with `g_bp_enum_depth > 0`** -- an apply inside `EnumeratePlansWithLand` hits a
+breakpoint, NGC enumerates again, at every level, none of it billed to units. A 1M cache cap
+(clears=0) only halves the wall, so thrash is half the story; the recursion is the rest.
+
+### The lever
+
+`MTG_BP_CANON_CONT` (heurarm slot, default OFF; mutually exclusive with NGC / BASE_EMPTY):
+
+* **ACT-vs-PASS is judged by the greedy path's own Solve at its own post-land state** (a state copy
+  is taken only when a drop is actually still open). On PASS it falls through to the greedy path
+  verbatim -- the land is replayed on the real state and the greedy Solve memo-hits the probe's
+  state, so a genuine "cast nothing" reproduces byte-for-byte. This deletes the empty-class
+  lossiness BY CONSTRUCTION (measured: every `greedy=[(nothing)]` case vanished from th's list).
+* **On ACT the continuation is the canonical `cands[0]`** -- greedy's free pick of WHICH casts is
+  what stays deleted; only act-vs-pass remains with Solve, the same judgement class as the accepted
+  greedy land drop.
+* **Stands down inside a derivation** (`g_bp_enum_depth > 0`): kills the recursion. gi=2686 under
+  canon: 46,592 hits / 2,431 misses / 0 clears / nested=0, no SLOW-GAME (was 145-151s under NGC),
+  same win turn.
+
+th residual under canon: 99.0% agreement, 7 cases, ALL pure pick-order differences
+(Land's Edge-vs-Treasure Hunt-vs-Throes) -- the intended payload, each a cast-order review item.
+
+### Gate (pending)
+
+`scripts/gen_canon_gate.py` -> 64 jobs / 186,000 games, one pooled batch, every deck at its own
+play settings, two disjoint blocks, paired via MTG_DUMP_WINS. ACCEPTANCE: overall
+quality-neutral-or-better; **hinata keeps a real gain** (NGC's only quality, -0.006 -- lose that
+and the lever has no upside); **th's +0.0016 regression gone**; **no one-sided dragonstorm
+SLOW-GAME tail**. Flag-off byte-identity smoke ran first (the land-lambda refactor touches the
+play path).
