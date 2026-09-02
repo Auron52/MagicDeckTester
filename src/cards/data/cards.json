@@ -5950,13 +5950,14 @@
    "keywords": [
     "Enchant"
    ],
-   "oracle_text": "Enchant land\nEnchanted land has shroud. (It can't be the target of spells or abilities.)\nWhenever enchanted land is tapped for mana, its controller adds an additional one mana of any color. [Mana clause modelled as a Land Aura -- see Fertile Ground. SHROUD is inert and disclosed: the passive opponent casts nothing, and no card in this deck targets a land (Azorius Chancery's ETB return is not targeted). PROVISIONAL deferral.]",
+   "oracle_text": "Enchant land\nEnchanted land has shroud. (It can't be the target of spells or abilities.)\nWhenever enchanted land is tapped for mana, its controller adds an additional one mana of any color. [Mana clause modelled as a Land Aura -- see Fertile Ground. SHROUD IS MODELLED (land_aura_grants_shroud): an Aura spell TARGETS its host as it is cast (CR 303.4a) and shroud stops that (CR 702.18a, symmetric -- it applies to our own spells too), so a land already carrying a Trace can take NO further auras. That is a legality filter on this deck's own plays, and it bites: the deck runs ~23 land auras and concentrating them on one host is a real line, so the host ranking steered straight into the illegal play. Cast order puts a shroud-granting land aura LAST among land auras, which keeps the legal Overgrowth-then-Trace stack available. Still inert vs the OPPONENT (passive, casts nothing) -- that half remains disclosed.]",
    "template": "custom",
    "parameters": {
     "is_aura": true,
     "is_land_aura": true,
     "land_aura_extra_mana": 1,
-    "land_aura_produces": []
+    "land_aura_produces": [],
+    "land_aura_grants_shroud": true
    }
   },
   {

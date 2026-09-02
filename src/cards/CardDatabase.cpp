@@ -987,6 +987,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_untap_lands               = params.value("etb_untap_lands", 0);
     p.is_land_aura                  = params.value("is_land_aura", false);
     p.land_aura_extra_mana          = params.value("land_aura_extra_mana", 0);
+    p.land_aura_grants_shroud       = params.value("land_aura_grants_shroud", false);
     for (const std::string& c : params.value("land_aura_produces", json::array()))
     {
         p.land_aura_produces.push_back(ColorFromString(c));

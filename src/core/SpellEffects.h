@@ -1742,6 +1742,26 @@ inline bool CreatureHasAura(const Permanent& creature, const GameState& state)
     return false;
 }
 
+// Does this LAND have shroud from an Aura attached to it (Trace of Abundance)? CR 702.18a: a
+// permanent with shroud can't be the target of spells or abilities -- and unlike hexproof that
+// applies to its CONTROLLER's spells too, so this restricts our own plays.
+//
+// The live consequence in this engine is Aura casting: an Aura spell targets its host as it is cast
+// (CR 303.4a), so a land already carrying a shroud-granting aura can take no further auras. It is
+// deliberately NOT filtered on controller: shroud is symmetric, and an opponent's aura on our land
+// would shroud it just the same.
+inline bool LandHasShroud(const Permanent& land, const GameState& state)
+{
+    if (!land.card.IsLand()) { return false; }
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.aura_attached_to != land.card.m_number) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (d && d->params.is_land_aura && d->params.land_aura_grants_shroud) { return true; }
+    }
+    return false;
+}
+
 // "Modified" (Lion Umbra's restriction): the creature has an Aura you control, Equipment (none in
 // this engine), or a +1/+1 counter (CR 701.48). = has-aura OR has-a-plus-one-counter here.
 inline bool CreatureIsModified(const Permanent& creature, const GameState& state)
@@ -1981,6 +2001,8 @@ inline std::vector<int> LegalEnchantTargets(const GameState& state, int controll
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+            // An Aura spell TARGETS its host (CR 303.4a), so a shrouded land is not a legal one.
+            if (LandHasShroud(p, state)) { continue; }
             out.push_back(p.card.m_number);
         }
         return out;
@@ -2010,14 +2032,18 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
 {
     if (land_aura)
     {
+        // Shroud is checked on BOTH arms: the searched target must still be legal (a board can change
+        // between enumeration and resolution -- another aura may have landed on that host in the
+        // meantime), and the heuristic fallback must not pick an illegal host either.
         for (const Permanent& p : state.battlefield)
             if (p.controller_index == controller && p.card.IsLand()
-                && p.card.m_number == enchant_target)
+                && p.card.m_number == enchant_target && !LandHasShroud(p, state))
             { return enchant_target; }
         int lbest = 0, lbest_yield = -1;
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+            if (LandHasShroud(p, state)) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d) { continue; }
             const int y = PermanentManaYield(state, p, *d);
@@ -8226,25 +8252,46 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
     }
 }
 
-// A land the caller wants back FIRST, ahead of the yield order, as an m_number (0 = none). Set only
-// by ApplyBlinkLoop, for one reason: the damage sink.
+// Lands the caller wants back FIRST, ahead of the yield order, MOST WANTED FIRST (null = none).
+// Set only by ApplyBlinkLoop.
 //
-// The default order is highest per-tap YIELD, which is right for mana and exactly wrong for Shivan
-// Gorge -- it makes {C}, so on a board of Overgrowth'd lands it is never in the top five and the
-// loop untaps it exactly never. Measured: the go-off was recognised and proposed on 708 nodes of a
-// 3-game sample and executed ZERO times, because one Gorge activation is all the loop could ever
-// buy. A land you can convert into DAMAGE is worth more than the one or two extra mana the land it
-// displaces would make, since mana is what the loop already has an unbounded supply of.
+// USER, 2026-09-02: "It's okay to untap by per-tap yield by default most of the time. However, we
+// should have the ability to do something different when we go infinite." That is exactly the split
+// this is: yield everywhere, and an explicit override for the one context where yield is the wrong
+// objective. The default order is highest per-tap YIELD, which is right for mana and exactly wrong
+// for Shivan Gorge -- it makes {C}, so on a board of Overgrowth'd lands it is never in the top five
+// and the loop untaps it exactly never. Measured: the go-off was recognised and proposed on 708
+// nodes of a 3-game sample and executed ZERO times, because one Gorge activation is all the loop
+// could ever buy.
+//
+// The principle, stated generally so the next combo deck inherits it: ONCE MANA IS UNBOUNDED, MANA
+// STOPS BEING THE OBJECTIVE. A land you can convert into damage, cards, or any other progress is
+// worth more than the one or two extra mana the land it displaces would make, because the loop
+// already has an unbounded supply of the thing yield measures. So this is an ORDERED SET rather
+// than the single id it started as: the loop promotes every permanent it can cash out, damage
+// sinks first (they end the game) and draw/investigate sinks behind them (they find the card that
+// does). A one-sink version silently hardcoded "the sink is Shivan Gorge", which is a deck fact,
+// not an engine one.
 //
 // Scoped, thread_local, and nulled outside the loop, so every other untap keeps the yield order.
-inline thread_local int g_etb_untap_priority = 0;
+inline thread_local const std::vector<int>* g_etb_untap_priority = nullptr;
 
 struct EtbUntapPriorityScope
 {
-    int prev;
-    explicit EtbUntapPriorityScope(int id) : prev(g_etb_untap_priority) { g_etb_untap_priority = id; }
+    const std::vector<int>* prev;
+    explicit EtbUntapPriorityScope(const std::vector<int>* v)
+        : prev(g_etb_untap_priority) { g_etb_untap_priority = v; }
     ~EtbUntapPriorityScope() { g_etb_untap_priority = prev; }
 };
+
+// Rank of `number` in the priority set: 0 = most wanted, -1 = not in it.
+inline int EtbUntapPriorityRank(int number)
+{
+    if (g_etb_untap_priority == nullptr) { return -1; }
+    for (std::size_t i = 0; i < g_etb_untap_priority->size(); ++i)
+    { if ((*g_etb_untap_priority)[i] == number) { return static_cast<int>(i); } }
+    return -1;
+}
 
 // The blink loop -- ONE shared driver both worlds call, so the executor realises exactly the line
 // the rollout scored. Per iteration, in this order:
@@ -8263,15 +8310,37 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
                           const std::function<bool(const ManaCost&)>& pay)
 {
     if (!outlet.blink_cost.has_value()) { return 0; }
-    // The damage sink this loop wants back every iteration (0 = none). Fixed for the whole loop:
+    // The sinks this loop wants back every iteration, MOST WANTED FIRST. Fixed for the whole loop:
     // lands do not move, so it need not be recomputed per iteration.
-    int sink_id = 0;
+    //
+    // DAMAGE SINKS ONLY, and that restriction is MEASURED, not assumed. Promoting draw/investigate
+    // sinks too (Mariposa's {5},{T}: draw; Kitchen's Investigate) is the obvious generalisation and
+    // it LOSES: +0.0437 avg win turns, t +5.99, 8 of 8 seeds worse, paired 800 games a side.
+    //
+    // The mechanism explains the sign. A promotion is only worth its displaced yield if the loop can
+    // CASH the promoted permanent, and the loop's per-iteration spend is SpendSurplusOnDamageSinks --
+    // damage and nothing else. So untapping a draw land instead of an Overgrowth'd one converts real
+    // loop mana into an ability no iteration ever activates: pure loss. Damage sinks are the whole
+    // exception because firing one IS the win condition.
+    //
+    // So the ordered-set shape above is the capability ("do something different when we go
+    // infinite"), and this is the policy that currently earns its place in it. Adding a class of
+    // sink here is only correct alongside a matching per-iteration SPEND for it -- do both, or
+    // neither. Empty on every deck without a damage land, which keeps this byte-identical elsewhere.
+    // ONE sink, not all of them -- the `break` is deliberate and is what makes this generalisation
+    // byte-identical to the single-id version it replaces. Promoting every copy was measured too
+    // (Shivan Gorge is a 4-of, so it is a real alternative): it buys damage per iteration but spends
+    // the untap slots that would have gone to high-yield lands, and it came out a WASH -- 7.2200 vs
+    // 7.2238 over 8 seeds x 100. A wash is not a reason to move off the shipped behaviour, so the
+    // set carries one entry today and the ordering machinery is simply ready for the day a deck has
+    // two DIFFERENT sinks worth ranking against each other.
+    std::vector<int> sinks;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && d->params.tap_damage_cost.has_value() && d->params.tap_damage_each_opponent > 0)
-        { sink_id = p.card.m_number; break; }
+        { sinks.push_back(p.card.m_number); break; }
     }
     int done = 0;
     for (int k = 0; k < iterations; ++k)
@@ -8296,13 +8365,29 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         SpendSurplusOnDamageSinks(state, controller, c, pay);
         if (untaps > 0) { EtbUntapTapAheadIntoFloat(state, controller, untaps); }
         if (!pay(c)) { break; }
-        // Emiel's optional {G/W} counter trigger fires inside ApplyBlink's ETB cascade; hand it
-        // this loop's payer so its mana is on the same books as the activation's (see
+        // Emiel's optional {G/W} counter trigger fires inside ApplyBlink's ETB cascade; hand it this
+        // loop's payer so its mana is on the same books as the activation's (see
         // PayOptionalTriggerCost). Restored on scope exit. The untap priority puts the damage sink
         // back at the front of the untapped set (see g_etb_untap_priority).
+        //
+        // PAY IT ON THE LAST ITERATION ONLY (user, 2026-09-02: "this is silly to do when we plan to
+        // flicker the creature, when we are going off being the biggest example"). This is not a
+        // preference, it is arithmetic: CR 400.7 makes the returned permanent a NEW OBJECT, so
+        // iteration k+1 WIPES the counter iteration k paid for. Paying every pass buys exactly one
+        // surviving counter for K payments -- and, far worse, {G/W} per iteration is subtracted from
+        // the loop's PER-ITERATION MARGIN. A loop netting +1 mana a pass is unbounded; the same loop
+        // paying {G/W} every pass nets 0 and is not a combo at all. So the always-pay heuristic could
+        // silently un-make the deck's win condition.
+        //
+        // A DECLINING payer is installed for the other passes rather than a null one: null would
+        // fall through to the turn-scoped float in PayOptionalTriggerCost and pay anyway, which is
+        // the same bug wearing a different hat.
         {
-            EtbOptionalPayerScope   _eops(&pay);
-            EtbUntapPriorityScope   _eups(sink_id);
+            const bool last_pass = (k + 1 == iterations);
+            const std::function<bool(const ManaCost&)> decline =
+                [](const ManaCost&) { return false; };
+            EtbOptionalPayerScope   _eops(last_pass ? &pay : &decline);
+            EtbUntapPriorityScope   _eups(sinks.empty() ? nullptr : &sinks);
             ApplyBlink(state, controller, source_id, target_id, outlet.blink_returns_tapped);
         }
         ++done;
@@ -8373,8 +8458,11 @@ inline void EtbUntapLands(GameState& state, int controller, int count)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         int key = PermanentManaYield(state, p, *d);
-        if (g_etb_untap_priority != 0 && p.card.m_number == g_etb_untap_priority)
-        { key += 1000; }   // above any real yield, so the sink is always in the untapped set
+        // Above any real yield, so a wanted sink is always in the untapped set; the rank keeps the
+        // caller's own ordering among them (damage before draw) while still leaving every
+        // non-priority land ranked by yield below the whole set.
+        const int rank = EtbUntapPriorityRank(p.card.m_number);
+        if (rank >= 0) { key += 1000000 - 1000 * rank; }
         tapped.emplace_back(key, bi);
     }
     std::stable_sort(tapped.begin(), tapped.end(),

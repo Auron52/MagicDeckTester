@@ -305,6 +305,89 @@ literally the same library. Losses scored at `max_turns+1`.
 the *refuted* flat-pool credit, and most of it was the unsound part — a Drake paying for its own
 cast is mana the deck does not have. The sound version is worth **−0.034**. Real, free, and small.
 
+## Two USER-CAUGHT correctness bugs, and a refuted generalisation (2026-09-02)
+
+Both bugs were found by the user reading the PROVISIONAL list, not by any harness. Worth recording
+because the two misses have the same shape: I checked a card's clause against the *opponent* and
+concluded "inert", when the clause actually constrains **our own** plays.
+
+### 1. Trace of Abundance's shroud — I called it inert, and it was a live illegal play
+
+I wrote off shroud because "the passive opponent casts nothing and no card in this deck targets a
+land". The user: *"The shroud is actually important, since it can get in the way of us putting more
+enchantments on it."* Correct, and the rule is not subtle — **an Aura spell targets its host as it
+is cast** (CR 303.4a), and shroud (CR 702.18a) is symmetric, so it stops *our* auras too. A land
+carrying a Trace can take no further auras.
+
+It is not a rare corner. The deck runs **~23 land auras**, and `LandAuraHostCandidates` scores hosts
+by yield — so the Trace's own +1 makes the shrouded land the **highest-scoring** host. The ranking
+aimed directly at the illegal play.
+
+Verified by A/B on the card parameter (`cards.json` is runtime, so no rebuild needed), on a fixture
+with a Trace'd Yavimaya Coast plus a clean Brushland and Forest:
+
+| `land_aura_grants_shroud` | Overgrowth attaches to |
+|---|---|
+| off (pre-fix) | **Yavimaya Coast** — the shrouded land, **illegal** |
+| on (fixed) | Brushland — legal |
+
+Life totals and win turn are **identical** either way, which is why no existing assertion could see
+it. So `--scenario` gained **`expect_attachment`** (`{"<aura>": "<host>"}`), and
+`test/scenarios/edf_shroud_blocks_second_aura.json` guards it — confirmed to PASS with the fix and
+FAIL without it. Enforced in `LegalEnchantTargets`, `ResolveEnchantTarget` (both arms) and
+`LandAuraHostCandidates`; the last one matters because that hook *narrows*, so proposing only
+shrouded hosts would drop an aura that has a legal home elsewhere.
+
+Cast order also splits: a shroud-granting land aura now ranks **last among land auras** (3 vs 4), so
+the legal Overgrowth-then-Trace stack stays available while Trace-then-Overgrowth (illegal) does
+not. That also keeps enumeration honest — its frozen pre-shroud snapshot is correct under this
+order and wrong under any other.
+
+Still disclosed as inert **vs the opponent**: that half genuinely is.
+
+### 2. Emiel's `{G/W}` was paid EVERY blink iteration — which can un-make the combo
+
+The user: *"5 is potentially okay, but this would only work if we never prevent any other casting.
+As you mentioned this is silly to do when we plan to flicker the creature, when we are going off
+being the biggest example."*
+
+The loop installed its payer for every pass, so `{G/W}` was paid on each one. Two costs, and the
+second is the serious one:
+* CR 400.7 makes the returned permanent a NEW OBJECT, so pass k+1 **wipes** the counter pass k paid
+  for — K payments buy exactly one surviving counter;
+* `{G/W}` per iteration comes straight off the loop's **per-iteration margin**. A loop netting +1
+  mana a pass is unbounded; the same loop paying `{G/W}` every pass nets 0 and **is not a combo at
+  all**. An always-pay resolution heuristic could silently delete the deck's win condition.
+
+Now paid on the **final** iteration only (a *declining* payer is installed for the others — a null
+one would fall through to the turn float and pay anyway).
+
+### 3. Untap priority: the mechanism generalised, the policy REFUTED by measurement
+
+The user: *"It's okay to untap by per-tap yield by default most of the time. However, we should have
+the ability to do something different when we go infinite."* The override existed but was hardcoded
+to a single damage sink, so `g_etb_untap_priority` is now an **ordered set** — the capability, stated
+generally: once mana is unbounded, mana stops being the objective.
+
+The obvious policy to put in it — also promote draw/investigate sinks — **loses**, and the
+measurement is decisive: **+0.0437 turns, t +5.99, 8/8 seeds worse** (paired, 800 games a side).
+The mechanism explains the sign: a promotion is only worth its displaced yield if the loop can
+**cash** the promoted permanent, and the loop's per-iteration spend is `SpendSurplusOnDamageSinks` —
+damage and nothing else. Untapping a draw land instead of an Overgrowth'd one converts real loop
+mana into an ability no iteration activates. So the policy is damage-only, and the code says plainly
+that adding a sink class is only correct alongside a matching per-iteration spend for it.
+
+### What the correctness fixes cost
+
+| | avg win turn |
+|---|---|
+| before (shipped) | 7.2038 |
+| after shroud + Emiel-last | **7.2200** |
+
+**+0.0163 turns** (se 0.0092, t +1.76, 8 seeds x 100 games paired). That is the honest price of no
+longer making an illegal play, and it is the right trade: the previous number was partly bought with
+auras the rules do not allow.
+
 ## Recommended next steps
 
 1. ~~**Credit the ETB refund toward SUBSEQUENT casts only**~~ — **DONE 2026-09-02**, adopted at
@@ -353,8 +436,10 @@ cast is mana the deck does not have. The sound version is worth **−0.034**. Re
 2. **`etb_untap_lands` is a DISCLOSED VIEWER GAP.** "Untap up to N lands" is a real choice, is
    auto-resolved by yield order, and a human cannot override it. It demonstrably matters (see the
    bug above). Wiring it needs a NEW multi-pick decision type (the Dragonstorm `dragon` shape).
-3. **Trace of Abundance's shroud** is unmodelled: the passive opponent casts nothing and no card in
-   this deck targets a land (Azorius Chancery's ETB return is not targeted).
+3. ~~**Trace of Abundance's shroud** is unmodelled~~ — **USER CAUGHT A REAL BUG, 2026-09-02; now
+   MODELLED.** It was not inert: an Aura spell targets its host (CR 303.4a) and shroud is symmetric,
+   so a Trace'd land can take no further auras. See the section above. Only the opponent-facing half
+   remains disclosed as inert.
 4. ~~**Blink activation COUNT in human play** is offered as `{1,2,3, go-off}`~~ — **STALE, and
    already resolved by the OOM fix; nothing to sign off.** The count menu in human play was
    collapsed to **1** (`TurnSolver.cpp`, fold (a)), because K is a *repetition* of a decision rather
@@ -363,7 +448,10 @@ cast is mana the deck does not have. The sound version is worth **−0.034**. Re
    The `{1,2,3, go-off}` ladder survives only in the **autonomous** search
    (`EldraziFlickerProvider::BlinkActivationCounts`), which needs it because it commits a whole turn
    at once. This entry was written before that fix and outlived it.
-5. **Emiel's optional `{G/W}`** is always paid when affordable (monotone vs a passive opponent).
+5. ~~**Emiel's optional `{G/W}`** is always paid when affordable~~ — **USER CAUGHT, 2026-09-02.**
+   Paying every blink iteration bought one counter for K payments (CR 400.7) and, worse, ate the
+   loop's per-iteration margin. Now paid on the FINAL iteration only. The general "never let it deny
+   another cast" requirement outside the loop is still OPEN (see next steps).
 6. **Devoid, flying, and the `{C}`/`{G/W}` reminder texts** are inert — disclosed.
 
 ## Approved deferrals

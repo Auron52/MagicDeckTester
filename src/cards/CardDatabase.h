@@ -1542,6 +1542,14 @@ struct CardParams
     bool               is_land_aura         = false;
     int                land_aura_extra_mana = 0;
     std::vector<Color> land_aura_produces;
+    // "Enchanted land has shroud" (Trace of Abundance). NOT cosmetic, and not inert just because the
+    // opponent is passive: an Aura SPELL targets its host as it is cast (CR 303.4a, 702.18a), so a
+    // land already carrying a shroud-granting aura cannot legally receive ANOTHER aura -- including a
+    // second copy of the same card. That makes this a legality filter on the deck's OWN plays, which
+    // is the case a "does anything target a land?" reading misses. It matters here because
+    // concentrating auras on one host is a real line (it raises the top-N yield the blink loop
+    // untaps), so the host ranking actively steers INTO the illegal play unless this is enforced.
+    bool               land_aura_grants_shroud = false;
 
     // Eldrazi Displacer "{2}{C}: Exile another target creature, then return it to the battlefield
     // tapped under its owner's control" / Emiel the Blessed "{3}: Exile another target creature you

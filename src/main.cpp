@@ -4252,6 +4252,40 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         std::cout << "scenario: PASS (active_life " << exp << ")\n";
     }
 
+    // Optional ATTACHMENT assertion: {"<aura or equipment name>": "<host name>"}. Pins WHICH
+    // permanent an Aura/Equipment ended up on, which no other assertion in this harness can see --
+    // attaching to the wrong host changes neither life total nor win turn on a short fixture, so a
+    // rules defect in target legality is invisible to every check above. That is not hypothetical:
+    // the shroud fix (CR 303.4a targeting + CR 702.18a) was verified by exactly this observable, and
+    // pre-fix the aura went to the ILLEGAL host while life and win turn were identical either way.
+    //
+    // Matches by NAME on both sides and requires exactly one host match, so a fixture cannot pass by
+    // accident on a board with two same-named lands. An unattached aura reports "<none>".
+    if (j.contains("expect_attachment"))
+    {
+        for (auto it = j.at("expect_attachment").begin(); it != j.at("expect_attachment").end(); ++it)
+        {
+            const std::string aura = it.key();
+            const std::string want = it.value().get<std::string>();
+            std::string got = "<none>";
+            int host_num = 0;
+            for (const Permanent& p : state.battlefield)
+            { if (p.card.m_name.str() == aura) { host_num = p.aura_attached_to; break; } }
+            if (host_num != 0)
+            {
+                for (const Permanent& h : state.battlefield)
+                { if (h.card.m_number == host_num) { got = h.card.m_name.str(); break; } }
+            }
+            if (got != want)
+            {
+                std::cout << "scenario: FAIL expected " << aura << " attached to \"" << want
+                          << "\", got \"" << got << "\"\n";
+                return 1;
+            }
+            std::cout << "scenario: PASS (" << aura << " -> " << want << ")\n";
+        }
+    }
+
     // Optional NEGATIVE assertion: fail (exit 1) if the engine DID win, when the fixture asserts it
     // must not (e.g. Invigorate must NOT auto-fire and gift life when it is not lethal, or when no
     // legal target exists). Guards a conditional fire against becoming too eager.

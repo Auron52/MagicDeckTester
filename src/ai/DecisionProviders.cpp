@@ -13380,6 +13380,11 @@ std::vector<int> EldraziFlickerProvider::LandAuraHostCandidates(const GameState&
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+        // A shrouded host is not merely a bad pick, it is an ILLEGAL one (CR 303.4a/702.18a), and
+        // filtering here is required rather than cosmetic: this hook NARROWS, so proposing two
+        // shrouded hosts would intersect to nothing and drop an aura that has a legal home
+        // elsewhere -- a narrowing that loses a legal line, which the core invariant forbids.
+        if (LandHasShroud(p, s)) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         int score = PermanentManaYield(s, p, *d) * 4;
@@ -13437,7 +13442,15 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
 // Ranks are inside the generic bands (creatures 10, noncreature 20) so nothing else reorders.
 int EldraziFlickerProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
-    if (def.params.is_land_aura)                 { return 4; }   // ramp first: it feeds the rest
+    // Ramp first: it feeds the rest. Land auras split into two tiers so a SHROUD-granting one
+    // (Trace of Abundance) is cast LAST among them. Order is a legality question here, not a
+    // preference: an Aura spell targets its host (CR 303.4a) and shroud stops that (CR 702.18a), so
+    // Trace-then-Overgrowth on one land is an illegal second cast while Overgrowth-then-Trace is a
+    // perfectly legal stack. Ranking the shroud one last makes every same-turn combination realise
+    // the legal ordering -- which is also what keeps enumeration honest, since its frozen snapshot
+    // sees the pre-shroud board and is therefore RIGHT under this order and wrong under any other.
+    if (def.params.is_land_aura)
+    { return def.params.land_aura_grants_shroud ? 4 : 3; }
     if (def.params.reduces_creature_activation)  { return 5; }   // Training Grounds cheapens both outlets
     if (def.params.etb_untap_lands > 0)          { return 6; }   // the payload refunds its own cost
     if (def.params.blink_cost.has_value())       { return 7; }   // then the outlet
