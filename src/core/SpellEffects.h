@@ -8280,7 +8280,11 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
     for (const Permanent& p : state.battlefield)
     {
         if (p.card.m_number != source_id || p.controller_index != controller) { continue; }
-        if (mode == PermAbilityMode::SacDraw) { return true; }   // no {T} in the cost
+        // No {T} in the cost -> the source's tap state and summoning sickness are irrelevant. This
+        // used to test SacDraw alone; the two Eldrazi mana sinks are the same shape, and requiring
+        // an untappable source would have stopped a just-wished Essence Depleter from draining on
+        // the turn it lands, and stopped an ATTACKING one from draining at all.
+        if (!PermAbilityTaps(mode)) { return true; }
         return !p.tapped && p.CanTap();
     }
     return false;

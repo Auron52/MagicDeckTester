@@ -73,6 +73,64 @@ analyzer must do the card work, and it cannot analyze cards it cannot see.
 7. **Regenerate the profile** (the committed one is fitted to the old list) and re-run the
    measurement stages.
 
+### THE TRAP the Stage-2 fan-out found: the wish cannot reach either win condition
+
+Two independent agents landed on the same defect, and it is the third instance of this exact shape in
+this deck's history.
+
+`DecisionProvider::TutorSearchWidth()` defaults to **6**. `GenericProvider::TutorCandidates` returns
+candidates in **zone order**, and for a sideboard that is **decklist order, identical in every game
+of every seed**:
+
+```
+0 Azorius Chancery  1 Adarkar Wastes  2 Cloud of Faeries  3 Eldrazi Displacer
+4 Mariposa Mil.Base 5 Vexing Shusher  6 Essence Depleter  7 Dimensional Infiltrator
+```
+
+`EldraziFlickerProvider` overrides neither hook, and the axis fan-out emits ranks `0 .. width-1`. So
+**ranks 6 and 7 — Essence Depleter and Dimensional Infiltrator, i.e. BOTH win conditions — would be
+unreachable by the search at every depth and every budget, deterministically, forever.** The deck
+would measure as though it had no kill, and nothing in any report would say why.
+
+The precedents, all in this repo: Natural Order, where "neither the greedy default nor any searched
+variant could reach the deck's win condition, so no projection anywhere priced the T4 kill"; Stroke
+of Genius shipped as a no-op; the Shivan Gorge the loop untapped exactly zero times. The fix is a
+**coverage** fix, not a heuristic one: `EldraziFlickerProvider::TutorSearchWidth() → 8` (the pool
+size), plus a provider ranking so file order stops deciding it — and falling through to
+`GenericProvider` under `UnprunedGate::Tutor` so human play still sees every legal name.
+
+### Other findings from the fan-out worth keeping
+
+* **`rad_counters` was folded into NEITHER `BuildSimKey` NOR `Dominance`.** A key-hole I introduced
+  with the rad mode: two states differing only in rad counters shared a TT/dedup entry, and rad is
+  future-determining twice over (it cheapens Mariposa's draw AND fires a mill + life loss at every
+  precombat main). Identical to the defect `storage_counters` once had, which canon exposed on
+  dragonstorm. **Fixed**, gated on nonzero so every other deck keeps its exact prior key.
+* **`PerformTutor` calls `ShuffleAfterSearch` UNCONDITIONALLY** — it is not gated on
+  `tutor_shuffle_after`. So "just don't set the shuffle param" is not enough for a wish: a wish does
+  not search a library, CR 701.19c never triggers, and letting it advance `search_count` would
+  perturb every later fetch's deterministic reshuffle. The call site needs an explicit gate.
+* **`EffectiveProduces` is NOT a complete choke point.** The payment DFS
+  (`SpellEffects.cpp` `TapForCostBacktrackWorker`) and the flow oracle (`TapFlowInfeasible`) each
+  inline their own `produces` resolution and bypass it. An energy gate added only to
+  `EffectiveProduces` would look right in every pool projection and every rank ladder while the
+  actual solver tapped three Hubs off one energy.
+* **Aether Hub's energy must be metered, and this is not a nicety.** Peregrine Drake and Cloud of
+  Faeries untap lands on every blink iteration, so a Hub is untapped and re-tapped an unbounded
+  number of times per turn. Modelled as a plain 6-colour land it becomes an **infinite any-colour
+  source**, switching on the `{2}{R}` Gorge kill for free and making the deck look far faster than
+  it is. Energy is also a **player** resource, not a permanent's: under the untap loop, correct play
+  is to tap ONE Hub three times spending all three Hubs' energy.
+* **Vexing Shusher is not worth zero.** With no blocker path it is an unopposed 2/2 clock — legal
+  but dominated, not dead. So no `card_scores` entry (those are opening-hand marginals and a
+  sideboard card can never be in an opening hand) and no provider exclusion: let the search price it.
+* **`g_play_land_rad_chooser` is DEAD** — the hook and the call site exist, but nothing ever sets the
+  pointer (no `WriteLandRadDecisionJson`, no GUI branch, no registry row). A 2c-ter gap, open.
+* **Human play is the OOM risk on the wish, not the search.** `--claude-play` forces `MTG_UNPRUNED`,
+  and 8 names x up to 4 castable Living Wishes is `8^k` plan variants on the deck that already
+  OOM-killed the box at 46 GB. Use the Turntimber route: emit ONE empty-target cast and defer the
+  pick to `g_play_tutor_chooser` at resolution.
+
 ### Verified oracle text (Scryfall, 2026-09-02)
 
 | card | cost | text |

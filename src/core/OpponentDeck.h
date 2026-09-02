@@ -74,9 +74,9 @@ inline constexpr int kNumberBase = 100000;
 // shared RNG stream, so dealing a second library cannot perturb player 0's permutation by a single
 // card. (Had it been a shared stream this change would have moved every deck's baseline and cost a
 // full three-tier GT rebaseline.)
-inline void Deal(GameState& state, uint64_t seed)
+inline void Deal(GameState& state, bool needed, uint64_t seed)
 {
-    if (!state.opponent_library_dealt) { return; }
+    if (!needed) { return; }
 
     Player& opp = state.players[1];
     int number  = kNumberBase;
@@ -103,6 +103,15 @@ inline void Deal(GameState& state, uint64_t seed)
         opp.hand.push_back(opp.library.front());
         opp.library.erase(opp.library.begin());
     }
+
+    // SET LAST, AND ONLY HERE. The flag means "a library was actually dealt", so the ONLY code that
+    // may raise it is the code that fills the zone. This is not tidiness -- it closes the
+    // empty-is-not-absent trap structurally. It was previously set by StampDeckTraits, and the
+    // scenario harness calls StampDeckTraits WITHOUT calling SetupGame: every EDF fixture came up
+    // with the flag true and the library empty, so the very first end-of-turn draw decked the
+    // opponent and two fixtures that assert "no win" reported wins on turns 3 and 5. Any future
+    // caller that builds a GameState by hand now simply gets the old, safe model.
+    state.opponent_library_dealt = true;
 }
 
 // The opponent's DRAW, simulated at the end of each of OUR turns.
@@ -129,11 +138,43 @@ inline void EndOfTurnDraw(GameState& state)
     {
         // CR 104.3c: a player who would draw from an empty library loses the game the next time a
         // player would receive priority. Nothing here can respond, so it is immediate.
+        //
+        // NOTE the asymmetry with TakeFromTop below: running the library OUT is not the loss, being
+        // ASKED to draw from it is. So the last card is drawn normally and the deck-out lands on the
+        // NEXT draw -- one turn later. Do not "simplify" these two into one empty-check.
         state.opponent_decked = true;
         return;
     }
     opp.hand.push_back(opp.library.front());
     opp.library.erase(opp.library.begin());
+}
+
+// THE mill / exile-from-library primitive: take `n` cards off the top of the opponent's library
+// into the shared exile zone (CR 406.1). Returns the number actually taken.
+//
+// Every effect that removes cards from the opponent's library must go through here, because of the
+// second half: emptying the library **immediately** sets `opponent_decked`.
+//
+// That is not the CR rule (running out is not a loss; being asked to draw from empty is) but it is
+// EXACT under this model, and the difference matters enormously to the search. Our turn always ends
+// with their draw, and nothing can refill the zone, so a library emptied at any point during turn T
+// loses them the game at the end of turn T -- the same win turn either way. Setting the flag at
+// empty-time is what lets the SEARCH see it: `wins_this_turn`, the go-off short-circuit and every
+// mid-turn OpponentHasLost check run before that end-of-turn draw, so deferring the flag would make
+// a mill kill invisible to every within-turn win check and the search would never steer toward it.
+// That is precisely the Dragonstorm go-off that executed as a kill zero times.
+inline int TakeFromTop(GameState& state, int n)
+{
+    if (!state.opponent_library_dealt || n <= 0) { return 0; }
+    Player& opp = state.players[1];
+    int taken = 0;
+    for (; taken < n && !opp.library.empty(); ++taken)
+    {
+        state.exile.push_back(opp.library.front());
+        opp.library.erase(opp.library.begin());
+    }
+    if (opp.library.empty()) { state.opponent_decked = true; }
+    return taken;
 }
 
 } // namespace opponentdeck

@@ -5790,6 +5790,7 @@
    "subtypes": [
     "Eldrazi"
    ],
+   "colors": [],
    "keywords": [
     "Devoid"
    ],
@@ -6003,6 +6004,71 @@
    "oracle_text": "Target player draws X cards. [The deck's draw payoff: with infinite mana this draws the library. 'Target player' = self (handing the passive opponent cards is strictly pointless -- the same collapse Braingeyser carries).]",
    "template": "draw_x",
    "parameters": {}
+  },
+  {
+   "name": "Vexing Shusher",
+   "mana_cost": "{R/G}{R/G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Goblin",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "This spell can't be countered.\n{R/G}: Target spell can't be countered. [Vanilla 2/2 Goblin Shaman for goldfishing -- a SIDEBOARD card, reachable off Living Wish (a creature, so a legal wish target). The two {R/G} HYBRID pips are real either-colour pips (ManaCost::hybrid_pair): the deck runs NO red source and casts it off {G}{G}, and CR 202.2b makes the card RED AND GREEN (derived from the pips, so no explicit colors array). ManaCost::ToString renders a hybrid as its FIRST colour, so logs show {R}{R} -- deliberate, for digest stability; payment is unaffected. NOT a dead card: with no blocker path it is an unopposed 2/2 clock, just one badly dominated by the sideboard's two {C} mana sinks. [PARTIAL: the static \"This spell can't be countered\" is inert. It is a stack-functioning ability (CR 113.6a) that only removes an option from a would-be COUNTERER; unlike shroud (CR 702.18a) it is NOT symmetric, so it places no restriction on our OWN plays, and having no cost it consumes nothing. The passive opponent casts nothing, and the engine's only counter path (EffectHandler::ResolveCounterSpell) is an explicit no-op. Disclosed deferral D1.] [PARTIAL: the activated \"{R/G}: Target spell can't be countered\" is inert AND NEVER LEGALLY ACTIVATABLE -- implementing it would ADD an illegal play, not restore a real one. There is no spell/stack target type (GameState::Target is Player|Permanent) and no priority window with a non-empty stack (ResolveStack drains after every cast), so a legal target can never exist and CR 601/602 forbid activating it. Carrying NO param is also what keeps this {T}-less repeatable mana sink out of the go-off: SpendSurplusOnDrain, SpendSurplusOnDamageSinks and TurnSolver's ActivatePermAbility ModeSpec table are each keyed on specific params, so ApplyBlinkLoop's per-iteration spend cannot latch onto it and eat the loop's margin (the Emiel {G/W} lesson). Disclosed deferral D2.]]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Essence Depleter",
+   "mana_cost": "{2}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Eldrazi",
+    "Drone"
+   ],
+   "colors": [],
+   "keywords": [
+    "Devoid"
+   ],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "Devoid (This card has no color.)\n{1}{C}: Target opponent loses 1 life and you gain 1 life. ({C} represents colorless mana.) [WIN CONDITION 1 of 2, reachable only off Living Wish. STRUCTURALLY UNLIKE Shivan Gorge: there is NO {T} and no sacrifice in the cost, so it is not once-per-untap -- it is a pure mana sink whose activation COUNT is bounded only by available mana, and it can be activated the turn it lands and on a turn it attacks (CR 302.6 restricts {T} abilities and attacking, neither of which applies). That is what converts the flicker loop's unbounded mana into a kill, ~20 activations, with no untap required. Under Training Grounds {1}{C} -> {C}: EffectiveActivationCost removes the GENERIC half and the colourless PIP survives, so a real {C} source is still required -- no coloured mana pays a {C} pip (CR 107.4c), and neither does Fertile Ground's or Trace of Abundance's 'one mana of any colour' (credited as wild, never wild_c). The life LOSS is not damage: no prevention, no lifelink, no damage triggers (PermAbilityMode::Drain, shared by the executor and the rollout). 'Target opponent' is the single passive opponent, so there is no target choice. [PARTIAL: 'you gain 1 life' is applied faithfully but is INERT FOR THE CLOCK; the limitation is that the passive opponent never attacks or burns us, so nothing reads our life total -- if a damaging opponent is ever modelled this note is void.] [PARTIAL: Devoid is an inert keyword TAG; the limitation is that no card in this decklist reads a card's COLOUR. \"colors\" is set to [] EXPLICITLY regardless, because the mask otherwise DERIVES from the {B} pip and would model this colourless card as black.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "drain_cost": "{1}{C}",
+    "drain_amount": 1,
+    "drain_self_gain": 1
+   }
+  },
+  {
+   "name": "Dimensional Infiltrator",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Eldrazi"
+   ],
+   "colors": [],
+   "keywords": [
+    "Devoid",
+    "Flash",
+    "Flying"
+   ],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "Devoid (This card has no color.)\nFlash\nFlying\n{1}{C}: Target opponent exiles the top card of their library. If it's a land card, you may return this creature to its owner's hand. ({C} represents colorless mana.) [WIN CONDITION 2 of 2, reachable only off Living Wish, and it is a DECK-OUT rather than a damage kill: the opponent has a real 60-card library and a simulated draw at the end of each of our turns (core/OpponentDeck.h), so emptying that zone loses them the game on OUR turn (CR 104.3c; user win-turn rule 2026-09-02). Depth is 53 after their opening seven, one less for every turn they have drawn. Like Essence Depleter there is NO {T} and no sacrifice, so the activation COUNT is bounded only by mana and it works the turn it lands. Under Training Grounds {1}{C} -> {C} (generic half only; the {C} pip survives, CR 107.4c). The exiled card's LAND-ness is read from its CardDefinition, never from the zone card: a card outside the battlefield carries EMPTY type masks, so a raw IsLand() would be false for every library card -- the same trap ApplyRadMill documents. [PARTIAL: 'you may return this creature to its owner's hand' is modelled as ALWAYS DECLINED. It is a may, so declining is always legal, and it is dominant in every line this engine can realise: the creature has no ETB to re-trigger and there is no removal to dodge, while bouncing costs {1}{U} plus a fresh summoning-sick turn AND -- decisively -- removes the ability from the battlefield mid-loop on the ~40% of activations that hit a land (24 lands in the 60-card opponent deck), which is the difference between the deck-out existing and not. The one corner where bouncing buys something is re-casting it to re-fire Emiel's enters-trigger, and that is itself dominated by simply BLINKING it for {C}/{1} without leaving the battlefield. Auto-resolved; a bucket-B choice deliberately not surfaced.] [PARTIAL: Flash is inert; the limitation is that this engine models no priority window outside a main phase with an empty stack, so instant-speed casting is unreachable for every card.] [PARTIAL: Flying is inert; the limitation is that NO BLOCKING IS MODELLED AT ALL -- there is no blocker path anywhere in src/ -- and the engine's one Flying reader is Dragon Tempest's haste_on_flying_enter watcher, which this deck does not run.] [PARTIAL: Devoid is an inert keyword TAG for the same reason as Essence Depleter; \"colors\" is set to [] EXPLICITLY so the mask is not derived as blue from the {U} pip.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "exile_opponent_top_cost": "{1}{C}",
+    "exile_opponent_top_may_bounce_on_land": true
+   }
   }
  ]
 }

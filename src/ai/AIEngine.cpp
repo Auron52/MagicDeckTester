@@ -3692,7 +3692,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                           a.sac_source_id, a.ability_mode))
             {
                 // {T} half first -- see the rollout twin and SetPermTapped.
-                const bool taps = a.ability_mode != Action::AbilityMode::SacDraw;
+                const bool taps = PermAbilityTaps(a.ability_mode);   // SacDraw/Drain/ExileTop have no {T}
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
                 ManaPool avail = AvailableManaPool(state);
                 if (!TapForCost(state, a.cost, avail, /*for_creature=*/false))

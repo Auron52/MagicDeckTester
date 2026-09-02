@@ -722,7 +722,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     state.dep_enabler_main1    = dep_pulls.enabler_main1;
     state.dep_castpayoff_main1 = dep_pulls.castpayoff_main1;
     state.deck_gy_readers      = DeckGraveyardReaders(deck); // EOT dominance's graveyard projection
-    state.opponent_library_dealt = DeckTouchesOpponentZones(deck);
+    // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
+    // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers
+    // that stamp traits without running SetupGame (the scenario harness) must otherwise get the
+    // old, safe model rather than a flag promising a zone nobody filled.
 }
 
 
@@ -794,7 +797,7 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // The passive opponent's own library + opening hand, on a DERIVED seed so player 0's shuffle
     // above is untouched (core/OpponentDeck.h). Gated on the deck being able to reach those zones,
     // so this is a no-op for every deck that cannot mill.
-    opponentdeck::Deal(state, seed);
+    opponentdeck::Deal(state, DeckTouchesOpponentZones(deck), seed);
 
     state.active_player_index   = 0;
     state.priority_player_index = 0;

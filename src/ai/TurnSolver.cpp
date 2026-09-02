@@ -19257,7 +19257,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.def != nullptr && PermAbilitySourceLive(state, state.active_player_index,
                                                           a.sac_source_id, a.ability_mode))
             {
-                const bool taps = a.ability_mode != Action::AbilityMode::SacDraw;
+                const bool taps = PermAbilityTaps(a.ability_mode);   // SacDraw/Drain/ExileTop have no {T}
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
                 if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
                 { ApplyPermAbility(state, state.active_player_index, a.sac_source_id, a.ability_mode); }
@@ -20032,6 +20032,16 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // rollout's win turn for a deck-out equals the realised one. No-op for every deck that was not
     // dealt an opponent library. See core/OpponentDeck.h.
     opponentdeck::EndOfTurnDraw(state);
+    // If that draw DECKED them, stop here without advancing the counter. Every caller's ordinary
+    // OpponentHasLost check returns `state.turn_number`, so incrementing first would make the
+    // rollout report the win a full turn later than the executor does -- the executor checks
+    // CheckWinCondition immediately after RunTurn, with turn_number still OUR turn
+    // (GameEngine::PlayOut). That is a silent one-turn pessimism on the deck's whole second win
+    // condition, and it is the [fd-diverge] shape: the search under-values a line the real game
+    // realises earlier. Twelve call sites read this function's turn counter; fixing it here fixes
+    // all of them, and SimulateToEndImpl's loop-head check turns the frozen counter into an
+    // immediate return rather than a replayed turn.
+    if (state.opponent_decked) { return true; }
 
     // Start of next turn
     ++state.turn_number;
@@ -25473,6 +25483,16 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             if (reads_lifegain)
             { Fold(k, 0x1F5E); Fold(k, static_cast<uint64_t>(p.life_gained_this_turn)); }
         }
+        // RAD COUNTERS (Mariposa Military Base). Unlike the two counters above this is NOT
+        // turn-scoped scratch -- it persists across untaps, and it is future-determining twice
+        // over: it reduces Mariposa's "{5}, {T}: Draw a card" by {1} each, and it fires a MILL plus
+        // life loss at the start of every one of this player's precombat mains (ApplyRadMill).
+        // Two states that differ only here reach different futures, so sharing a key is a hole --
+        // the same defect BuildSimKey once had for storage_counters, which canon exposed on
+        // dragonstorm. Gated on nonzero, so every deck that never takes the rad mode keeps the
+        // EXACT prior key.
+        if (p.rad_counters > 0)
+        { Fold(k, 0x2AD0); Fold(k, static_cast<uint64_t>(p.rad_counters)); }
         Fold(k, static_cast<uint64_t>(p.library.size()));
         if (!p.library.empty()) { Fold(k, p.library.front().m_name_hash); }
         // Live-library ORDERED digest (added 2026-08-20, enum-memo verify find #3): the
@@ -25720,9 +25740,22 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     {
         // Branch-and-bound: a line that hasn't won by cutoff_turn cannot beat the
         // incumbent best win turn, so abandon it (win turn only grows from here).
-        // Abort only AFTER cutoff_turn so a win exactly on cutoff_turn still
+        // Abort only AFTER cutoff_turn so a line that wins exactly on cutoff_turn still
         // registers for the value tiebreak.
         if (state.turn_number > cutoff_turn) { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
+
+        // DECKED when we got here -- the previous turn's end-of-turn opponent draw emptied their
+        // library, and SimulateEndAndStartNextTurn deliberately left the counter on that turn.
+        // Return it rather than replaying a turn of an already-finished game.
+        //
+        // Gated on `opponent_decked`, NOT on the general OpponentHasLost: writing it as the general
+        // predicate ALSO catches an ordinary lethal state at a loop head, which the old code played
+        // a further turn from -- and it skips this turn's ConsumeAt work unit, so the search's
+        // budget accounting moves and with it the result. Measured: creature_giving d3 s1001 moved
+        // one game 5 -> 4 and changed a line at equal score. Whether that early-out is an
+        // improvement is a separate question with its own A/B; it is not this change's business.
+        // Gated on the new field, this is unreachable for every deck without an opponent library.
+        if (state.opponent_decked) { leafeval::Publish(leafeval::kInvalid); return state.turn_number; }
 
         // Truncated-rollout cap: K turns simulated with no win yet -> hand the tail to the cheap value leaf
         // (see MTG_ROLLOUT_HORIZON above). Fires only for lines that DON'T win fast (the expensive ones);

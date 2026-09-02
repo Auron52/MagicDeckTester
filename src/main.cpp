@@ -4074,8 +4074,8 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // rad_counters is settable: reaching a deck-out through real play means milling 53 cards, which
     // no fixture can do in a handful of turns -- so without this the entire deck-out path, the win
     // check and its win-turn convention would be untestable, i.e. untested. Setting it also forces
-    // opponent_library_dealt on, overriding the deck-derived trait, so a fixture can exercise the
-    // path on any deck. Absent -> whatever StampDeckTraits derived (0 for every deck today).
+    // opponent_library_dealt on, so a fixture can exercise the path on ANY deck -- including one
+    // with no way to mill at all, which is what test/scenarios/opponent_deckout.json uses.
     if (j.contains("opponent_library_size"))
     {
         const int n = j.at("opponent_library_size").get<int>();
@@ -4097,6 +4097,17 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     state.turn_number           = turn - 1;   // PlayOut steps INTO `turn`
     state.on_the_play           = j.value("on_the_play", true);
     state.game_seed             = j.value("seed", 1);
+
+    // The opponent's real library + opening hand, exactly as SetupGame deals them, so a fixture on
+    // a milling deck models the same opponent a real game does. Must come AFTER game_seed is set --
+    // the deal is seeded off it. StampDeckTraits deliberately does NOT raise
+    // opponent_library_dealt (only Deal may), so without this an EDF fixture would simply get the
+    // old library-less opponent. An explicit `opponent_library_size` above has already dealt one,
+    // and overriding it here would throw that away, so this stands down when it fired.
+    if (!state.opponent_library_dealt)
+    {
+        opponentdeck::Deal(state, GoldFishRunner::DeckTouchesOpponentZones(deck), state.game_seed);
+    }
 
     try
     {

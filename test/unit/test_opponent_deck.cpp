@@ -72,8 +72,8 @@ TEST_CASE("opponent deck: dealing is gated, and leaves 53 in library / 7 in hand
     // of simulated draws may ever make the opponent read as lost.
     {
         GameState s;
-        s.opponent_library_dealt = false;
-        opponentdeck::Deal(s, 12345);
+        opponentdeck::Deal(s, /*needed=*/false, 12345);
+        CHECK_FALSE(s.opponent_library_dealt);   // Deal is the ONLY writer of the flag
         CHECK(s.players[1].library.size() == 0u);
         CHECK(s.players[1].hand.empty());
         for (int i = 0; i < 50; ++i) { opponentdeck::EndOfTurnDraw(s); }
@@ -85,8 +85,8 @@ TEST_CASE("opponent deck: dealing is gated, and leaves 53 in library / 7 in hand
     // across decks.
     {
         GameState s;
-        s.opponent_library_dealt = true;
-        opponentdeck::Deal(s, 12345);
+        opponentdeck::Deal(s, /*needed=*/true, 12345);
+        CHECK(s.opponent_library_dealt);
         CHECK(s.players[1].hand.size() == static_cast<std::size_t>(opponentdeck::kOpeningHandSize));
         CHECK(s.players[1].library.size() == 53u);
     }
@@ -99,10 +99,9 @@ TEST_CASE("opponent deck: the shuffle is seed-derived, not a shared stream")
     // deterministic). The reason the salt matters at all: player 0's shuffle must be unaffected,
     // which is what kept this change byte-identical for every existing deck.
     GameState a, b, c;
-    a.opponent_library_dealt = b.opponent_library_dealt = c.opponent_library_dealt = true;
-    opponentdeck::Deal(a, 1);
-    opponentdeck::Deal(b, 2);
-    opponentdeck::Deal(c, 1);
+    opponentdeck::Deal(a, /*needed=*/true, 1);
+    opponentdeck::Deal(b, /*needed=*/true, 2);
+    opponentdeck::Deal(c, /*needed=*/true, 1);
 
     std::string sa, sb, sc;
     for (const Card& x : a.players[1].library) { sa += x.m_name.str(); sa += ';'; }
@@ -112,11 +111,53 @@ TEST_CASE("opponent deck: the shuffle is seed-derived, not a shared stream")
     CHECK(sa != sb);
 }
 
+TEST_CASE("opponent deck: TakeFromTop decks them the INSTANT the library empties")
+{
+    // The asymmetry with the draw is deliberate and load-bearing (see the comment on TakeFromTop).
+    // A mill that empties the library during OUR turn T loses them the game at the end of turn T
+    // either way -- but only the immediate flag lets the SEARCH see it, because wins_this_turn and
+    // every mid-turn OpponentHasLost check run before that end-of-turn draw.
+    GameState s;
+    opponentdeck::Deal(s, /*needed=*/true, 3);
+    REQUIRE(s.players[1].library.size() == 53u);
+
+    CHECK(opponentdeck::TakeFromTop(s, 52) == 52);
+    CHECK(s.players[1].library.size() == 1u);
+    CHECK_FALSE(OpponentHasLost(s));
+    CHECK(s.exile.size() == 52u);          // exiled, not milled to a graveyard (CR 406.1)
+
+    CHECK(opponentdeck::TakeFromTop(s, 1) == 1);
+    CHECK(s.players[1].library.size() == 0u);
+    CHECK(OpponentHasLost(s));             // immediate, NOT deferred to the next draw
+
+    // Over-asking is clamped to what is there, and never negative.
+    CHECK(opponentdeck::TakeFromTop(s, 10) == 0);
+
+    // Gated like everything else: a deck that was never dealt a library cannot be milled into a
+    // spurious win.
+    GameState u;   // never dealt -> the flag is false -> milling cannot manufacture a win
+    CHECK(opponentdeck::TakeFromTop(u, 10) == 0);
+    CHECK_FALSE(OpponentHasLost(u));
+}
+
+TEST_CASE("perm abilities: the three {T}-less modes are not tap-gated")
+{
+    // Getting this wrong taps the source on every activation, which destroys exactly the
+    // repeatability that makes the two Eldrazi mana sinks win conditions -- and blocks activation
+    // on a summoning-sick or attacking body, both of which are legal (CR 302.6 restricts {T}
+    // abilities and attacking; neither applies to a costed ability with no tap symbol).
+    CHECK(PermAbilityTaps(PermAbilityMode::TapDamage));
+    CHECK(PermAbilityTaps(PermAbilityMode::TapInvestigate));
+    CHECK(PermAbilityTaps(PermAbilityMode::TapDraw));
+    CHECK_FALSE(PermAbilityTaps(PermAbilityMode::SacDraw));
+    CHECK_FALSE(PermAbilityTaps(PermAbilityMode::Drain));
+    CHECK_FALSE(PermAbilityTaps(PermAbilityMode::ExileTop));
+}
+
 TEST_CASE("opponent deck: deck-out fires on the draw from an empty library")
 {
     GameState s;
-    s.opponent_library_dealt = true;
-    opponentdeck::Deal(s, 7);
+    opponentdeck::Deal(s, /*needed=*/true, 7);
 
     // 53 draws empty the library without decking anyone -- running OUT is not the loss; being
     // ASKED to draw from empty is (CR 104.3c).

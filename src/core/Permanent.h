@@ -24,7 +24,24 @@ enum class PermAbilityMode
     // turn -- the activation count is bounded only by available mana. That is what makes it this
     // deck's real kill: unbounded mana converts straight into life loss with no untap required.
     Drain,
+    // {cost}: Target opponent exiles the top card of their library  (Dimensional Infiltrator)
+    // Same structure as Drain -- no {T}, no sacrifice, so repeatable within a turn and bounded only
+    // by mana. The kill it converts unbounded mana into is a DECK-OUT rather than damage, which is
+    // why it needs its own win-recognition path (opponentdeck::TakeFromTop sets opponent_decked).
+    ExileTop,
 };
+
+// Does this mode's cost include {T}? THE single source of truth, because three separate sites used
+// to open-code `mode != SacDraw` -- and every one of them would have silently tapped Essence
+// Depleter and Dimensional Infiltrator on each activation, destroying the repeatability that makes
+// them win conditions at all, AND blocking activation on a summoning-sick or attacking body (both
+// legal: CR 302.6 restricts {T} abilities and attacking, neither of which applies here).
+inline bool PermAbilityTaps(PermAbilityMode m)
+{
+    return m != PermAbilityMode::SacDraw
+        && m != PermAbilityMode::Drain
+        && m != PermAbilityMode::ExileTop;
+}
 
 struct Permanent
 {

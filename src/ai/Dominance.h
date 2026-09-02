@@ -447,6 +447,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         fold(static_cast<std::uint64_t>(p.cards_drawn_this_turn));
         fold(static_cast<std::uint64_t>(p.life_gained_this_turn));
         fold(static_cast<std::uint64_t>(p.poison_counters));
+        // RAD COUNTERS (Mariposa Military Base): NOT per-turn scratch like the three counters
+        // above -- they persist across untaps and are future-determining twice over (they cheapen
+        // Mariposa's draw, and they mill + cost life at every precombat main). Gated on nonzero so
+        // every deck that never takes the rad mode keeps the EXACT prior key.
+        if (p.rad_counters > 0) { fold(0x2AD0ull); fold(static_cast<std::uint64_t>(p.rad_counters)); }
         // Staged (Light Up the Stage) and suspended (Lotus Bloom) cards are future-determining
         // zones with timers; exact match rather than a subset rule (a timer is not monotone).
         fold(static_cast<std::uint64_t>(p.staged_cards.size()));
