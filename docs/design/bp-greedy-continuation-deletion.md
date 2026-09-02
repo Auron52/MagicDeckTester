@@ -298,6 +298,18 @@ recipe EF pays for itself. (The screcipe re-run on the post-EDF-rebase binary re
 Neutrality gate across the other 15 suite decks launched (`scripts/gen_ef_gate.py` -> 60 jobs /
 146k games, base arm = the sound recipe; hinata reused from ef_probe, same binary+seeds).
 
+**EF neutrality gate PASSED (146k games, 15 decks, `logs/ngc_sound/ef_gate.err`): 14 of 15 decks
+are GAME-IDENTICAL under EF** (+0.0000, zero paired games changed, both blocks -- at play settings
+the executor-feasibility test only ever fires on states those decks never reach); the one mover is
+dragons, 3 games BETTER / 0 worse (-0.0007/-0.0013). SLOW-GAME tail balanced (fivecolour 52 EF vs
+45 base -- a slow deck, not an EF tail; dragonstorm 4 vs 4). **EF's own dossier is therefore
+complete and clean: hinata -0.0017/-0.0016 (t 3.3), dragons a hair better, 14 decks untouched,
+-0.55% units inside the recipe.** It meets the adoption bar on its face (quality-improving AND
+cheaper) but was NOT part of the gated recipe -- it is staged as a SEPARATE follow-up candidate
+awaiting its own USER sign-off, surfaced in the morning report. If the USER wants it folded into
+the same rebaseline the cost is zero extra measurement (one more flag flip before the tiers run);
+adopting it later instead costs one more 3-tier rebaseline (~35 min of box time).
+
 ### "Is greedy deleted" -- the ACTED evidence at recipe settings (2026-09-02 overnight)
 
 `MTG_M2_YIELD_STATS` cells, recipe env on, 300 games each, one process per cell
