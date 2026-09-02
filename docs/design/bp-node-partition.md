@@ -1109,3 +1109,46 @@ candidate's own site, whose lists reach n=962 on hinata, the widest in the repo.
 it already reads -10.8% nohost for +3.7% units. Its gate (hinata 5 arms, antilife/creature_giving
 3 arms, 13-deck screen, 100,800 games) is what decides whether `node0` has been leaving quality on
 the table since it was built.
+
+### KEEPWAVE3 REJECTED -- and the control arms take a recorded result with them (2026-09-02)
+
+100,800 games: hinata 5 arms x 2 blocks x 5,000; antilife and creature_giving 3 arms x 2,500; a
+13-deck screen at 800. Paired per game, each deck at its own resolved play settings.
+
+| arm | hold | train | t | better | worse |
+|---|---|---|---|---|---|
+| hinata `node` | -0.0074 | -0.0120 | 1.52 / 2.48 | 232 / 254 | 195 / 187 |
+| hinata `nodekw3` | -0.0038 | -0.0044 | 0.77 / 0.88 | 237 / 258 | 218 / 228 |
+| hinata `node0` | +0.0024 | +0.0000 | 1.17 / 0.00 | 30 / 36 | 44 / 34 |
+| hinata `node0kw3` | **+0.0192** | **+0.0214** | **4.48 / 4.75** | 129 / 145 | 214 / 223 |
+
+**Restoring the rank machinery on site 3 makes hinata WORSE**, and on the plain node it is merely
+neutral -- no better than the node alone. antilife and creature_giving: zero games changed in any
+arm. All 13 screen decks: byte-identical digests. So the width argument that motivated this (site 3
+is the widest class in the repo, n=962 on hinata) does not survive measurement, and mirrorwing's
+64-85% site-5 recovery does not transfer. `MTG_BP_NODE_KEEPWAVE3` stays default OFF.
+
+#### The control arms are the real result
+
+`node0` -- MTG_BP_NODE + D0ONLY, no NGC -- reads **+0.0024 / +0.0000 on hinata** (30-44 games
+changed of 5,000) and across today's three gates changed **exactly ZERO games** on mirrorwing,
+kitty, antilife and creature_giving. That is nothing like the **-0.0065 / -0.0059 (t 3.52 / 3.31)**
+this document records for D0ONLY at 15,000/cell.
+
+The recorded arm was not `node0`. From `37fe4b90`'s own commit message:
+
+> *"every arm carries MTG_BP_NO_GREEDY_CONT, so a non-hosting depth resolves its continuation from
+> the CAST ORDER, not greedy Solve -- greedy stays deleted everywhere."*
+
+So D0ONLY was measured as **the recipe at D0ONLY**. `MTG_BP_NO_GREEDY_CONT` was afterwards found
+LOSSY -- `EnumeratePlans` drops the empty combination, so `cands[0]` can never be "cast nothing" --
+and the 136k adoption gate rejected the recipe on it. **If the attribution holds, this class has no
+validated adoption candidate, and the "standing candidate" referred to throughout this document is
+an artifact of a component already rejected.**
+
+That is not something to conclude from commit archaeology, so it is being measured directly:
+`base` / `node` / `node0` / `recipe0` at 10,000/cell x 2 blocks on hinata, the one deck where any
+arm of this class moves at all. Note which arm looked good above: the **full node** (-0.0074 /
+-0.0120), i.e. the expensive form. If that survives, the class's question returns to exactly where
+the earlier equal-quality work left it -- a structure-vs-compute call at ~1.2-1.6x wall -- rather
+than the free win D0ONLY appeared to offer.
