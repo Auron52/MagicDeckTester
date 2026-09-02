@@ -8449,6 +8449,86 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
     }
 }
 
+// Fire a repeatable {T}-less mana sink (Essence Depleter's drain, Dimensional Infiltrator's library
+// exile) `want` further times, paying out of whatever mana is on the board. Returns how many
+// actually fired. Shared so the executor and the rollout cannot drift.
+//
+// THE POINT IS THE PAYMENT COUNT, and it is a tractability fix, not a nicety. The obvious loop --
+// price one activation, pay it, repeat -- costs ONE FULL PAYMENT SOLVE PER ACTIVATION, and a
+// deck-out asks for up to 53 of them inside EVERY rollout node. Measured before this: single games
+// took 5-70 SECONDS at d3/40ms, against well under a second for any other deck. Paying the whole
+// affordable block in one solve, with a HALVING fallback when a block does not fit, turns ~53 solves
+// into 1-2 on the common path and at most ~log2(53) on the failure path.
+//
+// Two clamps keep it honest as well as fast:
+//   * `want` is capped by what the sink can still ACCOMPLISH (life remaining / cards left in the
+//     opponent's library), so a 53-count plan on a 4-card library pays for 4;
+//   * a HYBRID cost falls back to one-at-a-time, because scaling a hybrid pip by k is not a
+//     well-formed cost (the pips are independently assignable). No such card exists today.
+bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);   // TurnSolver
+
+inline int SpendRepeatActivations(GameState& state, int controller, int source_id,
+                                  PermAbilityMode mode, const CardDefinition& def, int want)
+{
+    if (want <= 0) { return 0; }
+    const std::optional<ManaCost>* rc = (mode == PermAbilityMode::Drain)
+                                      ? &def.params.drain_cost
+                                      : &def.params.exile_opponent_top_cost;
+    if (!rc->has_value()) { return 0; }
+
+    int fired = 0;
+    while (want > 0)
+    {
+        if (OpponentHasLost(state)) { break; }
+        if (!PermAbilitySourceLive(state, controller, source_id, mode)) { break; }
+
+        // Re-priced every block: a Training Grounds can land mid-plan and change the cost.
+        const ManaCost unit = EffectiveActivationCost(state, controller, def.card, rc->value());
+        const int per = unit.ManaValue();
+        if (per <= 0) { break; }               // a free repeatable sink would not terminate
+
+        // Cap by what is left to DO. Beyond it the activations are pure waste, and paying for
+        // waste is what makes an upper-bound count expensive.
+        int useful = want;
+        if (mode == PermAbilityMode::Drain && def.params.drain_amount > 0)
+        {
+            const int need = (std::max(1, state.players[1 - controller].life)
+                              + def.params.drain_amount - 1) / def.params.drain_amount;
+            useful = std::min(useful, need);
+        }
+        else if (mode == PermAbilityMode::ExileTop)
+        {
+            useful = std::min(useful, static_cast<int>(state.players[1 - controller].library.size()));
+        }
+        if (useful <= 0) { break; }
+
+        ManaPool have = AvailableManaPool(state, nullptr);
+        have.AddPool(state.floating_mana);
+        int k = std::min(useful, static_cast<int>(have.Total()) / per);
+        if (k <= 0) { break; }
+
+        if (unit.hybrid_count > 0) { k = 1; }   // see the hybrid note above
+
+        bool paid = false;
+        while (k >= 1)
+        {
+            ManaCost block = unit;
+            block.generic   *= k; block.white *= k; block.blue  *= k; block.black *= k;
+            block.red       *= k; block.green *= k; block.colorless *= k;
+            if (TapForCostDirect(state, block, /*for_creature=*/false)) { paid = true; break; }
+            if (k == 1) { break; }
+            k /= 2;                              // the block did not fit -- try half of it
+        }
+        if (!paid) { break; }
+
+        for (int i = 0; i < k; ++i)
+        { ApplyPermAbility(state, controller, source_id, mode); }
+        fired += k;
+        want  -= k;
+    }
+    return fired;
+}
+
 // Lands the caller wants back FIRST, ahead of the yield order, MOST WANTED FIRST (null = none).
 // Set only by ApplyBlinkLoop.
 //

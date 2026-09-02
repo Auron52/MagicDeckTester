@@ -10,9 +10,10 @@
     "just-wished Depleter draining the turn it arrives is legal. That is the exact case the old",
     "`taps = mode != SacDraw` shortcut would have silently forbidden.",
     "",
-    "our life ends at 23: the drains' lifegain rider, net of one point of Brushland pain paid for a",
-    "coloured tap. That rider is inert for the clock, and asserting it is the only way the harness",
-    "can see it applied at all.",
+    "our life ends at 22: the four drains' lifegain rider, net of two points of Brushland pain paid",
+    "for coloured taps. That rider is inert for the clock, and asserting it is the only way the",
+    "harness can see it applied at all. (It was 23 before the repeat activations were paid as one",
+    "BLOCK rather than one at a time -- same kill, same turn, one differently-chosen land tap.)",
     "see it at all."
   ],
   "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
@@ -75,5 +76,5 @@
   "budget_ms": 200,
   "max_turns": 6,
   "expect_win_turn": 4,
-  "expect_active_life": 23
+  "expect_active_life": 22
 }

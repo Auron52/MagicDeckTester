@@ -28,6 +28,15 @@
     "toughness": "4",
     "type_line": "Legendary Creature — Human Knight"
   },
+  "Aether Hub": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "When this land enters, you get {E} (an energy counter).\n{T}: Add {C}.\n{T}, Pay {E}: Add one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Aether Vial": {
     "cmc": 1.0,
     "keywords": [],
@@ -516,6 +525,19 @@
     "toughness": null,
     "type_line": "Instant — Arcane"
   },
+  "Dimensional Infiltrator": {
+    "cmc": 2.0,
+    "keywords": [
+      "Devoid",
+      "Flash",
+      "Flying"
+    ],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Devoid (This card has no color.)\nFlash\nFlying\n{1}{C}: Target opponent exiles the top card of their library. If it's a land card, you may return this creature to its owner's hand. ({C} represents colorless mana.)",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Eldrazi"
+  },
   "Disenchant": {
     "cmc": 2.0,
     "keywords": [],
@@ -659,6 +681,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Essence Depleter": {
+    "cmc": 3.0,
+    "keywords": [
+      "Devoid"
+    ],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "Devoid (This card has no color.)\n{1}{C}: Target opponent loses 1 life and you gain 1 life. ({C} represents colorless mana.)",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Creature — Eldrazi Drone"
   },
   "Essence Warden": {
     "cmc": 1.0,
@@ -1449,6 +1482,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Living Wish": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "You may reveal a creature or land card you own from outside the game and put it into your hand. Exile Living Wish.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Llanowar Elves": {
     "cmc": 1.0,

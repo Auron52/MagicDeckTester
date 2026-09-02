@@ -3711,25 +3711,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // books; the rest are paid here out of what the turn actually produced. If only
                     // one world ran this loop the search would predict a kill the real game never
                     // deals -- the [fd-diverge] shape.
-                    for (int rep = 1; rep < a.chosen_x && !taps; ++rep)
+                    if (!taps && a.chosen_x > 1)
                     {
-                        if (OpponentHasLost(state)) { break; }
-                        if (!PermAbilitySourceLive(state, state.active_player_index,
-                                                   a.sac_source_id, a.ability_mode)) { break; }
-                        const std::optional<ManaCost>* rc =
-                            (a.ability_mode == Action::AbilityMode::Drain)
-                              ? &a.def->params.drain_cost : &a.def->params.exile_opponent_top_cost;
-                        if (!rc->has_value()) { break; }
-                        const ManaCost step = EffectiveActivationCost(
-                            state, state.active_player_index, a.def->card, rc->value());
-                        ManaPool ravail = AvailableManaPool(state);
-                        if (!TapForCost(state, step, ravail, /*for_creature=*/false)) { break; }
-                        ApplyPermAbility(state, state.active_player_index, a.sac_source_id,
-                                         a.ability_mode);
+                        const int extra =
+                            SpendRepeatActivations(state, state.active_player_index,
+                                                   a.sac_source_id, a.ability_mode, *a.def,
+                                                   a.chosen_x - 1);
                         if (m_logger)
                         {
-                            m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
-                                                 PermAbilityLabel(a.ability_mode));
+                            for (int i = 0; i < extra; ++i)
+                            { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                                   PermAbilityLabel(a.ability_mode)); }
                         }
                     }
                 }

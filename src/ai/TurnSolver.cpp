@@ -19328,25 +19328,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     ApplyPermAbility(state, state.active_player_index, a.sac_source_id, a.ability_mode);
                     // Repeatable {T}-less sinks: the plan asked for K activations and only the FIRST
                     // is on the subset's books, so pay the rest here out of what the turn actually
-                    // produced. Re-cost every pass (a Training Grounds can land mid-plan) and stop
-                    // at the first unpayable one rather than dropping the whole activation -- the
-                    // ApplyBlinkLoop discipline. Stop early once they are dead or decked: further
-                    // activations are pure waste and the count is only an upper bound.
-                    for (int rep = 1; rep < a.chosen_x && !taps; ++rep)
+                    // produced. Shared with the executor (SpendRepeatActivations), which also
+                    // explains why it pays in BLOCKS -- one payment solve per activation made a
+                    // single game take 5-70 seconds.
+                    if (!taps && a.chosen_x > 1)
                     {
-                        if (OpponentHasLost(state)) { break; }
-                        if (!PermAbilitySourceLive(state, state.active_player_index,
-                                                   a.sac_source_id, a.ability_mode)) { break; }
-                        const CardDefinition* rd = a.def;
-                        const std::optional<ManaCost>* rc =
-                            (a.ability_mode == Action::AbilityMode::Drain)
-                              ? &rd->params.drain_cost : &rd->params.exile_opponent_top_cost;
-                        if (!rc->has_value()) { break; }
-                        const ManaCost step = EffectiveActivationCost(
-                            state, state.active_player_index, rd->card, rc->value());
-                        if (!TapForCostDirect(state, step, /*for_creature=*/false)) { break; }
-                        ApplyPermAbility(state, state.active_player_index, a.sac_source_id,
-                                         a.ability_mode);
+                        SpendRepeatActivations(state, state.active_player_index, a.sac_source_id,
+                                               a.ability_mode, *a.def, a.chosen_x - 1);
                     }
                 }
                 else if (taps)
