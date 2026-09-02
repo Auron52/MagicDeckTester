@@ -194,8 +194,14 @@ worse(){ awk -v d="$1" 'BEGIN{ exit !(d > 0) }'; }
 # because lookahead bottoming has clairvoyance bias").
 run_regression(){
   local key
+  # The map value is QUOTED in regression_cases.sh whenever the path contains a space, so the
+  # surrounding quotes must come off before comparing -- otherwise the lookup silently fails for
+  # exactly the decks with spaces in their paths ("Mirrorwing Dragon", "Creature Giving") and this
+  # function reports "not in the suite" for a deck that IS in all three tiers. That happened on the
+  # 2026-09-02 Mirrorwing adoption: the profile went live and mullgen skipped its own rebaseline.
   key=$(awk -v d="$DECK" '/^[[:space:]]*\[[a-z0-9_]+\]=/ {
           line=$0; sub(/^[[:space:]]*\[/, "", line); split(line, a, "\\]=");
+          gsub(/^[[:space:]]*"|"[[:space:]]*$/, "", a[2]);
           if (a[2] == d) { print a[1]; exit } }' test/regression_cases.sh)
   log ""
   if [ -z "$key" ]; then
