@@ -388,6 +388,52 @@ that adding a sink class is only correct alongside a matching per-iteration spen
 longer making an illegal play, and it is the right trade: the previous number was partly bought with
 auras the rules do not allow.
 
+## Mariposa's rad mode — now a SEARCHED decision, and it WINS (2026-09-02)
+
+The user rejected the hardcoded always-decline: *"We probably shouldn't always decline the rad
+counters, since it draws more cheaply with them out."* Correct on both counts — it was a greedy
+heuristic standing where a searched decision belongs, and declining was leaving value on the table.
+
+**It was never really "declined", it was never implemented.** `etb_optional_tapped_rad` was parsed
+and then read by nothing, and `Player::rad_counters` only ever appeared in the draw discount. So this
+was a build, not a flag flip.
+
+**Modelling the MILL is the precondition, not an extra.** The rad rule is inherent to the counter
+type rather than printed on the card: *at the beginning of your precombat main, mill that many; for
+each NONLAND milled, lose 1 life and remove a rad counter.* Without it the mode is strictly upside
+and the search takes it every time — the over-acceptance class that later shows up as `[fd-diverge]`.
+`ApplyRadMill` fires from `GameEngine::MainPhase` and the rollout's per-turn main, at the same point
+relative to the draw, so the executor realises what the search scored.
+
+Shaped as a fourth plan-level land sub-decision alongside `fetch_target` / `land_face` /
+`scry_choice`: `Plan::rad_mode`, one variant per mode, carried into the drop through
+`LandPlayOptions::rad_mode` by both worlds. Human play gets its own chooser
+(`g_play_land_rad_chooser`), gated on its own pointer rather than `honor_entry_chooser` so it does
+not drag the unrelated shock/reveal axis onto the executor's drop.
+
+| | avg win turn |
+|---|---|
+| always-decline (hardcoded) | 7.2200 |
+| **searched rad mode** | **7.2037** |
+
+**−0.0163 turns, se 0.0062, t −2.60**, 5 seeds better : 3 unchanged : **0 worse** (8 x 100 paired).
+That almost exactly cancels the +0.0163 the shroud and Emiel correctness fixes cost.
+
+**Verified as a real choice, not a hidden default** — the lesson from the `MTG_EXEC_FEAS` dead-code
+miss was applied deliberately here. Temporary instrumentation showed the accept variant **emitted**
+(13x on one fixture) and **simulated** (`mode=1 take=1`, 16x) alongside the decline arm, and the mill
+firing at 2 counters. All instrumentation removed before commit.
+
+**And it is guarded.** The mill is unreachable from a fixture while the search prefers to decline, so
+`--scenario` gained a `rad_counters` staging field (the same argument as the existing
+`storage_counters` / `charge_counters`) and `test/scenarios/edf_rad_mill.json` pins it: 2 counters,
+a nonland library, **exactly 2 life lost over 4 turns (20 -> 18)**. The decay is the assertion's real
+content — a mill that failed to remove counters would keep draining well past 18.
+
+The timing that makes the trade close, and worth keeping in mind if this is ever revisited: the land
+enters tapped, so the discounted draw cannot be activated the turn it arrives, and the mill fires at
+the head of the **next** precombat main — before that draw ever becomes activatable.
+
 ## Recommended next steps
 
 1. ~~**Credit the ETB refund toward SUBSEQUENT casts only**~~ — **DONE 2026-09-02**, adopted at
@@ -410,29 +456,9 @@ auras the rules do not allow.
 
 ## Open items / PROVISIONAL decisions (need user sign-off)
 
-1. ~~**Mariposa Military Base's rad-counter mode is always DECLINED**~~ — **USER RULED AGAINST,
-   2026-09-02**: *"We probably shouldn't always decline the rad counters, since it draws more
-   cheaply with them out."* Correct — a hardcoded always-decline is a greedy heuristic standing
-   where a searched decision belongs, and the repo's own rule is to purge those. **QUEUED behind the
-   value leaf** (nothing may run alongside a generation).
+1. ~~**Mariposa Military Base's rad-counter mode is always DECLINED**~~ — **BUILT AND ADOPTED
+   2026-09-02**, and the user's instinct was right: it is a **measured win**. Full write-up below.
 
-   **The fix is NOT "always accept" — it is to model the whole card and let the search choose.**
-   Accepting the counters without the mill is a strictly-upside model, so the engine would take the
-   mode every time; that is the over-acceptance class that surfaces later as `[fd-diverge]`. So this
-   is a build, not a flag flip: `Player::rad_counters` already exists, and what is missing is the rad
-   rule itself — *at the beginning of the precombat main phase, mill that many; for each NONLAND
-   milled, lose 1 life and remove a rad counter*.
-
-   **The timing detail that makes the answer non-obvious, and which is why it has to be measured:**
-   the land enters tapped, so it cannot be tapped for the draw on the turn it arrives; the next
-   thing that happens is the rad trigger at the beginning of the following precombat main, which
-   fires **before** the main-phase window where the discounted `{5}` could be activated. So the
-   counters are exposed to the mill before the discount is ever usable, and each nonland milled
-   removes one. This deck is roughly 31 lands in ~85 cards (~36%), so P(a 2-card mill removes no
-   counter) ≈ 0.13 — most of the time the discount is gone before it can be spent. That is real
-   support for the old judgement, and it is exactly the kind of claim that should be settled by the
-   harness rather than by either of us reasoning about it. Once built, A/B the mode as a searched
-   choice against the current always-decline.
 2. **`etb_untap_lands` is a DISCLOSED VIEWER GAP.** "Untap up to N lands" is a real choice, is
    auto-resolved by yield order, and a human cannot override it. It demonstrably matters (see the
    bug above). Wiring it needs a NEW multi-pick decision type (the Dragonstorm `dragon` shape).

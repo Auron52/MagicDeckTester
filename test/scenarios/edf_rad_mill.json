@@ -1,0 +1,21 @@
+{
+ "_comment": "RAD COUNTER RULE (Mariposa Military Base). The rule is inherent to the counter type, not printed on the card: at the beginning of each player's precombat main they mill a number of cards equal to their rad counters, and for each NONLAND milled they lose 1 life and remove one counter. Staged with 2 counters because the counters only arrive from an optional land-ETB mode the search currently declines, which would otherwise leave the mill untested. library_filler is Peregrine Drake (a NONLAND), so the first precombat main mills 2, costs 2 life, and removes BOTH counters -- after which the mill stops. Hence exactly 2 life lost no matter how many turns run: 20 - 2 = 18. That decay is the assertion's real content; a mill that failed to remove counters would keep draining and land well below 18. It also guards the zone-card mask trap -- a graveyard/library card has empty type masks, so testing IsLand() on the zone card instead of the DEFINITION would make every milled card read as a nonland here and, on a land-heavy mill, drain life that should never be lost.",
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "max_turns": 6,
+ "active_life": 20,
+ "opponent_life": 20,
+ "rad_counters": 2,
+ "battlefield": [
+   {"name": "Forest", "controller": 0, "tapped": false},
+   {"name": "Island", "controller": 0, "tapped": false}
+ ],
+ "hand": [],
+ "library_filler": "Peregrine Drake",
+ "library_size": 30,
+ "depth": 3,
+ "budget_ms": 300,
+ "expect_active_life": 18,
+ "expect_no_win": true
+}

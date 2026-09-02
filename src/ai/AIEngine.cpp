@@ -2482,7 +2482,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // Same pin the search applied when it scored this plan (Plan::scry_choice), so
                     // the realised land ETB disposes of the top card exactly as the line assumed.
                     ScriptedTopChoice _stc(plan.scry_choice);
-                    TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target, plan.land_face);
+                    TryPlaySpecificLand(state, plan.land_to_play, plan.fetch_target, plan.land_face,
+                                        plan.rad_mode);
                 }
             }
         }
@@ -3944,7 +3945,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 // Play a specific named land from hand. Mirrors TryPlayLand's per-card logic;
 // used by the land search in TakeTurn to apply the chosen candidate.
 bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
-                                   const std::string& fetch_target, const std::string& land_face)
+                                   const std::string& fetch_target, const std::string& land_face,
+                                   int rad_mode)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
@@ -3973,6 +3975,12 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
         o.label_look_source  = true;    // executor labels the reveal log with the land's name
         o.spawn_orchard_spirit = true;  // searched drop: the on-play Spirit fires
         o.record_touch       = true;
+        o.rad_mode           = rad_mode;   // the SEARCH's rad choice, so the drop realises the plan
+        // Deliberately NOT setting honor_entry_chooser: that flag governs the older shock/reveal
+        // entry chooser, which the executor's real drop has never consulted (a disclosed gap on that
+        // axis), and switching it on here would silently change that behaviour too. The rad chooser
+        // is gated on its own pointer instead, so human play gets the rad question without dragging
+        // an unrelated axis along.
         o.logger             = m_logger;
         return PlayLandFromHand(state, static_cast<std::size_t>(pick - ap.hand.begin()), *def, o);
     }

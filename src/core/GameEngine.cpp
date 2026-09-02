@@ -403,6 +403,10 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     state.phase = is_pre_combat ? Phase::PreCombatMain : Phase::PostCombatMain;
     state.step  = Step::MainPhase;
 
+    // Rad counters mill at the beginning of the PREcombat main only (see ApplyRadMill). Before the
+    // logger's phase marker so the mill is not attributed to a cast. Lockstep with the rollout.
+    if (is_pre_combat) { ApplyRadMill(state, state.active_player_index); }
+
     if (m_logger)
     {
         m_logger->StartPhase(state.turn_number, is_pre_combat ? "MAIN_1" : "MAIN_2");

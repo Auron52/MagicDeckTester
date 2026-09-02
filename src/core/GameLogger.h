@@ -509,6 +509,18 @@ using LandEntryChooser = std::function<bool(const GameState& state, int controll
                                             bool heuristic_untapped)>;
 extern thread_local LandEntryChooser* g_play_land_entry_chooser;
 
+// ---- Human-play RAD-COUNTER mode chooser (Mariposa Military Base) -------------------------------
+// "You may have this land enter tapped. If you do, you get N rad counters." A separate chooser from
+// LandEntryChooser because it is the opposite question: that one asks whether to PAY to enter
+// untapped, this one asks whether to accept entering tapped to GAIN something. Folding them would
+// make `heuristic_untapped` mean two different things.
+// Returns true to take the counters (and enter tapped). Nulled by RevealLogPause for every
+// search/rollout/enumeration scope, so it fires only on the REAL land drop and the searched
+// Plan::rad_mode stands there -> autonomous play and the search stay byte-identical.
+using LandRadChooser = std::function<bool(const GameState& state, int controller,
+                                          const std::string& source, int rad_counters)>;
+extern thread_local LandRadChooser* g_play_land_rad_chooser;
+
 // ---- Human-play Soulfire own-target chooser (WHICH of your creatures the dig also targets) ------
 // Soulfire Eruption targets the face + opponent creatures + (optionally) you + a SEARCHED COUNT of
 // your OWN creatures (each = a deeper dig + a bigger Hinata discount, but takes a random exiled
@@ -725,7 +737,8 @@ inline bool AllPlayHooksNull()
         && g_play_draw_sink == nullptr && g_play_reveal_sink == nullptr
         && g_play_event_sink == nullptr && g_play_dropped_cast_sink == nullptr
         && g_play_sacrifice_chooser == nullptr && g_play_replicate_chooser == nullptr
-        && g_play_land_entry_chooser == nullptr && g_play_dragon_chooser == nullptr
+        && g_play_land_entry_chooser == nullptr && g_play_land_rad_chooser == nullptr
+        && g_play_dragon_chooser == nullptr
         && g_play_sac_tutor_chooser == nullptr && g_play_lackey_chooser == nullptr
         && g_play_free_cast_chooser == nullptr && g_play_lightpaws_chooser == nullptr
         && g_play_firebreathe_chooser == nullptr && g_play_cast_order_chooser == nullptr
@@ -765,6 +778,7 @@ struct RevealLogPause
     BounceChooser* saved_sacchooser;
     ReplicateChooser* saved_repchooser;
     LandEntryChooser* saved_lechooser;
+    LandRadChooser*   saved_lradchooser = nullptr;
     DragonChooser* saved_dragchooser;
     SacTutorChooser* saved_sacttchooser;
     LackeyChooser* saved_lackeychooser;
@@ -808,6 +822,7 @@ struct RevealLogPause
         saved_evsink = g_play_event_sink; saved_dropsink = g_play_dropped_cast_sink;
         saved_sacchooser = g_play_sacrifice_chooser;
         saved_repchooser = g_play_replicate_chooser; saved_lechooser = g_play_land_entry_chooser;
+        saved_lradchooser = g_play_land_rad_chooser;
         saved_dragchooser = g_play_dragon_chooser; saved_sacttchooser = g_play_sac_tutor_chooser;
         saved_lackeychooser = g_play_lackey_chooser;
         saved_freecastchooser = g_play_free_cast_chooser;
@@ -825,7 +840,8 @@ struct RevealLogPause
         g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
         g_play_draw_sink = nullptr; g_play_reveal_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
         g_play_sacrifice_chooser = nullptr;
-        g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
+        g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr;
+        g_play_land_rad_chooser = nullptr; g_play_dragon_chooser = nullptr;
         g_play_sac_tutor_chooser = nullptr;
         g_play_lackey_chooser = nullptr; g_play_free_cast_chooser = nullptr;
         g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
@@ -844,6 +860,7 @@ struct RevealLogPause
                         g_play_event_sink = saved_evsink; g_play_dropped_cast_sink = saved_dropsink;
                         g_play_sacrifice_chooser = saved_sacchooser;
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
+                        g_play_land_rad_chooser = saved_lradchooser;
                         g_play_dragon_chooser = saved_dragchooser; g_play_sac_tutor_chooser = saved_sacttchooser;
                         g_play_lackey_chooser = saved_lackeychooser;
                         g_play_free_cast_chooser = saved_freecastchooser;

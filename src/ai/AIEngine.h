@@ -400,7 +400,7 @@ private:
     // the searched fetchland target (Plan::fetch_target); empty -> heuristic top pick.
     bool TryPlaySpecificLand(GameState& state, const std::string& name,
                              const std::string& fetch_target = "",
-                             const std::string& land_face = "");
+                             const std::string& land_face = "", int rad_mode = -1);
 
     // "Dig when stuck" land abilities: cycling (e.g. Lonely Sandbar) and sacrifice-to-draw
     // (e.g. Fiery Islet) to draw toward Treasure Hunt. Gated by ShouldConsiderDig (no draw

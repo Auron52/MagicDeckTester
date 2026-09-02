@@ -5977,6 +5977,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p)
     folds(p.fetch_target);
     folds(p.land_face);
     fold(static_cast<uint64_t>(p.scry_choice + 2) * 37 + static_cast<uint64_t>(p.etbdig_choice + 2));
+    fold(static_cast<uint64_t>(p.rad_mode + 2) * 41);
     fold(static_cast<uint64_t>(p.tutor_choice + 2) * 41 + static_cast<uint64_t>(p.tapmode_choice + 2));
     fold(static_cast<uint64_t>(p.freshmode_choice + 2) * 43 + static_cast<uint64_t>(p.lackey_choice + 2));
     fold(static_cast<uint64_t>(p.ponder_choice + 2) * 47 + static_cast<uint64_t>(p.discard_choice + 2));
@@ -6001,7 +6002,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
     return p.actions.empty() && p.breakpoint_actions.empty()
         && p.land_decided && p.land_to_play.empty() && p.fetch_target.empty()
         && p.land_face.empty()
-        && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1
+        && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1 && p.rad_mode == -1
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.vial_charge_choice == -1 && !p.searched_order && p.atk_dork_release == -1
@@ -15105,7 +15106,7 @@ bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creatu
 // not search the land (depth-0 static plans).
 static bool PlayLandByName(GameState& state, const std::string& name,
                            const std::string& fetch_target = "", bool allow_shock_pay = true,
-                           const std::string& land_face = "");
+                           const std::string& land_face = "", int rad_mode = -1);
 static std::string SimulateLandPlay(GameState& state);
 
 // ---- GREEDY LAND-DROP INSTRUMENT (MTG_LANDDROP_STATS, default off, zero cost when off) --------
@@ -16619,7 +16620,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // Pin the land's ETB scry/surveil disposition when this plan variant carries one
                     // (searched, not narrowed -- see Plan::scry_choice). Consumed by the first look.
                     ScriptedTopChoice _stc(plan.scry_choice);
-                    PlayLandByName(state, plan.land_to_play, plan.fetch_target, allow_shock_pay, plan.land_face);
+                    PlayLandByName(state, plan.land_to_play, plan.fetch_target, allow_shock_pay,
+                                   plan.land_face, plan.rad_mode);
                 }
             }
         }
@@ -16940,7 +16942,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         if (!sp.land_decided || sp.land_to_play.empty()) { return; }
         if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
-        if (!PlayLandByName(state, sp.land_to_play, sp.fetch_target, true, sp.land_face)) { return; }
+        if (!PlayLandByName(state, sp.land_to_play, sp.fetch_target, true, sp.land_face, sp.rad_mode))
+        { return; }
         if (out_breakpoint != nullptr && sink != nullptr)
         {
             Action la;
@@ -19948,6 +19951,12 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Next simulated turn opens on its pre-combat main (partner of the PostCombatMain write at the
     // end of SimulateCombat; see the note there). Write-only for every other deck.
     state.phase = Phase::PreCombatMain;
+    // Rad-counter mill, at the beginning of that pre-combat main and therefore AFTER the draw above
+    // -- the same position GameEngine::MainPhase fires it from, which is what keeps the two worlds
+    // in lockstep (the executor's order is draw step, then main phase). Getting this on the wrong
+    // side of the draw would mill a different set of cards in the rollout than in the real game.
+    // No-op at 0 rad counters, i.e. everywhere but a deck holding Mariposa Military Base.
+    ApplyRadMill(state, state.active_player_index);
     return true;
 }
 
@@ -19958,7 +19967,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 // byte-identical placement for the same card.
 static bool PlayLandByName(GameState& state, const std::string& name,
                            const std::string& fetch_target, bool allow_shock_pay,
-                           const std::string& land_face)
+                           const std::string& land_face, int rad_mode)
 {
     Player& ap = state.ActivePlayer();
     if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
@@ -19992,6 +20001,7 @@ static bool PlayLandByName(GameState& state, const std::string& name,
     o.fetch_target         = fetch_target;
     o.land_face            = land_face;
     o.allow_shock_pay      = allow_shock_pay;
+    o.rad_mode             = rad_mode;   // searched Plan::rad_mode; -1 = decline (the old behaviour)
     // Human play (g_play_land_entry_chooser set, and a real choice present) picks whether to pay
     // the shock life / reveal to enter untapped; otherwise the autonomous heuristic stands
     // (byte-identical for the search, which nulls the chooser via RevealLogPause).
@@ -24047,6 +24057,35 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 v.scry_choice = static_cast<int>(c);
                 extra.push_back(std::move(v));
             }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
+    // SEARCHED RAD-COUNTER MODE (Mariposa Military Base). "You may have this land enter tapped. If
+    // you do, you get two rad counters." Emit the ACCEPT variant alongside the default DECLINE, and
+    // let the outer rollout score both -- exactly as scry_choice / fetch_target / land_face do for
+    // the other land sub-decisions. One extra plan per qualifying land drop, and only for a deck
+    // holding such a land, so everything else is byte-identical.
+    //
+    // Adopted as a SEARCH axis rather than a heuristic on the user's instruction (2026-09-02): the
+    // engine previously hardcoded decline. The trade is genuinely close -- entering tapped costs a
+    // turn of the land's mana and takes on the rad mill, against {1} off its own draw per counter --
+    // and the mill fires at the head of the NEXT precombat main, before that draw is ever
+    // activatable. Which side wins is a deck-ratio question, so the search answers it per board.
+    {
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            // Base plans only, for the same reason the scry axis restricts itself: keeps this a
+            // second AXIS rather than a cross product.
+            if (p.land_to_play.empty() || p.rad_mode >= 0) { continue; }
+            if (p.scry_choice >= 0 || p.bp_choice >= 0) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().Lookup(p.land_to_play);
+            if (d == nullptr || d->params.etb_optional_tapped_rad <= 0) { continue; }
+            TurnSolver::Plan v = p;
+            v.rad_mode = 1;                 // accept; the base plan is the decline arm
+            extra.push_back(std::move(v));
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));

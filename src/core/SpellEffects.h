@@ -6075,6 +6075,49 @@ inline void SpawnOpponentSpirit(GameState& state)
 // Turn-start spawn: one Spirit per Orchard the ACTIVE player already controls (re-tapped this turn).
 // Called where opponent_spawns are materialised, in BOTH the rollout and the executor -> lockstep.
 // Count first (CreateToken appends to battlefield) so we don't iterate over the new tokens.
+// RAD COUNTERS (Mariposa Military Base). The rule is not printed on the card -- it is inherent to
+// the counter type: "At the beginning of each player's precombat main phase, that player mills a
+// number of cards equal to the number of rad counters they have. For each NONLAND card milled this
+// way, that player loses 1 life and removes one rad counter from themselves."
+//
+// Modelling it is what makes taking the counters a real DECISION rather than free upside. Without
+// the mill, `etb_optional_tapped_rad` would be strictly positive (a discount with no downside) and
+// the search would accept it every time -- the over-acceptance class that surfaces later as
+// [fd-diverge]. See LandPlayOptions::rad_mode.
+//
+// The TIMING is the interesting part and it is why the trade is close: the land enters tapped, so it
+// cannot be tapped for the discounted draw on the turn it arrives; the next thing that happens is
+// this trigger, at the beginning of the following precombat main -- BEFORE the main-phase window
+// where that draw could be activated. So the counters face the mill before the discount is ever
+// spendable, and every nonland milled takes one away. Whether the discount survives long enough to
+// be used is therefore a property of the deck's land ratio, which is a thing to MEASURE, not assume.
+//
+// Called at the head of the precombat main in BOTH worlds (GameEngine::MainPhase and the rollout's
+// per-turn main) so the executor realises what the search scored. No-op at 0 counters, which is
+// every player of every other deck.
+inline void ApplyRadMill(GameState& state, int controller)
+{
+    Player& p = state.players[controller];
+    if (p.rad_counters <= 0) { return; }
+    const int n = std::min<int>(p.rad_counters, static_cast<int>(p.library.size()));
+    for (int i = 0; i < n; ++i)
+    {
+        const Card c = p.library.front();
+        p.library.erase(p.library.begin());
+        p.graveyard.push_back(c);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        // A milled NONLAND costs 1 life and removes a counter. The land/nonland test reads the
+        // DEFINITION, not the zone-card mask: a card outside the battlefield carries empty type
+        // masks, so c.IsLand() would be false for every card here and the rad counters would never
+        // decay (see the zone-card placeholder-mask trap).
+        if (d && !d->card.IsLand())
+        {
+            p.life -= 1;
+            if (p.rad_counters > 0) { --p.rad_counters; }
+        }
+    }
+}
+
 inline void SpawnForbiddenOrchardTokensTurnStart(GameState& state)
 {
     int n = 0;

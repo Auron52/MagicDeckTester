@@ -66,6 +66,29 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
         tapped = LandEntersTapped(state, fdef, opts.allow_shock_pay);
     }
 
+    // "You may have this land enter tapped. If you do, you get N rad counters." Resolved here, after
+    // the other entry choices, because it can only ever ADD tapped-ness: declining leaves whatever
+    // the clauses above decided, so a land that already enters tapped for another reason is
+    // unaffected. -1 (no searched variant, no human pick) keeps the pre-2026-09-02 behaviour exactly
+    // -- decline -- so every deck without such a land is byte-identical.
+    int rad_gain = 0;
+    if (fdef.params.etb_optional_tapped_rad > 0)
+    {
+        bool take = false;
+        // Gated on the chooser POINTER alone, not on honor_entry_chooser: that flag belongs to the
+        // shock/reveal axis, and this must be askable on the executor's real drop without turning
+        // that one on too. The pointer is nulled by RevealLogPause for every search/rollout scope,
+        // so the search still scores Plan::rad_mode and autonomous play is untouched.
+        if (g_play_land_rad_chooser != nullptr)
+        {
+            take = (*g_play_land_rad_chooser)(state, state.active_player_index,
+                                              fdef.card.m_name.str(),
+                                              fdef.params.etb_optional_tapped_rad);
+        }
+        else if (opts.rad_mode >= 0) { take = (opts.rad_mode != 0); }
+        if (take) { tapped = true; rad_gain = fdef.params.etb_optional_tapped_rad; }
+    }
+
     Permanent perm;
     perm.card              = face_def->card;   // chosen face's identity -> locks its colour
     // Preserve the per-copy ID from the hand card: BounceKarooLand returns `battlefield[i].card` to
@@ -87,6 +110,9 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
 
     ap.hand.erase(it);
     ++ap.lands_played_this_turn;
+    // Counters are gained as the land enters, so AFTER it is on the battlefield -- and before any
+    // ETB below can read them.
+    if (rad_gain > 0) { ap.rad_counters += rad_gain; }
 
     // ETB effects, after the land is on the battlefield (face definition; see fdef above).
     if (fdef.params.etb_scry > 0)

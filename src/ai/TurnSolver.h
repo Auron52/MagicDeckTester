@@ -474,6 +474,21 @@ public:
         // See docs/design/searched-scry-disposition.md.
         int scry_choice = -1;
 
+        // Mariposa Military Base's "you may have this land enter tapped; if you do, you get two rad
+        // counters". -1 (default) == DECLINE, which is what the engine did unconditionally before
+        // 2026-09-02 and keeps every other deck byte-identical. 0 / 1 == the land enumeration
+        // emitted one Plan variant per mode and the SEARCH picks, on the user's instruction: "We
+        // probably shouldn't always decline the rad counters, since it draws more cheaply with them
+        // out." A hardcoded answer either way is a greedy heuristic standing where a searched
+        // decision belongs.
+        //
+        // Both sides of the trade are modelled, which is the precondition for searching it at all:
+        // the counters discount the land's own {5} draw by {1} each, and they carry the rad MILL
+        // (ApplyRadMill) that costs life and eats the counters. Carried into the drop through
+        // LandPlayOptions::rad_mode by BOTH worlds. Parallels fetch_target / land_face /
+        // scry_choice: a plan-level land sub-decision, searched rather than narrowed.
+        int rad_mode = -1;
+
         // ETB-dig pick (Acclaimed Contender's "look at the top 5, put a Knight into your hand"):
         // which candidate of the provider's ranked EtbDigCandidates the dig takes. -1 (default) ==
         // the provider's top pick, byte-identical to no branch. k >= 0 == the enumeration emitted one

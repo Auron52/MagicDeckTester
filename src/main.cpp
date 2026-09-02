@@ -4060,6 +4060,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // engine no matter what MTG_AL_PHASE/MTG_PHASE_CLASSIFY said.
     GoldFishRunner::StampDeckTraits(state, deck);
     state.players[0].life       = j.value("active_life", 20);
+    // Stage RAD COUNTERS directly (Mariposa Military Base). Same reason storage_counters /
+    // charge_counters are settable: the counters arrive only from an optional land-ETB mode the
+    // search normally DECLINES, so the rad mill is otherwise unreachable from a fixture -- and
+    // unreachable code is untested code.
+    state.players[0].rad_counters = j.value("rad_counters", 0);
     state.players[1].life       = j.value("opponent_life", 20);
     state.active_player_index   = 0;
     state.priority_player_index = 0;

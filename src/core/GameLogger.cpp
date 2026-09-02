@@ -38,6 +38,7 @@ thread_local EIChooser*      g_play_ei_chooser      = nullptr;
 thread_local RetraceDiscardChooser* g_play_retrace_chooser = nullptr;
 thread_local ReplicateChooser* g_play_replicate_chooser = nullptr;
 thread_local LandEntryChooser* g_play_land_entry_chooser = nullptr;
+thread_local LandRadChooser* g_play_land_rad_chooser = nullptr;
 thread_local SoulfireTargetChooser* g_play_soulfire_chooser = nullptr;
 thread_local DragonChooser*  g_play_dragon_chooser = nullptr;
 thread_local SacTutorChooser* g_play_sac_tutor_chooser = nullptr;

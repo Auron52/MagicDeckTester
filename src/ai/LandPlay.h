@@ -32,6 +32,19 @@ struct LandPlayOptions
     // choice. ONLY the rollout does this today -- the executor's real land drop never asks, so
     // under --claude-play the human's land-entry choice is not applied to the realised drop.
     bool honor_entry_chooser = false;
+    // "You may have this land enter tapped. If you do, you get N rad counters." (Mariposa Military
+    // Base, etb_optional_tapped_rad). -1 == the heuristic default (DECLINE); 0 / 1 == the SEARCH
+    // picked, one Plan variant per mode (Plan::rad_mode). A searched decision rather than a
+    // hardcoded one on the user's instruction, 2026-09-02: "We probably shouldn't always decline the
+    // rad counters, since it draws more cheaply with them out."
+    //
+    // It is a genuine trade, which is exactly why it is searched and not assumed either way:
+    // entering tapped costs a turn of the land's mana and takes on the rad MILL, against a
+    // {1}-per-counter discount on its own draw ability. The mill is modelled (see ApplyRadMill), so
+    // the mode carries its real cost -- without it, accepting would be strictly-upside and the
+    // search would take it every time, which is the over-acceptance class that shows up as
+    // [fd-diverge].
+    int rad_mode = -1;
     // Pass the land's own name to ScryTop / SurveilTop as the look SOURCE (the executor does; the
     // rollout leaves the default "Scry"/"Surveil"). Affects the reveal log and the claude-play
     // prompt label only -- the autonomous heuristic ignores the source.
