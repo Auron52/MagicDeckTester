@@ -369,3 +369,38 @@ gap before any discussion: wall DECOMPOSITION by lever launched (off / s3d / can
 screcipe, same protocol, `logs/ngc_sound/wall_decomp/`), then the known cost dials (enum-memo
 coverage at canon's call site -- the lever's own design premise says it should be a memo HIT;
 the 8192-cap wholesale-clear thrash; nested stand-down widening).
+
+### THE GAP-CLOSING ARC (2026-09-02 overnight, commit `a0d3f777`, CI green incl. Windows parity)
+
+**Decomposition named the burner: CANON AT ROLLOUT APPLIES.** ds canononly ALONE = +50.7% (the
+whole recipe delta); noderoot alone is FREE on ds (-0.6%) and +4.3% on hinata; hinata's +30% is
+the site3-open x canon interaction (canononly is cheap on hinata only because the mask hides s3).
+Context counters (`canon fires/copies/enums` by root|rec|resume|cap): hinata 4.03M fires per 300
+games, 91.5% [rollout+rec]; each paid a GameState deep-copy (644k) + Solve + a full plan-vector
+copy (1.78M enumerations). ds 96.6%+ rollout-side.
+
+Three cuts, each verified (hatch smoke 48/48 byte-identical vs GT; recipe fingerprints IDENTICAL
+under MTG_NO_BP_ENUM_CACHE=1; cross-build play identity):
+
+| form | hinata wall | ds wall | play |
+|---|---|---|---|
+| canon-everywhere (the gated form) | +30.6% | +49.7% | the 140k-gate quality |
+| + rollout scope (plain rollout applies stand down) | +20.8% | +26.1% | changed -- re-gate |
+| + verdict memo (entry-rider) | +23.5% (WORSE: PASS states derived plans) | +14.6% | same as scoped |
+| + verdict memo (SEPARATE map, shipped form) | **+18.7%** | **+14.2%** | same as scoped |
+| TIGHT scope (MTG_BP_CANON_REC=0: root/resume/capture only) | **+6.1%** | **+13.3%** | changed -- re-gate |
+
+Residue after the memo = the BuildBreakpointKey walk itself, 4M times (the recorded enummemo
+lesson: "a revisit must make the KEY incremental"). The TIGHT scope deletes 91.5% of hinata's
+fires instead -- **hinata +6.1% is UNDER the USER's 10% bar** -- and its open question is pure
+quality: do the [rollout+rec] fires carry any of the -0.0126? `scripts/gen_tight_gate.py` (140k
+games: hinata off/screcipe/tight at 10k/block, 4 movers off/tight at 5k/block) measures exactly
+that. ds's tight residue is capture-context canon (the node's own children) -- genuinely
+decision-side, likely the floor without an incremental key.
+
+**Traps this arc added to the record:** (1) units UNDERSTATE any lever whose work is uncharged
+enumeration/apply -- wall-probe the lever itself, never convert units->wall by a prior lever's
+ratio; (2) NEVER edit source while a background build runs -- the object lands NEWER than the
+source and the next build silently reuses it (cost: a defaults-revert that "didn't take", found
+only because clean-env play failed byte-identity); (3) sed range args print in FILE order, not
+argument order.
