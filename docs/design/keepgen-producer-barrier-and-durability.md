@@ -355,24 +355,53 @@ journal    decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json.journal
 resume     bash logs/FiveColour_gen/run.sh      # same command; journal replayed; no resume flag
 ```
 
-### State
+### State — FLIPPED TO REFINE 2026-09-02 at 293.4 h
+
+```
+[keepgen]   continuous: floor complete, refs fixed -> refine (1056351s)
+[keepgen]   monitor: 1057768s  phase=refine  fed=26137775 (75/s)  frozen=2535642/3955796 (64.0%)
+```
+
+The producer barrier held from 2026-08-25 to 2026-08-30 (the speculation pass), then sub-refine ran
+its waves down the size ladder H6→H5→H4→H3→H2 until `sub_converged`, and the flip followed.
+Prediction confirmed exactly: the run released at the computed ceiling of 25,052,142 feeds.
 
 | | |
 |---|---|
-| elapsed | 163.1 h |
-| phase | `floor`, `frozen=0/3955796` |
-| `fed` | 19,518,133 |
-| floor | **100% complete** — all 7 tables, 5,273,162 / 5,273,162 cell-sides, took ~83 h |
-| speculation | 10,308,905 / 15,823,184 = **65.2%** |
-| rate | 26.1/s (24 h), 18.6/s (6 h) |
-| expected flip | **40–77 h** from the timestamp above |
+| elapsed at flip | 293.4 h |
+| phase | `refine` |
+| **frozen at reconcile** | **2,535,642 / 3,955,796 = 64.0%, INSTANTLY** |
+| remaining | 1,420,154 cell-sides |
+| freeze rate | ~4–6 cell-sides/s (thin: 3 ticks) → ~79 h face value, **3–7 days** realistically |
+| journal | 459,050,474 B — **+131 MB in 37 min** at the reconcile |
 
-**It is not wedged — this is Defect 1 (§3).** Do not diagnose it again from scratch; §2 has the
-one-query confirmation if you want to re-verify.
+### THE SPECULATION WAS NOT WASTED — correct the record
 
-The journal has been silent since 2026-08-25 00:29 and that is **expected on this binary**, which
-predates the `jprog` fix (§4). ~330+ core-hours of speculation are unbanked. The 83 h floor is
-safe on disk.
+An earlier revision of this document called the speculation "mostly redundant". **That was wrong.**
+64% of cell-sides froze the instant refs published, because their freeze level fell inside
+`[r0, r0+spec_budget]` = `[2, 6]` — exactly the range speculation covered. Speculate-then-reconcile
+did what it was designed to do: it pulled real refine work forward. **The defect is the barrier that
+stops the producer advancing the wave clock, not the filler itself.** Fix 1 must therefore *bound*
+the filler, never delete it — deleting it would forfeit a 64% head start.
+
+The +131 MB reconcile burst is ~2.5M terminal `f=1` records: the ~330 core-hours that were unbanked
+for eight days are now durable. That risk is closed.
+
+### Do NOT trust the generator's own projection here
+
+At the flip it printed:
+
+```
+floor pass: 1056351s @ 24 rollouts/s;  5273162 cells
+projected FAST     (adaptive, R30): ~1186.0 h   (rough guide)
+projected COMPLETE (full bottom, R40): ~2372.0 h (upper bound)
+```
+
+**1186 h is badly pessimistic and must not be used.** It is a static `cells x R / floor-rate` formula
+with a fixed adaptive trim, computed from a floor rate (24 rollouts/s) that was itself dragged down
+by the barrier, and it has no knowledge that 64% of the table froze at reconcile. Its own label says
+"rough guide". Use `frozen / 3,955,796` and its slope instead — that is the first metric this run has
+had with an honest denominator.
 
 ### Hazards — all of these have already cost something
 
