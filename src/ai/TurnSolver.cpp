@@ -29468,7 +29468,16 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         ConsumeAt(budget, unitsite::kGreedyFallback);
         report(max_turns + 1, 0);   // greedy fallback is not an exhaustively-verified win
         greedysite::Record(90);
-        return Solve(state, is_pre_combat);
+        // RecordOutcome was MISSING here while every breakpoint site had it, so site 90 reported
+        // "acted 0" on all 16 decks -- which reads as "the horizon leaf decides nothing" and is
+        // simply an unwired counter. That is the exact confusion greedysite::act exists to prevent
+        // ("a count alone cannot distinguish greedy is still choosing plays from greedy returns an
+        // empty plan"), so the one site where the distinction decides whether the leaf is a greedy
+        // RELIANCE had no answer at all. NRVO'd; the flag gates only the counter, so play is
+        // byte-identical.
+        Plan greedy_leaf = Solve(state, is_pre_combat);
+        greedysite::RecordOutcome(90, !greedy_leaf.actions.empty());
+        return greedy_leaf;
     }
 
     // The enforcing top-level call owns the per-decision transposition table and

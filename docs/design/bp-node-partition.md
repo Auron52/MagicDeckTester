@@ -703,3 +703,68 @@ deleted at these sites until the continuation search can REACH what greedy reach
 only then remove the Solve. Deleting first is a lossy truncation dressed as a purification, and it
 violates the no-lossy-truncation bar in the name of satisfying the no-greedy one. The affordability
 of the wider search is the open question, and it is the right next measurement.
+
+## The greedy census: what the search actually relies on (2026-09-02)
+
+`greedysite::` (`MTG_M2_YIELD_STATS`) counts every greedy `TurnSolver::Solve()` reached from
+inside the search, by site, with an `acted` counter for whether that call returned a play. Run
+across all 16 suite decks at shipped settings, 150 games each:
+
+| deck | in-tree sites (calls / **acted**) | horizon s90 (calls / **acted**) |
+|---|---|---|
+| hinata | s0 769036/**256298**, s8 1613965/**780184** | 243216/**144550** |
+| mirrorwing | s0 1197556/**538482**, s8 2984986/**1493451** | 584580/**528122** |
+| creature_giving | s8 298592/**131150** | 1410410/**1312947** |
+| burn | s0 352926/**132801** | 7355/**6867** |
+| th | s1 563040/**136452**, s4 534/**154** | 70124/**54814** |
+| kitty | s8 167522/**97186** | 113757/**89750** |
+| fivecolour | s8 (300g: 135137/**61316**) | (300g: 463541) |
+| dragonstorm | s2 60634/**49619** | 73113/**38717** |
+| antilife | s8 25362/**7787** | 19666/**9953** |
+| auras | s4 26995/**12969** | 7341/**6026** |
+| dragons | -- | 2386594/**2143015** |
+| minotaur | -- | 44602/**44192** |
+| stompy | -- | 43002/**36295** |
+| slivers | -- | 7977/**7976** |
+| knights | -- | 800/**799** |
+| goblins | -- | 3709/**2021** |
+
+**EVERY deck relies on greedy. No deck is greedy-free.** The six decks with no in-tree site are
+greedy-free only INSIDE the searched region -- all of their greedy is at the horizon, and at
+84-99.9% acted.
+
+**TWO POPULATIONS, and they need different answers.**
+
+* **In-tree (s0/s1/s2/s4/s8) -- a real defect.** The search IS exploring here and greedy
+  short-circuits it. It concentrates: roughly ONE dominant site per deck. **s8 is the big one** --
+  it is the DEFERRED continuation fallback (`bp_searched_plan(deferred_site_index(), ...)`
+  returned false), where the deferred site is 3 (plain cantrip), 5 (trick/Gold Rush) or 6
+  (equipment-ETB draw). Hinata's 780k acted s8 is site 3 being MASKED OFF by default
+  (`BpSiteMask` 0x77 excludes 0x08), so every deferred plain-cantrip continuation falls to greedy.
+  That is exactly what `MTG_BP_SITE3` opens and what the node hosts -- the arc's target was right,
+  it was only ever bundled with the wrong second flag.
+* **Horizon (s90) -- NOT a defect of the same kind.** This is `SolveWithLookahead`'s `depth <= 0`
+  base case: depth ran out and something must choose a play. Every finite-depth search has a
+  heuristic leaf; removing it means infinite depth. The real levers are pushing the horizon deeper
+  (budget) or replacing the greedy playout with a learned evaluator -- the value leaf's territory.
+
+### The instrument was lying about the most important site
+
+Site 90 had `greedysite::Record(90)` but **no `RecordOutcome`**, so it reported `acted 0` on all 16
+decks. Read literally that says the horizon leaf decides nothing, and the first pass of this census
+concluded six decks were already greedy-free. Wiring the counter reversed it: those decks are
+84-99.9% acted at the leaf. This is precisely the confusion `greedysite::act` was introduced to
+prevent ("a count alone cannot distinguish 'greedy is still choosing plays' from 'greedy is called
+on a state with no legal option'") -- and the one site where the distinction decides whether the
+leaf is a RELIANCE was the site missing the call. Fixed 2026-09-02; smoke 48/48 byte-identical
+(the flag gates only the counter).
+
+### Plan
+
+1. Generalize node hosting from hard-coded site 3 to the DEFERRED site (3/5/6) and to BASE plans,
+   keeping ROOTTURN (node-at-every-turn is already measured worse -- budget starvation). The node
+   is the only construct that is complete: "No rank width, no waves -- completeness is the
+   enumeration itself", full cands PLUS the explicit empty arm.
+2. Re-run this census as the ACCEPTANCE TEST. Success is `acted` reaching zero at s0-s8 -- a
+   quality delta is not the criterion, reachability is.
+3. Treat s90 explicitly as horizon policy, not a bug, and decide it separately.
