@@ -3669,6 +3669,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     {
                         producing.store(false); q_ne.notify_all();
                         for (std::thread& th : pool) { th.join(); }
+                        // A `recommend` scout must NOT leave a journal behind. It shares the journal
+                        // PATH (out_raw + ".journal") with a real generation, but it is an R=1 run: it
+                        // samples every cell once and then -- right above -- fixes refs and journals
+                        // them. A later `complete` run resumes that file, inherits "refs are already
+                        // fixed", and starts in the refine phase, which is how Dragons and Mirrorwing
+                        // shipped bottoming tables at R=1 (the sub-table batches are fed from the floor
+                        // phase, which never ran). The refine-phase feed_sub() added alongside this
+                        // makes that resume sample correctly now, but resuming a full generation from an
+                        // R=1 scout is still wrong on its own terms -- compute_refs() fixed Dopt and vg
+                        // off single-rollout cells, and the complete run then inherits those thresholds
+                        // instead of deriving them from its own floor. The scout's deliverable is the
+                        // fingerprint-gated `.probe` (LoadProbeCarry), which IS a sound r=0 carry; the
+                        // journal has no legitimate consumer, so drop it.
+                        if (cfg.recommend_only && journal_on && !journal_path.empty())
+                        {
+                            journal_f.close();
+                            std::remove(journal_path.c_str());
+                            std::cerr << "[keepgen] recommend: journal removed (an R=1 scout must not be"
+                                         " resumed by a later full generation)\n" << std::flush;
+                        }
                         return;
                     }
                 }
