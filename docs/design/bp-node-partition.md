@@ -768,3 +768,65 @@ leaf is a RELIANCE was the site missing the call. Fixed 2026-09-02; smoke 48/48 
 2. Re-run this census as the ACCEPTANCE TEST. Success is `acted` reaching zero at s0-s8 -- a
    quality delta is not the criterion, reachability is.
 3. Treat s90 explicitly as horizon policy, not a bug, and decide it separately.
+
+## SIZED: the reachability hole greedy is papering over (2026-09-02)
+
+USER, 2026-09-02: *"Greedy within the search window can make lines genuinely unreachable, which is
+my largest concern."* That is correct, and it is the right frame -- sharper than "greedy
+short-circuits the search", and it is now MEASURED rather than argued.
+
+**The arithmetic.** At a breakpoint the search offers the BASE plan (greedy's pick) plus variants
+`k = 0..W-1`, and `BpSearchWidth()` is **2**. So of `n` enumerated continuations exactly THREE are
+ever explored -- `cands[0]`, `cands[1]`, and whichever one greedy evaluates to. `cands[2..n-1]`
+minus greedy's pick is unreachable at ANY budget, which is the infinite-budget test failing.
+
+`MTG_BP_CANDS_PROBE`, 120 games/deck at shipped settings:
+
+| deck | site | mean n | max n | capped | **unreachable** |
+|---|---|---|---|---|---|
+| dragonstorm | impulse_exile (Apex of Power) | 19.35 | 436 | 87.7% | **89.9%** |
+| th | DrawUntilNonland (Treasure Hunt) | 5.93 | 39 | 46.5% | **75.2%** |
+| hinata | stages_cards/EI | 5.53 | **962** | 59.7% | **68.4%** |
+| kitty | equipment_etb_draw (Puresteel) | 3.90 | 120 | 50.0% | **57.7%** |
+| auras | dig_through_lands | 3.06 | 39 | 33.3% | **56.4%** |
+| mirrorwing | trick_payload (Gold Rush) | 3.91 | 64 | 55.5% | **55.1%** |
+| burn | stages_cards/EI | 3.08 | 23 | 45.2% | **45.7%** |
+| mirrorwing | stages_cards/EI | 1.82 | 27 | 21.1% | 21.1% |
+| hinata (site 3 OPENED) | deferred_cantrip | 3.99 | 243 | 52.4% | **57.5%** |
+
+**45-90% of all continuations are unreachable on every affected deck.** Hinata enumerates up to
+962 continuations at one breakpoint and explores three of them. This is a far stronger case for
+the node than any quality delta: the node's contract is "No rank width, no waves -- completeness is
+the enumeration itself", i.e. it drives `unreachable` to ZERO by construction.
+
+### What a fix has to cover (greedysite:: WHY breakdown, same runs)
+
+| deck | site | masked | base | nested | overrun |
+|---|---|---|---|---|---|
+| hinata | s3 | **100%** | -- | -- | -- |
+| antilife | s3 | **100%** | -- | -- | -- |
+| creature_giving | s3 | **100%** | -- | -- | -- |
+| kitty | s6 | -- | 73.2% | -- | 26.8% |
+| auras | s4 | -- | 94.9% | -- | 5.1% |
+| dragonstorm | s2 | -- | 86.6% | 7.0% | 6.3% |
+| mirrorwing | s5 | -- | 52.4% | 8.7% | 38.9% |
+| burn | s0 | -- | 54.6% | 11.5% | 34.0% |
+| hinata | s0 | -- | 76.0% | 13.7% | 10.3% |
+| th | s1 | -- | 41.0% | 21.4% | 37.6% |
+| **mirrorwing** | **s0** | -- | 22.8% | **70.3%** | 6.9% |
+| hinata (s3 open) | s3 | -- | 83.1% | 9.9% | 7.0% |
+
+* **masked** -> open the mask. Site 3 is off by default (`BpSiteMask` 0x77 excludes 0x08), and on
+  antilife/creature_giving it is 100% of the fallback.
+* **base + overrun** -> the node fixes BOTH by construction (it hosts the base plan and enumerates
+  the full list). That is **78-100% of the fallback on every deck except mirrorwing s0**.
+* **nested** -> a variant sitting at a breakpoint it is not targeting; it must still reach its own
+  `bp_at`, so hosting does not help. Typically 7-21%. **mirrorwing s0 is the outlier at 70.3%** and
+  is the one place where zero in-tree greedy needs the harder nested-hosting work (the
+  L*W-not-W^L trade).
+
+### Acceptance test for the fix
+
+`unreachable -> 0` at hosted sites and `acted -> 0` at s0-s8, NOT a quality delta. This arc has
+twice mistaken a quality number for a correctness verdict; reachability is the property the USER
+asked for and it is directly measurable with the two probes above.

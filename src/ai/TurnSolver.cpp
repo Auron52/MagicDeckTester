@@ -1786,6 +1786,27 @@ inline std::atomic<unsigned long long> act[100] = {};
 // they need different fixes: the class is masked off (MTG_BP_SITES), or the enumeration returned an
 // EMPTY candidate list so there was nothing canonical to continue with.
 inline std::atomic<unsigned long long> why_class{0}, why_empty{0};
+// WHY bp_searched_plan returned false, per SITE -- the unconditional version of why_class/why_empty
+// above (those two only fire under MTG_BP_NO_GREEDY_CONT, so with the lever off they read 0 and say
+// nothing). Every in-tree greedy Solve in the engine sits behind `if (!bp_searched_plan(site, ...))`,
+// so this breakdown IS the inventory of what a fix would have to cover, and it sizes the ceiling of
+// "host the node here" BEFORE any of it is built:
+//   MASKED  the class is off in BpSiteMask -> open the mask (site 3 is off by default: 0x77)
+//   BASE    the plan carries no choice (bp_choice < 0) -- the BASE plan. THE NODE'S TARGET: hosting
+//           makes the base plan pend and enumerates the full continuation list plus the empty arm.
+//   NESTED  a variant sitting at a breakpoint it is not targeting (seen_before != bp_at). It must
+//           reach its OWN bp_at, so it cannot simply stop -- the deliberate L*W-not-W^L trade, and
+//           NOT fixed by hosting. This is the residue that decides whether "zero in-tree greedy" is
+//           reachable at all.
+//   OVERRUN bp_choice >= cands.size() -- more variants than continuations; the node's full
+//           enumeration removes it by construction.
+enum Why { kMasked = 0, kBase, kNested, kOverrun, kWhyCount };
+inline std::atomic<unsigned long long> why[100][kWhyCount] = {};
+inline const char* WhyName(int w)
+{ return w == kMasked ? "masked" : w == kBase ? "base" : w == kNested ? "nested" : "overrun"; }
+inline void RecordWhy(int site, int w)
+{ if (Enabled() && site >= 0 && site < 100 && w >= 0 && w < kWhyCount)
+  { why[site][w].fetch_add(1, std::memory_order_relaxed); } }
 inline void RecordOutcome(int site, bool acted)
 { if (Enabled() && acted && site >= 0 && site < 100) { act[site].fetch_add(1, std::memory_order_relaxed); } }
 struct Dumper
@@ -1800,6 +1821,23 @@ struct Dumper
         if (!any) { std::fprintf(stderr, "  NONE"); }
         std::fprintf(stderr, "  | fell-to-greedy: class-masked %llu, empty-cands %llu  ===\n",
                      why_class.load(), why_empty.load());
+        // Per-site WHY breakdown -- the inventory a fix has to cover. masked/base/overrun are all
+        // answerable by hosting the node (open the mask; the node's full enumeration plus the empty
+        // arm covers base and overrun). `nested` is NOT: that variant has to reach its own bp_at, so
+        // it is the residue that decides whether zero in-tree greedy is reachable at all.
+        for (int i = 0; i < 100; ++i)
+        {
+            unsigned long long tot = 0;
+            for (int w = 0; w < kWhyCount; ++w) { tot += why[i][w].load(); }
+            if (tot == 0) { continue; }
+            std::fprintf(stderr, "    s%d unresolved=%llu:", i, tot);
+            for (int w = 0; w < kWhyCount; ++w)
+            {
+                const unsigned long long v = why[i][w].load();
+                if (v) { std::fprintf(stderr, "  %s=%llu(%.1f%%)", WhyName(w), v, 100.0 * v / tot); }
+            }
+            std::fprintf(stderr, "\n");
+        }
     }
 };
 inline Dumper g_dumper;
@@ -16881,6 +16919,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                          "[bp-apply] turn=%d site=%d idx=%d bp_at=%d bp_choice=%d searched=%d%s\n",
                          state.turn_number, site, seen_before, plan.bp_at, plan.bp_choice,
                          resolved ? 1 : 0, class_on ? "" : " (class off)");
+        }
+        // Attribute an UNRESOLVED continuation to its reason (see greedysite::Why). Order matters:
+        // a masked class short-circuits before bp_choice is even consulted, and a base plan is not
+        // "nested" merely because it carries no choice.
+        if (!resolved && greedysite::Enabled())
+        {
+            const int why = !class_on              ? greedysite::kMasked
+                          : plan.bp_choice < 0     ? greedysite::kBase
+                          : seen_before != plan.bp_at ? greedysite::kNested
+                                                      : greedysite::kOverrun;
+            greedysite::RecordWhy(site, why);
         }
         BpHit(site, out_breakpoint != nullptr, resolved, nested_blocked, eligible);
         return resolved;
