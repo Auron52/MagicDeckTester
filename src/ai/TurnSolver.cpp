@@ -21299,14 +21299,32 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         {
             if (exec_feas >= 0) { return exec_feas == 1; }
             exec_feas = 0;
-            if (!ExecFeasEnabled()) { return false; }
-            bool interacts = any_hinata_credit;
+            // TWO INDEPENDENT ADMISSIONS to the same walk, because the general rescue is default
+            // OFF and the ETB-untap one is default ON. Keeping them separate is what stops the ETB
+            // clause from being dead code (as a sub-clause of MTG_EXEC_FEAS it never ran at ship
+            // settings) while still leaving every other deck byte-identical: with MTG_EXEC_FEAS off,
+            // the ONLY subsets that now reach the walk are those holding an etb_untap_lands cast,
+            // and no other deck in the repo has one.
+            const bool ef_on  = ExecFeasEnabled();
+            const bool seq_on_etb = SeqEtbUntapEnabled();
+            if (!ef_on && !seq_on_etb) { return false; }
+            bool interacts = ef_on && any_hinata_credit;
             for (int j : sel)
             {
                 if (interacts) { break; }
                 const Action& c = cands[j];
-                if (c.ritual_float > 0 || c.rock_mana.Total() > 0
-                    || (c.def && c.def->params.untap_x_mana_sources)) { interacts = true; }
+                if (ef_on && (c.ritual_float > 0 || c.rock_mana.Total() > 0
+                              || (c.def && c.def->params.untap_x_mana_sources))) { interacts = true; }
+                // "When this creature enters, untap up to N lands" is a same-turn mana interaction
+                // exactly like a ritual's float -- it just arrives AFTER its own cast resolves
+                // rather than before. That is why crediting it into the flat pool was unsound (the
+                // Stage 5d sweep: the refund paid for the creature itself), and it is why the
+                // SEQUENCED walk is the right home for it: SubsetPayableSequential pays each cast
+                // in CastOrderRank order against a real GameState, firing the untap between casts,
+                // so it answers "is this chain payable IN ORDER" instead of "is the total big
+                // enough". Conservative by construction -- it only ever RESCUES a subset the flat
+                // gate already rejected. See SeqEtbUntapEnabled() in EngineFlags.h.
+                if (seq_on_etb && c.def && c.def->params.etb_untap_lands > 0) { interacts = true; }
             }
             if (!interacts) { if (_ct.armed) { _ct.label = "ef-no-interact"; } return false; }
             // Sound scalar ceiling: sequencing realises colours/timing and LIVE discounts, never

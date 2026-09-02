@@ -123,6 +123,7 @@ enum Slot : int
     FILTER_FEED_STRICT,       // MTG_FILTER_FEED_STRICT    backtracker filter feed pays the real hybrid cost
     BP_PREFIX_PREPAY,         // MTG_BP_PREFIX_PREPAY      node-host prepay covers only the PRE-breakpoint casts
     FEED_FILTER_FIRST,        // MTG_FEED_FILTER_FIRST     route a filter's last feeder THROUGH the filter
+    EDF_SEQ_ETB,              // MTG_EDF_SEQ_ETB           an ETB-untap chain reaches the SEQUENCED payability walk
     COUNT
 };
 
@@ -223,6 +224,7 @@ inline const char* Name(int slot)
         "MTG_FILTER_FEED_STRICT",
         "MTG_BP_PREFIX_PREPAY",
         "MTG_FEED_FILTER_FIRST",
+        "MTG_EDF_SEQ_ETB",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

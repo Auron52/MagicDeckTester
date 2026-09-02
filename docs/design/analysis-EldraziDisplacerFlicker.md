@@ -243,13 +243,72 @@ is untouched (21 blink activations over 20 games, including `blink x25` / `x26` 
 just the autonomous one. `MTG_UNPRUNED` makes them completely different numbers, and only the
 autonomous one is covered by the regression suite.
 
+## Sequenced ETB rescue — MEASURED and ADOPTED (2026-09-02)
+
+**`MTG_EDF_SEQ_ETB`, default ON. −0.0338 avg win turns, paired t = −3.97 over 800 paired games,
+8/8 seeds better, and 6.3% CHEAPER.**
+
+Recommended-next-step #1, done the sound way. The version the Stage 5d sweep refuted credited the
+ETB refund into the flat subset pool, which let a Peregrine Drake pay for itself. This one leaves
+the flat gate honest and routes the chain to the **sequenced walk** that already existed:
+`EnumeratePlans`' `exec_feas_rescues()` runs `SubsetPayableSequential` when a mana gate is about to
+reject an "interacting" subset. That predicate knew about `ritual_float` / `rock_mana` /
+`untap_x_mana_sources` but **not** `etb_untap_lands`, so a Drake chain was rejected and dropped.
+
+`SubsetPayableSequential` is the right home because it pays each cast in `CastOrderRank` order
+against a real `GameState`, firing the untap between casts — it answers "is this chain payable IN
+ORDER" instead of "is the total big enough". It is **conservative by construction** (it only ever
+RESCUES a subset a gate already rejected, never rejects one a gate accepted), and
+`EldraziFlickerProvider::CastOrderRank` already ranks the payload (6) before the outlet (7), so the
+Drake is paid first and its untap funds what follows.
+
+### The finding that changed the design: it was DEAD CODE as first written
+
+The clause was originally a sub-clause of `MTG_EXEC_FEAS` — and **that flag is default OFF**, so at
+ship settings the rescue never ran and the clause could not have done anything. A 3-arm scout (25
+games, seed 4101) proved it and also priced the alternative:
+
+| arm | avg | digest | cost |
+|---|---|---|---|
+| baseline | 7.32 | `0bb2a78ada094405` | 282.9 s |
+| `MTG_EXEC_FEAS` alone | 7.32 | `0bb2a78ada094405` — **byte-identical** | 281.3 s |
+| `MTG_EXEC_FEAS` + the clause | 7.24 | `0a76a030c1e94d81` | 275.6 s |
+
+So turning the general rescue on buys this deck **exactly nothing** on its own; the whole effect is
+the ETB clause. The two admissions are therefore now **independent** in `exec_feas_rescues()`: with
+`MTG_EXEC_FEAS` off, the only subsets that reach the walk are ones holding an `etb_untap_lands`
+cast. No other deck in the repo has one, which is why this ships without moving any other deck.
+
+*(This is the "sweep levers in COMBINATION" lesson from the other direction — a lever whose entire
+effect is invisible unless you also measure the gate it hides behind.)*
+
+### The measurement
+
+One pooled 16-job batch (2 arms × 8 seeds × 100 games, `MTG_DUMP_WINS=1`), 23.9 of 24 cores start to
+finish. Paired on `(seed, gi)` — the arms share deck, profile and shuffle, so the same `gi` is
+literally the same library. Losses scored at `max_turns+1`.
+
+| | avg win turn |
+|---|---|
+| `off` | 7.2375 |
+| `on` | **7.2038** |
+| **delta** | **−0.0338** (se 0.0085, **t −3.97**) |
+
+- **8/8 seeds better**, seed-level t −8.04.
+- **26 games better : 4 worse : 770 identical** — it fires rarely, and when it fires it usually helps.
+- Cost 0.937× the baseline (7,890,693 vs 8,417,165 job-ms): a *widener* that is **cheaper**, because
+  the lines it unlocks end games sooner and a shorter game is less search.
+- The `off` arm reproduced the shipped **7.26** on the original four seeds, and every digest matched
+  across two independent runs — baseline and determinism both confirmed.
+
+**Correction to the earlier estimate.** The "~0.43 turns" recorded as this item's value came from
+the *refuted* flat-pool credit, and most of it was the unsound part — a Drake paying for its own
+cast is mana the deck does not have. The sound version is worth **−0.034**. Real, free, and small.
+
 ## Recommended next steps
 
-1. **Credit the ETB refund toward SUBSEQUENT casts only** — worth a MEASURED ~0.43 turns (above).
-   `SubsetPayableSequential` already models the ordering (it calls `EtbUntapTapAheadIntoFloat`
-   before paying), so the work is to let the flat subset gate be optimistic exactly where the
-   sequenced check then confirms it. Needs its own A/B; do NOT restore the version the sweep
-   refuted.
+1. ~~**Credit the ETB refund toward SUBSEQUENT casts only**~~ — **DONE 2026-09-02**, adopted at
+   −0.0338 turns; see the section above.
 2. **Value leaf** (`bash scripts/valueleaf.sh run decks/EldraziDisplacerFlicker`) — the deck is
    rollout-bound and its d0 policy is 1.4 turns worse than the search (8.52 vs 7.12), so the leaf is
    the highest-leverage lever available. This is also the gate that decides whether the deck can

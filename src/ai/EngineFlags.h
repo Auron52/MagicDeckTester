@@ -88,6 +88,31 @@ inline bool ExecFeasEnabled()
     return heurarm::Flag(heurarm::EXEC_FEAS, env_on);
 }
 
+// MTG_EDF_SEQ_ETB -- ADOPTED DEFAULT-ON 2026-09-02; `=0` restores the old behaviour (an ETB-untap
+// chain the flat pool rejects is dropped). Evidence, paired on (seed, gi) over 800 game-pairs at
+// play settings (d5/20ms), negative = better: -0.0338 avg win turns, se 0.0085, t -3.97, 8/8 seeds
+// better, 26 games faster : 4 slower : 770 identical -- and 0.937x the COST, because the lines it
+// unlocks end games sooner and a shorter game is less search. Suites: 0 configs changed.
+//
+// It admits "when this creature enters, untap up to N lands" chains to the rescue
+// walk above. It is an INDEPENDENT admission, not a sub-clause of MTG_EXEC_FEAS, and that is
+// deliberate: MTG_EXEC_FEAS is default OFF, so gating this on it made it dead code at ship settings
+// (measured -- a 3-arm scout put MTG_EXEC_FEAS alone at a byte-identical digest to baseline on the
+// only deck that has these cards). With MTG_EXEC_FEAS off, the only subsets that reach the walk are
+// ones holding an etb_untap_lands cast, so every other deck stays byte-identical.
+//
+// An ETB untap is a same-turn mana interaction exactly like a ritual's float -- it just arrives
+// AFTER its own cast resolves rather than before. That ordering is the whole point: crediting the
+// refund into the FLAT pool was unsound (the Stage 5d sweep caught a Peregrine Drake paying for
+// itself), whereas SubsetPayableSequential pays each cast in CastOrderRank order against a real
+// GameState and fires the untap between casts, so it answers "is this chain payable IN ORDER"
+// instead of "is the total big enough".
+inline bool SeqEtbUntapEnabled()
+{
+    static const bool env_on = EnvOn("MTG_EDF_SEQ_ETB", true);
+    return heurarm::Flag(heurarm::EDF_SEQ_ETB, env_on);
+}
+
 // MTG_IRENCRAG_WASTE -- ADOPTED DEFAULT-ON 2026-09-01 (USER: "let's adopt the Irencrag gate");
 // `=0` restores the old behaviour. Adoption evidence, paired 1200x2 at play settings (d5/20ms),
 // negative = better: SHIPPED engine hold -0.0167 (t -3.26, 20 better : 4 worse) / train -0.0117
