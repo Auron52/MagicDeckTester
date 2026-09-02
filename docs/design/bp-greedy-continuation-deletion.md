@@ -263,3 +263,17 @@ digest-only churn; th/mirrorwing +/-0.002-0.005 on 200-300-game cells (noise; th
 answered both as neutral). Net searched delta 20 faster / 16 slower. Healthy rebaseline profile --
 improvement concentrated where the gates measured it. OVERNIGHT preview launched. Adoption still
 awaits: quiet-box wall + USER sign-off.
+
+### Overnight-tier flag-on preview (2026-09-02 overnight, same new-HEAD binary)
+
+123 pass / 69 move (28m31s makespan, log `logs/ngc_sound/overnight_recipe_preview.log`). Of the 69:
+**47 digest-only** (play changed, aggregate identical -- burn/antilife/creature_giving/mirrorwing/
+kitty/fivecolour entirely in this class), **11 BETTER, 9 WORSE**. The improvement is exactly where
+the gates put it: **hinata owns 7 of the 11 BETTER cells and 7 of the 8 largest moves** (all 4 d3
+cells -0.0025..-0.0200 plus 3 of 4 d5 cells -0.0100..-0.0167; the 8th d5 cell digest-only) -- net
+-0.088 summed across its cells, no hinata cell worse. Dragonstorm nets BETTER (-0.013: 3 cells
+better, 1 worse +0.006). Every remaining WORSE cell is a +-0.0010 single-game move on a 1000-game
+cell (th x3, auras x5 -- auras nets +0.004, i.e. 4 games in 6000; its 5k gate cells were neutral).
+No new SLOW-GAME tail. Same healthy rebaseline profile as the regression tier: gains concentrated
+on hinata, jitter-level churn elsewhere. All three tiers now enumerated for the rebaseline;
+adoption still awaits the quiet-box wall number + USER sign-off.
