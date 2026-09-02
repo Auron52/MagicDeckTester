@@ -24,13 +24,30 @@ def _open(p):
 
 
 # ---------------------------------------------------------------- gen.log ----
+def _last_run(path):
+    """Only the MOST RECENT run's lines.
+
+    `mullgen.sh` APPENDS to gen.log, so a deck that has been generated more than once has every
+    run concatenated in one file. Reading the whole thing makes an earlier starved run condemn the
+    healthy one now in flight -- which is exactly what happened on the 2026-09-02 Dragons repair:
+    the fixed run had correctly resumed from the floor checkpoint and the detector still printed
+    STARVED, off August's monitor lines. Split on the settings banner and keep the last block.
+    """
+    lines = list(_open(path))
+    starts = [i for i, ln in enumerate(lines) if "MULLIGAN PROFILE GEN SETTINGS" in ln]
+    if len(starts) > 1:
+        print(f"  NOTE: {len(starts)} runs appended in this log -- reading only the last "
+              f"(from line {starts[-1] + 1})")
+    return lines[starts[-1]:] if starts else lines
+
+
 def check_genlog(path):
     """The monitor line is the primary signal: `sub=N/M` is sub-table batches DONE / TOTAL."""
     resumed_refine = False
     monitors = []          # (elapsed, phase, rollsub, sub_done, sub_total)
     floor_complete = False
     recommend_probe = False
-    for ln in _open(path):
+    for ln in _last_run(path):
         if "refs restored from journal -> resuming refine" in ln:
             resumed_refine = True
         if "floor complete, refs fixed" in ln:
