@@ -4,6 +4,15 @@
 lose at the shipped 20 ms budget — hold +0.0142 (t +1.21), train 0.0000, where every prior form
 lost. Default OFF; adoption is a USER decision.**
 
+**SUPERSEDED AGAIN 2026-09-02 -- READ "Why every greedy-deletion form has been lossy" (LAST SECTION)
+FIRST.** The 136k-game gate found the recipe's harm is `MTG_BP_NO_GREEDY_CONT` ALONE (th +0.0017,
+dragonstorm 11.8x WALL at identical answers and LOWER units), and root-caused the whole class:
+`BpSearchWidth()` is **2**, so the base plan's greedy Solve is an UNBOUNDED-WIDTH escape hatch and
+every deletion form is a REACHABILITY CUT. **Greedy deletion is NOT free and is NOT adopted.**
+Widen the continuation search first, delete second. The ROOTTURN section below is still correct
+about WHERE to host, but its "greedy deletion is effectively free" framing is wrong -- it priced
+the node while the harm was in the flag beside it.
+
 **SUPERSEDED 2026-09-01 -- READ "MTG_BP_NODE_ROOTTURN" BELOW FIRST. The class's cost was never the
 node; it was hosting the node on turns that are never played.** 99.4% of its children sit on
 lookahead turns (+1..+4) that get re-searched on arrival. Gating on the ROOT TURN gives
