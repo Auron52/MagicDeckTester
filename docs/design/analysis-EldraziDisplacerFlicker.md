@@ -309,10 +309,14 @@ cast is mana the deck does not have. The sound version is worth **−0.034**. Re
 
 1. ~~**Credit the ETB refund toward SUBSEQUENT casts only**~~ — **DONE 2026-09-02**, adopted at
    −0.0338 turns; see the section above.
-2. **Value leaf** (`bash scripts/valueleaf.sh run decks/EldraziDisplacerFlicker`) — the deck is
-   rollout-bound and its d0 policy is 1.4 turns worse than the search (8.52 vs 7.12), so the leaf is
-   the highest-leverage lever available. This is also the gate that decides whether the deck can
-   afford mulligan generation at all.
+2. **Value leaf** — **RUNNING since 2026-09-02 01:26**, frozen at `e5924a43` / src-tree
+   `1e7d7bebdd14`, play fingerprint `52b9ec620b92`. `bash scripts/valueleaf.sh status
+   decks/EldraziDisplacerFlicker` for progress; driver log `logs/edf/valueleaf_run.out`, queue
+   `logs/vlq_eldrazidisplacerflicker/`. The deck is rollout-bound and its d0 policy is 1.4 turns
+   worse than the search (8.52 vs 7.12), so the leaf is the highest-leverage lever available. This
+   is also the gate that decides whether the deck can afford mulligan generation at all.
+   **It owns the box** — nothing else may run alongside it (value-leaf skill / CLAUDE.md), which is
+   why items 3 and 6 below are queued behind it rather than run in parallel.
 3. **Decisive 5c2 run** at `--blocks 4`.
 4. **Do NOT add to the regression suite yet** — at ~20 s/game it would dominate the smoke budget.
    Revisit after the value leaf.
