@@ -1800,13 +1800,34 @@ inline std::atomic<unsigned long long> why_class{0}, why_empty{0};
 //           reachable at all.
 //   OVERRUN bp_choice >= cands.size() -- more variants than continuations; the node's full
 //           enumeration removes it by construction.
-enum Why { kMasked = 0, kBase, kNested, kOverrun, kWhyCount };
+//   NOHOST  a BASE plan in an apply NO CALLER IS HOSTING (bp_capture == nullptr) -- a rollout
+//           apply, an enumeration probe, or a depth/turn the node's own gates excluded. Split out
+//           of BASE because the two need OPPOSITE fixes and the undivided number hid that: BASE is
+//           "host this site", NOHOST is "host this CALLER", and only the second is left once the
+//           site set is widened. Measured rather than reasoned: with the node on and the site
+//           hosted, a base plan reaching the fallback PROVES no capture was offered, because the
+//           pend returns before it -- so if NOHOST ever read low while BASE read high, the code
+//           reading behind this whole stage would be wrong.
+enum Why { kMasked = 0, kBase, kNested, kOverrun, kNoHost, kWhyCount };
 inline std::atomic<unsigned long long> why[100][kWhyCount] = {};
 inline const char* WhyName(int w)
-{ return w == kMasked ? "masked" : w == kBase ? "base" : w == kNested ? "nested" : "overrun"; }
+{ return w == kMasked ? "masked" : w == kBase ? "base" : w == kNested ? "nested"
+       : w == kOverrun ? "overrun" : "nohost"; }
 inline void RecordWhy(int site, int w)
 { if (Enabled() && site >= 0 && site < 100 && w >= 0 && w < kWhyCount)
   { why[site][w].fetch_add(1, std::memory_order_relaxed); } }
+// WHICH KIND OF APPLY the NOHOST fallbacks happen in -- the sizing question for "grow the host
+// set", because only 2 of the engine's 42 ApplyPlanDirect call sites pass a capture at all. Three
+// bits off signals already in scope, so this costs no call-site edits and cannot drift:
+//   1 ROOT    g_bp_root_enum -- the committed decision's own enumeration, not a rollout
+//   2 REC     out_breakpoint != nullptr -- a RECORDED apply (committed line / wave entry)
+//   4 RESUME  bp_resume != nullptr -- already a node child being resumed
+// A fallback in a ROOT+REC apply is one the two host loops could plausibly be extended to cover;
+// one in a plain rollout apply (0) is the expensive half, since hosting there means a rollout
+// being able to pend and resume.
+inline std::atomic<unsigned long long> nohost_kind[8] = {};
+inline void RecordNoHost(int kind)
+{ if (Enabled() && kind >= 0 && kind < 8) { nohost_kind[kind].fetch_add(1, std::memory_order_relaxed); } }
 inline void RecordOutcome(int site, bool acted)
 { if (Enabled() && acted && site >= 0 && site < 100) { act[site].fetch_add(1, std::memory_order_relaxed); } }
 struct Dumper
@@ -1821,10 +1842,11 @@ struct Dumper
         if (!any) { std::fprintf(stderr, "  NONE"); }
         std::fprintf(stderr, "  | fell-to-greedy: class-masked %llu, empty-cands %llu  ===\n",
                      why_class.load(), why_empty.load());
-        // Per-site WHY breakdown -- the inventory a fix has to cover. masked/base/overrun are all
-        // answerable by hosting the node (open the mask; the node's full enumeration plus the empty
-        // arm covers base and overrun). `nested` is NOT: that variant has to reach its own bp_at, so
-        // it is the residue that decides whether zero in-tree greedy is reachable at all.
+        // Per-site WHY breakdown -- the inventory a fix has to cover. `masked` is answerable by
+        // opening the mask, and `base`/`overrun` by hosting the node at that site. `nested` is NOT
+        // (that variant has to reach its own bp_at), and neither is `nohost`, which is the apply
+        // having no host to pend into at all -- MEASURED 2026-09-02 as the large majority, and the
+        // reason widening the SITE set cannot reach zero in-tree greedy on its own.
         for (int i = 0; i < 100; ++i)
         {
             unsigned long long tot = 0;
@@ -1835,6 +1857,24 @@ struct Dumper
             {
                 const unsigned long long v = why[i][w].load();
                 if (v) { std::fprintf(stderr, "  %s=%llu(%.1f%%)", WhyName(w), v, 100.0 * v / tot); }
+            }
+            std::fprintf(stderr, "\n");
+        }
+        // WHERE the nohost fallbacks live -- see RecordNoHost. This sizes "grow the host set":
+        // the ROOT+REC bucket is what the two existing host loops could be extended to cover, the
+        // bare-rollout bucket is the expensive half.
+        unsigned long long nh_tot = 0;
+        for (int k = 0; k < 8; ++k) { nh_tot += nohost_kind[k].load(); }
+        if (nh_tot)
+        {
+            std::fprintf(stderr, "    nohost by apply kind (total %llu):", nh_tot);
+            for (int k = 0; k < 8; ++k)
+            {
+                const unsigned long long v = nohost_kind[k].load();
+                if (!v) { continue; }
+                std::fprintf(stderr, "  [%s%s%s]=%llu(%.1f%%)",
+                             (k & 1) ? "root" : "rollout", (k & 2) ? "+rec" : "",
+                             (k & 4) ? "+resume" : "", v, 100.0 * v / nh_tot);
             }
             std::fprintf(stderr, "\n");
         }
@@ -5937,6 +5977,65 @@ static bool BpNodeEnabled()
     return heurarm::Flag(heurarm::BP_NODE, on);
 }
 
+// WHICH breakpoint classes the node hosts (MTG_BP_NODE_D56, default OFF = site 3 alone).
+//
+// The reason this exists: `BpSearchWidth()` is 2, so a breakpoint offers the base plan plus
+// variants k=0..1 -- exactly THREE of n continuations are ever explored, and the deferred wave
+// phase only reaches the rest at a budget nobody runs. Measured over 120 games/deck at shipped
+// settings, 45-90% of all continuations are unreachable (dragonstorm 89.9%, hinata 68.4% with a
+// max list of 962). The node answers that WHERE IT HOSTS: it enumerates the FULL drawn-card-aware
+// list and resumes each entry as a real child, so there is no rank and no W.
+//
+// WHAT THIS FLAG DOES NOT DO, measured 2026-09-02: it does not get near zero in-tree greedy.
+// Widening the SITE set turns out to be the wrong axis -- see greedysite::kNoHost, which splits the
+// old `base` bucket and shows that 52-100% of the remaining fallback is an apply NO CALLER IS
+// HOSTING (a capture is passed at 2 of the engine's 42 ApplyPlanDirect sites). Measured effect on
+// `acted`: mirrorwing -10.8% / kitty +3.8% against the plain node, mirrorwing -0.8% / kitty -33%
+// against node+D0ONLY. Its real content is removing `overrun` where it hosts.
+//
+// Sites 5 (solo-target trick with a draw/Treasure payload) and 6 (equipment-ETB draw) are the
+// other two DEFERRED classes, and they share site 3's shape exactly: armed only at the main-plan
+// level (sink_stack empty), resolved once after every main cast, so their partition point is the
+// same post-cast/post-Karoo state the node already snapshots -- and BpPrefixSnap already carries
+// trick_armed/equip_armed, so a resume lands back on the right site with no new machinery. That
+// is why these two come first: the hosting exists, only the gate was narrow.
+//
+// The INLINE sites (0/1/2/4) are deliberately NOT here. Moving a resolve inline is itself a play
+// change before hosting is even considered -- measured on Hinata, 60 games: deferred 5.7000,
+// inline without truncation 6.0333, inline WITH truncation 7.0333 -- so they need their own
+// design, not this flag. Nested breakpoints (a variant at a breakpoint it is not targeting;
+// mirrorwing site 0 at 70.3% of its fallback) are a third, harder piece: hosting cannot help a
+// continuation that must still reach its own bp_at.
+static int BpNodeSites()
+{
+    static const bool d56 = EnvOn("MTG_BP_NODE_D56");
+    return heurarm::Flag(heurarm::BP_NODE_D56, d56) ? ((1 << 3) | (1 << 5) | (1 << 6))
+                                                    : (1 << 3);
+}
+
+// WHICH of the node's sites the RANK machinery (wave 0 + the deferred waves) stands down for.
+//
+// It is not automatically "all of them". The node only HOSTS where a caller offers a capture, and
+// `MTG_BP_NODE_D0ONLY` / `MTG_BP_NODE_ROOTTURN` narrow that to depth 0 / the root turn. So dropping
+// a site from the wave masks unconditionally leaves it with no variants, no waves AND no node at
+// every other depth -- purely greedy, which is a reachability LOSS bought for a node at one depth.
+// That is measurable: hinata's site-3 `nohost` share goes 53.5% -> 87.5% when D0ONLY is added.
+//
+// MTG_BP_NODE_KEEPWAVE keeps sites 5/6 in the wave masks so the node ADDS to their coverage rather
+// than replacing it. The cost is duplicate coverage at the hosted depth (waste, never a wrong
+// answer -- a variant that collapses onto a child is a wasted node, the same trade the overrun case
+// already makes). Site 3 is deliberately NOT included: it has stood down since the node was built,
+// and changing it would move `node0`, the standing adoption candidate, out from under every number
+// already recorded for it. This flag exists to ANSWER ONE QUESTION -- was D56's measured quality
+// loss the removed rank coverage, or the partition itself? -- and the two answers need different
+// follow-ups.
+static int BpNodeWaveDrop()
+{
+    static const bool kw = EnvOn("MTG_BP_NODE_KEEPWAVE");
+    return heurarm::Flag(heurarm::BP_NODE_KEEPWAVE, kw) ? (BpNodeSites() & (1 << 3))
+                                                        : BpNodeSites();
+}
+
 // The node's explicit EMPTY continuation: resume the prefix and cast nothing more (no drop, no
 // casts -- the trailing passes still run). bp_choice >= 0 keeps the bp_seen counting/eligibility
 // machinery identical to a ranked resume; bp_searched_plan special-cases the value BEFORE the
@@ -6359,17 +6458,19 @@ static int BpWave0SiteMask()
     // MTG_BP_NODE: the plain-cantrip continuation is a real search node, so the (base x k) wave-0
     // fan-out for site 3 would only duplicate the node's own children. Unlike the DEFER form this
     // is not a re-ordering -- the wave walker is excluded too (see BpWaveSiteMask).
-    if (BpNodeEnabled()) { out &= ~(1 << 3); }
+    // Under MTG_BP_NODE_D56 the same argument covers sites 5 and 6: whatever the node hosts, the
+    // rank machinery must stand down for, or the two cover the same continuations twice.
+    if (BpNodeEnabled()) { out &= ~BpNodeWaveDrop(); }
     return out;
 }
 
 // The site mask the DEFERRED WAVE machinery walks (BpWaveWalker slots + nested discovery). The
-// full BpSiteMask, minus site 3 when the node lever owns that class: a site-3 slot would start
-// the node-hosted plans at rank 0 and re-search continuations the node already searched in full.
+// full BpSiteMask, minus the sites the node lever owns: such a slot would start the node-hosted
+// plans at rank 0 and re-search continuations the node already searched in full.
 static int BpWaveSiteMask()
 {
     const int m = BpSiteMask();
-    return BpNodeEnabled() ? (m & ~(1 << 3)) : m;
+    return BpNodeEnabled() ? (m & ~BpNodeWaveDrop()) : m;
 }
 
 // Re-entrancy guard: the breakpoint's OWN enumeration must not emit further bp_choice variants.
@@ -7050,6 +7151,7 @@ bool TurnSolver::EquipmentDrawBreakpointEnabled()
 
 bool TurnSolver::PartitionCantrip() { return BpPartitionCantripEnabled(); }
 bool TurnSolver::BpNodeSearch()     { return BpNodeEnabled(); }
+int  TurnSolver::BpNodeHostedSites(){ return BpNodeSites(); }
 
 bool TurnSolver::EquipmentDrawBreakpointInline()
 {
@@ -16523,6 +16625,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     auto deferred_site_index = [&]() -> int
     { return deferred_trick_armed ? 5 : (deferred_equip_armed ? 6 : 3); };
 
+    // Does the NODE own the deferred class this apply armed (see BpNodeSites)? The node's contract
+    // is prefix + explicit continuation, and it has TWO halves that must agree: the base plan has
+    // to stop AT the partition point with its blind tail unapplied (bp_truncate), and a child
+    // carrying a bp_choice has to realise that SAME truncated prefix when it is re-applied without
+    // a resume (committed-line replay, rollout re-application). If they disagree the scored line
+    // and the played one diverge -- the fd-diverge class. Site 3 has always done this through
+    // `partition_here`; sites 5 and 6 arm the identical deferred shape but never truncated,
+    // because until now nothing hosted them. One predicate for both halves and all three sites, so
+    // they cannot drift apart -- the same reason deferred_site_index above is a single lambda.
+    auto node_owns_site = [&](int site) -> bool
+    {
+        return BpNodeEnabled() && ((BpNodeSites() >> site) & 1) != 0
+            && (bp_capture != nullptr || plan.bp_choice >= 0);
+    };
+
     // PARTITION TRUNCATION (MTG_EQUIP_DRAW_BP_INLINE). USER 2026-08-20/21: "we should only be
     // considering spells that have not been considered already at every point, making the
     // breakpoints fully distinct from each other" -- "the only way to do this is through a mix of
@@ -16833,8 +16950,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             // EMPTY pre-skip channel (PLAY logic under the node, unlike the stats block above):
             // report whether the list holds an apply-empty entry, so the host can skip its
-            // explicit EMPTY arm as a guaranteed post-apply dupe. Site 3 k=0 only.
-            if (BpNodeEnabled() && site == 3 && plan.bp_choice == 0)
+            // explicit EMPTY arm as a guaranteed post-apply dupe. Node-hosted sites, k=0 only.
+            if (BpNodeEnabled() && ((BpNodeSites() >> site) & 1) != 0 && plan.bp_choice == 0)
             {
                 g_bp_cands_has_empty = false;
                 for (const TurnSolver::Plan& cp : cands)
@@ -16927,11 +17044,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // "nested" merely because it carries no choice.
         if (!resolved && greedysite::Enabled())
         {
+            // BASE splits on whether a caller was HOSTING this apply at all: with no capture
+            // pointer there is nothing for a base plan to pend into, whatever the site set says.
             const int why = !class_on              ? greedysite::kMasked
-                          : plan.bp_choice < 0     ? greedysite::kBase
+                          : plan.bp_choice < 0     ? (bp_capture == nullptr ? greedysite::kNoHost
+                                                                            : greedysite::kBase)
                           : seen_before != plan.bp_at ? greedysite::kNested
                                                       : greedysite::kOverrun;
             greedysite::RecordWhy(site, why);
+            if (why == greedysite::kNoHost)
+            {
+                greedysite::RecordNoHost((g_bp_root_enum ? 1 : 0)
+                                       | (out_breakpoint != nullptr ? 2 : 0)
+                                       | (bp_resume != nullptr ? 4 : 0));
+            }
         }
         BpHit(site, out_breakpoint != nullptr, resolved, nested_blocked, eligible);
         return resolved;
@@ -17781,8 +17907,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // class). Every other apply -- greedy Solve, enumeration probes, rollout leaves --
             // keeps the full-tail greedy shape, exactly as before.
             const bool partition_here =
-                (BpPartitionCantripEnabled()
-                 || (BpNodeEnabled() && (bp_capture != nullptr || plan.bp_choice >= 0)))
+                (BpPartitionCantripEnabled() || node_owns_site(3))
                 && plain_cantrip && sink_stack.empty();
             if (s_human_play)
             {
@@ -18244,6 +18369,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     deferred_cantrip_site    = &def;
                     deferred_hand_before     = hand_at_cast;
                     deferred_trick_armed     = true;   // site 5, not the plain-cantrip site 3
+                    // The node hosts this class (MTG_BP_NODE_D56): partition HERE, exactly as the
+                    // plain-cantrip branch does. Everything still unapplied belongs to the
+                    // continuation's section -- and the continuation is what the node enumerates.
+                    if (node_owns_site(5)) { bp_truncate = true; }
                 }
                 else if (def.params.cast_draw > 0)
                 {
@@ -18455,6 +18584,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     deferred_cantrip_site    = &def;
                     deferred_hand_before     = hand_at_cast;
                     deferred_equip_armed     = true;   // site 6, not the plain-cantrip site 3
+                    // Node-hosted (MTG_BP_NODE_D56): partition here. Note the INLINE arm above
+                    // already truncates -- after its continuation's own apply -- so this is the
+                    // deferred twin of a shape site 6 has always had, not a new one.
+                    if (node_owns_site(6)) { bp_truncate = true; }
                 }
             }
             // Legend rule (CR 704.5j, a state-based action) for a legendary NON-creature permanent
@@ -19136,6 +19269,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     deferred_cantrip_site    = put_def;
                     deferred_hand_before     = hand_before_put;
                     deferred_equip_armed     = true;   // site 6, not the plain-cantrip site 3
+                    // NO node partition on the PUT arm, deliberately -- unlike the cast-side
+                    // site-6 arm above. The executor's PutFromHandAbility branch (AIEngine) does
+                    // not arm a deferred re-solve at all, so it has no equip_bp_truncates hook to
+                    // mirror a truncation with; truncating here would make the node's CHILD replay
+                    // (bp_choice >= 0) drop a tail the executor still casts -- the fd-diverge class
+                    // this whole partition exists to prevent. Not truncating is self-consistent:
+                    // the pend state simply includes the plan's tail, and child and executor agree.
+                    // Giving the put its own executor twin is a separate change with its own A/B.
                 }
             }
         }
@@ -19255,10 +19396,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // (partition_here) -- with the continuation UNRESOLVED. Snapshot everything the resume
         // needs (the same capture as above, plus `pending`) and hand control back: the plan loop
         // enumerates the continuations on snap.state and resumes each as its own search-node
-        // child (bp_choice = k / kBpEmptyChoice, bp_at = snap.bp_seen). Site 3 only -- the
-        // site-5/6 deferred re-solves keep their rank machinery untouched.
+        // child (bp_choice = k / kBpEmptyChoice, bp_at = snap.bp_seen). Which sites pend is
+        // BpNodeSites: site 3 always, plus the other two DEFERRED classes (5/6) under
+        // MTG_BP_NODE_D56 -- they reach this same point with the same snapshot, and the resume
+        // restores trick_armed/equip_armed so deferred_site_index lands back on the right one.
         if (BpNodeEnabled() && bp_capture != nullptr && plan.bp_choice < 0
-            && deferred_site_index() == 3)
+            && ((BpNodeSites() >> deferred_site_index()) & 1) != 0)
         {
             bp_capture->valid        = true;
             bp_capture->pending      = true;
@@ -26288,7 +26431,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                  && state.turn_number != g_condemn_root_turn))
         {
             for (const TurnSolver::Plan& q : post)
-            { if ((PlanOpensBreakpoint(state, q) & (1 << 3)) != 0) { node_host_here = true; break; } }
+            { if ((PlanOpensBreakpoint(state, q) & BpNodeSites()) != 0) { node_host_here = true; break; } }
         }
         // Node dedup, two levels. PREFIX: every base plan sharing one truncated prefix reaches the
         // same partition state, so only the first hosts a node (this is where the old apply-time
@@ -26932,7 +27075,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
              && state.turn_number != g_condemn_root_turn))
     {
         for (const TurnSolver::Plan& p : pre)
-        { if ((PlanOpensBreakpoint(state, p) & (1 << 3)) != 0) { node_host_here = true; break; } }
+        { if ((PlanOpensBreakpoint(state, p) & BpNodeSites()) != 0) { node_host_here = true; break; } }
     }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> node_prefix_seen;
 

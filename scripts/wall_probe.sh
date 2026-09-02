@@ -38,6 +38,14 @@ HIN=(decks/Hinata2/Hinata2.cod --profile decks/Hinata2/Hinata2.profile.json
      --games ${HGAMES:-200} --seed 6600001 --depth 5 --budget-ms 20 --ignore-play-profile --threads 1)
 DRG=(decks/Dragonstorm/Dragonstorm.cod --profile decks/Dragonstorm/Dragonstorm.profile.json
      --games ${DGAMES:-200} --seed 2002 --depth 5 --budget-ms 20 --ignore-play-profile --threads 1)
+# The two MTG_BP_NODE_D56 movers (site 5 / site 6). d5/20ms is not an imposed setting here: the
+# batch's own [play] lines report both decks resolving to exactly depth=5 budget=20ms source=default,
+# so --ignore-play-profile reproduces their shipped settings rather than overriding them.
+MIR=(decks/"Mirrorwing Dragon"/"Mirrorwing Dragon".cod
+     --profile decks/"Mirrorwing Dragon"/"Mirrorwing Dragon".profile.json
+     --games ${MGAMES:-200} --seed 6600001 --depth 5 --budget-ms 20 --ignore-play-profile --threads 1)
+KIT=(decks/KittyEquipment/KittyEquipment.cod --profile decks/KittyEquipment/KittyEquipment.profile.json
+     --games ${KGAMES:-200} --seed 6600001 --depth 5 --budget-ms 20 --ignore-play-profile --threads 1)
 
 # arm -> env assignments (empty = shipped defaults). "recipe" is the LOSSY greedy-free form
 # (EnumeratePlans drops the empty combination, so cands[0] can never be "cast nothing"); "node"
@@ -50,12 +58,19 @@ declare -A ARMENV=(
   [ef]="MTG_EXEC_FEAS=1"
   [credit]="MTG_HINATA_SUBSET_CREDIT=1"
   [creditef]="MTG_HINATA_SUBSET_CREDIT=1 MTG_EXEC_FEAS=1"
+  # MTG_BP_NODE_D56 (stage 1): the node hosting the other two DEFERRED breakpoint classes. Priced
+  # against BOTH the plain node and node+D0ONLY, since D0ONLY is the form it would ship with.
+  [nodeonly]="MTG_BP_NODE=1"
+  [d56]="MTG_BP_NODE=1 MTG_BP_NODE_D56=1"
+  [node0]="MTG_BP_NODE=1 MTG_BP_NODE_D0ONLY=1"
+  [d560]="MTG_BP_NODE=1 MTG_BP_NODE_D0ONLY=1 MTG_BP_NODE_D56=1"
 )
 
 run_one() {   # $1=rep $2=deck $3=arm $4=stats(0/1) [$5..=extra argv]
   local rep="$1" deck="$2" arm="$3" stats="$4"; shift 4
   local -a argv
-  case "$deck" in hinata) argv=("${HIN[@]}") ;; dragonstorm) argv=("${DRG[@]}") ;; esac
+  case "$deck" in hinata) argv=("${HIN[@]}") ;; dragonstorm) argv=("${DRG[@]}") ;;
+    mirrorwing) argv=("${MIR[@]}") ;; kitty) argv=("${KIT[@]}") ;; esac
   argv+=("$@")
   local envs="${ARMENV[$arm]}"
   [ "$stats" = 1 ] && envs="$envs MTG_ROLLOUT_STATS=1"
@@ -79,9 +94,11 @@ run_one() {   # $1=rep $2=deck $3=arm $4=stats(0/1) [$5..=extra argv]
 # Hinata), so subtracting it turns totals into honest per-game costs.
 for rep in c1 c2; do
   for deck in $DECKS; do
-    case "$deck" in hinata) HS=${HIN[4]}; HIN[4]=1 ;; dragonstorm) DS=${DRG[4]}; DRG[4]=1 ;; esac
+    case "$deck" in hinata) HS=${HIN[4]}; HIN[4]=1 ;; dragonstorm) DS=${DRG[4]}; DRG[4]=1 ;;
+      mirrorwing) MS=${MIR[4]}; MIR[4]=1 ;; kitty) KS=${KIT[4]}; KIT[4]=1 ;; esac
     run_one "cal-$rep" "$deck" base 0
-    case "$deck" in hinata) HIN[4]=$HS ;; dragonstorm) DRG[4]=$DS ;; esac
+    case "$deck" in hinata) HIN[4]=$HS ;; dragonstorm) DRG[4]=$DS ;;
+      mirrorwing) MIR[4]=$MS ;; kitty) KIT[4]=$KS ;; esac
   done
 done
 

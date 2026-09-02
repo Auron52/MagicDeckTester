@@ -3168,6 +3168,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             && d->tmpl == CardTemplate::DrawSpell
             && !d->params.expressive_iteration && !d->params.stages_cards)
         { return true; }
+        // MTG_BP_NODE_D56: the node hosts the other two DEFERRED classes too, and each one's
+        // partition needs its executor twin here for exactly the reason the cantrip clause above
+        // spells out -- a committed plan carrying a continuation choice was SCORED with its tail
+        // truncated at this cast, so executing that tail realises a turn the search never scored.
+        // Both clauses mirror ApplyPlanDirect's arming conditions cast-for-cast; the PUT-armed
+        // site-6 case is deliberately absent on BOTH sides (see the note at that arming point).
+        if (TurnSolver::BpNodeSearch() && plan.bp_choice >= 0)
+        {
+            const int hosted = TurnSolver::BpNodeHostedSites();
+            // Site 5 -- solo-target trick with a draw or Treasure payload (Gold Rush, Mirrorwing).
+            if ((hosted & (1 << 5)) != 0 && d->params.solo_target_trick
+                && (d->params.cast_draw > 0 || d->params.creates_treasures > 0))
+            { return true; }
+            // Site 6 -- an Equipment cast under a live ETB-draw watcher. Only the DEFERRED shape
+            // is new here; the inline one already truncates through the clause below.
+            if ((hosted & (1 << 6)) != 0 && !TurnSolver::EquipmentDrawBreakpointInline()
+                && TurnSolver::EquipmentDrawBreakpoint(state, *d))
+            { return true; }
+        }
         if (!TurnSolver::EquipmentDrawBreakpointInline()) { return false; }
         return TurnSolver::EquipmentDrawBreakpoint(state, *d);
     };

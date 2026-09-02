@@ -771,6 +771,11 @@ public:
     // plain cantrip were truncated by the search's partition, so the executor must drop them too
     // (the recorded continuation owns that section). Same one-reader rule as PartitionCantrip.
     static bool BpNodeSearch();
+    // WHICH breakpoint classes the node hosts, as a site bitmask (MTG_BP_NODE_D56; see
+    // BpNodeSites in the .cpp). Exposed for the same reason as BpNodeSearch: the executor's
+    // truncation twin has to ask about the SAME sites the search partitioned at, or a committed
+    // site-5/6 line executes a tail its scored continuation already owned.
+    static int BpNodeHostedSites();
     // The same question WITHOUT the lever: does resolving `def` draw off an equipment-ETB watcher?
     // The draw happens whether or not the search is allowed to plan around it, so anything
     // REPORTING the draw (the game log's draw reporter) must ask this one, not the gated one --

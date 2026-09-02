@@ -825,6 +825,13 @@ the enumeration itself", i.e. it drives `unreachable` to ZERO by construction.
   is the one place where zero in-tree greedy needs the harder nested-hosting work (the
   L*W-not-W^L trade).
 
+> **THE `base` ROW ABOVE IS WRONG, AND IT IS THE MOST CONSEQUENTIAL ERROR IN THIS DOCUMENT.**
+> `kBase` was one bucket for two different things: a base plan in an apply a caller WAS hosting
+> (which the node does fix) and a base plan in an apply **nobody was hosting** (which it cannot
+> touch). Splitting them -- `greedysite::kNoHost`, 2026-09-02 -- shows the fix-able half is
+> essentially **zero** and the whole of that 78-100% is the un-hostable half. See
+> "The real constraint is the HOST SET, not the SITE SET" below; read that table, not this one.
+
 ### Acceptance test for the fix -- THREE gates, all of which must pass
 
 USER 2026-09-02, correcting an earlier over-statement of this section: *"we do need to consider
@@ -886,3 +893,157 @@ The node is restricted to site 3 in **TWO** places, and both must move:
 
 Do stage 1 first and gate it on all three acceptance gates above. It is the only part where the
 machinery already exists and the measurement already says the shape is right.
+
+---
+
+## STAGE 1 BUILT AND MEASURED (2026-09-02): `MTG_BP_NODE_D56`
+
+Built exactly as scoped above: `BpNodeSites()` returns the site bitmask the node hosts (site 3
+always, plus 5 and 6 under the new default-OFF heurarm slot `BP_NODE_D56`), and every place that
+was pinned to `(1 << 3)` now reads it -- `BpWave0SiteMask`, `BpWaveSiteMask`, the two host gates,
+the pend gate, and the EMPTY pre-skip channel. One shared predicate `node_owns_site(site)` drives
+both halves of the partition contract (the base plan's `bp_truncate` and the child's replay), so
+they cannot drift. The executor got its twin clause in `equip_bp_truncates`, without which a
+committed site-5/6 line would execute a tail its scored continuation already owned.
+
+Two things came out of building it that the scoping note did not anticipate:
+
+* **The PUT-armed site-6 case is excluded, on both sides.** `AIEngine`'s `PutFromHandAbility`
+  branch does not arm a deferred re-solve at all, so there is no `equip_bp_truncates` hook to
+  mirror a truncation with. Truncating in the rollout alone would make the node's child replay drop
+  a tail the executor still casts -- the fd-diverge class this partition exists to prevent. Not
+  truncating is self-consistent (the pend state simply includes the tail, and child and executor
+  agree), so that is what it does. Giving the put an executor twin is its own change.
+* **Site 6's deferred arm never truncated.** The scoping note said "site 6 has its own arming that
+  already sets `bp_truncate`" -- that is the INLINE arm. The deferred one, which is the one the
+  node pends at, did not.
+
+### Flag-off inertness
+
+`test/regression.sh --smoke`: 48/48 byte-identical, 0 configs changed, on both the D56 build and
+the later `kNoHost` instrument build.
+
+### The real constraint is the HOST SET, not the SITE SET
+
+Reachability census, `scripts/stage1_census.sh` (60 games/cell, one process per cell, each deck at
+its own `value_play` settings), five arms: `base` (shipped), `node`, `d56`, `node0`
+(`+D0ONLY`, the standing adoption candidate), `d560`. `acted` = greedy `Solve` calls at in-tree
+sites 0-8 that DECIDED something; site 90 (the horizon leaf) is out of scope by USER direction.
+
+| deck | base | node | d56 | node0 | d560 |
+|---|---|---|---|---|---|
+| mirrorwing | 1,309,115 | 1,309,115 | 1,167,428 | 1,309,115 | 1,298,402 |
+| kitty | 65,575 | 65,575 | **68,066** | 65,575 | 43,807 |
+| hinata | 342,049 | 306,739 | 306,739 | 318,264 | 318,264 |
+| th / auras / burn / dragonstorm / antilife / creature_giving | *identical across all five arms* ||||||
+
+The lever is **correctly scoped**: only mirrorwing (site 5) and kitty (site 6) move, hinata's
+`d56` is byte-equal to `node` and `d560` to `node0`, and the other six decks are identical in every
+arm. It is also **not the fix**: mirrorwing -10.8% (d56 vs node) but only -0.8% (d560 vs node0),
+and kitty is **+3.8% WORSE** under d56, -33% under d560. Nothing approaches `unreachable -> 0`.
+
+**Why -- and this is the finding.** `kBase` was measuring two different things at once. Splitting
+it (`greedysite::kNoHost`: a base plan in an apply where `bp_capture == nullptr`, i.e. one no
+caller is hosting) re-reads the entire inventory:
+
+| deck | arm | site | nohost | nested | overrun | base (hosted) |
+|---|---|---|---|---|---|---|
+| mirrorwing | node | s5 | **52.3%** | 7.8% | 39.8% | 0% |
+| mirrorwing | d56 | s5 | **85.3%** | -- | 14.7% | 0% |
+| mirrorwing | d560 | s5 | **100.0%** | -- | -- | 0% |
+| mirrorwing | d560 | s0 | **100.0%** | -- | -- | 0% |
+| kitty | node | s6 | **79.7%** | -- | 20.3% | 0% |
+| kitty | d560 | s6 | **91.2%** | -- | 8.8% | 0% |
+| hinata | node | s3 | **53.5%** | 3.6% | 43.0% | 0% |
+| hinata | node0 | s3 | **87.5%** | 2.2% | 10.3% | 0% |
+| hinata | node | s0 | 9.5% | 81.4% | 5.4% | 3.7% |
+
+`base` -- a base plan the node could have pended but did not -- is **~0% everywhere**. That is not
+a surprise once stated: with the node on and the site hosted, the pend `return`s *before* the
+greedy fallback, so a base plan reaching the fallback proves no capture was offered. The
+instrument now measures that rather than leaving it to be inferred.
+
+So the 78-100% of the fallback this document credited to "base + overrun, which the node fixes by
+construction" is really **`nohost`, which the node cannot touch at any site set**. The node
+receives a `bp_capture` from exactly two callers -- `FSLineWin`'s `pre` loop and `FSLineTail`'s m2
+loop -- and `nullptr` from everything else: every rollout apply, every enumeration probe, and
+(under `D0ONLY` / `ROOTTURN`) every depth or turn those gates exclude. Note the direction of that
+last one: **the gates that made the node affordable are themselves a large part of what keeps
+greedy reachable**, which is why hinata's s3 `nohost` share RISES from 53.5% (node) to 87.5%
+(node0). Affordability and completeness are pulling against each other through the same knob.
+
+**Consequence for the plan.** Widening the site set was the wrong axis, and stages 2 and 3 as
+written are the wrong next steps too -- they also only add sites. `unreachable -> 0` needs the set
+of *callers that can host* to grow, which is a different and larger piece of work: it means a
+rollout apply (or an enumeration probe) being able to pend and resume, not just the two search
+plan loops. Whether that is even affordable is the open question, and it is the same 1-vs-2 tension
+already recorded above -- a complete search under a fixed budget can play worse, and the answer is
+a cheaper enumeration, never truncating the option set back.
+
+`MTG_BP_NODE_D56` itself stays default OFF pending its quality/cost numbers; it is a real but
+partial reduction (it removes `overrun` where it hosts: mirrorwing s5 39.8% -> 0, kitty s6
+20.3% -> 8.8%), not a fix.
+
+### An asymmetry Stage 1 inherits, and a lever it suggests
+
+`BpWave0SiteMask` / `BpWaveSiteMask` drop the node's sites unconditionally, but the node only
+*hosts* where `node_host_here` is true -- which under `MTG_BP_NODE_D0ONLY` is depth 0 only, and
+under `MTG_BP_NODE_ROOTTURN` the root turn only. So at every other depth a node site has **no
+wave-0 variants, no deferred waves, and no node**: it is purely greedy. That is a reachability
+*loss* at depth > 0 bought for a node at depth 0, and it is exactly why hinata's site-3 `nohost`
+share jumps 53.5% -> 87.5% when D0ONLY is added.
+
+Site 3 has had this shape since the node was built, so Stage 1 replicates it faithfully for sites
+5 and 6 rather than silently diverging -- but for 5/6 it is a *new* loss, because those classes did
+have wave-0 and wave coverage before. It is a plausible part of why `d560` moves mirrorwing's
+`acted` only -0.8% while `d56` (no depth gate) moves it -10.8%.
+
+**The lever this suggests, NOT yet built or measured:** have the wave masks stand down only for
+sites the node hosts *unconditionally* -- i.e. keep the rank machinery whenever D0ONLY/ROOTTURN is
+narrowing hosting. Cost is duplicate coverage at the hosted depth (waste, not error); benefit is
+that the un-hosted depths keep the reachability they have today. Note this would also change the
+**site-3** behaviour of `node0`, which is the standing adoption candidate, so it must be measured
+as its own arm against the previously recorded D0ONLY numbers rather than folded into Stage 1.
+
+### THE QUALITY GATE: STAGE 1 IS REJECTED (2026-09-02, 102,400 games)
+
+One pooled batch, four arms x two disjoint seed blocks (5500001 / 6600001, 1.1M apart) x 5,000
+games on each mover, at each deck's own resolved play settings (`[play]` reports both movers at
+depth=5 budget=20ms source=default). Paired per game via `MTG_DUMP_WINS` + `scripts/paired_wins.py`;
+the engine is deterministic, so an unchanged game contributes an exact zero rather than noise.
+
+| deck | arm | block | mean | d vs base | t | better | worse |
+|---|---|---|---|---|---|---|---|
+| mirrorwing | node0 | hold / train | 4.4096 / 4.4040 | **+0.0000 / +0.0000** | 0.00 | 0 | 0 |
+| mirrorwing | d56 | hold / train | 4.4744 / 4.4712 | **+0.0648 / +0.0672** | 12.47 / 13.16 | 91 / 96 | 418 / 437 |
+| mirrorwing | d560 | hold / train | 4.4642 / 4.4694 | **+0.0546 / +0.0654** | 10.86 / 13.72 | 68 / 59 | 328 / 362 |
+| kitty | node0 | hold / train | 4.3906 / 4.3408 | **+0.0000 / +0.0000** | 0.00 | 0 | 0 |
+| kitty | d56 | hold / train | 4.4152 / 4.3662 | **+0.0246 / +0.0254** | 10.87 / 10.74 | 3 / 8 | 125 / 135 |
+| kitty | d560 | hold / train | 4.3904 / 4.3414 | -0.0002 / +0.0006 | -0.33 / 1.13 | 5 / 2 | 4 / 5 |
+
+**Every arm that actually bites is worse, on both decks, on both blocks, at t 10.7-13.7.** The one
+arm that is not worse (kitty `d560`) is inert -- nine games changed out of 10,000. `MTG_BP_NODE_D56`
+does not clear gate 2 (quality) and is not adopted; it stays default OFF.
+
+Two facts worth carrying forward from the same run:
+
+* **`node0` is EXACTLY inert on both movers** -- zero games changed, both blocks. So the standing
+  D0ONLY adoption candidate's recorded benefit comes from elsewhere in the suite (hinata and
+  friends), and these two decks contribute nothing to it either way.
+* **All 14 non-mover decks are digest-identical** between `node0` and `d560` (800 games each). The
+  lever's scope is exactly what it claims, proven at the play level rather than by counters.
+
+### Was it the stand-down or the partition? (`MTG_BP_NODE_KEEPWAVE`)
+
+The rejection has two candidate causes and they need opposite follow-ups:
+
+1. **Lost rank coverage.** D56 drops sites 5/6 from wave 0 AND the deferred waves, while the node
+   hosts at only 2 of 42 apply sites (and, under D0ONLY, only at depth 0). Those sites may simply
+   have less coverage than before -- a reachability LOSS, which would also explain why the census
+   shows greedy RELOCATING (mirrorwing s0 787,537 -> 1,321,810 under d56) rather than disappearing.
+2. **The partition itself.** Truncating a base plan at a site-5/6 cast is a play change on its own,
+   exactly as the recorded inline measurement warns (deferred 5.7000 / inline+truncate 7.0333).
+
+`MTG_BP_NODE_KEEPWAVE` separates them: it keeps 5/6 in the wave masks so the node ADDS to their
+coverage instead of replacing it, leaving site 3 untouched so `node0`'s own recorded numbers still
+stand. If it recovers the loss, cause 1; if not, cause 2. Same 4-arm x 2-block x 5,000-game shape.
