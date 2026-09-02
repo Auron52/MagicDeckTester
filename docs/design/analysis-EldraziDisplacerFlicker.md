@@ -327,17 +327,42 @@ cast is mana the deck does not have. The sound version is worth **−0.034**. Re
 
 ## Open items / PROVISIONAL decisions (need user sign-off)
 
-1. **Mariposa Military Base's rad-counter mode is always DECLINED**, so `Player::rad_counters`
-   stays 0 and the rad mill is never reached (and so is not implemented). Reasoning in the card's
-   bracket note. This is a disclosed decision, not a dropped clause — but it is the one place the
-   implementation is conditional on a judgement call.
+1. ~~**Mariposa Military Base's rad-counter mode is always DECLINED**~~ — **USER RULED AGAINST,
+   2026-09-02**: *"We probably shouldn't always decline the rad counters, since it draws more
+   cheaply with them out."* Correct — a hardcoded always-decline is a greedy heuristic standing
+   where a searched decision belongs, and the repo's own rule is to purge those. **QUEUED behind the
+   value leaf** (nothing may run alongside a generation).
+
+   **The fix is NOT "always accept" — it is to model the whole card and let the search choose.**
+   Accepting the counters without the mill is a strictly-upside model, so the engine would take the
+   mode every time; that is the over-acceptance class that surfaces later as `[fd-diverge]`. So this
+   is a build, not a flag flip: `Player::rad_counters` already exists, and what is missing is the rad
+   rule itself — *at the beginning of the precombat main phase, mill that many; for each NONLAND
+   milled, lose 1 life and remove a rad counter*.
+
+   **The timing detail that makes the answer non-obvious, and which is why it has to be measured:**
+   the land enters tapped, so it cannot be tapped for the draw on the turn it arrives; the next
+   thing that happens is the rad trigger at the beginning of the following precombat main, which
+   fires **before** the main-phase window where the discounted `{5}` could be activated. So the
+   counters are exposed to the mill before the discount is ever usable, and each nonland milled
+   removes one. This deck is roughly 31 lands in ~85 cards (~36%), so P(a 2-card mill removes no
+   counter) ≈ 0.13 — most of the time the discount is gone before it can be spent. That is real
+   support for the old judgement, and it is exactly the kind of claim that should be settled by the
+   harness rather than by either of us reasoning about it. Once built, A/B the mode as a searched
+   choice against the current always-decline.
 2. **`etb_untap_lands` is a DISCLOSED VIEWER GAP.** "Untap up to N lands" is a real choice, is
    auto-resolved by yield order, and a human cannot override it. It demonstrably matters (see the
    bug above). Wiring it needs a NEW multi-pick decision type (the Dragonstorm `dragon` shape).
 3. **Trace of Abundance's shroud** is unmodelled: the passive opponent casts nothing and no card in
    this deck targets a land (Azorius Chancery's ETB return is not targeted).
-4. **Blink activation COUNT in human play** is offered as `{1,2,3, go-off}` rather than a full
-   ladder — a self-funding loop has no natural maximum, so "every legal count" is not well-defined.
+4. ~~**Blink activation COUNT in human play** is offered as `{1,2,3, go-off}`~~ — **STALE, and
+   already resolved by the OOM fix; nothing to sign off.** The count menu in human play was
+   collapsed to **1** (`TurnSolver.cpp`, fold (a)), because K is a *repetition* of a decision rather
+   than a separate one: the main phase re-prompts after each activation, so a human reaches "blink
+   three times" by choosing it three times — strictly more expressive than a fixed `{1,2,3}` menu.
+   The `{1,2,3, go-off}` ladder survives only in the **autonomous** search
+   (`EldraziFlickerProvider::BlinkActivationCounts`), which needs it because it commits a whole turn
+   at once. This entry was written before that fix and outlived it.
 5. **Emiel's optional `{G/W}`** is always paid when affordable (monotone vs a passive opponent).
 6. **Devoid, flying, and the `{C}`/`{G/W}` reminder texts** are inert — disclosed.
 
