@@ -3213,6 +3213,10 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
         order.push_back(j);
     }
     if (order.empty()) { return true; }
+    const bool _dbg = EnvOn("MTG_DBG_SEQ");
+    if (_dbg) { std::fprintf(stderr, "[dbgseq] enter n=%zu:", order.size());
+                for (int j : order) { std::fprintf(stderr, " %s", cands[j].card_name.str().c_str()); }
+                std::fprintf(stderr, "\n"); }
     const DecisionProvider& prov = ResolveProvider(state);
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return prov.CastOrderRank(state, *cands[x].def) < prov.CastOrderRank(state, *cands[y].def); });
@@ -3257,11 +3261,32 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
             if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(cp, a.chosen_x); }
             if (def.params.etb_untap_lands > 0)
             { EtbUntapTapAheadIntoFloat(cp, cp.active_player_index, def.params.etb_untap_lands); }
-            if (!TapForCostDirect(cp, ec, def.card.IsCreature())) { return false; }
+            if (_dbg) { ManaPool _ap = AvailableManaPool(cp);
+                        std::fprintf(stderr, "[dbgseq]   pay %s cost=%s float{w%d u%d b%d r%d g%d c%d *%d} avail{w%d u%d b%d r%d g%d c%d *%d}\n",
+                                     def.card.m_name.str().c_str(), ec.ToString().c_str(),
+                                     cp.floating_mana.white, cp.floating_mana.blue, cp.floating_mana.black,
+                                     cp.floating_mana.red, cp.floating_mana.green, cp.floating_mana.colorless, cp.floating_mana.wild,
+                                     _ap.white,_ap.blue,_ap.black,_ap.red,_ap.green,_ap.colorless,_ap.wild);
+                        for (const Permanent& _p : cp.battlefield)
+                        { if (_p.card.IsLand()) { std::fprintf(stderr, "[dbgseq]     land %s %s\n", _p.card.m_name.str().c_str(), _p.tapped?"TAPPED":"untapped"); } } }
+            if (!TapForCostDirect(cp, ec, def.card.IsCreature()))
+            { if (_dbg) { std::fprintf(stderr, "[dbgseq]   -> FAIL\n"); } return false; }
         }
         // Resolve the cast's mana-relevant effects so they fund the NEXT payment. Anything not
         // modelled here simply earns no credit (under-optimistic -> fewer rescues, never unsound).
         if (IsManaRitual(def)) { ApplyRitualFloat(cp, def, a.chosen_x, a.splice_count + 1); }
+        // "When this creature enters, untap up to N lands" -- the RESOLUTION half. Without it this
+        // walk performed the tap-ahead (which TAPS lands into float) and then never gave them back,
+        // so a Peregrine Drake left the scratch board strictly WORSE off than it found it and every
+        // cast ordered after it read as unpayable. That is the whole reason a chain like
+        // Drake -> Eldrazi Displacer was never offered even though CastOrderRank already puts the
+        // payload (6) ahead of the outlet (7): the walk had the order right and the board wrong.
+        // Firing it HERE, after this cast's own TapForCostDirect, is what keeps the credit sound --
+        // the refund can fund a LATER cast and can never pay for the creature itself, which is the
+        // exact unsoundness that removed the flat-pool credit (see the a.ritual_float note in
+        // EnumeratePlans and SeqEtbUntapEnabled in EngineFlags.h). Scratch state -> no viewer ledger.
+        if (def.params.etb_untap_lands > 0)
+        { EtbUntapLands(cp, cp.active_player_index, def.params.etb_untap_lands, /*log_ledger=*/false); }
         const bool joins_for_mana = (def.params.mana_rock && !def.card.IsCreature())
                                  || def.params.hinata_cost_reducer;
         if (joins_for_mana)
@@ -12949,12 +12974,45 @@ static void ProbeSeqReject(const GameState& state, const std::vector<Action>& ca
                  pool.colorless, pool.wild, simul_credit, seq_credit, names.c_str(), srcs.c_str());
 }
 
+// "When this creature enters, untap up to N lands" (Peregrine Drake 5 / Cloud of Faeries 2), for the
+// total-mana BOUND only. `etb_state` is null everywhere the credit must not apply, so a caller opts in.
+//
+// WHY THE BOUND NEEDS IT, and why this is a different question from the flat-pool credit that was
+// REMOVED. The bound is a necessary condition the odometer applies BEFORE a position is ever emitted:
+// `sum(cost) <= pool + gains`. It is documented as an UPPER bound that may only over-count. Without
+// this term it under-counts by the whole refund, so a chain like Peregrine Drake ({4}{U}) then
+// Eldrazi Displacer ({2}{W}) -- 8 mana off a 6-mana board that the Drake's ETB refunds 6 more of --
+// is pruned at the odometer and never reaches eval_and_push AT ALL. That is why the MTG_EDF_SEQ_ETB
+// rescue (SubsetPayableSequential, default ON) could not fire on the case it was written for: the
+// rescue can only rescue a subset the odometer emitted. Same shape as the SourceMaxNet land-Aura
+// blind spot found on this deck the same week -- a gate that "deliberately over-counts" quietly
+// under-counting, and pruning a payable cost.
+//
+// It is SOUND for the same reason the ritual/rock terms are: it only ever loosens. It is NOT the
+// unsound credit that was removed -- that one added the refund to the FLAT PAYMENT POOL, where it
+// let the Drake pay for ITSELF (Stage 5d: "Drake offered as castable with 2-4 mana available"). Here
+// the refund never touches a payment: the flat pool, the per-colour gates and the sequential walk
+// all still price the Drake's own cast against the pre-cast board, and the sequential walk fires the
+// untap only AFTER that payment. Optimism in the bound, exactness in the payment.
+static int EtbUntapBoundCredit(const GameState* etb_state, const Action& a)
+{
+    if (etb_state == nullptr || a.def == nullptr) { return 0; }
+    // Only an action that PUTS THE CARD ONTO THE BATTLEFIELD earns the refund. An ActivateBlink's
+    // `def` is the OUTLET (which has blink_cost, never etb_untap_lands), and a blinked payload's
+    // refund is the separate MTG_EDF_BLINK_CREDIT lever -- keeping this test explicit means a future
+    // action kind carrying a payload's def cannot silently start crediting a refund it never gets.
+    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { return 0; }
+    const int n = a.def->params.etb_untap_lands;
+    if (n <= 0) { return 0; }
+    return EtbUntapLandsCredit(*etb_state, n);
+}
+
 // `extra_credit` = same-turn mana the bound cannot derive from `cands` alone. Today that is only
 // EnumeratePlans' hasted-dork unlock (a dork cast this turn taps once this plan equips haste onto
 // it); Solve passes 0, so its bound is byte-identical. This is an UPPER bound on the turn's mana, so
 // adding to it can only LOOSEN the prune -- it can never drop a payable plan.
 static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands,
-                          int extra_credit = 0)
+                          int extra_credit = 0, const GameState* etb_state = nullptr)
 {
     static const bool on = EnvOn("MTG_MANA_PRUNE", true);   // DEFAULT ON; =0 disables
     if (!on) { return std::numeric_limits<int>::max(); }
@@ -12976,6 +13034,7 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     {
         b += a.ritual_float;
         b += a.rock_mana.Total();
+        b += EtbUntapBoundCredit(etb_state, a);   // ETB "untap up to N lands" -- see above
         if (a.def && a.def->params.ritual_float_gy_self_bonus) { ++gy; }
     }
     // SOUNDNESS FIX (2026-07-30): this bound credited every candidate's base ritual_float but NOT the
@@ -13081,22 +13140,24 @@ static bool SelectionExactManaGateEnabled() { return g_sel_mana_gate; }
 // ManaGateIndex allocation. Solve is the rollout leaf (once per node), so an unconditional
 // make_unique cost +0.3..0.65pp on the decks that never use the gate -- burn/treasure_hunt paid a
 // malloc+free per node for a gate that always declined (callgrind, 2026-07-29).
-static inline bool ManaGateWouldHelp(const std::vector<Action>& cands)
+static inline bool ManaGateWouldHelp(const std::vector<Action>& cands, const GameState* etb_state)
 {
     for (const Action& a : cands)
     {
         if (a.ritual_float > 0 || a.rock_mana.Total() > 0
             || (a.def && (a.def->params.affinity_for_subtype
-                          || !a.def->params.reduces_spell_color.empty())))
+                          || !a.def->params.reduces_spell_color.empty()))
+            || EtbUntapBoundCredit(etb_state, a) > 0)
         { return true; }
     }
     return false;
 }
 
 static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& cands,
-                               const std::vector<int>& independent, ManaGateIndex& out)
+                               const std::vector<int>& independent, ManaGateIndex& out,
+                               const GameState* etb_state = nullptr)
 {
-    if (!ManaGateWouldHelp(cands)) { return false; }
+    if (!ManaGateWouldHelp(cands, etb_state)) { return false; }
 
     const int m = static_cast<int>(cands.size());
     out.term.assign(m, ManaGateTerm{});
@@ -13105,7 +13166,7 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         const Action& a = cands[j];
         ManaGateTerm& t = out.term[j];
         t.cost = a.cost.ManaValue();
-        t.gain = a.ritual_float + a.rock_mana.Total();
+        t.gain = a.ritual_float + a.rock_mana.Total() + EtbUntapBoundCredit(etb_state, a);
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
         t.block = ((a.def && (a.def->params.affinity_for_subtype
                               || !a.def->params.reduces_spell_color.empty()))
@@ -21698,7 +21759,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (!gate_relevant
             && (cands[j].ritual_float > 0 || cands[j].rock_mana.Total() > 0
                 || (cands[j].def && (cands[j].def->params.affinity_for_subtype
-                                     || !cands[j].def->params.reduces_spell_color.empty()))))
+                                     || !cands[j].def->params.reduces_spell_color.empty()))
+                // ... and an ETB "untap up to N lands" cast, whose refund THIS enumerator's bound
+                // now credits (EtbUntapBoundCredit). Must match ManaGateWouldHelp's condition or the
+                // per-selection gate is never built on the one hand shape that needs it. Solve's
+                // twin above deliberately does NOT carry this clause -- the rollout leaf passes no
+                // etb_state, so its bound and its gate stay byte-identical.
+                || EtbUntapBoundCredit(&state, cands[j]) > 0))
         { gate_relevant = true; }
         // The group key: hand slot / free-cast bank slot / mutually-exclusive activation or
         // multi-variant-sac family (PlanGroupKey), else -> independent bit.
@@ -22371,6 +22438,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // gate already rejected. See SeqEtbUntapEnabled() in EngineFlags.h.
                 if (seq_on_etb && c.def && c.def->params.etb_untap_lands > 0) { interacts = true; }
             }
+            if (EnvOn("MTG_DBG_SEQ")) { std::fprintf(stderr, "[dbgseq] gate interacts=%d\n", (int)interacts); }
             if (!interacts) { if (_ct.armed) { _ct.label = "ef-no-interact"; } return false; }
             // Sound scalar ceiling: sequencing realises colours/timing and LIVE discounts, never
             // new total mana -- but a live discount can forgive up to the whole GENERIC part
@@ -22379,7 +22447,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // measured too tight (the gi=22 no-draw chain: eff 21 vs combined 22, while the walk's
             // live discounts realise it at 16).
             if ((credited ? eff : pool).Total() < combined.ManaValue() - combined.generic)
-            { if (_ct.armed) { _ct.label = "ef-scalar"; } return false; }
+            { if (EnvOn("MTG_DBG_SEQ")) { std::fprintf(stderr, "[dbgseq] scalar reject\n"); }
+              if (_ct.armed) { _ct.label = "ef-scalar"; } return false; }
             if (SubsetPayableSequential(state, cands, sel)) { exec_feas = 1; }
             else if (_ct.armed) { _ct.label = "ef-walk-fail"; }
             return exec_feas == 1;
@@ -22819,7 +22888,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     const int mana_bound = any_hinata_credit
         ? std::numeric_limits<int>::max()
         : ManaPruneBound(pool, cands,
-                         haste_unlock_bound + metalcraft_bound + growth_bound);
+                         haste_unlock_bound + metalcraft_bound + growth_bound,
+                         // ETB-untap refund, ENUMERATOR ONLY -- the same asymmetry the extra_credit
+                         // terms above already have (Solve passes none). Its consumer is the
+                         // MTG_EDF_SEQ_ETB rescue in eval_and_push, which Solve::consider
+                         // deliberately does not have; loosening the rollout leaf's bound would buy
+                         // it nothing but positions its own flat gate then rejects.
+                         &state);
     if (SeqChainTraceLevel() >= 2)
     {
         std::fprintf(stderr, "[chain-bound] t%d any_hinata_credit=%d mana_bound=%d\n",
@@ -22847,7 +22922,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         && !any_hinata_credit)
     {
         auto idx = std::make_unique<ManaGateIndex>();
-        if (BuildManaGateIndex(pool, cands, independent, *idx)) { gate_owned = std::move(idx); }
+        // `&state`: the ETB-untap refund, per SELECTION (tighter than the scalar bound's whole-list
+        // sum, and the reason this gate is worth building on a Drake hand at all).
+        if (BuildManaGateIndex(pool, cands, independent, *idx, &state)) { gate_owned = std::move(idx); }
     }
     const ManaGateIndex* gate    = gate_owned.get();      // null -> legacy scalar path
     const bool           gate_on = (gate != nullptr);

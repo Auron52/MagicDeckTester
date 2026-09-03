@@ -799,7 +799,7 @@ inline void FireOwnEtbTriggers(GameState&, int controller, int entered_index,
 constexpr int kEtbKxHeuristic = -2;
 extern thread_local int g_scripted_tutor_choice;   // defined below (ScriptedTutor)
 inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefinition&);   // defined below
-inline void EtbUntapLands(GameState&, int controller, int count);                            // defined below
+inline void EtbUntapLands(GameState&, int controller, int count, bool log_ledger = true);    // defined below
 inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count);                // defined below
 inline int  EtbUntapLandsCredit(const GameState&, int count);                                // defined below
 inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost);                      // defined below
@@ -9016,7 +9016,12 @@ inline ManaCost EffectiveActivationCost(const GameState& state, int controller,
 // "Up to" N is always taken in full: an untapped land is never worse than a tapped one for a
 // goldfish (no opponent to bluff, nothing punishes an open board), so the choice collapses -- the
 // only real decision is WHICH lands, which the yield order settles. Disclosed in Stage 6a.
-inline void EtbUntapLands(GameState& state, int controller, int count)
+// `log_ledger` = false for SCRATCH-STATE callers (the enumerator's sequential payability walk and
+// the viewer's line classifier), which run this on a throwaway GameState copy purely to price a
+// chain: the untap itself must be identical -- same yield order, same set -- but it is not a real
+// game event, so it must not push a viewer untap ledger entry. Every real-resolution caller keeps
+// the default.
+inline void EtbUntapLands(GameState& state, int controller, int count, bool log_ledger)
 {
     if (count <= 0) { return; }
     std::vector<std::pair<int, int>> tapped;   // (sort key, battlefield index)
@@ -9041,7 +9046,7 @@ inline void EtbUntapLands(GameState& state, int controller, int count)
     for (int i = 0; i < n; ++i) { state.battlefield[tapped[i].second].tapped = false; }
     // Real-game untap ledger for the viewer (see RitualUntapSources' identical block): g_reveal_logger
     // is nulled by RevealLogPause for every search/rollout scope, so only the executor logs.
-    if (n > 0 && g_reveal_logger != nullptr)
+    if (log_ledger && n > 0 && g_reveal_logger != nullptr)
     {
         std::vector<int> nums; std::vector<std::string> names;
         nums.reserve(n); names.reserve(n);
