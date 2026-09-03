@@ -1442,3 +1442,57 @@ construction, not by luck.
 touches `SubsetPayableSequential` / `ManaPruneBound`, which `EnumeratePlans` uses for EVERY deck, so
 this was a real check rather than a formality — no suite deck casts an ETB-untap permanent ahead of
 another cast in the same plan, so none of them can reach the changed branch.
+
+## The T3 line: `legal_not_enumerated` (2026-09-03) — VERIFIED, NOT FIXED
+
+The user hand-played seed 1 and spelled out a T3 win the engine takes until T5 to find. Chasing
+their step (a) produced a precise, reproducible finding, and a correction to an earlier claim of
+mine that was wrong three ways.
+
+**The finding.** At seed 1 / gi 0 / T3 (reproduce with
+`--claude-play --seed 1 --game-index 0 --choices "1,0,0"`), the engine's own line validator says:
+
+```
+land=Mariposa Military Base;cast=Trace of Abundance;cast=Living Wish
+  verdict = legal_not_enumerated
+  reason  = rules-legal in your cast order (a same-turn cost reducer makes it payable),
+            but the search never enumerated this line
+```
+
+At that decision the enumerator produces **40 plans and not one of them casts two spells.**
+
+**Why it is payable and the enumerator cannot see it.** Sources are Conservatory (1), Aether Hub
+(1 -- its only energy was spent on T1), the Wild Growth on the Hub (1 G) and Mariposa (1): 4 mana.
+Trace of Abundance `{R/W}{G}` consumes the W and the ONLY green, so Living Wish's `{G}` looks
+unpayable. It is payable because Trace lands ON Aether Hub and grants it +1 of any colour, which
+restores the green. That is a same-turn mana interaction of exactly the ETB-untap's shape -- it
+arrives AFTER its own cast resolves -- and the flat gate prices the pool as it stood before the
+Aura existed.
+
+**An admission clause is NOT the fix -- measured, and reverted.** The obvious repair is to admit
+mana-adding land Auras to the sequenced rescue walk beside `SeqEtbUntapEnabled`'s ETB admission.
+Built it; the line stayed `legal_not_enumerated` and the plan count stayed 40/0-multi-cast. So did
+turning on the GENERAL rescue (`MTG_EXEC_FEAS=1`), which admits the subset unconditionally. **The
+blocker is therefore upstream of the admission gate**: either the two-cast subset is never generated
+at all, or `SubsetPayableSequential` itself does not model the Aura's grant when re-pricing. Reverted
+rather than left in as an unproven widening of the walk. Whoever picks this up should start by
+instrumenting whether the subset `{Trace of Abundance, Living Wish}` is ever constructed.
+
+**Corrections to the record.** An earlier note in this session claimed the user's step (a) was
+"correctly rejected". That was wrong on every count and is withdrawn:
+* the saved artifact `logs/play/rejections/..._s1_gi0_t2.json` is turn **2** and its line is
+  `cast=Wild Growth`, not Trace of Abundance -- a different card on a different turn;
+* that line is **legal** on the current binary AND on one built before any of this session's work,
+  so the recorded `illegal` verdict does not reproduce anywhere;
+* the user was right that it was a valid line: Aether Hub plus the Wild Growth already attached to
+  it taps for `{C}{G}`, so green WAS available.
+
+**Tooling gap this exposed.** A rejection artifact records `version: null` and no engine
+fingerprint, so a saved verdict cannot be tied to the binary that produced it -- attribution here
+degenerated into an inconclusive bisect across binaries. The build already computes
+`MTG_ENGINE_FP`; stamping it and the `HEAD` sha into `/api/reject-artifact` would make this a
+two-second question. Worth doing before the next viewer session.
+
+**Viewer nit, separately:** the decision dump renders Trace of Abundance's cost as `{R}{G}`, losing
+the hybrid. The engine pays it correctly (its refusal message says "red or white"), but a human
+reading the dump is told the card needs red.
