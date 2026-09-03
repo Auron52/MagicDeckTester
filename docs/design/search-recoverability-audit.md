@@ -317,8 +317,9 @@ the rest are fan-out code-reading claims with cites.
 
 ### 4e. Second main, attack projections, node scope
 
-* **`DeckUsesSecondMain` whitelist — DROP-hard but DATA-recoverable, and the whitelist is
-  incomplete.** Dragons/Dragonstorm (Utvara Hellkite) and Knights (Adeline) read
+* **`DeckUsesSecondMain` whitelist — CLOSED 2026-09-03, the incompleteness was REAL and is
+  fixed (§6.7: the Utvara+ping pairwise rule; dragons net −50/1000 games).** Original entry:
+  Dragons/Dragonstorm (Utvara Hellkite) and Knights (Adeline) read
   `uses_second_main=false`, skipping the entire post-combat main at any budget. Whether that
   costs real value is deck-specific (attack-created tokens are summoning-sick) — NEEDS-JUDGMENT,
   fix is per-param. The in-code activating comment names untap-on-attack (Bear Umbra) as a case;
@@ -377,8 +378,10 @@ both arms — the definitive per-game proof, affordable because it runs only on 
 rollout-internal heuristic residue does not contaminate the proof.) Any game the lever-off arm
 wins earlier at d8 b0 — after a clairvoyance check — is a lossy element cutting a genuinely
 better line. `g_fs_trunc_events == 0` in the unlimited arms is
-the precondition — **which today cannot hold meaningfully on AL/5C** (condemnation drops are
-invisible to it; see the trunc-demotion gap). Arm-3 construction notes:
+the precondition — **meaningful on AL/5C since the 2026-09-03 trunc-demotion wiring (§6.1;
+before it, condemnation drops were invisible to the counter). The same session opened the
+escalation's K to the whole pool at unlimited budget (§6.6), so an unlimited arm's escalation
+converges too.** Arm-3 construction notes:
 * Flags an unlimited arm must set to open the searched structure fully:
   `MTG_BP_NODE_ROOTTURN=0 MTG_BP_NODE_KEEPWAVE3=1 MTG_BP_CANON_REC=1 MTG_SEARCH_SECOND_MAIN=1
   MTG_M2_D0_SEARCHED=1 MTG_IRENCRAG_WASTE=0 MTG_SV_HOLD=0 MTG_NO_RITUAL_PAYOFF_GUARD=1
@@ -414,21 +417,67 @@ space, so this is outcome-identical by construction. **MEASURED (2026-09-03, th 
 (contended) hinata −19% / th −33% / mirrorwing −46%.** Unwon-game digests move (a followed line
 differs in actions), so adoption = default flip + suite + GT rebaseline + quiet-box wall probe.
 
-## 6. Proposed fixes surfaced by this audit (NOT made — each is GT-affecting or user-owned)
+## 6. Proposed fixes surfaced by this audit — BUILT 2026-09-03 (second session; measurement chain
+below). Hatches: `MTG_TRUNC_COMPLETE=0` (counting), `MTG_GW_PARITY=0` (tranche parity),
+`MTG_ENUM_MEMO_HOSTTAG=0` (memo identity), `MTG_KAROO_BP_LOCKSTEP=0` — each default ON, each =0
+arm verified byte-identical at smoke scale (48/48, 0 configs changed).
 
-1. Wire `CondemnFilterArmed` → `g_fs_trunc_events` (or gate the no-win stores on it): one-line
-   class, restores the anytime contract on AL/5C.
-2. Count the four group-wave holes (§1) or give `FSLineTail` a wave phase.
-3. Add the 17 missing land params to BOTH land signatures; re-run the collision audit as a
-   required step when any land param is added (it had not been re-run; 2 new collisions since).
-4. Namespace-tag the enum memo's two hosts (0x5E2C precedent).
-5. Extend `solvememo::SamePlan` to compare the axis pins, so the VERIFY harnesses verify what
-   they claim.
-6. `MTG_CONDEMN_ESC_K` → budget-scaled (or `|pool|` when unlimited).
-7. Second-main whitelist: decide the Utvara/Adeline/untap-on-attack params (needs judgment on
-   whether the skipped m2 ever has value for those decks).
-8. The executor/rollout Karoo reserved-drop divergence (AIEngine.cpp:2974) — a plain lockstep
-   bug, needs its own fix + measurement, filed separately from this audit.
+1. **DONE — trunc-demotion wiring.** SEARCHED-space condemnation drops (both the m2 filter and
+   the breakpoint twin) now bump `g_fs_trunc_events`; rollout/executor drops exempt per the
+   scope ruling. THE MEMO SUBTLETY THE PROPOSAL MISSED: a memo hit replays neither the drop nor
+   the bump, silently re-opening the gap — so `enummemo::Entry` and the searched-m2
+   `solvememo::Entry` now record their body's (condemn_drops, trunc_delta) and REPLAY both on
+   every hit (exact parity with unmemoized counting; also fixes the escalation detector's
+   blindness to memoized filter-touched subtrees).
+2. **DONE — the four group-wave holes.** (a) `FSLineTail`'s m2 enumeration counts its group-cap
+   drop as a truncation (no wave phase re-opens it there); (d) the beam's wave-phase skip at
+   `FSLineWin` counts; (b) FIXED not counted — `FSLineWin`'s tranche re-enumeration now opens
+   the fresh-spend axis like its wave 0 (scorer mirrors the win-realization admissibility
+   check); (c) FIXED not counted — the lookahead enforcing-root's tranches now run under the
+   same `CondemnSuppressGuard` as its wave 0. Interior condemn-filtered tranche plans are
+   covered by fix 1's counting.
+3. DONE previously (land-sig adoption, see 4d).
+4. **DONE — memo identity, three instances.** The m2-plain host folds `0x371D`; PLUS two
+   instances the audit had not named: `g_fresh_axis_enum` folded by the m1 host (FSLineWin's
+   fresh-emitting enumeration must not share entries with lookahead hosts — a cross-host hit
+   either starved FSLineWin of fresh variants or leaked unvalidatable ones into a rollout), and
+   `g_condemn_suppress` folded by both m2-side caches (the escalation's honest re-run guards its
+   TT with `esc_tt` but hit these two thread_local caches' FILTERED entries — the honest re-run
+   was cache-contaminated on AL/5C).
+5. **DONE — `SamePlan` compares all plan-level axis pins** (scry/rad/etbdig/tutor/sac_pins/
+   tapmode/freshmode/lackey/ponder/discard/vial/dig/bp_choice/bp_at/bp_wave0/atk_dork_release).
+   Verify-only callers; prior clean records remain statements about cast content.
+6. **DONE — escalation K opens to the whole pool at unlimited budget** (budgeted play keeps
+   K=3, byte-identical at ship settings; the d8b0 instrument now converges).
+7. **DONE — the whitelist WAS costing real wins; per-param rule shipped.** The
+   `MTG_FORCE_USES_M2=1` probe (1000 games/arm at value-play): **dragons 51 faster / 1 slower
+   (net −50 turns, avg 5.635 → 5.585), dragonstorm 14 / 4 (net −10), knights 2 movers net 0.**
+   Mechanism: Utvara Hellkite's attack-created Dragon tokens raise the Dragon count that
+   Scourge of Valkas / Dragon Tempest `dragon_ping_on_enter` ETB damage scales on, so a
+   post-combat dragon cast pings strictly harder — a combat-generated resource (2c-bis) the
+   whitelist read as absent, and a skipped phase is not budget-recoverable at ANY setting (the
+   whitelist's confirmed violation of the invariant). Shipped: pairwise rule
+   `attack_per_matching_creates_tokens > 0` AND any `dragon_ping_on_enter` card
+   (Skyhunter/Puresteel form; leaves Adeline-only knights correctly off — measured net 0).
+   Rule-arm reproduces the probe arm BYTE-FOR-BYTE on dragons+dragonstorm; knights identical to
+   default. **All 5 rule-ON ship-settings regressions (ds gi157/306/384/749, dragons gi47)
+   CONVERGE at d8 b0 — identical win turn both arms — so each is budget churn, not a cut.**
+   Hatch: `MTG_NO_UTVARA_M2=1` restores the pre-rule whitelist. Cost: m2 search now runs on two
+   more decks (wall indicative-only, box contended; dragons pooled job ms roughly +77%).
+8. **DONE — Karoo lockstep fix.** The executor's searched-continuation land play now honours
+   `karoo_deferred` exactly as the rollout's `bp_play_searched_land` does
+   (`MTG_KAROO_BP_LOCKSTEP=0` restores).
+
+Also closed: the `MTG_FORCED_EARLY_LAND` doc/code mismatch (4d residue) — the hook is
+WITHDRAWN per its provider header (disjoint-seed re-measure was +1.87% rollout calls, worse);
+default OFF is deliberate, the stale TurnSolver "(default on)" comment is fixed.
+
+**MEASUREMENT (2026-09-03, all contention-proof — the USER flagged the box as contended, so no
+wall verdicts):** 16 decks × 1000 games/arm at value-play on the pre-fold binary: **ZERO
+outcome movers in 16,000 games; exactly 2 play-digest movers, both FiveColour, both UNWON
+games** (gi630/gi636 — the demotion changing search inside doomed games only). Final-binary
+re-run of both arms + the force-m2 probe: in flight at write time. Smoke: flag-off arm AND
+defaults both 48/48 byte-identical (the counting fixes change no smoke-scale committed play).
 
 ## Context
 

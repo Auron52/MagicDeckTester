@@ -52,6 +52,13 @@
 //     and those decks stay byte-identical (verified: burn/slivers unchanged).
 bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
 {
+    // MTG_FORCE_USES_M2=1 -- MEASUREMENT LEVER (default off, recoverability audit §6.7): force the
+    // searched second main ON regardless of the whitelist, to A/B whether a non-whitelisted deck's
+    // skipped m2 ever has value (the Utvara/Adeline attack-created-token question: the whitelist's
+    // in-code comment names untap-on-attack as a trigger, but no such param is in this predicate).
+    // Byte-identical when the arm measures no better: the whitelist is then confirmed per-deck.
+    static const bool s_force_m2 = EnvOn("MTG_FORCE_USES_M2");
+    if (s_force_m2) { return true; }
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -108,6 +115,31 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
             {
                 const CardDefinition* d2 = CardDatabase::Instance().LookupCached(c2);
                 if (d2 && d2->params.draw_on_equipment_etb) { return true; }
+            }
+        }
+
+        //   * UTVARA HELLKITE + COUNT-SCALED PING (attack-created tokens feeding Scourge of
+        //     Valkas / Dragon Tempest ETB damage): attacking creates Dragon tokens, and a
+        //     dragon_ping_on_enter card's ETB damage scales with the Dragon count, so a
+        //     post-combat dragon cast pings strictly harder than the same cast pre-combat --
+        //     the token count is a resource GENERATED DURING COMBAT (2c-bis). Require BOTH
+        //     params in the deck (mirrors the Skyhunter/Puresteel pairwise rule): the tokens
+        //     alone are inert permanents, the ping alone has no combat-grown count to read.
+        //     MEASURED (recoverability audit §6.7 probe, MTG_FORCE_USES_M2, 1000 games/arm at
+        //     value-play): dragons 51 faster / 1 slower (net -50 turns), dragonstorm 14 / 4
+        //     (net -10); knights (Adeline: attack tokens, no ping) 2 movers net 0, so the
+        //     pairwise form leaves it correctly off. The skipped phase is not budget-recoverable
+        //     (no lever re-opens it), which made this the whitelist's confirmed violation of the
+        //     convergence-at-the-limit invariant.
+        //     MTG_NO_UTVARA_M2=1 restores the pre-rule whitelist (the A/B hatch, the
+        //     MTG_AL_SINGLE_MAIN precedent).
+        static const bool s_no_utvara_m2 = EnvOn("MTG_NO_UTVARA_M2");   // DEFAULT OFF
+        if (!s_no_utvara_m2 && def->params.attack_per_matching_creates_tokens > 0)
+        {
+            for (const Card& c2 : deck.mainboard)
+            {
+                const CardDefinition* d2 = CardDatabase::Instance().LookupCached(c2);
+                if (d2 && d2->params.dragon_ping_on_enter) { return true; }
             }
         }
     }

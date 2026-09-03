@@ -3031,7 +3031,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 bp_searched_here = true;
                 // The continuation's land drop is part of the searched decision; play it first so
                 // its mana funds the casts (mirrors bp_play_searched_land in ApplyPlanDirect).
-                if (extra.land_decided && !extra.land_to_play.empty())
+                // karoo_deferred guard (audit §6.8, MTG_KAROO_BP_LOCKSTEP=0 to restore): the
+                // rollout's bp_play_searched_land SUPPRESSES the continuation land while the drop
+                // is reserved for the deferred Karoo; without the same guard here the executor
+                // consumed the drop and never played the Karoo the rollout scored -- a plain
+                // rollout/executor divergence (the class the HoldDeferredDrop mirrors prevent).
+                static const bool s_karoo_lockstep = EnvOn("MTG_KAROO_BP_LOCKSTEP", true);
+                if (extra.land_decided && !extra.land_to_play.empty()
+                    && !(s_karoo_lockstep && karoo_deferred))
                 { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
             }
         }

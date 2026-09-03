@@ -6764,6 +6764,25 @@ static thread_local int g_fsline_nest = 0;
 // ANYWHERE in the subtree propagates up and suppresses the no-win store at every ancestor.
 // thread_local: each worker searches independently. Wins are unaffected (a win found is a win).
 inline thread_local unsigned long long g_fs_trunc_events = 0;
+// MTG_TRUNC_COMPLETE (default ON; =0 restores the pre-audit counting for the A/B). The
+// recoverability audit (docs/design/search-recoverability-audit.md §6.1/§6.2) found searched-
+// structure drops that never bumped the counter above, so the no-win stores cached FILTERED or
+// CAPPED results as complete refutations: condemnation-filter drops (the m2 filter live on
+// AntiLifegain/FiveColour, and the breakpoint-condemnation twin), the FSLineTail second main's
+// group-cap drop (no wave phase re-opens it), and the escalation beam's group-wave skip. Under
+// this flag every such drop counts as a truncation, and the two per-decision memo families
+// (enummemo, searched-m2 solvememo) REPLAY their body's recorded deltas on a hit -- without the
+// replay a memo hit hides the drop and the gap silently reopens (same class as max_dropped).
+inline bool TruncCompleteEnabled()
+{ static const bool v = EnvOn("MTG_TRUNC_COMPLETE", true); return v; }
+// MTG_GW_PARITY (default ON; =0 restores the pre-audit tranche enumeration). Audit §6.2 parity
+// holes in the deferred group-wave phases: (b) FSLineWin's tranche re-enumeration never set
+// g_fresh_axis_enum, so tranche plans lacked the fresh-spend variants wave 0 had (falsifying
+// "wave 0 plus tranches exactly partition the uncapped plan space"); (c) SolveWithLookahead's
+// enforcing-root tranches re-enumerated WITHOUT the root's CondemnSuppressGuard, so the very m2
+// condemnation the root-insurance exists to keep off the root filtered its tranche plans.
+inline bool GwParityEnabled()
+{ static const bool v = EnvOn("MTG_GW_PARITY", true); return v; }
 struct FsLineNestGuard
 {
     FsLineNestGuard()  { ++g_fsline_nest; }
@@ -8521,6 +8540,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             { g_bp_condemn_drops_exec.fetch_add(1, std::memory_order_relaxed); }
                         }
                     }
+                    // TRUNC-DEMOTION (audit §6.1): a SEARCHED-space drop deletes a candidate this
+                    // enumeration would otherwise offer, so no enclosing no-win over this subtree
+                    // is a complete refutation. Rollout/executor drops are playout-layer policy
+                    // (scope ruling 2026-09-02) and do not demote.
+                    if (g_search_candidate_enum && TruncCompleteEnabled()) { ++g_fs_trunc_events; }
                     continue;
                 }
             }
@@ -12207,6 +12231,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (drop)
                 {
                     ++g_condemn_drops;   // escalation: this subtree is filter-touched
+                    // TRUNC-DEMOTION (audit §6.1): CondemnFilterArmed exists because "a no-win
+                    // from [the filter] is not a complete refutation", but only the default-OFF
+                    // tranche consulted it -- so on the decks shipping this filter ON a filtered
+                    // no-win passed the truncation-clean gate and was cached as sound. Count the
+                    // SEARCHED-space drop as a truncation so the watermark demotes every
+                    // enclosing no-win store (executor drops are committed play, not a search).
+                    if (g_search_candidate_enum && TruncCompleteEnabled()) { ++g_fs_trunc_events; }
                     if (s_rollout_stats)
                     {
                         g_condemn_drops_total.fetch_add(1, std::memory_order_relaxed);
@@ -14240,7 +14271,12 @@ namespace solvememo
     inline bool Enabled()  { static const bool v = EnvOn("MTG_SOLVE_MEMO", true); return v; }
     inline bool VerifyOn() { static const bool v = EnvOn("MTG_SOLVE_MEMO_VERIFY"); return v; }
 
-    struct Entry { uint64_t epoch = 0; TurnSolver::Plan plan; };
+    // condemn_drops/trunc_delta: the memoized body's side-counter contributions, REPLAYED on a
+    // searched-m2 hit (audit §6.1; see enummemo::Entry -- same class, same fix). Unused (always
+    // 0) for the greedy Solve memo: its interior collects run outside the candidate space, where
+    // the searched-only condemnation filter never fires.
+    struct Entry { uint64_t epoch = 0; TurnSolver::Plan plan;
+                   uint32_t condemn_drops = 0; uint32_t trunc_delta = 0; };
     // thread_local: the batch runner plays games concurrently; capped so one long decision
     // cannot grow it without bound (wholesale clear, same policy as the bp-enum memo).
     inline thread_local std::unordered_map<TranspositionTable::Key, Entry,
@@ -14302,6 +14338,20 @@ namespace solvememo
             || a.searched_order != b.searched_order || a.land_decided != b.land_decided
             || a.land_to_play != b.land_to_play || a.fetch_target != b.fetch_target
             || a.land_face != b.land_face || a.actions.size() != b.actions.size())
+        { return false; }
+        // Searched-axis pins (audit §6.5): the harness previously compared cast content only, so
+        // its clean records were statements about WHAT is cast, not WHICH branch was returned --
+        // two plans differing only in a pin (scry disposition, breakpoint continuation, sac
+        // ordinal...) verified as "same". Verify-only callers, so this tightening cannot change
+        // play; it makes the 813k/604k-style clean records mean what they claim.
+        if (a.atk_dork_release != b.atk_dork_release || a.scry_choice != b.scry_choice
+            || a.rad_mode != b.rad_mode || a.etbdig_choice != b.etbdig_choice
+            || a.tutor_choice != b.tutor_choice || a.sac_pins != b.sac_pins
+            || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
+            || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
+            || a.discard_choice != b.discard_choice || a.vial_charge_choice != b.vial_charge_choice
+            || a.dig_choice != b.dig_choice || a.bp_choice != b.bp_choice
+            || a.bp_at != b.bp_at || a.bp_wave0 != b.bp_wave0)
         { return false; }
         for (std::size_t i = 0; i < a.actions.size(); ++i)
         {
@@ -24856,7 +24906,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // provider names an early land that is actually in hand, collapse the fan-out to that one name --
     // the land-choice breadth on turns 1..2 is paid for out of the same fixed budget as the spell
     // decisions. Empty (every deck by default) leaves land_names untouched -> byte-identical.
-    // Gated MTG_FORCED_EARLY_LAND (default on) so the with/without A/B is one env flag.
+    // Gated MTG_FORCED_EARLY_LAND (default OFF -- the hook is WITHDRAWN: on disjoint seed bases
+    // the prune measured +1.87% rollout calls, worse; see GoblinsProvider::ForcedEarlyLandName's
+    // header, the one implementation). A stale "(default on)" here caused a doc/code mismatch
+    // flagged by the recoverability audit; OFF is the deliberate state.
     static const bool s_forced_early_land = EnvOn("MTG_FORCED_EARLY_LAND");
     if (s_forced_early_land)
     {
@@ -25962,6 +26015,12 @@ namespace enummemo
         std::string dbg;                       // VERIFY builds only: un-keyed-input fingerprint of
                                                // the state whose plans were stored, diffed at a
                                                // mismatch to name the input the key fails to fold
+        // The body's own side-counter contributions (audit §6.1, MTG_TRUNC_COMPLETE): a hit must
+        // REPLAY them or the memo hides a condemnation-filter drop from both the escalation
+        // detector (g_condemn_drops deltas) and the truncation watermark -- exactly the
+        // max_dropped propagation problem, solved the same way.
+        uint32_t condemn_drops = 0;            // g_condemn_drops delta over the uncached body
+        uint32_t trunc_delta   = 0;            // g_fs_trunc_events delta over the uncached body
     };
 
     // Fingerprint of the enumeration inputs the key does NOT (or conditionally does not) fold --
@@ -26041,6 +26100,23 @@ std::string enummemo::Fingerprint(const GameState& state)
     return s;
 }
 
+// Key-folding helpers (hoisted above the enum memo hosts, which fold a host-namespace tag --
+// audit §6.4; the definitions otherwise belong to the BuildSimKey block below).
+namespace
+{
+    inline void Fold(TranspositionTable::Key& k, uint64_t v)
+    {
+        k.h1 ^= v + 0x9e3779b97f4a7c15ULL + (k.h1 << 6) + (k.h1 >> 2);
+        k.h2 ^= (v * 0xff51afd7ed558ccdULL) + 0xc4ceb9fe1a85ec53ULL
+              + (k.h2 << 5) + (k.h2 >> 3);
+    }
+
+    inline void FoldName(TranspositionTable::Key& k, const std::string& s)
+    {
+        Fold(k, static_cast<uint64_t>(std::hash<std::string>{}(s)));
+    }
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
                                                             bool is_pre_combat)
 {
@@ -26056,7 +26132,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     auto& cache = enummemo::t_cache;
     if (enummemo::t_epoch_seen != g_decision_epoch)
     { cache.clear(); enummemo::t_epoch_seen = g_decision_epoch; }
-    const TranspositionTable::Key k = BuildBreakpointKey(state, is_pre_combat);
+    TranspositionTable::Key k = BuildBreakpointKey(state, is_pre_combat);
+    // ENUMERATION-OBSERVABLE GLOBALS the key does not fold (audit §6.4 class, same hatch as the
+    // m2 host tag): (a) g_fresh_axis_enum -- only FSLineWin's enumeration emits freshmode
+    // variants ("only FSLineWin validates them"), but a lookahead host enumerating the same m1
+    // state in the same epoch shared its entry, so a cross-host hit either starved FSLineWin of
+    // its fresh variants or leaked unvalidatable ones into a rollout candidate list;
+    // (b) g_condemn_suppress -- the escalation's honest re-run suppresses the m2 filter and uses
+    // a fresh TT precisely so "filtered memos must not leak into the honest re-run", but this
+    // cache and the searched-m2 solve memo were keyed identically for both worlds, so the honest
+    // re-run could consume a FILTERED plan list.
+    static const bool s_hosttag_m1 = EnvOn("MTG_ENUM_MEMO_HOSTTAG", true);
+    if (s_hosttag_m1)
+    {
+        if (g_fresh_axis_enum)  { Fold(k, 0x0F5A); }
+        if (g_condemn_suppress) { Fold(k, 0xC5B9); }
+    }
     auto it = cache.find(k);
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans)
     {
@@ -26091,6 +26182,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         }
         groupwave::g_state.max_dropped =
             std::max(groupwave::g_state.max_dropped, it->second.max_dropped);
+        // Replay the body's side-counter contributions (see the Entry fields): without this a
+        // hit hides a filter drop from the escalation detector and the truncation watermark.
+        if (TruncCompleteEnabled() && (it->second.condemn_drops | it->second.trunc_delta))
+        {
+            g_condemn_drops   += it->second.condemn_drops;
+            g_fs_trunc_events += it->second.trunc_delta;
+        }
         return it->second.plans;
     }
 
@@ -26098,15 +26196,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     const int saved_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = 0;
+    const unsigned long long drops_before = g_condemn_drops;
+    const unsigned long long trunc_before = g_fs_trunc_events;
     std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLandUncached(state, is_pre_combat);
+    const uint32_t own_drops = static_cast<uint32_t>(g_condemn_drops - drops_before);
+    const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
     const int own_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = std::max(saved_md, own_md);
     if (second_visit)
     {
         // Second visit this decision: the state provably recurs -- promote to full storage.
-        it->second.has_plans   = true;
-        it->second.max_dropped = own_md;
-        it->second.plans       = plans;
+        it->second.has_plans     = true;
+        it->second.max_dropped   = own_md;
+        it->second.plans         = plans;
+        it->second.condemn_drops = own_drops;
+        it->second.trunc_delta   = own_trunc;
         if (enummemo::VerifyOn()) { it->second.dbg = enummemo::Fingerprint(state); }
     }
     else
@@ -26117,7 +26221,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             cache.clear();
             enummemo::g_clears.fetch_add(1, std::memory_order_relaxed);
         }
-        cache[k] = enummemo::Entry{ g_decision_epoch, own_md, false, {} };
+        cache[k] = enummemo::Entry{ g_decision_epoch, own_md, false, {}, {},
+                                    own_drops, own_trunc };
     }
     return plans;
 }
@@ -26143,7 +26248,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     auto& cache = enummemo::t_cache;
     if (enummemo::t_epoch_seen != g_decision_epoch)
     { cache.clear(); enummemo::t_epoch_seen = g_decision_epoch; }
-    const TranspositionTable::Key k = BuildBreakpointKey(state, false);
+    TranspositionTable::Key k = BuildBreakpointKey(state, false);
+    // HOST NAMESPACE (audit §6.4): this host's body (EnumeratePlans, no land axis / no appended
+    // breakpoint variants) differs from EnumeratePlansWithLand's at the same (state, m2) key, and
+    // both are reachable in one epoch -- a cross-host hit would return the other body's list.
+    // Same 0x5E2C-style tag SearchedSecondMainMemoized uses. =0 restores the shared namespace.
+    static const bool s_hosttag = EnvOn("MTG_ENUM_MEMO_HOSTTAG", true);
+    if (s_hosttag)
+    {
+        Fold(k, 0x371D);
+        // Same suppress-flag split as the m1 host (the fresh axis is m1-only, no fold needed).
+        if (g_condemn_suppress) { Fold(k, 0xC5B9); }
+    }
     auto it = cache.find(k);
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans)
     {
@@ -26176,6 +26292,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         }
         groupwave::g_state.max_dropped =
             std::max(groupwave::g_state.max_dropped, it->second.max_dropped);
+        // Replay the body's side-counter contributions (see the Entry fields / the m1 twin).
+        if (TruncCompleteEnabled() && (it->second.condemn_drops | it->second.trunc_delta))
+        {
+            g_condemn_drops   += it->second.condemn_drops;
+            g_fs_trunc_events += it->second.trunc_delta;
+        }
         return it->second.plans;
     }
 
@@ -26183,14 +26305,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
     const int saved_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = 0;
+    const unsigned long long drops_before = g_condemn_drops;
+    const unsigned long long trunc_before = g_fs_trunc_events;
     std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, false);
+    const uint32_t own_drops = static_cast<uint32_t>(g_condemn_drops - drops_before);
+    const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
     const int own_md = groupwave::g_state.max_dropped;
     groupwave::g_state.max_dropped = std::max(saved_md, own_md);
     if (second_visit)
     {
-        it->second.has_plans   = true;
-        it->second.max_dropped = own_md;
-        it->second.plans       = plans;
+        it->second.has_plans     = true;
+        it->second.max_dropped   = own_md;
+        it->second.plans         = plans;
+        it->second.condemn_drops = own_drops;
+        it->second.trunc_delta   = own_trunc;
         if (enummemo::VerifyOn()) { it->second.dbg = enummemo::Fingerprint(state); }
     }
     else
@@ -26200,7 +26328,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
             cache.clear();
             enummemo::g_clears.fetch_add(1, std::memory_order_relaxed);
         }
-        cache[k] = enummemo::Entry{ g_decision_epoch, own_md, false, {} };
+        cache[k] = enummemo::Entry{ g_decision_epoch, own_md, false, {}, {},
+                                    own_drops, own_trunc };
     }
     return plans;
 }
@@ -26225,20 +26354,6 @@ void TurnSolver::ClearPerGameCaches()
 // in order because plan tie-breaks and mana/sacrifice selection read that order.
 // The library is keyed by remaining size + top card (see TranspositionTable.h
 // for why size alone is exact within one decision).
-namespace
-{
-    inline void Fold(TranspositionTable::Key& k, uint64_t v)
-    {
-        k.h1 ^= v + 0x9e3779b97f4a7c15ULL + (k.h1 << 6) + (k.h1 >> 2);
-        k.h2 ^= (v * 0xff51afd7ed558ccdULL) + 0xc4ceb9fe1a85ec53ULL
-              + (k.h2 << 5) + (k.h2 >> 3);
-    }
-
-    inline void FoldName(TranspositionTable::Key& k, const std::string& s)
-    {
-        Fold(k, static_cast<uint64_t>(std::hash<std::string>{}(s)));
-    }
-}
 
 // MTG_CANON_SIMKEY (ADOPTED default-ON 2026-08-14; =0 disables): fold the hand and battlefield as
 // ORDER-INSENSITIVE multisets instead of ordered sequences. The ordered fold means "play Sandbar
@@ -27460,8 +27575,18 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         std::vector<TurnSolver::Plan> post;
         {
             EnumTimeScope _ets;
+            // Group-cap accounting (audit §6.2a): this host has NO wave phase, so a group the
+            // breadth cap drops here is unreachable at ANY budget -- count it as a truncation so
+            // the enclosing no-win stores are demoted (the design doc conceded this gap with a
+            // frequency argument; the invariant rejects that reasoning). Save/reset/merge so the
+            // read attributes THIS enumeration's drops, not a stale accumulator value.
+            const int saved_md = groupwave::g_state.max_dropped;
+            groupwave::g_state.max_dropped = 0;
             post = M2DropLive(state) ? EnumeratePlansWithLand(state, false)
                                      : EnumeratePlansM2Memoized(state);
+            const int m2_md = groupwave::g_state.max_dropped;
+            groupwave::g_state.max_dropped = std::max(saved_md, m2_md);
+            if (m2_md > 0 && TruncCompleteEnabled()) { ++g_fs_trunc_events; }
         }
         // Always allow casting nothing in the second main and just advancing the
         // turn. EnumeratePlans returns an empty vector when no post-combat play is
@@ -28714,6 +28839,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // (the probe's position-keyed ranks keep mapping to the same plans). Skipped at beam-cut nodes:
     // the escalation beam declined breadth at this node on purpose, and it never applies at the
     // root, so the committed play is not affected by the skip.
+    // Audit §6.2d: the beam's wave-phase skip below left the dropped groups unreachable at this
+    // node with nothing counted -- silently when the beam itself never cut a plan. gw_dropped > 0
+    // can only be set with group waves enabled, so the =0 hatch arm stays byte-identical.
+    if (gw_dropped > 0 && beam_here && TruncCompleteEnabled()) { ++g_fs_trunc_events; }
     if (gw_dropped > 0 && !beam_here && GroupWavesHere(budget))
     {
         if (groupwave::ProbeOn()) { groupwave::g_probe.nodes.fetch_add(1); }
@@ -28732,7 +28861,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                               ? static_cast<double>(budget->Remaining()) : 0.0;
             groupwave::g_state.bound_exceeded = false;
             g_bp_root_enum = bp_root;
+            // FRESH-SPEND parity (audit §6.2b): wave 0's enumeration above ran with the fresh
+            // axis open, so the tranches must too or "wave 0 plus tranches exactly partition the
+            // uncapped plan space" is false -- a dropped group's freshmode variants were
+            // unreachable at any budget. The scorer below mirrors wave 0's admissibility check.
+            const bool fresh_prev = g_fresh_axis_enum;
+            if (GwParityEnabled()) { g_fresh_axis_enum = true; }
             std::vector<TurnSolver::Plan> tp = EnumeratePlansWithLand(state, true);
+            g_fresh_axis_enum = fresh_prev;
             g_bp_root_enum = false;
             groupwave::g_state.tranche_rank = -1;
             if (groupwave::g_state.bound_exceeded)
@@ -28786,6 +28922,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 TurnSolver::SearchLine tail =
                     FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
                                tt, lc, budget);
+                // FRESH-SPEND admissibility (mirror of wave 0's check): a freshmode variant is
+                // admitted only when its line realizes a WIN within the horizon; a this-turn kill
+                // took the won_now return above. See the wave-0 comment for the doctrine.
+                if (v.freshmode_choice == 1 && tail.win_turn > max_turns) { return true; }
                 if (tail.win_turn < best.win_turn)
                 {
                     if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
@@ -31242,7 +31382,16 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                       ? static_cast<double>(budget->Remaining()) : 0.0;
                     groupwave::g_state.bound_exceeded = false;
                     g_bp_root_enum = enforce_budget;
-                    std::vector<Plan> tp = EnumeratePlansWithLand(state, is_pre_combat);
+                    std::vector<Plan> tp;
+                    {
+                        // ROOT-INSURANCE parity (audit §6.2c): the wave-0 enumeration above ran
+                        // under the enforcing root's CondemnSuppressGuard ("a root candidate the
+                        // filter deletes has no escalation path back") -- without the same guard
+                        // here the tranches are filtered by the very m2 condemnation that
+                        // insurance exists to keep off the root.
+                        CondemnSuppressGuard _csg(enforce_budget && GwParityEnabled());
+                        tp = EnumeratePlansWithLand(state, is_pre_combat);
+                    }
                     g_bp_root_enum = false;
                     groupwave::g_state.tranche_rank = -1;
                     if (groupwave::g_state.bound_exceeded)
@@ -31391,12 +31540,20 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             && MainPhaseFilterActive(state) && ResolveProvider(state).CondemnsPassedMainPhase())
         {
             static const int s_esc_k = std::max(1, EnvInt("MTG_CONDEMN_ESC_K", 3));
+            // CONVERGENCE AT THE LIMIT (audit §6.6): the fixed top-K re-scores finalists of a
+            // ranking the filter itself biased, and K grew with nothing -- at an unlimited
+            // budget the escalation still consulted only 3 of the pool, so the honest re-run
+            // could not converge to the unfiltered answer. Unlimited (or budget-less) decisions
+            // now re-score the WHOLE pool; budgeted play keeps K (byte-identical at ship
+            // settings, where every suite run is budgeted).
+            const int esc_k = (budget == nullptr || budget->Unlimited())
+                            ? static_cast<int>(committed_esc_pool.size()) : s_esc_k;
             std::vector<int> order(committed_esc_pool.size());
             for (std::size_t i = 0; i < order.size(); ++i) { order[i] = static_cast<int>(i); }
             std::stable_sort(order.begin(), order.end(),
                              [&](int a, int b)
                              { return committed_esc_pool[a].win < committed_esc_pool[b].win; });
-            if (static_cast<int>(order.size()) > s_esc_k) { order.resize(s_esc_k); }
+            if (static_cast<int>(order.size()) > esc_k) { order.resize(esc_k); }
 
             TranspositionTable esc_tt;        // honest table, never shared with the filtered pass
             CondemnSuppressGuard _esc_sup;    // the whole re-evaluation is unfiltered
@@ -31592,15 +31749,32 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     TranspositionTable::Key k = BuildBreakpointKey(state, /*is_pre_combat=*/false);
     Fold(k, 0x5E2C);                                // searched-m2 key namespace
     Fold(k, static_cast<uint64_t>(depth));          // fidelity is part of what is reused
+    // Filtered/honest split (audit §6.4 class; see the enum memo hosts): the condemnation
+    // escalation's suppressed re-run must not hit a plan this memo computed under the filter
+    // (its fresh esc_tt guards the TT but not this thread_local cache).
+    static const bool s_hosttag_m2s = EnvOn("MTG_ENUM_MEMO_HOSTTAG", true);
+    if (s_hosttag_m2s && g_condemn_suppress) { Fold(k, 0xC5B9); }
     auto& cache = solvememo::t_m2cache;
     auto it = cache.find(k);
     if (it != cache.end() && it->second.epoch == g_decision_epoch)
     {
         solvememo::g_m2_hits.fetch_add(1, std::memory_order_relaxed);
+        // Replay the memoized solve's side-counter contributions (audit §6.1): the unmemoized
+        // engine would re-run the solve and re-bump both counters, so a hit that stays silent
+        // hides a condemnation drop AND any budget truncation from the caller's watermark --
+        // the enclosing no-win would be stored as a refutation over a subtree that was never
+        // fully looked at. Replay restores exact parity with the unmemoized counting.
+        if (TruncCompleteEnabled() && (it->second.condemn_drops | it->second.trunc_delta))
+        {
+            g_condemn_drops   += it->second.condemn_drops;
+            g_fs_trunc_events += it->second.trunc_delta;
+        }
         return it->second.plan;
     }
 
     solvememo::g_m2_misses.fetch_add(1, std::memory_order_relaxed);
+    const unsigned long long drops_before = g_condemn_drops;
+    const unsigned long long trunc_before = g_fs_trunc_events;
     TurnSolver::Plan p = TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/false, depth,
                                                         max_turns, budget,
                                                         /*enforce_budget=*/false, second_main, tt);
@@ -31609,7 +31783,9 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
         cache.clear();
         solvememo::g_m2_clears.fetch_add(1, std::memory_order_relaxed);
     }
-    cache[k] = solvememo::Entry{ g_decision_epoch, p };
+    cache[k] = solvememo::Entry{ g_decision_epoch, p,
+                                 static_cast<uint32_t>(g_condemn_drops - drops_before),
+                                 static_cast<uint32_t>(g_fs_trunc_events - trunc_before) };
     return p;
 }
 
