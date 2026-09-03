@@ -2305,7 +2305,24 @@ function freeCastPanelHtml(d){
        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
        (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
   });
-  h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+  h+=`</div>`;
+  // The walk's skipped cards (`walked`, walk order): the trigger just made these public, so
+  // show them beside the hit with the mechanic's disposition (USER request 2026-09-03). Dimmed
+  // (.away) -- they are information, not options.
+  const walked=d.walked||[];
+  if(walked.length){
+    const dispo=src.indexOf('(cascade)')>=0 ? 'to the bottom of your library'
+               : src.indexOf('Breaching Dragonstorm')>=0 ? 'they stay in exile'
+               : 'to the bottom of your library';
+    h+=`<div class="sub" style="margin-top:8px">Walked past on the way (${esc(dispo)}):</div>`;
+    h+=`<div class="revealrow">`;
+    walked.forEach(n=>{
+      h+=`<span class="reveal-card away" title="${esc(n)}">`+
+         `<img loading="lazy" src="${scryImg(n,'small')}" onerror="this.style.opacity=.15"/><em>${esc(n)}</em></span>`;
+    });
+    h+=`</div>`;
+  }
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
      `<button class="ghost" data-opt="-1">Decline</button></div>`;
   return h;
 }
@@ -2727,7 +2744,7 @@ function wireDecisionPanel(d, dec){
   else if (dec==='free_cast')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFreeCast(d, +b.dataset.opt));
   else if (dec==='demonstrate')
-    panel.querySelectorAll('button[data-demo]').forEach(b=>b.onclick=()=>commitDemonstrate(d, +b.dataset.demo));
+    panel.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>commitDemonstrate(d, +b.dataset.demo));
   else if (dec==='tutor_etb')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitTutor(d, +b.dataset.opt));
   else if (dec==='echo')
@@ -2817,9 +2834,13 @@ function commitFreeCast(d, oi){
 function demonstratePanelHtml(d){
   const copy=d.heuristic_default?1:0;
   let h=`<h3>Demonstrate — ${esc(d.source||'')}</h3>`;
-  h+=`<div class="sub">You may <b>copy this spell</b>. The copy resolves first — shuffling, revealing and free-casting its own find. (The opponent's copy does nothing here.)</div>`;
-  h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.source||'', '', 'normal')}</div>`;
-  h+=`<div class="pbtns"><span class="spacer"></span>`+
+  h+=`<div class="sub">You may <b>copy this spell</b> — click the card (or the button) to copy. The copy resolves first — shuffling, revealing and free-casting its own find. (The opponent's copy does nothing here.)</div>`;
+  // The card itself is the "Copy it" click, and the buttons sit CENTERED right under it: this
+  // dialog pops immediately after a centered click (the plan row that cast the spell), so the
+  // affirmative action must be where the cursor already is, not past a spacer in the bottom
+  // corner (USER request 2026-09-03).
+  h+=`<div class="cardrow" style="justify-content:center;margin:8px 0"><span data-demo="1" style="cursor:pointer" title="Click to copy ${esc(d.source||'')}">${cardMini(d.source||'', '', 'normal')}</span></div>`;
+  h+=`<div class="pbtns" style="justify-content:center">`+
      `<button class="primary" data-demo="1">Copy it${copy===1?'  ·  AI':''}</button>`+
      `<button class="ghost" data-demo="0">Don't copy${copy===0?'  ·  AI':''}</button></div>`;
   return h;

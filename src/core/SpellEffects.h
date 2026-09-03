@@ -3530,6 +3530,22 @@ inline bool WalkRevealUntilNonland(GameState& state, int controller, Card& out_f
     return have;
 }
 
+// The walk's NON-HIT names (walk order), for the free_cast chooser's `walked` list: every
+// seen card except the hit. Matches EmitReveal's bottomed/stays-exiled set at each site by
+// construction (same inputs, same exclusion).
+inline std::vector<std::string> WalkedNonHitNames(const std::vector<int>& seen_nums,
+                                                  const std::vector<std::string>& seen_names,
+                                                  int hit_num)
+{
+    std::vector<std::string> out;
+    for (std::size_t i = 0; i < seen_names.size(); ++i)
+    {
+        if (i < seen_nums.size() && seen_nums[i] == hit_num) { continue; }
+        out.push_back(seen_names[i]);
+    }
+    return out;
+}
+
 // Pending enter-trigger free-casts (Breaching Dragonstorm). FireOwnEtbTriggers RECORDS the
 // trigger here (it cannot resolve it: the free-cast mechanics are world-specific); each world
 // drains immediately after its enter site -- the executor into Triggered{EtbExileFreeCast}

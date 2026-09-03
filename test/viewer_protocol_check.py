@@ -130,6 +130,10 @@ DECKS = {
     # Third time this exact row has been the fix (StompySurprise, Minotaur, now Dragons): a new
     # reference directory is not self-registering, and the day it appears is the day it needs a row.
     "Dragons":       ("decks/Dragons/Dragons.cod",             "decks/Dragons/Dragons.profile.json"),
+    # Added 2026-09-03: the user hand-played the first BreachingDragonstorm references (fourth
+    # time this row has been the same-day fix -- see the Dragons note above).
+    "BreachingDragonstorm": ("decks/BreachingDragonstorm/BreachingDragonstorm.cod",
+                             "decks/BreachingDragonstorm/BreachingDragonstorm.profile.json"),
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)

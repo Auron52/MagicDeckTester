@@ -1821,7 +1821,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
                 const int picked = (*g_play_free_cast_chooser)(state, state.active_player_index,
                                                                "Maelstrom Archangel",
-                                                               fc_cards, heur);
+                                                               fc_cards, heur,
+                                                               /*walked=*/{});   // from-hand: no library walk
                 if (picked >= 0 && picked < static_cast<int>(fc_idx.size()))
                 { TurnSolver::ApplyPlan(state, fc_plans[fc_idx[picked]], is_pre_combat_main); }
             }

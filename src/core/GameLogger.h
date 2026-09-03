@@ -622,9 +622,15 @@ extern thread_local LackeyChooser* g_play_lackey_chooser;
 // `source` names the trigger that offers the free cast ("Maelstrom Archangel", or the
 // cascade / Breaching Dragonstorm / Creative Technique card at its resolution site), so the
 // viewer labels the decision correctly now that four mechanics share this chooser.
+// `walked` = the NON-HIT cards the trigger's library walk skipped past, in walk order (empty
+// for Archangel's from-hand charge). Purely informational: the dialog shows what the walk
+// revealed alongside the hit, so the player can judge the free cast with the same knowledge
+// the walk just made public (USER request 2026-09-03). The same list reaches the history via
+// each walk site's EmitReveal.
 using FreeCastChooser = std::function<int(const GameState& state, int controller,
                                           const std::string& source,
-                                          const std::vector<Card>& candidates, int heuristic_index)>;
+                                          const std::vector<Card>& candidates, int heuristic_index,
+                                          const std::vector<std::string>& walked)>;
 extern thread_local FreeCastChooser* g_play_free_cast_chooser;
 
 // ---- Human-play demonstrate chooser (Creative Technique, CR 702.145) ------------------------

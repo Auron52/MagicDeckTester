@@ -1685,10 +1685,41 @@ static void WriteLackeyDecisionJson(std::ostream& os, const GameState& s, const 
 // any moment in the phase or silently lost. Emits the castable hand cards as image options; the reply
 // is a candidate index to cast that spell for free, or -1 to decline. `heuristic_default` = the
 // engine's highest-MV pick (the charge is worth most on what you could least afford).
+// Shared "reveals" field emitter (the DecisionJson trailing-",\n" contract): the reveals
+// accumulated since the last CARRYING decision. Historically only main_phase carried them, so a
+// cascade chain's walks all surfaced in one batch at the next re-prompt; the free_cast and
+// demonstrate frames now carry (and their choosers clear) the pending list too, so the viewer's
+// history stays current through a 20-decision chain (USER request 2026-09-03). Same bytes as
+// WriteDecisionJson's inline block.
+static void EmitRevealsField(std::ostream& os, const std::vector<PlayReveal>& reveals)
+{
+    if (reveals.empty()) { return; }
+    os << "  \"reveals\": [";
+    for (size_t ri = 0; ri < reveals.size(); ++ri)
+    {
+        if (ri) { os << ", "; }
+        const PlayReveal& r = reveals[ri];
+        os << "{ \"turn\": " << r.turn << ", \"source\": "; JsonStr(os, r.source);
+        os << ", \"cards\": [";
+        for (size_t ci = 0; ci < r.cards.size(); ++ci)
+        {
+            if (ci) { os << ", "; }
+            os << "{ \"name\": "; JsonStr(os, r.cards[ci]);
+            os << ", \"disposition\": ";
+            JsonStr(os, ci < r.disposition.size() ? r.disposition[ci] : std::string());
+            os << " }";
+        }
+        os << "] }";
+    }
+    os << "],\n";
+}
+
 static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
                                       const std::string& source,
                                       const std::vector<Card>& candidates, int heuristic_default,
-                                      int decision_index)
+                                      int decision_index,
+                                      const std::vector<std::string>& walked = {},
+                                      const std::vector<PlayReveal>& reveals = {})
 {
     DecisionJson d(os, decision_index);
     // heuristic_default doubles as the PREDATES-DEFAULT: the answer used for any reference that
@@ -1716,6 +1747,15 @@ static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
     {
         os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
     });
+    // The library walk's NON-HIT cards, in walk order (empty for Archangel's from-hand charge).
+    // Informational: the walk just made these public, so the dialog shows them beside the hit
+    // (their disposition is per-mechanic -- cascade: bottomed; Breaching Dragonstorm: stay in
+    // exile; Creative Technique: bottomed -- worded by the viewer panel off `source`).
+    if (!walked.empty())
+    {
+        d.Array("walked", walked.size(), [&](std::size_t i) { JsonStr(os, walked[i]); });
+    }
+    EmitRevealsField(os, reveals);
     d.Note("reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick.");
 }
 
@@ -1725,11 +1765,13 @@ static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
 // (the goldfish opponent is never dealt a library), so this only gates YOUR extra payload.
 static void WriteDemonstrateDecisionJson(std::ostream& os, const GameState& s,
                                          const std::string& source, bool heuristic_default,
-                                         int decision_index)
+                                         int decision_index,
+                                         const std::vector<PlayReveal>& reveals = {})
 {
     DecisionJson d(os, decision_index);
     d.Type("demonstrate").Source(source).Turn(s.turn_number).Board(s)
      .HeuristicDefault(heuristic_default ? 1 : 0);
+    EmitRevealsField(os, reveals);   // pending walk reveals stay current mid-chain (see helper)
     d.Note("reply 1 to copy the spell (the copy resolves first, with its own free cast), or 0 to decline. Default = copy.");
 }
 
@@ -3101,7 +3143,8 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
     // Default = the engine's highest-MV pick. Human-play only, so ground truth is unaffected.
     free_cast_chooser =
         [this](const GameState& s, int controller, const std::string& source,
-            const std::vector<Card>& candidates, int heuristic_index) -> int
+            const std::vector<Card>& candidates, int heuristic_index,
+            const std::vector<std::string>& walked) -> int
         {
             (void)controller;
             int di = static_cast<int>(cursor);
@@ -3116,14 +3159,18 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteFreeCastDecisionJson(ss, s, source, candidates, heuristic_index, di);
+                    WriteFreeCastDecisionJson(ss, s, source, candidates, heuristic_index, di, walked, reveal_log);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
+                // This frame CARRIED the pending reveals (see EmitRevealsField): clear so the
+                // next carrying decision reports only what happens after it -- lockstep with the
+                // main-phase chooser's clear.
+                reveal_log.clear();
                 return chosen;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteFreeCastDecisionJson(std::cout, s, source, candidates, heuristic_index, di);
+            WriteFreeCastDecisionJson(std::cout, s, source, candidates, heuristic_index, di, walked, reveal_log);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);
@@ -3147,14 +3194,16 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << (copy ? 1 : 0) << ", \"decision\": ";
-                    WriteDemonstrateDecisionJson(ss, s, spell.m_name.str(), heuristic_default, di);
+                    WriteDemonstrateDecisionJson(ss, s, spell.m_name.str(), heuristic_default, di, reveal_log);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
+                // Carried the pending reveals -- clear, lockstep with the other carriers.
+                reveal_log.clear();
                 return copy;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteDemonstrateDecisionJson(std::cout, s, spell.m_name.str(), heuristic_default, di);
+            WriteDemonstrateDecisionJson(std::cout, s, spell.m_name.str(), heuristic_default, di, reveal_log);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);

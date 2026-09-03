@@ -17959,8 +17959,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         auto do_shuffle_reveal_freecast = [&]()
         {
             ShuffleAfterSearch(state, state.active_player_index);
+            std::vector<int> seen_nums; std::vector<std::string> seen_names;
             Card found;
-            if (!WalkRevealUntilNonland(state, state.active_player_index, found)) { return; }
+            if (!WalkRevealUntilNonland(state, state.active_player_index, found,
+                                        &seen_nums, &seen_names)) { return; }
+            // Viewer/history visibility of the walk -- THIS lambda is what the real
+            // claude-play/viewer game executes (the executor's ResolveShuffleRevealFreecast,
+            // which already emits, never runs there), so without this emit the skipped cards
+            // were invisible in play (USER request 2026-09-03). Mirrors the executor's label +
+            // kept/bottomed shape; nulled in every search/rollout scope (RevealLogPause).
+            {
+                std::vector<int> kept{ found.m_number };
+                std::vector<int> bottomed;
+                for (int n : seen_nums) { if (n != found.m_number) { bottomed.push_back(n); } }
+                EmitReveal(state.turn_number, def.card.m_name.str() + " (reveal)",
+                           seen_nums, seen_names, kept, bottomed);
+            }
             const CardDefinition* fd = CardDatabase::Instance().LookupCached(found);
             bool take = fd != nullptr
                 && ResolveProvider(state).TakeFreeCast(state, state.active_player_index, *fd);
@@ -17974,7 +17988,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 std::vector<Card> cands{ found };
                 take = ((*g_play_free_cast_chooser)(state, state.active_player_index,
                                                     def.card.m_name.str(), cands,
-                                                    take ? 0 : -1) == 0);
+                                                    take ? 0 : -1,
+                                                    WalkedNonHitNames(seen_nums, seen_names,
+                                                                      found.m_number)) == 0);
             }
             if (take && state.casts_remaining_this_turn != 0)
             {
@@ -18034,10 +18050,26 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const int n_casc = std::max(1, def.params.cascade_count);
             for (int ci = 0; ci < n_casc; ++ci)
             {
+                std::vector<int> seen_nums; std::vector<std::string> seen_names;
                 Card hit;
-                if (!WalkCascadeExile(state, state.active_player_index,
-                                      def.params.cascade_max_mv, hit))
-                { continue; }
+                const bool have = WalkCascadeExile(state, state.active_player_index,
+                                                   def.params.cascade_max_mv, hit,
+                                                   &seen_nums, &seen_names);
+                // Viewer/history visibility of the exile walk (whiffs included -- an all-lands
+                // walk that bottoms everything is exactly what a player needs to see). Mirrors
+                // the executor's ResolveCascadeTrigger emit, which never runs on the real
+                // claude-play/viewer path (USER request 2026-09-03). Nulled in search/rollouts.
+                if (!seen_names.empty())
+                {
+                    std::vector<int> kept;
+                    if (have) { kept.push_back(hit.m_number); }
+                    std::vector<int> bottomed;
+                    for (int n : seen_nums)
+                    { if (!have || n != hit.m_number) { bottomed.push_back(n); } }
+                    EmitReveal(state.turn_number, def.card.m_name.str() + " (cascade)",
+                               seen_nums, seen_names, kept, bottomed);
+                }
+                if (!have) { continue; }
                 const CardDefinition* hd = CardDatabase::Instance().LookupCached(hit);
                 bool take = hd != nullptr
                     && ResolveProvider(state).TakeFreeCast(state, state.active_player_index, *hd);
@@ -18047,7 +18079,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     std::vector<Card> cands{ hit };
                     take = ((*g_play_free_cast_chooser)(state, state.active_player_index,
                                                         def.card.m_name.str() + " (cascade)",
-                                                        cands, take ? 0 : -1) == 0);
+                                                        cands, take ? 0 : -1,
+                                                        WalkedNonHitNames(seen_nums, seen_names,
+                                                                          hit.m_number)) == 0);
                 }
                 if (take && state.casts_remaining_this_turn != 0)
                 {
@@ -18073,10 +18107,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 pend.swap(g_pending_etb_free_casts);
                 for (const auto& pe : pend)
                 {
+                    std::vector<int> seen_nums; std::vector<std::string> seen_names;
                     Card found;
-                    if (!WalkExileUntilNonland(state, pe.controller, found)) { continue; }
-                    const CardDefinition* fd = CardDatabase::Instance().LookupCached(found);
                     const CardDefinition* bd = CardDatabase::Instance().LookupCached(pe.source);
+                    const std::string bd_name = bd ? bd->card.m_name.str()
+                                                   : std::string("Breaching Dragonstorm");
+                    const bool have = WalkExileUntilNonland(state, pe.controller, found,
+                                                            &seen_nums, &seen_names);
+                    // Viewer/history visibility of the walk -- mirrors the executor's
+                    // ResolveEtbExileFreeCast emit (which never runs on the real claude-play/
+                    // viewer path), incl. its explicit "stays in exile" dispositions for the
+                    // walked lands (USER request 2026-09-03). Nulled in search/rollouts.
+                    if (!seen_names.empty())
+                    {
+                        std::vector<int> kept;
+                        if (have) { kept.push_back(found.m_number); }
+                        std::vector<std::string> disp;
+                        for (int n : seen_nums)
+                        { disp.push_back(have && n == found.m_number ? "found"
+                                                                     : "stays in exile"); }
+                        EmitReveal(state.turn_number, bd_name + " (exile until nonland)",
+                                   seen_nums, seen_names, kept, std::vector<int>{}, disp);
+                    }
+                    if (!have) { continue; }
+                    const CardDefinition* fd = CardDatabase::Instance().LookupCached(found);
                     const int mv  = fd ? fd->card.m_mana_cost.ManaValue()
                                        : found.m_mana_cost.ManaValue();
                     const int cap = bd ? bd->params.etb_exile_free_cast_max_mv : 0;
@@ -18088,9 +18142,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     {
                         std::vector<Card> cands{ found };
                         take = ((*g_play_free_cast_chooser)(state, pe.controller,
-                                                            bd ? bd->card.m_name.str()
-                                                               : std::string("Breaching Dragonstorm"),
-                                                            cands, 0) == 0);
+                                                            bd_name, cands, 0,
+                                                            WalkedNonHitNames(seen_nums,
+                                                                seen_names,
+                                                                found.m_number)) == 0);
                     }
                     if (take && state.casts_remaining_this_turn != 0)
                     {

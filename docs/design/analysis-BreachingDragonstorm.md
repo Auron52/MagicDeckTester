@@ -295,6 +295,30 @@ decisions (user answer 1, "just implement them" + no objection to the convention
    policy; rollout scores the plan without the phantom cast, so search pricing is consistent.
    Pre-existing, not deck-specific. Disclosed 6a (viewer UX note).
 
+## Viewer round (2026-09-03, user play-testing session)
+
+USER: "change the cascade for the play viewer to show which cards we skipped in the history
+and perhaps the dialog as well" + "the button for the copy effect [closer] to the 'cast
+spell' click". Landed:
+- **Dialog:** the free_cast frame carries `walked` (the walk's non-hit cards, walk order),
+  rendered dimmed in freeCastPanelHtml with the mechanic's disposition wording. Threaded
+  through the FreeCastChooser signature (all 7 sites; Archangel passes empty).
+- **History:** apply_one's three walks (cascade / BD / CT) now EmitReveal — they never did,
+  because only the executor's resolvers emitted and real viewer play executes through
+  apply_one (the same asymmetry as the retrace-chooser lesson, on the reveal axis). BD's
+  walked lands get explicit "stays in exile" dispositions (both worlds).
+- **Mid-chain freshness:** free_cast/demonstrate frames carry (and their choosers clear) the
+  pending reveal list, so history stays current through a 20-decision chain instead of
+  batching at the next main-phase re-prompt.
+- **Demonstrate dialog:** the card itself is the "Copy it" click and the buttons sit centered
+  under it (the dialog pops right after a centered plan click; the affirmative action is now
+  where the cursor already is).
+- **GT effect:** digest-only churn on this deck's keys (LogReveal folds reveal content, and
+  the BD dispositions + new emits change the fold at IDENTICAL play/scores) — re-accepted on
+  all three tiers. Every other deck byte-identical.
+- First two hand-played references landed (references/BreachingDragonstorm/, commit-only) +
+  the same-day DECKS row in viewer_protocol_check.py; both replay ok.
+
 ## Claude-play DELTA sweep (2026-09-03, post-sign-off round)
 
 commit: working tree over a939480f (the sign-off-round build)

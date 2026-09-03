@@ -861,7 +861,9 @@ void EffectHandler::ResolveCascadeTrigger(GameState& state, const StackEntry& en
         std::vector<Card> cands{ hit };
         take = ((*g_play_free_cast_chooser)(state, entry.controller_index,
                                             def.card.m_name.str() + " (cascade)", cands,
-                                            take ? 0 : -1) == 0);
+                                            take ? 0 : -1,
+                                            WalkedNonHitNames(seen_nums, seen_names,
+                                                              hit.m_number)) == 0);
     }
     if (!take || !PushFreeCast(state, hit, entry.controller_index))
     {
@@ -880,8 +882,14 @@ void EffectHandler::ResolveEtbExileFreeCast(GameState& state, const StackEntry& 
                                             &seen_nums, &seen_names);
     std::vector<int> kept;
     if (have) { kept.push_back(found.m_number); }
+    // Explicit dispositions: the walked lands are in NEITHER kept nor bottomed (they stay in
+    // exile permanently -- this card's signature behaviour), which the default derivation
+    // would render as a bare name. Say it outright in the history line.
+    std::vector<std::string> disp;
+    for (std::size_t i = 0; i < seen_nums.size(); ++i)
+    { disp.push_back(have && seen_nums[i] == found.m_number ? "found" : "stays in exile"); }
     EmitReveal(state.turn_number, def.card.m_name.str() + " (exile until nonland)",
-               seen_nums, seen_names, kept, std::vector<int>{});
+               seen_nums, seen_names, kept, std::vector<int>{}, disp);
     if (!have) { return; }
     const CardDefinition* fd = CardDatabase::Instance().LookupCached(found);
     const int mv = fd ? fd->card.m_mana_cost.ManaValue() : found.m_mana_cost.ManaValue();
@@ -893,7 +901,9 @@ void EffectHandler::ResolveEtbExileFreeCast(GameState& state, const StackEntry& 
     {
         std::vector<Card> cands{ found };
         take = ((*g_play_free_cast_chooser)(state, entry.controller_index,
-                                            def.card.m_name.str(), cands, 0) == 0);
+                                            def.card.m_name.str(), cands, 0,
+                                            WalkedNonHitNames(seen_nums, seen_names,
+                                                              found.m_number)) == 0);
     }
     // "If you don't, put that card into your hand."
     if (!take || !PushFreeCast(state, found, entry.controller_index))
@@ -977,7 +987,9 @@ void EffectHandler::ResolveShuffleRevealFreecast(GameState& state, const StackEn
         std::vector<Card> cands{ found };
         take = ((*g_play_free_cast_chooser)(state, entry.controller_index,
                                             def.card.m_name.str(), cands,
-                                            take ? 0 : -1) == 0);
+                                            take ? 0 : -1,
+                                            WalkedNonHitNames(seen_nums, seen_names,
+                                                              found.m_number)) == 0);
     }
     // A declined (or forbidden) hit STAYS EXILED -- the oracle's only alternative disposition.
     if (!take || !PushFreeCast(state, found, entry.controller_index))
