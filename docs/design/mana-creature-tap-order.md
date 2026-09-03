@@ -1,6 +1,13 @@
 # A mana CREATURE should tap after every LAND — the doctrine the tap order never implemented
 
-**Status:** BUILT, fully measured on all three seed tiers, and **DEFAULT OFF** — opt in with
+**Status (updated 2026-09-03): ADOPTED DEFAULT-ON 2026-08-26** (`MTG_DORK_TAP_LAST=0` disables) —
+the one-shot-reserve prerequisite named below shipped, clearing the reference blocker. The shipped
+shape is the creature band at `ManaSourceRank` (`DecisionProviders.cpp`): flat dorks 64, domain
+scalers (Faeburrow/Bloom Tender) held back at 65+ per §5b's winning arm, Deathrite (fuel) last at
+67, with the scaler-plan-bias refinement on top. The paragraphs below predate the adoption and
+record the original measurement and blocker as they stood.
+
+**Original status:** BUILT, fully measured on all three seed tiers, and **DEFAULT OFF** — opt in with
 `MTG_DORK_TAP_LAST=1`. Found while sweeping the rank for a §2a payment source
 (`lump-mana-sources-as-payment-sources.md` §2b); it turned out to be a much larger, separate effect.
 
