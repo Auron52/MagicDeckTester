@@ -136,6 +136,17 @@ gap should be hunted: **look for more modelling gaps before reaching for another
 short, and the untested candidate remains the learned exhaustive keep table (rule-based mulligans
 were already refuted).
 
+**UPDATE, same day: a THIRD mana fix landed and the prediction held.** Another agent's
+recoverability audit (`46e8efb4`) found a *fifth* land-Aura blind spot — the branch-and-bound
+max-mana bound (`SourceMaxNet` / the `source_max_net` lambda) never carried the Aura bonus, so a
+gate documented as "deliberately over- (never under-) counts" could prune a payable cost. Measured
+on these same 4 seeds x 100 games: **7.068 → 6.92, another −0.145.**
+
+Cumulative for the day: **7.206 → 6.92 (−0.29 turns), from three independent mana-modelling fixes,
+found by two agents working separately.** Each is larger than any tuning lever ever tried on this
+deck. The "hunt modelling gaps, not levers" call was made after the first two and immediately paid
+out a third — treat it as the standing direction for this deck, not a one-off observation.
+
 **Side effect worth recording: the depth knob is partially live again.** Pre-fix, d3 and d5 were
 byte-identical on **all four** seeds — total starvation, `--depth` completely inert (next section).
 Post-fix, **three of four seeds diverge** (only s4101 still matches). The averages are still the

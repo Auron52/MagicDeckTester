@@ -116,6 +116,47 @@ suites are NOT visibly affected, which is why this survived so long: the harness
 caught it is made of decks that are not on the boundary. Do not read "smoke is green" as "the engine
 is deterministic"; read it as "no smoke deck is starved".
 
+### CONVERGENT EVIDENCE, found independently the same day (46e8efb4)
+
+Another agent's recoverability audit landed a fix whose description is the mechanism class above,
+arrived at from a different direction:
+
+> `BpEnumBuildKey` folds the whole heurarm `t_arm`: the bp-enum plan cache + canon verdict memo are
+> **thread_local, survive batch job switches, are NOT in `ClearPerGameCaches`** — a MIXED-ARM pooled
+> batch shared enumeration entries across arms whenever a lever changes enumeration output (the
+> batch-pool-contamination class, second instance).
+
+That is exactly "a cache that survives across games on a worker thread", confirmed and fixed for the
+**mixed-arm** case. It very likely explains the 8-job (two-arm) result here — 6 of 8 diverging.
+
+**It does NOT explain the single-config result, and I re-ran that case ON the fixed binary to be
+sure.** Keying the cache by the heuristic arm cannot help a pool whose jobs all share one arm, and
+it doesn't:
+
+| single-config 4-job pool, run twice | diverged | averages moved |
+|---|---|---|
+| before the arm-key fold | 1 of 4 | 0 |
+| **after the arm-key fold** | **3 of 4** | **2** (6.98→6.97, 6.93→6.94) |
+
+So the residual is not only real, it is the *larger* half on this deck, and post-fix it moves
+AVERAGES rather than just digests. (The two rows are not a controlled comparison of the fix — the
+same commit also changed play via the B&B aura bound — so read them as "still broken, at least as
+badly", not as "the fix made it worse".) Seed 4101 remains stable in every run, before and after.
+
+The caches still survive job and game switches within an arm, so cross-*game* contamination remains
+even with the arm folded into the key. The open question is narrower and sharper than it was this
+morning:
+
+> Which thread_local caches survive a game boundary without being in `ClearPerGameCaches`, and is
+> any of them keyed on something that does not fully determine its value?
+
+Note also that the same commit fixed a **fifth** land-Aura blind spot (the B&B max-mana bound in
+`SourceMaxNet` / `source_max_net`, which could prune a payable cost). Measured here on the same
+4 seeds x 100 games: **7.068 → 6.92**, another −0.145. Three independent mana-modelling fixes landed
+on this deck in one day, each worth ~0.14 turns, for a cumulative **7.206 → 6.92 (−0.29)** — every
+one of them larger than any tuning lever ever tried on it. That is the strongest available evidence
+for the conclusion recorded in the deck ledger: on this deck, hunt modelling gaps, not levers.
+
 ### The next test, and it is cheap
 Run the pooled manifest with `MTG_ROLLOUT_STATS` and compare the `id_depth` histogram and
 `units_total` across two runs. If units move run-to-run on identical games, the mechanism above is
