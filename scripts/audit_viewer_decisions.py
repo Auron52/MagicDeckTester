@@ -450,6 +450,37 @@ INERT_PARAMS = {
     "blink_returns_tapped": "blink resolution detail (rides blink_cost -> main_phase)",
     "land_aura_extra_mana": "mana amount (the host pick rides is_land_aura -> main_phase)",
     "land_aura_produces": "mana colour (auto-resolved in payment, like `produces`)",
+    # Trace of Abundance. Shroud is a STATIC ability, so it takes no decision at any point: it
+    # narrows the set of legal enchant targets for LATER auras, and that pick already rides
+    # is_land_aura -> main_phase, where the legality filter applies before the variants are
+    # offered. The one thing worth naming is that it is not merely a filter on the opponent --
+    # it is symmetric (CR 702.18a) and so restricts OUR OWN aura stacking, which is exactly why
+    # cast order ranks a shroud-granting land aura LAST among land auras. That ordering is a
+    # heuristic in the provider, not a surfaced choice.
+    "land_aura_grants_shroud": "static targeting restriction; the host pick it filters rides is_land_aura -> main_phase",
+    # Living Wish. `wish_from_sideboard` REDIRECTS the search zone of an already-mapped tutor
+    # (library -> sideboard) rather than adding a decision -- the pick itself is the same
+    # tutor_choice axis, chooser and viewer branch, which is the whole reason the wish was built
+    # on the tutor apparatus instead of a parallel one. That the pool shown is the SIDEBOARD and
+    # not the library is a correctness property the runtime sweep checks, not a second decision.
+    "wish_from_sideboard": "tutor search-ZONE redirect (rides tutor_to_hand -> main_phase/tutor)",
+    # "Exile Living Wish" -- a mandatory resolution-zone replacement with no `you may`, so there
+    # is nothing to offer. Listed rather than left unclassified because a destination change CAN
+    # be load-bearing (it denies a later graveyard decision its fuel); here it denies nothing this
+    # deck can act on, and any such later decision is surfaced by its OWN param regardless.
+    "exiles_self_on_resolve": "mandatory exile-instead-of-graveyard on resolution, no choice",
+    # Aether Hub. `etb_energy` is a mandatory resource gain (no `you may`). The coloured tap is a
+    # genuine either/or in the abstract -- "{T}: Add {C}" vs "{T}, Pay {E}: Add one mana of any
+    # color" -- but the engine resolves it INSIDE the payment DFS, which snapshots and restores
+    # energy_counters as it backtracks (SpellEffects.cpp), so both branches are actually explored
+    # and the mode is picked as part of paying the cast. That makes it the same shape as tap order:
+    # a searched sub-choice of an already-mapped cast, not a separate offer.
+    # DISCLOSED sub-choice (Stage 6a): with Aether Hub as the deck's ONLY energy sink, the sole
+    # cost of spending is not holding the {E} for a later turn, and the DFS optimises the cast in
+    # front of it rather than across turns -- so a line that could have been paid without the
+    # energy may still burn it. Ceiling is 3 {E} for the whole game.
+    "etb_energy": "mandatory energy gain on ETB, no choice",
+    "energy_per_colored_tap": "coloured-tap mode resolved inside the payment DFS (backtracked, like tap order); rides the cast -> main_phase. Cross-turn hoarding is a disclosed heuristic sub-choice",
     "tap_damage_each_opponent": "damage amount (rides tap_damage_cost)",
     "tap_draw_cost_less_per_rad": "cost-reduction detail (rides tap_draw_cost)",
     "reduces_creature_activation": "cost reduction (static, like hinata_cost_reducer)",

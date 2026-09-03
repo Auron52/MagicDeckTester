@@ -62,7 +62,9 @@ def invoke(deck, profile, seed, gi, max_turns, reveal, choices):
     if profile:
         cmd += ["--profile", str(profile)]
     cmd += ["--choices", ",".join(str(c) for c in choices)]
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    # No timeout (CLAUDE.md): a single claude-play step on a hard board can legitimately
+    # run for minutes, and killing it surfaces as an ERROR that reads like an engine defect.
+    p = subprocess.run(cmd, capture_output=True, text=True)
     return p.returncode, p.stdout
 
 

@@ -188,8 +188,11 @@ def run_variant(env_var, env_val, mode):
     if backup:
         shutil.copy2(scratch, backup)
     try:
+        # No timeout (CLAUDE.md): the overnight budget is ~8 h, so any cap sits ON the
+        # expected runtime -- a slow box truncates the sweep and parse_harness then reads a
+        # PARTIAL run as a variant's result, silently corrupting the A/B it exists to decide.
         p = subprocess.run(["bash", str(ROOT / "test/regression.sh"), f"--{mode}"],
-                           capture_output=True, text=True, env=e, timeout=8 * 3600)
+                           capture_output=True, text=True, env=e)
         return p.stdout + "\n" + p.stderr, parse_harness(p.stdout + "\n" + p.stderr)
     finally:
         if backup:

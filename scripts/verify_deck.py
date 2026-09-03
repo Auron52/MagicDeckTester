@@ -68,15 +68,25 @@ class Gate:
 
 
 # --------------------------------------------------------------------------- helpers
-def run(cmd, timeout=600, env=None):
+def run(cmd, env=None):
+    """Run a child to COMPLETION. There is deliberately NO timeout parameter.
+
+    CLAUDE.md: never wrap a command in a timeout -- a truncated run reads as a *result*.
+    That is not theoretical here: `gate_mismatch` grepped the child's stderr for flag lines
+    and ignored its return code, so a run killed at the cap produced empty stderr, zero
+    flagged lines, and a confident **PASS** on a harness that never finished. The whole
+    point of this spine is that nothing reaches the user except an explicit approve-or-defer,
+    so a did-not-run must never be able to wear a green gate.
+
+    The parameter is REMOVED rather than defaulted to None so that reintroducing a cap is a
+    visible edit at every call site, not a one-word default nobody reads.
+    """
     e = dict(os.environ)
     if env:
         e.update(env)
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=e)
+        p = subprocess.run(cmd, capture_output=True, text=True, env=e)
         return p.returncode, p.stdout, p.stderr
-    except subprocess.TimeoutExpired:
-        return 124, "", f"timeout after {timeout}s"
     except FileNotFoundError as exc:
         return 127, "", str(exc)
 
@@ -89,7 +99,7 @@ def deck_stem(deck_path):
 def gate_coverage(deck_path):
     """analyze_deck.py --coverage-only, HARD on missing OR partial (the plan's gap: partials exit 0)."""
     rc, out, err = run([sys.executable, str(ROOT / "scripts/analyze_deck.py"),
-                        deck_path, "--coverage-only"], timeout=180)
+                        deck_path, "--coverage-only"])
     # The tool prints JSON to stdout; a fully-absent card makes it exit 1. Parse regardless.
     try:
         data = json.loads(out[out.index("{"):out.rindex("}") + 1])
@@ -120,17 +130,19 @@ def gate_card_costs(no_network):
         return Gate("card_costs", SKIP, True, "skipped (--no-network)",
                     disclose=["card_costs SKIPPED (--no-network) -- Scryfall cost/cmc reality-diff not run"])
     # A full cold sweep is ~230 cards x (round trip + 0.1s throttle), and every card Scryfall
-    # 429s costs a further 1+2+4s of backoff -- a rate-limited run legitimately needs ~10 min, so
-    # the old 300s cap timed out on a HEALTHY audit rather than on a slow one.
-    rc, out, err = run([sys.executable, str(ROOT / "scripts/audit_card_costs.py")], timeout=1800)
+    # 429s costs a further 1+2+4s of backoff, so a rate-limited run legitimately needs ~10 min.
+    # A 300s cap once timed out on a HEALTHY audit; the cap is now gone entirely (see run()),
+    # and each HTTP request carries its own socket timeout, which is what actually bounds this.
+    rc, out, err = run([sys.executable, str(ROOT / "scripts/audit_card_costs.py")])
     if rc == 127 or "Traceback" in err:
         return Gate("card_costs", ERROR, True, f"tool error (rc={rc}): {err.strip()[:200]}")
     # DID-NOT-RUN IS NOT A FINDING. audit_card_costs exits 1 ONLY on a real mismatch (an
-    # unresolved card does not move its rc), so a 124 is our own timeout sentinel -- nothing was
+    # unresolved card does not move its rc), so a 124 means the audit was killed and nothing was
     # compared. Reporting that as "1 Scryfall cost mismatch(es)" invented a defect that did not
-    # exist and hid the real cause; fail closed, but say which one it is.
+    # exist and hid the real cause; fail closed, but say which one it is. We no longer generate
+    # 124 ourselves -- this now catches a child that was killed from outside.
     if rc == 124:
-        return Gate("card_costs", FAIL, True, "cost audit DID NOT COMPLETE (timeout) -- no costs compared",
+        return Gate("card_costs", FAIL, True, "cost audit DID NOT COMPLETE (killed) -- no costs compared",
                     [("card_costs:*", f"cost audit did not complete: {err.strip()[:120]}; "
                                       f"no cost was compared -- this is a did-not-run, not a mismatch")])
     findings = []
@@ -150,7 +162,7 @@ def gate_card_fields():
     (mana_cost, P/T, types, keywords HARD; oracle_text advisory). Fails closed if the snapshot
     is missing/incomplete -- that is a DISCLOSED pending (run --update on a networked machine),
     never a silent pass. A hard field mismatch is a blocking FAIL."""
-    rc, out, err = run([sys.executable, str(ROOT / "scripts/audit_card_fields.py"), "--json"], timeout=120)
+    rc, out, err = run([sys.executable, str(ROOT / "scripts/audit_card_fields.py"), "--json"])
     try:
         data = json.loads(out[out.index("{"):out.rindex("}") + 1])
     except (ValueError, json.JSONDecodeError):
@@ -209,7 +221,7 @@ def gate_viewer(deck_path, profile, no_sweep):
         args.append(str(profile))
     if no_sweep:
         args.append("--no-sweep")
-    rc, out, err = run(args, timeout=900)
+    rc, out, err = run(args)
     tail = (out or err).strip().splitlines()
     tail = " | ".join(tail[-3:])[:300]
     if rc == 0:
@@ -281,29 +293,64 @@ def gate_viewer_wiring(deck_path):
                 f"{len(expected)} type(s) wired (emitter + GUI): {', '.join(sorted(expected))}")
 
 
+def _write_mismatch_manifest(path, deck_path, profile, seeds, games, depth):
+    """One pooled `mtg --batch` manifest covering EVERY seed of one arm.
+
+    CLAUDE.md forbids a loop of small invocations: each one strands cores on its own
+    load-imbalance tail. Lookahead bottoming is not a manifest field -- the engine derives
+    it from depth (on iff depth > 0), which is what the old `--lookahead-bottoming` flag
+    did at these depths, so the two routes exercise the same play.
+    """
+    jobs = []
+    for s in seeds:
+        j = {"name": f"s{s}d{depth}", "deck": str(deck_path), "games": games,
+             "seed": s, "depth": depth, "budget_ms": 20}
+        if profile and Path(profile).exists():
+            j["profile"] = str(profile)
+        jobs.append(j)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"jobs": jobs}, indent=2))
+    return path
+
+
 def gate_mismatch(deck_path, profile, seeds, games, no_sweep):
     """Engine mismatch harnesses: no [nonconv] (search inconsistency) or [fd-diverge]
-    (rollout-vs-real) across seeds. A single flagged line is a real defect (analyze-deck 5a)."""
+    (rollout-vs-real) across seeds. A single flagged line is a real defect (analyze-deck 5a).
+
+    TWO arms, because both are selected by PROCESS-WIDE env vars (MTG_FLAG_NONCONV vs
+    MTG_FULL_DEPTH+MTG_FD_ORACLE) and so cannot share one process. That is the floor, not a
+    wave: within each arm every seed is pooled into ONE `mtg --batch` queue at full threads.
+    The old shape was the opposite on both counts -- one invocation per (seed, arm), each
+    pinned to `--threads 1`, which is why a 2-seed run took long enough to look hung.
+
+    A non-zero return code is an ERROR, never a pass. This gate reads the engine's STDERR for
+    flag lines, so a child that died produced no lines and therefore looked clean; combined
+    with the old wrapper timeout, a harness that never finished reported PASS.
+    """
     if no_sweep:
         return Gate("mismatch", SKIP, True, "skipped (--no-sweep)",
                     disclose=["mismatch SKIPPED (--no-sweep) -- nonconv/fd-diverge not exercised"])
     if not Path(BIN).exists():
         return Gate("mismatch", ERROR, True, f"engine binary not built at {BIN}")
-    prof_args = ["--profile", str(profile)] if profile and Path(profile).exists() else []
+    scratch = ROOT / "logs/verify" / deck_stem(deck_path)
+    arms = [("nonconv", 3, {"MTG_FLAG_NONCONV": "1"}),
+            ("fd_oracle", 5, {"MTG_FULL_DEPTH": "1", "MTG_FD_ORACLE": "1"})]
     flagged = []
-    for s in seeds:
-        _, _, e1 = run([BIN, deck_path, *prof_args, "--games", str(games), "--seed", str(s),
-                        "--depth", "3", "--budget-ms", "20", "--lookahead-bottoming", "--threads", "1"],
-                       timeout=600, env={"MTG_FLAG_NONCONV": "1"})
-        _, _, e2 = run([BIN, deck_path, *prof_args, "--games", str(games), "--seed", str(s),
-                        "--depth", "5", "--budget-ms", "20", "--lookahead-bottoming", "--threads", "1"],
-                       timeout=900, env={"MTG_FULL_DEPTH": "1", "MTG_FD_ORACLE": "1"})
-        for line in (e1 + "\n" + e2).splitlines():
+    for arm, depth, env in arms:
+        man = _write_mismatch_manifest(scratch / f"mismatch_{arm}.json", deck_path, profile,
+                                       seeds, games, depth)
+        rc, out, err = run([BIN, "--batch", str(man)], env=env)
+        if rc != 0:
+            tail = " | ".join((err or out).strip().splitlines()[-3:])[:300]
+            return Gate("mismatch", ERROR, True,
+                        f"{arm} arm did NOT complete (rc={rc}) -- nothing was compared: {tail}")
+        for line in err.splitlines():
             if "[nonconv]" in line or "[fd-diverge]" in line:
-                flagged.append((f"mismatch:seed{s}", line.strip()[:200]))
+                flagged.append((f"mismatch:{arm}", line.strip()[:200]))
     if flagged:
         return Gate("mismatch", FAIL, True, f"{len(flagged)} nonconv/fd-diverge line(s)", flagged)
-    return Gate("mismatch", PASS, True, f"no nonconv/fd-diverge across seeds {seeds} x {games} games")
+    return Gate("mismatch", PASS, True,
+                f"no nonconv/fd-diverge across seeds {seeds} x {games} games (both arms completed)")
 
 
 def gate_play_invariants(deck_path, profile, seeds, games, no_sweep):
@@ -323,8 +370,7 @@ def gate_play_invariants(deck_path, profile, seeds, games, no_sweep):
     prof = ["--profile", str(profile)] if profile and Path(profile).exists() else []
     n_games = min(games, 4)   # a few game-indices/seed is plenty; keep the gate fast (~1s/game)
     rc, out, err = run([sys.executable, str(ROOT / "scripts/play_invariants.py"), deck_path, *prof,
-                        "--seeds", ",".join(str(s) for s in seeds), "--games", str(n_games), "--json"],
-                       timeout=900)
+                        "--seeds", ",".join(str(s) for s in seeds), "--games", str(n_games), "--json"])
     try:
         data = json.loads(out[out.index("{"):out.rindex("}") + 1])
     except (ValueError, json.JSONDecodeError):
@@ -358,7 +404,7 @@ def _ledger_section(deck_path, heading):
 
 
 def _git_head():
-    rc, out, _ = run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], timeout=30)
+    rc, out, _ = run(["git", "-C", str(ROOT), "rev-parse", "HEAD"])
     return out.strip() if rc == 0 else ""
 
 
