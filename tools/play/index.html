@@ -198,8 +198,9 @@
   .thumb .landface:hover { background:#a6d8ff; box-shadow:0 0 6px rgba(122,180,255,.7); }
   .thumb.sac-src { cursor:pointer; box-shadow:0 0 0 1px #2f8f7e inset; }
   .thumb.sac-src:hover { box-shadow:0 0 0 2px #5ac8b4, 0 0 8px rgba(90,200,180,.45); }
-  .hand .thumb.cyc-src { cursor:pointer; }
-  .hand .thumb.cyc-src:hover { box-shadow:0 0 0 2px #5ac8b4, 0 0 8px rgba(90,200,180,.4); }
+  /* The cycle affordance is the BADGE, not the card: clicking the card body plays it. (It used to
+     highlight the whole thumb, which is exactly the "I clicked the card and it cycled" report.) */
+  .thumb .digbadge:hover { background:#7fe3d0; box-shadow:0 0 6px rgba(90,200,180,.7); }
   /* Activated ability of a permanent already in play (Krenko's token tap, a Goblin sac outlet).
      Single-click queues one activation; the ring turns solid once at least one is queued. */
   .thumb .actbadge { position:absolute; bottom:2px; left:2px; background:rgba(197,140,240,.95); color:#0c1116;
@@ -1427,11 +1428,15 @@ function renderHand() {
     const chN    = canCh ? channelCountFor(c.name) : 0;
     const canSu  = !!suspendSources()[c.name];         // suspendable from hand -- badge to exile it
     const suN    = canSu ? suspendCountFor(c.name) : 0;
-    html += `<span class="thumb ${land?'land':'spell'} ${q?'queued':''} ${spent?'spent':''} ${lehot?'lehot':''} ${vialhot?'vialhot':''} ${canCyc?'cyc-src':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
+    html += `<span class="thumb ${land?'land':'spell'} ${q?'queued':''} ${spent?'spent':''} ${lehot?'lehot':''} ${vialhot?'vialhot':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
       `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
       (leN?`<span class="lealloc" title="${leN} copy/copies discarded to Land’s Edge">⚡${leN}</span>`:'')+
       (c.is_draw?`<span class="draws" title="draws — re-prompts after; commit without a land to play a revealed one">↻ draws</span>`:'')+
-      (canCyc?`<span class="digbadge" title="single-click to cycle — discard to draw a card">↻ cycle</span>`:'')+
+      // Cycling: ANOTHER way to play this card, so it gets its own badge for exactly the reason the
+      // land-face / channel / suspend badges below do -- and, unlike them, cycling RESOLVES ON THE
+      // SPOT (fireDig commits the plan), so it must never be what an ordinary click on the card body
+      // does. Clicking the body plays the card.
+      (canCyc?`<span class="digbadge" data-cycle="${esc(c.name)}" title="CYCLE — discard ${esc(c.name)} to draw a card (resolves immediately). Click the card itself to play it instead.">↻ cycle</span>`:'')+
       // MDFC land side: an explicit badge, because the card's own kind is the FRONT's and every
       // other route on this thumb (double-click, drag) casts that front. Clicking it queues the
       // land drop instead (`land=<front name>`, which is how the engine names the play).
@@ -1464,6 +1469,19 @@ function renderHand() {
     }
   }
   row.innerHTML = html;
+  // Cycle badge: the ONLY route to cycling a hand card. It used to have no handler at all -- the
+  // whole thumb's click fired `activateAbility`, which cycled any card `digSources().cyc` listed --
+  // so clicking a cycling land ANYWHERE discarded it for a card, instantly and irreversibly (it is a
+  // committed plan, not a queued entry). USER 2026-09-01, FiveColour seed 3: "clicking on Jetmir's
+  // Garden, rather than the cycle part, still causes it to cycle" -- the land could not be PLAYED by
+  // clicking it. stopPropagation is what keeps the body's own click (play the card) from also firing.
+  row.querySelectorAll('.digbadge[data-cycle]').forEach(b => {
+    b.onclick = e => { e.stopPropagation(); e.preventDefault();
+      const nm = b.dataset.cycle, idx = digSources().cyc[nm];
+      if (idx == null) return;                       // re-rendered since; not offered any more
+      fireDig(idx, `cycle ${nm} to draw`); };
+    b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
+  });
   // MDFC land-side badge: queue the LAND drop, not the front cast. stopPropagation keeps the
   // thumb's own click/dblclick (which cast the front) from also firing.
   row.querySelectorAll('.landface[data-landface]').forEach(b => {
@@ -1499,7 +1517,7 @@ function renderHand() {
   row.querySelectorAll('.thumb[data-card]').forEach(t => {
     const card=t.dataset.card, kind=t.dataset.kind;
     t.addEventListener('click', () => { if (S._clickT) return;
-      S._clickT = setTimeout(()=>{ S._clickT=null; activateAbility(card); }, 220); });
+      S._clickT = setTimeout(()=>{ S._clickT=null; activateAbility(card, kind); }, 220); });
     t.addEventListener('dblclick', () => { if (S._clickT){ clearTimeout(S._clickT); S._clickT=null; } queueCard(card, kind); });
     t.addEventListener('dragstart', e => { e.dataTransfer.setData('text/card', card); e.dataTransfer.setData('text/kind', kind);
       // Drop-highlight set: the Auras' legal hosts PLUS, for an Equipment in hand, the creatures a
@@ -1612,7 +1630,12 @@ function retraceCard(name) {
   renderBoard();
 }
 
-function activateAbility(name) {
+// A click on a HAND card. The two board-click MODES (Aether Vial deploy, Land's Edge discard) claim
+// it while they are active; otherwise it means the card's DEFAULT play -- the land drop / the cast --
+// exactly as a double-click or a drag does. Every OTHER way to play a card (cycle, channel, suspend,
+// an MDFC land face) lives on its own badge, because those are the routes the body gesture would
+// otherwise silently take instead of the obvious one.
+function activateAbility(name, kind) {
   if (S.over || !S.decision || S.decision.type!=='main_phase') return;
   const le = S.decision.lands_edge;
   const card = (S.decision.me.hand||[]).find(c=>c.name===name);
@@ -1640,10 +1663,16 @@ function activateAbility(name) {
     flashHint(`Land’s Edge: discarding ${n} land${n>1?'s':''} → ${dmg} damage (opponent to ${(S.decision.opponent.life||0)-dmg}).`);
     renderBoard(); return;
   }
-  // Cycling (a land in HAND, e.g. Lonely Sandbar / Forgotten Cave): single-click discards it to draw.
-  const cycIdx = digSources().cyc[name];
-  if (cycIdx != null) { return fireDig(cycIdx, `cycle ${name} to draw`); }
-  flashHint(`“${name}”: double-click or drag to CAST/PLAY it.`+(le?' Click your Land’s Edge to discard lands to it.':''));
+  // No mode is active -> play the card. This branch used to CYCLE any hand card with a cycling
+  // ability (`digSources().cyc`) before it could ever reach the play, which meant a cycling land
+  // could not be played by clicking it at all -- and cycling is not a queued entry that ✕ takes
+  // back, it commits the plan immediately, so a stray click cost the card (USER: FiveColour seed 3,
+  // Jetmir's Garden). Cycling now belongs solely to the `↻ cycle` badge, which stops propagation.
+  queueCard(name, kind || (card ? card.kind : 'nonpermanent'));   // hideVerdict + renderBoard inside
+  if (digSources().cyc[name] != null)
+    flashHint(`Playing ${name}. To CYCLE it instead (discard to draw), click its ↻ cycle badge.`);
+  else if (le)
+    flashHint(`Playing ${name}. Click your Land’s Edge to discard lands to it.`);
 }
 
 // ---- commit / validate -----------------------------------------------------

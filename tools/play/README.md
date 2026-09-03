@@ -1,9 +1,12 @@
 # Play GUI — human-played reference games
 
 A browser GUI for **playing a simulated game by hand** and **probing the engine's model**.
-You assemble a main-phase line — **double-click or drag** a hand card into the
-**Casting this phase** zone (single-click is reserved for ability activation), drag it back or
-✕ to undo — then **Commit phase**. **Committing does not end the phase**: the engine applies the
+You assemble a main-phase line — **click, double-click or drag** a hand card into the
+**Casting this phase** zone, drag it back or ✕ to undo — then **Commit phase**. On a hand card
+every gesture on the card BODY means the same thing, *play this card*; each of the other ways to
+play it (**↻ cycle**, **⚡ channel**, **⌛ suspend**, **▣ land** for an MDFC's land face) has its
+own badge, and only that badge does it. (On the BATTLEFIELD a single click still means "activate
+this permanent's ability" — there is nothing else a click there could mean.) **Committing does not end the phase**: the engine applies the
 line, re-enumerates from the resulting board and asks again, for as long as there is anything left
 to do. Only **Pass** ends the main phase. That is what makes a resource you generate mid-phase
 usable by that phase — tap Krenko for tokens *then* sacrifice them to Skirk Prospector, Vial in a
@@ -121,7 +124,7 @@ background, asks the **depth-5 search** what it would bottom (via `/api/ai-hint`
 when that returns it tags the deep pick and ✓-marks the removals that keep the earliest win — never
 blocking your own choice. Following those picks reproduces the search's exact opening hand. Then each
 main phase:
-double-click or drag hand cards into **Casting this phase** to build a land drop + casts, then
+click, double-click or drag hand cards into **Casting this phase** to build a land drop + casts, then
 **Commit phase** (empty = **Pass**). On accept the board advances; on **choose** you pick the
 sub-decision variant; on reject you get the classified verdict, the lines the model *would*
 play, and **Store as artifact**. **Undo** steps back (free — replayed from choices). Aether Vial
@@ -270,9 +273,14 @@ external-chooser surface exposes:
   Symbiosis // Turntimber, Serpentine Wood) shows a **▣ land** badge; click it to take the land drop
   instead of casting the front. The badge only appears when the model is actually offering that land
   play this phase.
+- **Cycling is a BADGE, not the card.** A hand card the model offers a cycle of carries a **↻ cycle**
+  badge; clicking *that* discards it to draw (it resolves on the spot — it is a committed plan, not a
+  queued entry you can ✕ back). Clicking the card itself plays it, like every other hand card. The
+  badge used to have no handler at all, so a click anywhere on a cycling land cycled it and the land
+  could not be played by clicking at all (user report: FiveColour seed 3, Jetmir's Garden).
 - **Next:**
-  - **The rest of ability activation by single-click** — cycle/dig and Land's Edge discard as
-    committable line actions. Today those two still only hint; cast/play is double-click/drag.
+  - **Land's Edge discard as a committable line action** — today it is a click MODE entered from the
+    Land's Edge permanent rather than a per-card affordance.
   - **Higher-fidelity resolved effects** — the "what changed" strip is a client-side state diff,
     so it can't show *which* card Gamble discarded or Soulfire's per-target flips. Faithful detail
     needs the `claude-play` apply path to emit the `tools/replay/` action log (Gamble discard /
