@@ -339,6 +339,30 @@ The human-play `plan_signature` keys on `|face=` so the two faces don't collapse
 stays cast-name-only (this IS a modeling change, so autonomous GT shifts — Pathway now commits to one
 colour instead of a dual).
 
+**AN AURA IS NEVER OFFERED "unattached" (USER 2026-09-01, EldraziDisplacerFlicker).** *"Auras cannot
+be unattached. That option should not be offered by dialogs."* CR 303.4 — an Aura enters attached to
+the target chosen as it was cast; only an **Equipment** can sit loose, which is why `equip`'s missing
+value still reads *"don't equip it"* and the attack-dig `attach_host` prompt still offers **Leave
+unattached** (that prompt is gated on `params.is_equipment` in `FireAttackDigAttach`, so an Aura
+cannot reach it). The offending option came from the choose dialog's dimension walk: a variant with
+no `enchant` sub reports `'—'`, which `renderChooseDialog` labelled *"leave it unattached"*.
+**CheckLine drops that sub whenever it cannot NAME the host** — its lookup scans battlefield
+*creatures* and then the hand, so an "Enchant land" aura (Wild Growth / Fertile Ground / Overgrowth /
+Trace of Abundance) attached to a land **already in play** carries no sub, while the same aura
+attached to the land being **played this turn** does (the hand fallback finds it). The viewer now
+recovers the host from the enumerated plan's own `enchant_target_name` before the walk, so that
+dialog asks *"Aether Hub or Conservatory?"*; `'—'` for an `enchant` dimension can now only mean a
+plan past the emitted-plan cap and reads *"another host"*.
+
+> **STILL OPEN (engine, not the viewer):** because the sub is what the `CheckLine` dedup signature is
+> built from, TWO land hosts that are both already in play share an EMPTY signature and **collapse**,
+> so the human is never asked which one — the same dead-decision shape as the `plan_signature` bug
+> above, one layer down. Reproduce: EldraziDisplacerFlicker seed 1, T2+, `cast=Wild Growth` returns a
+> single variant with `subs: []` while `d.plans` lists a distinct plan per legal land. The fix is in
+> the `enchant` `addSub` branch of `TurnSolver::CheckLine` (accept a non-creature host — resolve the
+> art/label off any battlefield permanent, not `IsCreature()` only), and no client-side shortcut can
+> recover a variant the engine has already collapsed.
+
 **Archangel free cast (`free_cast`) — a one-time TRIGGER, not a menu option.** Maelstrom Archangel's
 "whenever this creature deals combat damage to a player, you may cast a spell from your hand without
 paying its mana cost" is modelled as a banked charge (`GameState::free_casts_available`) spent in the

@@ -1723,6 +1723,34 @@ function renderChooseDialog(v, line){
   // there. index.html keeps only the rendering and the auto-resolve shortcuts.
   const subOf=(x,key)=>LB.subOf(x,key);
   const choiceOf=(x,key)=>LB.choiceOf(x,key);
+  // AN AURA IS NEVER UNATTACHED (USER 2026-09-01, EldraziDisplacerFlicker: "auras cannot be
+  // unattached. That option should not be offered by dialogs"). CR 303.4: an Aura enters attached to
+  // the target chosen as it was cast, and only an Equipment can sit loose on the battlefield. So a
+  // variant that carries NO `enchant` sub is not "the aura unattached" -- it is an aura whose host
+  // CheckLine could not NAME: its host lookup scans battlefield CREATURES and then the hand, so a
+  // LAND host already in play (Wild Growth / Fertile Ground / Overgrowth / Trace of Abundance --
+  // 16 of this deck's 60 cards) drops the sub. Rendered raw that became the choice
+  // "leave it unattached", which is a play the rules do not have.
+  // Recover the host from the enumerated plan the variant points at: the engine already emits
+  // `enchant_target_name` on every aura action (SummarizePlan prints it too), so the dialog can ask
+  // "Aether Hub or Conservatory?" -- the decision that was actually on offer.
+  // Reproduced at seed 1 T2 with `land=Conservatory;cast=Wild Growth`: two variants, and only the
+  // one enchanting the land being PLAYED (still in hand, so the hand fallback names it) carried a
+  // sub. Plans beyond the emitted-plan cap (MTG_PLAY_PLANS_CAP, 200) are simply not found here and
+  // fall back to the neutral label in `choiceText` -- never to "unattached".
+  variants.forEach(x=>{
+    const pl=((S.decision||{}).plans||[]).find(p=>p.index===x.plan_index);
+    if (!pl) return;
+    (pl.actions||[]).forEach(a=>{
+      // Solo-target tricks re-ask their target at RESOLUTION (board prompt), so they deliberately
+      // carry no queue-time sub -- synthesizing one would ask a decision twice.
+      if (!a || a.trick || !(a.enchant_target>0) || !a.enchant_target_name || !a.card) return;
+      const key=a.card+' →';
+      if ((x.subs||[]).some(s=>s.key===key)) return;   // the engine named it -- keep ITS label ("#2" disambiguation)
+      (x.subs=x.subs||[]).push({ key, choice:a.enchant_target_name, card:a.enchant_target_name,
+                                 kind:'enchant', num:a.enchant_target });
+    });
+  });
 
   function stepChoose(remaining, picks){
     if (remaining.length===1){ hideDecPanel(); return applyAccepted(remaining[0].plan_index, remaining[0].label); }
@@ -1786,9 +1814,13 @@ function renderChooseDialog(v, line){
     // `choiceOf` reports '—' for a variant that simply does not HAVE this dimension (a mixed set:
     // one variant equips, another does not). Rendered raw that is an unexplained dash — the shape
     // that used to drop the whole dialog into the deleted flat picker — so say what it means.
+    // "leave it unattached" is EQUIPMENT-ONLY: an Equipment may legally sit loose (its Equip is a
+    // separate activation, and the attack-dig `attach_host` prompt offers declining outright), but an
+    // AURA cannot -- see the host-recovery pass above. An enchant dimension that still reads '—' here
+    // is one whose plan was past the emitted-plan cap, so say only what is true: some other host.
     const choiceText = c => c.choice!=='—' ? c.choice
       : dim.kind==='equip'     ? 'don’t equip it'
-      : dim.kind==='enchant'   ? 'leave it unattached'
+      : dim.kind==='enchant'   ? 'another host'
       : dim.kind==='sacrifice' ? 'sacrifice nothing'
       : 'this line doesn’t do that';
     // WHICH SHAPE? A grid of card art only communicates something when the choices ARE different
