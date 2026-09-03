@@ -90,6 +90,22 @@ disambiguates same-named hosts for any permanent kind, so this is the minimal co
 16 of the deck's 60 cards are "Enchant land" auras (Wild Growth / Fertile Ground / Overgrowth /
 Trace of Abundance).
 
+**DIRECTLY reproduced DECISIONS.md's own repro, before AND after, same seed/game.**
+DECISIONS.md names an exact repro: "EldraziDisplacerFlicker seed 1, T2+, `cast=Wild Growth`
+returns a single variant with `subs: []`". Ran it on both binaries (seed 1, game-index 0,
+`--choices "1,0"`, `--validate-line "cast=Wild Growth"` -- board has Aether Hub already in
+play with a first Wild Growth already attached, hand has a second Wild Growth):
+
+* BEFORE (commit `56ba0979`): `"variants": [{ "plan_index": 20, "label": "cast: Wild Growth",
+  "cards": [], "subs": [] }]` -- exactly as DECISIONS.md describes: empty subs, no art, no
+  indication the plan enchants Aether Hub at all.
+* AFTER (this worktree): `"variants": [{ "plan_index": 20, "label": "cast: Wild Growth — Wild
+  Growth → Aether Hub", "cards": ["Aether Hub"], "subs": [{ "key": "Wild Growth →", "choice":
+  "Aether Hub", "card": "Aether Hub", "kind": "enchant", "num": 3 }] }]`.
+
+This is the load-bearing verification for C: same commit-pair as the A/B test below, same
+exact repro named in the existing design doc, verdict flips exactly as predicted.
+
 Scope-checked like B: `CheckLine` is called only from `src/main.cpp` (human-play line
 reconciliation + `--validate-line`), never from the autonomous rollout. The autonomous search's
 OWN plan dedup (`plan_signature` inside `EnumeratePlans`) only keys on `enchant_target` under
