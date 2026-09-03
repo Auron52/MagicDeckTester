@@ -162,17 +162,22 @@ static const bool  s_eval_rows_honest = EnvOn("MTG_EVAL_ROWS_HONEST");
 // (fixed: s_discard_reline). With both fixed it is monotone-better: held-out overnight 39 games
 // faster / 0 slower. See docs/design/searched-cleanup-discard.md.
 static const bool  s_searched_discard = EnvOn("MTG_SEARCHED_DISCARD", true);
-// MTG_REFUTED_FOLLOW (measurement lever, DEFAULT OFF pending the adoption A/B; USER 2026-09-03:
-// "Once we have searched fully to the end of max_turn we should stop... choosing a line that
-// seems the best and following it out"): when a top-level search covers the FULL remaining
-// horizon with zero truncation events and finds no win, the game is PROVEN unwinnable -- later
-// turns' searches explore a subset of the refuted space, so re-proving the doom every turn is
-// pure waste (historically the slowest games are no-wins: the five-hour TH game was 100% no-win
-// leaf lookups). Under the lever the engine commits the WHOLE best-graded lost line, follows it
-// out, and answers uncovered phases with the greedy plan. Outcome-identical by construction
-// (the A/B acceptance is 0 outcome moves); unwon-game digests may move (a followed line vs a
-// re-searched one can differ in actions). Also bounds DEEP (d8 b0) instrument runs the same way.
-static const bool  s_refuted_follow    = EnvOn("MTG_REFUTED_FOLLOW");
+// MTG_REFUTED_FOLLOW -- ADOPTED DEFAULT ON 2026-09-03 (USER: "We should turn it on if it
+// improves performance (and has no regressions)"); `=0` restores per-turn re-search. USER
+// design, same day: "Once we have searched fully to the end of max_turn we should stop...
+// choosing a line that seems the best and following it out". When a top-level search covers
+// the FULL remaining horizon with zero truncation events (TurnSolver::TruncEvents() delta) and
+// finds no win, the game is PROVEN unwinnable -- later turns' searches explore a subset of the
+// refuted space, so re-proving the doom every turn is pure waste (historically the slowest
+// games are no-wins: the five-hour TH game was 100% no-win leaf lookups). The engine commits
+// the WHOLE best-graded lost line, follows it out, and answers uncovered phases with the
+// greedy plan; rollouts untouched. Outcome-identical by construction AND measured: 0 outcome
+// moves in 2000 paired games (th 1000 / hinata 500 / mirrorwing 500, seed 5500001), identical
+// averages; unwon games are <4% of games but were 19-46% of deck wall (indicative contended
+// wall: hinata -19% / th -33% / mw -46%). Unwon-game digests move (a followed line differs in
+// actions from a re-searched one) => GT rebaselined at adoption. Also bounds DEEP (d8 b0)
+// instrument runs: refutation fires as early as the horizon allows.
+static const bool  s_refuted_follow    = EnvOn("MTG_REFUTED_FOLLOW", true);
 // Drop the committed line when the searched discard deviates from the heuristic pick (the line was
 // searched assuming the heuristic shed). MTG_DISCARD_RELINE=0 keeps replaying the stale line.
 static const bool  s_discard_reline    = EnvOn("MTG_DISCARD_RELINE", true);
