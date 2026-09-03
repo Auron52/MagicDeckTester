@@ -3147,6 +3147,11 @@ inline int CountControlledDragons(const GameState& state, int controller)
 //
 // Every block below is param-gated, so a deck using none of these params pays only the scans and
 // is byte-identical.
+// Pending self-bounces (Breaching Dragonstorm clause 2) -- recorded by FireEtbWatchers below,
+// drained by DrainPendingSelfBounces (defined after the walk helpers; see its comment).
+struct PendingSelfBounce { int controller; int perm_number; };
+inline thread_local std::vector<PendingSelfBounce> g_pending_self_bounces;
+
 inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
@@ -3226,6 +3231,26 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
                     }
                 }
             }
+        }
+    }
+    // Self-bounce watchers (Breaching Dragonstorm clause 2: "When a Dragon you control enters,
+    // return this enchantment to its owner's hand"). RECORD-only -- the erase happens at the
+    // world's DrainPendingSelfBounces point, because callers of this cascade hold saved slot
+    // indices an erase here would shift. Above the creature early-out: the oracle says "a
+    // Dragon", not "a Dragon creature", so a noncreature Dragon permanent also fires it.
+    // Param-gated scan -> byte-identical for every deck without the param.
+    {
+        const Card& newcomer = state.battlefield[entered_index].card;
+        const int   nctrl    = state.battlefield[entered_index].controller_index;
+        const int   bf_size  = static_cast<int>(state.battlefield.size());
+        for (int i = 0; i < bf_size; ++i)
+        {
+            const Permanent& w = state.battlefield[i];
+            if (i == entered_index || w.controller_index != nctrl) { continue; }
+            const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+            if (!wd || wd->params.self_bounce_on_etb_subtype.empty()) { continue; }
+            if (!CardHasSubtype(newcomer, wd->params.self_bounce_on_etb_subtype)) { continue; }
+            g_pending_self_bounces.push_back({ nctrl, w.card.m_number });
         }
     }
     // Early out for every NONCREATURE enter. This used to early-out on "not a Dragon", which made
@@ -3512,6 +3537,89 @@ inline bool WalkRevealUntilNonland(GameState& state, int controller, Card& out_f
 // enter site keeps the queue empty across games by construction.
 struct PendingEtbFreeCast { int controller; Card source; };
 inline thread_local std::vector<PendingEtbFreeCast> g_pending_etb_free_casts;
+
+// Pending self-bounces (Breaching Dragonstorm clause 2: "When a Dragon you control enters,
+// return this enchantment to its owner's hand"). FireEtbWatchers RECORDS the trigger (it must
+// not erase a battlefield permanent mid-cascade: callers hold saved slot indices -- e.g. the
+// FireEtbWatchers(slot); FireOwnEtbTriggers(slot); pairs -- that an erase would shift); each
+// world drains via DrainPendingSelfBounces at the same points it drains
+// g_pending_etb_free_casts, plus the off-suspend arrival sites. Keyed by permanent m_number so
+// a double-fire (two Dragons entering off one resolution) bounces once and no-ops the second.
+// (The struct + queue are declared above FireEtbWatchers, which records into them.)
+
+// Drain the pending self-bounce queue: each recorded permanent, if still on the battlefield
+// under its controller, returns to its OWNER's hand as its CURRENT card. Copy-revert gap
+// (disclosed): a Sakashima's Protege that entered as a copy of a bounce card returns to hand
+// as the COPIED printed card, not its own (CR 707 says it should revert) -- same class as the
+// already-disclosed graveyard-name gap, unreachable until a deck pairs the copy card with the
+// bounce card AND a Dragon. Safe at every drain point: no saved battlefield indices are live.
+inline void DrainPendingSelfBounces(GameState& state)
+{
+    if (g_pending_self_bounces.empty()) { return; }
+    std::vector<PendingSelfBounce> pend;
+    pend.swap(g_pending_self_bounces);
+    for (const PendingSelfBounce& b : pend)
+    {
+        for (std::size_t i = state.battlefield.size(); i-- > 0; )
+        {
+            Permanent& q = state.battlefield[i];
+            if (q.card.m_number != b.perm_number || q.controller_index != b.controller)
+            { continue; }
+            if (g_play_event_sink)   // nulled by RevealLogPause -> autonomous byte-identity
+            {
+                EmitPlayEvent(state.turn_number, "zone",
+                              "\xF0\x9F\x94\x99 " + q.card.m_name.str()
+                              + ": returned to hand (a Dragon entered)");
+            }
+            state.players[q.owner_index].hand.push_back(q.card);
+            state.battlefield.erase(state.battlefield.begin()
+                                    + static_cast<std::ptrdiff_t>(i));
+            break;   // one bounce per record; a duplicate record finds nothing next pass
+        }
+    }
+}
+
+// Call Forth the Tempest clause 2: "deals damage to each creature your opponents control
+// equal to the total mana value of other spells you've cast this turn." X reads the
+// mv_cast_this_turn accumulator at RESOLUTION (CR-correct: the spell's own cascade free-casts
+// resolved before it and count) minus one instance of this card's own MV. Real damage with
+// inline death pruning -- the rollout has no SBA pass -- mirroring the Chainwhirler loop
+// (etb_damage_each_opponent) exactly: marked damage vs EffectiveToughness, indestructible
+// respected, kills fire FireOppCreatureDies (Massacre Wurm watchers). Shared by BOTH worlds
+// (executor Custom-spell resolution + rollout apply_one) so the realised board matches the
+// searched line. Untargeted sweep: no decision surface, nothing for a chooser to override.
+inline void PerformMvCastDamageOppCreatures(GameState& state, int controller,
+                                            const CardDefinition& def)
+{
+    const int dmg = state.mv_cast_this_turn - def.card.m_mana_cost.ManaValue();
+    if (dmg <= 0) { return; }
+    const int opp = 1 - controller;
+    int hit = 0, killed = 0;
+    for (std::size_t i = state.battlefield.size(); i-- > 0; )
+    {
+        Permanent& q = state.battlefield[i];
+        if (q.controller_index != opp || !q.card.IsCreature()) { continue; }
+        ++hit;
+        q.damage += dmg;
+        if (q.damage >= q.EffectiveToughness()
+            && !q.card.HasKeyword(Keyword::Indestructible))
+        {
+            ++killed;
+            const int dead_controller = q.controller_index;
+            state.players[q.owner_index].graveyard.push_back(q.card);
+            state.battlefield.erase(state.battlefield.begin()
+                                    + static_cast<std::ptrdiff_t>(i));
+            FireOppCreatureDies(state, dead_controller);
+        }
+    }
+    if (hit > 0 && g_play_event_sink)   // nulled by RevealLogPause -> autonomous byte-identity
+    {
+        EmitPlayEvent(state.turn_number, "damage",
+                      "\xE2\x9B\x88 " + def.card.m_name.str() + ": " + std::to_string(dmg)
+                      + " to each opponent creature (" + std::to_string(hit) + " hit, "
+                      + std::to_string(killed) + " died)");
+    }
+}
 
 // Sakashima's Protege: choose which this-turn entrant to enter as a copy of. Priority:
 // (1) the searched/stamped copy_target (a card m_number); (2) the human chooser (real
@@ -4003,6 +4111,7 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
     // The copy is CAST: it counts toward storm-style counters and fires on-cast triggers
     // (a multicolored conjure would ping Mana Cannons -- none of the six is multicolored).
     ++state.spells_cast_this_turn;
+    state.mv_cast_this_turn += cd->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
     FireOnCastTriggers(state, *cd);
 
     if (name == "Black Lotus" || name == "Shivan Dragon")
@@ -6143,6 +6252,7 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
     // turn as a Dragonstorm therefore adds +1 storm. Suspending ({0}) and sacrificing are NOT casts and
     // do not come through here. Byte-identical for every deck that never suspends (this path never runs).
     ++state.spells_cast_this_turn;
+    state.mv_cast_this_turn += def->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
     Permanent perm;
     perm.card              = def->card;
     perm.card.m_number     = card.m_number;   // preserve the per-copy id for logging/state key

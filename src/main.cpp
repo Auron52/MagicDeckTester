@@ -1691,22 +1691,26 @@ static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
                                       int decision_index)
 {
     DecisionJson d(os, decision_index);
-    // heuristic_default is DELIBERATELY -1 (decline), not the AI's pick. It is the answer used for
-    // any reference that PREDATES this decision type, and a newly-added "may" trigger must default to
-    // the NO-OP or it silently rewrites recorded games: with the highest-MV pick as the default, the
-    // seed-6 FiveColour reference had Faeburrow Elder cast for free at T4, so its recorded T5 line
-    // ("land=Wooded Foothills; cast: Faeburrow Elder") became unplayable and the protocol checker --
-    // which infers a reshuffle from a hand difference -- misreported it as `shuffle-dead`. Nothing had
-    // reshuffled; the default had spent a card. The AI's suggestion still ships as `ai_pick` for the
-    // viewer's badge, so the player keeps the hint without it being the silent answer.
+    // heuristic_default doubles as the PREDATES-DEFAULT: the answer used for any reference that
+    // predates this decision type. The rule is that it must reproduce what the engine DID before
+    // the decision existed -- and that differs per mechanic, which is why it is source-keyed:
     //
-    // `source` names the offering trigger: "Maelstrom Archangel" (from-hand charge), or the
-    // cascade / Breaching Dragonstorm / Creative Technique card whose resolution offers its
-    // found card ("you may cast it without paying its mana cost"). The alternative disposition
-    // on decline differs per mechanic (bottom / hand / stays exiled) but the reply shape is
-    // identical: candidate index to cast free, -1 to decline.
+    //  * "Maelstrom Archangel" (from-hand charge): -1 (decline). Before this decision existed
+    //    the engine had NO such trigger, so the no-op is the old behaviour. Learned on the
+    //    seed-6 FiveColour reference: with the AI pick as default, Faeburrow Elder was cast for
+    //    free at T4, the recorded T5 line ("land=Wooded Foothills; cast: Faeburrow Elder")
+    //    became unplayable, and the checker misreported it as `shuffle-dead` -- nothing had
+    //    reshuffled; the default had spent a card from the recorded hand.
+    //  * cascade / Breaching Dragonstorm / Creative Technique trigger resolutions: the AI pick
+    //    (take). Before the decision existed these mechanics AUTO-TOOK the free cast inline
+    //    (provider auto-YES, no dialog), so declining is what rewrites the recorded game.
+    //    Learned on the treasure_hunt claude_s6_gi5 reference (2026-09-03): -1 declined five
+    //    Throes of Chaos cascade casts the recorded game had actually made, bottoming the hits
+    //    and replaying a won game into a loss (`play-drift`).
+    //
+    // The AI's suggestion also ships as `ai_pick` for the viewer's badge either way.
     d.Type("free_cast").Source(source).Turn(s.turn_number).Board(s)
-     .HeuristicDefault(-1);
+     .HeuristicDefault(source == "Maelstrom Archangel" ? -1 : heuristic_default);
     d.Int("ai_pick", heuristic_default);
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {

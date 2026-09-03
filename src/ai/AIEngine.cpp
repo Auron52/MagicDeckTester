@@ -4773,6 +4773,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // executor's storm count matches the searched line. Read only by Dragonstorm's EffectHandler
     // resolution + folded into no state key -> byte-identical for every non-storm deck.
     ++state.spells_cast_this_turn;
+    state.mv_cast_this_turn += def->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
 
     // Maintain the "one more spell" budget in lockstep with TurnSolver::apply_one (same per-cast site):
     // a non-restrictor spends one (when a budget is active); the restrictor (Irencrag) installs its own

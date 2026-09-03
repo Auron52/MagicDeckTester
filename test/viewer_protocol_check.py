@@ -801,11 +801,21 @@ def check_reference(path, collect=None):
             if dec.get("type") == "main_phase":
                 pick, src = -1, "pass"
             elif dec.get("type") == "free_cast":
-                # A "may" trigger the reference predates: replay what its own line did (see
-                # free_cast_intent). Falls back to the engine default (decline) when the reference
-                # says nothing about that phase.
-                intent = free_cast_intent(dec, kept, ri)
-                pick, src = intent if intent else engine_default(dec)
+                # A "may" trigger the reference predates. The intent scan applies ONLY to
+                # Maelstrom Archangel's from-hand charge, whose old protocol recorded the free
+                # cast inside the post-main plan (see free_cast_intent) -- for it, fall back to
+                # the engine default (decline) when the reference says nothing. A TRIGGER-
+                # RESOLUTION free cast (cascade / Breaching Dragonstorm / Creative Technique)
+                # never rode any plan: the pre-decision engine auto-took it inline, so the
+                # faithful answer is the frame's own heuristic_default (= the AI take, per the
+                # emitter's source-keyed predates-default). Scanning the post-main plan for
+                # those declined cascade casts the recorded game had actually made and replayed
+                # a won treasure_hunt reference into a loss (claude_s8_gi7, 2026-09-03).
+                if dec.get("source") == "Maelstrom Archangel":
+                    intent = free_cast_intent(dec, kept, ri)
+                    pick, src = intent if intent else engine_default(dec)
+                else:
+                    pick, src = engine_default(dec)
             elif dec.get("type") == "target":
                 # A trick target that used to ride the PLAN and is now asked at resolution: aim it
                 # where the reference's own plan aimed it (see target_intent).

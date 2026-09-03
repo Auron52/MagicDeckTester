@@ -104,7 +104,14 @@ static_assert(sizeof(Player) == 192,
 // at the top of Build() gated on opponent_library_dealt.
 // 744 -> 760 (2026-09-02): the two embedded Players each gained energy_counters, above (8 bytes
 // each once padding settles).
-static_assert(sizeof(GameState) == 760,
+// 760 -> 768 (2026-09-03): GameState gained `mv_cast_this_turn` (int, Call Forth the Tempest's
+// damage accumulator) + `deck_reads_mv_cast` (bool). Classification: mv_cast_this_turn is an
+// EXACT-MATCH turn-scoped counter, folded in Build() beside its pair spells_cast_this_turn,
+// gated on deck_reads_mv_cast (same guard rationale as opponent_library_dealt: an unconditional
+// fold would shift every key for every deck). deck_reads_mv_cast itself is a DECK CONSTANT
+// (stamped once at SetupGame), identical across every pair of states Build() could ever
+// compare -- nothing to fold, exactly like deck_feeds_combat above it.
+static_assert(sizeof(GameState) == 768,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -366,6 +373,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // storm from a Lotus Bloom arriving off suspend, and the per-turn pins. Exact-match rather than
     // asserted, so two siblings sharing the same value still compare.
     fold(static_cast<std::uint64_t>(s.spells_cast_this_turn));
+    // MV-cast accumulator (CFT damage clause): turn-scoped like its pair above; deck-gated on a
+    // reader existing, same rationale as the opponent_library_dealt guard (an unconditional fold
+    // would shift every key for every deck to record a field permanently unread for them).
+    if (s.deck_reads_mv_cast) { fold(static_cast<std::uint64_t>(s.mv_cast_this_turn)); }
     fold(static_cast<std::uint64_t>(s.casts_remaining_this_turn));
     fold(static_cast<std::uint64_t>(s.free_casts_available));
     fold(static_cast<std::uint64_t>(s.scripted_cheat_choice));

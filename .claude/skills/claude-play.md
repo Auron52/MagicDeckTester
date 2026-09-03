@@ -124,8 +124,21 @@ decision and exits:
   again; `ai_choice` is what the engine's KeepHand would do. `"bottom"` — after a keep,
   put one card on the bottom (fires `mulligan_count` times): reply the 0-based `hand`
   INDEX to bottom; `ai_choice.index` is the engine's pick and each hand card carries a
-  `win_optimal` flag (depth > 0). Following `ai_choice` at every mulligan/bottom step
-  reproduces the autonomous search's exact opening hand. All decision types share the one
+  `win_optimal` flag (depth > 0). **CAVEAT (2026-09-03 sweep finding): `ai_choice` at the
+  `bottom` step is a per-step HINT, not a replay of the benchmark.** For a deck with no
+  keep table (`ai_set: []`) it comes from a heuristic/lower depth and can differ from
+  what the depth-5 autonomous game bottoms — three sweep agents observed it picking a
+  bottom that costs the benchmark's win turn (and `win_optimal: true` on every card at
+  such a step is not trustworthy). To reproduce the autonomous opening exactly, read the
+  benchmark run's per-game log `mulliganSequence` (`--log-dir`) and bottom those exact
+  cards; otherwise reason about the bottom yourself. Trigger-resolution decisions also
+  exist: `"free_cast"` — a cascade / Breaching Dragonstorm / Creative Technique / Maelstrom
+  Archangel "you may cast it without paying its mana cost": reply the candidate index to
+  cast free or **-1** to decline (decline disposition differs per mechanic: cascade
+  bottoms, BD banks to hand, CT leaves it exiled). `"demonstrate"` — copy yes/no: reply
+  **1** to copy, **0** not to. `"target"` — an option-list pick at resolution (e.g.
+  Sakashima's Protege's copy-an-entrant choice; `min_targets: 0` means an empty pick
+  declines). Each self-documents via its `note` field. All decision types share the one
   `--choices` stream in the order they occur (mulligan/bottom first, then per turn a
   vial_charge before its main_phase). Not emitted under `--force-mulligan` (that
   reconstructs a fixed hand on the engine).

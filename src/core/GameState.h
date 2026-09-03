@@ -242,6 +242,20 @@ struct GameState
     // first-main dedup boundary and the combo never spans one). Byte-identical for every deck without
     // a tutor_to_battlefield card: the field is written but read by nothing else and folded nowhere.
     int                      spells_cast_this_turn = 0;
+    // Summed MANA VALUE of the spells behind spells_cast_this_turn (Call Forth the Tempest's
+    // damage clause: "equal to the total mana value of other spells you've cast this turn" --
+    // the reader subtracts its own MV once). Incremented at EXACTLY the five sites that ++ the
+    // storm counter (CastSpellFromHand, apply_one, PushFreeCast, the Garth copy-cast, and
+    // CastOffSuspend) and reset at the same two turn starts, so the pair can never desync.
+    // Folded into state keys ONLY when deck_reads_mv_cast (below) -- an unconditional fold
+    // would shift every storm-deck key and give up byte-identity to record a field that is
+    // read by nothing in those decks (same guard rationale as opponent_library_dealt).
+    int                      mv_cast_this_turn = 0;
+    // Deck-level stamp (GoldFishRunner::SetupGame): true iff some card in the deck carries
+    // damage_opp_creatures_mv_cast, i.e. something actually READS mv_cast_this_turn. Gates the
+    // key folds only; the accumulator itself always runs (cheap, and lockstep is simpler than
+    // a conditional increment at five sites).
+    bool                     deck_reads_mv_cast = false;
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

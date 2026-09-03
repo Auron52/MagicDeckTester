@@ -2,6 +2,7 @@
 #include "../core/GameSetup.h"
 #include "GoldFishRunner.h"
 #include "../core/OpponentDeck.h"
+#include "../core/SpellEffects.h"   // g_pending_self_bounces (cleared per game in StampDeckTraits)
 #include "../core/GameEngine.h"
 #include "../core/GameLogger.h"
 #include "../core/HardwareConcurrency.h"
@@ -740,6 +741,17 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     state.dep_enabler_main1    = dep_pulls.enabler_main1;
     state.dep_castpayoff_main1 = dep_pulls.castpayoff_main1;
     state.deck_gy_readers      = DeckGraveyardReaders(deck); // EOT dominance's graveyard projection
+    g_pending_self_bounces.clear();   // thread-scoped queue: a fresh game must never inherit a stray record
+    // Does anything in this deck READ the mv-cast accumulator (Call Forth the Tempest's damage
+    // clause)? Gates the mv_cast_this_turn key folds only -- see GameState::deck_reads_mv_cast.
+    state.deck_reads_mv_cast = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.damage_opp_creatures_mv_cast) { return true; }
+        }
+        return false;
+    }();
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
     // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers
     // that stamp traits without running SetupGame (the scenario harness) must otherwise get the

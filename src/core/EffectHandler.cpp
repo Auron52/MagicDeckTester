@@ -151,6 +151,12 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
             state.stack.push_back(std::move(te));
         }
     }
+    // Self-bounce drain (Breaching Dragonstorm clause 2): a watched-subtype permanent entered
+    // during this resolution (cast, put, token or copy -- FireEtbWatchers records them all).
+    // Safe here: the resolution is complete, no saved battlefield indices are live. Rollout
+    // twin: apply_one's DrainPendingSelfBounces calls. No-op (empty check) for every deck
+    // without the param.
+    DrainPendingSelfBounces(state);
     return ok;
 }
 
@@ -397,6 +403,13 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 if (def.params.shuffle_reveal_freecast)
                 {
                     ResolveShuffleRevealFreecast(state, entry, def);
+                }
+                // Call Forth the Tempest clause 2: damage each opponent creature by the total
+                // MV of OTHER spells cast this turn (shared helper -- rollout twin in
+                // apply_one's sorcery dispatch, lockstep).
+                if (def.params.damage_opp_creatures_mv_cast)
+                {
+                    PerformMvCastDamageOppCreatures(state, entry.controller_index, def);
                 }
                 // Reality Spasm / Irencrag Feat -- mana RITUAL. On resolution, add its floating
                 // mana to the turn-scoped reserve so a later same-turn cast (Crackle) can spend
@@ -788,6 +801,7 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
     // storm-count divergence, where ResolveCascade pushed a bare StackEntry that no counter or
     // cast trigger ever saw.)
     ++state.spells_cast_this_turn;
+    state.mv_cast_this_turn += def->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
     if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
     if (def->params.max_casts_after >= 0)
     {
@@ -891,9 +905,7 @@ void EffectHandler::ResolveEtbExileFreeCast(GameState& state, const StackEntry& 
 void EffectHandler::ResolveDemonstrate(GameState& state, const StackEntry& entry,
                                        const CardDefinition& def)
 {
-    // "You may copy this spell." Provider default (copy), human chooser overrides. The
-    // opponent's half ("choose an opponent to also copy it") is inert -- the goldfish opponent
-    // is never dealt a library and never casts (see the card's bracket note).
+    // "You may copy this spell." Provider default (copy), human chooser overrides.
     bool copy = ResolveProvider(state).DemonstrateCopy(state, entry.controller_index, def);
     if (g_play_demonstrate_chooser)
     { copy = (*g_play_demonstrate_chooser)(state, entry.controller_index, def.card, copy); }
@@ -907,6 +919,23 @@ void EffectHandler::ResolveDemonstrate(GameState& state, const StackEntry& entry
     ce.controller_index = entry.controller_index;
     ce.is_copy          = true;
     state.stack.push_back(std::move(ce));
+    // Opponent's half ("choose an opponent to also copy it" -- exactly one opponent exists).
+    // Their copy walks THEIR library, so it is modelled only when they actually have one
+    // (opponent_library_dealt; no current demonstrate deck deals one -- live machinery behind
+    // an engine boundary, not a card gap). Pushed AFTER ours -> resolves FIRST (APNAP: the
+    // active player's copy entered the stack first). Their free cast is DECLINED inside
+    // ResolveShuffleRevealFreecast (the passive opponent has no casting machinery; the hit
+    // stays exiled, the oracle's decline disposition) -- disclosed in the bracket note.
+    // Rollout twin: apply_one's demonstrate block runs the same walk before the CT payload.
+    if (state.opponent_library_dealt)
+    {
+        StackEntry oe;
+        oe.type             = StackEntry::EntryType::Spell;
+        oe.source           = entry.source;
+        oe.controller_index = 1 - entry.controller_index;
+        oe.is_copy          = true;
+        state.stack.push_back(std::move(oe));
+    }
 }
 
 void EffectHandler::ResolveShuffleRevealFreecast(GameState& state, const StackEntry& entry,
@@ -924,9 +953,22 @@ void EffectHandler::ResolveShuffleRevealFreecast(GameState& state, const StackEn
     if (have) { kept.push_back(found.m_number); }
     std::vector<int> bottomed;
     for (int n : seen_nums) { if (!have || n != found.m_number) { bottomed.push_back(n); } }
-    EmitReveal(state.turn_number, def.card.m_name.str() + " (reveal)",
+    EmitReveal(state.turn_number,
+               def.card.m_name.str()
+                   + (entry.controller_index != state.active_player_index
+                          ? " (opponent copy reveal)" : " (reveal)"),
                seen_nums, seen_names, kept, bottomed);
     if (!have) { return; }
+    // The OPPONENT's demonstrate copy (ResolveDemonstrate pushes it with their controller
+    // index): the walk above already ran on THEIR library; the free cast is declined by the
+    // model -- the passive opponent has no casting machinery -- so the hit stays exiled (the
+    // oracle's decline disposition). No provider/chooser consult: neither speaks for the
+    // opponent. Disclosed in Creative Technique's bracket note.
+    if (entry.controller_index != state.active_player_index)
+    {
+        state.exile.push_back(found);
+        return;
+    }
     const CardDefinition* fd = CardDatabase::Instance().LookupCached(found);
     bool take = fd ? ResolveProvider(state).TakeFreeCast(state, entry.controller_index, *fd)
                    : false;

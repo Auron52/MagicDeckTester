@@ -642,6 +642,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.shuffle_reveal_freecast    = params.value("shuffle_reveal_freecast",    false);
     p.demonstrate                = params.value("demonstrate",                false);
     p.enter_as_copy_of_entrant   = params.value("enter_as_copy_of_entrant",   false);
+    p.damage_opp_creatures_mv_cast = params.value("damage_opp_creatures_mv_cast", false);
+    p.self_bounce_on_etb_subtype = params.value("self_bounce_on_etb_subtype", std::string());
     p.retrace             = params.value("retrace",             false);
 
     p.etb_pay_life_to_untap = params.value("etb_pay_life_to_untap", 0);

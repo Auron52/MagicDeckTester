@@ -200,6 +200,8 @@ void GameEngine::UntapStep(GameState& state)
     state.opponent_lost_life_this_turn = false;
     state.floating_mana = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4); no-op for non-ritual decks
     state.spells_cast_this_turn = 0;    // STORM counter resets each turn (lockstep w/ SimulateEndAndStartNextTurn); no-op for non-storm decks
+    state.mv_cast_this_turn     = 0;    // CFT damage accumulator resets with its pair
+    DrainPendingSelfBounces(state);     // safety net: an off-cascade bounce (e.g. off-suspend Dragon) lands by turn start
     state.casts_remaining_this_turn = -1; // Irencrag "one more spell" budget clears each turn (see GameState); no-op for non-restrictor decks
     state.hand_size_at_combat   = -1;   // post-combat productivity markers are per turn (see GameState);
     state.battlefield_at_combat = -1;   // -1 = no combat yet this turn = "assume productive"

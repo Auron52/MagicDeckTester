@@ -351,6 +351,8 @@ INERT_PARAMS = {
     # ---- BreachingDragonstorm (2026-09-03) ----
     "cascade_count": "cascade instance count -- a printed constant ('Cascade, cascade' = 2), not a choice",
     "etb_exile_free_cast_max_mv": "oracle MV cap on Breaching Dragonstorm's free cast -- a printed constant",
+    "damage_opp_creatures_mv_cast": "CFT damage clause: untargeted rules-forced sweep off the mv-cast accumulator -- nothing to choose, no decision surface",
+    "self_bounce_on_etb_subtype": "BD Dragon-bounce: a mandatory ('return', not 'may') triggered ability -- fires from the universal enter cascade, no choice",
     # stats / computed values
     "damage": "damage amount", "draw": "draw count", "cast_draw": "draw count",
     "power_bonus": "stat bonus", "tough_bonus": "stat bonus",

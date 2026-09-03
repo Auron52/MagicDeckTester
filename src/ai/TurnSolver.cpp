@@ -40,6 +40,10 @@
 // for top-level T1 pre-combat decisions.  Set via TurnSolver::SetTraceSolve().
 static bool s_trace_solve = false;
 
+// Fixed-colour SacForMana credit (the BreachingDragonstorm gi2 fix) -- defined with the
+// sequenced-credit machinery; declared here for the colour-reserve checker's early use.
+static bool CreditFixedColorSac(ManaPool& eff, const Action& a);
+
 // Fidelity of the full-depth search's BEYOND-HORIZON leaf estimate (FSLineWin's
 // `depth<=0` tail). This is the policy that ranks plans whose payoff lies past the
 // searched horizon -- e.g. a combo deck (Treasure Hunt) whose lethal turn is several
@@ -4520,6 +4524,9 @@ std::vector<int> TurnSolver::ColorCriticalReserve(const GameState& state,
     ManaPool credit;
     for (const Action& a : acts)
     {
+        // Fixed-colour sacs credit their pinned colour (the gi2 fix -- see CreditFixedColorSac);
+        // everything else keeps the enumerator's exact treatment (ritual float as wild).
+        if (CreditFixedColorSac(credit, a)) { continue; }
         if (a.ritual_float > 0) { credit.wild += a.ritual_float; }
         if (a.rock_mana.Total() > 0) { credit.AddPool(a.rock_mana); }
     }
@@ -12844,6 +12851,52 @@ static int SeqRitualCreditMode()
 // (21 hand-played references stopped replaying; see the mode note above). Passing it is a strict
 // LOOSENING: discounts only ever raise the credit, so it can remove false rejects and can never
 // create a new rejection.
+// FIXED-COLOUR SAC CREDIT (2026-09-03, the BreachingDragonstorm gi2 fix). A SacForMana whose
+// SOURCE pins its colour (Dwarven Ruins {R}{R}, Svyelunite Temple {U}{U}, an Eldrazi Spawn's
+// {C}) used to enter the subset walkers' affordability as WILD -- mana that pays ANY pip -- so
+// a plan could crack Dwarven Ruins to "pay" {U}{U}, be offered to a human, fire the
+// IRREVERSIBLE crack in the apply pre-pass, and only then drop the miscoloured cast
+// (server-truth drop; gi2 lost a real turn). Crediting the PINNED colour instead is exact, not
+// conservative: the executor can only ever float that colour, so no payable line is lost.
+//
+// QUANTITY (same day, found by the delta sweep's gi2 probe): the crack's cost is {T}+sac, so a
+// crackable land is necessarily UNTAPPED -- and an untapped land's ordinary tap mana is ALREADY
+// in the walkers' pool. Crediting the full sac amount on top counted Dwarven Ruins as tap+crack
+// = 3 mana from a permanent whose true max is 2 (tap XOR crack), and plans one mana beyond the
+// real ceiling still reached the menu (advertised cast dropped after the irreversible crack --
+// the gi2 harm on a second axis). So a sac source that is ALSO a standing tap source credits
+// only the DELTA (sac amount minus its tap production); sac-ONLY sources (Lotus Bloom, Spawn
+// tokens -- nothing of theirs is in the pool) keep the full amount. Still exact, still an upper
+// bound: pool(tap) + delta == the crack's yield.
+//
+// Returns true (and adds any credit) iff the candidate is a fixed-colour SacForMana; such
+// credit is EXCLUDED from the wild ritual_credit/simul totals -- it needs no sequencing (the
+// {0}-cost crack runs in the apply pre-pass, before any cast) -- and from the seq walk's
+// domain nothing changes for existing decks (no suite deck holds a fixed-colour sac + rituals
+// together; a future one reads slightly optimistic on the RITUAL portion only, the status-quo
+// direction). Choose-a-colour sacs (Lotus Bloom, Black Lotus, Treasures) keep the wild credit:
+// their apply-time colour is picked to fit the line, so wild IS the exact model for them.
+static bool CreditFixedColorSac(ManaPool& eff, const Action& a)
+{
+    if (a.kind != Action::Kind::SacForMana || a.ritual_float <= 0 || !a.def) { return false; }
+    const std::string& col = a.def->params.sac_for_mana_color;
+    if (col.empty()) { return false; }
+    int amt = a.ritual_float;
+    if (!a.def->params.produces.empty())
+    { amt -= a.def->params.produces_amount; }        // its tap mana is already in the pool
+    if (amt < 0) { amt = 0; }
+    switch (col[0])
+    {
+        case 'W': eff.white     += amt; return true;
+        case 'U': eff.blue      += amt; return true;
+        case 'B': eff.black     += amt; return true;
+        case 'R': eff.red       += amt; return true;
+        case 'G': eff.green     += amt; return true;
+        case 'C': eff.colorless += amt; return true;
+        default:  return false;
+    }
+}
+
 static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>& cands,
                                  const std::vector<int>& sel, int exclude = -1,
                                  const GameState* st_disc = nullptr)
@@ -14605,7 +14658,15 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         {
             int ritual_credit = 0;
             {
-            for (int j : sel) { ritual_credit += cands[j].ritual_float; }
+            for (int j : sel)
+            {
+                // Fixed-colour sac credit (Dwarven Ruins / Svyelunite Temple / Spawn): the
+                // pinned colour, not wild -- see CreditFixedColorSac. Excluded from the wild
+                // total AND from simul (its {0}-cost crack pre-passes, needing no sequencing).
+                if (CreditFixedColorSac(eff, cands[j]))
+                { CreditFixedColorSac(eff_nc, cands[j]); credited = true; continue; }
+                ritual_credit += cands[j].ritual_float;
+            }
             // Rite-of-Flame graveyard self-scaling: k copies cast this turn escalate (+0,+1,...,+k-1)
             // as each prior copy hits the graveyard; the flat per-cast stamp misses that triangular
             // term. Single self-scaling name in-deck, so count-by-flag == count-by-name.
@@ -17868,6 +17929,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // draw-breakpoint cast is its own apply_one so it self-counts. Read only by Dragonstorm's
         // resolution (below) + no BuildSimKey fold -> byte-identical for every non-storm deck.
         ++state.spells_cast_this_turn;
+        state.mv_cast_this_turn += def.card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
 
         // Maintain the "one more spell" budget in lockstep with the storm counter (same per-cast site).
         // A non-restrictor spends one (when a budget is active); the restrictor itself (Irencrag) INSTALLS
@@ -17926,15 +17988,42 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         };
         // Demonstrate (CR 702.145): the copy resolves BEFORE the original (2021-04-16 ruling).
         // The copy is NOT a cast -- no counters, no apply_one recursion for the copy itself,
-        // just its payload (any free cast the payload makes IS a cast and self-counts). The
-        // opponent's copy is inert (never dealt a library, never casts -- bracket note).
+        // just its payload (any free cast the payload makes IS a cast and self-counts).
         if (def.params.demonstrate && def.params.shuffle_reveal_freecast)
         {
             bool copy = ResolveProvider(state).DemonstrateCopy(state, state.active_player_index, def);
             // Human demonstrate chooser at the REAL resolution path (same lesson as above).
             if (g_play_demonstrate_chooser)
             { copy = (*g_play_demonstrate_chooser)(state, state.active_player_index, def.card, copy); }
-            if (copy) { do_shuffle_reveal_freecast(); }
+            if (copy)
+            {
+                // Opponent's half ("choose an opponent to also copy it"): their copy walks
+                // THEIR library, and resolves FIRST (APNAP: the active player's copy entered
+                // the stack first -- executor twin pushes it last). Modelled only when they
+                // actually have a library (opponent_library_dealt; no current demonstrate deck
+                // deals one). Their free cast is DECLINED by the model -- the passive opponent
+                // has no casting machinery -- so the hit stays exiled (the oracle's decline
+                // disposition); disclosed in the card's bracket note. Lockstep with the
+                // executor's opponent-copy Spell entry: same shuffle ordinal, same walk.
+                const int opp = 1 - state.active_player_index;
+                if (state.opponent_library_dealt)
+                {
+                    ShuffleAfterSearch(state, opp);
+                    std::vector<int> onums; std::vector<std::string> onames;
+                    Card ofound;
+                    if (WalkRevealUntilNonland(state, opp, ofound, &onums, &onames))
+                    {
+                        std::vector<int> obottomed;
+                        for (int n : onums)
+                        { if (n != ofound.m_number) { obottomed.push_back(n); } }
+                        EmitReveal(state.turn_number,
+                                   def.card.m_name.str() + " (opponent copy reveal)",
+                                   onums, onames, { ofound.m_number }, obottomed);
+                        state.exile.push_back(std::move(ofound));
+                    }
+                }
+                do_shuffle_reveal_freecast();
+            }
         }
         // Cascade instances resolve BEFORE the spell's own effect (CR 601.2i / 702.85a) -- so a
         // cascade CREATURE's hit enters first (load-bearing for Sakashima's Protege's copy
@@ -18433,6 +18522,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Breaching Dragonstorm enter trigger (recorded just above when this creature IS a
             // copy of it): resolve now, lockstep with the executor's post-resolution drain.
             if (!g_pending_etb_free_casts.empty()) { drain_etb_free_casts(); }
+            // ...and clause 2's self-bounce (recorded by FireEtbWatchers if this entrant is a
+            // watched-subtype permanent): safe here, no saved battlefield indices are live.
+            DrainPendingSelfBounces(state);
 
             // ETB library dig (Acclaimed Contender): performed inline so the clairvoyant
             // rollout sees the dug card in hand for later turns. The real game does the
@@ -18694,6 +18786,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // it is a cast trigger, run above BEFORE the spell's effect -- see the real-stack
             // block after the cast bookkeeping.)
             do_shuffle_reveal_freecast();
+        }
+        else if (def.params.damage_opp_creatures_mv_cast)
+        {
+            // Call Forth the Tempest clause 2 (shared helper -- executor twin in the
+            // Custom-spell resolution, lockstep). Its cascades already resolved above as cast
+            // triggers, so their free-cast MVs are in the accumulator, per the oracle timing.
+            PerformMvCastDamageOppCreatures(state, state.active_player_index, def);
         }
         else if (def.tmpl == CardTemplate::Removal && def.params.tuck_to_library)
         {
@@ -19184,6 +19283,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // enter trigger FireOwnEtbTriggers just recorded): resolve the exile-until-nonland
             // walk + free cast now, lockstep with the executor's post-resolution drain.
             if (!g_pending_etb_free_casts.empty()) { drain_etb_free_casts(); }
+            // ...and clause 2's self-bounce (a watched-subtype permanent entering -- incl. one
+            // PUT mid-resolution, e.g. a Dragonstorm tutor wave, whose FireEtbWatchers recorded
+            // here): drained now, matching the executor's end-of-Resolve drain point.
+            DrainPendingSelfBounces(state);
             // ...and that draw is a DECISION POINT (breakpoint site 6): the card it put in hand is
             // castable with the mana this turn's plan has left, and until this existed it never
             // could be -- see TurnSolver::EquipmentDrawBreakpoint for the measurement.
@@ -20604,6 +20707,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.opponent_lost_life_this_turn = false;
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
     state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
+    state.mv_cast_this_turn       = 0;             // CFT damage accumulator resets with its pair
+    DrainPendingSelfBounces(state);                // safety net (lockstep w/ UntapStep): off-cascade bounces land by turn start
     state.casts_remaining_this_turn = -1;          // Irencrag "one more spell" budget clears each turn (see GameState)
     state.hand_size_at_combat   = -1;              // post-combat productivity markers are per turn (see
     state.battlefield_at_combat = -1;              // GameState); lockstep with GameEngine's turn start
@@ -22077,7 +22182,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         {
             int ritual_credit = 0;
             {
-            for (int j : sel) { ritual_credit += cands[j].ritual_float; }
+            for (int j : sel)
+            {
+                // Fixed-colour sac credit (Dwarven Ruins / Svyelunite Temple / Spawn): the
+                // pinned colour, not wild -- see CreditFixedColorSac. Excluded from the wild
+                // total AND from simul (its {0}-cost crack pre-passes, needing no sequencing).
+                if (CreditFixedColorSac(eff, cands[j]))
+                { CreditFixedColorSac(eff_nc, cands[j]); credited = true; continue; }
+                ritual_credit += cands[j].ritual_float;
+            }
             // Rite-of-Flame graveyard self-scaling: k copies cast this turn escalate (+0,+1,...,+k-1)
             // as each prior copy hits the graveyard; the flat per-cast stamp misses that triangular
             // term. Single self-scaling name in-deck, so count-by-flag == count-by-name.
@@ -26138,6 +26251,12 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     // so two identical-zone states can differ in it. User-suspected 2026-08-14; folded when nonzero.
     if (state.spells_cast_this_turn > 0)
     { Fold(k, 0x5709A); Fold(k, static_cast<uint64_t>(state.spells_cast_this_turn)); }
+    // MV-cast accumulator (Call Forth the Tempest's damage clause): future-determining for the
+    // same reason as the storm count -- two identical-zone states can differ in it (retrace /
+    // copy casts). Deck-gated (deck_reads_mv_cast): an unconditional fold would shift every
+    // storm-deck key for a field nothing in those decks reads (see GameState).
+    if (state.deck_reads_mv_cast && state.mv_cast_this_turn > 0)
+    { Fold(k, 0x37C4D); Fold(k, static_cast<uint64_t>(state.mv_cast_this_turn)); }
     if (state.floating_mana.Total() > 0)
     {
         const ManaPool& fm = state.floating_mana;
@@ -31319,6 +31438,10 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     Fold(k, static_cast<uint64_t>(f.wild));
     Fold(k, static_cast<uint64_t>(state.spells_cast_this_turn));
     Fold(k, static_cast<uint64_t>(state.casts_remaining_this_turn + 1));   // -1 == unset
+    // MV-cast accumulator: same mid-turn-scalar rationale as the storm fold above it; deck-gated
+    // so every existing deck keeps the exact prior key (see GameState::deck_reads_mv_cast).
+    if (state.deck_reads_mv_cast)
+    { Fold(k, static_cast<uint64_t>(state.mv_cast_this_turn)); }
     // ACTIVE SCRIPTED PINS (2026-08-20, enum-memo verify find #4): an outer candidate's
     // ApplyPlanDirect holds consumable thread-local pins (top/etbdig/tutor/reorder/tapmode)
     // across its nested enumerations and solves, and a live pin steers the next resolution

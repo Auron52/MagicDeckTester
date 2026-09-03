@@ -260,8 +260,12 @@ struct CardParams
     // Demonstrate (Creative Technique, CR 702.145): when you cast this spell, you may copy it.
     // The copy resolves BEFORE the original (2021-04-16 ruling), is NOT a cast (no cast
     // triggers, no spells_cast_this_turn increment) and ceases to exist on resolution (never
-    // touches the graveyard -- StackEntry::is_copy). The opponent's copy is inert here: the
-    // goldfish opponent is never dealt a library and never casts (see the card's bracket note).
+    // touches the graveyard -- StackEntry::is_copy). The opponent's copy ("choose an opponent
+    // to also copy it") IS modelled (2026-09-03): when the opponent has a library
+    // (opponent_library_dealt), their copy shuffles THEIR library and walks reveal-until-
+    // nonland, resolving first (APNAP); their free cast is declined by the model (no opponent
+    // casting machinery -- the engine boundary), so the hit stays exiled. No-op while no
+    // demonstrate deck deals the opponent a library (see the card's bracket note).
     bool demonstrate = false;
 
     // Sakashima's Protege: "You may have this creature enter as a copy of any permanent that
@@ -274,6 +278,31 @@ struct CardParams
     // decline when none. Scoped to permanents STILL on the battlefield with entered_this_turn
     // (the entered-and-left set is provably empty in this deck -- see the bracket note).
     bool enter_as_copy_of_entrant = false;
+
+    // Call Forth the Tempest clause 2: "deals damage to each creature your opponents control
+    // equal to the total mana value of OTHER spells you've cast this turn." Damage source =
+    // GameState::mv_cast_this_turn (summed at every cast site, lockstep with
+    // spells_cast_this_turn) minus THIS card's own mana value ("other" excludes exactly one
+    // instance of itself; a second copy cast earlier this turn counts). Cascade free-casts off
+    // this very spell resolve BEFORE it (cast triggers), so their MV counts -- CR-correct, the
+    // clause reads state at resolution. Real DAMAGE (marked, SBA death when damage >=
+    // toughness, indestructible respected), not a debuff -- contrast etb_opp_creatures_debuff.
+    // Untargeted sweep, no decision surface. Kills fire FireOppCreatureDies (Massacre Wurm
+    // watchers). Opponent creatures exist in 8 of 10 goldfish games (the spawn schedule), so
+    // this is live board contact; it cannot change the CLOCK in a deck without opponent-death
+    // watchers (spawns never block/attack), which is why it was once deferred as inert.
+    bool damage_opp_creatures_mv_cast = false;
+
+    // Breaching Dragonstorm clause 2: "When a Dragon you control enters, return this
+    // enchantment to its owner's hand." Non-empty = the watched subtype ("Dragon"). Fires from
+    // the universal enter cascade (FireEtbWatchers) for ANY enter route -- cast, put, token,
+    // copy -- via a pending-bounce queue (g_pending_etb_self_bounces) drained after the
+    // resolution completes, because erasing a battlefield permanent mid-cascade would shift
+    // callers' saved slot indices. Composition note: no current deck pairs this card with a
+    // Dragon, so the trigger is live machinery that never fires today; it goes live the moment
+    // any Dragon (including a Lathliss/Utvara token or a Protege copying a Dragon) enters
+    // under the controller.
+    std::string self_bounce_on_etb_subtype;
 
     // Retrace (e.g. Throes of Chaos): this card may be cast from the graveyard by
     // discarding a land card as an additional cost. It is not exiled, so it returns
