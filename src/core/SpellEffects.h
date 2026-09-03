@@ -2534,6 +2534,11 @@ inline bool HasHasteFromLords(
         if (lord.controller_index != controller_index) { continue; }
         const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
         if (!ldef || !ldef->params.grants_haste) { continue; }
+        // Maelstrom Wanderer: "Creatures you control have haste" -- an ALL-creatures grant
+        // (affects_all_creatures), self-inclusive, matching the P/T lord scans' handling of the
+        // same param. Byte-identical for every existing deck: the only prior card with
+        // affects_all_creatures (Benalish Marshal) does not set grants_haste.
+        if (ldef->params.affects_all_creatures) { return true; }
         if (all_creature_types && !ldef->params.subtypes_affected.empty()) { return true; }
         for (const std::string& sub : ldef->params.subtypes_affected)
         {
@@ -3417,6 +3422,157 @@ inline int DevotionTo(const GameState& state, int controller, const std::string&
 // hook these params, and the tribal name is what made a missing call in the search's
 // noncreature-permanent projection look inert for months (docs/design/etb-cascade-projection-gap.md).
 // Every block is param-gated -> byte-identical for a deck that uses none of them.
+// ---- BreachingDragonstorm onboarding (2026-09-03): shared walk helpers + trigger queue ----
+// Both worlds (EffectHandler executor, TurnSolver rollout) call these so the library/exile
+// mutations are ONE implementation; only the free-CAST mechanics stay world-specific.
+
+// Breaching Dragonstorm's enter walk: exile cards from the top until the first NONLAND is
+// exiled. The walked LANDS go to state.exile PERMANENTLY (the oracle gives them no
+// disposition -- this is real library thinning, NOT cascade's bottoming). The found nonland is
+// returned removed from the library (the caller free-casts it or puts it in hand); false if
+// the library ran out (everything walked is still exiled).
+inline bool WalkExileUntilNonland(GameState& state, int controller, Card& out_found,
+                                  std::vector<int>* out_seen_nums = nullptr,
+                                  std::vector<std::string>* out_seen_names = nullptr)
+{
+    Player& p = state.players[controller];
+    while (!p.library.empty())
+    {
+        Card c = p.library.DrawTop();
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+        const bool is_land = cd ? cd->card.IsLand() : c.IsLand();
+        if (out_seen_nums)  { out_seen_nums->push_back(c.m_number); }
+        if (out_seen_names) { out_seen_names->push_back(c.m_name.str()); }
+        if (!is_land) { out_found = std::move(c); return true; }
+        state.exile.push_back(std::move(c));
+    }
+    return false;
+}
+
+// Cascade's exile walk: exile from the top until a nonland with MV < mv_limit; the non-hits
+// are bottomed in exile order (CR 702.85a's "random order" is modelled deterministically --
+// the shared pre-existing cascade convention; see the cards' bracket notes). Returns true with
+// the hit removed from the library; false if the walk exhausted the library (everything
+// bottomed).
+inline bool WalkCascadeExile(GameState& state, int controller, int mv_limit, Card& out_hit,
+                             std::vector<int>* out_seen_nums = nullptr,
+                             std::vector<std::string>* out_seen_names = nullptr)
+{
+    Player& p = state.players[controller];
+    std::vector<Card> exiled;
+    int hit = -1;
+    while (!p.library.empty())
+    {
+        Card c = p.library.DrawTop();
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+        const bool is_land = cd ? cd->card.IsLand() : c.IsLand();
+        const int  mv      = cd ? cd->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
+        if (out_seen_nums)  { out_seen_nums->push_back(c.m_number); }
+        if (out_seen_names) { out_seen_names->push_back(c.m_name.str()); }
+        exiled.push_back(std::move(c));
+        if (!is_land && mv < mv_limit) { hit = static_cast<int>(exiled.size()) - 1; break; }
+    }
+    for (int i = 0; i < static_cast<int>(exiled.size()); ++i)
+    {
+        if (i == hit) { out_hit = std::move(exiled[i]); continue; }
+        p.library.push_back(std::move(exiled[i]));
+    }
+    return hit >= 0;
+}
+
+// Creative Technique's reveal walk (caller runs ShuffleAfterSearch FIRST): reveal until the
+// first nonland; that card is returned removed (the caller free-casts it or leaves it in
+// state.exile); the revealed non-hits bottom in reveal order -- off a just-shuffled library
+// that IS a uniform random order (faithful; no second shuffle, so search_count is untouched).
+inline bool WalkRevealUntilNonland(GameState& state, int controller, Card& out_found,
+                                   std::vector<int>* out_seen_nums = nullptr,
+                                   std::vector<std::string>* out_seen_names = nullptr)
+{
+    Player& p = state.players[controller];
+    std::vector<Card> lands;
+    bool have = false;
+    while (!p.library.empty())
+    {
+        Card c = p.library.DrawTop();
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+        const bool is_land = cd ? cd->card.IsLand() : c.IsLand();
+        if (out_seen_nums)  { out_seen_nums->push_back(c.m_number); }
+        if (out_seen_names) { out_seen_names->push_back(c.m_name.str()); }
+        if (!is_land) { out_found = std::move(c); have = true; break; }
+        lands.push_back(std::move(c));
+    }
+    for (auto& l : lands) { p.library.push_back(std::move(l)); }
+    return have;
+}
+
+// Pending enter-trigger free-casts (Breaching Dragonstorm). FireOwnEtbTriggers RECORDS the
+// trigger here (it cannot resolve it: the free-cast mechanics are world-specific); each world
+// drains immediately after its enter site -- the executor into Triggered{EtbExileFreeCast}
+// stack entries (EffectHandler::Resolve), the rollout inline (apply_one). Draining at every
+// enter site keeps the queue empty across games by construction.
+struct PendingEtbFreeCast { int controller; Card source; };
+inline thread_local std::vector<PendingEtbFreeCast> g_pending_etb_free_casts;
+
+// Sakashima's Protege: choose which this-turn entrant to enter as a copy of. Priority:
+// (1) the searched/stamped copy_target (a card m_number); (2) the human chooser (real
+// resolution only -- nulled in rollouts); (3) the heuristic: the highest-EffectivePower
+// entrant on EITHER side ('any permanent' includes opponent spawns that entered this turn),
+// skipping any candidate whose name matches a legendary the controller already controls (the
+// copy would immediately die to the legend rule). Returns a battlefield index, or -1 = enter
+// as itself (decline / no legal entrant).
+inline int ChooseCopyEntrantIndex(GameState& state, int controller, int copy_target,
+                                  const CardDefinition& self_def)
+{
+    // Searched DECLINE (plan variant enchant_target -1): enter as the printed card.
+    if (copy_target < 0) { return -1; }
+    auto legal = [&](int bi) -> bool
+    {
+        const Permanent& q = state.battlefield[bi];
+        if (!q.entered_this_turn) { return false; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd && qd->card.HasSupertype(Supertype::Legendary))
+        {
+            for (const Permanent& own : state.battlefield)
+            {
+                if (&own != &q && own.controller_index == controller
+                    && own.card.m_name.str() == q.card.m_name.str()) { return false; }
+            }
+        }
+        return true;
+    };
+    if (copy_target > 0)
+    {
+        for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+        {
+            if (state.battlefield[bi].card.m_number == copy_target
+                && state.battlefield[bi].entered_this_turn) { return bi; }
+        }
+    }
+    int best = -1, best_pw = -1;
+    for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+    {
+        if (!legal(bi)) { continue; }
+        const int pw = state.battlefield[bi].EffectivePower();
+        if (pw > best_pw) { best_pw = pw; best = bi; }
+    }
+    if (g_play_target_chooser)  // real human resolution only (nulled in rollouts)
+    {
+        std::vector<ChosenTarget> heur;
+        if (best >= 0) { heur.push_back({ 1, best, 0 }); }
+        std::vector<ChosenTarget> picked =
+            (*g_play_target_chooser)(state, self_def, controller, 1, 0, heur);
+        // Empty pick = the "(no target)" DECLINE option (the chooser's copy_entrant branch
+        // offers it at min_targets 0): enter as the printed card, NOT the heuristic.
+        if (picked.empty()) { return -1; }
+        if (picked[0].kind == 1
+            && picked[0].index >= 0
+            && picked[0].index < static_cast<int>(state.battlefield.size())
+            && state.battlefield[picked[0].index].entered_this_turn)
+        { return picked[0].index; }
+    }
+    return best;
+}
+
 inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_index,
                            const std::string& chosen_tutor = "", int etb_kx = -1)
 {
@@ -3425,6 +3581,13 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         CardDatabase::Instance().LookupCached(state.battlefield[entered_index].card);
     if (!def) { return; }
     const CardParams& p = def->params;
+
+    // Breaching Dragonstorm: RECORD the enter trigger for the world-specific drain (executor:
+    // a Triggered{EtbExileFreeCast} stack entry; rollout: inline in apply_one). Recorded, not
+    // resolved, because the free-cast mechanics differ per world. Fires for a COPY of the card
+    // too (Sakashima's Protege entering as it), since this is the universal enter path.
+    if (p.etb_exile_until_nonland)
+    { g_pending_etb_free_casts.push_back({ controller, state.battlefield[entered_index].card }); }
 
     // Peregrine Drake / Cloud of Faeries: "When this creature enters, untap up to N lands." FIRST,
     // ahead of every other own-ETB effect, because it is a MANA effect and a later trigger in the

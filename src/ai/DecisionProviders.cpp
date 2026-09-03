@@ -1554,6 +1554,8 @@ bool IsIdealOrderDraw(const CardDefinition& def)
         || def.params.expressive_iteration
         || def.params.impulse_exile > 0
         || def.params.cascade_max_mv > 0
+        || def.params.shuffle_reveal_freecast
+        || def.params.etb_exile_until_nonland
         || def.params.retrace
         || def.params.solo_target_trick;
 }

@@ -911,6 +911,8 @@ bool OrderingOpaque(const std::string& name)
     return d->tmpl == CardTemplate::DrawUntilNonland
         || d->params.stages_cards
         || d->params.cascade_max_mv > 0
+        || d->params.shuffle_reveal_freecast   // Creative Technique: mid-turn free cast
+        || d->params.etb_exile_until_nonland   // Breaching Dragonstorm: enter-trigger free cast
         || d->params.retrace
         || d->params.expressive_iteration
         || d->params.impulse_exile > 0   // Apex of Power: staged exile -> search-owned breakpoint order

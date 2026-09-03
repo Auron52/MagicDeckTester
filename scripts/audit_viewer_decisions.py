@@ -76,6 +76,25 @@ MANIFEST = {
     "etb_dig_count":         ("dig",                  positive),
     "upkeep_adds_charge":    ("vial_charge",          truthy),
     "retrace":               ("retrace_discard",      truthy),
+    # ---- BreachingDragonstorm (real-stack cascade family, 2026-09-03) -----------------------
+    # Cascade's "you may cast it" now SURFACES as a `free_cast` decision at the cascade
+    # trigger's resolution (EffectHandler::ResolveCascadeTrigger -> g_play_free_cast_chooser,
+    # source "<card> (cascade)"). The hit itself is rules-forced (first nonland with lesser MV),
+    # so the may-cast is the only choice.
+    "cascade_max_mv":        ("free_cast",            positive),
+    # Breaching Dragonstorm's enter trigger: may free-cast the found nonland (mv <= cap) or
+    # bank it to hand -- same `free_cast` decision shape at ResolveEtbExileFreeCast.
+    "etb_exile_until_nonland": ("free_cast",          truthy),
+    # Creative Technique's payload: may free-cast the revealed nonland (else it stays exiled).
+    "shuffle_reveal_freecast": ("free_cast",          truthy),
+    # Creative Technique's demonstrate: its own yes/no type (WriteDemonstrateDecisionJson /
+    # demonstratePanelHtml).
+    "demonstrate":           ("demonstrate",          truthy),
+    # Sakashima's Protege: WHICH this-turn entrant to copy is a main_phase plan-variant
+    # sub-decision (one variant per battlefield entrant + decline, enchant_target reused --
+    # blink/trick precedent); a cascade-flipped Protege additionally asks via the board-click
+    # `target` chooser at resolution (ChooseCopyEntrantIndex).
+    "enter_as_copy_of_entrant": ("main_phase",        truthy),
     "has_replicate":              ("replicate",       truthy),   # Hatchery Sliver's own replicate
     "grants_replicate_to_subtypes": ("replicate",     truthy),   # + grants it to Sliver spells
     "etb_bounce_land":       ("bounce",               truthy),
@@ -329,6 +348,9 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # ---- BreachingDragonstorm (2026-09-03) ----
+    "cascade_count": "cascade instance count -- a printed constant ('Cascade, cascade' = 2), not a choice",
+    "etb_exile_free_cast_max_mv": "oracle MV cap on Breaching Dragonstorm's free cast -- a printed constant",
     # stats / computed values
     "damage": "damage amount", "draw": "draw count", "cast_draw": "draw count",
     "power_bonus": "stat bonus", "tough_bonus": "stat bonus",
@@ -540,6 +562,7 @@ INERT_PARAMS = {
     # mana production -- color/amount auto-resolved by the payment engine (user: 'mana we leave to the engine')
     "impulse_float_amount": "impulse mana float amount; color auto-resolved in payment (left to engine)",
     "sac_for_mana_amount": "Lotus Bloom sac-for-mana amount; color auto-resolved (left to engine); when-to-sac rides the search plan",
+    "sac_for_mana_color": "sac-for-mana color PIN (Dwarven Ruins/Svyelunite Temple {R}{R}/{U}{U}): a printed constant, no color choice; when-to-crack rides the search plan like sac_for_mana_amount",
     "ritual_float_color": "ritual float color (fixed R), no choice",
     "storage_land": "storage battery: charge auto-while-idle; burst amount search-resolved via payment (like other mana sources)",
     "storage_charge_mode": "storage charge timing (auto-while-idle), no choice",
@@ -759,7 +782,8 @@ MAINPHASE_PARAMS = {
 
 # Known unwired decision gaps, DEFERRED with the user's sign-off (disclosed in Stage 6a).
 DEFERRED_PARAMS = {
-    "cascade_max_mv":       "cascade SEARCH target -- heuristic-picked (DECISIONS.md known gap)",
+    # (cascade_max_mv moved to the MANIFEST 2026-09-03: the may-cast surfaces as `free_cast`
+    # at the cascade trigger's resolution; the hit itself is rules-forced, not a choice.)
     "untap_x_mana_sources": "Reality Spasm untap mode -- engine model shipped default-ON (4f449fbd, "
                             "MTG_SPASM_UNTAP_LITERAL); the viewer CHOICE wiring is what remains deferred",
     # Dragonstorm: pump + ping are real player choices but currently search-resolved. User (2026-07-19)

@@ -1498,7 +1498,8 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     int max_targets, int heuristic_default, int decision_index,
                                     const std::string& pump_desc = "", const std::string& remove_desc = "",
                                     int min_targets = 1, bool random_damage = false,
-                                    const std::string& loyalty_desc = "")
+                                    const std::string& loyalty_desc = "",
+                                    const std::string& copy_desc = "")
 {
     DecisionJson d(os, decision_index);
     d.Type("target").Source(source).Turn(s.turn_number);
@@ -1507,6 +1508,10 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // ability's printed restriction allows (artifacts and lands included), so the viewer must not
     // word it as "N damage" or assume the opponent's face is in the set.
     if (!loyalty_desc.empty()) { d.Str("loyalty", loyalty_desc); }
+    // A non-empty copy_desc flags this as Sakashima's Protege's enter-as-a-copy choice: the
+    // legal set is this-turn ENTRANTS (any permanent, either side), the "(no target)" option is
+    // DECLINE (enter as the printed 3/1), and no damage is dealt.
+    if (!copy_desc.empty())   { d.Str("copy", copy_desc); }
     // A non-empty pump_desc (e.g. "+4/+4") flags this as an own-creature pump rather than damage, so
     // the viewer shows "gets +4/+4" and highlights your creatures instead of "N damage".
     if (!pump_desc.empty())   { d.Str("pump", pump_desc); }
@@ -1548,6 +1553,11 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     { d.Note("reply an option index. Each chosen target is dealt a RANDOM exiled card's "
              "mana value (assigned positionally, not steerable); pick " + std::to_string(min_targets)
              + "-" + std::to_string(max_targets) + " targets. Default = the AI's pick."); }
+    else if (!copy_desc.empty())
+    { d.Note("reply an option index. Sakashima's Protege enters as a COPY of the chosen "
+             "this-turn entrant (any permanent that entered this turn; a Breaching Dragonstorm "
+             "copy re-fires its exile trigger); pick the \"(no target)\" option to decline and "
+             "enter as the printed 3/1. Default = the AI's pick."); }
     else
     { d.Note("reply an option index. Each chosen target takes " + std::to_string(per_target)
              + " damage (up to " + std::to_string(max_targets) + " target(s)). Default = the AI's pick (face)."); }
@@ -1659,6 +1669,7 @@ static void WriteLackeyDecisionJson(std::ostream& os, const GameState& s, const 
 // is a candidate index to cast that spell for free, or -1 to decline. `heuristic_default` = the
 // engine's highest-MV pick (the charge is worth most on what you could least afford).
 static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
+                                      const std::string& source,
                                       const std::vector<Card>& candidates, int heuristic_default,
                                       int decision_index)
 {
@@ -1671,14 +1682,34 @@ static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
     // which infers a reshuffle from a hand difference -- misreported it as `shuffle-dead`. Nothing had
     // reshuffled; the default had spent a card. The AI's suggestion still ships as `ai_pick` for the
     // viewer's badge, so the player keeps the hint without it being the silent answer.
-    d.Type("free_cast").Source("Maelstrom Archangel").Turn(s.turn_number).Board(s)
+    //
+    // `source` names the offering trigger: "Maelstrom Archangel" (from-hand charge), or the
+    // cascade / Breaching Dragonstorm / Creative Technique card whose resolution offers its
+    // found card ("you may cast it without paying its mana cost"). The alternative disposition
+    // on decline differs per mechanic (bottom / hand / stays exiled) but the reply shape is
+    // identical: candidate index to cast free, -1 to decline.
+    d.Type("free_cast").Source(source).Turn(s.turn_number).Board(s)
      .HeuristicDefault(-1);
     d.Int("ai_pick", heuristic_default);
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
     });
-    d.Note("reply a candidate index to cast that spell from hand WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick.");
+    d.Note("reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick.");
+}
+
+// Creative Technique demonstrate decision (CR 702.145): "you may copy this spell" -- a yes/no
+// asked as the demonstrate trigger resolves, BEFORE the spell's payload runs. Reply 1 = copy
+// (the near-dominant line and the engine default), 0/-1 = don't. The opponent's copy is inert
+// (the goldfish opponent is never dealt a library), so this only gates YOUR extra payload.
+static void WriteDemonstrateDecisionJson(std::ostream& os, const GameState& s,
+                                         const std::string& source, bool heuristic_default,
+                                         int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("demonstrate").Source(source).Turn(s.turn_number).Board(s)
+     .HeuristicDefault(heuristic_default ? 1 : 0);
+    d.Note("reply 1 to copy the spell (the copy resolves first, with its own free cast), or 0 to decline. Default = copy.");
 }
 
 // ETB tutor fired off a PUT rather than a cast (a Lackey combat cheat / Vial deploy / Muxus reveal
@@ -2192,6 +2223,7 @@ g_play_dragon_chooser = nullptr;
 g_play_sac_tutor_chooser = nullptr;
 g_play_lackey_chooser = nullptr;
 g_play_free_cast_chooser = nullptr;
+g_play_demonstrate_chooser = nullptr;
 g_play_tutor_chooser = nullptr;
 g_play_lightpaws_chooser = nullptr;
 g_play_firebreathe_chooser = nullptr;
@@ -2376,6 +2408,7 @@ struct ClaudePlayHarness
     LightPawsChooser      lightpaws_chooser;
     LackeyChooser         lackey_chooser;
     FreeCastChooser       free_cast_chooser;
+    DemonstrateChooser    demonstrate_chooser;
     TutorChooser          tutor_chooser;
     DragonChooser         dragon_chooser;
     SacTutorChooser       sac_tutor_chooser;
@@ -2746,8 +2779,29 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // passes max_targets = 1 + paid extras with the floor equal to the ceiling; an up-to-one
             // trick (Gold Rush / Scale the Heights) allows an EMPTY pick (untargeted cast).
             const bool trick = def.params.solo_target_trick;
+            // Sakashima's Protege "enter as a copy of any permanent that entered this turn"
+            // (ChooseCopyEntrantIndex routes here with the Protege's own def, e.g. off a cascade
+            // flip): the legal set is EVERY battlefield permanent with entered_this_turn -- either
+            // side, creature or not (a Breaching Dragonstorm copy re-fires its exile trigger; a
+            // land entrant is legal too) -- plus DECLINE (min 0: enter as the printed 3/1). The
+            // 5d sweep found the old fall-through to CollectDamageTargets offered faces + stale
+            // creatures (silent no-ops) while hiding the real noncreature entrants.
+            const bool copy_entrant = def.params.enter_as_copy_of_entrant;
+            const std::string copy_desc = copy_entrant
+                ? std::string("enters as a copy of the chosen this-turn entrant") : std::string();
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
-            if (crackle)
+            if (copy_entrant)
+            {
+                for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
+                {
+                    const Permanent& p = s.battlefield[bi];
+                    if (!p.entered_this_turn) { continue; }
+                    legal.push_back({ 1, bi, 0 });
+                    legal_labels.push_back(p.card.m_name.str()
+                        + (p.controller_index == controller ? " (yours)" : " (opponent)"));
+                }
+            }
+            else if (crackle)
             {
                 for (int t : CrackleTargetOrder(s, controller, per_target_damage))
                 {
@@ -2810,6 +2864,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // an up-to-one single-target trick floors at ZERO (the untargeted cast is a real option).
             const int min_targets =
                   crackle ? std::max(1, static_cast<int>(heuristic.size()))
+                : copy_entrant ? 0   // "you MAY have it enter as a copy": decline is a real option
                 : (trick && def.params.trick_up_to_one && max_targets == 1) ? 0
                 : trick   ? std::min(max_targets, std::max(1, static_cast<int>(heuristic.size())))
                 : 1;
@@ -2835,14 +2890,14 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets);
+                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return opts[chosen].targets;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets);
+            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);
@@ -3024,7 +3079,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
     // Maelstrom Archangel free cast (one-time triggered choice; see WriteFreeCastDecisionJson).
     // Default = the engine's highest-MV pick. Human-play only, so ground truth is unaffected.
     free_cast_chooser =
-        [this](const GameState& s, int controller,
+        [this](const GameState& s, int controller, const std::string& source,
             const std::vector<Card>& candidates, int heuristic_index) -> int
         {
             (void)controller;
@@ -3040,19 +3095,50 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteFreeCastDecisionJson(ss, s, candidates, heuristic_index, di);
+                    WriteFreeCastDecisionJson(ss, s, source, candidates, heuristic_index, di);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return chosen;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteFreeCastDecisionJson(std::cout, s, candidates, heuristic_index, di);
+            WriteFreeCastDecisionJson(std::cout, s, source, candidates, heuristic_index, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);
         };
     g_play_free_cast_chooser = &free_cast_chooser;
+
+    // Creative Technique demonstrate (yes/no; see WriteDemonstrateDecisionJson). Default = copy
+    // (the provider's call). Human-play only, so ground truth is unaffected.
+    demonstrate_chooser =
+        [this](const GameState& s, int controller, const Card& spell,
+               bool heuristic_default) -> bool
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                const bool copy = (chosen != 0 && chosen != -1);   // 1 = copy; 0/-1 = decline
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << (copy ? 1 : 0) << ", \"decision\": ";
+                    WriteDemonstrateDecisionJson(ss, s, spell.m_name.str(), heuristic_default, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return copy;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteDemonstrateDecisionJson(std::cout, s, spell.m_name.str(), heuristic_default, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_demonstrate_chooser = &demonstrate_chooser;
 
     // ETB tutor off a PUT (Lackey cheat / Vial deploy / Muxus reveal drops a Goblin Matron): the human
     // picks WHICH card to search up, or -1 to decline ("you MAY search"). A tutor from a CAST carries a

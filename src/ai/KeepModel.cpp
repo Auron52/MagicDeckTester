@@ -413,6 +413,7 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
             if (d->params.damage > 0 || d->params.landfall_damage > 0 || d->params.death_trigger_damage > 0)
             { ++hand_damage; }
             if (d->params.draw > 0 || d->params.stages_cards || d->params.cascade_max_mv > 0
+                || d->params.shuffle_reveal_freecast || d->params.etb_exile_until_nonland
                 || d->params.retrace || d->params.expressive_iteration
                 || d->tmpl == CardTemplate::DrawUntilNonland)
             { ++hand_draw; }
@@ -506,6 +507,7 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
             if (d->params.damage > 0 || d->params.landfall_damage > 0 || d->params.death_trigger_damage > 0)
             { ++lib_damage; }
             if (d->params.draw > 0 || d->params.stages_cards || d->params.cascade_max_mv > 0
+                || d->params.shuffle_reveal_freecast || d->params.etb_exile_until_nonland
                 || d->params.retrace || d->params.expressive_iteration
                 || d->tmpl == CardTemplate::DrawUntilNonland)
             { ++lib_draw; }
@@ -563,6 +565,8 @@ MidGamePlanSummary SummarizePlanByNames(const std::vector<std::string>& cast_nam
         if (def->tmpl == CardTemplate::DrawUntilNonland
             || def->params.stages_cards
             || def->params.cascade_max_mv > 0
+            || def->params.shuffle_reveal_freecast
+            || def->params.etb_exile_until_nonland
             || def->params.retrace
             || def->params.expressive_iteration
             || def->params.draw > 0)

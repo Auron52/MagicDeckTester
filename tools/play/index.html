@@ -1089,7 +1089,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','echo','land_entry','tutor_etb','sac_tutor','attach_host','jitte'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','attach_host','jitte'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -2118,7 +2118,7 @@ function renderDecisionPanel(d, dec){
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor'
                 || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte'
-                || dec==='lackey_put' || dec==='free_cast' || dec==='echo' || dec==='tutor_etb'; // centered card-image modals
+                || dec==='lackey_put' || dec==='free_cast' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -2134,6 +2134,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='sac_tutor' ? sacTutorPanelHtml(d)
                   : dec==='lackey_put' ? lackeyPanelHtml(d)
                   : dec==='free_cast' ? freeCastPanelHtml(d)
+                  : dec==='demonstrate' ? demonstratePanelHtml(d)
                   : dec==='tutor_etb' ? tutorPanelHtml(d)
                   : dec==='echo' ? echoPanelHtml(d)
                   : dec==='lightpaws' ? lightPawsPanelHtml(d)
@@ -2286,8 +2287,16 @@ function freeCastPanelHtml(d){
   // WriteFreeCastDecisionJson.
   const aiPick=(d.ai_pick===undefined? d.heuristic_default : d.ai_pick);
   const defName=(cands.find(c=>c.index===aiPick)||{}).name;
-  let h=`<h3>Maelstrom Archangel — cast a spell for free</h3>`;
-  h+=`<div class="sub"><b>${esc(d.source||'Maelstrom Archangel')}</b> dealt combat damage — you may cast one spell from your hand <b>without paying its mana cost</b>. This is a one-time trigger: click a spell, or decline.</div>`;
+  // `source` names the offering trigger: Maelstrom Archangel's combat charge (from hand), or a
+  // cascade / Breaching Dragonstorm / Creative Technique resolution offering its found card.
+  // Decline's disposition differs per mechanic (Archangel: keep hand; cascade "(cascade)":
+  // bottomed; Breaching Dragonstorm: to hand; Creative Technique: stays exiled).
+  const src=d.source||'Maelstrom Archangel';
+  const isArch=src.indexOf('Archangel')>=0;
+  let h=`<h3>${esc(src)} — cast a spell for free</h3>`;
+  h+=isArch
+    ? `<div class="sub"><b>${esc(src)}</b> dealt combat damage — you may cast one spell from your hand <b>without paying its mana cost</b>. This is a one-time trigger: click a spell, or decline.</div>`
+    : `<div class="sub"><b>${esc(src)}</b> found this card — you may cast it <b>without paying its mana cost</b>. Click it to cast, or decline${src.indexOf('(cascade)')>=0?' (it goes to the bottom of your library)':src.indexOf('Creative Technique')>=0?' (it stays in exile)':' (it goes to your hand)'}.</div>`;
   h+=`<div class="tutgrid">`;
   if(!cands.length) h+=`<span class="hint">No castable spell in hand.</span>`;
   cands.forEach(c=>{
@@ -2717,6 +2726,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitLackey(d, +b.dataset.opt));
   else if (dec==='free_cast')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFreeCast(d, +b.dataset.opt));
+  else if (dec==='demonstrate')
+    panel.querySelectorAll('button[data-demo]').forEach(b=>b.onclick=()=>commitDemonstrate(d, +b.dataset.demo));
   else if (dec==='tutor_etb')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitTutor(d, +b.dataset.opt));
   else if (dec==='echo')
@@ -2800,6 +2811,21 @@ function commitLackey(d, oi){
 function commitFreeCast(d, oi){
   const c=(d.candidates||[]).find(x=>x.index===oi);
   pushChoice(d, oi, `${d.source||'Maelstrom Archangel'}: ${oi<0||!c?'declined the free cast':'cast '+c.name+' for free'}`);
+}
+// Creative Technique demonstrate (CR 702.145): yes/no central modal, echo's shape. Reply 1 =
+// copy (the copy resolves first, with its own free cast), 0 = decline. Default = copy.
+function demonstratePanelHtml(d){
+  const copy=d.heuristic_default?1:0;
+  let h=`<h3>Demonstrate — ${esc(d.source||'')}</h3>`;
+  h+=`<div class="sub">You may <b>copy this spell</b>. The copy resolves first — shuffling, revealing and free-casting its own find. (The opponent's copy does nothing here.)</div>`;
+  h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.source||'', '', 'normal')}</div>`;
+  h+=`<div class="pbtns"><span class="spacer"></span>`+
+     `<button class="primary" data-demo="1">Copy it${copy===1?'  ·  AI':''}</button>`+
+     `<button class="ghost" data-demo="0">Don't copy${copy===0?'  ·  AI':''}</button></div>`;
+  return h;
+}
+function commitDemonstrate(d, v){
+  pushChoice(d, v, `${d.source||'Demonstrate'}: ${v?'copied the spell':'declined the copy'}`);
 }
 function commitTutor(d, oi){
   const c=(d.candidates||[]).find(x=>x.index===oi);

@@ -18,17 +18,38 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     perm.controller_index  = entry.controller_index;
     perm.owner_index       = entry.controller_index;
     perm.entered_this_turn = true;
+    // Sakashima's Protege: "You may have this creature enter as a copy of any permanent that
+    // entered this turn." Replace the entering card with the chosen source's PRINTED card
+    // (CR 706.2 copiable values -- no counters/attachments/temp pumps), keeping this cast's
+    // m_number. The COPIED definition then drives enters-tapped/loyalty and, below, the enter
+    // triggers -- so a copy of Breaching Dragonstorm re-fires its exile trigger. Lockstep twin:
+    // apply_one's creature-enter branch makes the identical swap.
+    const CardDefinition* edef = &def;
+    if (def.params.enter_as_copy_of_entrant)
+    {
+        // The searched pick rides entry.enchant_target (reused as the copy-source m_number, the
+        // aura/trick precedent; -1 = searched decline, 0 = heuristic).
+        const int src_bi = ChooseCopyEntrantIndex(state, entry.controller_index,
+                                                  entry.enchant_target, def);
+        if (src_bi >= 0)
+        {
+            perm.card          = state.battlefield[src_bi].card;
+            perm.card.m_number = entry.source.m_number;
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(perm.card);
+            if (cd) { edef = cd; }
+        }
+    }
     // Fire Diamond: "This artifact enters tapped." enters_tapped was previously honored only on the
     // land-drop path, so a CAST permanent carrying it entered untapped and was tappable for mana
     // the same turn. Lands are played, not cast, so they never reach here -- no double-apply.
     // Lockstep with TurnSolver's rollout non-creature enter branch.
-    if (def.params.enters_tapped) { perm.tapped = true; }
+    if (edef->params.enters_tapped) { perm.tapped = true; }
     // Planeswalker: enters with its starting loyalty (dedicated int + a display-mirror counter
     // the existing viewer badge code picks up). Mirrors the rollout's non-creature enter branch.
-    if (def.params.loyalty_start > 0)
+    if (edef->params.loyalty_start > 0)
     {
-        perm.loyalty = def.params.loyalty_start;
-        perm.counters.push_back(Counter{Counter::Type::Loyalty, def.params.loyalty_start});
+        perm.loyalty = edef->params.loyalty_start;
+        perm.counters.push_back(Counter{Counter::Type::Loyalty, edef->params.loyalty_start});
     }
     state.battlefield.push_back(perm);
 
@@ -46,6 +67,9 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
 
 void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
 {
+    // A demonstrate COPY was never a card: it ceases to exist on resolution (CR 707.10),
+    // leaving nothing in any zone.
+    if (entry.is_copy) { return; }
     // "Exile Living Wish": a self-exiling spell goes to EXILE instead. LOCKSTEP with the rollout's
     // instant/sorcery line in TurnSolver's apply_one. See CardParams::exiles_self_on_resolve for
     // why this is implemented rather than bracket-noted as inert.
@@ -59,6 +83,15 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
 
 bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const CardDefinition& def)
 {
+    // Real-stack trigger entries (cascade / Breaching Dragonstorm ETB / demonstrate) dispatch
+    // to their own resolvers -- they are abilities, not the spell itself, so none of the
+    // spell machinery below (legend rule, graveyard placement inside ResolveImpl) applies.
+    if (entry.type == StackEntry::EntryType::Triggered
+        && entry.trigger_kind != StackEntry::TriggerKind::None)
+    {
+        return ResolveTriggered(state, entry, def);
+    }
+
     const bool ok = ResolveImpl(state, entry, def);
     // Legend rule (CR 704.5j) is a STATE-BASED ACTION: it is checked the moment the duplicate is on
     // the battlefield, NOT deferred. The executor used to enforce it only for Vial-deployed
@@ -90,9 +123,33 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
     // resolved (dig, enter-watcher cascade), which is exactly the rollout's ordering -- and after, not
     // before, so an ETB dig's `battlefield.back()` self-pointer is never invalidated underneath it.
     // No-op for every deck with no legendary permanent.
-    if (def.card.HasSupertype(Supertype::Legendary))
+    if (def.card.HasSupertype(Supertype::Legendary)
+        // ...or the spell may have ENTERED as a legendary (Sakashima's Protege copying
+        // Maelstrom Wanderer): the entering card is the copy's, not def's, so gate on the
+        // param too. EnforceLegendRule is a no-op without a duplicate.
+        || def.params.enter_as_copy_of_entrant)
     {
         EnforceLegendRule(state, entry.controller_index);
+    }
+
+    // Drain pending enter triggers (Breaching Dragonstorm's exile-until-nonland) recorded by
+    // FireOwnEtbTriggers during this resolution, as Triggered stack entries -- LIFO, so they
+    // resolve next, after the permanent has entered and the legend rule has run (the trigger
+    // fires even if the permanent itself was legend-ruled away, CR 603.3). Reversed push so
+    // multiple simultaneous triggers resolve in the order they fired.
+    if (!g_pending_etb_free_casts.empty())
+    {
+        std::vector<PendingEtbFreeCast> pend;
+        pend.swap(g_pending_etb_free_casts);
+        for (auto it = pend.rbegin(); it != pend.rend(); ++it)
+        {
+            StackEntry te;
+            te.type             = StackEntry::EntryType::Triggered;
+            te.trigger_kind     = StackEntry::TriggerKind::EtbExileFreeCast;
+            te.source           = it->source;
+            te.controller_index = it->controller;
+            state.stack.push_back(std::move(te));
+        }
     }
     return ok;
 }
@@ -333,9 +390,13 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                         { g_play_draw_sink->push_back({ state.turn_number, mp.hand[hi].m_name.str() }); }
                     }
                 }
-                if (def.params.cascade_max_mv > 0)
+                // (Cascade is no longer resolved here: it is a CAST trigger -- CastSpellFromHand /
+                // PushFreeCast push Triggered{Cascade} entries that resolve BEFORE this spell.)
+                // Creative Technique: shuffle -> reveal until nonland -> exile it -> bottom the
+                // rest -> free-cast (runs for the original AND its demonstrate copy).
+                if (def.params.shuffle_reveal_freecast)
                 {
-                    ResolveCascade(state, entry, def);
+                    ResolveShuffleRevealFreecast(state, entry, def);
                 }
                 // Reality Spasm / Irencrag Feat -- mana RITUAL. On resolution, add its floating
                 // mana to the turn-scoped reserve so a later same-turn cast (Crackle) can spend
@@ -665,51 +726,220 @@ void EffectHandler::ResolveDrawUntilNonland(GameState& state, const StackEntry& 
     MoveToGraveyard(state, entry);
 }
 
-void EffectHandler::ResolveCascade(GameState& state, const StackEntry& entry,
-                                    const CardDefinition& def)
+// ---- Real-stack trigger machinery (BreachingDragonstorm onboarding, 2026-09-03) ------------
+// Cascade / demonstrate are CAST triggers pushed ABOVE their spell; Breaching Dragonstorm's
+// exile walk is an ENTER trigger pushed by Resolve()'s pending-queue drain. All of them resolve
+// through GameEngine::ResolveStack's ordinary LIFO loop, so nested chains (Wanderer -> cascade
+// -> free-cast Altisaur -> its cascade -> ...) need no special-casing: each cast pushes its own
+// triggers and the stack does the rest. Lockstep twin: TurnSolver::apply_one runs the same
+// sequence inline (cascade walks before the spell's own effect, copy payload before the
+// original's, ETB walk right after entry), so both worlds realise identical states.
+
+void EffectHandler::PushCastTriggers(GameState& state, const CardDefinition& def, int controller)
 {
-    Player& controller = state.players[entry.controller_index];
-    int cascade_limit  = def.params.cascade_max_mv;
-
-    // Exile cards from top until a nonland with MV < cascade_limit is found.
-    std::vector<Card> exiled;
-    int cascade_idx = -1;
-    while (!controller.library.empty())
+    // Cast triggers go on the stack ABOVE the just-pushed spell entry (CR 601.2i / 603.3b),
+    // so they resolve first. No-op for every card without a cast-trigger param.
+    if (def.params.demonstrate)
     {
-        Card c = controller.library.DrawTop();
-        auto cdef = CardDatabase::Instance().LookupCached(c);
-        bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
-        int  mv      = cdef ? cdef->card.m_mana_cost.ManaValue()
-                            : c.m_mana_cost.ManaValue();
-        exiled.push_back(std::move(c));
-        if (!is_land && mv < cascade_limit)
+        StackEntry te;
+        te.type             = StackEntry::EntryType::Triggered;
+        te.trigger_kind     = StackEntry::TriggerKind::Demonstrate;
+        te.source           = def.card;
+        te.controller_index = controller;
+        state.stack.push_back(std::move(te));
+    }
+    if (def.params.cascade_max_mv > 0)
+    {
+        // One entry per instance ("Cascade, cascade" = 2 -- cascade_count). The instances are
+        // identical, so their relative order is moot (CR 603.3b makes it the controller's
+        // choice); each resolves FULLY (walk + free cast) before the next pops, so the second
+        // cascade sees the library the first one left.
+        const int n = std::max(1, def.params.cascade_count);
+        for (int i = 0; i < n; ++i)
         {
-            cascade_idx = static_cast<int>(exiled.size()) - 1;
-            break;
+            StackEntry te;
+            te.type             = StackEntry::EntryType::Triggered;
+            te.trigger_kind     = StackEntry::TriggerKind::Cascade;
+            te.source           = def.card;
+            te.controller_index = controller;
+            state.stack.push_back(std::move(te));
         }
     }
+}
 
-    // Push the cascade target onto the stack so it resolves before the original spell's
-    // graveyard placement (the stack is LIFO; next iteration of ResolveStack pops it).
-    if (cascade_idx >= 0)
+bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int controller)
+{
+    auto def = CardDatabase::Instance().LookupCached(card);
+    if (!def) { return false; }
+    // Irencrag "one more spell" budget: a forbidden cast is not made -- the caller decides the
+    // card's fallback zone (cascade bottoms it, Breaching Dragonstorm hands it, Creative
+    // Technique strands it in exile). Inert (-1) for every deck without a max_casts_after card.
+    if (state.casts_remaining_this_turn == 0) { return false; }
+
+    StackEntry e;
+    e.type             = StackEntry::EntryType::Spell;
+    e.source           = def->card;
+    e.source.m_number  = card.m_number;   // preserve per-copy ID
+    e.controller_index = controller;
+
+    // A free cast IS a cast (CR 601.2 / 702.85a): count it and fire cast-time abilities
+    // exactly as CastSpellFromHand does -- lockstep with the rollout's apply_one free-cast
+    // recursion, which runs the same increments. (This also closes the old executor-vs-rollout
+    // storm-count divergence, where ResolveCascade pushed a bare StackEntry that no counter or
+    // cast trigger ever saw.)
+    ++state.spells_cast_this_turn;
+    if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
+    if (def->params.max_casts_after >= 0)
     {
-        const Card& cascade_card = exiled[cascade_idx];
-        auto cdef = CardDatabase::Instance().LookupCached(cascade_card);
-        if (cdef)
-        {
-            StackEntry ce;
-            ce.type             = StackEntry::EntryType::Spell;
-            ce.source           = cdef->card;
-            ce.source.m_number  = cascade_card.m_number;
-            ce.controller_index = entry.controller_index;
-            state.stack.push_back(std::move(ce));
-        }
+        state.casts_remaining_this_turn =
+            (state.casts_remaining_this_turn < 0)
+                ? def->params.max_casts_after
+                : std::min(state.casts_remaining_this_turn, def->params.max_casts_after);
     }
+    state.stack.push_back(std::move(e));
+    FireOnCastTriggers(state, *def);
+    FireProwess(state, *def);
+    // ...including the free spell's OWN cast triggers, so cascade chains nest naturally.
+    PushCastTriggers(state, *def, controller);
+    return true;
+}
 
-    // Remaining exiled cards go to the bottom of the library in the order exiled.
-    for (int i = 0; i < static_cast<int>(exiled.size()); ++i)
+bool EffectHandler::ResolveTriggered(GameState& state, const StackEntry& entry,
+                                     const CardDefinition& def)
+{
+    switch (entry.trigger_kind)
     {
-        if (i == cascade_idx) { continue; }
-        controller.library.push_back(std::move(exiled[i]));
+        case StackEntry::TriggerKind::Cascade:
+            ResolveCascadeTrigger(state, entry, def);   return true;
+        case StackEntry::TriggerKind::EtbExileFreeCast:
+            ResolveEtbExileFreeCast(state, entry, def); return true;
+        case StackEntry::TriggerKind::Demonstrate:
+            ResolveDemonstrate(state, entry, def);      return true;
+        default:                                        return true;
+    }
+}
+
+void EffectHandler::ResolveCascadeTrigger(GameState& state, const StackEntry& entry,
+                                          const CardDefinition& def)
+{
+    std::vector<int> seen_nums; std::vector<std::string> seen_names;
+    Card hit;
+    const bool have = WalkCascadeExile(state, entry.controller_index,
+                                       def.params.cascade_max_mv, hit,
+                                       &seen_nums, &seen_names);
+    // Viewer/log visibility: the exile walk + the hit (historically cascade emitted nothing,
+    // which left the deck's core engine invisible in the play viewer). Non-hits = "bottomed".
+    std::vector<int> kept;
+    if (have) { kept.push_back(hit.m_number); }
+    std::vector<int> bottomed;
+    for (int n : seen_nums) { if (!have || n != hit.m_number) { bottomed.push_back(n); } }
+    EmitReveal(state.turn_number, def.card.m_name.str() + " (cascade)",
+               seen_nums, seen_names, kept, bottomed);
+    if (!have) { return; }
+    // "You may cast it": provider-owned default (DecisionProvider::TakeFreeCast, Generic =
+    // always take -- disclosed in Stage 6a), human chooser overrides at real resolution. A
+    // decline, or a cast a restriction forbids, bottoms the hit under the walked cards.
+    bool take = true;
+    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hit);
+    if (hd) { take = ResolveProvider(state).TakeFreeCast(state, entry.controller_index, *hd); }
+    if (g_play_free_cast_chooser)
+    {
+        std::vector<Card> cands{ hit };
+        take = ((*g_play_free_cast_chooser)(state, entry.controller_index,
+                                            def.card.m_name.str() + " (cascade)", cands,
+                                            take ? 0 : -1) == 0);
+    }
+    if (!take || !PushFreeCast(state, hit, entry.controller_index))
+    {
+        state.players[entry.controller_index].library.push_back(hit);
+    }
+}
+
+void EffectHandler::ResolveEtbExileFreeCast(GameState& state, const StackEntry& entry,
+                                            const CardDefinition& def)
+{
+    // Breaching Dragonstorm: exile until the first nonland (NO mana-value bound on the walk);
+    // the walked LANDS stay in state.exile permanently (WalkExileUntilNonland).
+    std::vector<int> seen_nums; std::vector<std::string> seen_names;
+    Card found;
+    const bool have = WalkExileUntilNonland(state, entry.controller_index, found,
+                                            &seen_nums, &seen_names);
+    std::vector<int> kept;
+    if (have) { kept.push_back(found.m_number); }
+    EmitReveal(state.turn_number, def.card.m_name.str() + " (exile until nonland)",
+               seen_nums, seen_names, kept, std::vector<int>{});
+    if (!have) { return; }
+    const CardDefinition* fd = CardDatabase::Instance().LookupCached(found);
+    const int mv = fd ? fd->card.m_mana_cost.ManaValue() : found.m_mana_cost.ManaValue();
+    // The MV gate bounds only the free cast, not the walk (oracle constant, 8 here).
+    bool take = (mv <= def.params.etb_exile_free_cast_max_mv);
+    if (take && fd)
+    { take = ResolveProvider(state).TakeFreeCast(state, entry.controller_index, *fd); }
+    if (take && g_play_free_cast_chooser)
+    {
+        std::vector<Card> cands{ found };
+        take = ((*g_play_free_cast_chooser)(state, entry.controller_index,
+                                            def.card.m_name.str(), cands, 0) == 0);
+    }
+    // "If you don't, put that card into your hand."
+    if (!take || !PushFreeCast(state, found, entry.controller_index))
+    {
+        state.players[entry.controller_index].hand.push_back(found);
+    }
+}
+
+void EffectHandler::ResolveDemonstrate(GameState& state, const StackEntry& entry,
+                                       const CardDefinition& def)
+{
+    // "You may copy this spell." Provider default (copy), human chooser overrides. The
+    // opponent's half ("choose an opponent to also copy it") is inert -- the goldfish opponent
+    // is never dealt a library and never casts (see the card's bracket note).
+    bool copy = ResolveProvider(state).DemonstrateCopy(state, entry.controller_index, def);
+    if (g_play_demonstrate_chooser)
+    { copy = (*g_play_demonstrate_chooser)(state, entry.controller_index, def.card, copy); }
+    if (!copy) { return; }
+    // The copy is NOT cast (CR 707.10): no cast triggers, no cast counters. Pushed above the
+    // original (this trigger sat above it), so it resolves first (2021-04-16 ruling), then
+    // ceases to exist (StackEntry::is_copy -> MoveToGraveyard skips it).
+    StackEntry ce;
+    ce.type             = StackEntry::EntryType::Spell;
+    ce.source           = entry.source;
+    ce.controller_index = entry.controller_index;
+    ce.is_copy          = true;
+    state.stack.push_back(std::move(ce));
+}
+
+void EffectHandler::ResolveShuffleRevealFreecast(GameState& state, const StackEntry& entry,
+                                                 const CardDefinition& def)
+{
+    // "Shuffle your library" -- through the CRN reshuffle (ShuffleAfterSearch), NEVER an
+    // ad-hoc Shuffle(): the ordinal-keyed CRN is what keeps executor and rollout on the same
+    // library (and the rollout twin makes the identical call).
+    ShuffleAfterSearch(state, entry.controller_index);
+    std::vector<int> seen_nums; std::vector<std::string> seen_names;
+    Card found;
+    const bool have = WalkRevealUntilNonland(state, entry.controller_index, found,
+                                             &seen_nums, &seen_names);
+    std::vector<int> kept;
+    if (have) { kept.push_back(found.m_number); }
+    std::vector<int> bottomed;
+    for (int n : seen_nums) { if (!have || n != found.m_number) { bottomed.push_back(n); } }
+    EmitReveal(state.turn_number, def.card.m_name.str() + " (reveal)",
+               seen_nums, seen_names, kept, bottomed);
+    if (!have) { return; }
+    const CardDefinition* fd = CardDatabase::Instance().LookupCached(found);
+    bool take = fd ? ResolveProvider(state).TakeFreeCast(state, entry.controller_index, *fd)
+                   : false;
+    if (g_play_free_cast_chooser)
+    {
+        std::vector<Card> cands{ found };
+        take = ((*g_play_free_cast_chooser)(state, entry.controller_index,
+                                            def.card.m_name.str(), cands,
+                                            take ? 0 : -1) == 0);
+    }
+    // A declined (or forbidden) hit STAYS EXILED -- the oracle's only alternative disposition.
+    if (!take || !PushFreeCast(state, found, entry.controller_index))
+    {
+        state.exile.push_back(found);
     }
 }

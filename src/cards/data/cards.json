@@ -6112,6 +6112,232 @@
     "etb_energy": 1,
     "energy_per_colored_tap": 1
    }
+  },
+  {
+   "name": "Maelstrom Wanderer",
+   "mana_cost": "{5}{G}{U}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [],
+   "power": 7,
+   "toughness": 5,
+   "oracle_text": "Creatures you control have haste.\nCascade, cascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom in a random order. Then do it again.) [Haste grant is UNCONDITIONAL and SELF-INCLUSIVE ('Creatures you control', not 'Other') -> grants_haste + affects_all_creatures (NOT the mono-tribal subtypes_affected collapse -- this deck's creatures are Elemental/Dinosaur/Shapeshifter/Human Pirate). Cascade, cascade = cascade_max_mv 8 (== cmc) + cascade_count 2, each instance a Triggered{Cascade} stack entry resolving fully (walk + free cast) before the next, and BEFORE the Wanderer itself resolves (CR 601.2i/702.85a) -- so the hits enter first; haste is continuous, so they attack this turn either way. PARTIAL: exiled non-hits bottom in EXILE ORDER, not 'a random order' (deterministic shared cascade convention -- determinism-parity CI). PARTIAL: the 'may' on each free cast is provider-owned auto-YES in autonomous play (DecisionProvider::TakeFreeCast; the human free-cast chooser overrides at real resolution) -- vs a passive opponent a free nonland spell is never worse than bottoming. Legend rule modelled and LIVE (4 copies): a duplicate dies, but its two cascade triggers still fire (cascade triggers on CAST).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cascade_max_mv": 8,
+    "cascade_count": 2,
+    "grants_haste": true,
+    "affects_all_creatures": true
+   }
+  },
+  {
+   "name": "Annoyed Altisaur",
+   "mana_cost": "{5}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Dinosaur"
+   ],
+   "keywords": [
+    "Reach",
+    "Trample"
+   ],
+   "power": 6,
+   "toughness": 5,
+   "oracle_text": "Reach, trample\nCascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom in a random order.) [Reach INERT (the opponent never attacks, so this never blocks) and Trample INERT (no blockers) in goldfishing; both declared for faithful keywords. Cascade via cascade_max_mv 7 (== cmc): a cast trigger resolving BEFORE the creature enters. PARTIAL: bottoming order = exile order, deterministic (shared cascade convention). PARTIAL: the free-cast 'may' is provider-owned auto-YES (TakeFreeCast; human chooser overrides) -- declining only bottoms the card.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cascade_max_mv": 7
+   }
+  },
+  {
+   "name": "Sakashima's Protege",
+   "mana_cost": "{4}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Shapeshifter"
+   ],
+   "keywords": [
+    "Flash"
+   ],
+   "power": 3,
+   "toughness": 1,
+   "oracle_text": "Flash\nCascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom in a random order.)\nYou may have this creature enter as a copy of any permanent that entered this turn. [Cascade 6 (cascade_max_mv == cmc), a cast trigger: the flipped spell fully resolves BEFORE this creature enters -- which is what makes the copy clause live (a Breaching Dragonstorm or Creative Technique flipped off the cascade is itself a this-turn entrant). Copy = enter_as_copy_of_entrant: as it enters, its card is replaced by the chosen source permanent's PRINTED card (CR 706.2 -- no counters/attachments/temp pumps), keeping this cast's m_number; enter triggers then fire for the COPIED card (a copy of Breaching Dragonstorm re-fires its exile trigger; a copy of Boarding Party is a 6/3 with haste). The source pick is a searched plan variant (one per battlefield entrant + decline; heuristic covers same-plan entrants) and a human board-click at real resolution; the heuristic skips a copy that would immediately legend-rule itself away. PARTIAL: Flash is inert -- the engine models no priority window outside a main phase with an empty stack, so instant-speed casting is unreachable for every card. PARTIAL: 'any permanent that entered this turn' is scoped to permanents STILL on the battlefield with entered_this_turn; the entered-and-since-left set is provably empty in this deck (nothing removes/bounces/sacrifices our permanents -- Breaching Dragonstorm's self-bounce needs a Dragon and the deck runs zero). PARTIAL: a copy that leaves the battlefield is recorded under the COPIED name in the graveyard; inert -- only the legend rule can kill it here and nothing reads the graveyard.]",
+   "template": "custom",
+   "parameters": {
+    "cascade_max_mv": 6,
+    "enter_as_copy_of_entrant": true
+   }
+  },
+  {
+   "name": "Boarding Party",
+   "mana_cost": "{5}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Pirate"
+   ],
+   "keywords": [
+    "Haste"
+   ],
+   "power": 6,
+   "toughness": 3,
+   "oracle_text": "Haste\nCascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom in a random order.) [Cascade via cascade_max_mv 6 (== cmc), a cast trigger resolving BEFORE the creature enters. PARTIAL: bottoming order = exile order, deterministic (shared cascade convention). PARTIAL: the free-cast 'may' is provider-owned auto-YES (TakeFreeCast; human chooser overrides).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cascade_max_mv": 6
+   }
+  },
+  {
+   "name": "Breaching Dragonstorm",
+   "mana_cost": "{4}{R}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When this enchantment enters, exile cards from the top of your library until you exile a nonland card. You may cast it without paying its mana cost if that spell's mana value is 8 or less. If you don't, put that card into your hand.\nWhen a Dragon you control enters, return this enchantment to its owner's hand. [CLAUSE 1 (etb_exile_until_nonland): on ENTER, exile from the top until the first NONLAND -- NO mana-value bound on the walk (unlike cascade). The exiled LANDS have no oracle disposition and REMAIN IN EXILE permanently (real cumulative library thinning, ~1.6 lands/trigger in this 37-land list) -- deliberately NOT bottomed. The found nonland may be cast FREE iff its mv <= etb_exile_free_cast_max_mv (8 -- an ORACLE-PRINTED constant, NOT this card's cmc of 5; do not extend the cascade_max_mv==cmc audit to it); declining (or a cast a restriction forbids) puts it in HAND. The 'may' is provider-owned auto-YES in autonomous play (TakeFreeCast); the human free-cast chooser overrides. Rulings absorbed: the free cast happens during the trigger's resolution (cannot be banked), type timing ignored, X=0. Fired through the universal enter path, so a Sakashima's Protege entering as a copy re-fires it. CLAUSE 2 (Dragon bounce) NOT IMPLEMENTED -- PROVISIONAL COMPOSITION-BOUND deferral: this 60 contains no Dragon-subtype permanent and creates no Dragon tokens, so the trigger can never fire. It goes LIVE the moment any Dragon is added -- any deck-screening arm introducing a Dragon MUST implement it first (self-bounce-to-hand + recast decision, lockstep both worlds).]",
+   "template": "custom",
+   "parameters": {
+    "etb_exile_until_nonland": true,
+    "etb_exile_free_cast_max_mv": 8
+   }
+  },
+  {
+   "name": "Call Forth the Tempest",
+   "mana_cost": "{5}{R}{R}{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Cascade, cascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom of your library in a random order. Then do it again.)\nCall Forth the Tempest deals damage to each creature your opponents control equal to the total mana value of other spells you've cast this turn. [Both cascade instances modelled (cascade_max_mv 8 == cmc, cascade_count 2), each a cast trigger resolving fully before the next and before the spell. PARTIAL: the damage clause is NOT modelled; WHY inert -- it hits ONLY creatures your opponents control (never a player), and the goldfish opponent's creatures never block or attack, so killing them cannot change the clock or the win turn; no card in this deck triggers on opponent creature death or reads opponent creature count. PARTIAL: bottoming order = exile order, deterministic (shared cascade convention). PARTIAL: the free-cast 'may' is provider-owned auto-YES (TakeFreeCast; human chooser overrides).]",
+   "template": "custom",
+   "parameters": {
+    "cascade_max_mv": 8,
+    "cascade_count": 2
+   }
+  },
+  {
+   "name": "Creative Technique",
+   "mana_cost": "{4}{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Demonstrate (When you cast this spell, you may copy it. If you do, choose an opponent to also copy it.)\nShuffle your library, then reveal cards from the top of it until you reveal a nonland card. Exile that card and put the rest on the bottom of your library in a random order. You may cast the exiled card without paying its mana cost. [shuffle_reveal_freecast: the shuffle rides the CRN reshuffle (ShuffleAfterSearch) so executor and rollout walk the same library; the revealed non-hits bottom in reveal order, which off a just-shuffled library IS a uniform random order (faithful, no second shuffle). A declined/forbidden hit STAYS EXILED. demonstrate (CR 702.145): YOUR copy is fully modelled -- it resolves BEFORE the original (2021-04-16 ruling), is NOT a cast (no cast triggers, no storm/cast increments) and ceases to exist on resolution; the copy yes/no is provider-owned (DemonstrateCopy, default copy) with a human demonstrate chooser at real resolution. PARTIAL: demonstrate's opponent half ('choose an opponent to also copy it') is not modelled; WHY inert -- the goldfish opponent is never dealt a library (GoldFishRunner::DeckTouchesOpponentZones is false for this deck: no card carries exile_opponent_top_cost) and never casts, so their copy reveals, exiles and casts nothing. DECK-CONTINGENT proof: revisit if any card here gains exile_opponent_top_cost. Each free cast IS a cast (+1 storm each); the copies themselves add 0.]",
+   "template": "custom",
+   "parameters": {
+    "demonstrate": true,
+    "shuffle_reveal_freecast": true
+   }
+  },
+  {
+   "name": "Dwarven Ruins",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {R}.\n{T}, Sacrifice this land: Add {R}{R}. [Fallen Empires sac land -- NOT a depletion-counter land (contrast Saprazzan Skerry): an ordinary repeatable {T}: Add {R} PLUS a separate one-shot {T},Sacrifice: Add {R}{R}, mutually exclusive per turn because both tap the same permanent. Modelled with ZERO new params: basic_land produces:[R] for the normal tap + the existing sac_for_mana machinery (sac_for_mana_amount 2, colour-pinned {R}) for the crack, enumerated as its own SacForMana action. First card combining a basic-land tap with sac_for_mana on the SAME permanent -- feasibility-ceiling sites over-count it (up to 3 mana) in the SAFE direction only (under-prune, never a lost line).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R"
+    ],
+    "enters_tapped": true,
+    "sac_for_mana_amount": 2,
+    "sac_for_mana_color": "R"
+   }
+  },
+  {
+   "name": "Svyelunite Temple",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {U}.\n{T}, Sacrifice this land: Add {U}{U}. [Fallen Empires sac land, exact blue twin of Dwarven Ruins: basic_land produces:[U] repeatable tap + sac_for_mana_amount 2 / sac_for_mana_color U one-shot crack (own SacForMana action; tap-vs-crack is a search-enumerated plan choice, no chooser). Same safe feasibility-ceiling over-count note as Dwarven Ruins.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U"
+    ],
+    "enters_tapped": true,
+    "sac_for_mana_amount": 2,
+    "sac_for_mana_color": "U"
+   }
+  },
+  {
+   "name": "Mossfire Valley",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{1}, {T}: Add {R}{G}.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "G"
+    ],
+    "ramp_filter": true
+   }
+  },
+  {
+   "name": "Peat Bog",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Peat Bog enters tapped with two depletion counters on it. {T}, Remove a depletion counter from Peat Bog: Add {B}{B}. If there are no depletion counters on it, sacrifice it.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B"
+    ],
+    "enters_tapped": true,
+    "enters_tapped_with_depletion": 2,
+    "produces_amount": 2
+   }
+  },
+  {
+   "name": "Remote Farm",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Remote Farm enters tapped with two depletion counters on it. {T}, Remove a depletion counter from Remote Farm: Add {W}{W}. If there are no depletion counters on it, sacrifice it.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W"
+    ],
+    "enters_tapped": true,
+    "enters_tapped_with_depletion": 2,
+    "produces_amount": 2
+   }
   }
  ]
 }

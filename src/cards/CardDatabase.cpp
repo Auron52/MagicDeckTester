@@ -636,6 +636,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.no_max_hand_size    = params.value("no_max_hand_size",    false);
     p.discard_land_damage = params.value("discard_land_damage", 0);
     p.cascade_max_mv      = params.value("cascade_max_mv",      0);
+    p.cascade_count       = params.value("cascade_count",       1);
+    p.etb_exile_until_nonland    = params.value("etb_exile_until_nonland",    false);
+    p.etb_exile_free_cast_max_mv = params.value("etb_exile_free_cast_max_mv", 0);
+    p.shuffle_reveal_freecast    = params.value("shuffle_reveal_freecast",    false);
+    p.demonstrate                = params.value("demonstrate",                false);
+    p.enter_as_copy_of_entrant   = params.value("enter_as_copy_of_entrant",   false);
     p.retrace             = params.value("retrace",             false);
 
     p.etb_pay_life_to_untap = params.value("etb_pay_life_to_untap", 0);

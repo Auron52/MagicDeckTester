@@ -3590,6 +3590,13 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
         int dyn = def.params.power_equals_creature_count
                   ? CreatureCount(state, state.active_player_index) + 1 : 0;
         int power = (def.card.m_power.value_or(0) + dyn + lord_pb) * (ds ? 2 : 1);
+        // Cascade CREATURE credit (Maelstrom Wanderer / Annoyed Altisaur / Boarding Party):
+        // the creature branch used to return before the generic cascade estimate below, so a
+        // cascade creature was priced as a bare body and its free ~5-7 MV spell scored ZERO to
+        // the greedy leaf policy. Same ~3-DMG-per-instance estimate as the sorcery arm, times
+        // cascade_count (a double cascade is two free spells). 0 for every non-cascade creature.
+        const int cascade_credit = (def.params.cascade_max_mv > 0)
+            ? 3 * DMG * std::max(1, def.params.cascade_count) : 0;
         if (power <= 0)
         {
             // Mana-dork ramp: a 0-power accelerant contributes future mana the per-turn combat
@@ -3598,18 +3605,21 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
             if (s_dork_ramp > 0 && def.tmpl == CardTemplate::ManaDork)
             {
                 int remaining = std::max(1, ExpectedAttacks(state));
-                return s_dork_ramp * std::min(remaining, 4);
+                return s_dork_ramp * std::min(remaining, 4) + cascade_credit;
             }
-            return 0;
+            return cascade_credit;
         }
 
-        // Haste (from the card or from a lord already on board) attacks this turn;
-        // others start next turn.
+        // Haste (from the card or from a lord already on board -- or the card's OWN
+        // all-creatures grant, which hastes itself: Maelstrom Wanderer) attacks this turn;
+        // others start next turn. The self-grant test is needed because the card is being
+        // evaluated IN HAND, so HasHasteFromLords cannot see it on the battlefield yet.
         bool haste = def.card.HasKeyword(Keyword::Haste)
-                  || HasHasteFromLords(def.card, state.battlefield, state.active_player_index);
+                  || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)
+                  || (def.params.grants_haste && def.params.affects_all_creatures);
         int  attacks = ExpectedAttacks(state);
         if (!haste && attacks > 0) { --attacks; }
-        return power * attacks * DMG;
+        return power * attacks * DMG + cascade_credit;
     }
 
     if (def.tmpl == CardTemplate::DrawSpell)
@@ -3635,10 +3645,23 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
         }
     }
 
-    // Cascade spells: value = free spell drawn (assume ~3 damage-equivalents on average).
+    // Cascade spells: value = free spell drawn (assume ~3 damage-equivalents on average),
+    // per instance ("Cascade, cascade" = two free spells).
     if (def.params.cascade_max_mv > 0)
     {
-        return 3 * DMG;
+        return 3 * DMG * std::max(1, def.params.cascade_count);
+    }
+
+    // Breaching Dragonstorm / Creative Technique: a free spell from a pool of 5-8 MV payoffs
+    // (plus, for the former, permanent library thinning; for the latter, the demonstrate copy
+    // doubles it). Slightly above the cascade estimate -- the flip has no MV ceiling here.
+    if (def.params.etb_exile_until_nonland)
+    {
+        return 4 * DMG;
+    }
+    if (def.params.shuffle_reveal_freecast)
+    {
+        return (def.params.demonstrate ? 8 : 4) * DMG;
     }
 
     // Zada/Mirrorwing solo-target trick: a rough d0 estimate so the greedy leaf policy deploys
@@ -8517,7 +8540,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // single enumeration choke point so the search AND the bottoming rollouts both honor
         // it. Generic returns true (no gate), so non-Treasure-Hunt decks are byte-identical.
         if ((def.tmpl == CardTemplate::DrawUntilNonland
-             || def.params.cascade_max_mv > 0 || def.params.retrace)
+             || def.params.cascade_max_mv > 0 || def.params.retrace
+             || def.params.shuffle_reveal_freecast || def.params.etb_exile_until_nonland)
             && !ResolveProvider(state).ShouldCastDrawEngine(state, state.active_player_index, def))
         {
             continue;
@@ -9362,6 +9386,43 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.bestow         = true;
                     actions.push_back(std::move(a));
                 }
+            }
+        }
+
+        // Sakashima's Protege: WHICH this-turn entrant it copies is a SEARCH decision -- one
+        // extra CastFromHand variant per legal battlefield entrant (sharing hand_index ->
+        // mutually exclusive), reusing enchant_target for the source's card.m_number (aura
+        // precedent), plus an explicit DECLINE variant (enchant_target -1 -> enter as itself).
+        // No `continue`: the ordinary creature cast below emits the heuristic variant
+        // (enchant_target 0), which also covers same-plan entrants that are not on the board at
+        // enumeration time (a Wanderer cast earlier in this very plan) via the apply-time
+        // heuristic. The plan signature folds enchant_target, so the dedup keeps every variant
+        // distinct (lossless -- core invariant).
+        if (def.params.enter_as_copy_of_entrant)
+        {
+            for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+            {
+                if (!state.battlefield[bi].entered_this_turn) { continue; }
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = EffectiveCost(def, state);
+                a.eval           = EvalCard(def, state);
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.enchant_target = state.battlefield[bi].card.m_number;
+                actions.push_back(std::move(a));
+            }
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = EffectiveCost(def, state);
+                a.eval           = EvalCard(def, state);
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.enchant_target = -1;   // decline: enter as the printed 3/1
+                actions.push_back(std::move(a));
             }
         }
 
@@ -17766,6 +17827,134 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Paid at cast (before on-cast triggers), then the spell resolves its normal effect.
         if (alt_cost) { OpponentGainsLife(state, state.active_player_index, alt_lifegain); }
 
+        // ---- Real-stack cast triggers (lockstep with the executor's PushCastTriggers) --------
+        // Creative Technique's payload, shared by the demonstrate COPY and the original cast.
+        // The shuffle MUST be ShuffleAfterSearch (CRN) -- the executor's
+        // ResolveShuffleRevealFreecast makes the identical call, so both worlds walk the same
+        // library. A taken hit free-casts through apply_one (a real cast: it self-counts); a
+        // declined/forbidden hit STAYS EXILED (the oracle's only alternative disposition).
+        auto do_shuffle_reveal_freecast = [&]()
+        {
+            ShuffleAfterSearch(state, state.active_player_index);
+            Card found;
+            if (!WalkRevealUntilNonland(state, state.active_player_index, found)) { return; }
+            const CardDefinition* fd = CardDatabase::Instance().LookupCached(found);
+            bool take = fd != nullptr
+                && ResolveProvider(state).TakeFreeCast(state, state.active_player_index, *fd);
+            // Human free-cast chooser -- consulted HERE because the real claude-play/viewer game
+            // executes plans through THIS lambda, not EffectHandler's stack resolvers (the
+            // 2026-07-01 retrace-chooser lesson, re-learned by the 5d sweep: the decision never
+            // surfaced until this call existed). Nulled in every search/rollout scope
+            // (RevealLogPause) -> autonomous play byte-identical.
+            if (g_play_free_cast_chooser)
+            {
+                std::vector<Card> cands{ found };
+                take = ((*g_play_free_cast_chooser)(state, state.active_player_index,
+                                                    def.card.m_name.str(), cands,
+                                                    take ? 0 : -1) == 0);
+            }
+            if (take && state.casts_remaining_this_turn != 0)
+            {
+                const std::string fname = found.m_name.str();
+                ap.hand.push_back(std::move(found));
+                cascade_free = true;   // free cast (one-shot, consumed by the recursion)
+                apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
+                          std::string{}, 0, false, -1);
+            }
+            else { state.exile.push_back(std::move(found)); }
+        };
+        // Demonstrate (CR 702.145): the copy resolves BEFORE the original (2021-04-16 ruling).
+        // The copy is NOT a cast -- no counters, no apply_one recursion for the copy itself,
+        // just its payload (any free cast the payload makes IS a cast and self-counts). The
+        // opponent's copy is inert (never dealt a library, never casts -- bracket note).
+        if (def.params.demonstrate && def.params.shuffle_reveal_freecast)
+        {
+            bool copy = ResolveProvider(state).DemonstrateCopy(state, state.active_player_index, def);
+            // Human demonstrate chooser at the REAL resolution path (same lesson as above).
+            if (g_play_demonstrate_chooser)
+            { copy = (*g_play_demonstrate_chooser)(state, state.active_player_index, def.card, copy); }
+            if (copy) { do_shuffle_reveal_freecast(); }
+        }
+        // Cascade instances resolve BEFORE the spell's own effect (CR 601.2i / 702.85a) -- so a
+        // cascade CREATURE's hit enters first (load-bearing for Sakashima's Protege's copy
+        // clause). Each instance fully resolves (walk + free cast, nesting through apply_one)
+        // before the next walks, so the second cascade sees the library the first one left.
+        if (def.params.cascade_max_mv > 0)
+        {
+            const int n_casc = std::max(1, def.params.cascade_count);
+            for (int ci = 0; ci < n_casc; ++ci)
+            {
+                Card hit;
+                if (!WalkCascadeExile(state, state.active_player_index,
+                                      def.params.cascade_max_mv, hit))
+                { continue; }
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hit);
+                bool take = hd != nullptr
+                    && ResolveProvider(state).TakeFreeCast(state, state.active_player_index, *hd);
+                // Human free-cast chooser at the REAL resolution path (see the CT payload note).
+                if (g_play_free_cast_chooser)
+                {
+                    std::vector<Card> cands{ hit };
+                    take = ((*g_play_free_cast_chooser)(state, state.active_player_index,
+                                                        def.card.m_name.str() + " (cascade)",
+                                                        cands, take ? 0 : -1) == 0);
+                }
+                if (take && state.casts_remaining_this_turn != 0)
+                {
+                    const std::string hname = hit.m_name.str();
+                    ap.hand.push_back(std::move(hit));
+                    cascade_free = true;   // free cast (one-shot, consumed by the recursion)
+                    apply_one(hname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
+                              std::string{}, 0, false, -1);
+                }
+                else { ap.library.push_back(std::move(hit)); }   // declined/forbidden: bottomed
+            }
+        }
+        // Breaching Dragonstorm's enter trigger drain (recorded by FireOwnEtbTriggers at ANY
+        // enter site below -- including a Sakashima's Protege entering as a copy of it): walk,
+        // then free-cast (mv <= cap; a real cast -> apply_one recursion) or bank to hand.
+        // Lockstep with the executor's Triggered{EtbExileFreeCast} entries. Defined here (not
+        // at the enter sites) because it recurses through apply_one, a local of this lambda.
+        auto drain_etb_free_casts = [&]()
+        {
+            while (!g_pending_etb_free_casts.empty())
+            {
+                std::vector<PendingEtbFreeCast> pend;
+                pend.swap(g_pending_etb_free_casts);
+                for (const auto& pe : pend)
+                {
+                    Card found;
+                    if (!WalkExileUntilNonland(state, pe.controller, found)) { continue; }
+                    const CardDefinition* fd = CardDatabase::Instance().LookupCached(found);
+                    const CardDefinition* bd = CardDatabase::Instance().LookupCached(pe.source);
+                    const int mv  = fd ? fd->card.m_mana_cost.ManaValue()
+                                       : found.m_mana_cost.ManaValue();
+                    const int cap = bd ? bd->params.etb_exile_free_cast_max_mv : 0;
+                    bool take = (mv <= cap) && fd != nullptr
+                        && ResolveProvider(state).TakeFreeCast(state, pe.controller, *fd);
+                    // Human free-cast chooser at the REAL resolution path (see the CT payload
+                    // note). Only offered when the MV gate allows the cast at all.
+                    if (take && g_play_free_cast_chooser)
+                    {
+                        std::vector<Card> cands{ found };
+                        take = ((*g_play_free_cast_chooser)(state, pe.controller,
+                                                            bd ? bd->card.m_name.str()
+                                                               : std::string("Breaching Dragonstorm"),
+                                                            cands, 0) == 0);
+                    }
+                    if (take && state.casts_remaining_this_turn != 0)
+                    {
+                        const std::string fname = found.m_name.str();
+                        state.players[pe.controller].hand.push_back(std::move(found));
+                        cascade_free = true;
+                        apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1,
+                                  0, std::string{}, 0, false, -1);
+                    }
+                    else { state.players[pe.controller].hand.push_back(std::move(found)); }
+                }
+            }
+        };
+
         // Commit-the-line recording: if inside a breakpoint re-solve (sink_stack
         // non-empty), record THIS cast into the current sink so AIEngine can replay it
         // verbatim; its own draw-breakpoint casts nest under my_bp_sink. A main-plan
@@ -18148,6 +18337,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
+            // Sakashima's Protege: enter as a copy of a this-turn entrant (the searched pick
+            // rides enchant_target -- reused as the copy-source m_number; 0 = heuristic).
+            // Lockstep twin of EnterBattlefield's swap: the COPIED card drives enters-tapped
+            // and, below, the enter triggers (a copy of Breaching Dragonstorm re-fires its
+            // exile trigger through FireOwnEtbTriggers).
+            if (def.params.enter_as_copy_of_entrant)
+            {
+                const int src_bi = ChooseCopyEntrantIndex(state, state.active_player_index,
+                                                          enchant_target, def);
+                if (src_bi >= 0)
+                {
+                    perm.card          = state.battlefield[src_bi].card;
+                    perm.card.m_number = cast_number;
+                    const CardDefinition* cd = CardDatabase::Instance().LookupCached(perm.card);
+                    if (cd && cd->params.enters_tapped) { perm.tapped = true; }
+                }
+            }
             state.battlefield.push_back(perm);
 
             // Dragonstorm kill-engine (rollout side): a Dragon entering fires the shared cascade
@@ -18162,6 +18368,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // non-Goblin creature -> other decks byte-identical.
             FireOwnEtbTriggers(state, state.active_player_index,
                            static_cast<int>(state.battlefield.size()) - 1, tutor_target, chosen_x);
+
+            // Breaching Dragonstorm enter trigger (recorded just above when this creature IS a
+            // copy of it): resolve now, lockstep with the executor's post-resolution drain.
+            if (!g_pending_etb_free_casts.empty()) { drain_etb_free_casts(); }
 
             // ETB library dig (Acclaimed Contender): performed inline so the clairvoyant
             // rollout sees the dug card in hand for later turns. The real game does the
@@ -18186,8 +18396,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
             // Legend rule: a duplicate legendary just cast is put into the graveyard, so a
             // second copy of a legendary lord confers no benefit (the search then avoids
-            // casting it). No-op for non-legendary creatures.
-            if (def.card.HasSupertype(Supertype::Legendary))
+            // casting it). No-op for non-legendary creatures. The copy-entrant param is gated
+            // too: a Sakashima's Protege may have ENTERED as a legendary (Maelstrom Wanderer)
+            // even though def.card is not -- mirror of the executor's Resolve() gate.
+            if (def.card.HasSupertype(Supertype::Legendary)
+                || def.params.enter_as_copy_of_entrant)
             {
                 EnforceLegendRule(state, state.active_player_index);
             }
@@ -18414,44 +18627,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Human play: Treasure Hunt's reveal is now in hand; the chooser re-fires so the
             // human plays a land / Land's Edge / another Treasure Hunt with the revealed cards.
         }
-        else if (def.params.cascade_max_mv > 0)
+        else if (def.params.shuffle_reveal_freecast)
         {
-            // Cascade: exile from top until a nonland with MV < cascade_max_mv is found.
-            int limit = def.params.cascade_max_mv;
-            std::vector<Card> exiled;
-            int cascade_idx = -1;
-            while (!ap.library.empty())
-            {
-                Card c = ap.library.DrawTop();
-                auto cdef = CardDatabase::Instance().LookupCached(c);
-                bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
-                int  mv      = cdef ? cdef->card.m_mana_cost.ManaValue()
-                                    : c.m_mana_cost.ManaValue();
-                exiled.push_back(std::move(c));
-                if (!is_land && mv < limit)
-                {
-                    cascade_idx = static_cast<int>(exiled.size()) - 1;
-                    break;
-                }
-            }
-            // All non-target cards return to library bottom in exile order.
-            for (int ei = 0; ei < static_cast<int>(exiled.size()); ++ei)
-            {
-                if (ei == cascade_idx) { continue; }
-                ap.library.push_back(std::move(exiled[ei]));
-            }
-            // Cast the cascade target for free: place it in hand so apply_one finds it.
-            if (cascade_idx >= 0)
-            {
-                const std::string& cname = exiled[cascade_idx].m_name;
-                auto cdef2 = CardDatabase::Instance().LookupCached(exiled[cascade_idx]);
-                if (cdef2)
-                {
-                    ap.hand.push_back(cdef2->card);
-                    cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1);
-                }
-            }
+            // Creative Technique's own resolution payload. (Cascade no longer resolves here:
+            // it is a cast trigger, run above BEFORE the spell's effect -- see the real-stack
+            // block after the cast bookkeeping.)
+            do_shuffle_reveal_freecast();
         }
         else if (def.tmpl == CardTemplate::Removal && def.params.tuck_to_library)
         {
@@ -18938,6 +19119,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     }
                 }
             }
+            // Breaching Dragonstorm (the reachable card: a CAST noncreature enchantment whose
+            // enter trigger FireOwnEtbTriggers just recorded): resolve the exile-until-nonland
+            // walk + free cast now, lockstep with the executor's post-resolution drain.
+            if (!g_pending_etb_free_casts.empty()) { drain_etb_free_casts(); }
             // ...and that draw is a DECISION POINT (breakpoint site 6): the card it put in hand is
             // castable with the mana this turn's plan has left, and until this existed it never
             // could be -- see TurnSolver::EquipmentDrawBreakpoint for the measurement.

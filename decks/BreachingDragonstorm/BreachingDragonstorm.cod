@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Maelstrom Wanderer"/>
+        <card number="4" name="Annoyed Altisaur"/>
+        <card number="2" name="Sakashima's Protege"/>
+        <card number="4" name="Boarding Party"/>
+        <card number="4" name="Breaching Dragonstorm"/>
+        <card number="1" name="Call Forth the Tempest"/>
+        <card number="4" name="Creative Technique"/>
+        <card number="4" name="Dwarven Ruins"/>
+        <card number="4" name="Ferrous Lake"/>
+        <card number="4" name="Mossfire Valley"/>
+        <card number="9" name="Mountain"/>
+        <card number="4" name="Peat Bog"/>
+        <card number="4" name="Remote Farm"/>
+        <card number="4" name="Saprazzan Skerry"/>
+        <card number="4" name="Svyelunite Temple"/>
+    </zone>
+</cockatrice_deck>

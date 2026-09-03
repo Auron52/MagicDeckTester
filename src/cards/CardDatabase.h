@@ -219,7 +219,61 @@ struct CardParams
     // Cascade: when cast, exile from library top until a nonland card with mana value
     // strictly less than cascade_max_mv is found; cast it for free; put the rest on the bottom.
     // 0 = no cascade.
+    // Since the BreachingDragonstorm onboarding (2026-09-03) cascade is a real CAST TRIGGER:
+    // CastSpellFromHand / PushFreeCast push one Triggered{Cascade} stack entry per instance
+    // ABOVE the spell, so the cascade exile-walk and its free cast resolve BEFORE the casting
+    // spell does (CR 601.2i / 702.85a) -- which is what lets cascade fire on CREATURE and
+    // other permanent spells (previously it was reachable only on non-permanent resolution).
     int  cascade_max_mv = 0;
+
+    // Number of cascade INSTANCES on the card ("Cascade, cascade" = 2 -- Maelstrom Wanderer,
+    // Call Forth the Tempest). Read only when cascade_max_mv > 0. Each instance is its own
+    // Triggered{Cascade} entry, resolving fully (exile walk + free cast) before the next
+    // begins, so the second cascade sees the library the first one left. Default 1 keeps
+    // every existing cascade card byte-identical.
+    int  cascade_count = 1;
+
+    // Breaching Dragonstorm: "When this enchantment enters, exile cards from the top of your
+    // library until you exile a nonland card. You may cast it without paying its mana cost if
+    // that spell's mana value is 8 or less. If you don't, put that card into your hand."
+    // THREE deliberate divergences from cascade, all oracle-faithful: the exile walk has NO
+    // mana-value bound (the first nonland always stops it); the exiled non-hit LANDS stay in
+    // state.exile PERMANENTLY (the oracle gives them no disposition -- cascade bottoms its
+    // non-hits), which in a 37-land list is real cumulative library thinning; and a declined /
+    // over-MV hit goes to HAND (cascade bottoms it). etb_exile_free_cast_max_mv is the
+    // ORACLE-PRINTED constant (8), NOT this card's cmc (5) -- do not "correct" it, and do not
+    // extend audit_card_costs.py's cascade_max_mv==cmc cross-check to it. Fired through the
+    // universal enter path (FireOwnEtbTriggers -> pending queue), so a Sakashima's Protege
+    // entering as a copy re-fires it.
+    bool etb_exile_until_nonland    = false;
+    int  etb_exile_free_cast_max_mv = 0;
+
+    // Creative Technique: "Shuffle your library, then reveal cards from the top of it until
+    // you reveal a nonland card. Exile that card and put the rest on the bottom of your
+    // library in a random order. You may cast the exiled card without paying its mana cost."
+    // The shuffle MUST go through ShuffleAfterSearch (CRN) -- an ad-hoc Shuffle() would desync
+    // executor and rollout. The revealed non-hits bottom in reveal order, which off a
+    // just-shuffled library IS a uniform random order (faithful; no second shuffle -- that
+    // would burn a search_count ordinal). A declined hit stays in exile.
+    bool shuffle_reveal_freecast = false;
+
+    // Demonstrate (Creative Technique, CR 702.145): when you cast this spell, you may copy it.
+    // The copy resolves BEFORE the original (2021-04-16 ruling), is NOT a cast (no cast
+    // triggers, no spells_cast_this_turn increment) and ceases to exist on resolution (never
+    // touches the graveyard -- StackEntry::is_copy). The opponent's copy is inert here: the
+    // goldfish opponent is never dealt a library and never casts (see the card's bracket note).
+    bool demonstrate = false;
+
+    // Sakashima's Protege: "You may have this creature enter as a copy of any permanent that
+    // entered this turn." As it enters, the entering Permanent's card is replaced by the chosen
+    // source permanent's PRINTED card (CR 706.2 copiable values -- no counters, no attachments,
+    // no temp pumps), keeping this cast's own m_number for per-copy identity; enter triggers
+    // then fire for the COPIED card through the normal enter path (a copy of Breaching
+    // Dragonstorm re-fires its exile trigger). Choice rides StackEntry/Action::copy_target
+    // (searched plan variant / human chooser); 0 = heuristic pick (best-power entrant) /
+    // decline when none. Scoped to permanents STILL on the battlefield with entered_this_turn
+    // (the entered-and-left set is provably empty in this deck -- see the bracket note).
+    bool enter_as_copy_of_entrant = false;
 
     // Retrace (e.g. Throes of Chaos): this card may be cast from the graveyard by
     // discarding a land card as an additional cost. It is not exiled, so it returns

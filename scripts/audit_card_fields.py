@@ -62,6 +62,9 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # stripping them is safe (mirrors cycling/cascade). Goblins: Mogg War Marshal &
     # Stingscourger (echo), Twinshot Sniper (channel).
     "echo", "channel",
+    # Demonstrate (Creative Technique): modeled structurally via the demonstrate param
+    # (a cast-trigger stack entry), not a keyword tag -- mirrors cascade.
+    "demonstrate",
 }
 # Supertypes the engine does NOT model because they are inert in goldfishing:
 # Basic-ness is derived from the card name; the World rule never fires (one

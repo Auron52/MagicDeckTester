@@ -12,6 +12,7 @@
 #include "Profiler.h"
 #include "../cards/CardDatabase.h"
 #include "../core/GameEngine.h"
+#include "../core/EffectHandler.h"   // PushCastTriggers (real-stack cascade/demonstrate)
 #include "../core/SpellEffects.h"
 #include "../core/RolloutTouch.h"
 #include <algorithm>
@@ -1819,6 +1820,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (mv > best_mv) { best_mv = mv; heur = static_cast<int>(ci); }
                 }
                 const int picked = (*g_play_free_cast_chooser)(state, state.active_player_index,
+                                                               "Maelstrom Archangel",
                                                                fc_cards, heur);
                 if (picked >= 0 && picked < static_cast<int>(fc_idx.size()))
                 { TurnSolver::ApplyPlan(state, fc_plans[fc_idx[picked]], is_pre_combat_main); }
@@ -2779,6 +2781,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         state.stack.push_back(std::move(entry));
         FireOnCastTriggers(state, *def);
         FireProwess(state, *def);
+        // A retrace cast is a cast: its cascade fires exactly as a hand cast's does (this is
+        // Throes of Chaos's ONLY effect -- since cascade moved to cast-trigger entries, this
+        // call is what keeps retrace-cast Throes cascading at all).
+        EffectHandler::PushCastTriggers(state, *def, state.active_player_index);
     };
 
     // Note whether an action casts a draw-engine spell (DrawUntilNonland / cascade /
@@ -2791,6 +2797,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
+                  || d->params.shuffle_reveal_freecast || d->params.etb_exile_until_nonland
                   || d->params.stages_cards || d->params.impulse_exile > 0
                   // Zada/Mirrorwing trick with a draw payload -- or a Treasure payload (Gold
                   // Rush), whose tokens are same-turn mana: a magnet fan-out mass-draws (or
@@ -2857,6 +2864,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         return d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
+                     || d->params.shuffle_reveal_freecast || d->params.etb_exile_until_nonland
                      || d->params.stages_cards || d->params.expressive_iteration
                      || d->params.impulse_exile > 0
                      // Soulfire's staged exile / tutor fetch (MTG_ACQ_RESOLVE): the rollout arms a
@@ -4784,6 +4792,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // On-cast triggers fire when the spell is cast (CR 603.3), before it resolves.
     FireOnCastTriggers(state, *def);
     FireProwess(state, *def);
+    // Real-stack cast triggers (cascade instances, demonstrate): pushed ABOVE the spell entry
+    // so they -- and the free casts they make -- resolve BEFORE the spell itself (CR 601.2i /
+    // 702.85a). This is what makes cascade fire on CREATURE casts. No-op for every card
+    // without a cast-trigger param -> byte-identical elsewhere.
+    EffectHandler::PushCastTriggers(state, *def, state.active_player_index);
 
     // Push replicate token copies onto the stack so they enter the battlefield when
     // the stack resolves (EffectHandler will call EnterBattlefield for each).

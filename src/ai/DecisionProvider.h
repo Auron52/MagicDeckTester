@@ -381,6 +381,24 @@ public:
     virtual bool TrickCastSensible(const GameState& /*s*/, int /*controller*/,
                                    const CardDefinition& /*def*/) const { return true; }
 
+    // TakeFreeCast -- the "you may cast it without paying its mana cost" call on a cascade hit /
+    // Breaching Dragonstorm find / Creative Technique find. `found` is the card offered.
+    // Default TRUE (take it): against the passive goldfish opponent a free nonland spell is
+    // never worse than the alternative disposition (cascade bottoms it, Breaching Dragonstorm
+    // banks it to hand, Creative Technique strands it in exile), and every hit in the pool is
+    // pure upside. Provider-owned so any narrowing away from that is a NAMED, A/B-testable
+    // decision (core invariant) -- and the human chooser overrides it at the real-resolution
+    // sites regardless. Disclosed in each deck's Stage 6a.
+    virtual bool TakeFreeCast(const GameState& /*s*/, int /*controller*/,
+                              const CardDefinition& /*found*/) const { return true; }
+
+    // DemonstrateCopy -- Creative Technique's "you may copy this spell" (CR 702.145). Default
+    // TRUE: the copy is a second free payload at zero cost and the opponent's copy is inert
+    // here (never dealt a library, never casts). Provider-owned for the same core-invariant
+    // reason as TakeFreeCast; the human demonstrate chooser overrides at real resolution.
+    virtual bool DemonstrateCopy(const GameState& /*s*/, int /*controller*/,
+                                 const CardDefinition& /*def*/) const { return true; }
+
     // HasExtraLethalModel / ExtraLethalDamage -- deck-specific extra damage toward THIS turn's lethal, BEYOND
     // the generic combat + direct-damage total the engine already sums. This is the Treasure Hunt / Land's
     // Edge model: lands in hand are Land's Edge ammunition, and a clairvoyant Treasure Hunt cast this turn

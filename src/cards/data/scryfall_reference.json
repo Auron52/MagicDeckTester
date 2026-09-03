@@ -106,6 +106,19 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Annoyed Altisaur": {
+    "cmc": 7.0,
+    "keywords": [
+      "Cascade",
+      "Reach",
+      "Trample"
+    ],
+    "mana_cost": "{5}{G}{G}",
+    "oracle_text": "Reach, trample\nCascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom in a random order.)",
+    "power": "6",
+    "toughness": "5",
+    "type_line": "Creature — Dinosaur"
+  },
   "Apex of Power": {
     "cmc": 10.0,
     "keywords": [],
@@ -602,6 +615,15 @@
     "keywords": [],
     "mana_cost": "",
     "oracle_text": "This land enters tapped.\nYou may choose not to untap this land during your untap step.\nAt the beginning of your upkeep, if this land is tapped, put a storage counter on it.\n{T}, Remove any number of storage counters from this land: Add {R} for each storage counter removed this way.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Dwarven Ruins": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {R}.\n{T}, Sacrifice this land: Add {R}{R}.",
     "power": null,
     "toughness": null,
     "type_line": "Land"
@@ -1554,6 +1576,17 @@
     "toughness": "5",
     "type_line": "Creature — Angel"
   },
+  "Maelstrom Wanderer": {
+    "cmc": 8.0,
+    "keywords": [
+      "Cascade"
+    ],
+    "mana_cost": "{5}{G}{U}{R}",
+    "oracle_text": "Creatures you control have haste.\nCascade, cascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom in a random order. Then do it again.)",
+    "power": "7",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Elemental"
+  },
   "Magma Opus": {
     "cmc": 8.0,
     "keywords": [
@@ -1688,6 +1721,15 @@
     "power": "1",
     "toughness": "2",
     "type_line": "Creature — Human Monk"
+  },
+  "Mossfire Valley": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{1}, {T}: Add {R}{G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Mountain": {
     "cmc": 0.0,
@@ -1842,6 +1884,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Legendary Creature — Goblin Warrior"
+  },
+  "Peat Bog": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped with two depletion counters on it.\n{T}, Remove a depletion counter from this land: Add {B}{B}. If there are no depletion counters on this land, sacrifice it.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Peregrine Drake": {
     "cmc": 5.0,
@@ -2047,6 +2098,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Remote Farm": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped with two depletion counters on it.\n{T}, Remove a depletion counter from this land: Add {W}{W}. If there are no depletion counters on this land, sacrifice it.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Remote Isle": {
     "cmc": 0.0,
     "keywords": [
@@ -2102,6 +2162,18 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Goblin Warrior"
+  },
+  "Sakashima's Protege": {
+    "cmc": 6.0,
+    "keywords": [
+      "Cascade",
+      "Flash"
+    ],
+    "mana_cost": "{4}{U}{U}",
+    "oracle_text": "Flash\nCascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom in a random order.)\nYou may have this creature enter as a copy of any permanent that entered this turn.",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Shapeshifter"
   },
   "Sandstone Needle": {
     "cmc": 0.0,
@@ -2436,6 +2508,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Phyrexian Cleric"
+  },
+  "Svyelunite Temple": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {U}.\n{T}, Sacrifice this land: Add {U}{U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Swords to Plowshares": {
     "cmc": 1.0,

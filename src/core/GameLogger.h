@@ -619,9 +619,22 @@ extern thread_local LackeyChooser* g_play_lackey_chooser;
 // (or decline, it is a "may"). `candidates` = the castable-for-free cards in hand, one per hand slot;
 // the chooser returns an index into it, or -1 to decline. Nulled by RevealLogPause for every
 // search/rollout scope, so autonomous play keeps the plan-variant path and stays byte-identical.
+// `source` names the trigger that offers the free cast ("Maelstrom Archangel", or the
+// cascade / Breaching Dragonstorm / Creative Technique card at its resolution site), so the
+// viewer labels the decision correctly now that four mechanics share this chooser.
 using FreeCastChooser = std::function<int(const GameState& state, int controller,
+                                          const std::string& source,
                                           const std::vector<Card>& candidates, int heuristic_index)>;
 extern thread_local FreeCastChooser* g_play_free_cast_chooser;
+
+// ---- Human-play demonstrate chooser (Creative Technique, CR 702.145) ------------------------
+// "You may copy this spell" -- a yes/no asked as the demonstrate trigger resolves. `spell` is
+// the demonstrating spell; `heuristic_default` is the provider's call (true = copy, the
+// near-dominant line). Nulled by RevealLogPause for every search/rollout scope, so autonomous
+// play keeps the provider decision and stays byte-identical.
+using DemonstrateChooser = std::function<bool(const GameState& state, int controller,
+                                              const Card& spell, bool heuristic_default)>;
+extern thread_local DemonstrateChooser* g_play_demonstrate_chooser;
 
 // ---- Human-play ETB tutor chooser (Goblin Matron entering OFF a cast) ----------------------
 // A tutor resolved from a CAST already has its target decided: the search enumerates one plan
@@ -761,6 +774,7 @@ inline bool AllPlayHooksNull()
         && g_play_dragon_chooser == nullptr
         && g_play_sac_tutor_chooser == nullptr && g_play_lackey_chooser == nullptr
         && g_play_free_cast_chooser == nullptr && g_play_lightpaws_chooser == nullptr
+        && g_play_demonstrate_chooser == nullptr
         && g_play_firebreathe_chooser == nullptr && g_play_cast_order_chooser == nullptr
         && g_play_storage_hold_chooser == nullptr && g_play_tutor_chooser == nullptr
         && g_play_attach_host_chooser == nullptr && g_play_jitte_chooser == nullptr
@@ -804,6 +818,7 @@ struct RevealLogPause
     SacTutorChooser* saved_sacttchooser;
     LackeyChooser* saved_lackeychooser;
     FreeCastChooser* saved_freecastchooser;
+    DemonstrateChooser* saved_demochooser = nullptr;
     LightPawsChooser* saved_lpchooser;
     FirebreatheChooser* saved_fbchooser;
     CastOrderChooser* saved_cochooser;
@@ -848,6 +863,7 @@ struct RevealLogPause
         saved_dragchooser = g_play_dragon_chooser; saved_sacttchooser = g_play_sac_tutor_chooser;
         saved_lackeychooser = g_play_lackey_chooser;
         saved_freecastchooser = g_play_free_cast_chooser;
+        saved_demochooser = g_play_demonstrate_chooser;
         saved_lpchooser = g_play_lightpaws_chooser;
         saved_fbchooser = g_play_firebreathe_chooser;
         saved_cochooser = g_play_cast_order_chooser;
@@ -867,6 +883,7 @@ struct RevealLogPause
         g_play_land_rad_chooser = nullptr; g_play_dragon_chooser = nullptr;
         g_play_sac_tutor_chooser = nullptr;
         g_play_lackey_chooser = nullptr; g_play_free_cast_chooser = nullptr;
+        g_play_demonstrate_chooser = nullptr;
         g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
         g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
         g_play_tutor_chooser = nullptr;
@@ -888,6 +905,7 @@ struct RevealLogPause
                         g_play_dragon_chooser = saved_dragchooser; g_play_sac_tutor_chooser = saved_sacttchooser;
                         g_play_lackey_chooser = saved_lackeychooser;
                         g_play_free_cast_chooser = saved_freecastchooser;
+                        g_play_demonstrate_chooser = saved_demochooser;
                         g_play_lightpaws_chooser = saved_lpchooser;
                         g_play_firebreathe_chooser = saved_fbchooser;
                         g_play_cast_order_chooser = saved_cochooser;

@@ -45,6 +45,7 @@ thread_local DragonChooser*  g_play_dragon_chooser = nullptr;
 thread_local SacTutorChooser* g_play_sac_tutor_chooser = nullptr;
 thread_local LackeyChooser*  g_play_lackey_chooser = nullptr;
 thread_local FreeCastChooser* g_play_free_cast_chooser = nullptr;
+thread_local DemonstrateChooser* g_play_demonstrate_chooser = nullptr;
 thread_local TutorChooser*   g_play_tutor_chooser  = nullptr;
 thread_local std::vector<PlayReveal>* g_play_reveal_sink = nullptr;
 thread_local LightPawsChooser* g_play_lightpaws_chooser = nullptr;

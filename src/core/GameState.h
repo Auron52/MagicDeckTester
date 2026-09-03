@@ -153,6 +153,26 @@ struct StackEntry
                                         // Stamped from Action::bestow at the cast site; the resolver then
                                         // enters the DB's synthesized "<name> (Bestowed)" aura face instead
                                         // of the creature. false => the ordinary creature cast.
+    // ---- Real-stack trigger machinery (BreachingDragonstorm onboarding, 2026-09-03) ----
+    // Cast/enter triggers are their own LIFO entries so nested chains (cascade -> free cast ->
+    // cascade...) resolve in true stack order instead of ad-hoc inline special cases.
+    enum class TriggerKind
+    {
+        None,              // not a trigger entry
+        Cascade,           // one per cascade instance; pushed ABOVE the casting spell at cast
+                           // time (CR 601.2i), so the exile walk + free cast resolve first
+        EtbExileFreeCast,  // Breaching Dragonstorm's enter trigger (exile until nonland,
+                           // may free-cast if MV <= etb_exile_free_cast_max_mv, else to hand)
+        Demonstrate        // Creative Technique's cast trigger (may copy the spell; the copy
+                           // is pushed above the original and resolves first)
+    };
+    TriggerKind         trigger_kind = TriggerKind::None;  // meaningful on EntryType::Triggered
+    bool                is_copy     = false;  // demonstrate copy: resolves its payload but was
+                                        // never CAST -- no cast triggers fired for it and it
+                                        // ceases to exist on resolution (MoveToGraveyard skips).
+                                        // (Sakashima's Protege's copy-SOURCE pick reuses
+                                        // enchant_target above -- the aura/trick precedent:
+                                        // m_number, -1 = searched decline, 0 = heuristic.)
     // Resolve dispatch is added in Phase 1.2 when CardDatabase provides ability implementations.
 };
 
