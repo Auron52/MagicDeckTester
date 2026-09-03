@@ -460,6 +460,17 @@ depth/budget per the USER's own argument, or by the incremental key making REC a
 (3) MTG_EXEC_FEAS -- separate, fully-gated follow-up candidate (hinata -0.0017/-0.0016 t~3.3,
 -0.55% units, 14/15 decks game-identical), awaiting its own sign-off.
 
+**EF RE-MEASURED ON THE TIGHT BASELINE (2026-09-03): MARGINAL -- PARKED, not adopted.** The old
+dossier (-0.0017/-0.0016 AND -0.55% units) was measured on the UNSCOPED canon recipe; on the
+shipped tight baseline (130k games, `logs/ngc_sound/ef_newbase.err`): hinata **-0.0005 both
+blocks (t -2.24), 5 better / 0 worse each**; dragons 3/0; 14 decks zero games changed; units
+FLAT (11,339,543 -> 11,339,860); wall +0.8% (pinned pair). Most of EF's gain rode on the
+enumeration volume the tight scope removed. Still strictly one-sided (never worse in 40k paired
+games across two baselines) but 10x smaller and no longer self-funding -- below the effort of a
+rebaseline unless the USER wants it anyway (a 25-minute adopt) or the incremental key re-widens
+canon (EF's value likely returns with REC=1). LESSON, again: a lever's dossier is BASELINE-BOUND
+-- re-measure on the baseline it will actually ship onto.
+
 **Dragonstorm characterized from the new baseline (2026-09-02, first post-adoption probe):
 NOT cache thrash.** At ship settings the enum memo runs at a 94% hit rate (176,079 hits /
 11,374 misses / 1 clear / 0 nested per 200 games), and MTG_BP_ENUM_CACHE_CAP=262144 is
