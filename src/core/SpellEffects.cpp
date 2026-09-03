@@ -1575,6 +1575,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // committed (the FiveColour claude-play sweep's convergent finding, 14/18 games).
         if (dd.params.domain_mana)
         { b = std::max(b, static_cast<int>(EffectiveProduces(state, active, dd).size())); }
+        // Land aura (Wild Growth / Overgrowth): the DFS credits the aura's bonus when the host
+        // taps (next_with_aura, below), but neither SourceMaxNet overload carries it -- so the
+        // bound under-counted an enchanted land by its bonus (1-2) and could prune a payable
+        // cost the DFS pays: a losslessness violation, the storage/scaled/domain lesson again.
+        // Additive, not max: the bonus rides on top of whatever the host itself yields.
+        b += LandAuraBonus(state, pp);
         return b;
     };
 

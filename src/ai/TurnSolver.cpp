@@ -11984,7 +11984,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // which the decision-space gate below correctly excludes, and none is a committed decision.
     // Being free today is not a reason to withhold it -- it binds the moment a deck reaches a
     // breakpoint in committed play or through the searched-breakpoint fan-out.
-    static const bool s_condemn_m1_bp = EnvOn("MTG_CONDEMN_M1_BP", true);
+    // heurarm-slotted so ONE pooled batch can carry both arms of the recoverability-audit A/B
+    // (unset => the env static => byte-identical off the batch path).
+    static const bool s_condemn_m1_bp_env = EnvOn("MTG_CONDEMN_M1_BP", true);
+    const bool s_condemn_m1_bp = heurarm::Flag(heurarm::CONDEMN_M1_BP, s_condemn_m1_bp_env);
     const bool m1_bp_site = is_pre_combat && s_condemn_m1_bp && g_bp_continuation_depth > 0;
     const bool phase_ok = !is_pre_combat || m1_bp_site;
     // REACHABILITY PROBE (MTG_CONDEMN_M1_BP_PROBE, default off, counters only). A null A/B cannot
@@ -20820,6 +20823,34 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state);
 // revealed cards with the remaining mana — a line that static evaluation cannot
 // see.  The lookahead simulation compares these against the base plans and picks
 // whichever leads to the earliest win.
+// --- X-collision audit (MTG_SIG_X_AUDIT, off by default = zero cost) --------------------------
+// Counts autonomous plan-dedup drops that deleted a CastFromHand X ALTERNATIVE (same card, same
+// signature, different chosen_x) -- the recoverability-audit question of whether the X axis
+// reaches scoring at all or the signature collapses it. Dumped at exit.
+namespace sigxaudit
+{
+    inline std::mutex g_mu;
+    inline std::map<std::string, unsigned long long> g_counts;   // card -> collisions
+    inline void Record(const std::string& card, int kept_x, int dropped_x)
+    {
+        std::lock_guard<std::mutex> lk(g_mu);
+        ++g_counts[card + " kept_x=" + std::to_string(kept_x)
+                        + " dropped_x=" + std::to_string(dropped_x)];
+    }
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            std::lock_guard<std::mutex> lk(g_mu);
+            if (g_counts.empty()) { return; }
+            std::fprintf(stderr, "=== SIG-X AUDIT (X alternatives deleted by plan dedup) ===\n");
+            for (const auto& kv : g_counts)
+            { std::fprintf(stderr, "  %-60s %llu\n", kv.first.c_str(), kv.second); }
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 // --- Branching diagnostics (MTG_BRANCH_STATS, off by default = zero cost) ---------------------
 // Answers "which situations cause the most branching?": per EnumeratePlans call it attributes the
 // raw odometer size (product of per-group option counts x 2^independent) and the final plan count
@@ -22172,7 +22203,37 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // the sequential walk already validated pays for REAL, so both colour models -- which count
         // only the pre-cast board and cannot see a mid-chain refloat returning a TAPPED source's
         // colour -- defer to it (exec_feas_rescues, rescue-only).
-        if (!sel_col_reducer && !SubsetPayable(have_colors, cands, sel))
+        //
+        // MTG_SUBSET_ROCK_COLOR=1 -- measurement lever (DEFAULT OFF, recoverability audit
+        // 2026-09-03): widen the colour-PRESENCE check with the colours of same-subset mana rocks.
+        // The flat gate already credits a selected rock's production by real colour (rock_mana,
+        // stamped at emit "so the enumerator can fund the rest of the subset off it"), but have[]
+        // is board-only -- so a subset whose missing colour comes from the rock it casts passes
+        // the flat gate and dies here, unreachable at any budget (no hatch, EF default OFF).
+        // Widening a NECESSARY condition is rescue-only: the real allocation is still validated
+        // downstream. On adoption this flips default-ON with a hatch + GT rebaseline.
+        bool have_rock[5];
+        const bool* have_eff = have_colors;
+        {
+            static const bool s_rock_color = EnvOn("MTG_SUBSET_ROCK_COLOR");
+            if (heurarm::Flag(heurarm::SUBSET_ROCK_COLOR, s_rock_color))
+            {
+                for (int ci = 0; ci < 5; ++ci) { have_rock[ci] = have_colors[ci]; }
+                for (int j : sel)
+                {
+                    const ManaPool& rm = cands[j].rock_mana;
+                    if (rm.Total() <= 0) { continue; }
+                    if (rm.white > 0) { have_rock[0] = true; }
+                    if (rm.blue  > 0) { have_rock[1] = true; }
+                    if (rm.black > 0) { have_rock[2] = true; }
+                    if (rm.red   > 0) { have_rock[3] = true; }
+                    if (rm.green > 0) { have_rock[4] = true; }
+                    if (rm.wild  > 0) { for (int ci = 0; ci < 5; ++ci) { have_rock[ci] = true; } }
+                }
+                have_eff = have_rock;
+            }
+        }
+        if (!sel_col_reducer && !SubsetPayable(have_eff, cands, sel))
         {
             _ct.label = "colour-exists";                    // ef-* labels overwrite on a failed rescue
             if (!exec_feas_rescues()) { return; }
@@ -23088,9 +23149,39 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     seen.reserve(plans.size() * 2);
     std::vector<TurnSolver::Plan> deduped;
     deduped.reserve(plans.size());
+    // MTG_SIG_X_AUDIT (diagnostic, default off; recoverability audit 2026-09-03): count dedup
+    // drops where the dropped plan carried a CastFromHand chosen_x differing from the kept
+    // plan's for the same card -- i.e. a real X ALTERNATIVE deleted because the autonomous
+    // signature keys X only behind narrow param gates (#S modal / #K Terastodon / ...). The
+    // question it answers: does the X axis actually reach scoring, or does the dedup collapse
+    // it (in which case the provider's multi-value XCandidates is partially dead)?
+    static const bool s_sig_x_audit = EnvOn("MTG_SIG_X_AUDIT");
+    std::unordered_map<std::string, std::size_t> sig_first;
     for (TurnSolver::Plan& p : plans)
     {
-        if (seen.insert(plan_signature(p)).second) { deduped.push_back(std::move(p)); }
+        const std::string sig = plan_signature(p);
+        if (seen.insert(sig).second)
+        {
+            if (s_sig_x_audit) { sig_first[sig] = deduped.size(); }
+            deduped.push_back(std::move(p));
+        }
+        else if (s_sig_x_audit)
+        {
+            const TurnSolver::Plan& kept = deduped[sig_first[sig]];
+            for (const Action& da : p.actions)
+            {
+                if (da.kind != Action::Kind::CastFromHand) { continue; }
+                for (const Action& ka : kept.actions)
+                {
+                    // Either side may be the X-bearing one (a dropped X=0 variant carries -1),
+                    // so record whenever the pair disagrees and at least one side chose an X.
+                    if (ka.kind == Action::Kind::CastFromHand && ka.card_name == da.card_name
+                        && ka.chosen_x != da.chosen_x
+                        && (ka.chosen_x >= 0 || da.chosen_x >= 0))
+                    { sigxaudit::Record(da.card_name, ka.chosen_x, da.chosen_x); break; }
+                }
+            }
+        }
     }
 
     // Branching diagnostics (off by default): attribute this call's odometer size + plan count to
@@ -26651,6 +26742,7 @@ struct ForceValueLeafGuard
 inline thread_local long long g_vleaf_min_est = LLONG_MAX;
 void      TurnSolver::ResetLeafEstimate() { g_vleaf_min_est = LLONG_MAX; }
 long long TurnSolver::MinLeafEstimate()   { return g_vleaf_min_est; }
+unsigned long long TurnSolver::TruncEvents() { return g_fs_trunc_events; }
 
 // K-predictor state (MTG_ESC_PREDICT). The PROBE ladders d1..committed for free (cheap value leaf) and, per
 // depth, reveals the leaf count -- the quantity the escalation's dominant rollout cost scales with. The
@@ -31069,6 +31161,20 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
 {
     if (!BpEnumCacheOn()) { return false; }
     TranspositionTable::Key key = BuildBreakpointKey(state, is_pre_combat);
+    // BATCH-ARM FOLD (recoverability audit 2026-09-03). This cache and the canon verdict memo are
+    // thread_local and survive the batch runner's job switches, and ClearPerGameCaches does not
+    // clear them -- so in a MIXED-ARM pooled batch, two jobs whose heurarm levers change
+    // enumeration output (MTG_CONDEMN_M1_BP filters continuation CollectActions; the rock-colour
+    // widen changes SubsetPayable) would share entries across arms: the batch-pool-contamination
+    // class, whose rule is "a lever that changes a memoised answer must be hashed into the key".
+    // Fold the whole per-job arm; every slot unset (the entire non-batch world, and the regression
+    // harness) folds the same constant => byte-identical outside mixed-arm batches.
+    {
+        std::uint64_t armh = 0;
+        for (int ai = 0; ai < heurarm::COUNT; ++ai)
+        { armh = armh * 131 + static_cast<std::uint8_t>(heurarm::t_arm[ai] + 1); }
+        Fold(key, armh ^ 0xA53CULL);
+    }
     // MTG_CANTRIP_ORDER: the continuation list depends on the bound site (its ban filters
     // CollectActions), so the same state under different sites must not share an entry.
     if (g_cantrip_order_site != nullptr) { Fold(key, g_cantrip_order_site->card.m_name_hash); }

@@ -137,6 +137,8 @@ enum Slot : int
     HEROISM_MAGNET_TRAIT,     // MTG_HEROISM_MAGNET_TRAIT  a live copy-token enchantment counts as a magnet
     HEROISM_FRESH_HOLD,       // MTG_HEROISM_FRESH_HOLD    ...and unlocks same-turn spend of fresh Treasures
     ETB_TAP_YIELD,            // MTG_ETB_TAP_YIELD         ETB-untap tap-ahead takes the HIGHEST-yield lands
+    CONDEMN_M1_BP,            // MTG_CONDEMN_M1_BP         m1 condemnation filter at breakpoint continuations
+    SUBSET_ROCK_COLOR,        // MTG_SUBSET_ROCK_COLOR     colour-presence gate credits same-subset rock colours
     COUNT
 };
 
@@ -251,6 +253,8 @@ inline const char* Name(int slot)
         "MTG_HEROISM_MAGNET_TRAIT",
         "MTG_HEROISM_FRESH_HOLD",
         "MTG_ETB_TAP_YIELD",
+        "MTG_CONDEMN_M1_BP",
+        "MTG_SUBSET_ROCK_COLOR",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

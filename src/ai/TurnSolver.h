@@ -1149,6 +1149,12 @@ public:
     static void      ResetLeafEstimate();
     static long long MinLeafEstimate();
 
+    // Running count of search-truncation events on this thread (g_fs_trunc_events). A decision
+    // whose before/after delta is ZERO ran to completion with nothing truncated anywhere beneath
+    // it -- the precondition for treating its no-win as a full-coverage REFUTATION rather than
+    // "I ran out" (see MTG_REFUTED_FOLLOW in AIEngine).
+    static unsigned long long TruncEvents();
+
     // FULL-DEPTH search (experimental, env-gated via MTG_FULL_DEPTH). Unlike
     // SolveWithLookahead — which iterative-deepens the PRE-COMBAT decision and
     // approximates every future turn with a reduced-depth rollout plus a GREEDY

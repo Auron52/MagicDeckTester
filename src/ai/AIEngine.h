@@ -295,6 +295,14 @@ private:
     // this AIEngine by reference, so its play must not consume the real game's line).
     std::deque<TurnSolver::PhasePlan> m_committed_line;
 
+    // MTG_REFUTED_FOLLOW: this game is PROVEN unwinnable -- a top-level search covered the full
+    // remaining horizon (turn + searched_depth - 1 >= max_turns) with ZERO truncation events and
+    // found no win. Every later turn's search would explore a subset of that refuted space, so
+    // once set the engine follows the committed (best-graded lost) line out and, where the line
+    // does not cover a phase, plays the greedy plan -- no further full searches this game. Reset
+    // per game; never set from a rollout (the rollout PlayOut shares this engine by reference).
+    bool m_refuted_follow = false;
+
     // Cleanup-discard LOCKSTEP (Plan::discard_choice, the searched axis): the choice pinned by
     // the plan this turn is EXECUTING, consumed by the first shed of the real cleanup
     // (ChooseDiscard) exactly as the rollout consumes GameState::scripted_discard_choice in
