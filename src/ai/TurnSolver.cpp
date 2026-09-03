@@ -23953,12 +23953,18 @@ private:
     int                      m_last_k = 0;
 };
 
-// MTG_LAND_SIG_COMPLETE=1 OPTS IN to the completed land signature (every behaviour-affecting land
-// param discriminated, plus dominance-promotion for strictly-optional abilities). DEFAULT OFF per the
-// user's call (2026-07-29): lands with different names are mostly mechanically different, so widening
-// this dedupe key buys little while any grouping of distinct cards stays risky. Kept in-tree because
-// the underlying finding is real -- see docs/design/land-signature-completeness.md.
-static const bool s_complete_land_sig = EnvOn("MTG_LAND_SIG_COMPLETE");
+// MTG_LAND_SIG_COMPLETE -- ADOPTED DEFAULT ON 2026-09-03 (`=0` restores the legacy signature).
+// The 2026-07-29 decline ("widening buys little") was superseded by the recoverability audit's
+// FIRST CONFIRMED violation of the USER's convergence-at-the-limit bar: 4 Creature Giving games
+// (seed 5500001 gi 17/365/391/646) where the legacy City of Brass / Forbidden Orchard collision
+// makes a T4 win TRULY unreachable -- legacy stays T5 at depth 8 / budget 0 while the complete
+// signature wins T4, on the same draws, by playing the other collided land (legitimate
+// information, not clairvoyance). Ship-settings A/B across the 5 colliding suite decks: 4 games
+// strictly faster, 0 slower anywhere, ds/kn byte-identical, mino/sliv digest-only. The
+// signature now also discriminates the 17 params that were invisible to BOTH forms (the
+// Mariposa/Shivan Gorge class no flag could fix) -- see the extension block in land_sig.
+// docs/design/land-signature-completeness.md + search-recoverability-audit.md.
+static const bool s_complete_land_sig = EnvOn("MTG_LAND_SIG_COMPLETE", true);
 static const bool s_legacy_land_sig    = !s_complete_land_sig;
 // Land-priority knobs: shared readers in EngineFlags.h -- greedy_land_name below reimplements
 // TryPlayLand's passes as the search's last-resort tiebreak, and the two must stay in lockstep.
@@ -24060,7 +24066,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // Restricted-colour mana (Cavern of Souls / Unclaimed Territory / Secluded Courtyard):
         // coloured mana for CREATURE spells only -- same reasoning as creature_mana_only above.
         if (pp.colored_creature_only)         { s += "cco"; }
-        if (pp.colored_creature_ability_ok)   { s += "ccoa"; }
+        // colored_creature_ability_ok moved to land_bonus (2026-09-03): "may also pay ability
+        // costs" is a strictly-OPTIONAL extra on an otherwise-identical land (Secluded Courtyard
+        // vs Unclaimed Territory), so splitting the signature widened the Knights/Minotaur land
+        // branch for no new line and cost 2 smoke games to budget churn (both recover at d8 b0).
+        // Dominance-promotion keeps the ability reachable at the LEGACY branch width.
         // Reflecting Pool: colours are the runtime UNION of the other lands, not this static list.
         if (pp.reflecting)                    { s += "rp"; }
         // Forbidden Orchard: every tap hands the opponent a 1/1 Spirit -- a real cost.
@@ -24080,6 +24090,41 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         if (pp.ramp_filter)                   { s += "rf"; }
         // Storage land: Dwarven Hold and Mercadian Bazaar differ only in their CHARGE MODE.
         if (pp.storage_land)                  { s += "st" + pp.storage_charge_mode; }
+        // ---- the 17-param extension (recoverability audit, 2026-09-03) -------------------------
+        // The 2026-09-03 collision re-run found params invisible to BOTH signatures, so e.g.
+        // Mariposa Military Base vs Shivan Gorge (EDF -- whose damage ability is the deck's
+        // same-turn kill) could not be separated by ANY configuration: which was enumerable was
+        // decided by draw order. Every append below is guarded on a non-default value, so a deck
+        // whose lands carry none of them keeps its byte-identical signature.
+        // Checkland (Dragonskull Summit): untapped only alongside a matching subtype.
+        for (const std::string& cs : pp.checkland_subtypes)  { s += "ck" + cs; }
+        // Energy (Aether Hub): ETB energy + per-coloured-tap energy cost.
+        if (pp.etb_energy > 0)                { s += "ee" + std::to_string(pp.etb_energy); }
+        if (pp.energy_per_colored_tap > 0)    { s += "ep" + std::to_string(pp.energy_per_colored_tap); }
+        // ETB lifegain (Radiant Fountain).
+        if (pp.etb_lifegain > 0)              { s += "eg" + std::to_string(pp.etb_lifegain); }
+        // Rad-counter ETB choice (Mariposa Military Base).
+        if (pp.etb_optional_tapped_rad > 0)   { s += "rad" + std::to_string(pp.etb_optional_tapped_rad); }
+        // Graveyard-return ability (its cost/target class is the behaviour).
+        if (pp.gy_return_cost)                { s += "gr" + pp.gy_return_cost->ToString()
+                                                  + pp.gy_return_requires_subtype
+                                                  + (pp.gy_return_requires_creature ? "c" : ""); }
+        // Board-scaled mana land (Three Tree City): yield scales with a subtype count.
+        if (!pp.mana_per_creature_subtype.empty())
+        { s += "sc" + pp.mana_per_creature_subtype
+             + std::to_string(pp.mana_per_creature_feeder_generic)
+             + (pp.mana_per_creature_count_all ? "a" : ""); }
+        // Tap-for-damage (Shivan Gorge / Keldon Megaliths class).
+        if (pp.tap_damage_cost)               { s += "td" + pp.tap_damage_cost->ToString(); }
+        if (pp.tap_damage_each_opponent > 0)  { s += "te" + std::to_string(pp.tap_damage_each_opponent); }
+        // Tap-to-draw (Mariposa's draw mode; rad discount is a real behavioural difference).
+        if (pp.tap_draw_cost)                 { s += "tw" + pp.tap_draw_cost->ToString()
+                                                  + (pp.tap_draw_cost_less_per_rad ? "r" : ""); }
+        // Tap-to-investigate (Restless Anchorage class).
+        if (pp.tap_investigate_cost)          { s += "ti" + pp.tap_investigate_cost->ToString(); }
+        // Untap-a-creature land (Wirewood Lodge): target class + cost is the behaviour.
+        if (pp.untap_creature_cost)           { s += "uc" + pp.untap_creature_cost->ToString()
+                                                  + pp.untap_creature_subtype; }
         // NOTE: strictly-OPTIONAL extra activated abilities (Mutavault's animate, Sliver Hive's
         // token) are deliberately NOT discriminated here -- see land_bonus below. Splitting on them
         // doubles the land branch for no new line and measured +61% instructions on slivers_vial.
@@ -24097,6 +24142,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     auto land_bonus = [](const CardParams& pp) -> std::string
     {
         std::string b;
+        // Secluded Courtyard vs Unclaimed Territory: "spend on creature spells" is the shared
+        // base; "...or on abilities of creatures of the chosen type" is a strict superset. The
+        // richer land dominates -- every Territory line is available to Courtyard, the ability
+        // lines only to Courtyard -- so promote it as the representative (the Mutavault pattern)
+        // rather than splitting the signature (measured: the split cost 2 smoke games of budget
+        // churn on Knights with zero reachability gain over promotion).
+        if (pp.colored_creature_ability_ok)     { b += "ccoa"; }
         if (pp.can_animate)                     // Mutavault: {1}: becomes a 2/2 creature
         {
             b += "an" + std::to_string(pp.animate_power) + "/" + std::to_string(pp.animate_toughness);

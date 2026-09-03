@@ -32,6 +32,16 @@ ROOTTURN/site-3 evaluator greedy) moves OFF the active list — those are qualit
 not reachability cuts. Any probe hit must pass the clairvoyance attribution check before it
 counts (the clairvoyance-vs-R-noise discipline).
 
+**RESTORATION CONSTRAINTS (USER, 2026-09-03, working through the list):** (1) *"not to drop any
+heuristics that are saving significant work without an alternative for performance and budget"*
+— a work-saving gate with a confirmed reachability hole gets a TARGETED rescue (the EF
+rescue-only pattern), never deletion; (2) *"if we can determine that a heuristic falls short
+only because of clairvoyance we can leave it be"*, and the reason is load-bearing: *"we don't
+want to have to design any heuristics with clairvoyance in mind"* — beating a clairvoyant line
+would require the heuristic to encode hidden information (the exact next draws), which is a
+design anti-goal, not an omission. So a probe hit that is an isolated draw-specific flip is
+attributed to clairvoyance and closed; only systematic, draw-robust improvement indicts a gate.
+
 Classification legend: **IDENTITY** (provably equivalent / sound necessary condition),
 **ORDERING-ONLY** (recoverable by construction), **DROP+REOPEN** (budget-guarded wave/tranche
 re-opens it, truncation counted), **DROP-hard** (no reopen — judged case-by-case under the
@@ -131,10 +141,12 @@ the rest are fan-out code-reading claims with cites.
   adoption. Re-measured on the shipped binary (heurarm slot added, arm-fold fix in, 2000
   games/arm, seed 5500001): **digest-IDENTICAL on both AL and FiveColour.** The claim holds on
   the new baseline; entry closes clean, re-check again if canon scope ever widens.
-* **fcprune (`MTG_FREECAST_PRUNE`, default ON) — DROP-hard, no counter.** The dominance argument
-  is conditioned on "a subset that casts both cards" and fails exactly when the cheap card is
-  unpayable post-combat (the free cast banks on combat damage — the pool's thinnest moment).
-  Cheapest infinite-budget test candidate.
+* **fcprune — PROBED, KEEPS ITS SHIP (2026-09-03).** The dominance argument is conditioned on
+  "a subset that casts both cards" and fails in theory when the cheap card is unpayable
+  post-combat — but the probe (`MTG_FREECAST_PRUNE=0`, FiveColour 1000 games, seed 5500001):
+  ZERO outcome moves, identical average. A ~-7%-searched-wall work-saver with no measured loss;
+  under restoration constraint (1) it stays. The theoretical hole remains documented; re-probe
+  if a deck ever leans on cheap free-casts post-combat.
 * Breakpoint ("sound") condemnation is armed NOWHERE by default; drops measured 0/11.42M when
   sound. The still-reachable unsound arms are documented measured-worse; never ship them.
   Ranges (`CastOrderRankLatest`) are re-admit-only — recoverability-positive.
@@ -152,10 +164,24 @@ the rest are fan-out code-reading claims with cites.
   (identical win turn every game); Hinata digest-identical (the Signet never rescues at ship
   settings).** So the cut lines are reachable but not strictly better at this sample: an
   adoption candidate on gate-consistency grounds, quality-neutral, awaiting the USER.
-* **Irencrag waste gate (default ON, Hinata2 only) — DROP-hard, self-describedly heuristic**
-  ("this deletes a real if rare line"). Its measured value profile (93k dropped subsets/150
-  games, zero ever CHOSEN) is budget reallocation — at the limit its only residual effect is the
-  deleted line. Clean hatch (`MTG_IRENCRAG_WASTE=0`); the prescribed reachability probe is cheap.
+* **Irencrag waste gate — PROBED AT 16x BUDGET, KEEPS ITS SHIP (2026-09-03).** The b320 probe
+  (hinata, 300 games, gate on/off): gate-ON is BETTER even at 16x — off makes 3 games SLOWER
+  (gi169 4→5, gi254 7→8, gi277 5→6; the wasted-subset exploration bleeding budget) and 1 faster
+  (gi57, unwon→T8). **gi57 at d8 b0: T8 in BOTH arms — the b320 gate-on unwon was budget
+  starvation, not a reachability cut. The gate FULLY PASSES the definitive test; no rescue
+  needed; entry CLOSED.** The soundness is STRUCTURAL, not just measured (USER, 2026-09-03:
+  *"The only way we could have that line is if we didn't re-evaluate after drawing"*): the only
+  subset the gate deletes is the PRE-COMMITTED {cantrip, Irencrag} that locks the restrictor in
+  before the draw is seen, and the {cantrip}-only sibling's breakpoint continuation re-enumerates
+  on the post-draw hand, where {Irencrag, drawn payoff} passes the gate — so the deleted variant
+  is redundant BY CONSTRUCTION wherever draw points trigger re-enumeration. GENERAL PATTERN: any
+  gate deleting an act-before-information variant is sound exactly where the information point
+  arms a re-solve (the ACQ_RESOLVE/TOP_RESOLVE family exists to guarantee this); where re-solve
+  arming is MISSING (the recorded Vial-deployed-digger edge), such gates are NOT automatically
+  safe. The in-code "deletes a real if rare line" comment predates this analysis and overstates.
+  The follow-on USER discussion (spanning tails = reservation hypotheses; "{Ponder, Irencrag} vs
+  {Ponder} are the same up to the breakpoint except perhaps in how they tap mana") is formalized
+  as the deferred design `breakpoint-truncation-via-reservation-axis.md`.
   Also: `max_casts_after` counts followers by `CastOrderRank`, so a subset legal in a different
   order is dropped before the (post-enumeration) ordering search can see it.
 * **Strive-K mana ceiling — DROP-hard, NO HATCH** (the `+2` fudge credits no ritual/rock/reducer;
