@@ -488,6 +488,14 @@ with numbers and weakens the incremental-key urgency further -- the parked ~0.00
 with settings. A budget change is a PER-DECK play-settings adoption (USER's call; it also uses
 the current value leaf slightly off-distribution, which the sweep's numbers already price in).
 
+**USER RULING ON THE SWEEP (2026-09-03): budget STAYS AT b20.** The sweep's recorded meaning is
+NOT "raise budgets" -- it is (a) an indicator that certain decks may need more budget for
+SERIOUS TESTING, and (b) confirmation of the ruling's deep rationale: budget must REMAIN a
+lever that recovers budget-starved lines, i.e. deficiencies in the PLAYOUT layer (greedy, bad
+heuristics, bad mana-tap rules) are budget-recoverable while deficiencies in the SEARCHED
+structure are not -- which is exactly why greedy is banned from the searched part and tolerated
+in rollouts. Do not adopt a budget point off this table without the USER asking.
+
 **Dragonstorm attribution remains OPEN and now DOUBLY so:** a re-triple on the current binary
 read off==noderoot==tight (~10.0/9.9/9.9s -- the +12.9% GONE), but the box re-contended in that
 window (load 13-21 from another container; the same window inflated a hinata tight rep to
