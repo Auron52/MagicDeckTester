@@ -175,6 +175,139 @@ Run the pooled manifest with `MTG_ROLLOUT_STATS` and compare the `id_depth` hist
 confirmed and the hunt narrows to *which* cache is not cleared per game. If units are identical and
 only play differs, this is wrong and the cause is elsewhere.
 
+## ROOT-CAUSE PASS 2 (2026-09-03, later) — it IS concurrency, and here is what it is not
+
+Every experiment below counts DIVERGING GAMES over 400-game runs (see the retraction above for why
+job digests are the wrong unit), EldraziDisplacerFlicker seed 4303, d5/b20.
+
+### The one solid structural fact: single-threaded is deterministic
+
+| condition | diverged |
+|---|---|
+| `--threads 1`, 200 games, two independent runs | **0 / 200** |
+| `--threads 24`, 400 games, two runs | **8 / 400 (2.0%)** |
+| serial vs 24-thread over the same games 0–199 | 198 / 200 identical |
+
+At the measured 2% rate, seeing zero divergence in 200 serial games has probability 0.98^200 ≈ 1.8%.
+**Concurrent execution is required.** The serial answer also equals the isolated single-game answer,
+so serial/isolated is the "true" result and the threaded run is the one that deviates.
+
+### And it is NOT cross-game state carried on a worker thread
+
+The obvious story — a thread_local cache surviving a game boundary, so a game's result depends on
+which games preceded it — is *false* here. Games 47 and 67 give byte-identical digests whether run
+completely alone or after 46 / 66 preceding games on the same thread:
+
+```
+isolated (game alone):  47 -> 7bb35aaf366f0679 | 67 -> 7e1b0e3ef2f9b550
+serial  (after 46/66):  47 -> 7bb35aaf366f0679 | 67 -> 7e1b0e3ef2f9b550
+```
+
+So it needs threads running *at the same time*, not merely a dirty thread.
+
+### Eliminated, each at proper power or by construction
+
+* **The bp-enum plan cache + canon verdict memo** (the leading suspect, and the thing the arm-key
+  fix touched). Fully disabled via `MTG_NO_BP_ENUM_CACHE=1`: **10/400 diverged, vs 8/400 with it on**
+  — an unchanged rate. Note the earlier "identical digest at cap 8192 / 64 / off" check was itself
+  underpowered (one 100-game digest per arm, the same ~25%-coincidence trap); this replaces it.
+* **Data races** — a ThreadSanitizer build (`build/TSan`, deliberate explicit-build-type route)
+  reported **zero** warnings across three workloads (5 concurrent games; 4 jobs x 6; 4 jobs x 40
+  partial). Not conclusive for a rare race, but nothing on the hot path.
+* **Uninitialised memory** — `valgrind --tool=memcheck --track-origins=yes` on a diverging game:
+  **0 errors from 0 contexts**.
+* **The per-game abandon ceiling** — `abandon_*` are 0 here, and `need` is a property of the
+  manifest, not of completion order (the code says so and means it).
+* **In-flight condemnation / `max_game_sec`** — defaults to 0 without a `condemn` block.
+* **The profile LRU** (mutex-guarded, keyed on path+value-sidecar, hands out `shared_ptr<const>`),
+  **the sidecar-resolution memo** (mutex-guarded — already chased for the 2026-08-26 incident),
+  **`LookupCached`** (`std::atomic_ref` by design), **every instrument map** (all mutex-guarded),
+  **the ID start gate** (constants plus the game's own measured growth ratio), **wall clocks in the
+  decision path** (only two, both instrument-gated), and **pointer-derived hashing** (one cast, for
+  a temp filename).
+
+### Where it bites, and the one live lead
+
+The divergence is in **committed search depth** — the `id_depth` and `committed_depth` histograms
+differ between two runs of the same manifest — which is why it is confined to a small, *repeatable*
+set of games: those sitting exactly on the iterative-deepening budget boundary, where one more pass
+either fits or does not. Games 146, 265, 305, 317 and 367 diverged in two or more independent
+conditions.
+
+### The reporting paths MODULATE the rate but are not the cause
+
+Bisected, one 400-game pair per condition:
+
+| condition | diverged / 400 |
+|---|---|
+| baseline (both reporting paths on) | 8 |
+| `MTG_NO_BP_ENUM_CACHE=1` | 10 |
+| `MTG_BATCH_HEARTBEAT=0` (heartbeat thread off) | 7 |
+| `MTG_SLOW_GAME_MS=0` (worker-thread stderr off) | 4 |
+| both off | **2**, and **2** on a replicate |
+
+The heartbeat *thread* accounts for none of it. What matters is the **SLOW-GAME `fprintf`+`fflush`
+that WORKER threads perform** — this deck emits dozens per run, and serialising workers on stderr is
+exactly the kind of timing perturbation that changes which interleavings occur.
+
+**So these flags are an amplifier, not the mechanism, and the honest conclusion is the harder one:
+the underlying nondeterminism is TIMING-SENSITIVE and survives with all reporting off (4/800).**
+Neither flag can change play by construction — both are pure `fprintf` after a game has finished,
+and `MTG_SLOW_GAME_MS`'s only other use is in `GoldFishRunner`, which the batch path does not use.
+
+### Where that leaves it
+
+Something about concurrent execution changes **how much work a game's search does**, which flips the
+committed depth for games sitting exactly on the iterative-deepening budget boundary — and it is not
+a data race TSan can see, not uninitialised memory, not a clock in the play path (every remaining
+`steady_clock` in the tree is in `src/analyzer/`, unused by batch play), and not the known caches.
+
+### ROOT CAUSE CHAIN, ESTABLISHED (`MTG_DUMP_UNITS=1`, 400 games x2, 24 threads)
+
+Per-game work units are recorded by `MTG_DUMP_UNITS=1` (a `<job>.units` file beside `<job>.wins`).
+Diffed across two runs of the same manifest:
+
+* **69 / 400 games (17%) consumed a DIFFERENT number of work units.**
+* **6 / 400 diverged in play — and all six are a SUBSET of the 69.**
+
+```
+game 305: units 50527 vs 87556   -> win turn 8 vs 7
+game 143: units 167465 vs 153633
+game 317: units  85921 vs  81671
+```
+
+So the chain is: concurrency -> a game's consumed work units vary -> the iterative-deepening start
+gate (`estimated cost <= alpha * remaining budget`) sees a different remaining budget -> the
+committed depth flips -> play differs. Play only moves for the minority of games sitting exactly on
+the boundary, which is why the play-level rate is 2% while the underlying defect touches 17%.
+
+**This falsifies the conclusion recorded at the `ClearPerGameCaches` fix site**, which says of the
+same class of defect: *"Play was never affected; the work METER's determinism was."* The meter and
+the search budget are the same currency (`SearchBudget::Consume` calls `gamework::Add`), so meter
+nondeterminism reaches play by construction. That comment should be corrected when this is fixed.
+
+**METHODOLOGY NOTE, and it is the most reusable thing here: use UNITS, not play, as the detector.**
+It is 8x more sensitive (17% vs 2%), so a bisect needs ~8x fewer games for the same power. Every
+underpowered mistake earlier in this document came from testing with the insensitive signal.
+
+**REMAINING QUESTION (narrow):** why does a game's work vary at all? Its inputs are identical and it
+is deterministic single-threaded. The unit sites are the 13 `ConsumeAt(budget, unitsite::...)` calls;
+`MTG_ROLLOUT_STATS` prints the per-site partition but only as a PROCESS aggregate, so the next step
+is a per-game site partition (or a bisect over the sites) on one fragile game such as 305.
+
+**IN FLIGHT at the time of writing:** 50 games x2 at `--threads 1` under `MTG_DUMP_UNITS` to confirm
+units are deterministic serially. At the 17% rate this has P(false clean) = e^-8.5 ~ 2e-4, so it is
+a high-power check that the chain above really is concurrency-gated.
+
+**(superseded) THE NEXT PROBE, and it is cheap: `MTG_DUMP_UNITS=1` records per-GAME work units.** Diff them
+across two runs for a fragile game:
+* units differ ⇒ the game genuinely does different work ⇒ bisect the `ConsumeAt` unit sites
+  (`unitsite::` partition) to find which one varies;
+* units identical but play differs ⇒ the divergence is NOT in work accounting at all, and the
+  budget/depth story above is wrong — start again from the decision that differs.
+
+Either answer is decisive, which is why it is the right next step rather than more code reading.
+
 ## What is NOT yet ruled out, in priority order
 
 1. **Scheduling-dependent cross-game state in a worker thread.** The leading candidate by shape: a
