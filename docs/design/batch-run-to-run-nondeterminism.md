@@ -374,15 +374,92 @@ game, where the residual exposure is a mid-game shuffle (a fetchland, a tutor-an
 the permutation while the cache still holds pre-shuffle entries. FiveColour is the deck to check
 that on; EDF barely shuffles. **Flagged, not fixed, and not yet measured.**
 
-### The fix
+### The attempted fix — MEASURED, IT DOES NOT WORK, AND IT WAS REVERTED
 
-Hoist both caches to namespace scope (`bpcache::t_plans`, `bpcache::t_verdicts`) and clear them in
-`ClearPerGameCaches`. Scenarios: 54/54 pass.
+Hoisting both caches to namespace scope (`bpcache::t_plans`, `bpcache::t_verdicts`) and clearing
+them in `ClearPerGameCaches` **does not remove the divergence.** 400 games x2 at 24 threads, the
+same conditions as the 69/400 control:
 
-**This is not byte-identical and cannot be** — changing when a cap-clear happens changes work units,
-which is the entire point. Expect starved decks to move play and GT to need a rebaseline; that is
-the cost of the determinism, and it should be a deliberate, reported decision rather than a quiet
-one.
+| binary | unit-divergent | wave 0 (gi 0-47) |
+|---|---|---|
+| unfixed (control) | 69 / 400 | 0 / 48 |
+| both caches cleared per game | **102 / 400** | 1 / 48 |
+
+The rate did not fall, and — the part that actually settles it — **the dispatch-wave signature
+survives unchanged**: still ~0 in the first wave, still climbing monotonically with position in the
+run. So thread history is still being carried. These two caches were carriers, but not the one that
+matters.
+
+**Reverted**, because the change is not byte-identical (that was expected and is inherent), so it
+would have cost a full GT rebaseline while delivering no measured determinism benefit. Adopting a
+correctness-motivated change that shows no measured gain is exactly the trap
+`measure-before-fixing-a-shipped-bug` records. The revert is a `git checkout` of the file to the
+pre-fix commit and `git diff` against it is empty, so source identity is the proof; no behavioural
+re-run was needed or done.
+
+### What the two refuted guesses buy: a model of the whole thing
+
+Both remaining questions are answered by one more free re-read — whether the SAME games diverge in
+the fixed and unfixed runs:
+
+| | games |
+|---|---|
+| unfixed divergent set | 69 |
+| fixed divergent set | 102 |
+| overlap | **39** |
+| expected overlap if position-driven only (independent) | 17.6 |
+| max possible overlap if identity-driven only | 69 |
+
+39 is far above chance and far below identity, so **both factors are real and they multiply**:
+
+* **SUSCEPTIBILITY is a property of the game.** A game whose decision sits near the ID start gate
+  flips on an arbitrarily small change in work. Roughly twice as many games are susceptible as
+  actually flip in any one pair of runs.
+* **PERTURBATION is a property of run position.** It comes from thread-carried state and grows with
+  how many predecessors the thread has seen.
+
+Divergence = susceptibility x perturbation. That is why the deck matters (starved decks are
+susceptible, smoke decks are not), why position matters, and why killing one carrier of the
+perturbation moved the total hardly at all — there is at least one more, and the susceptible
+population is unchanged.
+
+**It also means there are two independent places to fix this**, and the second may be the better
+one: reduce susceptibility by making the start gate insensitive to small work deltas (a hysteresis
+band, or committing depth on a quantised budget), rather than chasing every carrier of a
+perturbation that will never be provably zero. That is a design change and is NOT proposed here
+without measurement, but it is the more robust direction and it should be on the table before
+anyone else spends a day hunting carriers.
+
+### Audited and NOT the carrier (2026-09-03)
+
+* **`AIEngine` members.** Worker threads reuse `AIEngine` across games, so its members are a bounded
+  carrier vector, and the game-start block resets most of them. Two gaps found, neither the cause:
+  `m_fd_best_leafest` is not reset (harmless in the ship configuration — it is written only under
+  `MTG_FD_ORACLE` and is diagnostic), and `m_ext_main_ordinal` is deliberately cumulative (a viewer
+  side-channel key, not read in batch play). `m_nonconv_best_win` IS reset.
+* **`g_decision_epoch`'s VALUE.** It is thread_local and monotonic and never reset per game, so it
+  does differ between runs for the same game. But it is only ever compared for equality, and the one
+  place its value enters a hash (`k.h1 ^= g_decision_epoch * ...`) is inside `CONSIDER_STATS`, a
+  gated diagnostic.
+* **`SearchBudget`.** No carried state at all — the growth constants are `constexpr`.
+* **`NameRegistry` / `SubtypeRegistry`.** Safe by construction, argued above.
+
+**The soundness hazard is real but UNMEASURED, and is left as an open item rather than fixed.**
+These two caches genuinely do hit on `BuildBreakpointKey` alone with no epoch check, in a regime
+where the codebase's own scoping argument says the key's library digest does not imply content. What
+is missing is any evidence that a cross-game hit ever actually occurs. The cheap instrument: stamp
+each entry with a monotonic game counter on insert and count hits whose stamp is from an earlier
+game. If that counter is zero on a few hundred games, the hazard is theoretical and can be closed
+with a comment; if it is non-zero, it is a correctness bug independent of determinism and worth its
+own fix and its own measurement. **Do not re-adopt the per-game clear without that number** — this
+document is the record that clearing alone buys nothing.
+
+### One methodology note, because it bit this very comparison
+
+Counting divergences with `diff a.units b.units | grep -c '^<'` is **wrong** and under-reports:
+`diff` is free to pair up non-corresponding lines, so it reported 93 where the correct
+game-index-keyed comparison reports 102. Compare per KEY (parse both files into game_index -> units
+maps and compare the intersection), never by line diff.
 
 ## What is NOT yet ruled out, in priority order
 
