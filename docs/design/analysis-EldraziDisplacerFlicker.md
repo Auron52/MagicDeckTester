@@ -953,11 +953,45 @@ follow the line'."*
 
 | # | Item | State |
 |---|---|---|
-| 1 | Seed 1: a spelled-out **T3 win** the engine does not find; step (a), Trace of Abundance on Aether Hub via Conservatory, "seems to be rejected" | investigating; combo-recogniser design deferred to `docs/design/combo-line-recognition.md` |
+| 1 | Seed 1: a spelled-out **T3 win** the engine does not find | **CAUSE FOUND AND VERIFIED** (below); design in `docs/design/combo-line-recognition.md` |
 | 2 | "I should be able to attach to a land in the plan" | engine-side cause found (below); fix in progress |
 | 3 | "Auras cannot be unattached. That option should not be offered by dialogs" | **FIXED** (`8a517c71`) |
 | 4 | `logs/play/rejections/..._s2_gi1_t4.json` — "Drake should allow untap followed by displacer" | investigating |
 | 5 | Seed 2: cannot activate Eldrazi Displacer to go off; board should allow a T4 win | investigating |
+
+### Item 1's cause: the recogniser exists, and it only looks at the BOARD
+
+The missed T3 win is **not** a depth or budget failure, and it is not the iterative-deepening start
+gate — that gate governs cross-*turn* lookahead, and this combo resolves inside one turn. It is a
+**width** limit, and the code already documents it. `DecisionProvider.h`'s generic
+`BlinkActivationCounts` and `ManaSinkActivationCounts` both enumerate `1..min(3, max_affordable)`,
+and say why that is fatal here in their own words:
+
+> "A generic cap of 3 does not merely play the deck badly, it makes the deck's only win line
+> invisible to the search: the kill needs ~20 iterations and the enumerator would never offer one.
+> A combo provider recognises the loop and proposes the go-off count as a further candidate."
+
+So the sanctioned design is *provider proposes, search picks* — and `EldraziFlickerProvider` does
+implement that recogniser (`RecogniseFlickerLoop` / `FlickerGoOffCount` / `ExtraLethalDamage`).
+**The gap is that the recogniser is purely retrospective:** every one of its scans walks
+`s.battlefield`, so the outlet AND the payload AND the sink must already be permanents in play.
+
+The user's line assembles the loop *this turn* — Living Wish fetches Cloud of Faeries, and a later
+Living Wish fetches Essence Depleter, the actual kill. At the moment the decision is made the sink
+is not on the battlefield, so `RecogniseFlickerLoop` returns nothing, the generic cap of 3 applies,
+and a ~20-activation kill cannot be expressed at any depth or budget. **Verified by reading both
+sites, not inferred.** The prospective (assembly) case is what
+`docs/design/combo-line-recognition.md` proposes extending; it is deliberately not implemented yet,
+because a prospective check needs a scratch-state re-simulation rather than the cheap board scan the
+assembled case gets away with.
+
+**A second, independent gap found on the way, and it is exactly the user's own aside.** They wrote:
+*"if black is not available, we would get blue instead of black and use Dimensional Infiltrator."*
+`TutorCandidates` tie-breaks candidate sinks by raw mana value, blind to colour castability — so it
+would rank Dimensional Infiltrator ahead of Essence Depleter regardless of which colours the board
+can actually produce. That is the opposite of the generic-by-construction discipline the rest of
+that function follows, and it is the deck-independent half of this item: the payoff must be chosen
+from what is REACHABLE, never hardcoded.
 
 **Item 3's root cause is more interesting than the report suggests, and it is shared with item 2.**
 `TurnSolver::CheckLine` drops the `enchant` sub whenever it cannot NAME the host — its lookup scans
