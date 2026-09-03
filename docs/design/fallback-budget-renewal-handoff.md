@@ -1,23 +1,9 @@
 # HANDOFF — escalation fallback tuning: budget renewal + single-depth fallback
 
-**Status (updated 2026-09-03): DONE / SUPERSEDED** — both levers were measured. `escalation_cap`
-ships as a per-deck `value_play` param (eded828b, 2026-07-19) and is CONFIRMED valuable (with the
-beam it moved CG's escalation mean committed depth 1.75 → 2.53 at the same budget and cut 22% of
-wall). Budget renewal is **no longer a per-deck param at all**:
-
-> **UPDATE 2026-09-03 (adoption, see `escalation-budget-investigation.md`):** the hybrid's
-> escalation now ALWAYS runs on a FRESH budget equal to the full decision budget ("fresh-full") as
-> **ENGINE BEHAVIOR**. `value_play.escalation_fresh_frac` was **DELETED** from the engine (field,
-> parse, pass-through, hybrid param) and the `0.5` keys were stripped from the
-> antilife/dragonstorm/hinata2 sidecars — an ABSENT key silently meant "legacy starved leftovers",
-> and 8 of 11 enabled value decks had no key and were running starved in production. **Fresh 0.5
-> is REFUTED**: worse than legacy on the train fleet (net +0.0018, because legacy leftovers often
-> EXCEED half the budget) and worse than the control held-out even with cap+beam engaged (+0.0031,
-> t=+2.71, 12/16 seeds). Fresh-full + cap/beam = control parity (t=−0.33, 0 win↔loss flips) at
-> 0.43× the control's wall. `MTG_ESCALATION_FRESH_FRAC` survives as a **research hatch only**
-> (default 1.0; −1 = legacy shared-leftover budget).
-
-`scripts/esc_fallback_ab.py` no longer exists. Nothing to pick up.
+**Status (updated 2026-09-03): DONE / SUPERSEDED** — both levers were measured and ship as
+per-deck `value_play` params: `escalation_cap` (eded828b, 2026-07-19) and
+`escalation_fresh_frac=0.5` on antilife/hinata/dragonstorm. `scripts/esc_fallback_ab.py` no
+longer exists. Nothing to pick up.
 
 **Status: SET UP, not yet measured on real tables. Pick this up next session.**
 Self-contained resume doc (2026-07-18). Everything below is on branch `d0-dynamic-model`, **uncommitted**.
@@ -34,10 +20,6 @@ for them.
    default (`-1` = legacy). Fresh-budget gives it a *fresh* `frac × budget_ms` instead — fixes the case where
    the value-leaf probe eats most of the budget and starves the heuristic re-search to ~d1. Measured earlier as
    a candidate: antilife/hinata **+~0.01–0.02 LP** but **~+16% wall** on hinata; TH slightly worse. UNADOPTED.
-   *(UPDATE 2026-09-03 — historical framing only. There is no per-deck field any more and the shared-leftover
-   default is gone: fresh-full is unconditional engine behavior, and the starvation this lever describes was
-   the real cause of every historical value-leaf "play rejection". See
-   `escalation-budget-investigation.md`.)*
 2. **Single-depth fallback — `MTG_ESC_SINGLE`** (+ `MTG_ESC_SINGLE_OFFSET`, default 0; offset=2 targets the
    crossover-min depth). Instead of re-running the whole 1..depth heuristic ladder on escalation, run ONE
    heuristic pass at `committed − offset`. Concentrates the reserved budget, skips the shallow-pass rework; its
@@ -46,9 +28,6 @@ for them.
 Code: both are read in `TurnSolver::FullSearchLineHybrid`, `src/ai/TurnSolver.cpp` ~6716–6736 (fresh_frac,
 `eff_fresh_frac`) and ~6717 (`s_esc_single`, `s_esc_single_off`). `escalation_fresh_frac` is a param on that
 function, passed from `AIEngine.cpp` as `value_play.drives() ? value_play.escalation_fresh_frac : -2.0`.
-*(UPDATE 2026-09-03: that param and its AIEngine pass-through no longer exist — deleted with the field. The
-"Escalation budget source" block in `TurnSolver.cpp` now defaults to fresh-full, overridable only by the
-`MTG_ESCALATION_FRESH_FRAC` research hatch.)*
 
 ## Provisional signal (why this is worth doing)
 
@@ -75,9 +54,7 @@ Not conclusive (`dLP=0` on 40 games isn't a quality verdict), but the single-dep
    wall (fresh-budget's +0.01–0.02 LP — weigh vs its wall cost). Validate the winner on held-out seeds (the
    harness already uses held-out 4004+; add more seeds for the winner).
 4. **Adopt per-deck (on a win).** Budget renewal is ALREADY per-deck wired: set
-   `value_play.escalation_fresh_frac` in the deck's `<deck>.value.json` block (e.g. `1.0`).
-   *(UPDATE 2026-09-03: obsolete step — budget renewal is fleet-wide engine behavior now, not a per-deck
-   adoption; do not add the key back to any sidecar.)* Single-depth is NOT
+   `value_play.escalation_fresh_frac` in the deck's `<deck>.value.json` block (e.g. `1.0`). Single-depth is NOT
    yet a value_play field — if it wins, mirror the fresh_frac wiring: add `single_depth`/`single_offset` to
    `ValuePlay` (`MulliganProfile.h`), parse in `MulliganProfileIO.h`, thread through
    `FullSearchLineHybrid` like `escalation_fresh_frac`, and gate on `value_play.drives()`.
@@ -88,7 +65,6 @@ Not conclusive (`dLP=0` on 40 games isn't a quality verdict), but the single-dep
 `TurnSolver.cpp` ~6711: added `s_fresh_frac_env_set`. An explicitly-set `MTG_ESCALATION_FRESH_FRAC` env now
 WINS over the block's `escalation_fresh_frac` (else the block's `-1` would mask the env). Env-unset ==
 byte-identical (verified: antilife bare 4.588 vs fresh_frac=1.0 4.577). Precedence: env(explicit) > block > -1.
-*(UPDATE 2026-09-03: there is no block term left — precedence is env(explicit) > engine default 1.0.)*
 
 ## Surrounding state (context a fresh agent needs)
 

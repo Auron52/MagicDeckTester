@@ -40,29 +40,6 @@ budgets. Requires a smoke/regression + overnight re-rebaseline. See `FullSearchL
 `src/ai/TurnSolver.cpp` (the `budget` arg passed to the escalation `FullSearchLine`; change to a fresh
 `SearchBudget::FromVirtualMs(budget_ms)`).
 
-**UPDATE 2026-09-03 — CLOSED, and this was not an antilife knife-edge quirk. Supersedes the
-parenthetical above** (which recorded a per-deck `escalation_fresh_frac=0.5` adoption and read frac
-1.0 as refuted — both wrong):
-
-- The "remaining-budget escalation" described here is a **fleet-wide starvation defect**, not four
-  antilife games. Measured mean committed depth of the escalated (unverified) population was **~1.4
-  against the pure-heuristic control's ~2.1-2.35**. On Creature Giving it cost **+0.0083
-  loss-penalized vs the no-sidecar control (t=+5.2, held-out)** — so this section's original
-  diagnosis ("starving the quality path is counterproductive") was right, and its "no downside at
-  generous budgets" expectation was right too; the 2026-08 refutation was measured on a
-  half-configured arm.
-- **ADOPTED:** the escalation always runs on a **FRESH budget equal to the full decision budget**
-  (fresh-full), as engine behavior. `value_play.escalation_fresh_frac` was **DELETED** — an absent
-  key silently meant "starved", and 8 of 11 enabled value decks had no key, so starved *was* the
-  production configuration. `MTG_ESCALATION_FRESH_FRAC` survives as a research hatch only
-  (default 1.0; `-1` = this section's legacy shared-leftover budget).
-- **Held-out proof:** CG d5/b40, 16 seeds x 500 g, one pooled batch — cap+beam escalation at
-  fresh-full is **control parity (-0.0004, t=-0.33) with ZERO win<->loss flips, at 0.43x the
-  control's wall**. Fresh **0.5 is dead**: +0.0031 (t=+2.71) WORSE than control held-out, and worse
-  than legacy fleet-wide.
-
-Full record: `docs/design/escalation-budget-investigation.md`.
-
 ## Not blocking (recorded)
 
 - **fd-diverge severe:** 2 games (seeds 6225/6303, realized T6 vs predicted T4) are **pre-existing** — they

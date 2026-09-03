@@ -1,29 +1,5 @@
 # Escalation value-guided beam ("reuse the leaf-value pass, do only the incremental rollout")
 
-> **UPDATE 2026-09-03 — READ FIRST: the beam SURVIVES, `fresh0.5` is DEAD, and the escalation budget is no
-> longer a config at all.** This doc's headline config is written throughout as `beam2_ld2/beam3_ld2 + fresh0.5`;
-> the fresh0.5 half of that pairing is refuted and gone. Authoritative record:
-> `escalation-budget-investigation.md`.
-> - **The beam + single-pass `escalation_cap` design — the actual subject of this doc — is CONFIRMED VALUABLE
->   and stays per-deck.** Engaging cap5 + beam W3/ld2 on Creature Giving moved the escalation's mean committed
->   depth **1.75 → 2.53 at the same budget** and cut **22% of wall** vs the no-cap config. cap+beam at
->   fresh-full is control-PARITY quality (t=−0.33, **0 win↔loss flips either way**) at **0.43×** the control's
->   wall on CG held-out.
-> - **The escalation now ALWAYS runs on a FRESH budget equal to the full decision budget ("fresh-full"), as
->   ENGINE BEHAVIOR.** `value_play.escalation_fresh_frac` was **DELETED** (field, parse, pass-through, hybrid
->   param) and the `0.5` keys were stripped from the antilife/dragonstorm/hinata2 sidecars. An ABSENT frac key
->   silently meant "legacy starved leftovers" — 8 of 11 enabled value decks had no key and were running starved
->   in production, and every historical value-leaf "play rejection" was that artifact (measured escalation mean
->   committed depth ~1.4 starved vs the pure-heuristic control's ~2.1–2.35 on the matched unverified-decision
->   population).
-> - **Fresh 0.5 is REFUTED, not merely superseded:** worse than legacy on the train fleet (net **+0.0018** —
->   legacy leftovers often EXCEED half the budget, so 0.5 caps the common generous case while fixing the rare
->   starved one) AND worse than control held-out **even with cap+beam engaged** (**+0.0031, t=+2.71, 12/16
->   seeds**; its depth 1.90 still sits below the control's 2.11). Only 1.0 dominated.
-> - `MTG_ESCALATION_FRESH_FRAC` remains **as a research hatch only** (default **1.0**; **−1 = legacy
->   shared-leftover budget**). Every "fresh0.5", "fresh -1", "budget-restore" and per-deck-frac mention below is
->   a HISTORICAL measurement record — the numbers stand, the config does not.
-
 > **ADOPTED + SHIPPED (2026-07-19): single-depth escalation = R-hint + live climb, per-deck `value_play.escalation_cap`.**
 > The escalation now runs ONE heuristic pass at a depth chosen by a cheap FROZEN cost-per-leaf hint (R=120 default),
 > then a per-decision LIVE climb/back-off corrects the depth from THIS decision's measured cost — deterministic AND
@@ -178,9 +154,6 @@ NOT mark it rejected.**
 **Status (2026-07-18): ADOPTED on the two heavy decks (antilife + hinata) as `beam2_ld2 + fresh0.5`, per USER
 ("wire + full A/B now"). Smoke + regression A/B GREEN (0 searched win->loss; all d5 cases neutral-to-better;
 d0/d3/light byte-identical). Overnight A/B + GT rebaseline in flight. Not yet committed.**
-*(UPDATE 2026-09-03: the BEAM half of this adoption stands; the `fresh0.5` half does not. `escalation_fresh_frac`
-was deleted from the engine and stripped from the sidecars — the escalation now runs fresh-FULL unconditionally,
-and 0.5 measured worse than both legacy and control. See `escalation-budget-investigation.md`.)*
 
 ## ADOPTION (2026-07-18)
 - **Wired**: `ValuePlay.beam_width` + `beam_leafdepth` (MulliganProfile.h), parsed in MulliganProfileIO.h,
@@ -192,10 +165,6 @@ and 0.5 measured worse than both legacy and control. See `escalation-budget-inve
 - **Set** on antilife + hinata value_play: `beam_width=2, beam_leafdepth=2, escalation_fresh_frac=0.5`. Light
   decks untouched (beam off, fresh -1) => byte-identical. burn's target_depth=6 => vp_here at d6, but beam_width
   default 0 => off.
-  *(UPDATE 2026-09-03: only the two beam keys survive. `escalation_fresh_frac` was deleted from `ValuePlay` and
-  the `0.5` values stripped from antilife/dragonstorm/hinata2; "light decks ... fresh -1 => byte-identical" is
-  no longer true either — every deck now escalates on the full fresh budget, which is exactly the silent-starve
-  footgun the deletion removes.)*
 - **A/B results (train seeds)**: smoke s1001 — antilife d5 neutral (4.6333=4.6333), hinata d5 better
   (6.0800->6.0667), 0 win->loss. regression s2002/s3003 — antilife d5 −0.004/−0.008 (2 loss->win!), hinata d5
   −0.01/−0.02, 0 win->loss, all d0/d3/light byte-identical. Every d5 change is an improvement or same-win-turn
@@ -301,9 +270,7 @@ beam (W3–W7) was the whole problem; wide (W20) at ld1 is the d3 answer.**
 ## DEPTH-ADAPTIVE BEAM — BUILT + VALIDATED (2026-07-18)
 Implemented the two-regime auto-select in `FullSearchLineHybrid` (`src/ai/TurnSolver.cpp`) + broadened the
 AIEngine beam gate (`vp_beam = value_play.drives()`, so the beam fires at ANY depth, not only on-policy; fresh
-renewal stays on-policy-only via `vp_here`) *(UPDATE 2026-09-03: the fresh-renewal clause is stale — fresh-full
-is unconditional engine behavior at every depth now, with no `vp_here` gate and no per-deck field; only the beam
-gate remains as described)*:
+renewal stays on-policy-only via `vp_here`):
 - **deep (depth >= 5)**: value-ranked, the deck's own `beam_width`/`beam_leafdepth` (== the ADOPTED d5 config).
 - **shallow (depth 3..4)**: STATIC, width 20, leafdepth 1 (the width-ladder answer above).
 - **d0/d1/d2**: too shallow to protect >= 2 top plies (`depth < eff_leafdepth+2`) => beam OFF => byte-identical.
@@ -406,8 +373,6 @@ Optional follow-up: shrink the TH/burn/antilife d3 residual (+0.0006..+0.0017) v
 - **Env knobs**: `MTG_ESC_BEAM=W`, `MTG_ESC_BEAM_LEAFDEPTH=D` (INT_MAX=uniform), `MTG_ESC_BEAM_STATIC=1`,
   `MTG_ESCALATION_FRESH_FRAC=f`. Env-path beam is literal (no depth guard); the per-deck path has the
   `depth >= beam_leafdepth+2` guard + the AIEngine `vp_here` (depth==target) gate.
-  *(UPDATE 2026-09-03: `MTG_ESCALATION_FRESH_FRAC` is a RESEARCH HATCH only now — default 1.0 (fresh-full,
-  the shipped behavior), −1 = legacy shared-leftover. It has no per-deck counterpart to override.)*
 - **d3 study logs**: `logs/eval/beam_d3_light.out` (th/slivers/knights/burn), `beam_d3_width.out` (width sweep),
   `beam_d3_static.out` (static vs value), `beam_d3_antilife.out`, `beam_d3_hinata.out` (partial; baseline slow).
 - **Pending (separate, user wants fixed independently)**: the batch per-thread-AIEngine knife-edge -- games are
@@ -480,12 +445,6 @@ Three layers, each a strict refinement of the last:
 - **fresh0.5** (`escalation_fresh_frac=0.5`, ALREADY wired as `value_play.escalation_fresh_frac`): the QUALITY
   lever — more escalation budget → commits the good line. hinata −0.0312, antilife −0.0008; faster/neutral; inert
   on light decks. The cleanest standalone win.
-  *(UPDATE 2026-09-03: this bullet's mechanism was right and its CONFIG was wrong. The lever is real — starvation
-  was the whole story — but 0.5 is the wrong number and a per-deck field is the wrong home: it is REFUTED against
-  both legacy (+0.0018 train fleet) and control (+0.0031, t=+2.71 held-out with cap+beam), and the field is
-  deleted. Fresh-FULL is now unconditional engine behavior. The measurements above stand as a record of the
-  starved baseline they were taken against; do not treat "fresh0.5" as a live or wired option. See
-  `escalation-budget-investigation.md`.)*
 - **depth-aware value-ranked beam** (`MTG_ESC_BEAM=2 MTG_ESC_BEAM_LEAFDEPTH=2`): the SPEED lever — reuses the
   probe's value ranking + protects the committed play, cutting the deep rollout frontier at equal quality. The
   faithful realization of the user's "reuse the leaf-value pass, do only the incremental rollout."

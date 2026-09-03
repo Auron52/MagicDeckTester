@@ -204,16 +204,6 @@ The real levers for escalation cost are therefore NOT reuse but **doing less**, 
   budget-exhaustion regression; surgical/byte-identical off the escalating decks. Pending accept.
   *(2026-09-03: the 1.0 default was REVERTED 2026-07-17 as drift — see escalation-refactor-drift.md;
   the env default is −1 (legacy) and the fix ships per-deck as `value_play.escalation_fresh_frac=0.5`.)*
-  **UPDATE 2026-09-03 (adoption — see `escalation-budget-investigation.md`): fresh-full is back, and this
-  time as ENGINE BEHAVIOR, not a default or a per-deck key.** The escalation always gets a fresh budget
-  equal to the full decision budget; `value_play.escalation_fresh_frac` is DELETED (its ABSENCE silently
-  meant "starved leftovers" — 8 of 11 enabled value decks had no key and ran starved in production, which
-  is what every historical value-leaf "play rejection" actually measured). Per-deck **0.5 is refuted**
-  (worse than legacy on the train fleet, +0.0018; worse than control held-out even with cap+beam,
-  +0.0031 t=+2.71). `MTG_ESCALATION_FRESH_FRAC` is now a research hatch only: default 1.0, −1 = legacy.
-  This lever therefore is no longer "doing less" — it is baseline behavior; the cheapness comes from the
-  per-deck `escalation_cap` + beam (cap5 + W3/ld2 moved CG's escalation mean depth 1.75 → 2.53 at the
-  same fresh-full budget while cutting 22% of wall).
 - **Truncated rollout horizon** (`MTG_ROLLOUT_HORIZON`): caps the escalation's rollout length.
 - Probe-cost levers (cap probe depth / lower the value startgate alpha) trade quality for speed and were
   already REJECTED (drop to the no-escalation floor).
@@ -230,10 +220,6 @@ escalated decision:
    paid off (no escalation). If UNVERIFIED and committed below the trust depth, it **escalates**.
 2. **Escalation** — a second `FullSearchLine` with `g_force_heuristic_leaf=true` (the exact heuristic
    rollout leaf, `SimulateToEnd`). Also ladders d1→d5, from an EMPTY memo.
-   *(UPDATE 2026-09-03: current behavior — the escalation runs on a FRESH budget equal to the full
-   decision budget (engine-wide, not per-deck), and on decks carrying `value_play.escalation_cap` it is
-   ONE predicted-affordable beamed pass rather than the full ladder. See
-   `escalation-budget-investigation.md`.)*
 
 **The premise (REFUTED — see RESULT above):** the doc assumed for any escalating line "the probe's entire
 traversal is thrown away and redone with the heuristic leaf... the interior traversal is done twice." The

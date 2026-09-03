@@ -212,8 +212,7 @@ are never written. Phase E produces the numbers an adoption decision needs — y
 strictly `<stem>.value.json`. A model you decided NOT to adopt must be committed under a different
 name (`<stem>.value.DISABLED.json`), or the suite goes red reproducing the regression you just
 rejected. Creature Giving hit this: it installed the sidecar with `value_play.enabled=false` and
-d5/s2002 moved 4.792 → 4.804. (The trap is real and unchanged; CG's *rejection* was not — it was a
-starved-escalation artifact and the model went live 2026-09-03, see "Reading the result".)
+d5/s2002 moved 4.792 → 4.804.
 
 **2. The H-cell ladder is guarded on the sidecar EXISTING.** `MTG_LADDER_VALUE_LEAF` runs the
 ladder's warm-up passes on the cheap leaf and only the committed pass on the heuristic — worth
@@ -261,35 +260,12 @@ decides; it stays pure heuristic at `MTG_VALUE_MODEL=0`.
   about keeping leaf lines inside real budgeted play. Non-inferiority, not improvement: trust is a
   cost lever whose upside is the escalation it skips, so the claim under test is that skipping does
   not cost quality. Not accepted ⇒ no trust ⇒ everything stays eligible to escalate, which is the
-  side that cannot cost quality (`docs/design/value-leaf-quality-floor.md` — that floor held only
-  because the escalation is given a real budget; it did NOT hold under the pre-2026-09-03 starved
-  escalation, see below).
+  side that cannot cost quality (`docs/design/value-leaf-quality-floor.md`).
 - **Phase E A/B** is the adoption gate, at the deck's real play point. Judge on avg win turn.
 
-**A PRE-2026-09-03 phase-E play rejection is SUSPECT — re-measure before citing it.** Until
-2026-09-03 the hybrid's heuristic escalation ran on the probe's **leftover** budget whenever the
-deck's `value_play` block carried no `escalation_fresh_frac` key — and an absent key silently meant
-"starved". `BuiltinDefaultPlay` carries no such key, so **every phase-E adoption A/B of a deck's
-FIRST model measured the starved config**: the hybrid committed at mean depth ~1.4 against the
-pure-heuristic control's ~2.1, i.e. it was judged on decisions it was never given the budget to
-make. That is why fresh first models kept "failing" phase E.
-*Fixed in the engine:* the escalation now always runs on a **fresh budget equal to the full decision
-budget**, and the per-deck `escalation_fresh_frac` field was **deleted outright** so the footgun
-cannot recur (`MTG_ESCALATION_FRESH_FRAC` is a research hatch only — default 1.0, `-1` = legacy).
-**Phase E therefore now measures fresh-full automatically — no skill-side workaround is needed** —
-but any rejection recorded *before* 2026-09-03 measured the old config and must be re-run before it
-is trusted. Worked example: Creature Giving's 2026-08-06 rejection (+0.0115, "slower to win on all
-four seeds") and its staged-model re-confirmation (+0.01175, t=+6.56) were **both** starvation
-artifacts; re-measured with the fresh-full budget plus `escalation_cap 5` + beam W3/ld2, the model
-is **control parity (−0.0004, t=−0.33, zero win↔loss flips) at 0.43× the control's wall** and is now
-**LIVE** in `decks/Creature Giving/Creature Giving.value.json`. Full investigation:
-`docs/design/escalation-budget-investigation.md`.
-
 **Adoption is not the default outcome.** Of the last nine models, one was a clear win, six were
-neutral, one was declined at scale, and one was rejected for play and shipped inert (Creature
-Giving — that rejection has since been overturned as a starved-escalation artifact, above). A
-neutral model can still be worth shipping DISABLED — it is a large generation-cost lever for
-mulligan work.
+neutral, one was declined at scale, and one was rejected for play and shipped inert. A neutral model
+can still be worth shipping DISABLED — it is a large generation-cost lever for mulligan work.
 
 ## Verification discipline
 

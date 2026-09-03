@@ -160,36 +160,6 @@ chosen in 98; game_102 upkeep drop 16 → −36 = 13 swept × exactly 4; game_11
 
 ## Value-leaf model: built, play-adoption REJECTED, sidecar installed disabled (2026-08-06)
 
-> **SUPERSEDED — ADOPTED AND LIVE 2026-09-03.** The rejection recorded below (and its two
-> re-confirmations on 2026-09-03) was a **measurement artifact, not a model defect**. Every one of
-> those A/Bs ran the hybrid's heuristic escalation on the **legacy shared-LEFTOVER budget**: the
-> deck's `value_play` block carried no `escalation_fresh_frac` key, and an absent key silently meant
-> "starved". Instrumented (`MTG_HYBRID_STATS`), the starved escalation committed at **mean depth
-> ~1.4** against the pure-heuristic control's **~2.1** — the hybrid was being judged on decisions it
-> was never given the budget to make. **The model was never the problem.**
->
-> What is live now: `decks/Creature Giving/Creature Giving.value.json` — a freshly regenerated model
-> (**11,707 rows** dumped on current play with the deck profile attached, held-out **RMSE 0.475**),
-> `value_play.enabled` at **d5/b20** with **`escalation_cap: 5` + beam `W=3` / `beam_leafdepth: 2`**
-> (the antilife/hinata2 template), plus `mull_gen_depth 1` / `mull_gen_budget_ms 3` /
-> `expected_buckets 20` from the 2026-09-03 phase F. Held-out proof (CG d5/b40, 16 seeds × 500 g =
-> 8000 games/arm, one pooled batch): cap+beam at the fresh-full escalation budget is **control
-> PARITY — −0.0004 (t=−0.33), zero win↔loss flips in either direction — at 0.43× the control's wall
-> (2.3× faster)**. The same config at fresh 0.5 measured +0.0031 (t=+2.71) WORSE, so the budget, not
-> the model, was carrying the whole effect.
->
-> Engine change adopted the same day: the escalation now **always runs on a FRESH budget equal to the
-> full decision budget**, and `value_play.escalation_fresh_frac` was **DELETED as a field** so the
-> absent-key-means-starved footgun cannot recur (`MTG_ESCALATION_FRESH_FRAC` survives as a research
-> hatch only — default 1.0, `-1` restores legacy).
->
-> The parked `Creature Giving.value.DISABLED.json` copy has been **removed** — it is the same model
-> that is now live, and git history retains every prior artifact. Full investigation, tables and
-> reproduction recipes: **`docs/design/escalation-budget-investigation.md`**.
->
-> Everything below is preserved as the historical record of the 2026-08-06 run. Read its verdicts as
-> "measured under the starved escalation", not as current status.
-
 Pipeline on frozen `33cb148` (user-directed: value-leaf before the mulligan profile — the
 model's purpose is the generation cost lever):
 - **Rows**: 2500 games, ONE pooled batch, seeds 900000+ → 11,989 unique rows (searched K=3
@@ -204,18 +174,13 @@ model's purpose is the generation cost lever):
 - **Adoption A/B at the play point** (block d5/b20, 4 × 1000g, seeds 600000–603000):
   hybrid slower-to-win on ALL FOUR seeds — 90 slower / 50 faster, net +46 turn-units
   (+0.0115 avg) for a 1.27× wall speedup (58.7s vs 74.4s /1000g). **REJECTED for play.**
-  *(2026-09-03: this A/B ran the STARVED escalation — see the superseded banner above. Re-measured
-  with the fresh-full budget + cap/beam it is control parity at 0.43× the wall; the rejection does
-  not stand.)*
 - **Shipped**: `Creature Giving.value.DISABLED.json` (committed, NOT the auto-resolved
   sibling name). First attempt installed it as `<stem>.value.json` with
   `value_play.enabled=false` — the suite went RED: **sidecar PRESENCE activates the
   depth-aware hybrid in play** (`enabled` only releases depth ownership), reproducing the
   A/B regression (d5 s2002 4.792→4.804). The engine resolves strictly `<stem>.value.json`,
   so the DISABLED name is inert (suite-verified green); the mulligan-generation step
-  copies/renames it into place when it wants the gen-cost lever. *(2026-09-03: the DISABLED file no
-  longer exists — the model is live as `Creature Giving.value.json`, so the copy/rename dance is
-  obsolete. The trap itself — sidecar PRESENCE activates the hybrid — still holds.)* Interim-read lesson
+  copies/renames it into place when it wants the gen-cost lever. Interim-read lesson
   repeated twice in this run: partial matrix cells and 100-game seed subsets both produced
   confident-looking phantom structure ("H4/H5 improve past the plateau") that full counts
   erased.
@@ -228,9 +193,7 @@ findings and wiring are in place for whoever launches the real gen:
 - **Gen settings (user-directed): d3/b10 rollouts + the fetches merged.** Wired via a
   GEN-ONLY `Creature Giving.value.json` carrying `value_play.mull_gen_depth=3` /
   `mull_gen_budget_ms=10` and **no eval_model** (play-inert, deck-restricted smoke verified
-  twice; the trained model stays parked in `Creature Giving.value.DISABLED.json` — *superseded
-  2026-09-03: the live sidecar now carries the eval_model AND the enabled play block, with
-  `mull_gen_depth 1` / `mull_gen_budget_ms 3` re-derived by the 2026-09-03 regen*). GOTCHA
+  twice; the trained model stays parked in `Creature Giving.value.DISABLED.json`). GOTCHA
   found: the profile loader ignores the whole `value_play` block unless a `target_depth`
   key is present — the sidecar carries `target_depth:0` for that reason. Launch with
   `MTG_EQUIV_FORCE_MERGE="Windswept Heath, Misty Rainforest"` — at d3 discovery the

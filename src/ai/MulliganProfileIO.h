@@ -1226,6 +1226,7 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                 profile.value_play.target_depth = vp.value("target_depth", 0);
                 profile.value_play.budget_ms    = vp.value("budget_ms", 0);
                 profile.value_play.enabled      = vp.value("enabled", false);
+                profile.value_play.escalation_fresh_frac = vp.value("escalation_fresh_frac", -1.0);
                 profile.value_play.beam_width     = vp.value("beam_width", 0);
                 profile.value_play.beam_leafdepth = vp.value("beam_leafdepth", 2);
                 profile.value_play.escalation_cap = vp.value("escalation_cap", 0);

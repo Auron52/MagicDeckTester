@@ -241,9 +241,7 @@ numbers: **burn=6, TH=7**, knights/slivers=5. At play depth 5, trust 6/7 ≡ Non
 - `budget_ms` (int) — the budget `target_depth` is optimal for. `(target_depth, budget_ms)` = "the optimal setting".
 - `leaf_cost_ms[]`, `heur_cost_ms[]` — INFORMATIVE only ("how fast at each level"); for transparency + re-deriving
   `target_depth` if the budget changes. NOT read at runtime.
-- `escalation_fresh_frac` — **DELETED 2026-09-03**: the escalation's fresh-full budget is ENGINE behavior now,
-  not a per-deck field (an absent key silently meant "starved leftovers" — the footgun behind every value-leaf
-  play rejection; see escalation-budget-investigation.md). The env `MTG_ESCALATION_FRESH_FRAC` is a research hatch.
+- `escalation_fresh_frac` (double, default -1=off) — BUDGET RENEWAL, per-deck. Only heavy decks that escalate set it.
 - `regime` ("light"|"heavy") — readability tag.
 
 **How it reaches the CLI:** `<deck>.value.json` is AUTO-ATTACHED from the deck folder on every run
@@ -321,14 +319,13 @@ you drop `--depth`, adopt, and rebaseline THAT case. Per-deck, on the user's sch
 deliberate switch — the user explicitly expects to move the depth-5 regression items onto this setting.
 
 **Edit points (mostly writer; engine is small):**
-- `MulliganProfile.h` — add the `value_play` fields (target_depth, budget_ms, cost vectors; escalation_fresh_frac
-  was later DELETED 2026-09-03 — fresh-full became engine behavior).
+- `MulliganProfile.h` — add the `value_play` fields (target_depth, budget_ms, cost vectors, escalation_fresh_frac).
 - `MulliganProfileIO.h` — parse the block (absent → today's behavior).
 - `AIEngine.cpp:~1413` — where `escalate_below`/`m_lookahead_depth` feed `FullSearchLineHybrid`: add the
   conflict-check (block-present + `--depth` given → error unless `--ignore-profile-play`) and, when the block
   drives, use `target_depth`/`budget_ms`. `--depth` IS the search depth already, so light "lock d6" = target 6.
-- `TurnSolver.cpp` `FullSearchLineHybrid` — (2026-09-03: the per-deck fresh_frac read was REMOVED again; the
-  escalation always runs fresh-full, env research hatch only).
+- `TurnSolver.cpp` `FullSearchLineHybrid` — read `escalation_fresh_frac` from the profile instead of the env-only
+  `s_fresh_frac` (budget renewal; default -1/off preserves current).
 - writer `derive()` — new trust rule + derive `target_depth`(budget) + emit cost curves + `fresh_frac`.
 
 **Depth and budget are ASYMMETRIC — depth is the POLICY (locked), budget is a RESOURCE KNOB (free override)
