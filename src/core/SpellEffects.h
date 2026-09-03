@@ -9431,14 +9431,15 @@ inline int HeroismCopiesLive(const GameState& state, int controller)
     return n;
 }
 
-// MTG_HEROISM_FRESH_HOLD (EXPERIMENT, default OFF; =1 enables): a live Heroism also unlocks the
+// MTG_HEROISM_FRESH_HOLD (ADOPTED 2026-09-03, default ON; =0 restores the pre-adoption
+// behaviour): a live Heroism also unlocks the
 // fresh-hold -- Treasures minted this turn may pay while one is out, as under a true magnet. The
 // doctrine's magnet carve-out exists because fan-minted Treasures legitimately fund same-turn
 // continuation; a Heroism doubles every qualifying mint, which is the same funding shape at
 // smaller scale. Extends the adopted MTG_HEROISM_MAGNET_TRAIT (plan traits) to the payment layer.
 inline bool HeroismFreshHoldOn()
 {
-    static const bool env_on = EnvOn("MTG_HEROISM_FRESH_HOLD");
+    static const bool env_on = EnvOn("MTG_HEROISM_FRESH_HOLD", true);
     return heurarm::Flag(heurarm::HEROISM_FRESH_HOLD, env_on);
 }
 

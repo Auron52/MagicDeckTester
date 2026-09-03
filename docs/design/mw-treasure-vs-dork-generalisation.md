@@ -56,7 +56,7 @@ ADOPTED 2026-09-02 (user approved): the reader now defaults ON (`EnvOn("MTG_HERO
 true)`); all three GT tiers rebaselined at the flip — only Mirrorwing cells moved, matching the
 `her` arm's measured per-game movers.
 
-## The payment-layer follow-up (measured 2026-09-02): MTG_HEROISM_FRESH_HOLD wins, staged
+## The payment-layer follow-up (measured 2026-09-02): MTG_HEROISM_FRESH_HOLD wins — ADOPTED
 
 The deferred question — the fresh-hold `CopyMagnetLive` gate and the Gold-Rush-positive net-mana
 rule still counted only true magnets — was measured on the same 20-cell footprint (13,625
@@ -76,5 +76,6 @@ depths). Mechanism trace (overnight d3 s6006 gi9, seed 6015, 4→3): both lines 
 T3 double Gold Rush, but only with the lever may the Heroism-doubled fresh mints pay same-turn —
 the ON line attacks T3 for exactly 20 instead of 16.
 
-Recommendation: ADOPT `MTG_HEROISM_FRESH_HOLD` default-ON (flip the reader, rebaseline — only
-Mirrorwing cells move). Staged default-OFF pending the user's approval.
+ADOPTED 2026-09-03 (user approved, with a standing policy stated: adopt all changes with no
+quality or performance drawbacks): reader defaults ON, all three tiers rebaselined — exactly the
+20 Mirrorwing cells moved and every one byte-matched the battery's `hfresh` arm.
