@@ -184,9 +184,12 @@ the rest are fan-out code-reading claims with cites.
   as the deferred design `breakpoint-truncation-via-reservation-axis.md`.
   Also: `max_casts_after` counts followers by `CastOrderRank`, so a subset legal in a different
   order is dropped before the (post-enumeration) ordering search can see it.
-* **Strive-K mana ceiling — DROP-hard, NO HATCH** (the `+2` fudge credits no ritual/rock/reducer;
-  the break sits outside `UnprunedGate::TrickTarget`). **`ActivateRevealTop` `kmax=3` — hard
-  width cap, NO HATCH.** Both need a hatch before they can even be A/B'd — itself the finding.
+* **Strive-K mana ceiling + `ActivateRevealTop` kmax=3 — HATCHES BUILT + PROBED (2026-09-03).**
+  `MTG_STRIVE_CEILING` (default ON; =0 removes the +2-fudge break) and `MTG_REVEALTOP_KMAX`
+  (int, default 3; 0 = pool-bounded). Revealtop probed on stompy (the ONLY live deck —
+  Call of the Wild), 1000 games value-play uncapped vs capped: **BYTE-IDENTICAL digest, the cap
+  never binds at ship settings — measured inert, closed.** The strive ceiling has NO live deck
+  (Twinflame exists only in the archived Mirrorwing v1 list); the hatch waits for one.
 * **`MTG_EMIT_PRUNE` (default OFF)**: per-card dimension drop resting on an enumerated
   `budget_can_grow` list that has shipped lossy twice. Leave off; gate before reconsidering.
 * **Cross-cast greedy stranding — INSTRUMENTED 2026-09-03; the original claim was
@@ -257,20 +260,29 @@ the rest are fan-out code-reading claims with cites.
   proof); (c) `discard_protect` now serves as prune/tie-break, tuned pre-adoption, due a
   re-measurement. If a deck still misplays a discard, the USER's hypothesis is the per-deck
   BUCKETING (ranking rule) is mis-defined for that deck — a data fix, not a mechanism gap.
+  **THE BUCKETING HYPOTHESIS SCREENED FLEET-WIDE (2026-09-03): NO MIS-BUCKETING FOUND.**
+  `MTG_SHED_STATS` ranked the generic-rule decks by rollout-shed traffic (mirrorwing 40,475/200
+  games — 4x anyone, and its prior screen predated the 2026-08-24 decklist swap; dragonstorm
+  10,307; auras 4,578; knights 2,813; burn 2,589; CG 2,580; slivers 2,033; goblins 531), then
+  `analyze_deck.py --discard-analysis` re-ran on all of them + hinata under today's engine:
+  hinata, mirrorwing (shipping list), burn, goblins, auras, dragonstorm = **STATUS_QUO_OK** (the
+  shipped ranking is at/near the searched optimum); CG, knights, slivers = **DISCARD_INERT** (no
+  real-play shed reached). Combined with the shipped bucket policies
+  (AL/5C/kitty/stompy/dragons/minotaur + TH's own ranking), every suite deck's cleanup ranking
+  is either authored-and-validated or measured at the searched optimum.
   Also: same-named copies are NOT interchangeable for `graveyard_replace_shuffle_library`
   cards — a future name-keyed bucket would be unsound.
 
 ### 4d. Dedupe keys + caps + karoo (the incomplete-identity class)
 
-* **Land-signature dedupe — IDENTITY-INCOMPLETE, LIVE.** `MTG_LAND_SIG_COMPLETE` ships OFF; the
-  legacy signature has **6 live collisions across 5 suite decks** (re-run of the doc's audit:
-  Creature Giving, Dragonstorm, EldraziDisplacer, Knights, Minotaur, slivers_vial), and **17
-  land params are invisible to BOTH signatures** — Mariposa Military Base vs Shivan Gorge
-  (whose damage ability is "this deck's same-turn kill") cannot be separated by ANY existing
-  configuration; which is enumerable is decided by draw order. No counter, no reopen, no
-  `MTG_UNPRUNED` gate. Recommended order: add the 17 params (byte-identical for decks lacking
-  them), then measure name-keying separately. Doc/code mismatch: `MTG_FORCED_EARLY_LAND` is
-  commented "default on" but reads default OFF, while other docs describe it as adopted.
+* **Land-signature dedupe — FIXED + ADOPTED (2026-09-03, the audit's FIRST confirmed
+  violation).** `MTG_LAND_SIG_COMPLETE` now DEFAULT ON with the 17-param extension and the
+  ccoa dominance promotion; 4 Creature Giving games proved d8b0-unreachable T4s under the
+  legacy signature (City of Brass / Forbidden Orchard collision). All three GT tiers
+  rebaselined; the split-vs-promotion lesson (behavioural COSTS = signature splits,
+  strictly-optional RICHES = `land_bonus` promotions) recorded at the read site. Residue:
+  name-keying not measured separately. Doc/code mismatch still open: `MTG_FORCED_EARLY_LAND`
+  is commented "default on" but reads default OFF, while other docs describe it as adopted.
 * **`plan_signature` — IDENTITY-INCOMPLETE in autonomous search, X-axis MEASURED INERT
   (2026-09-03).** `chosen_x`, `enchant_target`, `splice_count`, strive-K are keyed only under
   `HumanPlayActive()`. The X-collapse concern was tested with a dedup-site audit
