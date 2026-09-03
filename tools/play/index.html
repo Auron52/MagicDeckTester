@@ -2654,6 +2654,18 @@ function promptPanelHtml(d, dec){
       `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
   const max=d.max_targets||1, n=(S.boardSel||new Set()).size;
+  // Planeswalker LOYALTY ability target: d.loyalty says what happens to the chosen permanent
+  // ("turned into a green 3/3 Elk with no abilities"), and d.source names the ability
+  // ("Oko, Thief of Crowns +1"). The legal set is the ability's own printed restriction, so it can
+  // contain lands, artifacts and the opponent's permanents -- never worded as damage, and the
+  // opponent's FACE is not in it. This is the board click the player asked for ("use targeting on
+  // the board if a targeted ability (like Oko's +1) is chosen", 2026-09-02).
+  if (d.loyalty){
+    return `<h3>Choose a target — ${esc(d.source||'')}</h3>`+
+      `<div class="sub">The chosen permanent is <b>${esc(d.loyalty)}</b> · pick 1. Click one of the highlighted permanents on the board (either side of the table, tapped or not). The AI's pick is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">${n} / 1 selected</span><span class="spacer"></span>`+
+      `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
+  }
   // Own-creature pump (Invigorate): d.pump carries "+P/+T" -- ask which of YOUR creatures to buff.
   if (d.pump){
     return `<h3>Which creature — ${esc(d.source||'')}</h3>`+

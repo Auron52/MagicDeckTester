@@ -334,6 +334,26 @@ extern thread_local BounceChooser* g_play_sacrifice_chooser;
 // RevealLogPause for every search/rollout scope, so autonomous play is byte-identical.
 extern thread_local BounceChooser* g_play_attach_host_chooser;
 
+// ---- Human-play planeswalker LOYALTY-ABILITY TARGET chooser --------------------------------
+// A loyalty ability that says "target ..." (Oko's +1 "target artifact or creature", Bolas's +3
+// "target noncreature permanent" and -2 "target creature") picks its target inside
+// ApplyLoyaltyAbility. Autonomously that is a deterministic disclosed rule (the plan's searched
+// `elk_target`, or the fallback pick); under --claude-play the HUMAN picks it off the board, from
+// the full RULES-legal set -- not the enumerator's search-pruned candidate set, which is a
+// search-breadth policy and must not bind a human (the same rule the Zada solo-target trick
+// follows: the searched target is only the preselected DEFAULT).
+// Shape = the bounce/sacrifice/attach-host chooser: legal battlefield indices + the heuristic's
+// pick (an index INTO that list); returns the chosen index into the list, or -1 to keep the
+// heuristic. `source` names the ability ("Oko, Thief of Crowns +1") and `prompt` says what happens
+// to the target, so the viewer can word the board prompt without knowing the card.
+// Nulled by RevealLogPause for every search/rollout/enumeration scope, so autonomous play and every
+// enumeration are byte-identical. Inert (heuristic) unless set.
+using LoyaltyTargetChooser = std::function<int(const GameState& state, int controller,
+                                               const std::string& source, const std::string& prompt,
+                                               const std::vector<int>& legal_indices,
+                                               int heuristic_pick)>;
+extern thread_local LoyaltyTargetChooser* g_play_loyalty_chooser;
+
 // ---- Human-play ETB-dig chooser (which examined card to put into hand) ------------------
 // An ETB "look at the top N, you may reveal a <type> and put it into your hand" (Acclaimed
 // Contender) digs for a matching card. Autonomously PerformEtbDig takes the FIRST match; under
@@ -744,7 +764,8 @@ inline bool AllPlayHooksNull()
         && g_play_firebreathe_chooser == nullptr && g_play_cast_order_chooser == nullptr
         && g_play_storage_hold_chooser == nullptr && g_play_tutor_chooser == nullptr
         && g_play_attach_host_chooser == nullptr && g_play_jitte_chooser == nullptr
-        && g_play_attackers_chooser == nullptr && g_play_tap_pref_chooser == nullptr;
+        && g_play_attackers_chooser == nullptr && g_play_tap_pref_chooser == nullptr
+        && g_play_loyalty_chooser == nullptr;
 }
 
 // 0 = flag fast path (DEFAULT). 1 = MTG_PAUSE_HOOK_FLAG=0, the original 26-pointer scan (identical
@@ -792,6 +813,7 @@ struct RevealLogPause
     FirebreatheChooser* saved_jitchooser;
     AttackersChooser*   saved_atkchooser;
     TapPrefChooser*     saved_tpchooser;
+    LoyaltyTargetChooser* saved_loychooser;
     std::vector<PlayReveal>* saved_revealsink;
     bool saved_real;
     bool noop;   // fast path: nothing installed -> nothing to save/null/restore (see ctor)
@@ -835,6 +857,7 @@ struct RevealLogPause
         saved_jitchooser = g_play_jitte_chooser;
         saved_atkchooser = g_play_attackers_chooser;
         saved_tpchooser = g_play_tap_pref_chooser;
+        saved_loychooser = g_play_loyalty_chooser;
         g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
         g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
@@ -849,6 +872,7 @@ struct RevealLogPause
         g_play_tutor_chooser = nullptr;
         g_play_attach_host_chooser = nullptr; g_play_jitte_chooser = nullptr;
         g_play_attackers_chooser = nullptr; g_play_tap_pref_chooser = nullptr;
+        g_play_loyalty_chooser = nullptr;
     }
     ~RevealLogPause() { if (noop) { return; }
                         g_real_resolution = saved_real; g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
@@ -872,7 +896,8 @@ struct RevealLogPause
                         g_play_attach_host_chooser = saved_ahchooser;
                         g_play_jitte_chooser = saved_jitchooser;
                         g_play_attackers_chooser = saved_atkchooser;
-                        g_play_tap_pref_chooser = saved_tpchooser; }
+                        g_play_tap_pref_chooser = saved_tpchooser;
+                        g_play_loyalty_chooser = saved_loychooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

@@ -3920,6 +3920,40 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
 // the deck's 6a table. Applied identically by the rollout and executor trailing passes (lockstep).
 // `elk_target` = the card.m_number of the permanent Oko's +1 turns into a 3/3 Elk (0 = the legacy
 // "first own Food Token" pick). SEARCHED, not hardcoded: see the enumeration note in TurnSolver.
+// How a loyalty ability PRINTS, in one line: "+1: turn a permanent into a 3/3 Elk". The single
+// source of truth for every place a human reads one -- the choose-variant dialog's `loyalty`
+// sub-decision, the committed line's history label (LineSummaryOfPlan), and the plan menu
+// (SummarizePlan). Those three used to disagree: the menu said "Oko, Thief of Crowns loyalty#1" (a
+// raw index) and the history said plain "cast: Oko, Thief of Crowns" -- indistinguishable from
+// hard-casting the walker, which is what "activating Oko is not listed in the history" was
+// (2026-09-02 item 1). An unmapped effect falls back to its raw param name, which is a visible
+// TODO rather than a silent blank.
+inline std::string LoyaltyAbilityText(const CardParams::LoyaltyAbilityParam& ab)
+{
+    const std::string what =
+        ab.effect == "kavu_token"              ? "create a 3/3 Kavu" :
+        ab.effect == "counters_up_to_two"      ? "put +1/+1 counters" :
+        ab.effect == "regrow_multicolored"     ? "return a multicolored card" :
+        ab.effect == "destroy_own_noncreature" ? "destroy a noncreature permanent" :
+        ab.effect == "face_damage"             ? (std::to_string(ab.amount) + " damage") :
+        ab.effect == "food_token"              ? "create a Food token" :
+        ab.effect == "elk_transform"           ? "turn a permanent into a 3/3 Elk" :
+        ab.effect == "steal_creature"          ? "gain control of a creature" :
+                                                 ab.effect;
+    return (ab.delta >= 0 ? "+" : "") + std::to_string(ab.delta) + ": " + what;
+}
+
+// "<walker>: <printed ability>", or the bare walker name when the index is out of range (a
+// stranded action). Used by both plan-summary writers.
+inline std::string LoyaltyActionLabel(const std::string& walker_name, int ability_index)
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(walker_name);
+    if (!d || ability_index < 0
+        || ability_index >= static_cast<int>(d->params.loyalty_abilities.size()))
+    { return walker_name; }
+    return walker_name + ": " + LoyaltyAbilityText(d->params.loyalty_abilities[ability_index]);
+}
+
 inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id, int ability_index,
                                 int elk_target = 0)
 {
@@ -3947,6 +3981,35 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
     {
         if (c.type == Counter::Type::Loyalty) { c.count = w.loyalty; break; }   // viewer mirror
     }
+
+    // ---- Human-play board-click TARGET for a targeting loyalty ability -------------------------
+    // Three of the modelled effects say "target ..." (Oko's +1 "target artifact or creature",
+    // Bolas's +3 "target noncreature permanent", -2 "target creature"). Autonomously each resolves
+    // by its own disclosed rule -- the searched `elk_target`, or the fallback ordering below -- and
+    // that path is untouched. Under --claude-play the HUMAN picks off the board, from the full
+    // RULES-legal set: the enumerator's candidate list is a search-BREADTH policy (it wants targets
+    // that pay off) and must never bind a human, exactly as the Zada solo-target trick re-asks its
+    // target at resolution rather than binding the searched one (viewer report 2026-09-02: "it
+    // seems to have ideas about what moves should be valid that are not correct").
+    // `pred` is the ability's own targeting restriction; `fallback` is the engine's pick, offered
+    // as the preselected default. Returns the chosen battlefield index, or -1 when nothing is legal.
+    auto human_target = [&](const std::string& ability_label, const std::string& prompt,
+                            const std::function<bool(const Permanent&)>& pred, int fallback) -> int
+    {
+        if (g_play_loyalty_chooser == nullptr) { return fallback; }   // nulled in every search scope
+        std::vector<int> legal;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (pred(state.battlefield[i])) { legal.push_back(i); } }
+        if (legal.empty()) { return fallback; }
+        int heur = 0;
+        for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+        { if (legal[k] == fallback) { heur = k; break; } }
+        const std::string src = d->card.m_name.str() + " " + ability_label;
+        const int pick = (*g_play_loyalty_chooser)(state, controller, src, prompt, legal, heur);
+        if (pick < 0 || pick >= static_cast<int>(legal.size())) { return fallback; }
+        return legal[pick];
+    };
+    const std::string ab_sign = (ab.delta >= 0 ? "+" : "") + std::to_string(ab.delta);
 
     auto make_token = [&](const char* nm, bool creature, int pw, int tf,
                           const std::vector<std::string>& subs, bool all_colors, bool green_only,
@@ -4084,6 +4147,16 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
             // this fallback -- reachable only once the opponent's lands are gone -- cannot earn).
             if (pick < 0) { pick = land_pick >= 0 ? land_pick : other_pick; }
         }
+        // HUMAN PLAY: the auto-resolved pick above is only the DEFAULT. "Destroy target noncreature
+        // permanent" is a targeted ability, so the human clicks the permanent (viewer report
+        // 2026-09-02 item 4: "Bolas has the same problem where I can't choose anything. We should
+        // have it target as well"). Legal = every noncreature permanent, either side, EXCLUDING the
+        // walker itself: it is rules-legal to target your own source, but the source has just paid
+        // its loyalty cost and blowing it up is a pure footgun with no upside vs a passive opponent.
+        pick = human_target(ab_sign, "destroyed",
+                            [&](const Permanent& q) {
+                                return !q.card.IsCreature() && q.card.m_number != walker_id;
+                            }, pick);
         if (pick >= 0)
         {
             Permanent dead = state.battlefield[pick];
@@ -4107,6 +4180,14 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
             const int pw = q.EffectivePower();
             if (pw > best_pow) { best_pow = pw; pick = i; }
         }
+        // HUMAN PLAY: the searched target is only the preselected default -- the human clicks the
+        // creature. Restricted to creatures we do NOT control: the printed card says "target
+        // creature" (any), but the effect is "gain control", so aiming it at your own creature is a
+        // no-op in real Magic too -- nothing legal is lost by leaving it out.
+        pick = human_target(ab_sign, "taken under your control",
+                            [&](const Permanent& q) {
+                                return q.card.IsCreature() && q.controller_index != controller;
+                            }, pick);
         if (pick >= 0)
         {
             Permanent& got = state.battlefield[pick];
@@ -4161,6 +4242,17 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
             else if (q.card.m_name.str() != "Food Token") { continue; }
             ti = qi; break;
         }
+        // HUMAN PLAY: the searched `elk_target` is only the preselected DEFAULT. The printed
+        // restriction is "target ARTIFACT OR CREATURE" -- ANY, either side, tapped or not -- and the
+        // enumerator's candidate list is far narrower (own permanents only, power < 3, and
+        // CanAttackFull, which excludes anything TAPPED). That pruning is a search-breadth policy;
+        // it made "Elk my own tapped Deathrite Shaman on turn 2" unreachable by hand even though it
+        // is a perfectly legal play the player asked for (viewer report 2026-09-02 item 1: "It
+        // should let me choose elking the Deathrite even if that probably is not a good idea T2").
+        ti = human_target(ab_sign, "turned into a green 3/3 Elk with no abilities",
+                          [&](const Permanent& q) {
+                              return q.card.IsCreature() || q.card.HasType(CardType::Artifact);
+                          }, ti);
         if (ti >= 0)
         {
             Permanent& q = state.battlefield[ti];

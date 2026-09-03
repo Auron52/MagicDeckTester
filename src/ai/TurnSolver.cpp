@@ -10824,20 +10824,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // of one we have taken (USER, 2026-08-16). Pattern 8 spawns a 6/6.
                     // Target is SEARCHED (enchant_target), like Oko's elk_target.
                     int best = 0, best_pow = 0;
+                    bool any_theirs = false;
                     for (const Permanent& q : state.battlefield)
                     {
                         if (q.controller_index == state.active_player_index) { continue; }
                         if (!q.card.IsCreature()) { continue; }
+                        any_theirs = true;
                         const int pw = q.EffectivePower();
                         if (pw > best_pow) { best_pow = pw; best = q.card.m_number; }
                     }
-                    if (best_pow <= 0) { continue; }   // nothing worth taking
+                    // LEGALITY vs VALUE. "Gain control of target creature" is legal the moment a
+                    // creature we do not control exists (CR 602.2b); the two tests below are VALUE
+                    // gates -- "nothing worth taking", "the swing lands outside the horizon". They
+                    // stay for the search and stand down for a HUMAN, who is entitled to a play the
+                    // AI would rank badly (viewer report 2026-09-02 item 4).
+                    if (!HumanPlayActive())
+                    {
+                        if (best_pow <= 0) { continue; }   // nothing worth taking
+                    }
+                    else if (!any_theirs) { continue; }    // no legal target -> not activatable
                     steal_target = best;
                     // It CANNOT attack this turn -- gaining control resets summoning sickness
                     // (CR 302.6) -- so the swing starts next turn. Price it as the attacks it will
                     // actually make inside the horizon, not as immediate damage.
                     ev = best_pow * DMG * std::max(0, ExpectedAttacks(state) - 1);
-                    if (ev <= 0) { continue; }
+                    if (ev <= 0) { if (!HumanPlayActive()) { continue; } ev = 1; }
                 }
                 else if (ab.effect == "face_damage") { ev = ab.amount * DMG; }
                 else if (ab.effect == "food_token") { ev = DMG / 3; }
@@ -10862,6 +10873,24 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (!CanAttackFull(q, state.battlefield, state.active_player_index)) { continue; }
                         elk_targets.push_back(q.card.m_number);
                     }
+                    // HUMAN PLAY: the list above is the SEARCH's candidate set, and every one of its
+                    // three filters (own permanents only, power < 3, CanAttackFull -- which excludes
+                    // anything TAPPED) is a value/breadth policy, not the card's restriction, which
+                    // is simply "target artifact or creature". A human whose only artifact/creature
+                    // was tapped for mana therefore saw NO +1 at all -- Oko's whole menu collapsed
+                    // to "+2 Food" with no dialog (viewer report 2026-09-02 item 1, FiveColour seed
+                    // 2 T2). The full legal set is offered at RESOLUTION by the board-click chooser
+                    // (ApplyLoyaltyAbility), so ONE representative action is all the human needs
+                    // here -- what matters is that the ability is REACHABLE whenever it is legal.
+                    if (HumanPlayActive() && elk_targets.empty())
+                    {
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (!q.card.IsCreature() && !q.card.HasType(CardType::Artifact)) { continue; }
+                            elk_targets.push_back(q.card.m_number);
+                            break;
+                        }
+                    }
                     if (elk_targets.empty()) { continue; }
                     for (int tgt : elk_targets)
                     {
@@ -10884,7 +10913,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             { costs_mana = true; }
                             break;
                         }
-                        if (gain <= 0) { continue; }
+                        // gain <= 0 is a VALUE gate (Elking a body already at 3 power is a
+                        // downgrade), not a legality one -- it stands down for a human.
+                        if (gain <= 0 && !HumanPlayActive()) { continue; }
                         Action ea;
                         ea.kind            = Action::Kind::ActivateLoyalty;
                         ea.card_name       = p.card.m_name;
@@ -10895,6 +10926,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         ea.enchant_target  = tgt;
                         ea.eval            = gain * DMG
                                              - (costs_mana ? s_dork_ramp * std::min(ExpectedAttacks(state), 4) : 0);
+                        // A human-only zero/negative-gain variant must still be OFFERED, so give it
+                        // a floor rather than a value that could read as "worse than doing nothing".
+                        if (HumanPlayActive() && ea.eval < 1) { ea.eval = 1; }
                         ea.is_noncreature  = true;
                         actions.push_back(std::move(ea));
                     }
@@ -31426,6 +31460,13 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p)
         // the copy already in play, and gave the human no way to tell the two menu entries apart.
         else if (a.kind == Action::Kind::Equip)
         { cast_names.push_back("equip " + a.card_name); }
+        // Planeswalker loyalty: listed bare under "cast:", an activation read "cast: Oko, Thief of
+        // Crowns" -- the SAME text as hard-casting the walker, and silent about which ability was
+        // used. That summary is what the viewer writes into its history panel on an accepted line,
+        // so the activation looked like it never happened (2026-09-02 item 1: "Activating Oko is
+        // not listed in the history").
+        else if (a.kind == Action::Kind::ActivateLoyalty)
+        { cast_names.push_back(LoyaltyActionLabel(a.card_name.str(), a.loyalty_ability)); }
         else if (a.kind == Action::Kind::AttachAllEquipment)
         { cast_names.push_back(a.card_name + ": attach all Equipment"); }
         else if (a.kind == Action::Kind::PutFromHandAbility)
@@ -32051,7 +32092,17 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             // the heuristic's first-enumerated pick -- the human IS the decision-maker here. Resolve the
             // stable m_number to the creature's name for the grid art; the target is one of the player's
             // creatures on the battlefield (LegalEnchantTargets), so this always resolves.
-            if (a.enchant_target > 0 && !is_trick)
+            // A PLANESWALKER LOYALTY target also rides `enchant_target` (Oko's +1 elk target,
+            // Bolas's -2 steal victim), but it is NOT an attachment and must not be asked as one:
+            // routing it here produced the literal dialog the player reported -- "Oko, Thief of
+            // Crowns ->?  pick one of 3.  leave it unattached / Faeburrow Elder / Deathrite Shaman"
+            // (2026-09-02 item 2), where "leave it unattached" was really "+2: create a Food token"
+            // and the ABILITY choice was buried behind an attach question (`enchant` sorts at
+            // priority 1.5, `loyalty` at the 9 default, so the target was asked FIRST). It is asked
+            // at RESOLUTION instead, as a board click over the full rules-legal set -- with no sub
+            // here the per-target variants share a signature and collapse to one representative per
+            // ability, which is exactly the Zada solo-target-trick shape above.
+            if (a.enchant_target > 0 && !is_trick && a.kind != Action::Kind::ActivateLoyalty)
             {
                 std::string etn, art;
                 for (const Permanent& perm : state.battlefield)
@@ -32183,22 +32234,13 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     && a.loyalty_ability >= 0
                     && a.loyalty_ability < static_cast<int>(adef->params.loyalty_abilities.size()))
                 {
-                    const auto& ab = adef->params.loyalty_abilities[a.loyalty_ability];
-                    std::string what =
-                        ab.effect == "kavu_token"            ? "create a 3/3 Kavu" :
-                        ab.effect == "counters_up_to_two"    ? "put +1/+1 counters" :
-                        ab.effect == "regrow_multicolored"   ? "return a multicolored card" :
-                        ab.effect == "destroy_own_noncreature" ? "destroy a noncreature permanent" :
-                        ab.effect == "face_damage"           ? (std::to_string(ab.amount) + " damage") :
-                        ab.effect == "food_token"            ? "create a Food token" :
-                        ab.effect == "elk_transform"         ? "turn a permanent into a 3/3 Elk" :
-                        // Bolas's -2. Missing from this map, so the dialog offered the human a raw
-                        // "-2: steal_creature" next to a plain-English "+3: destroy a noncreature
-                        // permanent" -- the only ability of the three walkers that read as source code.
-                        ab.effect == "steal_creature"        ? "gain control of a creature" :
-                                                               ab.effect;
-                    const std::string desc = (ab.delta >= 0 ? "+" : "") + std::to_string(ab.delta)
-                                           + ": " + what;
+                    // The wording lives in LoyaltyAbilityText (SpellEffects.h) so the dialog, the
+                    // history label and the plan menu cannot drift apart. (This map used to be
+                    // inline here, and Bolas's -2 was missing from it -- the dialog offered a raw
+                    // "-2: steal_creature" next to a plain-English "+3: destroy a noncreature
+                    // permanent", the only ability of the three walkers that read as source code.)
+                    const std::string desc =
+                        LoyaltyAbilityText(adef->params.loyalty_abilities[a.loyalty_ability]);
                     addSub(a.card_name + " " + desc, a.card_name + " ability", desc,
                            a.card_name, "loyalty");
                 }

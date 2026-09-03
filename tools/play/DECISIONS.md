@@ -84,6 +84,26 @@ leaked the top-7 into a no-reveal game and went stale the moment a same-line Wor
 reordered the library); the human picks at resolution off the REAL look, or -1 to put nothing.
 Autonomous play keeps the searched named-variant axis unchanged. Unexpectedly Absent's target reuses `target` (the
 tuck branch consults `g_play_target_chooser` with every nonland permanent legal, own side included).
+
+Planeswalker loyalty-ability TARGET reuse note (2026-09-03): Oko's +1 (`elk_transform`), Bolas's +3
+(`destroy_own_noncreature`) and -2 (`steal_creature`) all reuse `target` via a dedicated
+`g_play_loyalty_chooser` (`LoyaltyTargetChooser`, `GameLogger.h`) consulted from
+`ApplyLoyaltyAbility` (`SpellEffects.h`); `WriteTargetDecisionJson` gets a `loyalty_desc` string
+(what happens to the chosen permanent) that flags the JSON with a `"loyalty"` field so
+`promptPanelHtml` words the prompt without a damage number and never assumes the opponent's face is
+a legal target. Deliberately NOT a new type — `target` already owns board-click selection over an
+arbitrary legal set (the Soulfire precedent above). The **enumerator's** candidate set for these
+three effects stays search-narrow (own permanents, value-filtered) so autonomous play is unchanged,
+but under `HumanPlayActive()` each effect's `CollectActions` gate is loosened to LEGALITY ONLY (a
+human is entitled to a play the AI ranks badly — e.g. Elking your own tapped mana dork on turn 2),
+and at resolution `human_target` (SpellEffects.h) always offers the ability's FULL rules-legal set —
+either side of the board, tapped or not — regardless of which single candidate the plan enumerated.
+This also fixed a routing bug: `CheckLine` used to fold a loyalty ability's target into the `enchant`
+(attach) sub, which speaks Aura vocabulary ("leave it unattached") for a walker that isn't attaching
+anything — loyalty targets are now excluded from that path and asked only via the `loyalty`
+ability-choice sub + this `target` decision. See also `LoyaltyAbilityText`/`LoyaltyActionLabel`
+(SpellEffects.h), the single source of truth for how an ability prints in the dialog, the plan menu
+and the history label — those three used to disagree (Bolas's -2 had no English mapping at all).
 Balan's attach-all, Stoneforge's put, the Equip itself and the Jitte -1/-1 / lifegain modes are
 `main_phase` plan lines (`equip=` / `attachall=` / `sfput=` / `jittemode=` LineSpec verbs) — see
 **Board activations** below for how a human reaches them.

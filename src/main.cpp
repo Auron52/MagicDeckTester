@@ -266,8 +266,14 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             // play_invariants hand check and any human reading the plan list).
             case Action::Kind::GarthActivate:
                 tag = a.card_name + ": conjure " + a.tutor_target; break;
+            // "loyalty#1" is a raw index into cards.json -- meaningless to a player, and identical
+            // in shape for every walker. Print the ability the way the CARD does, and name the
+            // preselected target when the ability has one (the human re-picks it on the board at
+            // resolution, so this is a default, not a commitment).
             case Action::Kind::ActivateLoyalty:
-                tag = a.card_name + " loyalty#" + std::to_string(a.loyalty_ability); break;
+                tag = LoyaltyActionLabel(a.card_name.str(), a.loyalty_ability);
+                if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + EnchantTargetName(s, a.enchant_target); }
+                break;
             case Action::Kind::Equip:
                 tag = "equip " + a.card_name + " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
                 break;
@@ -1491,10 +1497,16 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     const std::vector<TargetOption>& options, int per_target,
                                     int max_targets, int heuristic_default, int decision_index,
                                     const std::string& pump_desc = "", const std::string& remove_desc = "",
-                                    int min_targets = 1, bool random_damage = false)
+                                    int min_targets = 1, bool random_damage = false,
+                                    const std::string& loyalty_desc = "")
 {
     DecisionJson d(os, decision_index);
     d.Type("target").Source(source).Turn(s.turn_number);
+    // A non-empty loyalty_desc (e.g. "turned into a green 3/3 Elk with no abilities") flags this as
+    // a PLANESWALKER LOYALTY ability's target: no damage number, and the legal set is whatever that
+    // ability's printed restriction allows (artifacts and lands included), so the viewer must not
+    // word it as "N damage" or assume the opponent's face is in the set.
+    if (!loyalty_desc.empty()) { d.Str("loyalty", loyalty_desc); }
     // A non-empty pump_desc (e.g. "+4/+4") flags this as an own-creature pump rather than damage, so
     // the viewer shows "gets +4/+4" and highlights your creatures instead of "N damage".
     if (!pump_desc.empty())   { d.Str("pump", pump_desc); }
@@ -1523,7 +1535,10 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                   << "\", \"index\": " << options[oi].targets[ti].index << " }"; }
         os << "] }";
     });
-    if (!pump_desc.empty())
+    if (!loyalty_desc.empty())
+    { d.Note("reply an option index -- the permanent this loyalty ability targets. It is "
+             + loyalty_desc + ". Default = the AI's pick."); }
+    else if (!pump_desc.empty())
     { d.Note("reply an option index. The chosen creature gets " + pump_desc
              + ". Default = the AI's pick (best attacker)."); }
     else if (!remove_desc.empty())
@@ -2182,6 +2197,7 @@ g_play_lightpaws_chooser = nullptr;
 g_play_firebreathe_chooser = nullptr;
 g_play_jitte_chooser = nullptr;
 g_play_attach_host_chooser = nullptr;
+g_play_loyalty_chooser = nullptr;
 g_play_cast_order_chooser = nullptr;
 g_play_attackers_chooser = nullptr;
 g_play_tap_pref_chooser = nullptr;
@@ -2370,6 +2386,7 @@ struct ClaudePlayHarness
     FirebreatheChooser    firebreathe_chooser;
     FirebreatheChooser    jitte_chooser;        // Umezawa's Jitte counter-spend (same shape)
     BounceChooser         attach_host_chooser;  // Skyhunter attach-host (same shape as bounce)
+    LoyaltyTargetChooser  loyalty_chooser;      // planeswalker loyalty-ability target (board click)
     CastOrderChooser      cast_order_chooser;
     AttackersChooser      attackers_chooser;    // --force-attackers (reference replay)
     TapPrefChooser        tap_pref_chooser;     // --tap-pref (reference replay)
@@ -3389,6 +3406,71 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_attach_host_chooser = &attach_host_chooser;
+
+    // PLANESWALKER LOYALTY TARGET (Oko's +1, Bolas's +3 and -2). The engine hands us the ability's
+    // full RULES-legal target set as battlefield indices; we surface it as the ordinary `target`
+    // decision so it is picked by CLICKING THE BOARD -- the play-viewer decision principle, and what
+    // the player asked for ("use targeting on the board if a targeted ability is chosen",
+    // 2026-09-02). Deliberately NOT a new decision type: `target` already owns board-click
+    // selection, and a `loyalty` wording field is all the viewer needs (the Soulfire precedent,
+    // where a full-board target set also reuses `target`). Rides the positional --choices stream.
+    loyalty_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+            const std::string& prompt, const std::vector<int>& legal, int heuristic_pick) -> int
+        {
+            std::vector<ChosenTarget> legal_ct; std::vector<std::string> legal_labels;
+            for (int bi : legal)
+            {
+                if (bi < 0 || bi >= static_cast<int>(s.battlefield.size())) { continue; }
+                const Permanent& p = s.battlefield[bi];
+                legal_ct.push_back({ 1, bi, 0 });
+                // Power/toughness only for creatures -- a land or a Food token has none, and
+                // "Island (0/0)" reads as a bug. "(yours)"/"(opponent)" is the same marker the
+                // damage-target collector uses, so the viewer's label normaliser already knows it.
+                std::string lbl = p.card.m_name.str();
+                if (p.card.IsCreature())
+                { lbl += " (" + std::to_string(p.EffectivePower()) + "/"
+                              + std::to_string(p.EffectiveToughness()) + ")"; }
+                lbl += (p.controller_index == controller ? " (yours)" : " (opponent)");
+                legal_labels.push_back(lbl);
+            }
+            if (legal_ct.empty()) { return heuristic_pick; }
+            // One option per legal target, built directly rather than via EnumerateTargetSets: that
+            // helper walks all 2^n subset masks even when the cap is 1, and this set is every
+            // noncreature PERMANENT for Bolas's +3 (both players' lands) -- 20+ by turn 8, i.e.
+            // a million wasted masks for n singletons. Option k IS legal[k], which is also the
+            // contract the caller's return value relies on.
+            std::vector<TargetOption> opts;
+            opts.reserve(legal_ct.size());
+            for (std::size_t k = 0; k < legal_ct.size(); ++k)
+            { opts.push_back({ { legal_ct[k] }, legal_labels[k] }); }
+            const int def_idx = (heuristic_pick >= 0 && heuristic_pick < static_cast<int>(opts.size()))
+                              ? heuristic_pick : 0;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen >= static_cast<int>(opts.size())) { chosen = def_idx; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteTargetDecisionJson(ss, s, source, legal_ct, legal_labels, opts, 0, 1,
+                                            def_idx, di, "", "", 1, false, prompt);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteTargetDecisionJson(std::cout, s, source, legal_ct, legal_labels, opts, 0, 1,
+                                    def_idx, di, "", "", 1, false, prompt);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_loyalty_chooser = &loyalty_chooser;
 
     // #10 Cast-order: the human-pinned execution order of a committed main plan's non-sacrifice hand
     // casts. Rides a MAIN-PHASE-ORDINAL-keyed side-channel (--cast-order "<ord>:A|B|C;<ord>:X|Y"),

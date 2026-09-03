@@ -32,6 +32,7 @@ thread_local TargetChooser* g_play_target_chooser = nullptr;
 thread_local BounceChooser*  g_play_bounce_chooser = nullptr;
 thread_local BounceChooser*  g_play_sacrifice_chooser = nullptr;
 thread_local BounceChooser*  g_play_attach_host_chooser = nullptr;
+thread_local LoyaltyTargetChooser* g_play_loyalty_chooser = nullptr;
 thread_local DigChooser*     g_play_dig_chooser    = nullptr;
 thread_local DiscardChooser* g_play_discard_chooser = nullptr;
 thread_local EIChooser*      g_play_ei_chooser      = nullptr;

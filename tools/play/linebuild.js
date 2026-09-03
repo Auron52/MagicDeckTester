@@ -189,9 +189,16 @@
   // per-spell dimensions for the same reason `free` is asked first: it is the one that consumes
   // whatever mana the rest of the line left, so every earlier pick reads in a fixed context and the
   // count is chosen against what is actually spare.
-  const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, bestow: 1.4,
-                        enchant: 1.5, equip: 1.5, jitte: 1.6, x: 2, activations: 2, modal: 2.5,
-                        soulfire: 3, crackle: 4, splice: 5, replicate: 6 };
+  // `loyalty` (WHICH loyalty ability of a planeswalker) sits just ahead of the attachment picks for
+  // the same gating reason `bestow` does: it decides what the rest of the line even means, and its
+  // TARGET is not asked here at all (a loyalty ability that targets is board-clicked at resolution).
+  // It used to be unlisted, i.e. priority 9 -- behind `enchant` at 1.5 -- and Oko's +1 target rode
+  // the `enchant` key, so the dialog asked "Oko, Thief of Crowns ->? / leave it unattached /
+  // Faeburrow Elder / Deathrite Shaman": an attach question standing in for the ability choice
+  // (2026-09-02 item 2). The engine no longer emits that sub, and the ability is asked first.
+  const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, loyalty: 1.3,
+                        bestow: 1.4, enchant: 1.5, equip: 1.5, jitte: 1.6, x: 2, activations: 2,
+                        modal: 2.5, soulfire: 3, crackle: 4, splice: 5, replicate: 6 };
   function subKindPri(k) { return SUBKIND_PRI[k] === undefined ? 9 : SUBKIND_PRI[k]; }
   function subOf(v, key) { return (v.subs || []).filter(s => s.key === key)[0]; }
   function choiceOf(v, key) { const s = subOf(v, key); return s ? s.choice : '—'; }
