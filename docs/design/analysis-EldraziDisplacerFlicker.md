@@ -1411,3 +1411,34 @@ _none_ -- every blocking gate is green or already signed off.
 - claude_sweep recorded at commit f5f664bf (HEAD d2d70091d516); re-run if play changed since (play_invariants + smoke digests track play live).
 
 <!-- verify_deck:end -->
+
+### Independent A/B confirmation of the 2026-09-03 batch (coordinator, held-out seeds)
+
+The deck is **not in `test/regression_cases.sh`**, so the regression suite cannot see it and "80/80
+green" is not evidence about EDF. (Adding it is wanted, but deliberately deferred — the user's
+reason: the deck was so far from working that a baseline would have frozen a broken deck into GT.
+Revisit once these fixes settle.) The honest instrument is therefore an A/B, run on seeds chosen
+independently of the implementing agent's:
+
+| seed | before | after | delta |
+|---|---|---|---|
+| 5101 | 6.7500 | 6.5900 | −0.1600 |
+| 5201 | 6.8900 | 6.5700 | −0.3200 |
+| 5301 | 6.7600 | 6.5500 | −0.2100 |
+| 5401 | 6.6900 | 6.5400 | −0.1500 |
+| **all** | **6.7725** | **6.5625** | **−0.2100**  (n=400, se=0.0238, t=−8.83) |
+
+Arms differ ONLY in the binary (before = `e093d3e4`, after = the integrated tree); one pooled batch
+per arm, deck profile attached, 4 seeds x 100 games. All four seeds move the same direction and the
+effect is ~21x the ~0.01 noise floor. The implementing agent measured −0.2025 (t≈−9.85) on its own
+seeds, so this is two independent measurements agreeing.
+
+**What is NOT in that number.** Only Task A (the ETB-untap credit reaching a later cast in the same
+plan) can move batch play. The Displacer-activation fix is in `WriteDecisionJson` and the
+aura-on-a-land fix is in `CheckLine` — both human-play-only paths, so they are inert here by
+construction, not by luck.
+
+**Regression on the integrated tree: 80/80, `configs changed: 0`, `play-changed=0`.** The Task A fix
+touches `SubsetPayableSequential` / `ManaPruneBound`, which `EnumeratePlans` uses for EVERY deck, so
+this was a real check rather than a formality — no suite deck casts an ETB-untap permanent ahead of
+another cast in the same plan, so none of them can reach the changed branch.
