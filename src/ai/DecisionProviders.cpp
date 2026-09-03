@@ -13140,6 +13140,10 @@ struct FlickerLoop
     int  drain_cost_mv = 0;   // mana per drain activation (0 = no drain sink on board)
     int  drain_amount  = 0;   // life the opponent loses per drain activation
     int  exile_cost_mv = 0;   // mana per library-exile activation (0 = no exile sink on board)
+    // Set when the loop is not running yet but is ASSEMBLED BY THE PLAN UNDER EVALUATION (a piece
+    // cast from hand this turn). Consumers that require a live loop -- the activation-count hooks,
+    // which can only fire an ability that is already on the battlefield -- must ignore these.
+    bool prospective   = false;
 };
 
 // Sum of the controller's TOP-N land yields -- the same order EtbUntapLands untaps in and the same
@@ -13175,6 +13179,48 @@ int FlickerTopLandYields(const GameState& s, int controller, int n)
 // it reads only what is already in play (never a card in hand), prices the activation through the
 // same EffectiveActivationCost the payer uses, and takes the refund as the top-N land yields --
 // which is what EtbUntapLands untaps. Returns ok=false unless net > 0.
+// The three sinks that live on the BATTLEFIELD, priced through EffectiveActivationCost so the
+// recognizer and the payer can never disagree about what an activation costs. Factored out (2026-
+// 09-03) so the board and prospective recognizers share ONE definition of "what can cash the mana"
+// -- two copies would drift, and a sink the projection believes in but the payer will not fire is
+// exactly the shape of an over-claim.
+//
+//   * a Shivan-Gorge-style tap sink -- needs a fresh untap per activation, so it rides the loop's
+//     iteration count. NOTE ON COLOUR: its cost is {2}{R} and this deck's only red is Aether Hub
+//     via energy, so the Gorge route is real only when red is actually producible. That is checked
+//     where it matters -- the payer refuses an unpayable activation -- rather than duplicated here.
+//   * the two {T}-less repeatable sinks (drain, library-exile). A tapped or summoning-sick body is
+//     fine for these, which is exactly what makes them the deck's real kills.
+static void ScanBoardSinks(const GameState& s, int controller, FlickerLoop* best)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.tap_damage_cost.has_value() && d->params.tap_damage_each_opponent > 0)
+        {
+            const int mv = EffectiveActivationCost(s, controller, p.card,
+                                                   d->params.tap_damage_cost.value()).ManaValue();
+            if (best->gorge_dmg == 0 || mv < best->gorge_cost_mv)
+            { best->gorge_cost_mv = mv; best->gorge_dmg = d->params.tap_damage_each_opponent; }
+        }
+        if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
+        {
+            const int mv = EffectiveActivationCost(s, controller, p.card,
+                                                   d->params.drain_cost.value()).ManaValue();
+            if (best->drain_amount == 0 || mv < best->drain_cost_mv)
+            { best->drain_cost_mv = mv; best->drain_amount = d->params.drain_amount; }
+        }
+        if (d->params.exile_opponent_top_cost.has_value())
+        {
+            const int mv = EffectiveActivationCost(s, controller, p.card,
+                                                   d->params.exile_opponent_top_cost.value()).ManaValue();
+            if (best->exile_cost_mv == 0 || mv < best->exile_cost_mv) { best->exile_cost_mv = mv; }
+        }
+    }
+}
+
 FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
 {
     FlickerLoop best;
@@ -13190,42 +13236,7 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
     }
     if (!any_outlet) { return best; }
 
-    // The cheapest live Shivan-Gorge-style sink, if any (priced through EffectiveActivationCost so
-    // the recognizer and the payer can never disagree about what an activation costs).
-    for (const Permanent& p : s.battlefield)
-    {
-        if (p.controller_index != controller) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || !d->params.tap_damage_cost.has_value()
-            || d->params.tap_damage_each_opponent <= 0) { continue; }
-        const int mv = EffectiveActivationCost(s, controller, p.card,
-                                               d->params.tap_damage_cost.value()).ManaValue();
-        if (best.gorge_dmg == 0 || mv < best.gorge_cost_mv)
-        { best.gorge_cost_mv = mv; best.gorge_dmg = d->params.tap_damage_each_opponent; }
-    }
-
-    // The cheapest live REPEATABLE sinks, priced the same way. A tapped or summoning-sick body is
-    // fine here -- unlike the Gorge these have no {T} in the cost (PermAbilityTaps), which is
-    // exactly what makes them the deck's real kills.
-    for (const Permanent& p : s.battlefield)
-    {
-        if (p.controller_index != controller) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d) { continue; }
-        if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
-        {
-            const int mv = EffectiveActivationCost(s, controller, p.card,
-                                                   d->params.drain_cost.value()).ManaValue();
-            if (best.drain_amount == 0 || mv < best.drain_cost_mv)
-            { best.drain_cost_mv = mv; best.drain_amount = d->params.drain_amount; }
-        }
-        if (d->params.exile_opponent_top_cost.has_value())
-        {
-            const int mv = EffectiveActivationCost(s, controller, p.card,
-                                                   d->params.exile_opponent_top_cost.value()).ManaValue();
-            if (best.exile_cost_mv == 0 || mv < best.exile_cost_mv) { best.exile_cost_mv = mv; }
-        }
-    }
+    ScanBoardSinks(s, controller, &best);
 
     for (const Permanent& src : s.battlefield)
     {
@@ -13248,6 +13259,129 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
             if (best.ok && net <= best.net) { continue; }
             best.ok = true; best.outlet_id = src.card.m_number; best.payload_id = tgt.card.m_number;
             best.untaps = n; best.cost_mv = cost_mv; best.refund = refund; best.net = net;
+        }
+    }
+    return best;
+}
+
+// PROSPECTIVE recognition: the loop ASSEMBLED THIS TURN, not just one already on the board.
+//
+// The board-only recognizer above answers "is the engine running?". This one answers the question
+// the user actually posed after hand-playing two games the engine won two turns late: "can I START
+// it this turn?". Both of their lines assemble the loop from hand -- seed 1 casts the payload and
+// wins T3 where the engine took T5; seed 2 casts payload + outlet and wins T4 where it took T6.
+//
+// It is deliberately NOT a search. The user's words: "It's fine if we use a heuristic approach once
+// it has been determined that we can go off." So this is a RECOGNISER over a plan the enumerator
+// already produced, and its whole job is to let the win projection see that this plan is lethal.
+// The plan's own payment machinery has already proved the casts are affordable; what is left to
+// check is that something is left over to turn the crank once (the user's point 3).
+//
+// The pieces may come from either zone, per the user's predicate:
+//   1. a payload  -- an ETB-untap creature (Peregrine Drake, Cloud of Faeries)   board OR cast
+//   2. an outlet  -- a blink ability      (Eldrazi Displacer, Emiel the Blessed) board OR cast
+//   4. net > 0    -- the untap must refund MORE than the activation costs, which is what makes the
+//                    mana unbounded. Displacer's {2}{C} needs a colourless in there; that is the
+//                    payment layer's business, not this arithmetic's.
+//   6. a sink     -- something to spend unbounded mana ON, or the loop wins nothing.
+//
+// Colour (their points 5 and 6) is left to the payer on purpose: EffectiveActivationCost prices the
+// activation and the executor pays it, so duplicating a colour model here could only disagree with
+// the thing that actually pays. The one place colour IS load-bearing is called out at the Gorge.
+// Does this def blink / untap-lands / act as a sink? Small predicates so the two recognizers can
+// never drift apart about what a "piece" is.
+static bool DefIsBlinkOutlet(const CardDefinition* d)
+{ return d && d->params.blink_cost.has_value(); }
+static bool DefIsUntapPayload(const CardDefinition* d)
+{ return d && d->params.etb_untap_lands > 0; }
+
+// The loop's economics for a (outlet, payload) pair whose pieces may not be on the battlefield yet.
+// `s` still supplies the LANDS -- they are in play by definition, which is why the refund term can
+// be read straight off the board even for a prospective loop.
+static void FlickerEconomics(const GameState& s, int controller,
+                             const CardDefinition* od, const CardDefinition* pd,
+                             FlickerLoop* out)
+{
+    const int n      = pd->params.etb_untap_lands;
+    const int cost   = EffectiveActivationCost(s, controller, od->card,
+                                               od->params.blink_cost.value()).ManaValue();
+    const int refund = FlickerTopLandYields(s, controller, n);
+    out->untaps = n; out->cost_mv = cost; out->refund = refund; out->net = refund - cost;
+}
+
+FlickerLoop RecogniseFlickerLoopProspective(const GameState& s, int controller,
+                                            const std::vector<const CardDefinition*>& casting)
+{
+    // Start from the board-only answer. If the engine is ALREADY looping, that is the stronger
+    // recognition and nothing here should weaken it.
+    FlickerLoop best = RecogniseFlickerLoop(s, controller);
+    if (best.ok) { return best; }
+    if (casting.empty()) { return best; }
+
+    // Gather candidate pieces from BOTH zones. A piece already in play is free; one being cast has
+    // already been paid for by the plan under evaluation.
+    std::vector<const CardDefinition*> outlets, payloads;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (DefIsBlinkOutlet(d))   { outlets.push_back(d); }
+        if (DefIsUntapPayload(d))  { payloads.push_back(d); }
+    }
+    for (const CardDefinition* d : casting)
+    {
+        if (DefIsBlinkOutlet(d))  { outlets.push_back(d); }
+        if (DefIsUntapPayload(d)) { payloads.push_back(d); }
+    }
+    // MTG_EDF_PROSPECTIVE_DEBUG: why a candidate plan did or did not read as a go-off. Bounded
+    // output -- this is called on every scored plan.
+    static const bool s_dbg = EnvOn("MTG_EDF_PROSPECTIVE_DEBUG");
+    static std::atomic<int> s_dbg_n{0};
+    if (s_dbg && s_dbg_n.fetch_add(1, std::memory_order_relaxed) < 40)
+    {
+        std::string cs;
+        for (const CardDefinition* d : casting) { cs += d->card.m_name.str() + ","; }
+        std::fprintf(stderr, "[edf-prosp] t%d outlets=%zu payloads=%zu casting=[%s]\n",
+                     s.turn_number, outlets.size(), payloads.size(), cs.c_str());
+    }
+    if (outlets.empty() || payloads.empty()) { return best; }
+
+    // Best net over the pairs. "another target creature" is satisfied because an outlet and a
+    // payload are distinct cards here; a card that is somehow both would still pair with a second
+    // copy, and if it cannot, the net test below rejects it anyway.
+    for (const CardDefinition* od : outlets)
+    {
+        for (const CardDefinition* pd : payloads)
+        {
+            if (od == pd) { continue; }
+            FlickerLoop cand;
+            FlickerEconomics(s, controller, od, pd, &cand);
+            if (cand.net <= 0) { continue; }                       // point 4: unbounded or nothing
+            if (best.ok && cand.net <= best.net) { continue; }
+            cand.ok = true; cand.prospective = true;
+            best = cand;
+        }
+    }
+    if (!best.ok) { return best; }
+
+    // The SINKS. Board first (a sink already down is seed 1's shape: Living Wish fetched Essence
+    // Depleter on an earlier turn), then anything the plan casts this turn -- which is the case
+    // that could not be seen before, and is the whole point of the user's point 6.
+    ScanBoardSinks(s, controller, &best);
+    for (const CardDefinition* d : casting)
+    {
+        if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
+        {
+            const int mv = EffectiveActivationCost(s, controller, d->card,
+                                                   d->params.drain_cost.value()).ManaValue();
+            if (best.drain_amount == 0 || mv < best.drain_cost_mv)
+            { best.drain_cost_mv = mv; best.drain_amount = d->params.drain_amount; }
+        }
+        if (d->params.exile_opponent_top_cost.has_value())
+        {
+            const int mv = EffectiveActivationCost(s, controller, d->card,
+                                                   d->params.exile_opponent_top_cost.value()).ManaValue();
+            if (best.exile_cost_mv == 0 || mv < best.exile_cost_mv) { best.exile_cost_mv = mv; }
         }
     }
     return best;
@@ -13350,6 +13484,12 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
 }
 
 const bool s_edf_goff = !EnvOn("MTG_NO_ELDRAZI_GOFF");
+
+// PROSPECTIVE go-off recognition (2026-09-03). Default ON so it is live in the shipped
+// configuration -- a lever behind a default-off gate is dead code, and this repo has shipped that
+// mistake twice. MTG_EDF_PROSPECTIVE=0 restores the board-only recognizer, which is what the A/B
+// arm uses.
+const bool s_edf_prospective = EnvOn("MTG_EDF_PROSPECTIVE", true);
 
 }  // namespace
 
@@ -13529,14 +13669,52 @@ bool EldraziFlickerProvider::HasExtraLethalModel() const { return s_edf_goff; }
 int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
                                               const std::vector<const CardDefinition*>& casting) const
 {
-    (void)casting;   // the loop is a BOARD state; nothing cast this turn changes the arithmetic
     if (!s_edf_goff) { return 0; }
     const int me = s.active_player_index;
-    const FlickerLoop loop = RecogniseFlickerLoop(s, me);
+    // The loop no longer has to be a BOARD state. It may be ASSEMBLED by the very plan being
+    // scored, which is what both of the user's hand-played lines do (seed 1 casts the payload and
+    // wins T3; seed 2 casts payload + outlet and wins T4). Reading `casting` is the whole change:
+    // the projection can now see a plan that turns the combo on.
+    const FlickerLoop loop = s_edf_prospective ? RecogniseFlickerLoopProspective(s, me, casting)
+                                               : RecogniseFlickerLoop(s, me);
     if (!loop.ok) { return 0; }
 
     ManaPool have = AvailableManaPool(s);
     have.AddPool(s.floating_mana);
+    // MANA LEFT AFTER ASSEMBLY (the user's point 3: "enough mana to play them and flicker when
+    // counting any benefit from playing 1"). The casts are already known payable -- the plan
+    // enumerator proved that -- but paying for them consumes the pool the first activation needs.
+    // The payload's ETB untap hands mana BACK as it enters, which is the "benefit from playing 1",
+    // so a loop assembled this turn can be startable even when the raw pool looks short.
+    long long avail = static_cast<long long>(have.Total());
+    if (loop.prospective)
+    {
+        for (const CardDefinition* d : casting) { avail -= d->card.m_mana_cost.ManaValue(); }
+        bool payload_cast = false;
+        for (const CardDefinition* d : casting)
+        { if (DefIsUntapPayload(d)) { payload_cast = true; break; } }
+        if (payload_cast) { avail += loop.refund; }
+        if (avail < 0) { return 0; }
+    }
+    const auto startable = [&](int need) {
+        return loop.prospective ? (avail >= need)
+                                : (have.Total() >= static_cast<unsigned>(need));
+    };
+    {
+        static const bool s_dbg2 = EnvOn("MTG_EDF_PROSPECTIVE_DEBUG");
+        static std::atomic<int> s_n2{0};
+        if (s_dbg2 && loop.prospective && s_n2.fetch_add(1, std::memory_order_relaxed) < 30)
+        {
+            std::string cs;
+            for (const CardDefinition* d : casting) { cs += d->card.m_name.str() + ","; }
+            std::fprintf(stderr,
+                         "[edf-loop] t%d net=%d cost=%d refund=%d pool=%u avail=%lld "
+                         "gorge=%d/%d drain=%d/%d exile=%d casting=[%s]\n",
+                         s.turn_number, loop.net, loop.cost_mv, loop.refund, have.Total(),
+                         avail, loop.gorge_dmg, loop.gorge_cost_mv, loop.drain_amount,
+                         loop.drain_cost_mv, loop.exile_cost_mv, cs.c_str());
+        }
+    }
 
     if (loop.gorge_dmg > 0)
     {
@@ -13544,7 +13722,7 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
         // the mana grows but the damage never fires, and claiming lethal off it would be fiction.
         // It must also be STARTABLE from the board right now -- one full iteration's worth.
         if (loop.refund > loop.cost_mv + loop.gorge_cost_mv
-            && have.Total() >= static_cast<unsigned>(loop.cost_mv + loop.gorge_cost_mv))
+            && startable(loop.cost_mv + loop.gorge_cost_mv))
         {
             const long long dmg = static_cast<long long>(kFlickerMaxIterations) * loop.gorge_dmg;
             return dmg > 1000000 ? 1000000 : static_cast<int>(dmg);
@@ -13559,7 +13737,7 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
     if (loop.drain_amount > 0)
     {
         const int per = std::max(1, loop.drain_cost_mv);
-        if (loop.net > 0 && have.Total() >= static_cast<unsigned>(loop.cost_mv + per))
+        if (loop.net > 0 && startable(loop.cost_mv + per))
         {
             const long long acts = (static_cast<long long>(kFlickerMaxIterations) * loop.net) / per;
             const long long dmg  = acts * loop.drain_amount;
@@ -13585,15 +13763,29 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
 bool EldraziFlickerProvider::ProjectsAlternateWin(
     const GameState& s, const std::vector<const CardDefinition*>& casting) const
 {
-    (void)casting;
     if (!s_edf_goff || !s.opponent_library_dealt || s.opponent_decked) { return false; }
-    const FlickerLoop loop = RecogniseFlickerLoop(s, s.active_player_index);
+    const int me = s.active_player_index;
+    const FlickerLoop loop = s_edf_prospective ? RecogniseFlickerLoopProspective(s, me, casting)
+                                               : RecogniseFlickerLoop(s, me);
     if (!loop.ok || loop.exile_cost_mv <= 0 || loop.net <= 0) { return false; }
 
-    // Startable from the board right now: one iteration plus one exile.
+    // Startable: one iteration plus one exile. For a loop ASSEMBLED this turn that is measured
+    // after paying for the assembly and crediting the payload's ETB untap, exactly as the damage
+    // projection does -- the two must agree or one route would claim a kill the other refuses.
     ManaPool have = AvailableManaPool(s);
     have.AddPool(s.floating_mana);
-    if (have.Total() < static_cast<unsigned>(loop.cost_mv + loop.exile_cost_mv)) { return false; }
+    long long avail = static_cast<long long>(have.Total());
+    if (loop.prospective)
+    {
+        bool payload_cast = false;
+        for (const CardDefinition* d : casting)
+        {
+            avail -= d->card.m_mana_cost.ManaValue();
+            if (DefIsUntapPayload(d)) { payload_cast = true; }
+        }
+        if (payload_cast) { avail += loop.refund; }
+    }
+    if (avail < static_cast<long long>(loop.cost_mv + loop.exile_cost_mv)) { return false; }
 
     // And the loop must actually be able to bank enough mana within the iteration ceiling to empty
     // the zone. Below that it is a clock, not a kill, and the ordinary search can price it.
