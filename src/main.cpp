@@ -971,6 +971,21 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // opponent loses 2 life" is enumerated on every fueled FiveColour turn and `is_activation`
             // above already excludes it from `casts` -- but with no flag here the viewer had no board
             // thumb for it, so the one ability that turns a graveyard into a clock was unusable by hand.
+            // ActivateBlink and ActivatePermAbility were the FOURTEENTH and FIFTEENTH misses
+            // (2026-09-03, EldraziDisplacerFlicker user report #5, "can't activate Eldrazi Displacer
+            // in the viewer"): both are repeatable, {T}-less battlefield activations enumerated every
+            // turn (Eldrazi Displacer / Emiel the Blessed's blink outlets; Shivan Gorge's damage tap,
+            // Conservatory's Investigate, and -- once fetched -- this deck's own win conditions,
+            // Essence Depleter's drain and Dimensional Infiltrator's exile), and unlike the two kinds
+            // above they were not merely missing the flag but were NEVER in this list at all, so a
+            // human could not click the source to go off even though EnumeratePlans already priced
+            // and offered the activation (confirmed directly: --claude-play's plan list already
+            // carries `blink_target`/`blink_count` / `PermAbilityLabel`-tagged summaries for these --
+            // the search and the claude-play index-based protocol were never blocked, only the
+            // browser viewer's board click was). Neither needs its own LineSpec verb: both already
+            // fall into the ordinary `cast=<name>` bucket in `TurnSolver::CheckLine` (the same
+            // fallback ActivatePump and the sac kinds use), so -- like those two -- they stay OUT of
+            // `is_activation()` above (so they remain in `casts`) and need only this flag.
             if (ac.kind == Action::Kind::TapForTokens
              || ac.kind == Action::Kind::SacForMana
              || ac.kind == Action::Kind::ActivatePump
@@ -986,7 +1001,9 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
              || ac.kind == Action::Kind::GraveyardReturnAbility
              || ac.kind == Action::Kind::AnimateLand
              || ac.kind == Action::Kind::TapForTokenPay
-             || ac.kind == Action::Kind::JitteModeAbility)
+             || ac.kind == Action::Kind::JitteModeAbility
+             || ac.kind == Action::Kind::ActivateBlink
+             || ac.kind == Action::Kind::ActivatePermAbility)
             {
                 os << ", \"activate\": true";
                 // `sacout` tells the GUI to encode this as the sacout= line verb rather than cast=,
