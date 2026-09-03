@@ -1,1 +1,11 @@
-{"value_play":{"enabled":false,"mull_gen_depth":3,"mull_gen_budget_ms":3,"note":"GEN-ONLY sidecar: no eval_model (play hybrid stays unarmed); mull_gen_* route --gen-mulligan rollouts to d3/b3 (d3 user-directed 2026-08-06, search saturates at H3 for this deck; budget 10->3 user-directed 2026-08-15 -- note the gen budget also feeds equivalence DISCOVERY, so buckets can move). The trained value model lives in Creature Giving.value.DISABLED.json (play A/B rejected).","target_depth":0,"budget_ms":0}}
+{
+ "value_play": {
+  "enabled": false,
+  "mull_gen_depth": 1,
+  "mull_gen_budget_ms": 3,
+  "note": "GEN-ONLY sidecar: no eval_model (play hybrid stays unarmed); mull_gen_* route --gen-mulligan rollouts to d1/b3 (d1/b3 PICKED by the 2026-09-03 valueleaf phase F, rho 0.9946 vs play, 0.15x play cost -- supersedes the d3 user-directed 2026-08-06; budget 10->3 user-directed 2026-08-15 -- note the gen budget also feeds equivalence DISCOVERY, so buckets can move). expected_buckets=20 recorded by the same run. The trained value model lives in Creature Giving.value.DISABLED.json (play A/B rejected 2026-08-06 and RE-CONFIRMED 2026-09-03 on a freshly regenerated model: staged +0.01175, t=+6.56, 0/8 seeds better, 0.58x search cost; trust UNSET -- see logs/vlq_creature_giving/driver.log).",
+  "target_depth": 0,
+  "budget_ms": 0,
+  "expected_buckets": 20
+ }
+}
