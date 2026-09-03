@@ -81,6 +81,20 @@ d0 cast ranker picked it over Sol Ring (which the same float could equally have 
 lever exposes a cast-rank ordering question (rock-vs-cantrip with float up), it does not
 misplay mana. Fixing that ordering is HINATA_MANA_FLOAT_RANK-adjacent work, out of scope here.
 
+**Mechanism corrected (2026-09-03, dug on the current tree):** it is NOT a cast-rank/ordering
+question after all. The game is hinata_overnight_d0_s10010 gi1225 (seed 11235): T2 = Reflecting
+Pool + Cascade Bluffs, hand holds Sol Ring, and the d0 greedy casts Preordain+Preordain, banking
+Sol Ring to T3. The staged user-reviewed order (`MTG_HINATA_ORDER_FULL=1`, rocks at 4 before the
+cantrips at 10-11) reproduces the IDENTICAL game — because rank only orders a chosen cast set,
+and the defect is the d0 plan-SET selection: the greedy evaluator scores {cantrip, cantrip}
+above {cantrip, rock} at equal spend, i.e. it does not price a free rock's future mana. Search
+prices it fine — the same seed wins T6 at both d3/b10 and d5/b20 — so the cost is confined to
+the d0 bookkeeping tier and hinata's shipped searched play is unaffected. A fix would be a
+lever in the shared d0 plan scoring (credit a net-positive rock's ramp against a same-spend
+extra cantrip), a full-suite measurement since every deck's d0 shares that evaluator; parked
+here deliberately — the d0 tier is the lighter bar and the churn risk outweighs two
+bookkeeping games. Re-derive from this note, not from the rank tables above.
+
 ## Measurement-apparatus lesson (cost ~90 min of ghost-hunting)
 
 Deriving a new battery manifest by copying a prior battery's jobs copied a STALE
