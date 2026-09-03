@@ -400,9 +400,10 @@ inline bool BpTraceEnabled()
 }
 
 // MTG_VIAL_AXIS -- the Aether Vial upkeep charge is decided IN-SEARCH, as a real plan axis
-// (TurnSolver::Plan::vial_charge_choice). DEFAULT ON; `=0` is the exact legacy hatch (the
-// out-of-band probe in AIEngine::DecideVialCharge, MTG_SEARCHED_VIAL, decides it as before).
-// Adopted 2026-08-18, user-directed: "the option to search needs to remain for all of the decks
+// (TurnSolver::Plan::vial_charge_choice). DEFAULT OFF since 3efbe969 (2026-08-30): the shipped
+// decider is the hand-aware root heuristic; the fan measured a standing net loss (-108 turns /
+// 34,325 suite games), so `=1` OPTS IN (and is further gated by MTG_VIAL_AXIS_NARROW).
+// Originally adopted default-ON 2026-08-18, user-directed: "the option to search needs to remain for all of the decks
 // ... even though we won't be taking it in most cases, maybe ever. There are cases where we might
 // want to take it, though. If it is really not obvious what decision to make."
 //

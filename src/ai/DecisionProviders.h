@@ -118,9 +118,9 @@ bool DecisionUnpruned(UnprunedGate g);
 // DecisionUnpruned). See docs/design/learned-d0-policy.md.
 bool UseLearnedEval();
 
-// A/B gate for the learned leaf VALUE model (MTG_VALUE_MODEL). Default OFF: even when a deck ships a
-// value sidecar, the search's horizon rollout is replaced by the learned estimate only when this is
-// set, so existing ground truth stays byte-identical until deliberately enabled. Reads env once.
+// Gate for the learned leaf VALUE model (MTG_VALUE_MODEL). ADOPTED default-ON 2026-07-11
+// (06e6ebe7): when a deck ships a value sidecar the learned estimate replaces the horizon rollout
+// unless MTG_VALUE_MODEL=0. See UseValueModel() in the .cpp for the adoption record. Reads env once.
 bool UseValueModel();
 
 // Gate probe: run a deck once with the probe ON, then read QueriedGatesMask() to learn which gates

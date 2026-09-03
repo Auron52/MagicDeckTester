@@ -760,7 +760,8 @@ MAINPHASE_PARAMS = {
 # Known unwired decision gaps, DEFERRED with the user's sign-off (disclosed in Stage 6a).
 DEFERRED_PARAMS = {
     "cascade_max_mv":       "cascade SEARCH target -- heuristic-picked (DECISIONS.md known gap)",
-    "untap_x_mana_sources": "Reality Spasm untap mode -- needs an engine-model change (phase-2 gap)",
+    "untap_x_mana_sources": "Reality Spasm untap mode -- engine model shipped default-ON (4f449fbd, "
+                            "MTG_SPASM_UNTAP_LITERAL); the viewer CHOICE wiring is what remains deferred",
     # Dragonstorm: pump + ping are real player choices but currently search-resolved. User (2026-07-19)
     # signed off on deferring the WIRING to the planned viewer options-menu toggle system ("every choice
     # toggleable... can be done in the future"), with these defaults:

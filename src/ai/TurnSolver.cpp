@@ -5831,7 +5831,8 @@ static std::size_t EtbDigAxisWidth()
 // plain cantrip is one of the five breakpoint sites, so the keep-vs-shuffle choice changes which card
 // arrives and therefore what the breakpoint re-solve can cast this turn. Each variant carries a
 // nested re-solve rather than one cheap rollout -- the cost shape that lost the budget race for the
-// cantrip-first class (+113% interior nodes for +2% rollout calls). DEFAULT OFF pending measurement.
+// cantrip-first class (+113% interior nodes for +2% rollout calls). ADOPTED default-ON 2026-08-02
+// (712342ee: -0.8467, 7/7 seeds, and faster); =0 disables.
 //
 // `partial` mode fans out only when the heuristic's call is CLOSE -- the looked-at set is mixed
 // (at least one card the provider wants and at least one it does not). A set that is all-wanted or
@@ -12934,10 +12935,10 @@ struct ManaGateIndex
 // Rite-of-Flame graveyard escalation: k copies cast this turn float +0,+1,...,+k-1 extra as each
 // prior copy hits the graveyard. Mirrors the triangular term consider()/eval_and_push() credit.
 
-// MTG_SEL_MANA_GATE=1 opts IN to the selection-exact gate. DEFAULT OFF -> every deck falls back to
-// the legacy whole-list ManaPruneBound scalar and is byte-identical.
+// MTG_SEL_MANA_GATE -- selection-exact gate. (HISTORY: the next paragraph describes the original
+// default-OFF era; the flag is DEFAULT ON since 2026-07-30 -- see the note above the initializer.)
 //
-// It is default-off because it is NOT byte-identical, and the reason is worth recording: the legacy
+// It was default-off at first because it was NOT byte-identical, and the reason is worth recording: the legacy
 // bound credits `Sum over ALL candidates of ritual_float` but NOT the Rite-of-Flame graveyard
 // escalation (Tri()), while consider()/eval_and_push() DO credit it. On a hand where the whole-list
 // slack is smaller than that triangular term -- e.g. four Rite of Flame, all selected, Tri(4) = +6 --
