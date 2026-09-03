@@ -32349,11 +32349,22 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                            a.card_name.str(), "bestow");
                 }
             }
-            // Aura enchant TARGET: which creature this Aura attaches to. Emit a sub per legal target so the
-            // viewer surfaces a "choose creature" art-grid (mirrors tutor_target) instead of silently taking
-            // the heuristic's first-enumerated pick -- the human IS the decision-maker here. Resolve the
-            // stable m_number to the creature's name for the grid art; the target is one of the player's
-            // creatures on the battlefield (LegalEnchantTargets), so this always resolves.
+            // Aura enchant TARGET: which permanent this Aura attaches to. Emit a sub per legal target so
+            // the viewer surfaces a "choose target" art-grid (mirrors tutor_target) instead of silently
+            // taking the heuristic's first-enumerated pick -- the human IS the decision-maker here.
+            // Resolve the stable m_number to the host's name for the grid art; the target is one of the
+            // player's legal hosts on the battlefield (LegalEnchantTargets), so this always resolves.
+            //
+            // The lookup used to require IsCreature(), which is wrong for an "Enchant land" aura (Wild
+            // Growth / Fertile Ground / Overgrowth / Trace of Abundance -- 16 of this deck's 60 cards):
+            // a land host ALREADY IN PLAY silently fell through with no sub at all, rendering as "leave
+            // unattached" (a state that cannot occur for an Aura, CR 303.4). Worse, an empty sub is also
+            // what CheckLine's dedup signature is built from, so two land hosts BOTH already in play
+            // produced an IDENTICAL empty signature and their variants COLLAPSED -- the human was never
+            // asked which land the aura enchants, and no viewer-side fix can recover a collapsed variant.
+            // A land played THIS turn was unaffected only because the hand-fallback below already found
+            // it. See tools/play/DECISIONS.md's "STILL OPEN (engine, not the viewer)" note.
+            //
             // A PLANESWALKER LOYALTY target also rides `enchant_target` (Oko's +1 elk target,
             // Bolas's -2 steal victim), but it is NOT an attachment and must not be asked as one:
             // routing it here produced the literal dialog the player reported -- "Oko, Thief of
@@ -32364,12 +32375,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             // at RESOLUTION instead, as a board click over the full rules-legal set -- with no sub
             // here the per-target variants share a signature and collapse to one representative per
             // ability, which is exactly the Zada solo-target-trick shape above.
+            //
+            // BOTH conditions are load-bearing and they were fixed independently (2026-09-03): widen
+            // the HOST to any permanent, and keep loyalty OUT of this path entirely.
             if (a.enchant_target > 0 && !is_trick && a.kind != Action::Kind::ActivateLoyalty)
             {
                 std::string etn, art;
                 for (const Permanent& perm : state.battlefield)
-                    if (perm.controller_index == state.active_player_index && perm.card.IsCreature()
-                        && perm.card.m_number == a.enchant_target)
+                    if (perm.card.m_number == a.enchant_target)
                     { art = perm.card.m_name.str(); break; }
                 // Two same-named hosts need distinct CHOICE strings or the dedup drops one of them --
                 // the equipment defect, which an Aura on a board of two Kor Duelists has verbatim.
