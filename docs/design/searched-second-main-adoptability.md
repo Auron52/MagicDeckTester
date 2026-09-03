@@ -1,5 +1,9 @@
 # Searched second main (`MTG_SEARCH_SECOND_MAIN`) — why it is not adoptable yet
 
+**Status (updated 2026-09-03):** the budget sweep landed (written up later in this file), and
+adoption went PER-DECK — `MTG_5C_SSM` (2026-08-21), then KittyEquipment and Anti-Lifegain — while
+the global lever stays OFF. The "not adoptable yet" framing is about the *global* flip only.
+
 **Status:** root-caused, one fix attempted and REFUTED, budget sweep in flight.
 **Goal (USER, 2026-08-16):** move the searched second main and searched breakpoint
 logic toward adoptability.

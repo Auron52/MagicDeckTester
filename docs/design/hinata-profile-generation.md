@@ -1,5 +1,9 @@
 # Hinata exhaustive mulligan profile — secondary-machine generation recipe
 
+**Status (updated 2026-09-03): SUPERSEDED** — the run happened and the R=22 profile was adopted
+2026-07-25 (22947513); artifacts at `decks/Hinata2/`. The "Open TODO before handoff" list is
+closed. Kept as the historical recipe.
+
 Plan for generating the Hinata2 exhaustive keep+bottom profile as a **multi-day, chunked,
 cross-machine** run on the secondary box. Read alongside `.claude/skills/mulligan-profile.md`
 (authoritative protocol) and `docs/design/exhaustive-keep-policy.md` (design). This doc is the

@@ -113,7 +113,7 @@ seeds (s2002/s3003) win-turn + perf, per heuristic-optimization skill; report be
 Reproduce a batch game gi in a single run: `--seed <base+gi> --game-index <gi> --games 1` (goldfish
 seeds each game `base_seed+gi`, spawns `base_game_index+gi`).
 
-## Status of the Unclaimed fix itself (still uncommitted)
+## Status of the Unclaimed fix itself (~~still uncommitted~~ committed + GT-rebaselined 2026-07-22, e6c1f2c3; noted 2026-09-03 — and the `MTG_HINATA_SPASM_GATE` "dormant precedent" cited below was deleted at f6e16645)
 
 The `colored_creature_only` fix is correct + faithful (per-case proof: 45 regressed games across all 5
 cases = 26 faithful-block / 18 ignitable-deferral / 0 stumbles; all 5 win→loss faithful; d0 100%

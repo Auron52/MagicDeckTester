@@ -246,6 +246,13 @@ journal deleted (unchanged).
 
 ## Migration / rollout notes
 
+**(Updated 2026-09-03: all executed and closed** — no wave binary remains, the Hinata2/Goblins
+campaigns finished and their sidecars are committed, the docs TODO was done
+(adaptive-batched-keepgen.md carries "REMOVAL COMPLETE"), and the validation plan below is no
+longer runnable since `MTG_KEEP_CONTINUOUS` has no live read. The snapshot *reader* is still
+present in ExhaustiveKeep.cpp. The doc cited as `hinata-gen-perf-campaign` is
+`hinata-gen-perf-r1.md`.)
+
 - **In-flight runs.** The current Goblins gen and any live campaign are on the wave binary; they finish
   on it. The change ships as a new commit for *future* runs — it does not touch a running binary (and a
   crash-resume must use the same binary it started with, so never hot-swap `build/Release` under a live

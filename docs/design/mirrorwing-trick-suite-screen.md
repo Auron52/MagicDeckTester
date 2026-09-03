@@ -1,5 +1,9 @@
 # Screening the Mirrorwing trick suite
 
+**Status (updated 2026-09-03): COMPLETE** — the generation finished and the screen was measured
+2026-08-18 (mirrorwing-trick-suite-result.md); the deck has shipped two later lists since
+(fec4c78f, 3faf5c76).
+
 **Status: UNBLOCKED 2026-08-17. Both blockers cleared; keep-table generation for the swap list is RUNNING. See "Progress" at the end.**
 Written down because the sequencing decision has to be made BEFORE any generation is spent — the wrong
 choice there costs a full table regeneration per follow-up tweak.

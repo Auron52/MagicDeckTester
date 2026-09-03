@@ -5,6 +5,11 @@ Off is byte-identical to the shipped engine (smoke 30/30, 0 configs changed), so
 perturbs ground truth. Session ran out of budget before the decisive deck was measured; the exact
 resume command is at the bottom.
 
+**(Updated 2026-09-03: the global lever is still correctly default OFF, but the "what to do
+next" list is done/overtaken** — the decisive deck (FiveColour) was measured and adopted
+per-deck as `MTG_5C_SSM` (2026-08-21), with KittyEquipment and Anti-Lifegain following; and the
+breakpoint-continuation greedy in item 4 was deleted by ebfb5f74.)
+
 **User bar (2026-08-09):** *"we can't afford to have second main be greedy … I want no greedy steps
 except attack decisions"*, later widened: *"(and mana allocation is also okay)"*. So the target state
 is: every PLAN choice searched; attack declaration and mana payment may stay heuristic.

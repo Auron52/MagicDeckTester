@@ -817,7 +817,12 @@ the head of the **next** precombat main — before that draw ever becomes activa
 
 1. ~~**Credit the ETB refund toward SUBSEQUENT casts only**~~ — **DONE 2026-09-02**, adopted at
    −0.0338 turns; see the section above.
-2. **Value leaf** — **RUNNING since 2026-09-02 01:26**, frozen at `e5924a43` / src-tree
+2. **Value leaf** — **(2026-09-03 observation: NOT live on this box — no `mtg`/valueleaf
+   process, no `logs/vlq_eldrazidisplacerflicker/` queue, no `logs/edf/valueleaf_run.out`, and
+   no `EldraziDisplacerFlicker.value.json`. Either it died or it runs elsewhere; `valueleaf.sh
+   run` resumes incrementally if the src tree still matches the freeze. Items 3/6 below should
+   not be treated as blocked on a run that is not running.)** Original record: **RUNNING since
+   2026-09-02 01:26**, frozen at `e5924a43` / src-tree
    `1e7d7bebdd14`, play fingerprint `52b9ec620b92`. `bash scripts/valueleaf.sh status
    decks/EldraziDisplacerFlicker` for progress; driver log `logs/edf/valueleaf_run.out`, queue
    `logs/vlq_eldrazidisplacerflicker/`. The deck is rollout-bound and its d0 policy is 1.4 turns

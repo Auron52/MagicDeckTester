@@ -183,6 +183,8 @@ structural, not budget. Two mechanisms, one probed causally:
    Crackle 22; default OFF, probe-only) measured WORSE than plain literal (951 slower than
    control, 186 slower than lit, 131 unwon) — a static rank cannot express the needed
    interleaving and disturbs plan selection. Do not ship it; kept only as the recorded negative.
+   *(2026-09-03: the diagnostic flag itself was deleted from src — bff2296c, user sign-off
+   2026-09-01; the negative result stands as recorded here.)*
 2. **No tap-ahead** (the load-bearing gap): the modal kill line (Spasm + one payoff, gi33-class)
    is payable ONLY by speculatively tapping the whole board into the float before Spasm — the
    payment machinery has no such move (it taps exactly to cover costs). **The phase-3 shippable

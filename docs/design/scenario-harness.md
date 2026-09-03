@@ -13,7 +13,12 @@ mtg --scenario test/scenarios/<name>.json
 ```
 
 Exit code: **0** = PASS (or no assertion), **1** = FAIL (`expect_win_turn` not met), **2** = harness
-error (bad JSON / unknown card). Implemented as `RunScenario` in `src/main.cpp` (early `--scenario`
+error (bad JSON / unknown card). *(2026-09-03: `expect_win_turn` is no longer the only assertion —
+`RunScenario` also supports `expect_no_win`, `expect_opponent_life`, `expect_active_life`,
+`validate_line`+`expect_verdict`, and `expect_variants` (src/main.cpp ~3985); `validate_line`
+exists precisely because a win-turn-only fixture can miss a play bug — see
+scaling-source-widening.md. Note `library_filler` defaults to `"Forest"`, the very filler the
+dead-draw advice below warns against — set it explicitly.)* Implemented as `RunScenario` in `src/main.cpp` (early `--scenario`
 dispatch, before the normal arg parse).
 
 ## Fixture format

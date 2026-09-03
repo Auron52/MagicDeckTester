@@ -7,7 +7,9 @@ empty (attack-only) subset and return it, skipping the 2^m cast-subset odometer.
 dominates every other plan this turn, so nothing is lost.
 
 It is gated by the provider hook `DecisionProvider::UseLethalShortCircuit()` (default **false**),
-overridden to **true** only in `GoblinsProvider`. Off-switch `MTG_NO_LETHAL_CUT`. Shares the
+overridden to **true** only in `GoblinsProvider`. *(2026-09-03: no longer Goblins-only — four
+providers opt in: Goblins, Mirrorwing, Equipment, Stompy. The ROOT default is still false, so
+the global A/B below remains the open item.)* Off-switch `MTG_NO_LETHAL_CUT`. Shares the
 `MTG_UNPRUNED(ComboLine)` audit gate with the sibling combo-line / go-off cuts.
 
 ## Why it is currently Goblins-only (not correctness — bookkeeping)

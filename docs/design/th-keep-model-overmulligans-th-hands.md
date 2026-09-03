@@ -74,6 +74,9 @@ session-1 writeup; keep for history.
 
 ## 2026-07-16 (session 3) — strict flood gate + forced-defer (UNCOMMITTED; avg9 verdict: not there yet)
 
+**(Updated 2026-09-03: superseded — the strict-flood gate WAS adopted the same day, a4f2be76,
+and ships default-ON (`THStrictFlood`); nothing in this section is uncommitted.)**
+
 Prototyped the strict flood-engine sequencing behind `MTG_TH_STRICT_FLOOD` (default off, byte-identical;
 non-TH decks unaffected). Two parts: (1) `ShouldCastDrawEngine` drops the spent-drop "dig anyway" clause
 (don't cast a payoff-less Treasure Hunt once the drop is spent — only with the drop open, to play a drawn

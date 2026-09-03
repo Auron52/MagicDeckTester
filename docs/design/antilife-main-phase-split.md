@@ -1,5 +1,10 @@
 # Anti-Lifegain: the enforced main-1/main-2 split (MTG_AL_PHASE) — built, measured, DECISION OPEN
 
+**Status (updated 2026-09-03): ADOPTED.** The full AL doctrine bundle — `MTG_AL_PHASE`,
+`MTG_AL_ORDER`, `MTG_AL_SSM`, `MTG_AL_CONDEMN`, `MTG_AL_DORK_M1`, `MTG_PHASE_DAMAGE_BOTH` — is
+DEFAULT ON as of a760a9d2 + b5a5e4e8 (2026-08-22); see "ADOPTION (USER)" later in this doc. The
+"DECISION OPEN" title and the default-OFF lever table below are the pre-adoption record.
+
 **Status 2026-08-21:** all levers BUILT and DEFAULT OFF (off-state byte-identical, per-deck
 regression 5/5 PASS). Train is green; **held-out is slightly red with a named residual class**,
 so the USER's adoption condition ("if my preference works better, let's stick with it") is not

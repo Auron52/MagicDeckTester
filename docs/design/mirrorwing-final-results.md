@@ -367,6 +367,10 @@ survive it. Note the two engine changes are confounded in this A/B; separating t
 * Four new scenario fixtures cover Frontline Heroism and the Oracle→Draught enabler, each verified
   *tight* (opponent_life + 1 makes all four fail).
 
+**(Updated 2026-09-03: this list is CLOSED** — list swapped + archived as
+`v2-instigator-entrance` (3faf5c76, 2026-08-30), value leaf adopted (7d13fd6c), mulligan table
+adopted with GT rebaselined (17dac2d7), and all three tiers re-accepted since.)
+
 **Not yet done:** primary `.cod` swap and archiving the current list as `v2-instigator-libation`;
 ground-truth rebaseline (**the overnight tier is still un-run — 12 mirrorwing cells exposed**);
 regression tier as further inert-ness evidence for the re-applied engine; mulligan profile and value

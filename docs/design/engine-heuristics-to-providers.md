@@ -147,6 +147,9 @@ Two deliberate non-moves, both for lockstep reasons:
 
 ## Status
 
+*(2026-09-03: objection 1 on the cleanup discard was acted on — 888b1a65, 2026-08-01, shipped
+provider-owned deck-aware rankings, later extended by the Dragons/Minotaur bucket policies.)*
+
 | rule | ported | reviewed | branched |
 |------|--------|----------|----------|
 | cleanup discard | yes (byte-identical) | see above — **two objections** | no |

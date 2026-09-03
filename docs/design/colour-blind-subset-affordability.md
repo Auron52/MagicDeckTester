@@ -3,6 +3,9 @@
 Self-contained record (2026-08-18). Found while reviewing Anti-Lifegain's cast order; it is NOT an
 ordering bug and NOT specific to that deck.
 
+**STATUS (updated 2026-09-03): ADOPTED** — `MTG_COLOR_EXACT` is default ON since e4690c37
+(2026-08-18); `=0` is now the A/B hatch (ManaPayment.cpp ~1334).
+
 **STATUS: BUILT and measured, behind `MTG_COLOR_EXACT` (default off). Adoption is the USER's call —
 see "What was built" at the end for the numbers and the soundness evidence.**
 

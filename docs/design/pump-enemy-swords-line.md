@@ -22,7 +22,9 @@ it's useful **when you can't afford / don't have your own attacker** but the opp
   **opponent's** creature is not a candidate.
 - **Swords' lifegain-to-controller isn't tied to a pump.** Swords is modeled as removal; its
   "controller gains life = power" rider (the thing Tainted Remedy weaponises) would need to be
-  represented AND combined with an enemy-target pump in one searched line.
+  represented AND combined with an enemy-target pump in one searched line. *(2026-09-03: the
+  rider IS modelled now — `controller_lifegain_equals_power` in cards.json, routed through the
+  lifegain→loss enabler; the enemy-target pump half remains unbuilt.)*
 
 ## What implementing it would take
 

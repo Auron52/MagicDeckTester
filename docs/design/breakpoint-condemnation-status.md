@@ -1,5 +1,12 @@
 # Breakpoint condemnation: EIGHT bugs; bug 8 was the big one -- the rank test infers a decline that never happened
 
+**Status (updated 2026-09-03):** the four type-exemptions named below (`_MANA_EXEMPT`,
+`_RITUAL_EXEMPT`, `_TUTOR_EXEMPT`, `_REDUCER_EXEMPT`) were DELETED outright at USER direction
+(87871ac4, 2026-08-28 — "I don't want any general exemptions") and replaced by the card-agnostic
+`BpTurnManaSettled` test (`MTG_BP_CONDEMN_MANA_SITE_EXEMPT`, default ON);
+`MTG_BP_CONDEMN_SEARCHED_ONLY` is also default ON since 9626afe8. `MTG_BP_CLASSIFY` remains
+default OFF. The flag inventory below predates the deletion.
+
 **Status: the engine work is DONE and committed. As of 2026-08-26 the correctness fixes are DEFAULT
 ON and condemnation is quality-neutral on every deck it can fire on, so the remaining decision is
 whether to flip `MTG_BP_CLASSIFY` itself (which moves GT on mirrorwing). That belongs to the USER.** Self-contained. Supersedes the "condemnation is harmful" reading that circulated on

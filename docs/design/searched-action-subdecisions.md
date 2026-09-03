@@ -103,7 +103,7 @@ shapes, and the mechanism for each is legible:
 |------|-------|-------|-----|
 | antilife | **2** | flat from 2 | the pool *is* 2 — the deck's only enchantments are Tainted Remedy and Aria of Flame and it runs no artifacts, so both tutors see the same two-card list. Play digests are byte-identical from width 2 to 12: there was never a third candidate. |
 | hinata | 6 (base, **not** overridden) | peaks at 2 on train, then dilutes | `TutorCandidates` is already combo-aware (Hinata alone while she is missing; `SituationalCardRank` order once she is online), so the hypothesis was that extra targets only dilute. Train agreed; **the holdout did not** — see below. |
-| goblins | **12** | monotone, knee at 8 | Matron fetches "a Goblin card" from ~16 distinct names that are *not* close substitutes (Muxus vs. Mogg War Marshal), so the search keeps finding value well past the top few. |
+| goblins | **12** *(2026-09-03: since REVERTED to 6 — see `GoblinsProvider::TutorSearchWidth`'s 2026-08-05 rationale)* | monotone, knee at 8 | Matron fetches "a Goblin card" from ~16 distinct names that are *not* close substitutes (Muxus vs. Mogg War Marshal), so the search keeps finding value well past the top few. |
 
 Measured on the TRAIN seeds (1001/2002/3003), searched-depth sum vs width 1:
 

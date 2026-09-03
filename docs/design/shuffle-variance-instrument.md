@@ -89,7 +89,9 @@ into it. (The force-arm shuffled on EVERY Ponder incl. the rare Hinata-online ca
 certainly the common missing-Hinata regime, so the clean adoption is the missing-Hinata branch only.)
 
 Magnitude is small (~0.077 turns / +0.31pp) but consistent and never-regressing. ADOPTION PENDING user
-approval (it shifts Hinata play -> GT rebaseline). Clean adoption path: change the missing-Hinata branch
+approval (it shifts Hinata play -> GT rebaseline). *(2026-09-03: moot — the doc's own 2026-07-05
+section below proves the always-shuffle edge is 100% clairvoyance artifact and retires the goal;
+nothing is pending.)* Clean adoption path: change the missing-Hinata branch
 to `return false`, re-confirm the SHIPPED change (heuristic vs new, no force flag) reproduces the edge,
 then --accept the Hinata GT across modes. Scaffolding (`MTG_PONDER_FORCE`) reverted.
 

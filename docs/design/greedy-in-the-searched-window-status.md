@@ -1,5 +1,10 @@
 # Greedy inside the search: what we found, and what it means
 
+**Status (updated 2026-09-03): the hinata executor greedy is FIXED and shipped** — ebfb5f74
+(2026-09-02, the tight sound recipe) records "Executor at ship settings: NONE greedy main-phase
+decisions, zero ROOT-kind fallbacks". `MTG_KE_ORDER` (listed below as a default-OFF lever) is
+default ON since d0547999.
+
 **Status: the 14-deck audit is COMPLETE as of 2026-08-25 (section 4). Nothing is running.**
 It found two things the first three decks did not show: a rollout-side breakpoint fallback on 5
 decks, and **one real greedy DECISION in the executor, on hinata**. No fix has been attempted — the

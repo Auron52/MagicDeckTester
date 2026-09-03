@@ -1,5 +1,9 @@
 # Model-driven performance levers for the NC policy / value leaf
 
+**Status (updated 2026-09-03):** one of the five IS built — the value-guided escalation beam
+(use-case 3) shipped as `MTG_ESC_BEAM` + per-deck `value_play.beam_width` (f517bb36; see
+escalation-beam-verify.md). The other four remain unbuilt backlog.
+
 **Status:** deferred backlog — a menu of *performance* techniques (same play quality, less compute) for the
 learned-model use cases. None built yet; recorded so any agent/session can pick one up. Companion to
 `learned-d0-policy.md` (the quality story) and `stable-shuffle.md` (the CRN reshuffle these compose with).

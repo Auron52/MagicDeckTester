@@ -188,7 +188,9 @@ Seeds default to a held-out band (4004..19019) disjoint from the regression trai
        MTG_MERGE_OUT_PROFILE=<deck>.synthR$k.profile.json MTG_MERGE_OUT_RAW=/tmp/ignore.raw.json \
        ./build/Release/mtg-analyze <deck> --cards-json src/cards/data/cards.json
    done
-   # adaptive bottoming (keep full, bottom sub-tables at the generation floor, e.g. 1):
+   # adaptive bottoming — DO NOT use SYNTH_BOTTOM_R for this (refuted above, c3666181: it
+   # overestimates 2.6x+); use MTG_KEEP_SIM_ADAPTIVE_BOTTOM / MTG_KEEP_SYNTH_ADAPTIVE_BOTTOM
+   # (9bd089f7) instead. Original (superseded) recipe line kept for the record:
    MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS=<full.raw.json> MTG_KEEP_SYNTH_BOTTOM_R=1 \
      MTG_MERGE_OUT_PROFILE=<deck>.adaptivebottom.profile.json MTG_MERGE_OUT_RAW=/tmp/ignore.raw.json \
      ./build/Release/mtg-analyze <deck> --cards-json src/cards/data/cards.json

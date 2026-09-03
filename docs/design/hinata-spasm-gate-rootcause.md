@@ -1,5 +1,9 @@
 # Hinata spasm gate — root-cause (measured)
 
+**Status (updated 2026-09-03):** `MTG_HINATA_SPASM_GATE` was DELETED from src on 2026-07-30
+(f6e16645, with 17 other spent flags, user-approved) — there is no flag left to keep opt-in;
+the recommendation below is historical.
+
 **Status:** ROOT-CAUSED. Committed modes are only `off / strict(=1) / soft(=2)` (opt-in,
 `MTG_HINATA_SPASM_GATE`, default OFF, `f2ee9d7`) — both non-off modes were **rejected**. The variant
 actually kept (≈0 quality change / ~0.5% perf) — a *full-turn, order-aware "ritual but no Win and no

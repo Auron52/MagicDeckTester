@@ -1,5 +1,8 @@
 # Card numbering / CRN reshuffle consistency (batch == viewer == references == audit)
 
+## Status (updated 2026-09-03): SHIPPED — committed WITH its GT rebaseline at b3f0bd55 (2026-07-20).
+The "uncommitted / rebaseline pending" line below is the pre-commit record.
+
 ## Status: FIX IMPLEMENTED (uncommitted), verified on a 40-game Hinata d3 sample + 120-game Burn control.
 Escape hatch `MTG_LEGACY_UNNUMBERED` restores the old behavior. GT rebaseline pending (see below).
 

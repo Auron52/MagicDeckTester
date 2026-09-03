@@ -1,5 +1,8 @@
 # Mana order + reserve overhaul — the comprehensive fix (USER, 2026-08-25)
 
+**Status (updated 2026-09-03): ADOPTED** — all 15 levers DEFAULT ON since 89076b85 (2026-08-26),
+GT rebaselined (80430387). The lever map below now reads =0-to-disable.
+
 **Status: BUILT (2026-08-25), measurement pending.** All layers implemented, every lever DEFAULT
 OFF, clean-env smoke 42/42 byte-identical after the build. The as-built lever map:
 

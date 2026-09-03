@@ -52,6 +52,9 @@
   prunes infeasible over-credited lines *before* their wasted rollout). GT-affecting only in the recover
   direction → rebaseline + legacy gate; `MTG_ORDER_ORACLE` (full-permutation) becomes the guard rail.
   To be written up as its own design doc (`enumeration-feasibility-via-executor.md`) before implementing.
+  *(2026-09-03: written and BUILT — the gate ships as `MTG_EXEC_FEAS` (EngineFlags.h:87, default
+  OFF), and its order-authority extension was measured and REJECTED 2026-08-31; the
+  `MTG_ORDER_ORACLE` guard rail named here was never built — the oracle is `MTG_SEARCH_ORDER`.)*
 - **Deferred (future, user-requested):** a per-deck **ordering-analysis step** that generates the
   candidate orderings a deck needs. See *Deferred: per-deck ordering-analysis step*.
 

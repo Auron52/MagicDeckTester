@@ -84,8 +84,8 @@ snapshot is what made the state question answerable at all.
 
 ## Next things worth trying
 
-- A harness guard: re-run a changed deck's cells once and fail loudly on a self-inconsistent
-  result, so an unreproducible cell can never reach `--accept`. Converts an invisible hazard into a
-  caught one without needing the mechanism.
+- ~~A harness guard: re-run a changed deck's cells once and fail loudly on a self-inconsistent
+  result~~ — **RULED OUT 2026-08-26 (user): never run a tier twice; see
+  viewer-feedback-2026-08-25.md's retraction.**
 - Audit the remaining reference-across-mutation candidates (a crude static scan flagged 8 sites;
   most look like loop re-bindings, but ASAN only adjudicates paths that actually execute).

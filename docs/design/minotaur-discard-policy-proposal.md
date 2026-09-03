@@ -332,7 +332,7 @@ doing exactly what the doctrine asks: V1 sheds **Ragemonger** to protect the Via
 sheds the Vial and keeps the Ragemonger — the card the user specifically said to keep for mana.
 So shedding the Vial is NOT established as incorrect; it is barely measurable in either direction.
 
-### Round 4 — is the LEARNED `card_scores` order the better `value`? (measurement in flight)
+### Round 4 — is the LEARNED `card_scores` order the better `value`? (STOPPED, no adoption — see outcome below)
 
 Round 3 closed with "the `value` term is a proxy", and named the deck's learned `card_scores` as
 what `value(playing)` ought to mean. Round 4 plumbs them through and measures it. Two things had to

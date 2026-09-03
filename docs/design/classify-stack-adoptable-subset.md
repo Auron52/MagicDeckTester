@@ -1,5 +1,10 @@
 # The classify stack: a four-lever subset is adoptable; two levers are not
 
+**Status (updated 2026-09-03):** held-out validation COMPLETE (below). Of the four levers,
+`MTG_ACQ_RESOLVE` was since adopted default-ON via a separate route (f49c33ae, 2026-08-19);
+`MTG_MAIN2_DROP`/`MTG_DOUBT_MAIN2` remain off, and `MTG_BP_SITES`' default mask has moved to
+0x77.
+
 **Status:** regression tier MEASURED; held-out overnight validation running.
 **Goal (USER, 2026-08-16):** move the searched second main and searched breakpoint
 logic toward adoptability.

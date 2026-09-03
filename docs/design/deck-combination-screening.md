@@ -973,7 +973,10 @@ position-based implementation can do.
 - Deck-size changes (add/remove without a matching replace) under inherited numbering — the route
   supports them by construction, but the alignment cost has not been measured.
 - The reweight path (zero-rollout retarget of an existing table to a new combination) and the
-  multi-source cell library: specified above, not built.
+  multi-source cell library: specified above, not built. *(2026-09-03: the reweight path IS
+  built and is now the DEFAULT bracket in deck_compare.py (`bracket: "reweight"`), and inherited
+  numbering shipped as `inherit_numbering(...)` with `replace` pairs; only the multi-source cell
+  library remains unbuilt.)*
 
 ## The reporting / batching / accuracy pass (2026-08-12)
 

@@ -63,6 +63,10 @@ setting is self-explaining and a later reader can tell a derived value from a hu
 
 ## What the rule says about today's decks
 
+*(2026-09-03: this table has drifted — Mirrorwing now HAS a `value_leaf_table` and reads d2/b3
+(4b708db8), and FiveColour's override was settled by measurement at d2/b1 rather than dropped;
+see mullgen-setting-is-a-trust-question.md for the current doctrine.)*
+
 | deck | model | trust | leaf table | current `mull_gen` | rule says |
 |---|---|---|---|---|---|
 | slivers_vial, Knights, Auras, burn | yes | 5 | yes | (inherits play) | **unchanged** — already correct |

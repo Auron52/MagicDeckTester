@@ -1,5 +1,9 @@
 # Mirrorwing card tournament: eliminate cards one at a time, with evidence
 
+**Status (updated 2026-09-03): COMPLETE** — runs A–D finished; standings and the closure are in
+mirrorwing-card-tournament-results.md, and the winning list shipped as the deck default at
+fec4c78f (2026-08-22).
+
 **Status:** IN PROGRESS, started 2026-08-19. The shared apparatus is generating; no test has run yet.
 See [[mirrorwing-trick-suite-result]] for the screening work this supersedes, and
 `.claude/skills/deck-screening.md` Rule 0a for the apparatus rules it obeys.

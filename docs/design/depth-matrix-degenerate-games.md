@@ -3,6 +3,11 @@
 Design agreed with the user 2026-08-13/14, from the FiveColour value-leaf run. Four changes with one
 enabler.
 
+**(Updated 2026-09-03: six of seven pieces stand; piece 6 — quality-based rung condemnation —
+and its whole `condemn.control_file` channel were REMOVED at USER direction on 2026-08-21,
+86e8a5cd. Cost-based condemnation is untouched. The HDEPTHS="1 2 3 4 5" change further down is
+done in valueleaf.sh.)**
+
 **STATUS 2026-08-15 — every piece SHIPPED, and the whole pipeline has now been run end to end
 (`valueleaf.sh run decks/burn`, 4m36s: 10,808 rows -> model -> 52 matrix cells -> metadata -> A/B).
 That run found the quality rule's zero-variance hole; see §"Quality-based rung condemnation".**

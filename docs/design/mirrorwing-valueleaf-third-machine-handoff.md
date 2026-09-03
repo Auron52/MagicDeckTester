@@ -1,5 +1,9 @@
 # Mirrorwing value-leaf regen: third-machine handoff (2026-08-13)
 
+**Status (updated 2026-09-03): SUPERSEDED** — feasibility resolved and the leaf generated and
+adopted twice since (58d2f7cc 2026-08-22; regenerated for the current list at 7d13fd6c,
+2026-09-01); `Mirrorwing Dragon.value.json` ships a 16-entry `value_leaf_table`.
+
 Play behavior for Mirrorwing is now **settled and pushed** (discard doctrine V3 + GT, commit
 `224e937` on `phase-1-2-deck-analyzer`). The value-leaf regen has been deliberately held back
 all along (`value-leaf.md` Rule 0: generate against ONE consistent PLAY DIGEST) and is now unblocked — except

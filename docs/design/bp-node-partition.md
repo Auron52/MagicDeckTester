@@ -1,5 +1,11 @@
 # The plain-cantrip breakpoint as a real search node (MTG_BP_NODE)
 
+**Status (updated 2026-09-03): ADOPTED.** `MTG_BP_NODE` and `MTG_BP_NODE_ROOTTURN` are DEFAULT ON
+as part of the tight sound recipe (ebfb5f74, 2026-09-02, GT rebaselined all three tiers) — see
+bp-greedy-continuation-deletion.md "ADOPTED: the TIGHT sound recipe". The "default OFF / NOT
+adopted" framing below is the pre-adoption record (greedy *deletion* — `MTG_BP_NO_GREEDY_CONT` —
+remains OFF; the recipe deletes greedy from the searched structure, not via that flag).
+
 **Status: BUILT + MEASURED (2026-08-29). The first form of the plain-cantrip class that does not
 lose at the shipped 20 ms budget — hold +0.0142 (t +1.21), train 0.0000, where every prior form
 lost. Default OFF; adoption is a USER decision.**

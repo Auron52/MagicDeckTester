@@ -1,5 +1,9 @@
 # Stompy: top-of-library consumers vs library-writing tutors (deferred design)
 
+**Status (updated 2026-09-03):** Item 1 IS BUILT — `MTG_TOP_RESOLVE` (aa1aabef, 2026-08-21),
+default OFF pending its adoption A/B, measured in stompy-order-and-top-resolve.md. Items 2 and 3
+remain deferred.
+
 **Status: DEFERRED — not being built yet.** Recorded per the deferred-work rule after the
 StompySurprise cast-order review (USER, 2026-08-21; the order itself is implemented behind
 `MTG_STOMPY_ORDER`, see `cast-order-rankings.md`). This doc holds the three modeling items the

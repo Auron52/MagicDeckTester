@@ -83,7 +83,9 @@ a reproduced win waiting on it, so the two should be scoped together.
 `TurnSolver.cpp` emits a keep variant and a shuffle variant per castable Ponder, carried on
 `Action::ponder_keep` and honoured by both the rollout and the executor. It ships **off**
 (`MTG_PONDER_SEARCH` / `MTG_UNPRUNED`) because it was measured as the #1 branching source —
-`MTG_BRANCH_STATS` put it at ~47% of all enumeration.
+`MTG_BRANCH_STATS` put it at ~47% of all enumeration. *(2026-09-03: no longer — the post-dedup
+`MTG_PONDER_AXIS` shipped default-ON in 712342ee, 2026-08-02, and `MTG_PONDER_SEARCH` is itself
+default ON; the keep-vs-shuffle call IS searched today.)*
 
 A/B with the branch on (hinata is the only suite deck with Ponder):
 
@@ -245,7 +247,8 @@ heuristic first made the branch **not exist** rather than free.
 Verified directly: `MTG_PONDER_SEARCH=0` and `MTG_PONDER_SEARCH=1` produce identical play (Hinata,
 200 games, seed 4004, d3, budget 10 → 5.8950 both).
 
-So the Ponder keep-vs-shuffle call is **still unsearched**. The real fix is the post-dedup axis the
+So the Ponder keep-vs-shuffle call is ~~**still unsearched**~~ *(2026-09-03: searched since
+712342ee — see the correction above)*. The real fix is the post-dedup axis the
 tutor target now uses — see `searched-action-subdecisions.md`. The land-ETB scry disposition in this
 document is unaffected: `Plan::scry_choice` variants are emitted in `EnumeratePlansWithLand` *after*
 `EnumeratePlans` returns, so they never meet the dedup.

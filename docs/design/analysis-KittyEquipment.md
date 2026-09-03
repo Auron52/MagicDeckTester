@@ -496,6 +496,11 @@ affordability gate, so with no lookahead there is no multi-step plan whose affor
 unlock, and it can never bind. That is the signature to expect from any enumeration-side
 optimism lever, and it is why a d0 cell can neither justify nor refute one.
 
+**Status (updated 2026-09-03): nothing remains open here.** `MTG_KE_ORDER` was ADOPTED
+default-ON later the same day (d0547999, 2026-08-25 — a re-measurement came back "2 better :
+0 worse, and CHEAPER", superseding the inert-and-slower verdict below), and
+`MTG_METALCRAFT_CREDIT` has been default ON since 200b33b4 (2026-08-21).
+
 **Not done / user calls** (updated 2026-08-25): regression-suite addition and the tree
 commit are both DONE; value-leaf and the exhaustive mulligan profile are both shipped. What
 remains is `MTG_KE_ORDER` — the USER's reviewed cast order, still default OFF because it is

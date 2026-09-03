@@ -146,7 +146,9 @@ original sketch/open-questions below apply to it.
 
 ### Original sketch (applies to the follow-up)
 
-**Idea.** Today adaptive sampling (`MTG_KEEP_R_FLOOR` + refine waves) skips refining confident cells
+**Idea.** *(2026-09-03: `MTG_KEEP_R_FLOOR` and the refine waves are DELETED — a1dce196,
+2026-08-10, keepgen-no-off-switches.md; generation is continuous/adaptive unconditionally.)*
+Today adaptive sampling (`MTG_KEEP_R_FLOOR` + refine waves) skips refining confident cells
 *within a run*. Extend that **across runs/chunks**: use a prior run's measured confidence to **freeze**
 cells whose keep/mull (and bottoming) decision is decisively settled, so future chunks (regeneration or
 higher-R pooling) don't re-spend rollouts re-establishing them — they concentrate on the still-ambiguous

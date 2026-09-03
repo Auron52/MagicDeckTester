@@ -237,8 +237,9 @@ victim as `sacrifice`, and both non-cleanup discards (Burning-Fist's cost, Neheb
 5. **`min_playable: 0`** in the generated profile. The skill suggests ≥1 for multi-colour decks, but
    the analyzer produced 0 and that matches 11 of the 13 other decks (including 5-colour FiveColour).
    Left as generated; it is mulligan-stage territory.
-6. **Mulligan profile generation has NOT been run** — correctly, per the pipeline-ordering policy it
-   is the last stage and the USER kicks it off.
+6. ~~**Mulligan profile generation has NOT been run**~~ — **DONE: generated and ADOPTED at
+   5243288c (2026-08-31, complete, R40, K=16)**; the profile ships at
+   `decks/Minotaur/Minotaur.keepmodel.exhaustive.profile.json.gz`.
 
 ## Verification log
 

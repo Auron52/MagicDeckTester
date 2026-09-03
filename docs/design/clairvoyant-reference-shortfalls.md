@@ -146,7 +146,8 @@ Both are provider hooks, so every other deck is byte-identical by construction.
 
 Both are **default ON** for Treasure Hunt; `MTG_NO_TH_HOLD_FOR_DIG` / `MTG_NO_TH_DROP_YIELD` restore
 the old behaviour for A/Bs (presence-tested, so `=0` also disables — see the `MTG_MAGMA_FAITHFUL`
-gotcha).
+gotcha). *(2026-09-03 correction: only Hook 22 shipped — per §A5's own heading, Hook 23 /
+`MTG_NO_TH_DROP_YIELD` were REJECTED and never entered src.)*
 
 **Hook 22 `HoldDeferredDropForFurtherDig`.** Hold the drop when the hand is
 already flooding, no no-max-hand-size land is in play, and another dig is payable *from mana available

@@ -1,5 +1,9 @@
 # Live progress reporting for exhaustive keep/bottom generation
 
+**Status (updated 2026-09-03): IMPLEMENTED** — an always-on gen progress monitor ships in
+`ExhaustiveKeep.cpp` (~1560; bb1a482f, d69ad99d), with NO `MTG_KEEP_PROGRESS` gate per
+keepgen-no-off-switches.md (the optional gate suggested below is contrary to that policy).
+
 Status: **deferred / not implemented** (written 2026-07-03 during the Knights R=100 grind, which
 cannot rebuild — Rule 0 commit-freeze). Implement on a commit boundary *between* deck grinds.
 

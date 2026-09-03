@@ -1,5 +1,10 @@
 # Classify-stack adoption status (re-measured at HEAD, 2026-08-16)
 
+**Status (updated 2026-09-03): SUPERSEDED** by classify-stack-adoptable-subset.md (98c7a810,
+2026-08-17 — a four-lever adoptable subset); `MTG_ACQ_RESOLVE` has since been adopted default-ON
+separately (f49c33ae, 2026-08-19), so the "levers-off GT" baseline this measurement used no
+longer exists.
+
 **Verdict: NOT adoptable yet.** Overall ~neutral, with two decks clearly harmed.
 
 ## Why the old number was withdrawn

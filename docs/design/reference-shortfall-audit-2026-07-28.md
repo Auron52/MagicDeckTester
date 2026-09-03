@@ -9,6 +9,9 @@ reference's exact kept hand, so mulligan differences cannot contaminate the comp
 > **fixed** — see [clairvoyant-reference-shortfalls.md §A5](clairvoyant-reference-shortfalls.md).
 > With `MTG_TH_HOLD_FOR_DIG=1 MTG_TH_DROP_YIELD=1` the clairvoyant shortfall count is **3 → 2**
 > (both survivors Dragonstorm class B). The tables below are the pre-fix baseline.
+> *(2026-09-03: neither flag exists under those names now — hold-for-dig ships default ON behind
+> the inverted hatch `MTG_NO_TH_HOLD_FOR_DIG`; `MTG_TH_DROP_YIELD` has no reader under any
+> polarity. `scripts/ref_line_replay.py` has moved to `scripts/attic/`.)*
 
 Repro:
 

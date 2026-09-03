@@ -1,5 +1,10 @@
 # The 168 UNPRICED prepay rows (mostly Hinata) — DEFERRED, and what would unblock them
 
+**Status (updated 2026-09-03): RESOLVED AND SHIPPED** — the split was measured, the cause
+identified, and the Spasm literal-untap model ADOPTED default-ON (4f449fbd, 2026-09-01); the
+default HAS flipped, so the hinata rows now price on the shipped engine. The 2026-09-01 section's
+"until the default flips" caveat is closed.
+
 **Status:** deferred, not started. Handed to the mana-focused workstream (user direction,
 2026-08-26). This note exists so the item lives in git rather than in one agent's head.
 

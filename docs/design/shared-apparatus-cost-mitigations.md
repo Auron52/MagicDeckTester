@@ -1,5 +1,9 @@
 # Making a SHARED screening apparatus affordable (without dropping R)
 
+**Status (updated 2026-09-03): partly IMPLEMENTED** — §1 reachability pruning (this doc's
+"single biggest win") shipped as `MTG_KEEP_ARM_DECKS`/`arm_mask` (bff7a47a); §2 and §§4-7
+remain deferred.
+
 **Status:** plan, 2026-08-18. Deferred work — nothing here is implemented yet.
 Companion to [[divergence-analysis-step]] and the deck-screening skill.
 

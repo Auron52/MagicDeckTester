@@ -90,6 +90,9 @@ d5 5.1467 -> 5.0933; 4 searched-slower games all classify `churn` (recover at 4x
 
 ## Status
 
+**(Updated 2026-09-03: fully RESOLVED — the pending rebaseline landed long ago; all three tiers
+current as of 3ffb1f09.)**
+
 RESOLVED pending GT rebaseline -- fix beats both the broken state and the defer-off hatch on
 the validation list. The overnight accept 73be0a6 stood in the interim (net -0.2125, tail
 bounded ~13 turns/5200 games).

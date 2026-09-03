@@ -4,6 +4,10 @@
 (≈16 h) now that the scheduler is a single continuous pool (floor→refine barrier removed 43f3f2b,
 sub-table fusion 30fee8b) and the float-colour collapse shipped (3831145)?
 
+**(Updated 2026-09-03: SUPERSEDED — an R=40 profile was generated and adopted 2026-07-27,
+5e646e77, via the adaptive floor-1 cap-40 route, without levers (1) or (3); the recommendation
+below not to burn cores on the exact gen no longer applies.)**
+
 **Answer: NO.** Empirically **~80–90 h** at the current rollout rate. The scheduler is no longer the
 bottleneck — the **degenerate rollout ATOM** is (the known ritual/Lotus enumeration blowup). This is
 exactly the split the capture memory predicted: the one-pool rewrite collapses all tails *down to* the

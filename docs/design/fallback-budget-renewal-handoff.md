@@ -1,5 +1,10 @@
 # HANDOFF — escalation fallback tuning: budget renewal + single-depth fallback
 
+**Status (updated 2026-09-03): DONE / SUPERSEDED** — both levers were measured and ship as
+per-deck `value_play` params: `escalation_cap` (eded828b, 2026-07-19) and
+`escalation_fresh_frac=0.5` on antilife/hinata/dragonstorm. `scripts/esc_fallback_ab.py` no
+longer exists. Nothing to pick up.
+
 **Status: SET UP, not yet measured on real tables. Pick this up next session.**
 Self-contained resume doc (2026-07-18). Everything below is on branch `d0-dynamic-model`, **uncommitted**.
 

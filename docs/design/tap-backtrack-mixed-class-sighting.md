@@ -1,5 +1,9 @@
 # Tap-backtrack blow-up: the mixed-class sighting the open defect predicted (HANDOFF)
 
+**Status (updated 2026-09-03): FIXED** — root-caused in
+tap-backtrack-n64-gate-counts-the-wrong-thing.md and closed by 2c6bc641 + f990bcfe (2026-08-16);
+both gates now key on the SOURCE count.
+
 **Status:** diagnosed with profiles + a deterministic repro; fix NOT implemented. Found 2026-08-16
 on Mirrorwing during mulligan generation. This is the residual case
 [[tap-backtrack-blowup]] left open.

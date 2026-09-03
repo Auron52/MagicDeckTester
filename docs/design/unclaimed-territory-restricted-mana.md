@@ -127,6 +127,7 @@ openingHand + per-turn actions). Findings:
   that have the red. The user's prior ("a 2-of shouldn't be costly") is largely borne out; the true
   faithful regression (red-poor hands genuinely leaning on Unclaimed's fake red) is a minority.
 
+**(2026-07-22: RESOLVED — adopted; see the header. Retained as history.)**
 **DECISION PENDING (user):** rebaseline smoke+regression GT (the fix is correct + faithful) vs hold vs
 revert. Uncommitted in the working tree: CardDatabase.{h,cpp} (colored_creature_only), SpellEffects.h
 (ProducesForPayment + backtracker strip), TurnSolver.cpp + AIEngine.cpp (call sites), cards.json (4

@@ -28,6 +28,10 @@
 > m1-pricing artifact -- see mana-affordability-arc-handoff.md's 2026-08-20 reopen trigger),
 > root-turn authority, tranche completeness (infinite-budget bar holds structurally).
 
+> **(Superseded 2026-08-21: `MTG_CONDEMN_TRANCHE` was flipped DEFAULT OFF the next day —
+> 7e82c9fb, USER — and demoted to an opt-in audit instrument; the "default ON / load-bearing"
+> notes in this block are the pre-flip record. See bp-node-partition.md.)**
+>
 > ## STATUS UPDATE 2026-08-20 (CONDEMNED TRANCHE -- the lossless build): all 5 residual cells
 > RECOVER byte-identical to OFF with condemnation FULLY ON. The mechanism chain that got here:
 >

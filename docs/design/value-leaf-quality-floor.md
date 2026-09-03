@@ -155,3 +155,5 @@ capped cell must not enter a paired comparison).
 
 **Status 2026-08-15:** unimplemented and deliberately not started -- another agent was mid-measurement
 on Creature Giving's rejection, and changing the deriver would have moved the numbers under them.
+*(2026-09-03: still unimplemented, but the blocking reason expired weeks ago — that measurement
+is long finished; free to pick up.)*

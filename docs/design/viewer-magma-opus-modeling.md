@@ -1,5 +1,10 @@
 # Magma Opus: divide surfacing + unmodeled "tap two" / Treasure clauses (issue #9)
 
+**Status (updated 2026-09-03): FULLY SHIPPED** — faithful Magma is adopted default-ON (e826368a;
+the surviving hatch is `MTG_LEGACY_MAGMA`), as this doc's own final section records. Also stale
+below: `MTG_HINATA_SPASM_GATE` was deleted (f6e16645), `MTG_HINATA_RANK_FIX` was adopted and its
+flag dropped (f2ee9d71), and the GT files described as "uncommitted" are all tracked.
+
 Status: **PARTIALLY SHIPPED — the FUNCTIONAL blocker is FIXED (GT-neutral); the full-faithful discount
 is a deferred, GT-negative correctness improvement awaiting supervised sign-off.**
 

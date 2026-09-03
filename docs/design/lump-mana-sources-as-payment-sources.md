@@ -3,7 +3,10 @@
 2026-08-21. Design + sizing for moving Black Lotus (and Lotus Bloom, Treasures, storage lands) out of
 the plan enumerator's per-colour fan and into the mana payment solver as a first-class source, with a
 reservation doctrine for one-shot resources. **Design is the USER's** (2026-08-20/21); this doc records
-it, the mechanism it fixes, and the measured ceiling. **Not built** — deferred per repo convention.
+it, the mechanism it fixes, and the measured ceiling. ~~**Not built** — deferred per repo
+convention.~~ **(Updated 2026-09-03: BUILT AND ADOPTED — `MTG_TREASURE_PAY_SOURCE` is default ON
+since 89076b85, 2026-08-26, part of the 15-lever mana order + reserve overhaul; the "default
+OFF" / "nothing below is built" lines further down are pre-adoption.)**
 
 ## 1. The defect
 

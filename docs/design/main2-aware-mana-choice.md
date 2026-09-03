@@ -1,5 +1,10 @@
 # Making main-1 mana choices with main 2 in mind
 
+**Status (updated 2026-09-03): SUPERSEDED** — the mechanism ships as `MTG_M2_PAYLOAD_RESERVE`
+(default ON since 89076b85, 2026-08-26): while a pre-combat plan apply is paying, a source set is
+reserved that keeps the best post-combat payload payable. It reserves for the single best uncast
+hand card rather than this doc's `ClassifyMainPhase` want-set.
+
 **Status:** designed, not built.
 **Origin:** USER, 2026-08-16 — *"it would be nice for the mana choices to be made
 with main 2 in mind (since often the human player would know what they need in

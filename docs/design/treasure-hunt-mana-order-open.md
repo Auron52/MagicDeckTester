@@ -60,6 +60,9 @@ the adopting commit.
 
 ### OPEN 1 — the OVERNIGHT tier's ground truth is STALE for treasure_hunt (now 3 decks)
 
+**(Updated 2026-09-03: CLOSED — the overnight tier has been re-run and accepted many times
+since, latest 3ffb1f09; no TH/dragonstorm/mirrorwing overnight debt remains.)**
+
 Smoke and regression were rebaselined for the ramp-filter fix, and again for the depletion tap
 order. **Overnight was deliberately not run** (user, 2026-08-27: *"We don't need to do overnight
 yet"*). Until it is, an overnight run will report failures on treasure_hunt / dragonstorm /

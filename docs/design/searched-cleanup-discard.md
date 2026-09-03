@@ -1,4 +1,7 @@
-# Searched cleanup discard (MTG_SEARCHED_DISCARD — ships OFF)
+# Searched cleanup discard (MTG_SEARCHED_DISCARD — ~~ships OFF~~ ADOPTED default ON)
+
+**Status (updated 2026-09-03):** ADOPTED default ON 2026-07-31 (f854a6f4, recorded later in this
+doc); the title's "ships OFF" and the "Remaining path forward" section are pre-adoption history.
 
 2026-07-21. Motivation (user): the cleanup discard heuristic is "often awful" — in Dragonstorm it
 pitches **Apex of Power / Dragonstorm** (the only combo payoffs), leaving the deck stranded. The

@@ -471,6 +471,12 @@ USER play knowledge encoded (rounds 3-4 of the review):
 
 ## Open items / next steps
 
+**(Updated 2026-09-03: this section is CLOSED.** The pipeline completed for the shipped
+Anger-4/Oracle-3 list — profile, value leaf (adopted 7d13fd6c, 2026-09-01) and exhaustive keep
+table (adopted 17dac2d7, 2026-09-02) are all committed under `decks/Mirrorwing Dragon/`, and
+`test/regression_cases.sh` points mirrorwing at the CURRENT list, not v1. Every
+"pending"/"deferred"/"running"/"points at v1" line below is the pre-completion record.)
+
 - Mulligan profile generation: DEFERRED (user kicks off; policy 2026-07-17).
 - Value-leaf: not generated (user decides post-freeze).
 - ~~card_costs gate line~~: DONE 2026-08-11 — clean pass, 150/150 match (see above).

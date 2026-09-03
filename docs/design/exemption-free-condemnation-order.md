@@ -87,6 +87,10 @@
 > structurally cheaper form exists (the searched continuation's cost IS the search dimension it
 > adds, not overhead to be shaved).
 
+**(Updated 2026-09-03: the parking is OVER — `MTG_BP_NODE` was adopted DEFAULT ON at ebfb5f74,
+2026-09-02, as part of the tight sound recipe, GT rebaselined all three tiers. Also note the
+four condemnation type-exemptions referenced in this doc were deleted outright at 87871ac4.)**
+
 **Status of the section below: the original plan, kept for the reference numbers. Steps 1-4
 executed 2026-08-30 (see STATUS above); step 5 answered negatively (units do not shrink).**
 

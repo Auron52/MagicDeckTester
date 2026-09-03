@@ -4,6 +4,11 @@ The cleanup discard (hand over its size limit — CR 514.1) was on the list of e
 pick among legal options by an arbitrary rule. It is now measured. **No searched axis is
 warranted**, and one half of the rule turns out to be load-bearing rather than defective.
 
+**(Updated 2026-09-03: SUPERSEDED — 888b1a65, 2026-08-01, reversed the "not worth ranking"
+conclusion ("answered the wrong question") and shipped deck-aware provider rankings via
+`CleanupDiscardCandidates`; `MTG_DISCARD_PICK` has been deleted from src. The no-searched-axis
+half still stands — the ranking is heuristic, not searched.)**
+
 `MTG_TRACE=discard` instruments the decision (real resolutions only, gated on `g_real_resolution`,
 so a searched run reports the discards the *game* made rather than the millions the search
 imagined). `MTG_DISCARD_PICK` is the temporary A/B lever; `first` is the shipped rule.

@@ -172,7 +172,7 @@ to all-Mountains and one land option. Measured on same-outcome games: **+18% int
 compare games whose win turn is unchanged. This search-economy effect -- not the pool -- is the
 question worth pursuing (land-order heuristic, GoblinsProvider).
 
-### What DID ship out of this: the land-order prune
+### What DID ship out of this: the land-order prune (WITHDRAWN — see the correction below)
 
 The branching side-effect turned out to be the real finding, and it belongs to a class the audit had
 not been looking at: **breadth the search pays for on turns where the answer is not interesting.**
@@ -230,7 +230,9 @@ Two lessons, both about the audit rather than the engine:
    highest-value thing this audit has produced (-0.7015 when first searched; -0.0620 more from
    tuning goblins' width alone). Unlike the legend keep, a fetched aura PERSISTS.
 3. **`ManaSourceRank`.** Fires constantly; a stranded colour persists. The heuristic-optimization
-   skill's worked example lives here.
+   skill's worked example lives here. *(2026-09-03: DONE — worked through the whole mana
+   order/reserve arc, incl. recorded non-adoptions; the worked example now sits in
+   `.claude/skills/heuristic-optimization.md`.)*
 
 Lower priority, with reasons: the three board-targeting hooks
 (`BurnCreatureTargetCandidates` / `LifegainRemovalCandidates` / `OwnPumpTargetCandidates`) face a

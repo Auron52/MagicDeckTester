@@ -47,6 +47,10 @@ user-initiated stage — see `deck-onboarding-hardening.md` "Pipeline ordering".
 
 ## Deeper follow-up (deferred) — reuse the parsed sidecar between instances
 
+**(Updated 2026-09-03: the parse-once binary cache WAS built — 26683d95, 2026-07-19,
+`<sidecar>.bincache` in MulliganProfileIO.h, ~5x faster keep-hint launch; only the stateful
+play server remains unbuilt.)**
+
 If we ever want *sidecar-quality* mulligan hints in the viewer without the reload cost, the
 per-launch JSON re-parse is the thing to kill (the stateless protocol reloads it every launch).
 Options, unbuilt:

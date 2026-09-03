@@ -1,8 +1,7 @@
 # In-game progress reporting — say where a long game is, while it is still running
 
-**Status:** designed, not implemented. Blocked only by the FiveColour value-leaf freeze (a `src/`
-change would move `HEAD:src` and stop the in-flight run's remaining phases). Implement as soon as
-phase E completes.
+**Status (updated 2026-09-03):** still designed, not implemented — but UNBLOCKED: the FiveColour
+value-leaf freeze ended when the leaf was adopted (a038b29d); no run holds `HEAD:src` today.
 
 **Requested by the user, 2026-08-08:** *"at regular, but significantly spaced intervals we output
 where we are in a specific game. So if something is running for minutes we get an occasional status

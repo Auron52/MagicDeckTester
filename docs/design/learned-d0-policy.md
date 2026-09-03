@@ -1,5 +1,10 @@
 # Learned d0 evaluator — non-clairvoyant policy distillation
 
+**Status (updated 2026-09-03):** the value model is ADOPTED default-ON since 2026-07-11
+(06e6ebe7, `UseValueModel` — on when a sidecar is present unless `MTG_VALUE_MODEL=0`), and
+Hinata — "DEFERRED" below — now ships both a value sidecar (2ec72fd6) and an R=22 keep profile
+(22947513). The sections below are the 2026-07 session log.
+
 Status: **in progress** (Phase 1). Owner-facing design; the executable plan lives here so it is
 durable and shared across machines/agents (per CLAUDE.md's `docs/design/` rule).
 

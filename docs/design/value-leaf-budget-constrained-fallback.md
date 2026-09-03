@@ -63,7 +63,9 @@ byte-identical (all six value decks). Files: `src/ai/TurnSolver.{h,cpp}` (FullSe
 on the cost of the heuristic fallback rollout**. A separate workstream is **pruning the leaves the heuristic
 rolls out on fallback**. If the fallback rollout gets materially cheaper, it finds the win with far less
 budget → a **moderate** reserve (probe keeps its cheap verified wins, fallback still finishes) becomes viable
-and potentially **net-positive**, not a neutral revert. So: **hold the reserve change** (keep it OFF/uncommitted
+and potentially **net-positive**, not a neutral revert. *(2026-09-03: the held patch NO LONGER
+EXISTS anywhere — `MTG_VALUE_FALLBACK_RESERVE` has zero hits in src and zero commits on any
+branch; rebuild from this description if ever wanted.)* So: **hold the reserve change** (keep it OFF/uncommitted
 to avoid conflicting with the fallback-leaf-pruning edits in the same `FullSearchLineHybrid`/`FSLineWin` path),
 then re-run the reserve fraction sweep once cheaper fallback rollouts land. Target: a fraction where Hinata
 avg9 goes **negative** (net better), not just back to pure-heuristic-neutral.

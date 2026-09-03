@@ -90,3 +90,6 @@ safe to enable (closing the ~24% Medallion slice of the residual).
 `src/ai/TurnSolver.cpp` (default-OFF flags, inert): `MTG_REALIZE_CHECK`
 (`SubsetRealizableInCastOrder` + the `consider` call) and `MTG_SOLVE_MEDALLION_CREDIT` (the strand
 repro). Keep or revert per the next session; the approach above is self-contained.
+*(2026-09-03: the scaffolding was never committed — neither flag exists in src. The leaf half of
+option 2 shipped as the default-on sequenced ritual credit (TurnSolver ~12665); option 1 exists
+as `MTG_EXEC_FEAS`, default OFF, search-only.)*

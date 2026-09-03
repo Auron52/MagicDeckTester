@@ -558,6 +558,10 @@ so they now guard every future smoke and regression run, not just this adoption.
 
 ## Adoption checklist — what is done, and what needs the user
 
+**(Updated 2026-09-03: the checklist is CLOSED** — engine work committed, list swapped and
+archived as `v2-instigator-entrance` (3faf5c76; note: not the `v2-instigator-libation` name the
+table uses), value leaf adopted (7d13fd6c), mulligan profile + GT rebaselined (17dac2d7).)
+
 | step | state |
 |---|---|
 | candidate list staged at `decks/Mirrorwing Dragon/v3-heroism-draught/` | **done**, 60 cards verified |

@@ -1,5 +1,9 @@
 # Per-deck play digest: regression tripwire + mulligan-pooling gate
 
+**Status (updated 2026-09-03): BUILT** — digest tripwire + `--deck` runner filter (0b2df839),
+pooling gate (708a4342); the digest field lives at `ExhaustiveKeepPolicy.h:42` and the gate in
+`ExhaustiveKeep.cpp`. The Slivers freeze it was deferred behind ended (R=100 adopted, afe917cb).
+
 **Status:** design, not yet built. Deferred until the in-flight Slivers R=100 mulligan
 profile is pooled (that repo copy is frozen — see the "Freeze interaction" note at the
 bottom). This doc is self-contained; an implementing agent can build from it directly.

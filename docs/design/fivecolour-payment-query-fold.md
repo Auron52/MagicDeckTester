@@ -51,7 +51,8 @@ Cheapest attribution: add a thread_local counter per call site (the `TapForCostS
 ManaPayment.cpp ~651, the two `BatchPrepayMainCasts` backtracks, and the per-cast fallback), print
 under the existing `MTG_TAP_STATS` dumper, and run the 12-game FiveColour command above. One build,
 one run. Note `MTG_SEL_MANA_GATE` is **default OFF**, so the enumerator's selection-exact gate is NOT
-the source.
+the source. *(2026-09-03 correction: wrong when written — `MTG_SEL_MANA_GATE` has been default ON
+since 2026-07-30 (TurnSolver.cpp ~12951), so the gate cannot be excluded on that ground.)*
 
 ## The design, IF step 0 says (b)
 

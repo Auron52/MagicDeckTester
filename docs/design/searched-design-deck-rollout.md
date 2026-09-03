@@ -1,5 +1,11 @@
 # Rolling the searched main-phase design out to more decks
 
+**Status (updated 2026-09-03): ACTIVE and largely shipped** — SSM hooks adopted default-ON on
+FiveColour/KittyEquipment/Anti-Lifegain, the Irencrag gate adopted (ddaf992b), and the sound
+greedy-free breakpoint form adopted default-ON (ebfb5f74), which answers §6e's "what does the
+sound form cost" question. Also stale below: KittyEquipment DOES carry gt_logs rows (20, at
+a1ada2b1), and of the "table-less" trio only FiveColour still lacks a keep table.
+
 **Status: OPEN, not started. USER-requested next project (2026-08-22).**
 Goal, in the USER's words: *"expand the number of decks using the new searched design with
 condemnation and no greedy."*

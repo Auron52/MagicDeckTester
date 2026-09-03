@@ -1,5 +1,9 @@
 # The equipment-ETB draw was drawn but never decided (breakpoint site 6)
 
+**Status (updated 2026-09-03): ADOPTED.** `MTG_EQUIP_DRAW_BP` is default ON since a9e86ff1
+(2026-08-25 — "1444 games faster, 18 slower"), and `MTG_METALCRAFT_CREDIT` (named below as
+"pending adoption") is default ON since 200b33b4 (2026-08-21). Both keep a `=0` hatch.
+
 > **STATUS 2026-08-20** — implemented behind `MTG_EQUIP_DRAW_BP` (default OFF), measured over 2764
 > games in two pooled batches, **awaiting the user's adoption call**. The play win is real,
 > reproduces on held-out seeds and never loses a game; it costs ~1.85-1.99x the search work on this

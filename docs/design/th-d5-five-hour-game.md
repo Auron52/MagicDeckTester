@@ -222,6 +222,9 @@ The canonical key went through the full verification pass on the Mirrorwing perf
 - **Remaining for the default flip**: the standing adoption gate only — GT rebaseline (digests move
   by construction) + re-saving the drifted reference via the viewer. Folds into the next joint
   chain rebaseline. Until then canon rides per-pipeline (Mirrorwing batches).
+  *(2026-09-03: the flip HAPPENED — `MTG_CANON_SIMKEY` is ADOPTED default-ON since 2026-08-14,
+  must-find 7/7 at 55145182; the "stays reverted/blocked until gi363 passes" line below closed
+  when gi363 was solved.)*
 
 ## Canon must-find hunt — state at 2026-08-14 end of session
 

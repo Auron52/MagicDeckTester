@@ -175,7 +175,9 @@ option (splice lowers spell count → matters for storm), Irencrag Feat is place
 when the payoff is Dragonstorm (never before Apex), and the payoff is ranked Dragonstorm/Apex first with
 a direct-Dragon (Utvara Hellkite) bad-hand fallback last.
 
-**Status:** NOT yet implemented. Step 1 (byte-identical over-splice skip, commit `d6cb727`) confirmed
+**Status** *(this is the ARCHIVED original spec — Step 2 shipped as GroupChoiceNonPrefixAccel,
+4e68c8c, per the section above; and `MTG_CARD_SCORES_ONLY` further down was later deleted when
+it became the analyzer's only mode, 8d4bdefb; noted 2026-09-03)*: NOT yet implemented. Step 1 (byte-identical over-splice skip, commit `d6cb727`) confirmed
 INSUFFICIENT on its own — a backtrace of a bounded d5 measurement showed the worker still grinding the
 `Solve` odometer (the legal ritual enumeration is itself huge). Step 2 is required for feasibility.
 Implement in DragonstormProvider + a gated enumeration path; validate with smoke 18/0/0 (GT byte-

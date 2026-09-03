@@ -1,5 +1,9 @@
 # Main-phase classification (MAIN1 / MAIN2 / BOTH)
 
+**Status (updated 2026-09-03): ADOPTED PER-DECK** — `ClassifiesMainPhases` is default ON for
+FiveColour (`MTG_5C_PHASE`, USER 2026-08-19) and AntiLifegain (`MTG_AL_PHASE`, a760a9d2,
+2026-08-22); the *global* `MTG_PHASE_CLASSIFY` force remains rejected/default-off.
+
 **Status: USER-designed architecture (2026-08-14); ENGINE MACHINERY BUILT (same day, see
 "Implementation (as built)" below), measurement in flight, NOT yet adopted — every gate
 default-off, suite byte-identical (smoke 36/36 post-build).** Origin: the

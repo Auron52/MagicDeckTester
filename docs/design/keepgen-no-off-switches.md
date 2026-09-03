@@ -1,6 +1,7 @@
 # Keep-gen: continuous, always-reporting, always-incremental — with no off switches
 
-**Status:** **IMPLEMENTED + VALIDATED 2026-08-10** (branch `phase-1-2-deck-analyzer`, uncommitted).
+**Status:** **IMPLEMENTED + VALIDATED 2026-08-10** (committed as a1dce196 the same day —
+"uncommitted" is stale as of 2026-09-03).
 Follow-on to
 [continuous-only-keepgen.md](continuous-only-keepgen.md), which removed the *execution-path*
 toggles but left three properties still defeatable.

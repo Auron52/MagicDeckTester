@@ -1,5 +1,8 @@
 # Divergence analysis: the comparison step that explains WHY, and catches bugs
 
+**Status (updated 2026-09-03):** Tier 1 IMPLEMENTED as `scripts/divergence_report.py`
+(a306f919, same day); Tiers 2–3 remain manual.
+
 **Status:** design, 2026-08-18 (user requirement). Applies to any paired deck-version comparison
 (`deck_compare.py` screens, and the per-arm store described in [[cell-arm-rollout-store]]).
 

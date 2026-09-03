@@ -1,5 +1,11 @@
 # Play-viewer fixes & improvements — 2026-07-27 batch
 
+**Status (updated 2026-09-03): the batch is COMPLETE; the inline Status column was never fully
+updated.** Seven rows still reading TODO landed per the doc's own progress log; #10 shipped as
+`--cast-order` (892c27fd + c429f445), the reopened #6 as `--storage-hold` (58989ec7); the
+"deferred" searched discard is default ON (f854a6f4); the "overnight GT still OLD" notes are
+long closed; and `test/viewer_validate_baseline.txt` is now empty by design (71e22d90).
+
 Plan of record for a 12-item batch of play-viewer (`tools/play/`) bugs and improvements the
 user reported after a round of hand-play across Anti-Lifegain / Dragonstorm / Auras. Standalone
 (this doc is the shared state; no agent-private notes). Status column tracked inline — update as

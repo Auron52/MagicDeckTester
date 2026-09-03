@@ -1,5 +1,10 @@
 # Enumeration feasibility via the real executor (kill the per-deck cost/legality patching treadmill)
 
+**Status (updated 2026-09-03): BUILT AND MEASURED** (see the reframe + experiment sections
+below) — the reframe rig ships default-off (`MTG_COST_REFRAME`/`MTG_NO_COST_TRICKS`); the
+successor gate is `MTG_EXEC_FEAS` (57b55bf6, 2026-08-30, default OFF). `MTG_ORDER_ORACLE` was
+never built.
+
 **Status:** DESIGN (2026-07-23, user-driven). Not implemented. Written for review before touching the
 hot enumeration path. Supersedes the "increment 2(b)" sketch in
 [sequential-plan-evaluation.md](sequential-plan-evaluation.md) with a more general framing.

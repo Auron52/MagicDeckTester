@@ -1,5 +1,8 @@
 # Mirrorwing Dragon play-viewer issue batch (2026-08-12)
 
+**Status (updated 2026-09-03):** issue #1 SHIPPED exactly as prescribed (74c43ca4/1a7ca347,
+TurnSolver enchant-target gate); the other seven remain open as analysed.
+
 Status: **ANALYSED, NOT STARTED.** Every finding below was reproduced from committed evidence; no
 code has been changed. Self-contained — everything needed to execute this lives in this file or in
 git.

@@ -1,5 +1,10 @@
 # Value-leaf × heuristic depth table → runtime fallback crossover
 
+**Status (updated 2026-09-03): no longer parked** — the `value_play` block IS implemented
+(`ValuePlay`, MulliganProfile.h) and adopted for Hinata2 since 2026-07-18; mulligan profiles
+exist for every suite deck; the two scripts in "Files" moved to `scripts/attic/` and the live
+route is `scripts/valueleaf.sh`.
+
 **Status:** in progress (2026-07-16). Core shipped for the 5 non-Hinata decks (metadata + engine + A/B).
 Hinata measurement and final GT rebaseline pending. Several deferred extensions recorded at the end.
 **PARKED (2026-07-17):** all value-leaf NUMBER generation waits on the real per-deck mulligan profiles (see

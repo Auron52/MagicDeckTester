@@ -2,7 +2,10 @@
 
 **Status: ADOPTED — default ON for Dragonstorm (opt-out `MTG_UNPRUNE=payoffprune` / `MTG_UNPRUNED`),
 2026-07-22.** Shipped on the BASELINE (fake-red) model; smoke + regression GT rebaselined. The Unclaimed
-`colored_creature_only` fix that surfaced this is **DEFERRED** (held for user game/log review) — the prune
+`colored_creature_only` fix that surfaced this is ~~**DEFERRED** (held for user game/log review)~~
+*(2026-09-03: it was ADOPTED the same day — e6c1f2c3; see unclaimed-territory-restricted-mana.md.
+Also: `MTG_DRAGON_PAYOFF_PRUNE` in the design section was never shipped — the gate is
+`UnprunedGate::PayoffPrune`, no per-flag env)* — the prune
 is validated as a win *independent* of it (see "Shipping-model measurement" below). See also
 [ritual-payoff-guard-stormgate](../../) (the committed d0/leaf surplus guard) and
 [hinata-spasm-gate-rootcause.md](hinata-spasm-gate-rootcause.md) (the Hinata analog).

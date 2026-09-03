@@ -44,3 +44,5 @@ rather than totals. Constraints:
   route as `MTG_SEL_MANA_GATE` (flag first, measure, user-approved rebaseline).
 - Related pre-existing approximation, out of scope here: multi-color sources are treated
   as wild (the dual-land approximation noted in the Knights deck's bracket notes).
+  *(2026-09-03: since fixed and adopted at the subset sites — `MTG_COLOR_EXACT` default ON,
+  e4690c37; the rock-credit colour gate that is this doc's own deferred fix is still deferred.)*

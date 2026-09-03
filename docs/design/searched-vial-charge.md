@@ -15,7 +15,9 @@ upkeep the choice is real and two-sided:
 `WantVialCharge` (`SpellEffects.h`, provider-owned) is a good rule — hold while a creature of the
 current MV is in hand, else climb toward a bigger one, else pre-charge toward the deck's dominant MV
 — but it cannot see which side actually wins the game. It stays as the **default, fallback and
-tie-break**; the answer is now searched.
+tie-break**; the answer is now searched. *(2026-09-03: REVERSED — the shipped decider is the
+hand-aware root heuristic; `MTG_SEARCHED_VIAL` and `MTG_VIAL_AXIS` both default OFF since
+3efbe969, 2026-08-30, the fan measuring −108 turns over 34,325 suite games. `=1` now OPTS IN.)*
 
 ## Shape (identical to the searched cleanup discard)
 

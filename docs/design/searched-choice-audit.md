@@ -33,6 +33,11 @@ remainder" idiom).
 
 ## (A) SAC-LAND AXIS design — IMPLEMENTED 2026-08-25
 
+**(Updated 2026-09-03: ADOPTED — `MTG_SAC_AXIS` default ON since 89076b85, 2026-08-26; the
+Crop-Rotation cast-desirability gate flagged "still open" below shipped as
+`MTG_SAC_SPAWN_CAST_GATE`, default ON. The user decision this section asks for was taken:
+axis + spawn-last prior, both.)**
+
 Status: built exactly per the design below, plus the bounceland prior tier. Sites:
 `Plan::sac_pins` (TurnSolver.h), `ScriptedSacLand` + `ConsumeScriptedSacPin` +
 consumption in `PerformSacrificeLandCost` (SpellEffects.h; the one consumption rule is a

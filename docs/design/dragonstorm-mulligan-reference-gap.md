@@ -27,7 +27,9 @@ execution-enforcement / cast-ordering work did not cause them.
 
 ## Root cause: no trained keep model + a curve check that miscounts a combo deck's mana
 
-Dragonstorm has only `Dragonstorm.profile.json` (no `.value.json`, no exhaustive `.keepmodel`), so mulligan
+Dragonstorm has only `Dragonstorm.profile.json` (no `.value.json`, no exhaustive `.keepmodel`
+*(2026-09-03: both now exist — 5e646e77 shipped the R=40 keepmodel and a .value.json; the
+`curve_check: none` quick fix is still unadopted, the profile still reads two_drop)*), so mulligan
 uses the **default heuristic** (`AIEngine::KeepHand`). Its `curve_check: two_drop` rejects any hand with
 `land_count < 2` (`AIEngine.cpp` ~L534) — counting **only lands**, not rituals or Lotus Bloom. For a
 ritual/Lotus combo deck this is wrong: e.g. s6's initial 7 was `Apex of Power, Mountain, Desperate Ritual,

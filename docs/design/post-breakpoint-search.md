@@ -1,5 +1,10 @@
 # Mid-turn breakpoints are search-free zones (2026-07-28)
 
+**(Defaults drifted since — 2026-09-03:** `MTG_BP_SEARCH` default is now **2** (not 4 as one
+table below says), the site mask default is **0x77** with site 3 searchable by default
+(`MTG_BP_SITE3` default ON since ebfb5f74; "all" = 0x7F = 127, not 31), and the "GT NOT yet
+rebaselined" lines deep in the doc are long closed (4772c17d).)
+
 **Status: FIXED and ADOPTED.** The fix is `Plan::bp_choice` (below). Defaults `MTG_BP_SEARCH=2`,
 **Follow-up (2026-07-28, second pass): a rollout mana-payment bug this work uncovered is fixed and is
 a standalone win on held-out seeds (see ROOT CAUSE); the nested `bp_at` axis is now defect-free but

@@ -143,3 +143,5 @@ touched `src/ai/TurnSolver.cpp` — the repo's post-rebase rebuild-and-recheck r
   `b5c3de95` RevealLogPause sticky flag + a real `g_play_soulfire_chooser` leak fix
   (`MTG_PAUSE_HOOK_FLAG=0`, `MTG_PAUSE_HOOK_AUDIT=1` hatches); `e25fb644` the EnumGroupCap finding.
 * FiveColour has **no mulligan profile** and is **not in the regression tiers** — both user-initiated.
+  *(2026-09-03 correction: FiveColour has been in ALL THREE tiers since 7cfbd079, 2026-08-14 —
+  before this line was written; only the "no mulligan profile" half holds.)*

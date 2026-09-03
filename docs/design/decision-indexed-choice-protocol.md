@@ -149,7 +149,8 @@ independently verifiable.
    Verified: Dwarven Hold surfaces at upkeep (pre_draw:true), Mercadian at main (pre_draw:false); HOLD keeps
    the battery climbing monotonically, ALLOW lets it burst and reset.
 
-   **REMAINING:** the GUI (a modal on the `storage_hold` decision → populate `S.storageHold`, and push
+   **REMAINING** *(2026-09-03: DONE — eed6c1fe, 2026-07-28; server.js pushes
+   `--storage-hold-prompt` unconditionally, modal + jsdom coverage landed)*: the GUI (a modal on the `storage_hold` decision → populate `S.storageHold`, and push
    `--storage-hold-prompt` in server.js buildArgs alongside it) + jsdom coverage. Until then server.js passes a
    recorded `--storage-hold` but deliberately does NOT push `--storage-hold-prompt` (an unhandled exit-70 would
    strand the live viewer).

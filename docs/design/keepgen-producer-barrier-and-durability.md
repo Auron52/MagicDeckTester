@@ -1,6 +1,8 @@
 # Keepgen: the producer-side barrier and the size-7 durability gap
 
-Status (2026-08-28):
+Status (2026-08-28): *(updated 2026-09-03: Defect 1 is FIXED at HEAD — 6fa7dba0, 2026-08-28,
+bounded speculation via persistent cursor + per-iteration FEED budget; "closes the three defects
+in this doc" per its commit message. §3 retained as the analysis.)*
 * **Defect 1 (producer-side barrier) — DIAGNOSED, OPEN at HEAD.** Verified still present:
   `sub_refine_step()` is called once per outer iteration above an unbounded speculation pass
   (`ExhaustiveKeep.cpp:3413`, `:3420-3427` at `9fbd47a2`).

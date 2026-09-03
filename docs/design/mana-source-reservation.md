@@ -139,7 +139,7 @@ mana dork, or none ever reservable). Net across the suite is a small improvement
 depth with no budget, i.e. the honest read on the heuristic itself. `test/classify_turn_later.sh`
 classifies 9 of the 13 searched slower games as budget **churn** (they recover at 4×/16×).
 
-#### MEASURED (2026-08-17), NOT YET ADOPTED — the follow-up was in the BACKTRACKER, not the rank
+#### MEASURED AND ADOPTED (2026-08-17, efa341ab; GT 4e4c2a02) — the follow-up was in the BACKTRACKER, not the rank
 
 The follow-up above guessed wrong about where the residual lived. `ManaSourceRank` was never the
 gap: **`TapForCostBacktrackWorker` never consults it.** The backtracker walks its candidate sources

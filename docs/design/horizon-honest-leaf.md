@@ -1,7 +1,9 @@
 # The horizon-honest leaf: grading a no-win instead of flattening it
 
-**Status: ADOPTED + SHIPPED (b3dab212, 2026-08-23). Default ON, dragonstorm opted out, GT
-rebaselined on all three tiers, CI green both platforms.**
+**Status: ADOPTED + SHIPPED (b3dab212, 2026-08-23). Default ON, ~~dragonstorm opted out~~, GT
+rebaselined on all three tiers, CI green both platforms.** *(Updated 2026-09-03: the dragonstorm
+opt-out was removed the same day — 8dc20bdc, user-approved; no deck opts out today, exactly as
+§4b argues.)*
 Origin: USER, 2026-08-22 -- *"I wouldn't change searched m2. However, we could change what we
 evaluate in it."*
 

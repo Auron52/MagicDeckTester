@@ -262,6 +262,8 @@ had moved the deck ~0.5 LP underneath them. Goblins' cells were built at `games=
 9009]` on an older engine, and `ec70359` alone moves d0 by −0.061. Appending without re-anchoring
 would silently mix two engine states.
 
+*(2026-09-03: the guard described next NO LONGER EXISTS — it was never committed and the working
+tree is clean of `MTG_ESC_SKIP_UNTAKEABLE`; rebuild it from this description if ever wanted.)*
 An unadopted guard for this exists in the working tree but is **deliberately uncommitted**: it derives
 the trust depth from the table (one `take_threshold` helper serving both the pre-check and the take
 decision) behind `MTG_ESC_SKIP_UNTAKEABLE`, default off, verified byte-identical on smoke (27) and
@@ -283,7 +285,9 @@ correctness depends entirely on which way `hc*[6]` lands once measured.
   wrong pass depth and the overrun-abort recovers, but gating on it would silently discard a takeable
   escalation, which the code itself already labels `LOSSY`. Order of work: extend the audit to the
   adopted branch, calibrate `escalation_r` per deck, measure the lossy rate, and only then gate.
-- **`escalation_cap` is inert fleet-wide.** It is documented as the CONVERGENCE cap ("heuristic gains
+- **`escalation_cap` is inert fleet-wide.** *(2026-09-03: no longer true — across the now-16
+  `value.json` decks it binds on at least FiveColour and StompySurprise, cap 5 < target 6.)*
+  It is documented as the CONVERGENCE cap ("heuristic gains
   ~0 past it", `clamp(cap, 1, depth)`, "never search deeper") but is set equal to `target_depth` on all
   nine decks, so it never binds. Its live function is as a *switch*: `escalation_cap > 0` is what
   selects `eff_single_deck`, the single-pass predicted-affordable path. Worth either setting it to the

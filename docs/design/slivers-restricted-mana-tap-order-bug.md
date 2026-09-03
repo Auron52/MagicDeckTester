@@ -1,5 +1,9 @@
 # Slivers restricted-mana tap-order bug (exposed by `e6c1f2c`)
 
+**Status (updated 2026-09-03): BOTH FIXED AND ADOPTED** — primary clamp-59 a8ea4369, secondary
+7b47650d (both 2026-07-26), GT rebaselined. The "fix not yet written" header and the
+"UNCOMMITTED" adoption-checklist tail are history.
+
 **Status:** ROOT-CAUSED (primary), secondary sub-bug scoped. Fix not yet written. 2026-07-25.
 
 ## Symptom

@@ -1,5 +1,10 @@
 # Deleting the greedy breakpoint continuation (MTG_BP_NO_GREEDY_CONT)
 
+**Status (updated 2026-09-03): the TIGHT sound recipe is ADOPTED** (ebfb5f74, 2026-09-02 — five
+recipe defaults ON incl. `MTG_BP_CANON_CONT`; see "ADOPTED: the TIGHT sound recipe" at the end of
+this doc). `MTG_BP_NO_GREEDY_CONT` itself stays default OFF — the header below is the
+pre-adoption record.
+
 **Status: BUILT, measured on 9 decks, default OFF. Adoption is a USER call; one deck (hinata) is
 still underpowered.** Self-contained. Everything needed to resume is here or in git.
 

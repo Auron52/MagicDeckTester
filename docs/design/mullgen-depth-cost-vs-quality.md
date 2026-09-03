@@ -5,7 +5,9 @@ answer that for other decks **without hours of regeneration**?
 
 Motivation: the user wants to run BOTH the value-leaf and the mulligan profile for **Mirrorwing**
 over the weekend of 2026-08-15, and Mirrorwing's mulligan generation is currently deferred as
-infeasible (`mirrorwing-mulligan-gen-deferred.md`).
+infeasible (`mirrorwing-mulligan-gen-deferred.md`). *(2026-09-03: since overtaken — the
+Mirrorwing table was generated and adopted (17dac2d7), the deferral doc retracted, and
+fivecolour's `mull_gen` is now d2/b1 (d1276651), not the d3/b3 discussed below.)*
 
 ## Rule 0 for this comparison: it was INVALID before 2026-08-15
 

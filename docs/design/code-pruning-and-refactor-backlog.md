@@ -5,6 +5,17 @@ written for another agent to pick up cold. Every claim below is backed by a meas
 `file:line` citation taken on branch `phase-1-2-deck-analyzer` at commit `e97c85a`
 (2026-07-30).
 
+## Status (updated 2026-09-03): the BODY below was never updated and is ~705 src commits stale
+
+Snapshot-taken at e97c85a (2026-07-30); read the body as history, not as open work. Verified
+drift highlights: **A8's own status line is now false again** — `build-tsan/` is back (747 MB)
+plus a new `build-instr/` (347 MB), and build.sh still has no sanitizer mode; **A5's index
+claim no longer holds** — docs/design/ has ~285 files while README.md links ~115 (~170
+unlinked); B3/C2's "no test/lib, no unit tests at all" are false (`test/lib/` exists; doctest
+suites under `test/unit/`); scale claims understate badly (TurnSolver.cpp ~32.8k LOC not 13.5k,
+suite is 16 decks not 8, ~714 registered flags not 290); and the appendix's "default build
+config Debug (-O0)" is fixed.
+
 ## Status (updated 2026-07-30, after verification of the claims)
 
 The Tier A claims below were independently re-verified before acting (multi-config default

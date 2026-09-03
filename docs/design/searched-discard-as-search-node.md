@@ -12,7 +12,10 @@ GT accepted all three tiers on the final binary. SUPERSEDED WIRING (user ruling 
 the band is NOT a general rule — it is **opt-in per deck via the PROFILE**
 (`mulligan.spare_copy_band`, default false; `MTG_SPARE_COPY_BAND=0` stays the global force-off
 hatch), set only by the analyzer's per-deck DISCARD ANALYSIS stage with user approval — see
-`docs/design/per-deck-discard-analysis-phase.md`. That stage (search-labelled evidence →
+`docs/design/per-deck-discard-analysis-phase.md`. *(2026-09-03: the SPARE-COPY BAND was later
+RETIRED WHOLESALE — 218164fd, "retire the spare-copy band (2.08x cheaper), author per-deck
+rules"; `spare_copy_band`, `MTG_SPARE_COPY_BAND` and `SpareCopyDiscardBand` no longer exist in
+src. The `MTG_DISCARD_NODE` adoption itself stands.)* That stage (search-labelled evidence →
 AI-authored rule → paired A/B → approval) is the durable mechanism; a per-deck
 `mulligan.discard_order` (tier-A shed order) is part of its rule vocabulary. The blind width axis
 stays at 1 everywhere (refuted below); any future widening must be bp-style apply-time

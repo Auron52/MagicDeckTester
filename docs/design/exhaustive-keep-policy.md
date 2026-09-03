@@ -196,6 +196,11 @@ matching bucket_fp/deck_fp, distinct seeds). R is **per-mode**, so R=100 = 100 g
 
 ## Next steps
 
+**(Updated 2026-09-03: items 1 and 4 are DONE** — all three GT tiers have long since been
+rebaselined (current at 3ffb1f09), and Knights shipped a deployable R=50 profile at 6d1794d1.
+Artifact paths below predate the per-deck folder refactor (a2ba8712): they now live at
+`decks/<name>/<name>.keepmodel.exhaustive.*.json.gz`.)
+
 1. **Re-baseline Slivers *overnight* GT** for the bottoming-on win-turn shift (per-game audit → `--accept`).
    Smoke + regression GT already reflect bottoming-on (re-baselined at 4136cc6, after the bottoming-on
    profile shipped at 3960ca4); only the overnight seeds (s4004–7007) remain.

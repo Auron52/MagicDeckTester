@@ -30,7 +30,9 @@ can't always **finish the depth level it needs** — on 4 antilife d5 knife-edge
 a hair shallower and the win tips to a loss. Net over all decks the change is **mean dLP = +0.0000**
 (antilife +0.0028, burn/knights/slivers/th better-or-tie, hinata byte-identical), so it shipped as-is.
 
-**Deferred fix:** give the escalation a **fresh/full budget** (as the pre-fallback hybrid's redo did) instead
+**Deferred fix** *(2026-09-03: DONE — shipped as `MTG_ESCALATION_FRESH_FRAC` and adopted
+per-deck at 0.5 for antilife (f517bb36); the "no downside" expectation was refuted at frac 1.0)*:
+give the escalation a **fresh/full budget** (as the pre-fallback hybrid's redo did) instead
 of the remaining budget — the escalation is the quality path, so starving it is counterproductive. Trade-off:
 it "double-spends" budget on escalated decisions (value-leaf pass + full heuristic pass), but the value-leaf
 pass is cheap (free leaves). Expected to recover the antilife knife-edge wins with no downside at generous

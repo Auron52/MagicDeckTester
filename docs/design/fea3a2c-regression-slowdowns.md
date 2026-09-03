@@ -1,5 +1,9 @@
 # fea3a2c (rituals-before-payoff CastOrderRank): regression slowdown classification
 
+**Status (updated 2026-09-03): CLOSED** — the rebaseline this doc calls "NOT" done landed at
+49e3ce86 (2026-07-21) and all three tiers have been re-accepted many times since. No decision
+outstanding; kept as the slowdown-classification record.
+
 2026-07-21. `fea3a2c` (DragonstormProvider::CastOrderRank — rituals rank 15, Irencrag 18, before the
 payoff at 20) is committed and **net strongly positive** on the loss-penalized avg (regression d3
 s2002 6.107→5.557, s3003 6.220→5.600; searched 631 faster / 30 slower). The committed **regression**

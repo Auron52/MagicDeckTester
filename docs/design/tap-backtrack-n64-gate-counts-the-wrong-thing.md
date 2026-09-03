@@ -1,5 +1,8 @@
 # The n>64 gate counts the WRONG THING — root cause of the mixed-class blow-up (2026-08-16)
 
+**Status (updated 2026-09-03): BOTH FIXES SHIPPED** — Fix 1 (3fdf7f19), Fix 2 (2c6bc641), and
+the payable-mana cache (the "STILL BROKEN" table row below) closed by f990bcfe, all 2026-08-16.
+
 **Status: root-caused and measured. Fix 1 written but NOT YET VALIDATED. Fix 2 designed, not written.**
 Answers the open question in [[tap-backtrack-mixed-class-sighting]] (the other agent's Mirrorwing
 handoff). Self-contained.

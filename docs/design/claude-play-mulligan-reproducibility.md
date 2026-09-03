@@ -2,7 +2,7 @@
 
 Self-contained.
 
-## STATUS (2026-07-02) — record + replay IMPLEMENTED; player-controlled mulligan still deferred
+## STATUS (2026-07-02) — record + replay IMPLEMENTED; player-controlled mulligan ~~still deferred~~ *(shipped 2026-07-03 — mulligan/bottom decision types, main.cpp; see claude-play-decision-parity.md items 2–3)*
 
 The reproducibility half is shipped: the engine RECORDS the mulligan it made and can REPLAY a
 recorded one, so a saved reference reconstructs its exact opening hand on any engine version.

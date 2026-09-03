@@ -58,7 +58,9 @@ Pieces (all have per-verb precedents in the same files):
   changing never is — it means the engine got worse (fix the engine), unless the AI can PROVE to
   the user the recorded line rode an engine bug (then, with the user's sign-off, the reference is
   marked invalid instead). "Draws diverged" is a symptom, never the verdict.
-* **Deck-version selector** (USER 2026-08-27): a separate viewer selector to play OLD or modified
+* **Deck-version selector** (USER 2026-08-27) *(2026-09-03: SHIPPED — 6d09701a, 2026-08-29,
+  `resolveDeck(deckName, version)` in server.js; the cycle=/sacdraw= verbs that are this doc's
+  main subject remain deferred)*: a separate viewer selector to play OLD or modified
   deck versions (e.g. `decks/Mirrorwing Dragon/v1-twinflame-anger/` — the archived list whose 24
   references exist), defaulting to the latest stable version; maturity/references/bench resolve
   per VERSION (the archived list's references must not count for the new list — today's

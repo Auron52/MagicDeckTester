@@ -5,6 +5,11 @@ remaining spell mechanics and the mid-build resume state so a compaction/handoff
 **Line numbers drift** (concurrent edits) — anchors below are by FUNCTION/PATTERN, which are stable.
 
 ## Session resume state (2026-07-18, updated) — READ FIRST on resume
+
+**(Updated 2026-09-03: this resume state is HISTORICAL.** The 2026-07-18 background gen is long
+gone; `MTG_SKIP_GRID` was deleted when card-scores-only became the analyzer's only mode
+(8d4bdefb); and the Bucket-B viewer items — target/dragon/firebreathe/storage_hold — have all
+since been wired. Do not resume from here.)
 - **BUILD COMPLETE: all 16 cards implemented, full coverage (`missing=[]`), byte-identity clean (full smoke
   18 passed / 0 new / EXACT digests).** Branch `phase-1-2-deck-analyzer`. Commits (in order):
   `f50de75` Knights references · `ea2c3cb` 12 cards + inert splice scaffolding · `5529bfb` Desperate Ritual

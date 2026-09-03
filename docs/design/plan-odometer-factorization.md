@@ -239,7 +239,8 @@ details were each measured, and each mattered:
    printed `{1}{R}`, put the spliced copy early, and dropped it exactly like Seething Song — costing
    **37 games**.
 2. **Gate it on the provider** (`DecisionProvider` Hook 30 `CastCheapestFirstWithinTier`, default off;
-   Dragonstorm opts in). At the root it churned 21 of 24 smoke configs, regressed
+   Dragonstorm opts in). *(2026-09-03: the root default is now TRUE — DecisionProvider.h:1317,
+   no provider overrides — so every deck casts cheapest-first within a tier today.)* At the root it churned 21 of 24 smoke configs, regressed
    slivers/Hinata/Anti-Lifegain/Knights and cost **2 searched slowdowns**.
 3. **Restrict it to mana accelerants.** Applied to every equal-rank tie it also reordered *creatures*,
    where cost is the wrong key and ETB order carries real value — Scourge of Valkas damages per Dragon

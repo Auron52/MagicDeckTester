@@ -1,5 +1,10 @@
 # Land-signature completeness: an incomplete dedupe key made land abilities unreachable
 
+**Status (updated 2026-09-03):** ADOPTED 2026-07-30 (cb806c84, dynamic land tapped-ness;
+`MTG_LAND_CLOSING_WINDOW` default ON), GT rebaselined 2026-08-02 (c89a7c25). The signature fix
+itself remains opt-in as `MTG_LAND_SIG_COMPLETE` (the `MTG_LEGACY_LAND_SIG` hatch named below
+does not exist).
+
 **Status:** BUILT, measured, GT-rebaseline pending (2026-07-29). Found while measuring the
 demand-driven colour-bucketing idea from
 [plan-odometer-factorization.md](plan-odometer-factorization.md) — the colour idea measured dead,

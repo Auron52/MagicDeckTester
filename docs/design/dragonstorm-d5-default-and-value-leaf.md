@@ -58,7 +58,7 @@ Dragonstorm references exist yet, so the model is **NOT** reference-validated; t
   the leaf is escalated everywhere so the speedup is the main win, not clairvoyant depth. Artifacts:
   `logs/eval_dragonstorm/` (rows, gbdt, budgeted_ab), `logs/eval/valueleaf_depth_dragonstorm.txt`.
 
-## Deferred: build a value-leaf model for Dragonstorm (gated on references)
+## Deferred: build a value-leaf model for Dragonstorm (gated on references) *(overtaken — BUILT 2026-07-22, see the GENERATED section above; `Dragonstorm.value.json` ships)*
 
 **Why it's the right general lever (not per-deck hand heuristics):** the user dislikes
 hand-authoring per-deck d0 heuristics, and d0 is inherently weak for a combo deck (the storm

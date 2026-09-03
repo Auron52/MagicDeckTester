@@ -14,7 +14,8 @@
 > effect, since Puresteel Paladin is the only card carrying the param, only KittyEquipment plays it,
 > and that deck is not in the tiers.
 
-**Status:** built behind `MTG_METALCRAFT_CREDIT` (default OFF), measured 2026-08-20.
+**Status:** built behind `MTG_METALCRAFT_CREDIT` (~~default OFF~~ ADOPTED default-ON per the
+block above — this line predates the adoption), measured 2026-08-20.
 **Deck:** KittyEquipment only — `metalcraft_equip_zero_artifacts` is carried by exactly one card in
 `cards.json` (Puresteel Paladin) and by exactly one deck, and KittyEquipment is **not** in the
 regression tiers. So this lever cannot move any suite deck's ground truth.

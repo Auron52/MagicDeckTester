@@ -1,5 +1,9 @@
 # Hinata mulligan-profile generation with the escalation confidence-gate
 
+**Status (updated 2026-09-03): SUPERSEDED** — Hinata's R=22 exhaustive profile was generated
+and adopted 2026-07-25 (22947513) on frozen 7f3aaa8 at d3/b10, *without* this escalation-gate
+plan. Kept for the T-sweep evidence.
+
 **Status:** ready to run — threshold decided (T=0.70), gate config frozen, awaiting the
 user to kick off the multi-week regen on the secondary machine.
 

@@ -111,3 +111,4 @@ categories). shuffle-dead and mull-drift are accepted classes and never gate.
 - `logs/viewer_checks/protocol_final_e97c85a.log` — final intent-replay sweep.
 - `logs/viewer_checks/probe_*.log` — per-reference stuck-frame dumps used for root-causing.
 - `scripts/ref_line_replay.py` — now imports the shared `plan_key`/`find_plan` from the check.
+  *(2026-09-03: moved to `scripts/attic/ref_line_replay.py`, 85fe9044.)*

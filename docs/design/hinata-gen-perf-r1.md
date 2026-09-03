@@ -12,6 +12,9 @@ the recipe's own "5–9 day" figure and clearly not survivable to repeat on play
 
 ## Root cause: Hinata is the ONLY tabled deck with no `value.json`
 
+**(Updated 2026-09-03: the premise is gone — `decks/Hinata2/Hinata2.value.json` shipped at
+490745c5, 2026-07-14, and the R=22 gen completed and was adopted at 22947513, 2026-07-25.)**
+
 The 2-week number is a **per-rollout rate** problem, not a hand-count problem:
 - Hinata: K=20 → ~700k cells (7/6/5/4), comparable to antilife's 520k. Hand count is fine.
 - Rate: **~40 rollouts/s on 24 threads** (d3/b10, 0.59 s/game single-thread) vs antilife's ~275/s — Hinata

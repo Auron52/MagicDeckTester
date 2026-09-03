@@ -520,6 +520,25 @@ ONCE where the models are attached and carry it as a stamped VALUE on `GameState
 — correct and free (back to 50 s, three identical runs). The general lesson: a per-game constant
 derived from a POINTER must be stamped beside the pointer, never memoised on its identity.
 
+## RE-MEASURED 2026-09-03 (user asked "any upside?"): benefit SHRANK — decision unchanged
+
+Per the standing instruction below ("re-measure the BENEFIT, not the gates"), re-run on the
+current tree (HEAD 6bbe8db3; post enum-memo, tight BP recipe, strict filter feed, heroism levers):
+
+- **Fixed budget (what production runs):** `MTG_DOM_PRUNE=1` regression tier vs GT — 0 slower,
+  2 faster (antilife d3 −0.0166, fivecolour d3 −0.0050), 8 configs play-changed at unchanged
+  score, NET −0.000270 turns; makespan 133 s vs 163 s clean baseline (baseline 80/80
+  byte-identical to GT). Same noise-level picture as 2026-08-15.
+- **Unbounded budget (fivecolour, the only deck that ever benefited; 12 g, d5, b0, census both
+  arms, logs/domprune/):** snaps 9,007,991 → 7,286,084 = **19.1% work saved** (was 39.2%),
+  wall 128.8 s → 94.7 s = **1.36x** (was 1.59x), user time also 1.36x, identical win set
+  (avg 5.3333 both arms). The tree's own adoptions since August have harvested roughly half of
+  the redundancy the prune used to remove.
+
+Nothing in production runs at b0 (unchanged), so the reachable upside is still the noise-level
+fixed-budget quality delta. The 2026-08-15 NOT-ADOPTED decision stands on strictly stronger
+ground than when it was made; flags stay default OFF.
+
 ## STATE OF PLAY (2026-08-15) — read this first on resume
 
 > **OUTCOME: NOT ADOPTED (user decision, 2026-08-15).** Every gate passed; the prune is still off,

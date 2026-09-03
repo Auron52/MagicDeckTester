@@ -6,6 +6,8 @@
    `VialProvider` opt-in. `VialProvider`'s now-redundant override is deleted.
 2. **The charge is decided IN-SEARCH** as a plan axis (`Plan::vial_charge_choice`), replacing the
    out-of-band probe. `MTG_VIAL_AXIS` default ON; `=0` is the exact legacy hatch (probe restored).
+   *(2026-09-03: change 2 was REVERSED — `MTG_VIAL_AXIS` is default OFF and gated since 3efbe969,
+   2026-08-30, the fan measuring −108 turns over 34,325 suite games; change 1 stands.)*
 
 Predecessor: `searched-vial-charge.md` (the probe this retires). Template:
 `searched-discard-as-search-node.md` (the same ruling applied to the cleanup discard) and the

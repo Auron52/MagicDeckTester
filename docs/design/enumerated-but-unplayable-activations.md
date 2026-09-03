@@ -2,6 +2,7 @@
 
 Found while making board activations clickable in the play viewer (the `activate: true` / `verb`
 work in `src/main.cpp`'s plan-action JSON). One is **fixed**; one is **open**.
+*(2026-09-03: both are now CLOSED — §2 closed 2026-08-26, see its section.)*
 
 ---
 

@@ -27,8 +27,10 @@ Every other `MTG_KEEP_*` / `MTG_EQUIV_*` knob and the uniform/round/wave code pa
 > (`MTG_KEEP_CONTINUOUS`, `MTG_KEEP_JOURNAL`, `MTG_KEEP_CHECKPOINT_SEC`, `MTG_KEEP_FLOOR_GROUPS`,
 > `MTG_KEEP_SWEEP_SEC`, `MTG_KEEP_CONTINUOUS_LOOKAHEAD` → baked = 4, `MTG_KEEP_NO_FLOOR_SPEC`,
 > `MTG_KEEP_NO_SUB_FUSE`). `recommend` is ported to the continuous floor phase and a **rolling-vg** freeze
-> target is added (`MTG_KEEP_REFS_OFFSET`, default 2). The **one remaining piece** is folding the
-> `sub_floor` (fast/keep-only) adaptive sub-refine into the pool so `run_refine_waves` can be deleted —
+> target is added (`MTG_KEEP_REFS_OFFSET`, default 2). ~~The **one remaining piece** is folding the
+> `sub_floor` (fast/keep-only) adaptive sub-refine into the pool so `run_refine_waves` can be deleted~~
+> — **DONE (b3b8d497, 2026-08-09): the sub-refine is fused into the continuous pool and
+> `run_refine_waves` is deleted from src**; references to it below are historical —
 > see `docs/design/continuous-only-keepgen.md`, which is the authoritative status + plan. The historical
 > sections below (with their `MTG_KEEP_CONTINUOUS=1` gating and temporary A/B knobs) are the SHIPPED-2026-07-24
 > record; the flags they cite as "temporary A/B knob" are the ones now retired.

@@ -163,7 +163,10 @@ cannot be checked from the container.
 
 Still OPEN after this batch, unchanged: the three pre-existing audit hard misses (Goblins echo /
 KittyEquipment bounce / burn sacrifice), the `protection_from_everything` classification, the literal
-replicate plan dimension, and the Reality Spasm model. **New and open: the mirrorwing run-to-run
+replicate plan dimension, and the Reality Spasm model. *(2026-09-03: the last two have since
+closed — replicate as a plan dimension shipped default-ON at 45d2ec40 (`MTG_REPLICATE_DIM`), and
+the Spasm model shipped as the literal untap, `MTG_SPASM_UNTAP_LITERAL` default-ON at 4f449fbd —
+see OPEN 6's closure note.)* **New and open: the mirrorwing run-to-run
 divergence below — cause unknown.**
 
 ## The OVERNIGHT tier — audited the same way, and one thing it caught
@@ -488,7 +491,7 @@ move to is irrelevant), so per the convention that a sweep scaffold goes once it
 down, `ManaSourceRankBase` no longer carries it. The shipped behaviour is the human-play-only
 `ManlandReserveReleaseScope`.
 
-## OPEN 6 — Reality Spasm is still the wrong MODEL
+## OPEN 6 — Reality Spasm is still the wrong MODEL *(CLOSED 2026-09-01: the literal-untap model shipped default-ON, 4f449fbd + 7994ce8f)*
 
 Its refloat now carries the untapped sources' true colours, which fixes the illegal-mana half. The
 underlying model is unchanged: "untap X target permanents" is still simulated as *floating* X mana

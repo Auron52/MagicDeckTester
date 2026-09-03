@@ -77,6 +77,10 @@ match Scryfall); fd-diverge systematic bug FIXED (rollout `m_number` stamp, Turn
 updated (5h STATIC passes). All engine changes UNCOMMITTED (user hasn't asked to commit) but survived a
 Windows-update kill; binary `build/Release/mtg` fresh + matches source.
 
+**(Updated 2026-09-03: this resume block is HISTORICAL.** The engine changes were committed
+(d00e045) and `decks/Auras/` now holds the committed profile, value leaf and exhaustive keep
+table — see the header above and auras-value-leaf.md / auras-mulligan-profile.md.)
+
 **IN FLIGHT:** Stage-4 profile regen — `python scripts/analyze_deck.py decks/Auras/Auras.cod --no-rebuild`
 (log `/tmp/auras_profile.log`; writes `decks/Auras/Auras.profile.json`). If killed again, just rerun it.
 

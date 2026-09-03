@@ -1,5 +1,10 @@
 # Dragonstorm Dragon-put override dialog (deferred)
 
+**Status (updated 2026-09-03): SHIPPED 2026-07-21** (6c4770fb, the same day) — the multi-pick
+modal is wired (GameLogger chooser, `WriteDragonDecisionJson`, `dragonPanelHtml`); and the
+"d5 plays WORSE than d3" open item below was root-caused and fixed as the model-less-d5 resolver
+bug (dragonstorm-d5-default-and-value-leaf.md).
+
 **Status:** deferred feature. The *selection rule* is fully implemented and correct; what's
 missing is a **viewer multi-pick UI** so a human can OVERRIDE which Dragons enter, defaulting
 to the AI's rule pick. Requested by the user during the 2026-07-21 Dragonstorm viewer bug-bash.

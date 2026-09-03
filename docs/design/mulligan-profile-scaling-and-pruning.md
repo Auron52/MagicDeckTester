@@ -1,5 +1,9 @@
 # Scaling the exhaustive mulligan profile: adaptive sampling, pruning, and force-merge
 
+**Status (updated 2026-09-03): largely BUILT** — Lever 1 ships as `MTG_EQUIV_FORCE_MERGE` and
+Lever 2 as the adaptive R schedule (410f215b, 9f11a9ba, c5fcc5fd); the "in-game A/B before
+shipping" step is now a hard gate in `scripts/mullgen.sh`.
+
 **Status:** design, mostly not yet built. Companion to `exhaustive-keep-policy.md` (the base
 method) and `play-digest-and-pooling-gate.md` (the pooling gate). This doc captures the
 efficiency work needed to run the exhaustive keep/bottom profile on *expensive* decks, plus the
@@ -182,8 +186,9 @@ cells, this is where the sub-table savings come from.
   subcomp — a subhand that's a clear loser in one hand is a razor-thin winner in another, so you
   need most of the sub-size table broadly accurate. Tiering helps bottoming only for confident
   mulligans (never bottomed) and mull-0 (no bottoming). Fortunately the sub-size tables are smaller
-  (Slivers 3,787 / 1,661 / 639 vs 7,758), and bottoming ships behavior-gated, so keep-only profiles
-  get full tiering and you pay near-full R on the sub-tables only when bottoming is enabled.
+  (Slivers 3,787 / 1,661 / 639 vs 7,758). (An earlier clause here said bottoming "ships
+  behavior-gated" — deleted 2026-09-03: bottoming is ALWAYS ON with no off switch, per CLAUDE.md;
+  generation bakes `bottoming_enabled=true` unconditionally, so sub-tables always pay their R.)
 
 ## Bottoming attribution (clairvoyance vs worse decisions)
 

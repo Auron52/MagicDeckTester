@@ -14,7 +14,10 @@ configs IMPROVED** on held-out 2002/3003 (d0 4.8200→4.7530); non-Goblins byte-
 it was leaf-independent) — with the untracked `value.json` present, local d5 = 4.3067 vs committed no-leaf GT
 4.2933. Harmless: `value.json` is untracked, so a fresh checkout / CI uses the built-in default and smoke is
 **27/27**. If d5 GT is ever re-accepted, do it with `value.json` moved aside (the committed state).
-**Remaining follow-ups:** (1) overnight-tier GT re-accept (leaf-independent; the documented 8h tail).
+**Remaining follow-ups:** ~~(1) overnight-tier GT re-accept~~ — **DONE (2026-09-03 check: 12
+`goblins_overnight_*` keys are in `test/regression_gt.txt`)**; nothing remains open in this doc,
+and the "RESAMPLE RUNNING" / unchecked Stage 4-6 boxes below are stale (all stages reported
+clean above).
 (2) DEPTH MATRIX generation — IN PROGRESS (see below). (3) global lethal-cut eval — docs/design/lethal-short-circuit-global.md.
 
 ## 📊 DEPTH MATRIX — GENERATED + H3/H4 RESAMPLE RUNNING (2026-07-31)

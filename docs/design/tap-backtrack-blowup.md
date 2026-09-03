@@ -82,3 +82,6 @@ cap + greedy fallback remains the documented next lever if one appears.
 
 FIXED (identical copies) — sibling collapse adopted 2026-08-12; see above. The
 node-cap fallback direction stays unimplemented until a residual sighting demands it.
+*(2026-09-03: the residual DID appear — Mirrorwing, 2026-08-16, tap-backtrack-mixed-class-sighting.md
+— and was closed by the source-count gate fixes 2c6bc641/f990bcfe, not by the node cap, which
+remains unimplemented and no longer needed.)*

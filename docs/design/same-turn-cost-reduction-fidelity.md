@@ -1,5 +1,9 @@
 # Same-turn cost-reduction fidelity gap (Hinata / future reducers)
 
+**Status (updated 2026-09-03):** the fix sketch below IS built — `SameTurnHinataCredit`
+(TurnSolver.cpp ~2819) behind `MTG_HINATA_SUBSET_CREDIT` (default OFF, added 2026-08-30); only
+the adoption A/B is outstanding.
+
 Status: **open, deferred** — a pre-existing fidelity gap, low frequency, not a
 correctness/crash bug. Surfaced while fixing the enumeration mana-total prune
 (commit 14103da); recorded here so it isn't lost.

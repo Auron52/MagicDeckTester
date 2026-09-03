@@ -1,5 +1,9 @@
 # Crackle with Power — declared targets, derived Hinata discount, faithful damage
 
+**Status (updated 2026-09-03): COMMITTED and adopted 2026-07-07** (efc7f10c + 5289974f). The
+"CONTINUATION STATE" section's "All Crackle work is UNCOMMITTED WIP / `git checkout` reverts
+everything" is FALSE against today's tree — do not act on it.
+
 Status: **in progress**. Soulfire dialog fix landed (see bottom); Crackle engine work staged below.
 
 ## Problem

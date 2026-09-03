@@ -1,6 +1,7 @@
 # Shard Volley hold — "don't spend a land before it buys something"
 
-**Status: ADOPTED (default ON), pending ground-truth rebaseline.** Provider-owned prune in
+**Status: ADOPTED (default ON), ~~pending ground-truth rebaseline~~** *(rebaselined 16 minutes
+after adoption — 7a61ea43, 2026-08-04; noted 2026-09-03)*. Provider-owned prune in
 `BurnProvider`; `MTG_UNPRUNE=saclandhold` / `MTG_UNPRUNED` reopen it, `MTG_SV_HOLD=0` is the
 legacy hatch. Code: `HoldSacLandBurn` in `src/ai/TurnSolver.cpp`, called from both plan
 enumerators (`Solve::consider` and `EnumeratePlans::eval_and_push`).

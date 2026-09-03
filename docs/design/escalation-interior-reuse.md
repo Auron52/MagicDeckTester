@@ -202,6 +202,8 @@ The real levers for escalation cost are therefore NOT reuse but **doing less**, 
   rollouts directly. Built; frozen for generation (T=0.70). This is the right lever.
 - **Fresh-budget fix** (`MTG_ESCALATION_FRESH_FRAC=1.0`, working-tree default): recovers the antilife
   budget-exhaustion regression; surgical/byte-identical off the escalating decks. Pending accept.
+  *(2026-09-03: the 1.0 default was REVERTED 2026-07-17 as drift — see escalation-refactor-drift.md;
+  the env default is −1 (legacy) and the fix ships per-deck as `value_play.escalation_fresh_frac=0.5`.)*
 - **Truncated rollout horizon** (`MTG_ROLLOUT_HORIZON`): caps the escalation's rollout length.
 - Probe-cost levers (cap probe depth / lower the value startgate alpha) trade quality for speed and were
   already REJECTED (drop to the no-escalation floor).

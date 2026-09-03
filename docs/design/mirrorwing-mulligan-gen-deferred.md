@@ -40,6 +40,10 @@
 > * **Order of work:** value leaf (running, frozen at `52d1ba29`) → then, alone on the box and at
 >   d2/b3, the `recommend` probe → then the decision about a full gen.
 
+**Status (updated 2026-09-03): NO LONGER DEFERRED** — the exhaustive keep+bottom table was
+generated, repaired (dfffa638) and ADOPTED on 2026-09-02 (17dac2d7, both gates pass, GT
+rebaselined 20 cells).
+
 **Status:** the exhaustive keep/bottom profile for `decks/Mirrorwing Dragon` is NOT generated and
 generation is deliberately deferred. The deck plays on defaults + the adopted value-leaf sidecar
 (`Mirrorwing Dragon.value.json`, presence-only, `mull_gen_depth=3` / `mull_gen_budget_ms=3` —
