@@ -166,7 +166,12 @@ Implemented per the user's stack directive:
   (search plateaus at d3; the burst lines are shallow). 62% T3 kills at searched depth —
   matches the deck's real clock (double sac-land burst = 5 mana on T3).
 - **4a provider audit: Generic (intended for a new deck).**
-- **5c2 leaf tie-break check: running.**
+- **5c2 leaf tie-break: KEEP DEFAULT (unbindable).** 12,000 + 48,000 paired games at play
+  settings: 0 changed in 60,000 total — the horizon-honest tie-break never fires for this deck
+  (the search wins inside the horizon in essentially every rollout, so the no-win leaf
+  comparison never arises). Per the script's guidance, the default (ON) stands: a lever that
+  never fires costs the deck nothing. Not escalating to --blocks 192 — declared inert at this
+  sample, revisit only if the deck's clock changes materially.
 - **5d claude-play sweep: 18 games seed 7100 gi0-17 fanned out (Opus wave all lost to
   API 529 Overloaded; full relaunch on Sonnet — the skill's default model).**
 - **Profile (Stage 4):** DISCARD_INERT (no cleanup shed ever reached); NO_COST_INTERACTIONS;
