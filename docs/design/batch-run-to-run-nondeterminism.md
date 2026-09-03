@@ -295,9 +295,17 @@ is deterministic single-threaded. The unit sites are the 13 `ConsumeAt(budget, u
 `MTG_ROLLOUT_STATS` prints the per-site partition but only as a PROCESS aggregate, so the next step
 is a per-game site partition (or a bisect over the sites) on one fragile game such as 305.
 
-**IN FLIGHT at the time of writing:** 50 games x2 at `--threads 1` under `MTG_DUMP_UNITS` to confirm
-units are deterministic serially. At the 17% rate this has P(false clean) = e^-8.5 ~ 2e-4, so it is
-a high-power check that the chain above really is concurrency-gated.
+**CONFIRMED (2026-09-03): work units are deterministic single-threaded — 0 of 50 games differ.**
+50 games x2 at `--threads 1` under `MTG_DUMP_UNITS`, byte-identical `.units` files
+(`logs/edf_units1/{a,b}`). At the threaded 17% rate this had P(false clean) = 0.83^50 ~ 1e-4, so it
+is a high-power check, not a token one. The chain above is therefore concurrency-gated end to end:
+the perturbation cannot originate inside a game's own deterministic computation, so it enters
+through **state a game does not own** — either shared across threads, or inherited from whatever ran
+on that thread before it.
+
+That is worth stating precisely, because it is what makes the remaining search tractable: the
+culprit must be reachable from the search AND carry information across a game boundary or a thread
+boundary. Pure per-game state, however complex, is exonerated wholesale.
 
 **(superseded) THE NEXT PROBE, and it is cheap: `MTG_DUMP_UNITS=1` records per-GAME work units.** Diff them
 across two runs for a fragile game:
@@ -310,25 +318,55 @@ Either answer is decisive, which is why it is the right next step rather than mo
 
 ## What is NOT yet ruled out, in priority order
 
-1. **Scheduling-dependent cross-game state in a worker thread.** The leading candidate by shape: a
-   batch worker owns its thread across many games, so any cache/memo that survives a game and is
-   keyed loosely can make game N's play depend on which games ran before it on that thread — and
-   the pool's interleave is not reproducible. There is direct precedent: the m2 solve memo's dead
-   cross-game entries once shifted cap-clear timing and broke work-unit thread-invariance. That was
-   fixed; this would be a second instance in a different cache.
-   **The discriminating test:** run the same job twice at `--threads 1`. Single-threaded scheduling
-   is deterministic, so if digests become stable the cause is in this class. This is the next step
-   and it has not been run.
-2. **A wall-clock or timing input reaching a decision.** Budgets are deterministic work units
-   (`NODES_PER_VIRTUAL_MS`), which is why this is second, not first — but any surviving real-time
-   read (an abandon check, a slow-game guard, a cache eviction on elapsed time) would do it.
-3. **Unordered-container iteration order** over pointer- or address-keyed maps.
+Serial determinism (above) narrows this list sharply: the cause must cross a game boundary or a
+thread boundary.
+
+1. **Scheduling-dependent cross-game state in a worker thread.** Still the leading candidate by
+   shape: a batch worker owns its thread across many games, so any cache/memo that survives a game
+   and is keyed loosely makes game N's work depend on which games ran before it on that thread —
+   and the pool's interleave is not reproducible. Direct precedent: the m2 solve memo's dead
+   cross-game entries once shifted cap-clear timing and broke work-unit thread-invariance.
+   **Note the earlier elimination of this was UNDERPOWERED and should not be trusted.** It replayed
+   two games (47, 67) alone versus after their predecessors and found them byte-identical — but at
+   a 17% per-game rate, two games have only a 31% chance of showing the effect at all. Worse, it
+   tested the *same* predecessor sequence, whereas the pool's defining property is that the
+   predecessors DIFFER between runs. It is not evidence.
+2. **Shared state that is thread-SAFE but not deterministic.** ThreadSanitizer being clean does not
+   exonerate this class — a mutex-guarded or atomic cache has no data race and still returns
+   different results depending on which thread arrived first. Everything eliminated earlier "by
+   inspection" was eliminated for thread-safety, which is the wrong property. Re-examine
+   `MulliganProfileIO`'s policy cache and sidecar-resolve map, `CardDatabase::LookupCached`'s
+   `atomic_ref`, and any shared memo, asking only: *can a hit cost different work than a miss?*
+   (`NameRegistry::Intern` is safe here on inspection: it hands back pointers into a node-based set
+   whose element addresses are stable, and identity is preserved. `SubtypeRegistry` is safe by
+   construction — ids are assigned during single-threaded load and the registry is frozen before
+   the worker pool exists.)
+3. **A wall-clock or timing input reaching a decision.** Budgets are deterministic work units
+   (`NODES_PER_VIRTUAL_MS`), and every surviving `steady_clock` read is in `src/analyzer/`, which
+   batch play does not use — so this is third, not first.
+4. **Unordered-container iteration order** over pointer- or address-keyed maps. Note that heap
+   addresses vary between runs even single-threaded (ASLR, and glibc's per-thread arenas), so if
+   address ordering reached a decision the SERIAL runs should have diverged too. They did not,
+   which argues against this — but only for the paths those 50 games exercised.
 
 ## Next step
 
-Narrow to a single game index. A run of one job three times with `--game-trace-dir` gives per-game
-digests; the games that differ localise the bug to one `(seed, game_index)`, which is then cheap to
-run hundreds of times under each hypothesis. `logs/edf_nondet/` holds that run.
+**Running now: is it the per-decision MEMOS, as a class?** One 100-game job, twice per arm, 24
+threads, `MTG_DUMP_UNITS=1`; arm ON is the shipped config, arm OFF sets
+`MTG_SOLVE_MEMO=0 MTG_ENUM_MEMO=0 MTG_FS_NOWIN_CACHE=0 MTG_NO_BP_PREFIX_CACHE=1
+MTG_NO_M2_SEARCH_MEMO=1 MTG_NO_BP_ENUM_CACHE=1`. Driver and results: `logs/edf_memo_off/`.
+100 games gives P(false clean) ~ 1e-8 at the observed rate, so a clean OFF arm is conclusive.
+This test is chosen because it settles hypothesis 1 for the whole memo class in one run instead of
+bisecting caches one at a time — and because the earlier single-cache result
+(`MTG_NO_BP_ENUM_CACHE=1`, 10/400 vs 8/400) only exonerated ONE of the six.
+
+If OFF is also ~17%, the memo class is out and the next probe is a per-game unit-SITE partition
+(the 13 `ConsumeAt(budget, unitsite::...)` calls; `MTG_ROLLOUT_STATS` prints that partition only as
+a process aggregate today, so it needs a small per-game dump) on one fragile game such as 305.
+
+The experiment binary is snapshotted at `logs/nondet_bin/mtg.nondet` (commit `56ba0979`) precisely
+so that concurrent source edits by other work cannot silently change what is being measured
+mid-investigation.
 
 Note that a single-game repro needs `--game-index` — `--seed base+gi` alone plays a *different*
 game, not game `gi` of that seed.
