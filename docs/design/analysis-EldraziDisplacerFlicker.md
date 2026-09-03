@@ -1044,6 +1044,73 @@ with reasons — chiefly painland tap-order (legal, a known unshipped `MTG_PREPA
 cleanly no-oping (the enumerator deliberately carries no affordability gate on activations — the
 Wirewood Lodge precedent — and the payment path is atomic).
 
+## User viewer batch items 1/2/4/5 — CLOSED (2026-09-03)
+
+Picked up from a WIP commit another agent left mid-fix ("wiring the opt-in from
+`EnumeratePlans` only, `Solve` stays byte-identical") after it was killed by an upstream API
+error. Reviewed the inherited diff critically, kept it (it was correct and precisely targeted
+the Drake→Displacer report), then closed the remaining three items. Full working notes:
+`docs/design/edf-task-a-b-c-d-notes.md`.
+
+**Item 4 (Drake→Displacer, `logs/play/rejections/..._s2_gi1_t4.json`) — category (b): the ETB
+untap was modelled, cast ORDER was already right, but the RESOLUTION-time credit from the untap
+was never given back to the scratch board that prices the next cast** (`SubsetPayableSequential`,
+TurnSolver.cpp), and separately the odometer's own upper bound (`ManaPruneBound`/
+`BuildManaGateIndex`) didn't credit the refund either, so the candidate was pruned before the
+sequential rescue ever saw it. Both fixed (inherited WIP). Verified directly: the exact
+`--validate-line` from the rejection log flips `illegal` → `accept`.
+
+**Item 5 (can't activate Eldrazi Displacer to go off) — the VIEWER, not the engine.** Verified
+directly that `EnumeratePlans` already offers `Eldrazi Displacer: blink Peregrine Drake` with a
+correctly-evaluated `{2}{C}` payment once Displacer is on the battlefield. The bug is
+`src/main.cpp`'s `WriteDecisionJson`: its `"activate": true` flag list (which
+`tools/play/index.html`'s `activatableSources()` reads to make a battlefield permanent
+clickable) never listed `Action::Kind::ActivateBlink` or `::ActivatePermAbility` — the
+14th/15th instance of a pattern already fixed 13 times at the same call site for other kinds.
+Fixed by adding both kinds to that list. This also explains the T4-kill half of the report:
+before Depleter/Infiltrator are fetched, Shivan Gorge's damage tap (`ActivatePermAbility`) is
+the only kill on board, and it rode the same missing flag. `CanTapNow` was investigated and
+ruled out — Displacer's `{2}{C}` has no `{T}` in its cost, so it was never gated on that
+predicate at all. Scope-checked inert for `--batch`/autonomous play (human-play-only emitter).
+
+**Item 2 ("I should be able to attach to a land in the plan") — engine half CLOSED.**
+`TurnSolver::CheckLine`'s "Aura enchant TARGET" `addSub` block required `IsCreature()`, so a
+land host already in play (Aether Hub, an in-play Yavimaya Coast, …) got no sub — and because
+that sub is what the dedup signature is built from, two already-in-play land hosts collapsed to
+one candidate. Fixed: resolve the host by `m_number` against ANY permanent, not just creatures.
+Directly reproduced DECISIONS.md's own named repro (seed 1, T2, `cast=Wild Growth` onto Aether
+Hub) on the pre-fix and post-fix binaries: before, `"subs": []`/`"cards": []`; after, the
+`enchant` sub and `Aether Hub` art resolve correctly. Scope-checked inert for `--batch` play
+(`CheckLine` is human-play/`--validate-line`-only; the autonomous plan dedup's own
+`enchant_target` key is separately gated on `HumanPlayActive()`).
+
+**Item 1 (seed 1 T3, "Trace of Abundance on Aether Hub via Conservatory… seems rejected") —
+not a new payment bug.** This is the same shape item 2 fixes (an Aura targeting a land already
+in play, Aether Hub), and the doc already ties them to one root cause. NOT independently
+replayed end-to-end for the exact seed-1/turn-3 board (the saved seed-1 rejection log is a
+DIFFERENT, correctly-illegal turn-2 line and doesn't record what was actually played next, so
+the turn-3 state couldn't be reconstructed) — flagging this honestly rather than presenting an
+invented replay as verification. The item-2 mechanism fix is the answer; whether this exact
+instance also involved a mana shortfall on top of the collapse is unconfirmed.
+
+**Measurement (Task A's fix; B and C are provably inert for batch play).** Paired before
+(commit `56ba0979`, built in a throwaway worktree) / after (this fix), 4 seeds × 100 games,
+d5/budget_ms=20, `ignore_play_profile=true`, one pooled `mtg --batch` per arm:
+
+| seed | before | after | delta |
+|---|---|---|---|
+| 6101 | 6.68 | 6.48 | −0.20 |
+| 6202 | 6.59 | 6.42 | −0.17 |
+| 6303 | 6.81 | 6.55 | −0.26 |
+| 6404 | 6.77 | 6.59 | −0.18 |
+| **mean** | **6.7125** | **6.51** | **−0.2025** (t ≈ −9.85) |
+
+All four seeds move the same direction, an order of magnitude past the ~0.01-turn single-job
+noise floor, and comparable to the three earlier mana-modelling fixes — another data point for
+"hunt modelling gaps, not levers" on this deck. Still 2+ turns short of the user's 4-5 estimate
+(now ~6.5 vs the pre-this-fix ~6.7-6.9 measured here); the learned exhaustive keep table remains
+the untested candidate.
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-09-03)
 

@@ -142,10 +142,31 @@ confident it is *the* explanation given the doc's own item-1/item-2 linkage, but
 personally replayed the exact turn-3 game state to see the verdict flip. Flagging this
 distinction explicitly rather than papering over it.
 
-## Measurement
+## Measurement -- DONE
 
 Paired before/after, both built inside worktrees off this repo (before = commit `56ba0979`,
-the WIP's real parent; after = current HEAD here). 4 seeds (6101/6202/6303/6404) x 100 games,
-d5, budget_ms=20, `ignore_play_profile=true`, `--threads 8`. B and C are confirmed inert for
-batch play (see above), so this measures Task A's effect alone. Results: see below / final
-report (in progress at time of writing this note).
+the WIP's real parent, built at `/tmp/edf_before_wt` then removed; after = current HEAD here).
+4 seeds (6101/6202/6303/6404) x 100 games, d5, budget_ms=20, `ignore_play_profile=true`,
+`--threads 8`, one pooled `mtg --batch` invocation per arm (manifests at
+`logs/edf_taskA_ab/manifest_{before,after}.json`, raw output at
+`logs/edf_taskA_ab/{before,after}_out.log`). B and C are confirmed inert for batch play (see
+above: `CheckLine` and `WriteDecisionJson` are only reachable from `src/main.cpp`'s human-play/
+claude-play CLI paths, never from `Solve`/`SolveUncached`/the rollout), so this measures Task
+A's effect alone.
+
+| seed | before | after | delta |
+|---|---|---|---|
+| 6101 | 6.68 | 6.48 | -0.20 |
+| 6202 | 6.59 | 6.42 | -0.17 |
+| 6303 | 6.81 | 6.55 | -0.26 |
+| 6404 | 6.77 | 6.59 | -0.18 |
+| **mean** | **6.7125** | **6.51** | **-0.2025** |
+
+All four seeds move the same direction (avg win turn DOWN, i.e. faster/better -- lower is
+better, this is a goldfish combo deck). se of the paired deltas = 0.0206, t = -9.85 on n=4
+seeds/400 games per arm -- an order of magnitude past this deck's documented ~0.01-turn
+single-job noise floor, and comparable in size to the three earlier mana-modelling fixes on
+this deck (-0.135, -0.145 etc.), consistent with the standing "hunt modelling gaps" direction.
+This is a real, board-legal-line-unlocking fix, not a heuristic tune, so no adoption gate is
+needed the way a heuristic-optimization lever would need one -- it is a correctness fix like
+the three that preceded it.
