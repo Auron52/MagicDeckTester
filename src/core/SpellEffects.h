@@ -8832,6 +8832,41 @@ inline int EtbUntapLandsCredit(const GameState& state, int count)
 // mana" and "five-mana 2/3". Bounded by `count` (never tap more than the untap will restore), and
 // it deliberately skips sources whose tap has a SIDE EFFECT (pain, drip, depletion, storage) --
 // those are not free to cycle. Called immediately before the cast's payment in all four worlds.
+// MTG_ETB_TAP_YIELD: WHICH lands the tap-ahead takes, when it cannot take them all.
+//
+// The tap-ahead is bounded by `count`, so on a board with more lands than the untap restores it is
+// a CHOICE, and the loop below made it by battlefield order -- i.e. by nothing. That is free money
+// on a deck whose land yields differ: an Overgrowth-enchanted land yields 3 where a plain land
+// yields 1, and the tapped land's mana is BANKED as float *and* the land comes straight back
+// untapped. Worked example, 6 lands (one Overgrowth at yield 3, five plains) and count=5:
+//   battlefield order (plains first): float 5, board 5+3=8  ->  13 available
+//   yield order:                      float 7, board 8      ->  15 available
+// The gap is exactly the aura bonus, and it recurs every blink iteration of the Drake/Faeries loop.
+//
+// The UNTAP side of this same mechanic (EtbUntapLands) already sorts by PermanentManaYield, so the
+// asymmetry looks like an oversight rather than a decision -- which is part of why this was worth
+// measuring.
+//
+// MEASURED, AND THE RESULT IS "THE RULER IS TOO SHORT", NOT "THE IDEA IS WRONG" (2026-09-03).
+// EldraziDisplacerFlicker, 4 seeds x 100 games x both arms in ONE pooled batch, d5/b20:
+// paired mean **-0.0025 turns, t=1.0** -- indistinguishable from nothing. But that verdict cannot
+// be tightened, because the same manifest run twice on the SAME binary moves a job's average by up
+// to 0.01 turns (docs/design/batch-run-to-run-nondeterminism.md, reproduced that day). The effect
+// is BELOW THE APPARATUS'S OWN NOISE FLOOR, so this is an inconclusive measurement, not a
+// falsification. Kept default-OFF rather than deleted for exactly that reason: re-measure once the
+// nondeterminism is fixed, and do not re-derive the idea from scratch in the meantime.
+//
+// Off by default and byte-identical when off (the order vector is the identity permutation) --
+// verified on the one seed that is stable enough to serve as a control, s4101, whose digest
+// 1ad5deba38ddb12e is unchanged across this edit. Ties keep battlefield order via stable_sort, so
+// the pick stays deterministic and platform-independent -- the Linux/Windows parity job depends on
+// that.
+inline bool EtbTapYieldOn()
+{
+    static const bool env_on = EnvOn("MTG_ETB_TAP_YIELD");
+    return heurarm::Flag(heurarm::ETB_TAP_YIELD, env_on);
+}
+
 inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int count)
 {
     if (count <= 0) { return; }
@@ -8840,8 +8875,29 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
     {
         if (p.controller_index == controller && p.tapped && p.card.IsLand()) { ++tapped_n; }
     }
-    for (Permanent& p : state.battlefield)
+    const int n_perm = static_cast<int>(state.battlefield.size());
+    std::vector<int> order(static_cast<std::size_t>(n_perm));
+    for (int i = 0; i < n_perm; ++i) { order[static_cast<std::size_t>(i)] = i; }
+    if (EtbTapYieldOn())
     {
+        // Keys computed BEFORE the loop, because the loop mutates `tapped`. A permanent that is not
+        // an eligible land keys -1 and sinks to the back, where the loop's own guards skip it.
+        std::vector<int> key(static_cast<std::size_t>(n_perm), -1);
+        for (int i = 0; i < n_perm; ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index != controller || p.tapped || !p.card.IsLand()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            key[static_cast<std::size_t>(i)] = PermanentManaYield(state, p, *d);
+        }
+        std::stable_sort(order.begin(), order.end(),
+                         [&key](int a, int b)
+                         { return key[static_cast<std::size_t>(a)] > key[static_cast<std::size_t>(b)]; });
+    }
+    for (int idx : order)
+    {
+        Permanent& p = state.battlefield[static_cast<std::size_t>(idx)];
         if (tapped_n >= count) { break; }
         if (p.controller_index != controller || p.tapped || !p.card.IsLand()) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);

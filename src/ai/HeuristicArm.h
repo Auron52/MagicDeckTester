@@ -136,6 +136,7 @@ enum Slot : int
     BP_CANON_RECROOT,         // MTG_BP_CANON_RECROOT      with REC=0, rec applies still fire on the ROOT TURN
     HEROISM_MAGNET_TRAIT,     // MTG_HEROISM_MAGNET_TRAIT  a live copy-token enchantment counts as a magnet
     HEROISM_FRESH_HOLD,       // MTG_HEROISM_FRESH_HOLD    ...and unlocks same-turn spend of fresh Treasures
+    ETB_TAP_YIELD,            // MTG_ETB_TAP_YIELD         ETB-untap tap-ahead takes the HIGHEST-yield lands
     COUNT
 };
 
@@ -249,6 +250,7 @@ inline const char* Name(int slot)
         "MTG_BP_CANON_RECROOT",
         "MTG_HEROISM_MAGNET_TRAIT",
         "MTG_HEROISM_FRESH_HOLD",
+        "MTG_ETB_TAP_YIELD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

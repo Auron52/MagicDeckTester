@@ -113,9 +113,17 @@ fixed binary, so the engine is the only thing that differs. `logs/edf_remeasure/
 | d3 | 7.206 | **7.068** | **−0.138** | −6.1 |
 | d5 | 7.205 | **7.070** | **−0.135** | −6.6 |
 
-All twelve job digests changed; every seed moved the same direction at every depth. Unwon games
-fell **37/400 (9.2%) → 27/400 (6.8%)**, and the t5 floor went from 2 games to 6. The mode is still
-t7 (183/400).
+Every seed moved the same direction at every depth. Unwon games fell **37/400 (9.2%) → 27/400
+(6.8%)**, the t5 floor went from 2 games to 6, and the mode is still t7 (183/400).
+
+> **CORRECTION (same day).** This section first cited "all twelve job digests changed" as
+> supporting evidence. **That is not evidence and the claim is withdrawn** — the play digest of this
+> deck is not stable run to run *at all*: the same binary on the same manifest diverges in 6 of 8
+> jobs (see `docs/design/batch-run-to-run-nondeterminism.md`, reproduced this session). Digests
+> would have "changed" with no code change whatsoever. What survives, and what the conclusion
+> actually rests on, is the **averages**: four seeds moving the same direction at three depths,
+> against a measured run-to-run noise floor of ~0.01 turns on a single job. −0.135 clears that
+> floor by an order of magnitude; the digest line never carried any weight.
 
 **This is the largest effect measured on this deck, and it is a CORRECTNESS fix, not a tuning
 knob.** For scale: 9x the search budget bought +0.063 turns (the wrong way), and the adopted wish
@@ -139,6 +147,40 @@ hypothesis that fits, not one that discriminates, and it has not been tested.
 Thread-wall roughly halved (d3 10,856s → 5,447s, d5 8,515s → 5,387s), but **that comparison is
 confounded** — batch `ms` is wall, not CPU, and the two runs saw different box load. Treat it as
 suggestive of a real tractability gain and re-measure on a quiet box if the number is ever needed.
+
+### Tried and REJECTED: yield-ordering the ETB-untap tap-ahead (`MTG_ETB_TAP_YIELD`)
+
+`EtbUntapTapAheadIntoFloat` taps lands ahead of a Drake/Faeries cast so the mana comes back as
+float. It is bounded by the untap count, so on a wide board it is a CHOICE — and it made that choice
+by battlefield order. On this deck land yields differ 3x (an Overgrowth land yields 3, a plain land
+1) and the tapped land's mana is banked *and* the land returns untapped, so the order is worth real
+mana. Worked example, 6 lands (one Overgrowth) and count=5: battlefield order floats 5 for 13
+available; yield order floats 7 for 15. The gap is exactly the aura bonus, every blink iteration.
+The **untap** half of the same mechanic (`EtbUntapLands`) already sorts by yield, so the asymmetry
+looked like an oversight.
+
+Measured as one pooled batch, both arms, 4 seeds x 100 games at d5/b20: **−0.0025 turns, t=1.0.**
+Not adopted. But the honest verdict is *inconclusive*, not *falsified* — the effect is smaller than
+the apparatus's own run-to-run noise (below). Kept default-OFF so it can be re-measured on a fixed
+apparatus rather than re-derived from scratch.
+
+### THE APPARATUS ITSELF IS NOT DETERMINISTIC ON THIS DECK (2026-09-03)
+
+Found while trying to use the A/B's OFF arm as a byte-identity control. **The same binary on the
+same manifest diverges in 6 of 8 jobs**, and one job moved its average by 0.01 turns. A job run
+ALONE is stable (3/3); the divergence needs the pooled batch and scales with pool pressure.
+
+This is the repo's open `batch-run-to-run-divergence` (2026-08-25), recorded since as *cause unknown,
+never reproduced* — now reproducible on demand in ~13 minutes on this deck. Full write-up, including
+the leading mechanism (a cache surviving across games makes the WORK priced against a deterministic
+unit budget vary, which flips the depth reached at the starvation edge) and the next test, is in
+**`docs/design/batch-run-to-run-nondeterminism.md`**.
+
+Two consequences for everything above:
+* **Play digests are not a valid identity check on this deck** — they change with no code change.
+  Conclusions here rest on averages, and the one claim that leaned on digests has been withdrawn.
+* **The noise floor for a single 100-game job is ~0.01 turns.** The −0.135 mana-fix result clears it
+  by 10x across four seeds and three depths; the −0.0025 tap-yield result does not clear it at all.
 
 ### d3 and d5 are BYTE-IDENTICAL — the search never gets past depth 1
 
