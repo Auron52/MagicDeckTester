@@ -1198,6 +1198,30 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
 // 56% of its 4.03M fires pass). Slot index = (site==1 | karoo_deferred<<1); -1 = unknown.
 struct CanonVerdict { int8_t v[4] = { -1, -1, -1, -1 }; };
 
+// THE TWO BREAKPOINT CACHES LIVE HERE, at namespace scope, so ClearPerGameCaches can reach them.
+// They used to be function-local `static thread_local` inside BpEnumEntryFor and canon's verdict
+// site, which made them unreachable from the per-game reset -- and that is precisely the defect
+// documented at the ClearPerGameCaches call site in AIEngine.cpp: a capped thread_local cache that
+// survives a game boundary carries its FILL LEVEL into the next game, so the cap-clear lands at a
+// different point and the same game's hit/miss pattern -- and therefore its work-unit count --
+// depends on which games happened to run before it on that worker thread. The pool's game->thread
+// assignment is not reproducible, so that is a run-to-run nondeterminism.
+//
+// The evidence that this class is what matters (2026-09-03, docs/design/batch-run-to-run-
+// nondeterminism.md): on 24 threads, games 0-47 -- the first two dispatch waves, whose threads have
+// no history yet -- diverge 0 of 48, and the rate then climbs monotonically with position in the
+// run to ~25%. Single-threaded, where the predecessor sequence is identical between runs, it is
+// 0 of 50. Divergence tracks INHERITED THREAD HISTORY, nothing else.
+namespace bpcache
+{
+    using PlanMap = std::unordered_map<TranspositionTable::Key, BpEnumEntry,
+                                       TranspositionTable::KeyHash>;
+    using VerdictMap = std::unordered_map<TranspositionTable::Key, CanonVerdict,
+                                          TranspositionTable::KeyHash>;
+    inline thread_local PlanMap    t_plans;
+    inline thread_local VerdictMap t_verdicts;
+}
+
 // MTG_BP_BASE_EMPTY -- the BASE plan's continuation is the EMPTY one, not a greedy Solve.
 //
 // WHY THIS IS THE RIGHT SHAPE, and why MTG_BP_NO_GREEDY_CONT was not. At an open-class breakpoint
@@ -17309,8 +17333,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // entry-rider form did, and measured WORSE on hinata, where 56% of fires pass); a
             // PASS revisit costs one key walk and a lookup, an ACT revisit adds one cache hit and
             // a single-Plan copy. Cap rides MTG_BP_ENUM_CACHE_CAP x4 (verdicts are 4 bytes).
-            static thread_local std::unordered_map<TranspositionTable::Key, CanonVerdict,
-                                                   TranspositionTable::KeyHash> canon_memo;
+            bpcache::VerdictMap& canon_memo = bpcache::t_verdicts;   // cleared per game
             static const std::size_t s_canon_cap =
                 static_cast<std::size_t>(std::max(1, EnvInt("MTG_BP_ENUM_CACHE_CAP", 8192))) * 4;
             const int ci = ((site == 1) ? 1 : 0) | (karoo_deferred ? 2 : 0);
@@ -25743,6 +25766,13 @@ void TurnSolver::ClearPerGameCaches()
     solvememo::t_cache.clear();
     solvememo::t_m2cache.clear();
     enummemo::t_cache.clear();
+    // The two breakpoint caches, added 2026-09-03. Unlike the three above -- whose entries are
+    // epoch-scoped and so could never be HIT across a game boundary -- these two are keyed on
+    // BuildBreakpointKey with no epoch, so a stale entry can be hit outright by a later game, not
+    // merely occupy the cap. Both failure modes change a game's work-unit count, which moves the
+    // iterative-deepening start gate, which flips committed depth, which changes play.
+    bpcache::t_plans.clear();
+    bpcache::t_verdicts.clear();
 }
 
 
@@ -31340,9 +31370,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     // way, and the smoke digests are the check. See docs/design/post-breakpoint-search.md.
     // MTG_BP_ENUM_CACHE_CAP overrides the cap (value-carrying; A/B probe for the memo-thrash
     // question above -- results must be identical at ANY cap, only the wall clock may move).
-    using BpEnumMap = std::unordered_map<TranspositionTable::Key, BpEnumEntry,
-                                         TranspositionTable::KeyHash>;
-    static thread_local BpEnumMap cache;
+    using BpEnumMap = bpcache::PlanMap;
+    BpEnumMap& cache = bpcache::t_plans;   // cleared per game -- see bpcache
     static const std::size_t s_bp_enum_cap =
         static_cast<std::size_t>(std::max(1, EnvInt("MTG_BP_ENUM_CACHE_CAP", 8192)));
 

@@ -316,6 +316,74 @@ across two runs for a fragile game:
 
 Either answer is decisive, which is why it is the right next step rather than more code reading.
 
+## LOCALIZED (2026-09-03) — it is INHERITED THREAD HISTORY, and here are the two caches
+
+The decisive measurement cost nothing: it is a re-read of data already on disk
+(`logs/edf_units/{a,b}`, 400 games, 24 threads). Bucket the unit-divergent games by game index —
+which, under a pooled queue with roughly equal game costs, is dispatch order:
+
+| games (by index) | unit-divergent |
+|---|---|
+| 0-23   (dispatch wave 0) | **0 / 24** |
+| 24-47  (wave 1)          | **0 / 24** |
+| 48-95                    | 2 / 48 |
+| 96-199                   | 16 / 104 |
+| 200-299                  | 21 / 100 |
+| 300-399                  | 28 / 100 |
+
+**The first two dispatch waves — the 48 games whose worker threads have no history yet — do not
+diverge at all.** The rate then climbs monotonically with position in the run, to ~25%.
+
+This explains every earlier confusion at once. The 100-game run's 2/100 is not a different rate: it
+is quartile 1, reproduced independently. So the rate is not a function of thread COUNT (which was
+the "needs the pool / scales with pool pressure" story, already retracted) and not a property of
+concurrency as such. It is a function of **how many games have already run on that thread**. Once a
+thread's carried state differs between two runs, every subsequent game on that thread is exposed.
+
+That kills the remaining "shared state accessed concurrently" hypotheses outright: a race on shared
+state would hit game 0 as readily as game 399. It has to be state a thread inherits from its own
+predecessors — and, since single-threaded runs are clean (0/50), state whose *contents depend on
+which predecessors ran*, which in a pool is not reproducible.
+
+### The two caches
+
+`ClearPerGameCaches` resets `solvememo::t_cache`, `solvememo::t_m2cache` and `enummemo::t_cache`.
+Two more capped `thread_local` caches were function-local statics, unreachable from it:
+
+* the breakpoint plan cache in `BpEnumEntryFor` (`MTG_BP_ENUM_CACHE_CAP`, default 8192), and
+* canon's ACT-vs-PASS verdict memo (same cap x4).
+
+Both are cleared **only on overflow** (`if (cache.size() >= cap) cache.clear()`), so a game inherits
+its predecessors' FILL LEVEL, the cap-clear lands at a different point, and the hit/miss pattern
+moves. A hit returns without calling `EnumeratePlansWithLand`; a miss pays it. Different work, same
+game — which is the whole chain's first link.
+
+### And it is not only a determinism problem
+
+The three caches that ARE cleared are also **epoch-scoped**: every hit demands
+`entry.epoch == g_decision_epoch`. That check is load-bearing, and the codebase says why, in
+`solvememo`'s own doc block: the key's library digest is *size + front card*, and that
+"only implies content within a single decision, the TranspositionTable's own scoping argument."
+
+The two breakpoint caches use the same `BuildBreakpointKey` and do **not** fold or check the epoch —
+they hit on the key alone. Within one game that is defensible: the library is a fixed permutation,
+so remaining size does imply remaining content. **Across games it is not** — two different shuffles
+sharing a library size and front card share a key, and the second game gets the first game's plans.
+Clearing per game closes that cross-game path. It does NOT close the cross-decision path within a
+game, where the residual exposure is a mid-game shuffle (a fetchland, a tutor-and-shuffle) changing
+the permutation while the cache still holds pre-shuffle entries. FiveColour is the deck to check
+that on; EDF barely shuffles. **Flagged, not fixed, and not yet measured.**
+
+### The fix
+
+Hoist both caches to namespace scope (`bpcache::t_plans`, `bpcache::t_verdicts`) and clear them in
+`ClearPerGameCaches`. Scenarios: 54/54 pass.
+
+**This is not byte-identical and cannot be** — changing when a cap-clear happens changes work units,
+which is the entire point. Expect starved decks to move play and GT to need a rebaseline; that is
+the cost of the determinism, and it should be a deliberate, reported decision rather than a quiet
+one.
+
 ## What is NOT yet ruled out, in priority order
 
 Serial determinism (above) narrows this list sharply: the cause must cross a game boundary or a
