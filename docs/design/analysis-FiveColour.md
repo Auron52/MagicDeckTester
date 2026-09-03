@@ -412,3 +412,46 @@ Each phase builds cleanly before the next; 2d review + audits after all phases.
   missing same-turn equip) are FIXED in `abdb9a0` and re-verified by the confirmation pass
   (gi2/gi3/gi6 match the AI exactly; gi7 Claude beat the AI by a turn via the free-cast-banked
   Unite — the banking design working as intended; zero dropped_casts post-fix in any game).
+
+## User viewer batch, 2026-09-03 (hand-played seeds 2, 3, 12) — ALL FOUR CLOSED
+
+Four items, all fixed. Three were the same class of defect and it is one this repo keeps
+reintroducing, so it is worth naming plainly: **a gate tuned to make the AI play well was allowed
+to decide what a HUMAN may attempt.** The user's own example is the argument — they wanted to elk
+their own Deathrite Shaman on turn 2, a line the AI would (correctly) rank badly, and the engine
+simply did not offer it.
+
+| # | Item | Cause |
+|---|---|---|
+| 1 | Oko: no ability choice, no target choice, absent from history | two bugs — `LineSummaryOfPlan` had no `ActivateLoyalty` case, so an activation printed as a plain cast; and `CollectActions`' `elk_transform` loop only considered the player's OWN untapped, attack-eligible permanents under 3 power, so a TAPPED Deathrite was invisible |
+| 2 | Activating Oko showed "leave it unattached / Faeburrow Elder / Deathrite Shaman" | `CheckLine` folded a loyalty ability's target into the `enchant` (Aura-attach) sub, which speaks attach vocabulary for a walker that attaches nothing |
+| 3 | Clicking Jetmir's Garden's body cycled it | the `↻ cycle` badge had NO click handler; the hand thumb's own listener cycled anything with cycling, so no gesture could play the card as a land |
+| 4 | Nicol Bolas: cannot choose anything | `-2 steal_creature` and `+3 destroy_own_noncreature` had AI value gates (`best_pow <= 0`, `ev <= 0`) that DROPPED the action outright instead of ranking it low, and neither had a target chooser |
+
+Item 3 deserves a second look because the report understates it. It was not a mis-click: `fireDig`
+**commits** the plan immediately, unlike a queued plan entry that an `✕` takes back. So a stray
+click on a triome spent the card irrecoverably.
+
+**The fix shape is the reusable part.** Loyalty targeting REUSES the existing `target` decision
+type (board-click, per the play-viewer decision principle) rather than inventing a new one — the
+`target` JSON gained an optional `loyalty` field. `LoyaltyAbilityText` / `LoyaltyActionLabel` is now
+the single source of truth for how an ability prints, shared by the dialog, the plan menu and the
+history label, so those three cannot drift apart again. Search-side candidate narrowing is scoped
+to `!HumanPlayActive()`, and at RESOLUTION a human gets the ability's full rules-legal target set
+(either side of the board) regardless of what the search enumerated.
+
+**Verified live, not inferred.** Both reported games were replayed under `--claude-play`: seed 2 now
+offers `+2: create a Food token` and `+1: turn a permanent into a 3/3 Elk -> Deathrite Shaman` as
+separate plans, and the +1 yields a target decision naming the tapped Deathrite; seed 12's Bolas
+`+3` lists BOTH players' noncreature permanents (the printed ability carries no "you control"
+restriction), and a deliberately non-default pick twice resolved correctly. Autonomous play is
+byte-identical — smoke 48/48, `configs changed: 0`, `play-changed=0` — and CI is green on Linux and
+Windows including the determinism-parity job.
+
+**Ability coverage, read from `cards.json` rather than recalled.** Oko's +2 and +1 are implemented
+and now both offered and targetable; **his -5 is not implemented** and is a previously approved
+deferral, so it is deliberately NOT offered — nothing is shown that would then do nothing. All three
+Bolas abilities are implemented; `-9` auto-resolves without a chooser because the passive opponent
+has no planeswalkers, so there is only ever one real target. The `-2` steal path shares the same
+helper but was never exercised live (no opponent creature appeared in either game) and is recorded
+as such rather than claimed as verified.
