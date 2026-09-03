@@ -944,6 +944,46 @@ Hub is the deck's only energy sink, so the sole cost of spending is not holding 
 turn, and the DFS optimises the cast in front of it rather than across turns — a line payable
 without the energy may still burn it. Ceiling is 3 {E} for the whole game.
 
+## User viewer batch, 2026-09-03 (hand-played seeds 1 and 2)
+
+Five items reported. Two are closed; three are with agents at the time of writing. The user's
+framing of the headline item is worth keeping verbatim, because it is a feature request, not a bug:
+*"This is what I mean by a combo heuristic. We need a way to determine 'combo is active, let's
+follow the line'."*
+
+| # | Item | State |
+|---|---|---|
+| 1 | Seed 1: a spelled-out **T3 win** the engine does not find; step (a), Trace of Abundance on Aether Hub via Conservatory, "seems to be rejected" | investigating; combo-recogniser design deferred to `docs/design/combo-line-recognition.md` |
+| 2 | "I should be able to attach to a land in the plan" | engine-side cause found (below); fix in progress |
+| 3 | "Auras cannot be unattached. That option should not be offered by dialogs" | **FIXED** (`8a517c71`) |
+| 4 | `logs/play/rejections/..._s2_gi1_t4.json` — "Drake should allow untap followed by displacer" | investigating |
+| 5 | Seed 2: cannot activate Eldrazi Displacer to go off; board should allow a T4 win | investigating |
+
+**Item 3's root cause is more interesting than the report suggests, and it is shared with item 2.**
+`TurnSolver::CheckLine` drops the `enchant` sub whenever it cannot NAME the host — its lookup scans
+battlefield *creatures*, then the hand. So an "Enchant land" aura on a land **already in play**
+carries no sub, while the same aura on the land being played *this* turn does. The choose-dialog
+then rendered the sub-less variant as *"leave it unattached"* — which did not mean unattached at
+all, it silently meant "enchant Aether Hub". That is 16 of the deck's 60 cards (Wild Growth,
+Fertile Ground, Overgrowth, Trace of Abundance).
+
+The viewer fix recovers the host from the plan's own `enchant_target_name`, so the dialog asks the
+real question. The engine half is NOT fixed: because the missing sub is also what CheckLine's dedup
+signature is built from, two land hosts that are **both already in play** produce an identical empty
+signature and the variants **collapse** — so the human is never asked which land an aura enchants,
+and no client-side change can recover a collapsed variant. The fix location is the `enchant`
+`addSub` branch, which must accept a non-creature host. Written up in `tools/play/DECISIONS.md`.
+
+**Item 3's other half was checked, not assumed:** the board `attach_host` prompt's
+*"Leave unattached"* button is gated engine-side on `is_equipment`, so it is correct and was left
+alone. An Equipment genuinely can be moved; an Aura cannot.
+
+Separately, the cycling-land click (reported on FiveColour, same batch) was **not** a missing
+`stopPropagation`: the `↻ cycle` badge had no click handler at all, and the hand thumb's own
+listener cycled anything with a cycling ability — so no gesture could play the card as a land. That
+is worse than a mis-click, because the dig **commits** immediately rather than queueing an
+undoable plan entry. Fixed in `acd01b6e`.
+
 ## Claude-play sweep
 - commit: `f5f664bf` (re-sweep, frozen binary; first sweep ran across a moving binary — disclosed)
 - seeds: 8801 games: 16 (x2 sweeps, 32 agent-games total)

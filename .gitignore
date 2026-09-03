@@ -112,3 +112,6 @@ node_modules/
 # Probe/scratch raw keep artifacts (never commit uncompressed raw -- see per-deck-folder-layout.md)
 *.raw.json.probe
 *.raw.json
+
+# Agent worktrees (transient isolated checkouts; never committed)
+.claude/worktrees/
