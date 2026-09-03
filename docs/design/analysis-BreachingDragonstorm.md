@@ -1,7 +1,13 @@
 # Analysis ledger — BreachingDragonstorm
 
 Deck: `decks/BreachingDragonstorm/BreachingDragonstorm.cod` (60 cards).
-Started 2026-09-03. Status: **IN PROGRESS — Stage 2 (per-card research fan-out running)**.
+Started 2026-09-03. Status: **ANALYZED (GATE PASS)** — verify_deck all-green (coverage /
+card_fields / viewer / viewer_wiring / mismatch / play_invariants 276-decision sweep /
+claude_sweep); CI green on ubuntu + windows incl. determinism parity. Outstanding:
+the 5c2 --blocks 48 confirmation run (first run: 0 changed of 12,000 paired — the
+tie-break never fires at play settings; default ON is fine either way per the script);
+user sign-off on the PROVISIONAL deferrals (batched in the session's closing report).
+Mulligan/value-leaf generation NOT started (user-initiated final stage, per policy).
 
 ## Decklist
 
