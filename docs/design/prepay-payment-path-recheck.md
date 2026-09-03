@@ -1,6 +1,19 @@
 # Payment-path re-check set — games to re-evaluate after the prepay work
 
-**Status:** OPEN, and deliberately NOT being fixed here. The payment path is owned by another
+**Status: CLOSED (2026-09-03).** `test/prepay_recheck.py verify --defects` re-run on the current
+tree (post strict-filter-feed, feed-aware, and Heroism adoptions): **every proven-defect row with
+a still-valid comparison is RECOVERED** — hinata 4/4 (including the 3 prepay-residue rows
+filter-feed-strict §6 deferred) and creature_giving 3/3. The 11 mirrorwing rows are
+**STALE-DECKLIST**: the shipping list changed to Anger-4/Oracle-3 (3faf5c76, 2026-09-01), so the
+same seed deals a different game and neither their 5 "recoveries" nor their 4 "residuals" attribute
+anything. Of those residuals, gi921's pre-fix line was LAUNDERED (a fictional win) and gi280's
+pre-fix T4 is unreachable even at UNLIMITED d5 budget under the current deck — not a payment
+defect. `MTG_PREPAY_SHRINK=1` recovers none of the 4, so the over-tap mechanism is also spent;
+the shrink lever's motivating defect set no longer exists, and its +25% wall cost keeps it OFF
+under the adopt-clean-wins-only policy. Re-open only with a NEW defect reproduced on the current
+tree. (Historical context below is preserved as written.)
+
+Original status: OPEN, and deliberately NOT being fixed here. The payment path is owned by another
 agent with unpushed work; this document exists so their fix can be checked against a concrete,
 pre-built set of games rather than a re-derivation.
 

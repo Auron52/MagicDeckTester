@@ -179,3 +179,5 @@ Flipped `EnvOn("MTG_FILTER_FEED_STRICT", true)` and rebaselined all three tiers 
 movement only; both decks' tier fingerprints match their battery strict arms exactly). The
 "cost" is fictional wins repriced honestly; no legal capability is removed. Follow-ups: re-run
 the 3 hinata prepay-residue rows; the gi164 prepay-defect entry is FIXED.
+**Follow-up closed 2026-09-03:** the recheck re-run recovered all hinata rows (4/4) —
+see prepay-payment-path-recheck.md's closing status.
