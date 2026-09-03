@@ -270,6 +270,18 @@
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
   },
+  "Boarding Party": {
+    "cmc": 6.0,
+    "keywords": [
+      "Cascade",
+      "Haste"
+    ],
+    "mana_cost": "{5}{R}",
+    "oracle_text": "Haste\nCascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom in a random order.)",
+    "power": "6",
+    "toughness": "3",
+    "type_line": "Creature — Human Pirate"
+  },
   "Bonesplitter": {
     "cmc": 1.0,
     "keywords": [
@@ -317,6 +329,15 @@
     "toughness": null,
     "type_line": "Land // Land"
   },
+  "Breaching Dragonstorm": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{4}{R}",
+    "oracle_text": "When this enchantment enters, exile cards from the top of your library until you exile a nonland card. You may cast it without paying its mana cost if that spell's mana value is 8 or less. If you don't, put that card into your hand.\nWhen a Dragon you control enters, return this enchantment to its owner's hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Breeding Pool": {
     "cmc": 0.0,
     "keywords": [],
@@ -345,6 +366,17 @@
     "power": "2",
     "toughness": "1",
     "type_line": "Creature — Minotaur Wizard"
+  },
+  "Call Forth the Tempest": {
+    "cmc": 8.0,
+    "keywords": [
+      "Cascade"
+    ],
+    "mana_cost": "{5}{R}{R}{R}",
+    "oracle_text": "Cascade, cascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom of your library in a random order. Then do it again.)\nCall Forth the Tempest deals damage to each creature your opponents control equal to the total mana value of other spells you've cast this turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Call of the Wild": {
     "cmc": 4.0,
@@ -459,6 +491,17 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Creature — Beast"
+  },
+  "Creative Technique": {
+    "cmc": 5.0,
+    "keywords": [
+      "Demonstrate"
+    ],
+    "mana_cost": "{4}{R}",
+    "oracle_text": "Demonstrate (When you cast this spell, you may copy it. If you do, choose an opponent to also copy it.)\nShuffle your library, then reveal cards from the top of it until you reveal a nonland card. Exile that card and put the rest on the bottom of your library in a random order. You may cast the exiled card without paying its mana cost.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Crop Rotation": {
     "cmc": 1.0,

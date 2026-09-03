@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 3a2206e1  date 2026-09-03
+# Regression ground truth -- commit c894cadb  date 2026-09-03
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-09-03): MTG_PREPAY_MIXED adoption: d0 slower=13/faster=9 confined to the 3 restricted-mana decks; greedy-only payment-widening churn (spot-checked fc gi508/gi1176: d8b0 identical both arms); searched slower=0 faster=6
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -11,9 +11,9 @@ slivers_smoke_d5_s1001=4.1867/768ac7b6f827eed2
 burn_smoke_d0_s1001=4.4620/e667d678badfdd47
 burn_smoke_d3_s1001=4.3400/c5915abf6d2fe278
 burn_smoke_d5_s1001=4.3520/b054df365b212677
-th_smoke_d0_s1001=5.5480/384ece7ee00453ae
-th_smoke_d3_s1001=4.0800/f6147643ca90690d
-th_smoke_d5_s1001=4.0000/27806a42c9a88c3b
+th_smoke_d0_s1001=5.5480/2c26a469bba22630
+th_smoke_d3_s1001=4.0800/14880877a7c39692
+th_smoke_d5_s1001=4.0000/9ee3c4128fe8de29
 knights_smoke_d0_s1001=4.5400/c25cdc82b946acb0
 knights_smoke_d3_s1001=4.3960/00cbfb13e70f8833
 knights_smoke_d5_s1001=4.3867/c524b6e9828eef90
