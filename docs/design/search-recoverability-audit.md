@@ -189,11 +189,46 @@ the rest are fan-out code-reading claims with cites.
   width cap, NO HATCH.** Both need a hatch before they can even be A/B'd — itself the finding.
 * **`MTG_EMIT_PRUNE` (default OFF)**: per-card dimension drop resting on an enumerated
   `budget_can_grow` list that has shipped lossy twice. Leave off; gate before reconsidering.
-* **Cross-cast greedy stranding — DROP-hard.** Per-cost payment is complete, but
-  `BatchPrepayMainCasts` declines on ~11 conditions, after which each cast pays alone and cast
-  #1's tap can strand cast #2 — which is then SILENTLY DROPPED at apply (:17645) while the plan
-  was scored as if it resolved. The USER's mana-allocation exemption is safe per-cost, NOT
-  across casts. Fix shape: shrink the decline set or joint re-solve on apply failure.
+* **Cross-cast greedy stranding — INSTRUMENTED 2026-09-03; the original claim was
+  OVERSTATED.** Per-cost payment is complete, but `BatchPrepayMainCasts` declines on ~11
+  conditions, after which each cast pays alone and cast #1's tap can strand cast #2, which is
+  then silently dropped at apply (:17645). **CORRECTION: the plan is NOT "scored as if it
+  resolved"** — the rollout's ApplyPlanDirect drops the same cast through the same
+  TapForCostDirect (lockstep by construction), so the plan's score reflects the drop. The real
+  question is narrower: is the JOINT-payment line (both casts resolve) reachable by any
+  enumerated route when sequential greedy strands it? `MTG_AFFORD_AUDIT=1` at value-play
+  settings, 300 games/deck, all 16 suite decks: real (executor) drops fire on 11 decks —
+  dragonstorm 304 (16% of real cast attempts, 210 stranded accelerants), hinata 141, dragons 83,
+  th 65, stompy 58, slivers 43; zero on antilife/auras/knights/creature_giving/mirrorwing.
+  Level-2 board dumps split the drops into TWO classes, NEITHER of which is order-dependent
+  stranding: **(A) restricted-source optimism** — single-cast turns priced against mana the
+  spell cannot legally use (dragons: T1 Lightning Bolt vs Haven of the Spirit Dragon's
+  dragon-only "wild" or Sol Ring's {C}{C}, colour-short ×56; kitty's white one-drops, stompy's
+  dorks) — enumeration optimism per the affordability arc's LAW, filtered honestly by the
+  rollout; **(B) ritual-chain optimism** — one-land turns declaring whole chains priced with
+  `MTG_RITUAL_SEQ_CREDIT=1` float credit (dragonstorm t1: Medallion {2} + Desperate Ritual +
+  Irencrag Feat all dropped on a lone Mountain) — the "plan is a PROPOSAL, apply trims"
+  mechanism working as designed.
+  **REACHABILITY A/B VERDICT (2026-09-03, 1000 games × 16 decks/arm at value-play, both worlds
+  through the shared prepay; every mover replayed per-lever and at d8 b0):** 8 movers total in
+  16,000 games. **THREE CONFIRMED VIOLATIONS, ALL FIXED BY `MTG_PREPAY_MIXED` ALONE** — dragons
+  gi460 + gi776 (default d8b0 = T6, mixed d8b0 = T5) and slivers gi777 (default d8b0 = T5, mixed
+  d8b0 = T4). All three are the RESTRICTED-SOURCE batch conservatism MIXED was built for (a
+  mixed creature/noncreature batch reads Haven of the Spirit Dragon / Sliver Hive as {C}-only →
+  combined solve fails → decline → the per-cast greedy strands a cast the two-stage solve pays).
+  MIXED's target population is exactly the `combined UNPAYABLE` decline class
+  (`MTG_PREPAY_PROBE`: 1,172/1.5M prepay calls on dragonstorm, 315 on hinata, 420 recorded on
+  slivers) — small and surgical, and MIXED caused ZERO regressions in the sample.
+  **`MTG_PREPAY_PRODUCER`: closed OFF with a sharper record than 2026-08-18** — its one
+  ship-settings rescue (fivecolour gi590 T6→T5) RECOVERS at d8 b0 under default (budget churn,
+  not a violation) while it alone causes all four regressions (stompy gi292/gi515/gi526,
+  fivecolour gi70). Dragonstorm — the drop-heaviest deck (304 real drops/300 games) — is
+  byte-IDENTICAL across arms: its ritual-chain drops are pure priced-optimism trimming.
+  What invalidates the 2026-08-18 "metric-inert" parking for MIXED: the question changed (d8 b0
+  unreachability, not aggregate), and per-game d8b0 attribution now shows 3 non-clairvoyant
+  faster lines truly unreachable without it. hinata gi1197 remains strand-SELECTION (cast-order
+  family), not allocation. The USER's mana-allocation exemption remains safe per-cost, NOT
+  across casts. MIXED-only full-sample confirmation + adoption chain: see the adoption record.
 
 ### 4c. Cast order + discard
 

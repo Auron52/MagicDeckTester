@@ -9456,6 +9456,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // exceeds every mana this board could conceivably make (own lands + dorks + treasures
             // + current float + 2 margin) can never be paid this turn -- emitting it only bloats
             // the option group. The margin absorbs bonus land drops / same-turn rocks.
+            // MTG_STRIVE_CEILING (DEFAULT ON; =0 disables): the ceiling credits NO ritual/rock/
+            // reducer cast this turn, so a ritual-funded strive count is never emitted. The hatch
+            // exists so that class can be probed at all (recoverability audit 4b -- "needs a hatch
+            // before it can even be A/B'd"). Off -> every K < others is emitted and the downstream
+            // affordability filter decides.
+            static const bool s_strive_ceiling = EnvOn("MTG_STRIVE_CEILING", true);
             int mana_ceiling = state.floating_mana.Total() + 2;
             for (const Permanent& p : state.battlefield)
             {
@@ -9503,7 +9509,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     {
                         const int mv = base_cost.ManaValue()
                                      + k * def.params.strive_cost->ManaValue();
-                        if (mv > mana_ceiling) { break; }
+                        if (s_strive_ceiling && mv > mana_ceiling) { break; }
                         kmax = k;
                     }
                     if (kmax >= 1) { emit(tgt_num, kmax); }
@@ -9513,7 +9519,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 {
                     const int mv = base_cost.ManaValue()
                                  + k * def.params.strive_cost->ManaValue();
-                    if (mv > mana_ceiling) { break; }
+                    if (s_strive_ceiling && mv > mana_ceiling) { break; }
                     emit(tgt_num, k);
                 }
             };
@@ -11216,7 +11222,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const ManaCost per = sd->params.activated_reveal_top_cost.value();
                 const int per_mv   = per.ManaValue();
                 int kmax = per_mv > 0 ? AvailableManaPool(state).Total() / per_mv : 1;
-                if (kmax > 3) { kmax = 3; }   // bounded branching; >3 activations/turn is fringe
+                // MTG_REVEALTOP_KMAX (DEFAULT 3; 0 = uncapped): bounded branching -- >3
+                // activations/turn is fringe. The value hatch exists so the width cap can be
+                // probed at all (recoverability audit 4b); uncapped, K is still bounded by the
+                // board's pool over the per-activation cost above.
+                static const int s_revealtop_kmax = EnvInt("MTG_REVEALTOP_KMAX", 3);
+                if (s_revealtop_kmax > 0 && kmax > s_revealtop_kmax) { kmax = s_revealtop_kmax; }
                 for (int k = 1; k <= kmax; ++k)
                 {
                     Action a;
@@ -15747,9 +15758,18 @@ PrepayProbe g_prepay_probe;
 // (1.95M times in 14 FiveColour games), and a function-local static forces a thread-safe init-guard
 // check on EVERY call -- the same ~0.9% self-cost that moved tapstats::g_enabled out of its function.
 const bool g_prepay_probe_on = EnvOn("MTG_PREPAY_PROBE");
-// MTG_PREPAY_MIXED (default off; =1 enables): mixed-batch two-stage prepay -- see the block in
-// BatchPrepayMainCasts. Namespace-scope for the same init-guard reason as g_prepay_probe_on.
-const bool g_prepay_mixed_on = EnvOn("MTG_PREPAY_MIXED");
+// MTG_PREPAY_MIXED (DEFAULT ON since 2026-09-03; =0 reverts): mixed-batch two-stage prepay --
+// see the block in BatchPrepayMainCasts. ADOPTED off the recoverability audit's two-stage
+// protocol: in a 16-deck x 1000-game value-play A/B it fixed the only three confirmed
+// faster-line-truly-unreachable violations in the payment layer (dragons gi460/gi776 T6->T5,
+// slivers gi777 T5->T4 -- all the restricted-source mixed-batch conservatism this stage was
+// built for, and all UNREACHABLE at d8 b0 without it) with ZERO regressed games; it fires only
+// where the single combined solve already FAILED, so off-path play is byte-identical by
+// construction. (MTG_PREPAY_PRODUCER stays OFF: its one rescue was budget churn -- recovers at
+// d8 b0 -- and it alone caused all four regressions in the same A/B.) See
+// docs/design/search-recoverability-audit.md 4b. Namespace-scope for the same init-guard reason
+// as g_prepay_probe_on.
+const bool g_prepay_mixed_on = EnvOn("MTG_PREPAY_MIXED", true);
 // MTG_PREPAY_PRODUCER (default off; =1 enables): producer-tolerant prepay -- see the note at the
 // PP_PRODUCER decline in BatchPrepayMainCasts.
 const bool g_prepay_producer_on = EnvOn("MTG_PREPAY_PRODUCER");

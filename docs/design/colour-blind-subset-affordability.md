@@ -450,7 +450,12 @@ source-to-pip assignment exists under the fungible pool — the standard the all
 already applies). Measured: converts 327 of the 420 declines (92 are genuinely overcommitted);
 slivers real drops 201 -> 202; smoke A/B — slivers d0/d3 and fivecolour d3/d5 digest-only at
 identical avg, fivecolour d0 **+0.0010** (gi810 5->6), slivers d5 and everything else
-byte-identical. Net: line churn, no metric gain, one game worse.
+byte-identical. Net at the time: line churn, no metric gain, one game worse.
+**ADOPTED DEFAULT ON 2026-09-03**: the recoverability audit's d8 b0 protocol found three games
+where the conservatism makes a faster line truly unreachable at unlimited budget (dragons
+gi460/gi776 T6->T5, slivers gi777 T5->T4) and the 16-deck x 1000-game value-play A/B showed
+zero MIXED-caused regressions — the churn verdict above was answering a different (aggregate)
+question. See `search-recoverability-audit.md` 4b.
 
 **`MTG_PREPAY_PRODUCER` — producer-tolerant prepay (v1, no output credit).** Folds a
 ritual/rock cast's COST into the combined solve without crediting its output — conservative: a

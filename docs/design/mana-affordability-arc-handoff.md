@@ -1,10 +1,20 @@
 # Mana affordability arc -- handoff (2026-08-18)
 
-**STATUS: PARKED (USER decision, 2026-08-18, at e84752e).** Adopted work is green with
-off-switches; every extension tried past that point measured metric-inert (five mechanisms).
-Reopen triggers: a reference-gate red (enum-gap), a concrete repro game where a colour phantom
--- not priced optimism -- costs a win, or the cast-order project reopening (first rule to
-review there: strand the cheapest, not the payoff -- the gi1197 lesson).
+**STATUS: PARKED (USER decision, 2026-08-18, at e84752e) -- REOPENED ONCE, 2026-09-03, on its
+own trigger.** The "concrete repro game where a colour phantom costs a win" trigger fired in
+reverse form during the recoverability audit: three games where the mixed-batch RESTRICTED-SOURCE
+conservatism (not a phantom -- the opposite, an under-count) makes a faster line truly
+unreachable at d8 b0 (dragons gi460/gi776 T6->T5, slivers gi777 T5->T4). **`MTG_PREPAY_MIXED`
+ADOPTED default ON** off that evidence (fires only where the single combined solve already
+failed -> byte-identical off-path; zero regressed games in a 16-deck x 1000-game A/B).
+**`MTG_PREPAY_PRODUCER` re-measured and closed OFF with a sharper record**: its one rescue
+(fivecolour gi590) recovers at d8 b0 under default (budget churn), while it alone caused all
+four regressions (stompy gi292/gi515/gi526, fivecolour gi70) -- the 2026-08-18 "inert-to-
+negative" verdict now has per-game attribution. Everything else below stands as written.
+Original reopen triggers (still valid for the rest): a reference-gate red (enum-gap), a concrete
+repro game where a colour phantom -- not priced optimism -- costs a win, or the cast-order
+project reopening (first rule to review there: strand the cheapest, not the payoff -- the gi1197
+lesson). Full protocol + numbers: `search-recoverability-audit.md` 4b (cross-cast stranding).
 
 Self-contained state of the subset-affordability / same-turn-mana work, for whoever picks it up.
 Everything referenced here is in git; no private notes are needed. The deep detail lives in
