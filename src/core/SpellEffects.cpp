@@ -1358,6 +1358,23 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             { bits |= (1u << static_cast<int>(Color::Colorless)); }   // drip land's {C} mode
         }
         if (bits == 0) { continue; }   // solo Reflecting Pool etc.: makes nothing usable -> no supply
+        // LAND AURAS. This oracle can declare a cost INFEASIBLE and short-circuit the payment
+        // entirely, so being blind here is not a missed optimisation -- it vetoes lines the DFS
+        // would have paid. `amt` is ManaProducedPerTap (the printed yield, no LandAuraBonus) and
+        // `bits` is the host's own colours, so an enchanted land was priced as if unenchanted.
+        // Credit the aura as its OWN edge: its units carry the AURA's colours, not the host's
+        // (a Wild Growth on an Adarkar Wastes supplies {G}, which the Wastes can never make).
+        const int aura_units = LandAuraBonus(state, state.battlefield[i]);
+        if (aura_units > 0)
+        {
+            const int am = LandAuraColorMask(state, state.battlefield[i]);
+            if (am != 0)
+            {
+                std::uint8_t abits = 0;
+                for (int ci = 0; ci < 5; ++ci) { if (am & (1 << ci)) { abits |= (1u << ci); } }
+                srcs.push_back({ abits, aura_units, aura_units, i });
+            }
+        }
         srcs.push_back({ bits, amt, amt, i });   // non-domain: one colour takes the whole tap
     }
 
@@ -2196,7 +2213,21 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             // below on failure alongside the active player's life.
             if (drip_ok && def->params.tap_opponent_lifegain > 0)
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
-            if (TapForCostBacktrackWorker(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover,
+            // LAND AURAS ("Whenever enchanted land is tapped for mana, add an additional {G}").
+            // Credited HERE, at the single choke point every tap branch funnels through, rather
+            // than in each of the six places that build `next` -- one site cannot drift out of
+            // step with the others, and a non-land source no-ops (LandAuraBonus gates on IsLand).
+            //
+            // This path ignored auras COMPLETELY: `amt` is ManaProducedPerTap (the PRINTED yield,
+            // no LandAuraBonus) and each branch adds only the host's own colours, so an enchanted
+            // land tapped for exactly what it prints. The greedy pool path (AddSourceToPool) has
+            // always credited it, so the two payers DISAGREED -- a line the pool said was payable
+            // could not be paid by the backtracking solver. Found while fixing the user's
+            // 2026-09-03 viewer report; see LandAuraColorMask for the colour-gate half.
+            ManaPool next_with_aura = next;
+            if (LandAuraBonus(state, state.battlefield[i]) > 0)
+            { LandAuraAddToPool(next_with_aura, state, state.battlefield[i]); }
+            if (TapForCostBacktrackWorker(state, cost, for_creature, next_with_aura, rp_colors, fail_memo, out_leftover,
                                     // memo bit = this source's POSITION in `cands` (see key.first
                                     // above). The `& 63` keeps the shift defined when the mask is
                                     // unused anyway (memo not installed); wherever the memo IS live

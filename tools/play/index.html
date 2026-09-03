@@ -1156,20 +1156,31 @@ function renderBoard() {
     }
     plannedPerms.push(plannedThumb(p,i,ord[i])); });
 
-  const meLands = meBf.filter(x=>x.is_land).map(bfThumb);
-  // Group attached Auras AND attached Equipment UNDER their host creature (by m_number; equipment
-  // added 2026-08-14). A host with no attachment renders as a plain
-  // thumb; an Aura whose host isn't found falls back to a standalone thumb so nothing is ever hidden.
+  // Group attached Auras AND attached Equipment UNDER their host (by m_number; equipment added
+  // 2026-08-14, LANDS added 2026-09-03). A host with no attachment renders as a plain thumb; an
+  // attachment whose host isn't found falls back to a standalone thumb so nothing is ever hidden.
+  //
+  // Lands are hosts too. They were not before, and the symptom was specific: hosts were drawn only
+  // from the NON-land permanents, so a land Aura (Wild Growth on an Aether Hub) never matched a
+  // host, fell through the "orphan" path below, and rendered as a loose thumb in the permanents row
+  // with nothing to say what it enchanted. USER, 2026-09-03: "the land enchantments need to show up
+  // under the lands, like creatures enchantments do".
   const mePermsRaw = meBf.filter(x=>!x.is_land && !eqQueuedSrc.has(x.num));
   const aurasByHost = {};
   mePermsRaw.forEach(p=>{ if((p.is_aura||p.is_equip) && p.attached_to>0){ (aurasByHost[p.attached_to]=aurasByHost[p.attached_to]||[]).push(p); } });
+  // One renderer for both zones, so a land host and a creature host can never drift apart.
+  const withAttachments = host => {
+    const at = aurasByHost[host.num]||[], pl = plannedAurasByHost[host.num]||[];
+    return (at.length||pl.length) ? enchantedGroup(host, at, pl) : bfThumb(host);
+  };
+  const meLandPerms = meBf.filter(x=>x.is_land);
+  const meLands = meLandPerms.map(withAttachments);
+  // Land hosts count as found, or the orphan fallback below would render every land Aura twice.
   const hostNums = new Set(mePermsRaw.filter(p=>!((p.is_aura||p.is_equip) && p.attached_to>0)).map(p=>p.num));
+  meLandPerms.forEach(p=>hostNums.add(p.num));
   const mePerms = mePermsRaw
     .filter(p=>!((p.is_aura||p.is_equip) && p.attached_to>0))
-    .map(host=>{
-      const at = aurasByHost[host.num]||[], pl = plannedAurasByHost[host.num]||[];
-      return (at.length||pl.length) ? enchantedGroup(host, at, pl) : bfThumb(host);
-    });
+    .map(withAttachments);
   // Orphan attached auras (host not on my field — shouldn't happen) render standalone.
   mePermsRaw.forEach(p=>{ if((p.is_aura||p.is_equip) && p.attached_to>0 && !hostNums.has(p.attached_to)) mePerms.push(bfThumb(p)); });
 

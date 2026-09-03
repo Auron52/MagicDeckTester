@@ -2401,6 +2401,14 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
                 default: break;
             }
         }
+        // Land AURAS ("Whenever enchanted land is tapped for mana, add an additional {G}"): the mana
+        // arrives on this source's own tap, in the AURA's colour, so the colours it supplies belong
+        // in this walk. Without it a subset whose pip only an aura can pay was rejected as "no
+        // untapped source produces <colour>" -- see LandAuraColorMask for the user-found case.
+        if (const int am = LandAuraColorMask(state, p))
+        {
+            for (int i = 0; i < 5; ++i) { if (am & (1 << i)) { have[i] = true; } }
+        }
         // Untap-land burst (Wirewood Lodge): with a live 2+ scaled Elf -- including a TAPPED one,
         // which contributes no colour of its own to this walk -- the Lodge tap delivers the FEED
         // colour ({G}), not just its printed {C}. Without this a mid-turn subset needing {G} that

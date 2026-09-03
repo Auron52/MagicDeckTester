@@ -1512,6 +1512,19 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
             add_one_of_each(mask);
             continue;
         }
+        // Land AURAS. `amt` ALREADY includes the aura's extra mana (PermanentManaYield adds
+        // LandAuraBonus), so the count was never the bug -- the COLOUR was: those units were being
+        // credited under the HOST's mask, so a Wild Growth on an Adarkar Wastes read as "two mana of
+        // W/U/C" instead of "one of W/U/C plus one {G}". Split the credit so each part carries its
+        // own colours. Do NOT also add(mask, amt) or the aura's mana is counted twice.
+        const int aura_units = LandAuraBonus(state, p);
+        const int aura_mask  = LandAuraColorMask(state, p);
+        if (aura_units > 0 && aura_mask != 0)
+        {
+            add(mask, amt - aura_units);   // the host land's own tap
+            add(aura_mask, aura_units);    // the aura's additional mana, in the AURA's colour
+            continue;
+        }
         add(mask, amt);
     }
     // The turn-scoped reserve is spendable on this phase's casts, so it is supply like any other.

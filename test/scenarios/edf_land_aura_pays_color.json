@@ -1,0 +1,74 @@
+{
+  "_comment": [
+    "USER-FOUND, 2026-09-03 (play viewer, rejection artifact s1_gi0_t2): 'Wild growth mana is not",
+    "being considered'. A land Aura's additional mana is credited by the PAYMENT solver and by the",
+    "real tap, but BOTH colour gates walked each source's own EffectiveProduces and never looked at",
+    "the Auras attached to it -- ComputeAvailableColors (TurnSolver.cpp, colour PRESENCE) and",
+    "BuildColorFeasibility (ManaPayment.cpp, colour EXACT). So a cast whose coloured pip was payable",
+    "only off an aura was pruned before the payer ever saw it.",
+    "",
+    "NOT a viewer bug. Both gates are built once per enumeration at the SEARCH's two plan",
+    "enumerators, so the search dropped the same lines in every game of every seed; the viewer's",
+    "line validator merely named the reason out loud. In BuildColorFeasibility the COUNT was already",
+    "right (PermanentManaYield adds LandAuraBonus) -- the units were just being credited under the",
+    "HOST's colours, so a Wild Growth on an Adarkar Wastes read as 'two mana of W/U/C'.",
+    "",
+    "The fixture: Adarkar Wastes makes W/U/C and Mariposa Military Base makes {C} -- NO red on the",
+    "board. Fertile Ground on the Wastes adds one mana of ANY colour, which is the only thing that",
+    "can pay the {R} in Shivan Gorge's '{2}{R}, {T}: deals 1 damage to each opponent'. Three mana",
+    "available, one of them red-capable, so the Gorge fires exactly once.",
+    "",
+    "Verified DISCRIMINATING: delete the Fertile Ground entry and the board still makes three mana",
+    "but none of it red -- the Gorge cannot be activated and the opponent stays on 20 (against 18",
+    "with it). The aura is the only difference and the COLOUR it supplies is the only thing under",
+    "test. active_life 18 is the Adarkar Wastes pain on each coloured tap, which is the second",
+    "witness that the enchanted land is the one being tapped.",
+    "",
+    "FOUR sites were blind, and only the fourth made the fixture move: the two colour gates above,",
+    "the payment DFS (TapForCostBacktrackWorker -- `amt` was ManaProducedPerTap, so an enchanted",
+    "land tapped for exactly what it prints), and TapFlowInfeasible, the flow oracle, which can",
+    "declare a cost infeasible and short-circuit the payment before the DFS ever runs. Only",
+    "AddSourceToPool (the greedy pool path) was ever correct, which is why the deck still ramped and",
+    "the bug stayed hidden.",
+    "",
+    "Deliberately avoids hybrid costs: Vexing Shusher ({R/G}{R/G}) was the first choice here and it",
+    "turned out to be uncastable off green, which is a SEPARATE open bug -- see the ledger."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Shivan Gorge",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Adarkar Wastes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Fertile Ground",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Adarkar Wastes"
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_no_win": true,
+  "expect_opponent_life": 18,
+  "expect_active_life": 18
+}

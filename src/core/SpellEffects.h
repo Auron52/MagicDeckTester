@@ -7221,6 +7221,43 @@ inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Perm
     }
 }
 
+// The COLOUR MASK (bit i == Color(i), i in 0..4) that land Auras attached to `land` can supply.
+//
+// THE single source of truth for the colour GATES, which is the whole point of it existing: the
+// payer (AddSourceToPool) and the real tap both credit an aura's mana, but the two colour gates --
+// ComputeAvailableColors (presence) and BuildColorFeasibility (exact) -- each walked only the
+// SOURCE'S OWN EffectiveProduces and never looked at what was attached to it. So a cast whose
+// coloured pip was payable only off an aura was pruned before the payer ever ran. USER-found on
+// 2026-09-03 through the play viewer ("Wild growth mana is not being considered"): with a Wild
+// Growth on an Aether Hub, a second Wild Growth ({G}) was rejected as "no untapped source produces
+// green mana". Both gates feed the SEARCH's plan enumerators, so it dropped the same lines in every
+// game of every seed; the viewer only made it say so out loud. See
+// test/scenarios/edf_land_aura_pays_color.json.
+//
+// An EMPTY land_aura_produces is "one mana of any colour" -> all five colour bits, and deliberately
+// NOT colourless: a colour cannot pay a {C} pip, exactly as LandAuraAddToPool credits `wild` and
+// never `wild_c`.
+inline int LandAuraColorMask(const GameState& state, const Permanent& land)
+{
+    if (!land.card.IsLand()) { return 0; }
+    int mask = 0;
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.aura_attached_to != land.card.m_number) { continue; }
+        if (a.controller_index != land.controller_index) { continue; }
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+        if (!ad || !ad->params.is_land_aura || ad->params.land_aura_extra_mana <= 0) { continue; }
+        const std::vector<Color>& prod = ad->params.land_aura_produces;
+        if (prod.empty()) { mask |= 0x1F; continue; }          // "one mana of any colour"
+        for (Color c : prod)
+        {
+            const int ci = static_cast<int>(c);
+            if (ci >= 0 && ci < 5) { mask |= (1 << ci); }
+        }
+    }
+    return mask;
+}
+
 inline int PermanentManaYield(const GameState& state, const Permanent& perm, const CardDefinition& def)
 {
     if (def.params.storage_land) { return perm.storage_counters + LandAuraBonus(state, perm); }
