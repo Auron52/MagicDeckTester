@@ -14384,23 +14384,23 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             const Action& c = cands[j];
             discard_lands_used += c.discard_lands;
 
-            combined.white     += c.cost.white;
-            combined.blue      += c.cost.blue;
-            combined.black     += c.cost.black;
-            combined.red       += c.cost.red;
-            combined.green     += c.cost.green;
-            combined.colorless += c.cost.colorless;
-            combined.generic   += c.cost.generic;
+            // Through the CARRYING helper: a plain field-by-field sum drops the hybrid
+            // metadata, leaving a fully BAKED cost that demands each pip's first colour
+            // (Card.h bakes it there). `pool.CanPay(combined)` below then rejects
+            // subsets the board pays fine off the OTHER half. It hid because a MULTI-COLOUR source
+            // credits `pool.wild` and CanPayFlat lets wild pay any pip: one untapped dual masks the
+            // baked demand, so the bug only bites on a MONO-source board -- which is why a library
+            // FILLER sweep, not a colour sweep, isolated it (Forest/Island fillers rejected the
+            // cast that Adarkar Wastes / Yavimaya Coast fillers allowed).
+            AddCostCarryingHybrids(combined, c.cost);
 
             if (c.is_noncreature)
             {
-                noncreature_combined.white     += c.cost.white;
-                noncreature_combined.blue      += c.cost.blue;
-                noncreature_combined.black     += c.cost.black;
-                noncreature_combined.red       += c.cost.red;
-                noncreature_combined.green     += c.cost.green;
-                noncreature_combined.colorless += c.cost.colorless;
-                noncreature_combined.generic   += c.cost.generic;
+                // Through the CARRYING helper: a plain field-by-field sum drops the hybrid
+                // metadata, leaving a fully BAKED cost that demands each pip's first colour
+                // (Card.h bakes it there). `pool.CanPay(noncreature_combined)` below then rejects
+                // subsets the board pays fine off the OTHER half.
+                AddCostCarryingHybrids(noncreature_combined, c.cost);
                 ++noncreature_count;
             }
 
@@ -21700,22 +21700,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         {
             const Action& c = cands[j];
             discard_lands_used += c.discard_lands;
-            combined.white     += c.cost.white;
-            combined.blue      += c.cost.blue;
-            combined.black     += c.cost.black;
-            combined.red       += c.cost.red;
-            combined.green     += c.cost.green;
-            combined.colorless += c.cost.colorless;
-            combined.generic   += c.cost.generic;
+            // Through the CARRYING helper: a plain field-by-field sum drops the hybrid
+            // metadata, leaving a fully BAKED cost that demands each pip's first colour
+            // (Card.h bakes it there). `pool.CanPay(combined)` below then rejects
+            // subsets the board pays fine off the OTHER half.
+            AddCostCarryingHybrids(combined, c.cost);
             if (c.is_noncreature)
             {
-                noncreature_combined.white     += c.cost.white;
-                noncreature_combined.blue      += c.cost.blue;
-                noncreature_combined.black     += c.cost.black;
-                noncreature_combined.red       += c.cost.red;
-                noncreature_combined.green     += c.cost.green;
-                noncreature_combined.colorless += c.cost.colorless;
-                noncreature_combined.generic   += c.cost.generic;
+                // Through the CARRYING helper: a plain field-by-field sum drops the hybrid
+                // metadata, leaving a fully BAKED cost that demands each pip's first colour
+                // (Card.h bakes it there). `pool.CanPay(noncreature_combined)` below then rejects
+                // subsets the board pays fine off the OTHER half.
+                AddCostCarryingHybrids(noncreature_combined, c.cost);
             }
             if (c.sacrifice_land)   { ++sacrifice_count; }
             if (c.is_noncreature)   { ++noncreature_count; }

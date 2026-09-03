@@ -2879,6 +2879,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                          ManaPool* out_full_pool,
                          const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
 {
+
     // ---- PAYABLE MANA CACHE lookup (canonical batch-prepay shape only; see the block above) ----
     // SHAPE: rp_colors must be null (externally-supplied colours are not in the key) and the board must
     // fit the tap-set bitmask. The output mode and the incoming floating pool are KEYED rather than
