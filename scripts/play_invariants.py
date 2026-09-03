@@ -50,6 +50,11 @@ KNOWN_TYPES = {
     # multi-consume put overrides (one 0/1 int per candidate): Dragonstorm put + Defense of the
     # Heart upkeep sac-tutor. Replied via the candidates' `def` flags (the AI's subset).
     "dragon", "sac_tutor",
+    # cascade / Breaching Dragonstorm / Creative Technique free-cast offer (reply ai_pick, the
+    # engine's autonomous take -- heuristic_default is -1 by the reference-protection convention,
+    # so the generic fallback would decline every cast and diverge from autonomous play) and
+    # Creative Technique's demonstrate yes/no (generic heuristic_default path).
+    "free_cast", "demonstrate",
 }
 D_START, D_END = "<<<CLAUDE_DECISION>>>", "<<<END_DECISION>>>"
 R_START, R_END = "<<<CLAUDE_RESULT>>>", "<<<END_RESULT>>>"
@@ -106,6 +111,12 @@ def reply_for(dec):
         return [int(ai.get("index", 0) if isinstance(ai, dict) else ai)]
     if t == "vial_charge":
         return [int(dec.get("heuristic_default", 0))]
+    if t == "free_cast":
+        # Follow the ENGINE's autonomous line (ai_pick = take the cast), not heuristic_default:
+        # that field is deliberately -1/decline (reference protection, see WriteFreeCastDecisionJson)
+        # and declining every cascade/Dragonstorm/Technique free cast would diverge from play.
+        ai = dec.get("ai_pick")
+        return [int(ai)] if isinstance(ai, int) else [int(dec.get("heuristic_default", -1))]
     if t in ("dragon", "sac_tutor"):
         # Multi-consume put override: ONE 0/1 int per candidate (in candidate order), following
         # the AI's default subset (each candidate's `def` flag). Like `divide`, the engine reads
