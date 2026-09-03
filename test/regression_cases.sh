@@ -34,6 +34,7 @@ declare -A DECK_FILE=(
   [minotaur]=decks/Minotaur/Minotaur.cod
   [kitty]=decks/KittyEquipment/KittyEquipment.cod
   [dragons]=decks/Dragons/Dragons.cod
+  [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -52,6 +53,7 @@ declare -A DECK_PROF=(
   [minotaur]=decks/Minotaur/Minotaur.profile.json
   [kitty]=decks/KittyEquipment/KittyEquipment.profile.json
   [dragons]=decks/Dragons/Dragons.profile.json
+  [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -167,6 +169,15 @@ SMOKE_CASES=(
   "dragons 0 1001 1000 0"
   "dragons 3 1001  250 10"
   "dragons 5 1001  150 20"
+  # breaching: BreachingDragonstorm -- Temur cascade/free-cast combo (double sac-land burst into
+  # Wanderer/Creative Technique chains; wins ~T3.5, 62% T3 at converged budgets). Pooled-probe
+  # 2026-09-03 vs dragonstorm as in-batch anchor: d0 ~0.007 ms/game, d3 b10 ~0.38 s/game,
+  # d5 b20 ~0.56 s/game (~7x/14x dragonstorm) -- kitty-class cost. Generic provider, no keep
+  # model / value leaf yet (Stage 4 pending): the d5 cell will move when a value leaf is adopted
+  # (its case omits depth so value_play owns it -- expected churn, regenerate GT then).
+  "breaching 0 1001 1000 0"
+  "breaching 3 1001  150 10"
+  "breaching 5 1001   75 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -271,6 +282,13 @@ REGRESSION_CASES=(
   "dragons 3 3003  300 10"
   "dragons 5 2002  250 20"
   "dragons 5 3003  250 20"
+  # breaching: kitty-shaped two-seed sweep at reduced counts (~0.38/0.56 s/game at the gate
+  # budgets => ~7 min ST added, pools inside the existing makespan).
+  "breaching 0 2002 1000 0"
+  "breaching 3 2002  300 10"
+  "breaching 3 3003  300 10"
+  "breaching 5 2002  250 20"
+  "breaching 5 3003  250 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -526,4 +544,20 @@ OVERNIGHT_CASES=(
   "dragons 5 5005  500 40"
   "dragons 5 6006  500 40"
   "dragons 5 7007  500 40"
+  # breaching: kitty-shaped 4-seed sweep at 2x gate budgets. Probed at the ACTUAL overnight
+  # budgets 2026-09-03: d3 b20 ~0.43 s/game, d5 b40 ~0.60 s/game (the deck's search plateaus at
+  # d3, so 2x budget costs almost nothing over the gates) => ~2.1 core-hours added. Counts obey
+  # the seed-spacing rule (1000/500 < 1001).
+  "breaching 0  4004 2000 0"
+  "breaching 0  6006 2000 0"
+  "breaching 0  8008 2000 0"
+  "breaching 0 10010 2000 0"
+  "breaching 3 4004 1000 20"
+  "breaching 3 5005 1000 20"
+  "breaching 3 6006 1000 20"
+  "breaching 3 7007 1000 20"
+  "breaching 5 4004  500 40"
+  "breaching 5 5005  500 40"
+  "breaching 5 6006  500 40"
+  "breaching 5 7007  500 40"
 )

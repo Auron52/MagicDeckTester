@@ -31,6 +31,8 @@ Ground truth is recorded by running a mode and, once inspected, promoting it wit
 | kitty   | 5     | 20 / 40 | —    | 0.50 / 1.65 s/game | |
 | dragons | 3     | 10 / 20 | —    | 0.98 / 1.39 s/game | |
 | dragons | 5     | 20 / 40 | —    | 2.00 / 3.60 s/game | |
+| breaching | 3   | 10 / 20 | —    | 0.38 / 0.43 s/game | pooled-probe 2026-09-03, dragonstorm anchor (0.055 s/game d3 b10 in-batch) |
+| breaching | 5   | 20 / 40 | —    | 0.56 / 0.60 s/game | search plateaus at d3, so 2x budget is nearly free; no value leaf yet (d5 GT will move on adoption) |
 
 ### kitty + dragons: sized by RATIO, because the box was contended
 
