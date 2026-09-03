@@ -1203,8 +1203,10 @@ public:
     // UNVERIFIED pass shallower than value_min_depth (the per-model trust depth, where the WEAK leaf is
     // unreliable), escalate to ONE heuristic search on the REMAINING budget and take it only if the depth it
     // can afford clears the crossover (heuristic-Hd beats value-leaf-committed iff Hd > committed-3). A
-    // VERIFIED win, or a line at/above the trust depth, is kept as-is. budget_ms is unused (escalation spends
-    // the remaining shared budget). value_min_depth <= 0, or no value model attached/enabled, => identical to
+    // VERIFIED win, or a line at/above the trust depth, is kept as-is. budget_ms sizes the escalation's FRESH
+    // budget (the probe's cheap leaves leave the re-search starved on shared leftovers -- see
+    // docs/design/escalation-budget-investigation.md; MTG_ESCALATION_FRESH_FRAC=-1 restores legacy for A/B).
+    // value_min_depth <= 0, or no value model attached/enabled, => identical to
     // FullSearchLine (no escalation -- pure value leaf). See learned-d0-policy.md.
     // value_fallback_take_at: the table-driven per-committed-depth take-crossover (MulliganProfile::
     // value_fallback_take_at, index = committed depth, hc*[c]). When non-empty it REPLACES the uniform
@@ -1217,10 +1219,6 @@ public:
                                            int value_min_depth, int budget_ms,
                                            bool value_no_fallback = false,
                                            const std::vector<int>& value_fallback_take_at = {},
-                                           // Per-deck escalation budget renewal (value_play.escalation_fresh_frac).
-                                           // Sentinel <= -1.5 (default) => use the MTG_ESCALATION_FRESH_FRAC env
-                                           // static (byte-identical). -1 => legacy shared budget; >=0 => fresh frac.
-                                           double escalation_fresh_frac = -2.0,
                                            // Per-deck escalation beam (value_play.beam_width / beam_leafdepth).
                                            // beam_width < 0 (default) => use the MTG_ESC_BEAM env static (byte-
                                            // identical). 0 => off; >0 => keep top-N value-ranked plans near the

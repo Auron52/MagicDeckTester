@@ -42,7 +42,9 @@ struct ValuePlay
     int    budget_ms    = 0;
     bool   enabled      = false;          // true => the ADOPTED policy: drives + locks play. false => recorded
                                           //         recommendation only (does NOT affect play; byte-identical).
-    double escalation_fresh_frac = -1.0;  // budget renewal, per-deck; -1 = off (legacy shared budget)
+    // (escalation_fresh_frac was DELETED 2026-09-03: the escalation's fresh-full budget is engine behavior,
+    // not a per-deck setting -- an absent key silently meant "starved legacy leftovers", which produced every
+    // historical value-leaf "play rejection". See docs/design/escalation-budget-investigation.md.)
     // Escalation value-guided beam (per-deck; see docs/design/escalation-beam-verify.md). The heuristic
     // escalation reorders each node's plans by the probe's recorded value ranking and expands only the top
     // `beam_width` at nodes within `beam_leafdepth` plies of the leaf -- cutting the deep rollout frontier
@@ -183,7 +185,7 @@ struct MulliganProfile
     // at ~d5, and on an UNVERIFIED committed line below this depth it plays materially worse than the heuristic
     // (see docs/design/learned-d0-policy.md, 2026-07-11). The hybrid keeps the value-leaf line without the
     // (clairvoyant) heuristic escalation when its committed depth >= this; below it (and not a verified win) it
-    // escalates to one heuristic search on the remaining budget. 0 (unset) => always eligible to escalate.
+    // escalates to one heuristic search on a fresh budget. 0 (unset) => always eligible to escalate.
     // Decks whose value-leaf matches the heuristic at d5 (verified-win-dominated: knights/slivers) set 5.
     int value_trust_depth = 0;
 

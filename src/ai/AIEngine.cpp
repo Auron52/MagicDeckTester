@@ -2165,9 +2165,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // The escalation BEAM is DEPTH-ADAPTIVE (FullSearchLineHybrid picks the deep vs shallow
                     // regime by search depth), so it fires whenever the block drives -- not only on-policy. At the
                     // deck's own (deep) depth this is the ADOPTED config (byte-identical); at a shallow off-policy
-                    // depth it switches to the wide static leaf beam (measured neutral+faster). Budget renewal
-                    // (fresh_frac) stays ON-POLICY-only (vp_here): it was tuned for the deck's deep search, and the
-                    // shallow beam was measured on the legacy budget. -1 beam_width => no block => beam off => byte-
+                    // depth it switches to the wide static leaf beam (measured neutral+faster). The escalation's
+                    // FRESH-FULL budget is engine behavior (not per-deck; see escalation-budget-investigation.md).
+                    // -1 beam_width => no block => beam off => byte-
                     // identical; d0/d1/d2 are too shallow for any regime so the beam stays off there too.
                     const bool vp_beam = m_profile.value_play.drives();
                     // Per-decision reset for the fd-oracle's leaf-estimate diagnostic (no-op unless
@@ -2182,9 +2182,6 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
                         fd_tt, &budget, &searched_depth, escalate_below, m_budget_ms,
                         m_profile.value_no_fallback, m_profile.value_fallback_take_at,
-                        // Per-deck escalation budget renewal; only the block's own on-policy search overrides the
-                        // env static (-2.0 sentinel => use env => byte-identical otherwise).
-                        vp_here ? m_profile.value_play.escalation_fresh_frac : -2.0,
                         // Per-deck escalation beam; fires whenever the block drives (depth-adaptive inside the
                         // hybrid). beam_leafdepth protects the top plies (the committed play). -1 => use env.
                         vp_beam ? m_profile.value_play.beam_width : -1,

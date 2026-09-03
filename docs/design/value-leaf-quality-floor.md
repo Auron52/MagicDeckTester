@@ -18,6 +18,18 @@ escalates to one heuristic search. Under that contract a bad leaf buys a worse p
 verification time -- it cannot cost quality, because every line it proposes is either verified or
 replaced by what the heuristic would have said anyway.
 
+> **CAVEAT ADDED 2026-09-03 -- the contract is CONDITIONAL on the escalation being a real search.**
+> "Cannot cost quality" holds only if the escalation actually reaches the depth the pure heuristic
+> would have. From the depth-aware fallback (2026-07-11) until 2026-09-03 it did not: it ran on the
+> probe's LEFTOVER budget and committed a measured mean depth of **~1.4 against the control's
+> ~2.1-2.35** on the same unverified population. That is a real quality leak, not a worse prior --
+> Creature Giving measured **+0.0083 loss-penalized vs the no-sidecar control (t=+5.2, held-out)**.
+> The escalation now always runs on a FRESH budget equal to the full decision budget (ADOPTED
+> 2026-09-03, engine behavior), which restores the invariant: cap+beam at fresh-full measured
+> **control parity (-0.0004, t=-0.33, ZERO win<->loss flips) at 0.43x the control's wall**. Read the
+> invariant below as *"the correctly-budgeted hybrid cannot cost quality"*, and see
+> `escalation-budget-investigation.md`.
+
 At a FIXED BUDGET the invariant is stronger than "no worse". Shipped play is budgeted, so a cheaper
 evaluator buys strictly more nodes for the same milliseconds; the saving converts into breadth rather
 than wall clock. So:
@@ -27,6 +39,12 @@ than wall clock. So:
 
 A measured, one-sided quality LOSS is therefore evidence about the CONFIGURATION, not about the
 model. Treat it as a config fault and audit the three levers below before believing it.
+
+*(2026-09-03: this claim was VINDICATED -- and the fault turned out to be a FOURTH lever this doc
+never listed, the escalation's BUDGET. Every historical value-leaf "play rejection", Creature
+Giving's 2026-08-06 one chief among them, traced to escalation starvation rather than to any model.
+Audit the budget FIRST: it is now fixed engine behavior at fresh-full, but any pre-2026-09-03
+measurement -- or an `MTG_ESCALATION_FRESH_FRAC=-1` research arm -- is still the starved config.)*
 
 ## The three levers, with their real semantics
 
@@ -48,6 +66,11 @@ escalated. Its cost is real -- verification consumes the budget that would other
 search -- but its quality direction is conservative. The quality leak is on the OTHER two levers: a
 high trust depth (commit to leaf lines unverified) or a fall-back that keeps the leaf after the
 escalation disagreed.
+
+*(2026-09-03 correction: conservative ONLY once the escalation is properly budgeted. Under the
+legacy shared-leftover budget, `trust UNSET` routed the MOST decisions into the starved re-search,
+so the "safe" setting carried the largest exposure to the leak. It is safe again now that
+fresh-full is engine behavior.)*
 
 ## Why the safest configuration is still worth shipping
 
@@ -146,7 +169,10 @@ Driver-side, in the deriver, applying to every deck:
    attribute its result to either.
 4. **Assert the floor.** A staged arm measuring significantly WORSE than no-sidecar at equal budget
    is a config fault, not a model verdict -- the pipeline should say so rather than report it as a
-   rejection.
+   rejection. *(2026-09-03: the first real test of this rule proved it right. Creature Giving's
+   2026-08-06 rejection was the escalation-budget fault, and phase E had been reporting it as a
+   model verdict for a month. The floor check must include the ESCALATION BUDGET, which this list
+   originally omitted.)*
 
 Related: `.claude/skills/value-leaf.md` (sidecar PRESENCE activates the hybrid; a rejected model
 ships as `<stem>.value.DISABLED.json`), `docs/design/value-leaf-regeneration-queue.md` (the Knights
@@ -156,4 +182,6 @@ capped cell must not enter a paired comparison).
 **Status 2026-08-15:** unimplemented and deliberately not started -- another agent was mid-measurement
 on Creature Giving's rejection, and changing the deriver would have moved the numbers under them.
 *(2026-09-03: still unimplemented, but the blocking reason expired weeks ago — that measurement
-is long finished; free to pick up.)*
+is long finished; free to pick up. That Creature Giving measurement's ANSWER also landed the same
+day: the rejection was an escalation-budget artifact, and fresh-full escalation is now engine
+behavior — `docs/design/escalation-budget-investigation.md`.)*

@@ -1,5 +1,12 @@
 # Escalation-refactor drift vs regression GT (ROOT CAUSE FOUND + FIXED)
 
+> **UPDATE 2026-09-03:** the "UNADOPTED improvement candidate" below was ADOPTED — the fresh-full
+> escalation budget is now the engine default (deliberate GT rebaseline; `value_play.escalation_fresh_frac`
+> deleted; `MTG_ESCALATION_FRESH_FRAC` is a research hatch, `-1` = the legacy budget this doc restored).
+> The 2026-07-17 fix below was still RIGHT at the time: the flip was un-gated, unmeasured drift; the adoption
+> is the same change done deliberately, measured (held-out control parity at 0.43x wall on CG, cap+beam), and
+> rebaselined. See docs/design/escalation-budget-investigation.md.
+
 **Status (2026-07-17, RESOLVED):** The uncommitted escalation-logic refactor in `src/ai/` changed default
 play for the value-leaf decks (TH, antilife, hinata) vs the committed regression GT. **Root cause pinned and
 fixed:** it was NOT a subtle refactor bug — it was a single **non-gated default flip**. The escalation budget

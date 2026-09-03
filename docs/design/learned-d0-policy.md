@@ -3,7 +3,10 @@
 **Status (updated 2026-09-03):** the value model is ADOPTED default-ON since 2026-07-11
 (06e6ebe7, `UseValueModel` — on when a sidecar is present unless `MTG_VALUE_MODEL=0`), and
 Hinata — "DEFERRED" below — now ships both a value sidecar (2ec72fd6) and an R=22 keep profile
-(22947513). The sections below are the 2026-07 session log.
+(22947513). Also ADOPTED 2026-09-03: the hybrid's heuristic escalation runs on a **fresh budget equal
+to the full decision budget**, superseding the "remaining shared budget" described in *The depth-aware
+fallback* below (`docs/design/escalation-budget-investigation.md`). The sections below are the 2026-07
+session log.
 
 Status: **in progress** (Phase 1). Owner-facing design; the executable plan lives here so it is
 durable and shared across machines/agents (per CLAUDE.md's `docs/design/` rule).
@@ -1960,6 +1963,20 @@ else keep the value-leaf. No bespoke Dh estimator (reuses the start gate); no fr
 left). `escalate_below` at the call site = env `MTG_VALUE_MIN_DEPTH` override (0 ⇒ pure leaf) → `value_trust_depth` →
 else `user_depth+1` (escalate at every depth).
 
+> **UPDATE 2026-09-03 — the "remaining shared budget" above is NO LONGER current engine behavior.**
+> That budget STARVED the escalation: measured mean committed depth **~1.4 against the pure-heuristic
+> control's ~2.1-2.35** on the same (unverified) population, which made it a real quality leak rather
+> than the neutral cost-saving it was taken for — Creature Giving measured **+0.0083 loss-penalized vs
+> the no-sidecar control (t=+5.2, held-out)**. **ADOPTED:** the escalation now always runs on a **FRESH
+> budget equal to the full decision budget** (fresh-full), as engine behavior. The per-deck
+> `value_play.escalation_fresh_frac` field is **DELETED** (an absent key silently meant "starved", and
+> 8 of 11 enabled value decks had no key — starved was the production config); `MTG_ESCALATION_FRESH_FRAC`
+> remains a research hatch only (default 1.0, `-1` = the legacy shared-leftover budget described above).
+> Held-out: cap+beam at fresh-full is **control parity (-0.0004, t=-0.33), ZERO win<->loss flips, 0.43x
+> the control's wall**; fresh 0.5 measured WORSE than control and is dead. Everything else in this
+> section (verified-win keep, `value_trust_depth`, the `Hd > committed − 3` crossover) is unchanged.
+> See `docs/design/escalation-budget-investigation.md`.
+
 **`value_trust_depth` is per-model, in `<deck>.value.json`, and DERIVED not hand-set** by
 `scripts/valueleaf_calibrate_trust.py` (run once per value model, ideally at model-creation): it is the shallowest depth
 where the pure leaf reaches converged-heuristic quality (`V_d − min_d H_d ≤ tol=0.002`), else UNSET ⇒ escalate always.
@@ -1972,7 +1989,8 @@ Calibrator output: **knights = 5, slivers = 5** (verified-win-dominated, V5=H5),
   escalation). Strict Pareto win over the pure heuristic.
 - **Gate d3=10:** the raw leaf is catastrophic (pure − heur: antilife **+0.344**, TH +0.077, knights +0.031); the fallback
   restores parity (fb − heur ≤ +0.003). So the fallback makes the value-leaf **safe at any depth**, not just a generous-
-  budget polish.
+  budget polish. *(2026-09-03: "safe at any depth" holds only with a properly-budgeted escalation — these numbers were
+  taken at 4 seeds on 5 decks and did not generalise to the fleet under the shared-leftover budget; see the UPDATE above.)*
 - **Gate d5=20:** fb − heur ≤ +0.005 (recovers ⅔–all of the residual under the tight node budget).
 
 **NC-path note.** The heuristic escalation leaf is *clairvoyant*, so it is a clairvoyant-path quality lever and lives only

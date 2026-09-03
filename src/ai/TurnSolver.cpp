@@ -28891,8 +28891,28 @@ namespace
         std::atomic<long long> esc_verified{0};                 // escalations that COMMITTED a verified win (win <= turn+hcommitted-1)
         std::atomic<long long> esc_verified_short{0};           // ... AND at hcommitted < probe committed (verified win the probe pruned)
         std::array<std::atomic<long long>, 16> esc_ver_hdepth{}; // achieved-depth histogram of the VERIFIED-win escalations
+        // CONTROL reference (no value model attached): the same top-level decisions, committed by the plain
+        // heuristic ladder. This is the baseline the escalation's achieved depth must be judged against.
+        std::atomic<long long> ctl_decisions{0};
+        std::atomic<long long> ctl_verified{0};
+        std::array<std::atomic<long long>, 16> ctl_depth{};       // control committed-depth histogram (all)
+        std::array<std::atomic<long long>, 16> ctl_depth_unver{}; // ... UNVERIFIED subset: the population the
+                                                                  // hybrid would ESCALATE, so this is the fair
+                                                                  // baseline for the escalation's achieved depth
         ~HybridStats()
         {
+            if (enabled && ctl_decisions.load() > 0)
+            {
+                std::cerr << "[hybrid-stats] CONTROL (no value model) decisions=" << ctl_decisions.load()
+                          << " verified=" << ctl_verified.load()
+                          << " committed-depth histogram (all / of-which-UNVERIFIED):\n";
+                for (int d = 0; d < 16; ++d)
+                {
+                    long long c = ctl_depth[d].load();
+                    if (c == 0) { continue; }
+                    std::cerr << "    c" << d << ": " << c << " / unver " << ctl_depth_unver[d].load() << "\n";
+                }
+            }
             if (!enabled || decisions.load() == 0) { return; }
             std::cerr << "[hybrid-stats] decisions=" << decisions.load()
                       << " redos=" << redos.load()
@@ -29032,7 +29052,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                                         int value_min_depth, int budget_ms,
                                                         bool value_no_fallback,
                                                         const std::vector<int>& value_fallback_take_at,
-                                                        double escalation_fresh_frac,
                                                         int beam_width, int beam_leafdepth,
                                                         int escalation_cap,
                                                         double escalation_r)
@@ -29124,7 +29143,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     static const int s_esc_beam_leafdepth = []{ const char* e = std::getenv("MTG_ESC_BEAM_LEAFDEPTH");
                                                 return (e && *e) ? std::atoi(e) : 2147483647; }();
     static const bool s_esc_beam_static = EnvOn("MTG_ESC_BEAM_STATIC");  // prune by static order
-    // DEPTH-ADAPTIVE BEAM (per-deck path). Precedence (mirrors escalation_fresh_frac): an EXPLICITLY-SET
+    // DEPTH-ADAPTIVE BEAM (per-deck path). Precedence: an EXPLICITLY-SET
     // MTG_ESC_BEAM env wins (keeps env A/B working + its literal uniform-beam semantics -- a research tool, no
     // depth adaptation). Else the per-deck value_play beam (beam_width >= 0 whenever an enabled block drives,
     // passed at ANY depth; beam_width < 0 => no block => off => byte-identical).
@@ -29140,8 +29159,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     //                         (the sole validated + suite-covered off-policy depth). d4 is a deliberate hole:
     //                         plausibly neutral (same W20/ld1 mechanism) but UNMEASURED, so it stays off until a
     //                         d4 sweep confirms it -- see escalation-beam-verify.md "d4 widening (deferred)".
-    // (The escalation-budget renewal / fresh_frac stays on-policy-only in AIEngine, so a shallow beam runs on the
-    // legacy budget as measured.)
+    // (The escalation's fresh-full budget is engine behavior at every depth since 2026-09-03; the shallow
+    // static beam was validated under it in the adoption tiers.)
     int  eff_beam;
     int  eff_beam_leafdepth;
     bool eff_beam_static;
@@ -29213,9 +29232,19 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         if (verified)  { g_hybrid_stats.verified.fetch_add(1); }
         if (escalate)  { g_hybrid_stats.redos.fetch_add(1); g_hybrid_stats.redo_depth[di].fetch_add(1); }
     }
+    else if (g_hybrid_stats.enabled)
+    {
+        // No value model: the plain heuristic ladder just ran above. Record its committed depth as the
+        // CONTROL reference distribution (what an escalation "reaching the control's depth" means).
+        g_hybrid_stats.ctl_decisions.fetch_add(1);
+        int di = (committed >= 0 && committed < 16) ? committed : 15;
+        g_hybrid_stats.ctl_depth[di].fetch_add(1);
+        if (verified) { g_hybrid_stats.ctl_verified.fetch_add(1); }
+        else          { g_hybrid_stats.ctl_depth_unver[di].fetch_add(1); }
+    }
     if (escalate)
     {
-        // ONE heuristic search on the REMAINING shared budget (not a fresh one): its start gate commits the
+        // ONE heuristic search on a FRESH budget (see the budget-source block below): its start gate commits the
         // deepest AFFORDABLE depth Hd -- "the best result we can afford", per the fallback design. TAKE it only
         // if it clears the crossover: value-leaf-d(committed) ~= heuristic-d(committed - kValueTrustOffset), so
         // heuristic-Hd beats the committed value-leaf line iff Hd > committed - kValueTrustOffset. Otherwise the
@@ -29251,30 +29280,22 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 return line;   // skip: trust the value-leaf line, save the full re-search
             }
         }
-        // Escalation budget source. DEFAULT IS OFF (-1 == legacy shared REMAINING budget) so this refactor is
-        // BYTE-IDENTICAL to the committed regression GT with no env set. The FRESH-FULL budget below is an
-        // UNADOPTED candidate: it fixes the value-leaf budget-exhaustion regression (the probe spends most of
-        // the shared decision budget reaching committed depth, starving the heuristic re-search to ~d1 so it
-        // mis-commits a hair shallower on knife-edge games -> antilife regression, overnight-audit-2026-07-11)
-        // and a fresh budget recovers those wins. But it is a genuine QUALITY *and* PERFORMANCE tradeoff, not a
-        // free win: single-seed A/B shows antilife/hinata better (+~0.01-0.02 LP) BUT TH slightly worse
-        // (4.11037->4.11371) and ~+16% wall on hinata. Adopting it requires a full-regression A/B (train+held-
-        // out) + perf measurement + user approval + a deliberate GT rebaseline -- do NOT flip the default back
-        // to 1.0 without that. Turn it on for that A/B with MTG_ESCALATION_FRESH_FRAC=1.0. See hinata-
-        // escalation-budget-restore + docs/design/escalation-refactor-drift.md. Overrides:
+        // Escalation budget source: FRESH-FULL (ADOPTED 2026-09-03). The probe's O(1) leaves let it commit
+        // deep while spending little, but what it LEAVES is not what a real re-search NEEDS: on shared
+        // leftovers the escalation committed mean depth ~1.4 vs the pure-heuristic control's ~2.1-2.35 on the
+        // same (unverified) population, and every historical value-leaf "play rejection" traced to exactly
+        // that starvation. A fresh budget equal to the decision budget restores the escalation to a real
+        // search: held-out CG d5/b40, cap+beam engaged, = control parity (t=-0.3, 0 win<->loss flips) at
+        // 0.43x the control's wall. This is ENGINE BEHAVIOR, not a per-deck setting -- the old per-deck
+        // escalation_fresh_frac's ABSENT key silently meant "starved", the footgun that produced the
+        // rejections. See docs/design/escalation-budget-investigation.md. Overrides (research only):
         //   MTG_ESC_SPLIT set              -> reserve: cap probe, dedicated ((1-split)+restore)*budget_ms
-        //   MTG_ESCALATION_FRESH_FRAC=f>=0 -> fresh f*budget_ms (f=1.0 == full fresh budget, the candidate)
-        //   MTG_ESCALATION_FRESH_FRAC=-1   -> LEGACY shared REMAINING budget (DEFAULT; == committed GT)
-        static const bool   s_fresh_frac_env_set = EnvSet("MTG_ESCALATION_FRESH_FRAC");
+        //   MTG_ESCALATION_FRESH_FRAC=f>=0 -> fresh f*budget_ms (A/B hatch; 0.5 measured WORSE than legacy
+        //                                     fleet-wide AND worse than control held-out -- do not ship it)
+        //   MTG_ESCALATION_FRESH_FRAC=-1   -> LEGACY shared REMAINING budget (the pre-2026-09-03 baseline)
         static const double s_fresh_frac = []{ const char* e = std::getenv("MTG_ESCALATION_FRESH_FRAC");
-                                               return (e && *e) ? std::atof(e) : -1.0; }();  // default OFF (legacy)
-        // Precedence: an EXPLICITLY-SET env (MTG_ESCALATION_FRESH_FRAC, the experiment/A-B override) wins over
-        // everything -- needed so the env-based A/B still works once a deck ships an enabled value_play block
-        // carrying its own escalation_fresh_frac. Else the per-deck value_play value (a real number, i.e. not
-        // the -2.0 sentinel) wins; else legacy -1. Env UNSET + block sentinel/-1 => -1 == byte-identical.
-        const double eff_fresh_frac = s_fresh_frac_env_set
-                                    ? s_fresh_frac
-                                    : (escalation_fresh_frac <= -1.5 ? s_fresh_frac : escalation_fresh_frac);
+                                               return (e && *e) ? std::atof(e) : 1.0; }();  // default FRESH-FULL
+        const double eff_fresh_frac = s_fresh_frac;
         static const int    s_esc_single_off = []{ const char* e = std::getenv("MTG_ESC_SINGLE_OFFSET");
                                                    return (e && *e) ? std::atoi(e) : 0; }();
         ForceHeuristicLeafGuard _fh(true);
