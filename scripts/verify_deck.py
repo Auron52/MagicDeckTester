@@ -431,8 +431,20 @@ def gate_claude_sweep(deck_path):
     head = _git_head()
     disclose = []
     if commit and head and not head.startswith(commit):
+        # The staleness rationale used to read "play_invariants + smoke digests track play live",
+        # which is only true for a deck the suite actually RUNS. For a deck that is not a
+        # regression case, no digest watches it at all, and the sweep's age is therefore
+        # unbounded -- saying otherwise overstates the coverage of a gate that just went green.
+        stem = deck_stem(deck_path)
+        cases = ROOT / "test/regression_cases.sh"
+        in_suite = cases.exists() and stem.lower() in cases.read_text().lower()
+        tracked = ("play_invariants + smoke digests track play live"
+                   if in_suite else
+                   f"NOTE: {stem} is NOT a regression case, so NO digest tracks its play -- nothing "
+                   f"will tell you when this record goes stale. Re-run the sweep on judgement, or "
+                   f"add the deck to the suite")
         disclose.append(f"claude_sweep recorded at commit {commit} (HEAD {head[:12]}); re-run if play "
-                        "changed since (play_invariants + smoke digests track play live).")
+                        f"changed since ({tracked}).")
     if mflags is None:
         return Gate("claude_sweep", SKIP, True, "sweep record present but flag count unparseable",
                     disclose=disclose + ["claude_sweep record found but no 'flags: N unresolved' line -- "
