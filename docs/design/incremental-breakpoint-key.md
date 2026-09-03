@@ -3,24 +3,30 @@
 **Status: DESIGN (2026-09-03). Authorized by the USER ("go through your list") as the structural
 follow-up to the tight-recipe adoption (`ebfb5f74`). Not started.**
 
-## Why this and nothing else
+## Why (CORRECTED 2026-09-03 — read the dragonstorm caveat before starting)
 
-Every residual wall number on the adopted tight recipe points at the same cost: the
-`BuildBreakpointKey` full-state walk, paid once per memo LOOKUP — hit or miss.
+The case for the incremental key is **hinata's REC re-widening**, not dragonstorm:
 
-* dragonstorm +12.9%: **NOT cache thrash** (94% enum hit rate, 176,079 hits / 11,374 misses /
-  1 clear / 0 nested per 200 games; `MTG_BP_ENUM_CACHE_CAP=262144` wall-NEUTRAL). The cost is
-  ~187k key walks + 11.4k real derivations.
-* hinata +6.4%: the scoped canon's remaining fires (~341k/300 games) each pay a walk; the
-  UNSCOPED form (`MTG_BP_CANON_REC=1`, 4.03M fires) was quality-better (−0.0126 vs −0.0057) but
-  cost +18.6% wall — almost entirely walks (the verdict memo already removed the copies/solves).
-* The recorded enummemo negative says it plainly: "Deep-search states are too diverse for a
-  full-key memo whose key walk costs as much as a small enumeration... a revisit must make the
-  KEY incremental, not tune the cache."
+* hinata: the UNSCOPED canon (`MTG_BP_CANON_REC=1`, 4.03M fires/300 games) was quality-better
+  (−0.0126 vs the shipped tight −0.0057) but cost +18.6% wall vs tight's +6.4% — and after the
+  verdict memo removed the copies/solves, that gap IS the `BuildBreakpointKey` walk volume
+  (~4M walks). A cheap key recovers ~0.005 hinata quality the adoption left parked.
+* The recorded enummemo negative: "a revisit must make the KEY incremental, not tune the cache."
 
-One fix, three payoffs: ds under the bar, hinata toward the noderoot floor (~+4%), and REC=1
-affordable again — recovering the parked ~0.005 hinata quality the USER agreed to leave on the
-table at adoption.
+**Dragonstorm's +12.9% is NOT this project's problem — every walk/derivation theory measured
+DEAD (2026-09-03, all per-200-game pinned cells):**
+
+* NOT cache thrash: 94% enum hit rate, `MTG_BP_ENUM_CACHE_CAP=262144` wall-neutral.
+* NOT enum volume AT ALL: off-arm enum traffic 179,535 hits / 11,311 misses vs tight-arm
+  176,079 / 11,374 — **the delta is zero**; the baseline already pays all of it.
+* NOT canon probe volume: under tight, ds canon fires only 20,997/300 games with 3,336 probe
+  Solves and 1,051 copies — an order of magnitude short of the ~1s/200-game delta.
+* NOT charged trajectory work: units_total off 922,381 vs tight 919,254 (flat).
+* The earlier lever decomposition (one pinned session) put noderoot alone at −0.6% and blamed
+  canon — but a contended re-triple was uninterpretable; the ATTRIBUTION IS OPEN pending a
+  quiet-box off/noderoot/tight triple. Do not size this project on dragonstorm until that
+  lands; it is possible the +12.9% has a session artifact or an owner none of the counters see
+  (e.g. per-fire BuildSimKey cost scaling with ds's state size — unproven).
 
 ## What the key is
 
@@ -56,11 +62,11 @@ digest battery (hatch byte-identity, suite smoke, cross-arm battery at multiple 
 
 ## Acceptance
 
-Wall (quiet box, `scripts/wall_probe.sh` protocol, cal-subtracted): dragonstorm < +10% vs
-all-off; hinata materially under +6.4%. Then re-gate `MTG_BP_CANON_REC=1` on the cheap key
-(paired hinata 10k/block): if it holds ~−0.012 at acceptable wall, propose re-widening to the
-USER. Play must be byte-identical throughout (the key is an identity, not a policy — any digest
-move is a bug).
+The primary target: re-gate `MTG_BP_CANON_REC=1` on the cheap key (paired hinata 10k/block) —
+if it holds ~−0.012 at a wall the USER's bar accepts, propose re-widening. Secondary: hinata's
+shipped +6.4% shrinks. Dragonstorm is NOT an acceptance criterion until its attribution closes
+(see above). Play must be byte-identical throughout (the key is an identity, not a policy — any
+digest move is a bug).
 
 ## Context
 
