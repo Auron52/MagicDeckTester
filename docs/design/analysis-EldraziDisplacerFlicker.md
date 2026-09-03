@@ -98,6 +98,48 @@ end-to-end (a logged turn-6 win assembles Emiel + Cloud of Faeries, wishes for D
 Infiltrator on T5, lands Training Grounds on T6 and DECKS the opponent with `oppLife=9` — the new
 win condition carrying a game on its own). It is the AVERAGE that is slow, not the ceiling.
 
+## RE-MEASURED after the two mana fixes (2026-09-03) — the first thing that moved the number
+
+The land-Aura fix (`b8d5f2e`-series, four of the five payment sites were blind to Aura mana) and
+the hybrid fix (`5bd5aaab`, a hybrid pip was unpayable with its SECOND colour — Trace of Abundance
+is `{R/W}{G}` and this deck has no red source, so every Trace needed the white half) both add
+LEGAL LINES the deck previously could not take. Re-ran the **identical manifest** — same 4 seeds,
+same 100 games each, same 3 depths, same profile, same `budget_ms`, `ignore_play_profile` — on the
+fixed binary, so the engine is the only thing that differs. `logs/edf_remeasure/`.
+
+| depth | pre | post | paired delta | t (n=4 seeds) |
+|---|---|---|---|---|
+| d0 (greedy) | 8.777 | **8.548** | **−0.230** | −8.9 |
+| d3 | 7.206 | **7.068** | **−0.138** | −6.1 |
+| d5 | 7.205 | **7.070** | **−0.135** | −6.6 |
+
+All twelve job digests changed; every seed moved the same direction at every depth. Unwon games
+fell **37/400 (9.2%) → 27/400 (6.8%)**, and the t5 floor went from 2 games to 6. The mode is still
+t7 (183/400).
+
+**This is the largest effect measured on this deck, and it is a CORRECTNESS fix, not a tuning
+knob.** For scale: 9x the search budget bought +0.063 turns (the wrong way), and the adopted wish
+ranking bought −0.030, inside the noise. That ordering is the point — `heuristic-optimization.md`'s
+Rule 0 says a modelling bug is a bug to fix rather than a heuristic to tune, and here the two
+modelling bugs outweighed every knob tried on this deck combined. It shifts where the remaining
+gap should be hunted: **look for more modelling gaps before reaching for another lever.**
+
+**It does NOT close the headline gap.** 7.07 against the user's 4–5 estimate is still 2+ turns
+short, and the untested candidate remains the learned exhaustive keep table (rule-based mulligans
+were already refuted).
+
+**Side effect worth recording: the depth knob is partially live again.** Pre-fix, d3 and d5 were
+byte-identical on **all four** seeds — total starvation, `--depth` completely inert (next section).
+Post-fix, **three of four seeds diverge** (only s4101 still matches). The averages are still the
+same to 0.003 turns, so depth still buys nothing — but it is no longer literally the same
+computation. *The mechanism is NOT measured*: the plausible story is that visible Aura mana lets
+the payment solver settle subsets sooner, leaving budget for a second ID pass, but that is a
+hypothesis that fits, not one that discriminates, and it has not been tested.
+
+Thread-wall roughly halved (d3 10,856s → 5,447s, d5 8,515s → 5,387s), but **that comparison is
+confounded** — batch `ms` is wall, not CPU, and the two runs saw different box load. Treat it as
+suggestive of a real tractability gain and re-measure on a quiet box if the number is ever needed.
+
 ### d3 and d5 are BYTE-IDENTICAL — the search never gets past depth 1
 
 Every seed returns the same play digest at both depths (`2edc534107c13e8f`, `6c6e46c03c301bf3`,
@@ -241,10 +283,13 @@ gated on Training Grounds landing, not on the Infiltrator.
   0.785x on the table via width 3. **The deck is still expensive in absolute terms** — the full
   measurement saw single games at 65 s, 194 s and one at **801 s** — so a feasibility check is still
   required before the value-leaf and mulligan generations, and that is now the open item.
-* **THE HEADLINE GAP IS NOT CLOSED.** 7.21 measured against the user's 4-5 estimate, and the two
-  things that would most obviously explain it are both refuted: more search budget buys 0.063 turns,
-  and pointing the wish at the win condition (which the adopted ranking does — 6 of 11 wishes vs 2
-  of 12) buys nothing. **The untested candidate is the mulligan profile**, which is exactly what the
+* **THE HEADLINE GAP IS NOT CLOSED — but it narrowed, and the thing that narrowed it says where to
+  look next.** Now **7.07** (was 7.21) against the user's 4-5 estimate. Three cheap explanations are
+  refuted by measurement: more search budget buys +0.063 turns (the wrong way), pointing the wish at
+  the win condition buys −0.030 (inside noise), and rule-based mulligans buy nothing. The ONE thing
+  that moved it was fixing two **modelling** bugs (−0.135 at ship depth, t=6.6) — bigger than every
+  tuning knob tried on this deck combined. **So the next hunt is for more modelling gaps, not another
+  lever.** The remaining untested candidate is the learned exhaustive keep table, which is what the
   user's estimate was conditioned on and which has not been generated.
 * **The pool projections over-credit energy** (three Hubs sharing one energy project 3 wild).
   Over-credit only, so a line is enumerated and then dropped rather than played illegally; the
@@ -817,6 +862,29 @@ the head of the **next** precombat main — before that draw ever becomes activa
 ## Approved deferrals
 
 (none yet — every proposed deferral above is PROVISIONAL until the user signs it off)
+
+### Pending the user's sign-off: 5 viewer param classifications (2026-09-03)
+
+`audit_viewer_decisions.py`'s self-guard requires the user's OK before a param is recorded as
+creating no decision. Per CLAUDE.md these are **collected, not blocked on** — the viewer gate is
+paperwork that gates nothing else, and blocking on exactly this kind of question once cost the user
+a weekend of an idle box. All five are classified as details riding an already-mapped decision; the
+gate is green on that basis, and the classification is reversible in one edit if the user disagrees.
+
+| param | card | classified as | rides |
+|---|---|---|---|
+| `land_aura_grants_shroud` | Trace of Abundance | static targeting restriction | `is_land_aura` → main_phase |
+| `wish_from_sideboard` | Living Wish | tutor search-ZONE redirect | `tutor_to_hand` → tutor |
+| `exiles_self_on_resolve` | Living Wish | mandatory zone replacement, no "you may" | — |
+| `etb_energy` | Aether Hub | mandatory resource gain | — |
+| `energy_per_colored_tap` | Aether Hub | mode resolved inside the payment DFS (backtracked) | the cast → main_phase |
+
+The one worth a second look is `energy_per_colored_tap`, and the reason it is *not* a surfaced
+choice is that the payment DFS snapshots and restores `energy_counters` as it backtracks, so both
+branches are genuinely explored rather than picked by a heuristic. **Disclosed sub-choice:** Aether
+Hub is the deck's only energy sink, so the sole cost of spending is not holding the {E} for a later
+turn, and the DFS optimises the cast in front of it rather than across turns — a line payable
+without the energy may still burn it. Ceiling is 3 {E} for the whole game.
 
 ## Claude-play sweep
 - commit: `f5f664bf` (re-sweep, frozen binary; first sweep ran across a moving binary — disclosed)
