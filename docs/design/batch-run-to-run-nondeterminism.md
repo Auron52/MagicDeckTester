@@ -68,15 +68,27 @@ Three experiments, each the same job (`off_s4303`, EDF d5/b20, 100 games, seed 4
 
 | pool | runs | s4303 digest | jobs diverged |
 |---|---|---|---|
-| **1 job alone** (`logs/edf_nondet/`) | 3 | `2e730b01…` **all three — stable** | 0 of 1 |
-| 4 jobs, ONE config, 4 seeds (`logs/edf_samearm/`) | 2 | `18b562c3…` then `1630f11f…` | **1 of 4** |
-| 8 jobs, two arms (`logs/edf_tapyield/`) | 2 | `2e730b01…` then `5f38514a…` | **6 of 8** |
+| 1 job, 100 games (`logs/edf_nondet/`) | 3 | `2e730b01…` all three | 0 of 1 |
+| 4 jobs, ONE config, 4 seeds (`logs/edf_samearm/`) | 2 | `18b562c3…` then `1630f11f…` | 1 of 4 |
+| 8 jobs, two arms (`logs/edf_tapyield/`) | 2 | `2e730b01…` then `5f38514a…` | 6 of 8 |
 
-**The divergence rate scales with pool pressure**, and a single-config pool is enough — it does not
-need mixed depths or mixed heuristic arms, so this is not a per-job-override leak. Seed 4303 is the
-most fragile (it diverged in every multi-job pool); seed 4101 never diverged in any of them, and its
-digest `1ad5deba38ddb12e` is identical across every run *and* across the pre-fix binary, which is
-what makes it usable as a byte-identity control.
+> **RETRACTED: "it needs the pool" and "the rate scales with pool pressure".** Both were read off
+> this table, and the table is UNDERPOWERED. The real unit of divergence is the GAME, and the rate
+> is **~1–2% of games**; a job-level digest diverges iff at least one of its games does, so a
+> 100-game job has only a ~1−e^−1.5 ≈ 78% chance of showing it at all and three identical runs is
+> an unremarkable coincidence (~25%), not evidence of stability.
+>
+> **Measured properly: a SINGLE job of 400 games, run twice at 24 threads, diverges 8/400 (2.0%)**
+> (`logs/edf_onejob/`, 2 of the 8 changed a win turn). One job is enough. Job count, mixed arms and
+> mixed depths are all irrelevant — they only ever changed how many games were in the sample.
+>
+> This is a good illustration of the trap: every row above is *true*, and the conclusion drawn from
+> them was still wrong, because "did this job's digest change" is a coarse, sample-size-dependent
+> proxy for "did a game change". Count the games.
+
+Seed 4101 never diverged in any run, and its digest `1ad5deba38ddb12e` is identical across every run
+*and* across the pre-fix binary, which makes it a usable byte-identity control — with the caveat
+above that "never diverged" over a handful of runs is weak evidence for any single job.
 
 **A job run ALONE is deterministic; the same job inside a pool is not.** That kills the simplest
 stories (a wall-clock read in the decision path would diverge the solo run too) and points at state
