@@ -471,6 +471,29 @@ rebaseline unless the USER wants it anyway (a 25-minute adopt) or the incrementa
 canon (EF's value likely returns with REC=1). LESSON, again: a lever's dossier is BASELINE-BOUND
 -- re-measure on the baseline it will actually ship onto.
 
+### The hinata BUDGET SWEEP (2026-09-03) -- the USER's depth/budget argument, priced
+
+From the adopted baseline, budget_ms alone (value_play lock keeps d5; b20 self-check reproduces
+the shipped means exactly), 10k/block paired x train+hold (`logs/ngc_sound/budget_sweep.err`):
+
+| budget | hold | train | better:worse | wall (PROVISIONAL -- box re-contended mid-session) |
+|---|---|---|---|---|
+| b20 (shipped) | -- | -- | -- | 62.1s/200g |
+| b30 | **-0.0139 (t -7.8)** | **-0.0159 (t -8.6)** | 178:54 / 197:50 | ~+26% |
+| b40 | **-0.0231 (t -10.7)** | **-0.0225 (t -10.1)** | 283:77 / 280:79 | ~+36% (sub-linear: games end) |
+
+Budget buys hinata quality FASTER than canon re-widening would (REC=1: -0.007 for +12%): b30
+alone exceeds the entire unscoped recipe's -0.0126. This validates the USER's ruling premise
+with numbers and weakens the incremental-key urgency further -- the parked ~0.005 is purchasable
+with settings. A budget change is a PER-DECK play-settings adoption (USER's call; it also uses
+the current value leaf slightly off-distribution, which the sweep's numbers already price in).
+
+**Dragonstorm attribution remains OPEN and now DOUBLY so:** a re-triple on the current binary
+read off==noderoot==tight (~10.0/9.9/9.9s -- the +12.9% GONE), but the box re-contended in that
+window (load 13-21 from another container; the same window inflated a hinata tight rep to
+142s), so neither the disappearance nor the original +12.9% is currently trustworthy on the
+shipped binary. Needs one clean quiet-box triple before any decision keys on it.
+
 **Dragonstorm characterized from the new baseline (2026-09-02, first post-adoption probe):
 NOT cache thrash.** At ship settings the enum memo runs at a 94% hit rate (176,079 hits /
 11,374 misses / 1 clear / 0 nested per 200 games), and MTG_BP_ENUM_CACHE_CAP=262144 is
