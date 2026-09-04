@@ -811,6 +811,30 @@ inline int  EtbUntapLandsCredit(const GameState&, int count);                   
 // the wild, instead of the default wild-first order. For the leftover computation only.
 inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost,
                                     bool keep_flexible = false);                             // defined below
+
+// HOLD BACK {C} FROM GENERIC PIPS while this is set. Default order spends colourless on a generic
+// pip ahead of any colour, which is right almost everywhere -- colourless cannot pay a coloured pip,
+// so spending it first keeps each colour free for its own. It is wrong in exactly one situation: the
+// caller is banking float across SEVERAL payments and a LATER one carries a {C} pip, which only
+// colourless (or a wild from a {C}-capable source) can pay. SpendFloatingTowardCost cannot know that
+// on its own -- it sees one cost at a time -- so the caller says so, the same shape as
+// `keep_flexible`.
+//
+// Set by ApplyBlinkLoop for the LIBRARY-EXILE sink only, and the asymmetry with the drain is the
+// point. A drain spends its {C} one activation at a time, so it can just tap a colourless land each
+// pass; the exile is all-or-nothing over the whole library, so it needs N colourless pips banked
+// SIMULTANEOUSLY, and a board with three {C} sources cannot produce twelve in one untap. Not set for
+// the drain, which therefore keeps the payment order its measurement was taken under.
+inline thread_local bool g_hold_colorless_for_pips = false;
+
+struct HoldColorlessScope
+{
+    bool prev;
+    explicit HoldColorlessScope(bool on)
+        : prev(g_hold_colorless_for_pips) { g_hold_colorless_for_pips = on; }
+    ~HoldColorlessScope() { g_hold_colorless_for_pips = prev; }
+};
+
 inline bool SetPermTapped(GameState&, int controller, int source_id, bool tapped);            // defined below
 inline ManaCost EffectiveActivationCost(const GameState&, int controller, const Card& source,
                                         const ManaCost& printed);                            // defined below
@@ -9743,6 +9767,86 @@ inline int SpendSurplusOnDrain(GameState& state, int controller, const ManaCost&
     return drained;
 }
 
+inline bool PermAbilitySourceLive(const GameState& state, int controller, int source_id,
+                                  PermAbilityMode mode);                                 // below
+
+// Spend surplus mana on a REPEATABLE LIBRARY-EXILE sink (Dimensional Infiltrator: "{1}{C}: Target
+// opponent exiles the top card of their library"). Returns the cards exiled.
+//
+// The drain's structural twin -- no {T}, so bounded by mana rather than by untaps -- but its
+// PAYOFF CURVE is the opposite shape, and that is what this function is really about. Every point
+// of drain is progress toward a life total of zero, so spending surplus on it is monotone and the
+// only question is how much. Exiling is worth NOTHING until the library is empty: 39 cards out of
+// 40 wins exactly as often as 0. So the naive twin -- "spend whatever is spare, every iteration" --
+// is not conservative here, it is a way to convert a real post-loop cast into nothing at all.
+//
+// Hence ALL OR NOTHING: it buys the whole remaining library or it spends not one mana. That makes
+// the routine non-negative BY CONSTRUCTION -- when it spends, the game ends this turn, so there is
+// no line it can take mana away from. It is also why
+// this needs no measurement to justify and no tuning knob: the alternative to firing is losing,
+// and the alternative to not firing is a partial exile that buys nothing.
+//
+// (The looser rule -- count the opponent's own draws and accept a deck-out that lands two turns
+// later -- is a real and possibly better policy, but it IS a policy, with a threshold that would
+// have to be measured on a route this deck reaches almost never. Left undone deliberately.)
+inline int SpendSurplusOnExile(GameState& state, int controller,
+                               const std::function<bool(const ManaCost&)>& pay)
+{
+    // Inert unless the opponent's library is modelled at all: a goldfish opponent with no library
+    // cannot be decked, so every activation would buy exactly nothing (see opponentdeck).
+    if (!state.opponent_library_dealt || state.opponent_decked) { return 0; }
+    const int left = static_cast<int>(state.players[1 - controller].library.size());
+    if (left <= 0) { return 0; }
+
+    // Cheapest sink first, and price it through EffectiveActivationCost so the affordability test
+    // and the payment can never disagree about what an activation costs.
+    int   best_id   = -1;
+    ManaCost best_cost;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.exile_opponent_top_cost.has_value()) { continue; }
+        const ManaCost c = EffectiveActivationCost(state, controller, p.card,
+                                                   d->params.exile_opponent_top_cost.value());
+        if (best_id < 0 || c.ManaValue() < best_cost.ManaValue())
+        { best_id = p.card.m_number; best_cost = c; }
+    }
+    if (best_id < 0) { return 0; }
+
+    if (best_cost.hybrid_count > 0) { return 0; }   // scaling a hybrid pip by k is not a cost
+    if (!PermAbilitySourceLive(state, controller, best_id, PermAbilityMode::ExileTop)) { return 0; }
+
+    // THE WHOLE LIBRARY OR NOTHING, AND THE PAYMENT IS THE TEST. Scale the cost by `left` and make
+    // ONE payment: a failed payment restores the full pre-payment snapshot (ManaPayment's atomic
+    // rollback), so this can neither half-exile nor leak a tapped land.
+    //
+    // The projection this replaced -- AvailableManaPool + float vs CanPay(all) -- was NOT good
+    // enough, and the way it failed is the flat-pool trap the analysis doc's 12a section documents
+    // in the enumerator. It passed on a board holding six colourless *in the flat sense*, then the
+    // sequential payments could only realise five, so it exiled 5 of 6 and threw ten mana away for
+    // nothing -- the exact waste the all-or-nothing rule exists to prevent. A flat pool cannot
+    // express "this land's one tap is either the {C} or the {G}"; the payer can, so let it decide.
+    //
+    // One cheap NECESSARY condition first, because this runs every blink iteration and a doomed
+    // payment attempt is not cheap (greedy, then backtracker, then a full snapshot restore). The
+    // flat pool OVER-states what the board can realise, so failing it means no payment could have
+    // succeeded: sound as a SKIP exactly where it was unsound as an ACCEPT.
+    ManaCost all = best_cost;
+    all.generic *= left; all.white *= left; all.blue  *= left; all.black *= left;
+    all.red     *= left; all.green *= left; all.colorless *= left;
+    {
+        ManaPool have = AvailableManaPool(state, nullptr);
+        have.AddPool(state.floating_mana);
+        if (have.Total() < left * best_cost.ManaValue()) { return 0; }
+    }
+    if (!pay(all)) { return 0; }
+
+    for (int i = 0; i < left; ++i)
+    { ApplyPermAbility(state, controller, best_id, PermAbilityMode::ExileTop); }
+    return left;
+}
+
 inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const ManaCost& keep_payable,
                                      const std::function<bool(const ManaCost&)>& pay)
 {
@@ -10149,6 +10253,24 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         if (d && d->params.tap_damage_cost.has_value() && d->params.tap_damage_each_opponent > 0)
         { sinks.push_back(p.card.m_number); break; }
     }
+    // BANK COLOURLESS for the library-exile sink, for the whole loop. It needs one {C} pip per card
+    // left in the opponent's library and it needs them all at once (see SpendSurplusOnExile), which
+    // no board of three colourless sources can produce in a single untap -- so the pips have to
+    // survive the blink's own generic cost, which by default eats them ahead of any colour. Scoped
+    // to this loop and set only when such a sink is actually on the battlefield with a modelled
+    // library to empty, so every other line -- including the drain route -- keeps the default order.
+    bool want_hold_colorless = false;
+    if (state.opponent_library_dealt && !state.opponent_decked)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.exile_opponent_top_cost.has_value())
+            { want_hold_colorless = true; break; }
+        }
+    }
+    HoldColorlessScope _hcs(want_hold_colorless ? true : g_hold_colorless_for_pips);
     int done = 0;
     for (int k = 0; k < iterations; ++k)
     {
@@ -10219,6 +10341,11 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // Byte-identical for every deck without a drain sink: SpendSurplusOnDrain returns 0 on an
         // empty candidate scan, and `drain_cost` is carried by exactly one card in cards.json.
         SpendSurplusOnDrain(state, controller, c, pay);
+        // The library-exile sink rides the same position for the same reason. No keep_payable: it
+        // is all-or-nothing, so on the pass where it spends anything at all the game is over and
+        // there is no next iteration to protect -- a failed pay() below is then the correct
+        // outcome, not a starved loop.
+        SpendSurplusOnExile(state, controller, pay);
     }
     // One last damage-sink pass with nothing held back: the loop is over, so there is no next
     // iteration to keep payable and any float left is genuinely surplus. Only after a loop that
@@ -10228,6 +10355,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     {
         SpendSurplusOnDamageSinks(state, controller, ManaCost{}, pay);
         SpendSurplusOnDrain(state, controller, ManaCost{}, pay);
+        SpendSurplusOnExile(state, controller, pay);
     }
     return done;
 }
@@ -12011,12 +12139,16 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
         return;
     }
     drain(cost.generic, reserve.wild);
-    drain(cost.generic, reserve.colorless);
+    // g_hold_colorless_for_pips moves colourless to the BACK of the generic order, so a bank being
+    // assembled for a later {C} pip survives this cost. Off everywhere but the exile sink inside
+    // ApplyBlinkLoop, and a no-op even there whenever the reserve holds no colourless.
+    if (!g_hold_colorless_for_pips) { drain(cost.generic, reserve.colorless); }
     drain(cost.generic, reserve.white);
     drain(cost.generic, reserve.blue);
     drain(cost.generic, reserve.black);
     drain(cost.generic, reserve.red);
     drain(cost.generic, reserve.green);
+    if (g_hold_colorless_for_pips) { drain(cost.generic, reserve.colorless); }
 }
 
 // True iff the active player's hand holds a card of a subtype this reveal land wants

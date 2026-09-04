@@ -2313,3 +2313,53 @@ it either — so the count model believes in a route the apply cannot fire, exac
 layer 1 was. It is far less reachable than the drain (sideboard-only, needs Living Wish AND the loop
 AND `opponent_library_dealt`), so its quality effect should be nil; it wants a scenario fixture rather
 than a measurement.
+
+#### 12f. The library-exile sink — closed too, and it is NOT the drain's twin
+
+`ApplyBlinkLoop` now cashes Dimensional Infiltrator (`{1}{C}`, `{T}`-less, deck-out) as well. Before,
+a loop + Infiltrator board with 12 cards left in the opponent's library won on turn **6** by attacking;
+it now wins on turn **4** by emptying the library, and the threshold is where the mana says it should
+be — turn 4 up to `opponent_library_size` 16, turn 5 at 20.
+
+The wiring position is the drain's (after `pay(c)`, after `ApplyBlink`, plus a final pass), but the
+SPEND RULE has to be different, and that is the interesting part:
+
+**Exiling has a step payoff, not a linear one.** Every point of drain is progress toward zero life,
+so spending surplus on it is monotone. Exiling 11 of 12 wins exactly as often as exiling 0. So the
+naive twin — "spend whatever is spare each iteration" — is not the conservative choice here, it is a
+way to convert a real post-loop cast into nothing. `SpendSurplusOnExile` is therefore **all or
+nothing**: it pays for the whole remaining library in ONE scaled payment or spends not a single mana.
+That makes it non-negative by construction — when it spends, the game ends this turn, so there is no
+line it can take mana away from — which is also why it needs no measurement and carries no threshold
+to tune. (The looser policy, accepting a deck-out that lands a turn or two later off the opponent's
+own draws, is real and possibly better. It IS a policy, and it would need a measurement on a route
+this deck reaches almost never. Deliberately not done.)
+
+**Two traps, both hit and both fixed:**
+
+1. **A flat-pool projection is not a good enough all-or-nothing test.** The first version guarded with
+   `AvailableManaPool + floating` vs `CanPay(cost * left)`. It passed on a board holding six colourless
+   *in the flat sense*, and the sequential payments then realised only five — so it exiled 5 of 6 and
+   threw ten mana away for nothing, the exact waste the rule exists to prevent. This is the same trap
+   12a documents in the enumerator: a flat pool cannot express "this land's one tap is either the `{C}`
+   or the `{G}`". The fix is to stop projecting and let the payer decide — one scaled `pay()`, whose
+   failure path is an atomic rollback, so it can neither half-exile nor leak a tapped land.
+
+2. **The colourless bank really does need protecting here — unlike the drain.** Twelve `{C}` pips are
+   needed *simultaneously* and this board makes three colourless per untap, so they must survive as
+   float across iterations. `SpendFloatingTowardCost` step 3 spends generic pips from `colorless`
+   before any colour, so the blink's own `{3}` eats them as fast as the tap-ahead banks them.
+   `g_hold_colorless_for_pips` moves colourless to the back of the generic order for the duration of a
+   loop that has this sink on board. **Isolated by probe**: with the hold, library 6/12/16 all win on
+   turn 4; without it, 6 -> turn 5 and 12/16 -> turn 6.
+
+   So 12c's "colour-aware reservation" instinct was right about a mechanism — just about the wrong
+   sink. It is gated on an exile sink being on the battlefield precisely so the **drain route keeps
+   the payment order its measurement was taken under**, and so every other deck is untouched.
+
+**Measured, and the point of measuring was to show it changes nothing.** Same 800-game pooled
+manifest, exile change against the drain-only arm: **-0.0037 turns, se 0.0046, t = -0.81** — squarely
+inside the run-to-run noise floor, with work unchanged (solve-memo misses 49.084M -> 49.055M). That
+is the expected and wanted result: Dimensional Infiltrator is a sideboard 1-of reachable only through
+Living Wish, so a measurement here could only ever confirm the blast radius is nil. The fixture is
+what asserts the behaviour. Cumulative against 12a's baseline: 6.5187 -> 6.4337.
