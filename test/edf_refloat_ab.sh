@@ -39,9 +39,16 @@ deck, prof, out, games, chunk, depth, budget = sys.argv[1:8]
 games, chunk, depth, budget = int(games), int(chunk), int(depth), int(budget)
 SEEDS = [4101, 4102, 4103, 4104, 4105, 4106, 4107, 4108]
 ARMS = {
-    "base":  {"MTG_REFLOAT_WILD_C": False, "MTG_REFLOAT_NEED": False},
-    "wildc": {"MTG_REFLOAT_WILD_C": True,  "MTG_REFLOAT_NEED": False},
-    "both":  {"MTG_REFLOAT_WILD_C": True,  "MTG_REFLOAT_NEED": True},
+    # `wildc` is the SHIPPED default and therefore the control every new arm is judged against.
+    # `base`/`both` are kept so the 2026-09-04 verdicts stay reproducible from one manifest.
+    "base":  {"MTG_REFLOAT_WILD_C": False, "MTG_REFLOAT_NEED": False, "MTG_REFLOAT_COMBO": False},
+    "wildc": {"MTG_REFLOAT_WILD_C": True,  "MTG_REFLOAT_NEED": False, "MTG_REFLOAT_COMBO": False},
+    "both":  {"MTG_REFLOAT_WILD_C": True,  "MTG_REFLOAT_NEED": True,  "MTG_REFLOAT_COMBO": False},
+    # The user's in-loop mana ladder: keep the loop alive, then {C} to 40, 1 black, 20 red with a
+    # Gorge, then bulk. Scoped to a live blink loop, so it is a different question from `both` --
+    # which applied a demand model EVERYWHERE, including the plain Drake cast where `wild` is a
+    # valuable deferred choice.
+    "combo": {"MTG_REFLOAT_WILD_C": True,  "MTG_REFLOAT_NEED": False, "MTG_REFLOAT_COMBO": True},
 }
 jobs = []
 for arm, flags in ARMS.items():

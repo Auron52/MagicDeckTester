@@ -836,6 +836,24 @@ struct HoldColorlessScope
     ~HoldColorlessScope() { g_hold_colorless_for_pips = prev; }
 };
 
+// SET ONLY INSIDE ApplyBlinkLoop -- "we have the pieces on the field and are untapping".
+//
+// The tap-ahead has FOUR call sites and only one of them is the combo. The other three fire when an
+// ETB-untap creature is merely CAST (executor, planner, rollout), i.e. a lone Peregrine Drake on a
+// normal board. That distinction is the whole reason the combo mana policy is a separate lever from
+// the general one: OUTSIDE a loop, mana is scarce and `wild` is a valuable DEFERRED CHOICE -- which
+// is why the demand-driven MTG_REFLOAT_NEED, applied everywhere, lost on 8 of 8 seeds. INSIDE a
+// loop, mana is unbounded and optionality is worth nothing, while having the right PIP TYPE is worth
+// the game. Same mechanism, opposite value, so it must be scoped rather than tuned.
+inline thread_local bool g_in_blink_loop = false;
+
+struct BlinkLoopScope
+{
+    bool prev;
+    explicit BlinkLoopScope(bool on) : prev(g_in_blink_loop) { g_in_blink_loop = on; }
+    ~BlinkLoopScope() { g_in_blink_loop = prev; }
+};
+
 inline bool SetPermTapped(GameState&, int controller, int source_id, bool tapped);            // defined below
 inline ManaCost EffectiveActivationCost(const GameState&, int controller, const Card& source,
                                         const ManaCost& printed);                            // defined below
@@ -10338,6 +10356,9 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         }
     }
     HoldColorlessScope _hcs(want_hold_colorless ? true : g_hold_colorless_for_pips);
+    // Mark the whole loop as combo mode, so the tap-ahead's mana policy can tell a live loop
+    // from a plain ETB-untap cast (the other three call sites). See g_in_blink_loop.
+    BlinkLoopScope _bls(true);
     // THE AUTONOMOUS CASH-OUT, AND IN HUMAN PLAY IT IS OPT-IN VIA THE ITERATION COUNT.
     //
     // The three sink spends below convert the loop's surplus into damage / life loss / an emptied
@@ -10355,7 +10376,51 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     // combo activated it would actually be helpful to have a shortcut to win the game" -- instead of
     // thirty hand-driven segments. The search is untouched (it never sets HumanPlayActive), so every
     // point of the -0.0812 drain measurement stands.
-    const bool cash_sinks = !HumanPlayActive() || iterations > 1;
+    // THE DECK RUNS THE COMBO FOR YOU -- and the scope of "the combo" is the whole correction.
+    //
+    // This gate was first written as a flat !HumanPlayActive(), on the user's report that the sinks
+    // were spending their float without asking. PROMOTING THEIR TURN-3 WIN TO A REFERENCE PROVED
+    // THAT WRONG, which is exactly what a reference is for: the recorded line replayed as a turn
+    // FIVE win, and restoring the cash-out put it back to turn 3 with zero drift. The auto-firing
+    // Essence Depleter drains WERE the kill. The complaint and the achievement had one cause.
+    //
+    // The user's own resolution, 2026-09-04: "I do think it is appropriate for the deck to run this
+    // for you once the provider understands how to do so." So the objection was never that the
+    // engine acted, it was that it acted BADLY -- wrong colours, invisible float, no way to take the
+    // action by hand. Those three are now fixed independently (the {C}-capability credit makes the
+    // drain enumerable, the viewer shows ◇ vs ◇C and energy, and the ladder banks the pips the loop
+    // actually needs), so the action is restored rather than the complaint re-litigated.
+    //
+    // SCOPED, not restored wholesale. It fires only for a LIVE loop -- blinking a payload that
+    // untaps lands, with a sink on the board to cash into. That is the user's "once we have the
+    // pieces on the field and are untapping". Blink some other creature for value and nothing
+    // touches your float, which is the half of the original report that was always right.
+    //
+    // MTG_HUMAN_AUTOCASH=1 forces it on unconditionally (isolation against a saved reference
+    // without a rebuild); =0 is not an off switch for the scoped path, which is deliberate -- see
+    // the reference above for what turning it off costs.
+    bool payload_untaps = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number != target_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        payload_untaps = (d != nullptr && d->params.etb_untap_lands > 0);
+        break;
+    }
+    bool have_sink = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& q = d->params;
+        if (q.drain_cost.has_value() || q.exile_opponent_top_cost.has_value()
+            || (q.tap_damage_cost.has_value() && q.tap_damage_each_opponent > 0))
+        { have_sink = true; break; }
+    }
+    static const bool s_human_autocash = EnvOn("MTG_HUMAN_AUTOCASH");
+    const bool combo_live = payload_untaps && have_sink;
+    const bool cash_sinks = !HumanPlayActive() || iterations > 1 || combo_live || s_human_autocash;
     int done = 0;
     for (int k = 0; k < iterations; ++k)
     {
@@ -10695,9 +10760,95 @@ inline void ComputeRefloatDemand(const GameState& state, int controller, int* ne
     }
 }
 
+// MTG_REFLOAT_COMBO -- the COMBO-MODE mana policy, active only inside a blink loop.
+//
+// USER, 2026-09-04, specifying it directly: *"this is one of the cases where we might want an
+// override for the mana usage, but only once we have the pieces on the field and are untapping"*,
+// with the ladder below; then *"The top priority is always keeping the combo going"*, and *"Finding
+// exact ways to finish the job is for after you have bountiful amounts of mana."*
+//
+// The rationale is a value inversion, not a preference. Outside a loop mana is scarce and `wild` is
+// a valuable deferred choice. Inside a live loop mana is UNBOUNDED, so optionality is worth nothing
+// and the only thing that can lose the game is holding a pile of mana in the wrong PIP TYPE -- a
+// {C} pip is unpayable by any colour (CR 107.4c), so a hundred green does not buy one Displacer
+// activation. This is why the deck may run it for you: with mana unbounded there is no tradeoff left
+// to ask a human about.
+//
+// The ladder, walked per tapped source, taking the first quota this source can actually satisfy:
+//
+//   0. KEEP THE LOOP ALIVE. Cover the next activation's own {C} pip before banking anything. The
+//      user's top priority, and it is also the only step that can lose the game outright.
+//   1./2. Colourless to 20, then to 40 ("1-2 colourless every time until we have 20 floating", then
+//      "generate extra 20 colourless"). Blink fuel and drain fuel; the two stages are one quota.
+//   3. One black, for casting Essence Depleter off a mid-loop wish ({2}{B}).
+//   4. Twenty red, but only with a Shivan Gorge on board -- 20 activations of {2}{R} is 20 damage.
+//   5. Bulk: anything the board can make ("around 300 mana of other types (what type doesn't matter
+//      here)"). Not capped -- 300 is a target to exceed, not a limit to stop at.
+//
+// Walking the ladder per SOURCE is what makes the quotas cooperate rather than compete: a
+// {C}-capable source spends itself on the colourless quota, and a source that cannot make {C} falls
+// through to black/red/bulk. So "always float 1 black" is satisfied without ever slowing the
+// colourless build, which a strict global ordering would have done.
+//
+// Inert for every other deck by construction: g_in_blink_loop is set only by ApplyBlinkLoop, and no
+// other deck pairs blink_cost with etb_untap_lands.
+inline bool RefloatComboOn()
+{
+    static const bool env_on = EnvOn("MTG_REFLOAT_COMBO");
+    return heurarm::Flag(heurarm::REFLOAT_COMBO, env_on);
+}
+
+// Per-source ladder pick. Returns true and sets `out` when a quota wants a colour this source can
+// make; false means "no quota applies, use the ordinary rule".
+inline bool PickComboRefloatColor(const GameState& state, int controller,
+                                  const std::vector<Color>& prod, int next_c_pip, Color& out)
+{
+    const ManaPool& f = state.floating_mana;
+    const auto can = [&](Color c) { return std::find(prod.begin(), prod.end(), c) != prod.end(); };
+    const int have_c = f.colorless + std::min(f.wild_c, f.wild);
+
+    // 0. Keep the loop alive: the next activation's {C} pip, before any stockpile.
+    if (have_c < next_c_pip && can(Color::Colorless)) { out = Color::Colorless; return true; }
+    // 1./2. Colourless to 40 (20 blink fuel + 20 spare).
+    if (have_c < 40 && can(Color::Colorless)) { out = Color::Colorless; return true; }
+    // 3. One black on hand for a mid-loop Essence Depleter.
+    if (f.black < 1 && can(Color::Black)) { out = Color::Black; return true; }
+    // 4. Twenty red, only when a Shivan Gorge can spend it.
+    if (f.red < 20 && can(Color::Red))
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.tap_damage_cost.has_value() && d->params.tap_damage_each_opponent > 0)
+            { out = Color::Red; return true; }
+        }
+    }
+    return false;   // 5. bulk -- any producible type, left to the ordinary rule
+}
+
 inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int count)
 {
     if (count <= 0) { return; }
+    // COMBO MODE is scoped to a live loop (g_in_blink_loop), never to a plain ETB-untap cast.
+    const bool combo = RefloatComboOn() && g_in_blink_loop;
+    // The {C} pip the NEXT activation needs, so step 0 can protect it. Read off the outlet actually
+    // on the battlefield rather than assumed: Emiel's blink is {3} (no {C} pip at all) while Eldrazi
+    // Displacer's is {2}{C}, and priming colourless for an outlet that does not want it would spend
+    // the quota on nothing.
+    int next_c_pip = 0;
+    if (combo)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !d->params.blink_cost.has_value()) { continue; }
+            const ManaCost c = EffectiveActivationCost(state, controller, p.card,
+                                                       d->params.blink_cost.value());
+            next_c_pip = std::max(next_c_pip, c.colorless);
+        }
+    }
     // Demand computed ONCE, then decremented as each unit is committed -- that decrement IS the
     // coverage. Net of what is already floating, so mana banked earlier this phase counts as demand
     // already met and the next tap moves on to a colour that still is not.
@@ -10729,7 +10880,14 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
     const int n_perm = static_cast<int>(state.battlefield.size());
     std::vector<int> order(static_cast<std::size_t>(n_perm));
     for (int i = 0; i < n_perm; ++i) { order[static_cast<std::size_t>(i)] = i; }
-    if (EtbTapYieldOn())
+    // "We should also untap the highest yield lands as a priority until we have 100 total."
+    // The yield ordering already exists (MTG_ETB_TAP_YIELD, default OFF -- measured below this
+    // deck's noise floor as a global default). Combo mode turns it on for the window where it
+    // obviously pays: while the stockpile is still being built. Past 100 floating the pick stops
+    // mattering, so it reverts rather than staying on forever.
+    const bool yield_order = EtbTapYieldOn()
+                          || (combo && state.floating_mana.Total() < 100);
+    if (yield_order)
     {
         // Keys computed BEFORE the loop, because the loop mutates `tapped`. A permanent that is not
         // an eligible land keys -1 and sinks to the back, where the loop's own guards skip it.
@@ -10780,6 +10938,22 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         // colour the board actually needs is strictly better than laundering it: `wild` pays any
         // COLOUR but no {C} pip, so an uncommitted rainbow unit is not the most permissive outcome, it
         // is merely a different and usually worse one.
+        // COMBO LADDER FIRST -- it outranks both the legacy scorer and the need model, and it is the
+        // only one of the three that knows the loop is running.
+        Color combo_pick = Color::Colorless;
+        if (combo && amt == 1 && prod.size() > 1
+            && PickComboRefloatColor(state, controller, prod, next_c_pip, combo_pick))
+        {
+            state.floating_mana.Add(combo_pick, 1);
+            if (refloatstats::On())
+            {
+                refloatstats::g_commit.fetch_add(1, std::memory_order_relaxed);
+                refloatstats::g_by_color[static_cast<int>(combo_pick)]
+                    .fetch_add(1, std::memory_order_relaxed);
+            }
+            if (LandAuraBonus(state, p) > 0) { LandAuraAddToPool(state.floating_mana, state, p); }
+            continue;
+        }
         const bool choice_source = (amt == 1 && prod.size() > 1)
                                 && (need_model || prod.size() < 5);
         if (choice_source)

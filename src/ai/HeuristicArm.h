@@ -142,6 +142,7 @@ enum Slot : int
     EDF_PROSPECTIVE,          // MTG_EDF_PROSPECTIVE      go-off recognizer sees a loop the PLAN assembles
     REFLOAT_WILD_C,           // MTG_REFLOAT_WILD_C       a rainbow source's float is {C}-capable (wild_c)
     REFLOAT_NEED,             // MTG_REFLOAT_NEED         tap-ahead colour commit: {C}+ability demand, coverage
+    REFLOAT_COMBO,            // MTG_REFLOAT_COMBO        in-loop mana policy: {C}/B/R quota ladder
     COUNT
 };
 
@@ -261,6 +262,7 @@ inline const char* Name(int slot)
         "MTG_EDF_PROSPECTIVE",
         "MTG_REFLOAT_WILD_C",
         "MTG_REFLOAT_NEED",
+        "MTG_REFLOAT_COMBO",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

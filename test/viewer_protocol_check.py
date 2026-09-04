@@ -119,6 +119,15 @@ DECKS = {
     # the StompySurprise lesson above.
     "KittyEquipment": ("decks/KittyEquipment/KittyEquipment.cod",
                        "decks/KittyEquipment/KittyEquipment.profile.json"),
+
+    # Added 2026-09-04: the user's hand-played TURN-3 KILL. It is the fastest line anyone has shown
+    # on this deck (the search's best in 800 games was ONE turn-4), so it is the benchmark the go-off
+    # work is aimed at -- and it took 47 committed segments in a single main phase to play, which is
+    # exactly the kind of work that must never be lost. Same-day row per the StompySurprise lesson:
+    # an unmapped references/<dir> is a CONTRACT-FAIL here, not a skip.
+    "EldraziDisplacerFlicker": ("decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+                                "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json"),
+
     # Added 2026-08-28: references/Minotaur/claude_s2_gi1.json was sitting UNTRACKED in the working
     # tree -- saved from the viewer, never committed, so the row was never added and the gate went
     # red exactly as designed. Committed with this row (references/ is commit-only; an untracked

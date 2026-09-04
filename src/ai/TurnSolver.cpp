@@ -12006,10 +12006,18 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             // recognised" -- offering it would label an ordinary three-blink as
                             // FINISH and, worse, trip the sink cash-out on a board with no combo.
                             // A real go-off is ~20 drains (up to 53 exiles), never 3.
-                            int k_go = 0;
-                            for (int k : prov.BlinkActivationCounts(state, src, tgt, affordable))
-                            { k_go = std::max(k_go, k); }
-                            if (k_go > 3) { counts.push_back(k_go); }
+                            // MTG_PLAY_FINISH_PLAN=0 suppresses the extra plan. Kept as a lever
+                            // because inserting it SHIFTS every later plan index in a human-play
+                            // menu, which is exactly what a saved reference's recorded plan_index
+                            // depends on -- so isolating it has to be possible without a rebuild.
+                            static const bool s_finish_plan = EnvOn("MTG_PLAY_FINISH_PLAN", true);
+                            if (s_finish_plan)
+                            {
+                                int k_go = 0;
+                                for (int k : prov.BlinkActivationCounts(state, src, tgt, affordable))
+                                { k_go = std::max(k_go, k); }
+                                if (k_go > 3) { counts.push_back(k_go); }
+                            }
                         }
                         else
                         { counts = prov.BlinkActivationCounts(state, src, tgt, affordable); }
