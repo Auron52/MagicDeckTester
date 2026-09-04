@@ -2249,7 +2249,9 @@ lands worth 7 mana a tap, loop net +4/iteration:
   **win_turn=4 today**, and it must STAY 4 — it is the control that says the loop and the go-off
   count are both fine, and any reservation change that breaks it has broken the working route.
 * **`b`** — no extra permanent; set `"hand": ["Living Wish"]`. **win_turn=7.** The wish chain, which
-  is a further hop and should not be touched until `a` is green.
+  is a further hop and should not be touched until `a` is green. **RETRACTED — see 12g. That 7 was a
+  HARNESS artefact: `--scenario` never dealt the wish pool, so the Living Wish fetched nothing. With
+  a real pool the same board wins on turn 5 and there is no "further hop" here at all.**
 
 Run with `./build/Release/mtg --scenario <file>`, and add `MTG_EDF_GOFF_DEBUG=1` for the count trace.
 
@@ -2363,3 +2365,40 @@ inside the run-to-run noise floor, with work unchanged (solve-memo misses 49.084
 is the expected and wanted result: Dimensional Infiltrator is a sideboard 1-of reachable only through
 Living Wish, so a measurement here could only ever confirm the blast radius is nil. The fixture is
 what asserts the behaviour. Cumulative against 12a's baseline: 6.5187 -> 6.4337.
+
+#### 12g. The third fixture was never testing the wish — `--scenario` deals no sideboard
+
+`b` (the loop on board, Living Wish in hand, no sink anywhere) read **win_turn 7**, and 12d recorded
+that as "the wish chain, a further hop". It was nothing of the kind. `RunScenario` hand-builds its
+`GameState` and **never dealt the outside-the-game pool**, so `players[0].sideboard` was empty in
+every fixture ever written: Living Wish resolved and fetched *nothing*. The game log says it plainly
+once you look — the wish is cast on turn 4 and the hand is empty afterwards.
+
+This is the `StampDeckTraits` hole one field over, and the header comment on that function already
+warned about the shape: *"every OTHER path that hand-builds a GameState MUST call it too, or
+deck-gated machinery silently reads defaults."* The wish pool had exactly the same requirement and no
+such call. `GoldFishRunner::DealWishPool` is now factored out of `SetupGame` and called from
+`RunScenario` as well — one definition, two callers, so they cannot drift.
+
+**With a real pool, `b` goes 7 -> 5**, and the line is the intended one: turn 4 casts Living Wish,
+**fetches Essence Depleter**, blinks twice to pay for it, and deploys it; turn 5 converts. Turn 5 is
+also what the same board does with the Depleter already in HAND, so on this board the wish now costs
+nothing at all. Pinned as `test/scenarios/edf_wish_fetches_the_sink.json`.
+
+Two things follow that are worth stating plainly:
+
+* **The tutor ranking was right the whole time.** `EldraziFlickerProvider::TutorCandidates`
+  (`MTG_EDF_TUTOR_RANK=2`) scores a sink 100 when the loop is assemblable against 40 for a land, and
+  with a real pool the wish takes the Depleter exactly as designed. It had simply never been handed a
+  pool to rank inside a fixture. Nothing about it changed here.
+* **`edf_wish_first_keeps_trace.json` moved from 3 variants to 24** — 3 Trace hosts x 8 wish targets.
+  That is the fixture becoming *more* correct, not a regression: the wish's target is a genuine
+  sub-decision that a human is entitled to be offered, and it contributed none before because it had
+  no legal target. The property that fixture exists for (every surviving variant is Trace-FIRST) is
+  untouched, which is exactly what its `expect_variants_all_contain` was written to guarantee against
+  a count that moves.
+
+**Reach for this the next time a fixture reports a surprisingly bad number.** The failure was not a
+wrong result, it was a fixture that quietly did not exercise the thing it named — and it cost a
+conclusion in this very document. A fixture that stages a card whose effect touches a zone the
+harness does not build is testing the harness, not the engine.

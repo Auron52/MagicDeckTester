@@ -141,6 +141,14 @@ public:
     // real per-game zone at all. Mainboard only -- a wish in the sideboard could never be cast.
     static bool DeckWishesFromSideboard(const Decklist& deck);
 
+    // Deal the OUTSIDE-THE-GAME pool (Player::sideboard) for a wish deck. SetupGame calls this;
+    // every OTHER path that hand-builds a GameState (--scenario) MUST call it too, exactly as it
+    // must call StampDeckTraits -- the same hole, and it bit for the same reason. Without it
+    // players[0].sideboard is empty, so Living Wish resolves and fetches NOTHING, and a fixture
+    // built to exercise a wish chain silently measures a whiff instead. No-op for every deck that
+    // does not wish, so it is safe to call unconditionally.
+    static void DealWishPool(GameState& state, const Decklist& deck);
+
     // Can this deck mill / exile-from-library / discard the OPPONENT? Gates whether they are dealt
     // a library and opening hand at all (see core/OpponentDeck.h). Scans BOTH boards -- this deck's
     // only library-toucher is a SIDEBOARD card reachable off Living Wish.

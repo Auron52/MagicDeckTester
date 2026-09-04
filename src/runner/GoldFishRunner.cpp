@@ -278,6 +278,29 @@ bool GoldFishRunner::DeckWishesFromSideboard(const Decklist& deck)
     return false;
 }
 
+// OUTSIDE THE GAME: the wish pool (Living Wish). Per-game state so each singleton is consumed on
+// fetch. Numbered from its own base, far above the deck's dense-from-1 numbering, for the same
+// reason the opponent's cards are: BuildCardNumbering keys an alphabetical set built from the
+// MAINBOARD, so feeding sideboard names into it would shift `next` and renumber the whole deck --
+// which moves ShuffleByKey's CRN keys and changes every existing game of this deck.
+//
+// Factored out of SetupGame (2026-09-04) because the --scenario harness hand-builds its GameState
+// and never did this, so `players[0].sideboard` was empty in EVERY fixture: a staged Living Wish
+// resolved and fetched nothing, and a fixture written to test a wish chain was testing a whiff.
+// Exactly the StampDeckTraits hole one field over. Two callers, one definition, no drift.
+void GoldFishRunner::DealWishPool(GameState& state, const Decklist& deck)
+{
+    if (!DeckWishesFromSideboard(deck)) { return; }
+    constexpr int kWishNumberBase = 200000;   // deck 1..60, tokens 1000+, opponent 100000+
+    int number = kWishNumberBase;
+    for (const Card& c : deck.sideboard)
+    {
+        Card w = c;
+        w.m_number = number++;
+        state.players[0].sideboard.push_back(w);
+    }
+}
+
 bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
 {
     auto scan = [](const std::vector<Card>& board) {
@@ -930,22 +953,7 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // so this is a no-op for every deck that cannot mill.
     opponentdeck::Deal(state, DeckTouchesOpponentZones(deck), seed);
 
-    // OUTSIDE THE GAME: the wish pool (Living Wish). Per-game state so each singleton is consumed
-    // on fetch. Numbered from its own base, far above the deck's dense-from-1 numbering, for the
-    // same reason the opponent's cards are: BuildCardNumbering keys an alphabetical set built from
-    // the MAINBOARD, so feeding sideboard names into it would shift `next` and renumber the whole
-    // deck -- which moves ShuffleByKey's CRN keys and changes every existing game of this deck.
-    if (DeckWishesFromSideboard(deck))
-    {
-        constexpr int kWishNumberBase = 200000;   // deck 1..60, tokens 1000+, opponent 100000+
-        int number = kWishNumberBase;
-        for (const Card& c : deck.sideboard)
-        {
-            Card w = c;
-            w.m_number = number++;
-            state.players[0].sideboard.push_back(w);
-        }
-    }
+    DealWishPool(state, deck);
 
     state.active_player_index   = 0;
     state.priority_player_index = 0;

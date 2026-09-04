@@ -4659,6 +4659,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // state.uses_second_main and so NEVER fired in a scenario, silently testing the unfiltered
     // engine no matter what MTG_AL_PHASE/MTG_PHASE_CLASSIFY said.
     GoldFishRunner::StampDeckTraits(state, deck);
+    // OUTSIDE THE GAME, same reason and the same hole one field over: without this the sideboard
+    // zone is empty in every fixture, so a staged Living Wish resolves and fetches NOTHING. A
+    // hand-built gap-two fixture reported win_turn 7 and was read as "the wish chain is a further
+    // hop" when the wish had simply whiffed. No-op for every non-wish deck.
+    GoldFishRunner::DealWishPool(state, deck);
     state.players[0].life       = j.value("active_life", 20);
     // Stage RAD COUNTERS directly (Mariposa Military Base). Same reason storage_counters /
     // charge_counters are settable: the counters arrive only from an optional land-ETB mode the
