@@ -499,3 +499,21 @@ had stopped offering at all, so the replay used to terminate early and never che
 is evidence FOR this change. Only re-playing by hand can restore it; references are the user's.
 
 `MTG_PLAY_SEGMENT_ALWAYS=0` still restores the old draw/sac-source rule.
+
+## An Aura can be dropped on the land you are PLAYING (2026-09-04)
+
+**User:** *"Can you add a way to put auras on a newly played land? Technically I can commit line and
+then add it, but it would be easier if I could do it in one step."*
+
+The engine always offered the line: `land=Aether Hub;cast=Wild Growth` enumerates with
+`enchant_target` = the land's own m_number, and a hand card and the permanent it becomes share that
+number. This was purely a missing GUI affordance — `queueCard` stamped `entry.num` on every queued
+card **except a land**, and `data-num` is the drop-target key, so a queued land was the one thing on
+the field you could not drop an Aura onto.
+
+`LineBuild.stampPlanNums(decision, plan)` now numbers every queued entry, lands included, and runs
+over the whole plan rather than only the entry just appended — queueing a land can REPLACE a
+previously queued one, which leaves the plan the same LENGTH, so the old "only if the plan grew"
+guard never stamped that land either. A queued land carrying queued Auras renders as a planned
+enchant group, exactly as a queued creature does. Pinned by `checkQueuedLandIsAuraHost` in
+`test/viewer_linebuild_check.js` (which CI runs).

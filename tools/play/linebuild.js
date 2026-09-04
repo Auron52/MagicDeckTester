@@ -178,6 +178,32 @@
     return plan;
   }
 
+  // Give every queued entry the m_number of the hand copy it will become, so a card queued THIS
+  // turn is itself a drop target for a same-turn attachment: drag Rancor onto the Bogle you are
+  // casting, or Wild Growth onto the land you are PLAYING. Mutates `plan` in place.
+  //
+  // Two things here are the fix rather than tidying, and both are why it lives in this file:
+  //   * it walks the WHOLE plan, not just the entry queueCard appended. Queueing a land can REPLACE
+  //     a previously queued one, which leaves the plan the same LENGTH -- and the caller's old
+  //     "only if the plan grew" guard therefore never stamped that land.
+  //   * it includes LANDS. They were excluded outright, so a land drop could never host an Aura
+  //     queued in the same line: the only way to enchant a land you were playing was to commit the
+  //     line and enchant it in the NEXT one (USER, 2026-09-04: "Technically I can commit line and
+  //     then add it, but it would be easier if I could do it in one step").
+  // The engine always offered the line -- `land=Aether Hub;cast=Wild Growth` enumerates with
+  // enchant_target = the land's own m_number, which is exactly the number its hand copy carries --
+  // so this was a missing affordance in the GUI, never a missing plan.
+  function stampPlanNums(decision, plan) {
+    const hand = (((decision || {}).me || {}).hand) || [];
+    const used = new Set(plan.filter(p => p.num != null).map(p => p.num));
+    plan.forEach(p => {
+      if (p.num != null || p.kind === 'le') return;
+      const hc = hand.find(c => c.name === p.name && !used.has(c.num));
+      if (hc) { p.num = hc.num; used.add(hc.num); }
+    });
+    return plan;
+  }
+
   // ---- Choose-variant dimension walk (the multi-sub-decision picker) -------------------------
   // Lives here, not inline in index.html, for the same reason queueCard does: it decides how many
   // dialogs a committed line produces, and that was un-testable while it sat in the page. Viewer
@@ -253,5 +279,6 @@
 
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
            leCount, leMax, encodeLine, encodeSegments, queueCard, isSacOut, lineVerb,
+           stampPlanNums,
            nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };
 });

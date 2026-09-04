@@ -588,15 +588,21 @@ function queueCard(name, kind, target, targetName) {
     // pushes at the end). At commit, encodeLine stays target-free; renderChooseDialog auto-resolves the
     // aura's enchant sub to this target (see enchantPrefFor), so the drag picks the creature end-to-end.
     if (target != null && e && e.name===name) { e.target = target; e.targetName = targetName || null; }
-    // Stamp the stable card number of the hand copy being played, so a queued CREATURE is itself a
-    // drop target for a same-turn Aura (drag Rancor onto a Bogle you're casting this turn). Pick a hand
-    // copy of this name not already claimed by another queued entry.
-    if (e && e.name===name && e.kind!=='land' && e.num==null) {
-      const used = new Set(S.plan.filter(p=>p.num!=null).map(p=>p.num));
-      const hc = (((S.decision||{}).me||{}).hand||[]).find(c=>c.name===name && !used.has(c.num));
-      if (hc) e.num = hc.num;
-    }
   }
+  // Stamp the stable card number of the hand copy each queued entry will become, so a card queued
+  // THIS turn is itself a drop target for a same-turn attachment (drag Rancor onto a Bogle you are
+  // casting, or Wild Growth onto the land you are playing).
+  //
+  // Runs over the WHOLE plan, not just the entry queueCard appended, and includes LANDS. Both are
+  // fixes, not tidying. Queueing a land can REPLACE a previously queued one, which leaves the plan
+  // the same LENGTH -- so the old "only if the plan grew" guard never stamped that land. And lands
+  // were excluded outright, so a land drop could never host an Aura queued in the same line: the
+  // only way to enchant a land you were playing was to commit the line and enchant it in the next
+  // one (USER, 2026-09-04: "Technically I can commit line and then add it, but it would be easier
+  // if I could do it in one step"). The engine always offered the line -- `land=Aether Hub;
+  // cast=Wild Growth` enumerates with enchant_target = the land's own m_number, which is the same
+  // number its hand copy carries -- so this was purely a missing affordance in the GUI.
+  LB.stampPlanNums(S.decision, S.plan);
   renderBoard();
 }
 function removePlanAt(i) { S.plan.splice(i,1); renderBoard(); }
@@ -1207,7 +1213,15 @@ function renderBoard() {
   const plannedLands = [], plannedPerms = [], plannedSpells = [], plannedLE = [];
   S.plan.forEach((p,i)=>{
     if(p.kind==='le'){ plannedLE.push(plannedThumb(p,i,ord[i])); return; }        // discarded to Land's Edge
-    if(p.kind==='land'){ plannedLands.push(plannedThumb(p,i,ord[i])); return; }
+    // A queued LAND carrying queued Auras renders as a planned enchant group, exactly as a queued
+    // creature does -- otherwise the Aura you just dropped on the land you are about to play has
+    // nowhere to be drawn and looks like it did not take.
+    if(p.kind==='land'){
+      plannedLands.push((p.num && (plannedAurasByHost[p.num]||[]).length)
+        ? plannedEnchantGroup(p, i, ord[i], plannedAurasByHost[p.num])
+        : plannedThumb(p,i,ord[i]));
+      return;
+    }
     // 'activate' = an ability of a permanent ALREADY in play. It puts no new card onto the battlefield,
     // so it belongs with the spells being cast this phase, not in the planned-permanents row.
     // A queued EQUIP carries its host on `target` like a dragged Aura, so it is drawn stacked on

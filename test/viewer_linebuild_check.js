@@ -277,6 +277,48 @@ function checkActivationVerbs() {
 // committed as consecutive SEGMENTS. Both halves of that live here (queueCard must ADD rather than
 // replace; encodeSegments must split lands-first), and neither is visible to the reference sweep,
 // since every saved reference predates the field. Synthetic + binary-free, like the dimension walk.
+// A land you are PLAYING this turn must be a legal host for an Aura queued in the SAME line --
+// stampPlanNums is what gives the queued land the m_number the GUI uses as its drop-target key, and
+// it is the engine's `enchant_target` for that aura (the hand copy and the permanent share a number).
+// Without it the only way to enchant a land you were playing was to commit the line and enchant it
+// in the next one (USER, 2026-09-04). Also pins the replacement path, which is where the old
+// "only when the plan GREW" stamping silently did nothing: swapping the queued land keeps the plan
+// the same length.
+function checkQueuedLandIsAuraHost() {
+  const hand = [{ name: 'Aether Hub', num: 3 }, { name: 'Conservatory', num: 13 },
+                { name: 'Wild Growth', num: 54 }, { name: 'Wild Growth', num: 53 }];
+  const dec = { me: { hand, land_drops_left: 1 } };
+  const fails = [];
+
+  let p = [];
+  p = LB.queueCard(dec, p, 'Aether Hub', 'land');
+  p = LB.queueCard(dec, p, 'Wild Growth', 'permanent');
+  LB.stampPlanNums(dec, p);
+  const land = p.find(e => e.kind === 'land');
+  if (!land || land.num !== 3) fails.push(`queued land num ${land && land.num} != 3 (its hand copy)`);
+  if (LB.encodeLine(p) !== 'land=Aether Hub;cast=Wild Growth')
+    fails.push(`encoded ${LB.encodeLine(p)}`);
+
+  // REPLACING the queued land (one drop, a different land) keeps the plan length the same -- the
+  // path the old stamping missed entirely, leaving the land that actually gets played unnumbered.
+  let q = [];
+  q = LB.queueCard(dec, q, 'Aether Hub', 'land');
+  LB.stampPlanNums(dec, q);
+  q = LB.queueCard(dec, q, 'Conservatory', 'land');
+  LB.stampPlanNums(dec, q);
+  const land2 = q.find(e => e.kind === 'land');
+  if (!land2 || land2.name !== 'Conservatory' || land2.num !== 13)
+    fails.push(`replaced land ${land2 && land2.name}#${land2 && land2.num} != Conservatory#13`);
+
+  // Two copies of one Aura claim DIFFERENT hand numbers, so two queued auras are separable targets.
+  let r = [];
+  r = LB.queueCard(dec, r, 'Wild Growth', 'permanent');
+  r = LB.queueCard(dec, r, 'Wild Growth', 'permanent');
+  LB.stampPlanNums(dec, r);
+  if (r[0].num === r[1].num) fails.push(`two Wild Growths share num ${r[0].num}`);
+  return fails;
+}
+
 function checkBonusLandDrop() {
   const hand = [{ name: 'Forest', kind: 'land' }, { name: 'Forest', kind: 'land' },
                 { name: 'Mountain', kind: 'land' }, { name: 'Gold Rush', kind: 'nonpermanent' }];
@@ -357,11 +399,16 @@ function main() {
   verbFails.forEach(m => console.log(`  FAIL  activation verb: ${m}`));
   console.log(`Viewer activation verbs: ${verbFails.length ? 'WRONG' : 'cast/sacout/equip/attachall/sfput/jittemode all encode'} ` +
               `(${verbFails.length} FAIL)`);
+  const hostFails = checkQueuedLandIsAuraHost();
+  hostFails.forEach(m => console.log(`  FAIL  queued-land aura host: ${m}`));
+  console.log(`Viewer queued-land aura host: ${hostFails.length ? 'WRONG' : 'a land being played is a legal same-line Aura host'} ` +
+              `(${hostFails.length} FAIL)`);
   const mixFails = checkMixedSubVariantWalk();
   mixFails.forEach(m => console.log(`  FAIL  mixed-sub walk: ${m}`));
   console.log(`Viewer mixed-sub walk: ${mixFails.length ? 'WRONG' : "a variant lacking the dimension is offered as '—', not dumped flat"} ` +
               `(${mixFails.length} FAIL)`);
-  return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length + mixFails.length) ? 1 : 0;
+  return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
+          + mixFails.length + hostFails.length) ? 1 : 0;
 }
 
 process.exit(main());
