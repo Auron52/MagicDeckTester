@@ -2108,3 +2108,109 @@ which reproduces it in one command. Suspects, in the order worth testing: whethe
 the payload agree with the target, but nothing has verified the count is USED); whether the wish
 ranking fetches Essence Depleter once a loop is live; and whether `FlickerGoOffCount` returns 0 for
 want of a recognised sink on this board.
+
+### 12. GAP ONE FIXED AND MEASURED; GAP TWO ROOT-CAUSED IN THREE LAYERS (2026-09-04)
+
+#### 12a. The colour gate — FIXED, measured, shipped (`d01f76c7`)
+
+Both colour gates and the flat mana pool are built ONCE per enumeration off the pre-plan board, so
+all three were blind to the one mana source a plan can INSTALL mid-turn. The turn-3 line was rejected
+three separate ways: `ComputeAvailableColors` and `BuildColorFeasibility` said "no untapped source
+produces blue mana", and the flat pool read the line as one mana short of a board that pays it
+EXACTLY (six lands' worth, seven needed, the Trace supplying the seventh).
+
+The two colour gates take a widening because they are PRE-FILTERS — an over-admitted subset is priced
+by the real payer and dropped at apply time, an under-admitted one is gone for good. The mana COUNT
+deliberately does NOT become an optimistic `a.rock_mana`-style stamp: an Aura's bonus is same-turn
+supply only if a land survives the Aura's own cost still untapped (one Forest, {Wild Growth, Llanowar
+Elves} — the Forest pays for the Growth and there is nothing left to enchant-and-tap). That condition
+is exactly what a flat pool cannot express, so the credit lives in `SubsetPayableWithFilters`, the
+real-payment simulation, where taps persist across the casts. Both halves are pinned:
+`test/scenarios/edf_land_aura_unlocks_color_same_turn.json` (the line is admitted AND every surviving
+variant really casts the Drake) and `edf_land_aura_credit_is_not_free.json` (the lone-Brushland board
+where the second Wild Growth must stay unpayable — restore the enumeration stamp and it goes red).
+
+**Measured**, 8 seeds x 100 games, ONE pooled batch, d5/20ms, profile attached, paired against the
+§10 baseline:
+
+| | dist | mean |
+|---|---|---|
+| before | `unwon:11 T4:1 T5:51 T6:368 T7:284 T8:85` | 6.5425 |
+| after  | `unwon:12 T4:1 T5:42 T6:393 T7:281 T8:71` | 6.5187 |
+
+**-0.0238 turns, se 0.0092, t = -2.57, better on 7 of 8 seeds.** Real, and small. **Still ZERO turn-3
+kills and still T4:1** — as predicted, because gap two is independent. Suite: smoke 51/51 and
+regression 85/85 both at `configs changed: 0`, scenarios 61/61, references 201 ok / 65 repaired / 0
+play-drift. All four mana-producing land Auras are EDF-only, which is why the blast radius is nil.
+
+#### 12b. A tighter, PER-SUBSET version of the same widen — MEASURED AND REFUTED
+
+The shipped widen reads the HAND, so on a deck running 16 land Auras in 60 cards it switches
+blue/black/red on for nearly every enumeration, including subsets that cast no Aura. The obvious
+improvement is to widen per-SUBSET (the shape `MTG_SUBSET_ROCK_COLOR` already uses), which is more
+precise and looked certain to be cheaper. It was built in full — `SubsetLandAuraColors` +
+`AnyLandAuraCandidate`, both gates and the rescue made subset-aware — and measured on the same 800
+games.
+
+It is **worse on both axes**: quality **-0.0125 (t = -1.93, 6/8)** against the shipped widen's
+**-0.0238 (t = -2.57, 7/8)**, and *more* work, not less — 51.2M solve-memo misses against 49.4M. The
+cost hypothesis that motivated it is simply false: the broad gate wins games sooner, so the games are
+shorter, and it memo-hits far more often (55.7M vs 47.0M) because the gate is uniform across subsets.
+Not kept behind a flag — it has its verdict, and a lever behind a default-off gate is dead code.
+(Wall-clock was useless here and must not be read into: the box swung between ~23 and ~5 usable cores
+across the three runs. `loadavg-is-the-hosts-not-ours` again — the memo counters are the honest work
+proxy because they are deterministic.)
+
+#### 12c. Gap two: the drain kill, root-caused in THREE layers
+
+Isolating fixtures in `logs/edf_t3/g2/` — identical turn-4 boards (Emiel + Peregrine Drake, loop live,
+4 lands worth 7 mana, net +4/iteration), differing only in the sink:
+
+| fixture | sink | result |
+|---|---|---|
+| `c.fx` | Shivan Gorge (board) | **win turn 4** — the go-off fires |
+| `a.fx` | Essence Depleter (board) | win turn 5, blinking ONCE and draining 3, then attacking |
+| `b.fx` | Living Wish in hand, sink in sideboard | win turn 7 |
+
+The go-off count is NOT the problem: `MTG_EDF_GOFF_DEBUG` (added in this commit) shows
+`ok=1 outlet=8 payload=9 net=4 drain=1/2 kmax=2 n=10` — the count is computed correctly and offered.
+Forcing it to be the ONLY offered count still wins on turn 5, so the failure is in the APPLY. Three
+distinct defects, each real, each verified:
+
+1. **`SpendSurplusOnDrain` has no caller.** It shipped complete on 2026-09-02 (`6e860c22`, "NOT
+   measured and NOT suite-checked") and was never wired into `ApplyBlinkLoop`, which calls only
+   `SpendSurplusOnDamageSinks`. That alone is why the Gorge route works and the drain route does not.
+   The function's own doc says the rule: *"Adding a class of sink here is only correct alongside a
+   matching per-iteration SPEND for it — do both, or neither."*
+
+2. **Wired at the END of the loop, the surplus is in the wrong COLOUR.** With the loop forced to 10
+   iterations the float ends at **{G:29, C:0}** and buys **three** drains — 29 mana, 3 life. Essence
+   Depleter costs `{1}{C}`; the blink's `{3}` is all generic, so the activation eats each pass's
+   colorless as fast as the tap-ahead makes it, and the bank ends up entirely in the one colour the
+   sink cannot spend. (`EtbUntapTapAheadIntoFloat`'s colour commit is need-aware only of the HAND's
+   remaining pips — with an empty hand every choice-limited land floats `prod[0]`, which is green for
+   both Conservatory and Brushland.)
+
+3. **Wired PER ITERATION before the activation, the `keep_payable` guard fails to protect the loop.**
+   This is the placement that *should* work — grab the colorless while it exists, under the same guard
+   the damage sink uses. Traced: the guard's projection is `AvailableManaPool(state) + floating` vs
+   `CanPay(drain + keep_payable)`, i.e. a TOTAL, and it mixes float with board mana that cannot
+   actually be realised in the needed colours. It admits three drains, leaves the pool at 2, and the
+   blink's `{3}` then fails — `done=0`, the loop never runs at all.
+
+**So the real fix is a colour-aware reservation**, not a call site: the loop must genuinely reserve
+its own activation cost before the sink spends, or the sink must be restricted to surplus above a
+real reservation. That is a piece of engineering with its own measurement, and it is where to resume.
+Nothing from layers 1-3 is committed — the tree carries only the `MTG_EDF_GOFF_DEBUG` diagnostic,
+because not having it is what made this take an afternoon.
+
+**Not a payment bug — checked.** The trace shows a `{1}{C}` drain leaving the float one lower rather
+than two, which looks like a colour paying a `{C}` pip. It is not. Brushland carries
+`tap_self_damage`, so `EtbUntapTapAheadIntoFloat` deliberately SKIPS it (a pain land is not free to
+tap ahead) and it is still untapped when the drain runs; `pay` taps it for the `{C}`, so the float
+goes 2 + 1 − 2 = 1. Everything balances.
+
+That is worth knowing for the fix, though, because it says where the colorless actually comes from.
+The deck's `{C}` sources are Aether Hub, Mariposa and Brushland, and Brushland is precisely the one
+the tap-ahead will not bank — so it is the drain's only per-iteration colorless that the blink has not
+already had first crack at. A colour-aware reservation should start there.

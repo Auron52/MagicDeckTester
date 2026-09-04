@@ -13845,10 +13845,29 @@ std::vector<int> EldraziFlickerProvider::BlinkActivationCounts(const GameState& 
     if (!s_edf_goff) { return out; }
 
     const FlickerLoop loop = RecogniseFlickerLoop(s, source.controller_index);
+    // MTG_EDF_GOFF_DEBUG -- WHY a go-off count was or was not offered. There are five independent
+    // ways to end up with the generic 1..3 here (no loop, either id disagreeing, no cashable sink,
+    // or n already inside kmax) and they are indistinguishable from the outside: every one of them
+    // shows up in a log as a single blink and a slow win by attacking. Bounded output.
+    static const bool s_dbg = EnvOn("MTG_EDF_GOFF_DEBUG");
+    static std::atomic<int> s_dbg_n{0};
+    const bool dbg = s_dbg && s_dbg_n.fetch_add(1, std::memory_order_relaxed) < 40;
+    const int n = loop.ok ? FlickerGoOffCount(s, loop) : 0;
+    if (dbg)
+    {
+        std::fprintf(stderr,
+                     "[edf-goff] t%d src=%s(%d) tgt=%s(%d) ok=%d outlet=%d payload=%d "
+                     "net=%d refund=%d cost=%d gorge=%d/%d drain=%d/%d exile=%d "
+                     "kmax=%d afford=%d n=%d\n",
+                     s.turn_number, source.card.m_name.str().c_str(), source.card.m_number,
+                     target.card.m_name.str().c_str(), target.card.m_number,
+                     loop.ok ? 1 : 0, loop.outlet_id, loop.payload_id, loop.net, loop.refund,
+                     loop.cost_mv, loop.gorge_dmg, loop.gorge_cost_mv, loop.drain_amount,
+                     loop.drain_cost_mv, loop.exile_cost_mv, kmax, max_affordable, n);
+    }
     if (!loop.ok) { return out; }
     if (loop.outlet_id != source.card.m_number)  { return out; }
     if (loop.payload_id != target.card.m_number) { return out; }
-    const int n = FlickerGoOffCount(s, loop);
     if (n > kmax) { out.push_back(n); }
     return out;   // n == 0 (nothing to cash the mana on) falls through to the generic counts
 }
