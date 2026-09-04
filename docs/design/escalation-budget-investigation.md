@@ -280,3 +280,31 @@ exchange for -43% wall. Not statistically confirmed; settling it at t=2 resoluti
 ~30k more games. Fleet moved-game breakdown for the other lean-positive decks: hin +1 net turn
 per 1000 games (7 faster/8 slower), th +1 net per 2000 (one game, one turn); al/ds/fc lean
 NEGATIVE (fc -6 net per 1000); brn/gob/ss byte-identical outcomes.
+
+### Session 3e (2026-09-04): re-validation on the new engine + the pre-adoption budget A/B
+
+Mid-session the shared branch adopted 11dfa7db (firebreathing pays real mana, dragons
+single-main, EXEC_FEAS default ON) — a search-affecting change — so the full ledger was
+re-measured on the rebuilt binary (50k games). It reproduces: quality parity on all 9 decks
+(CG pooled 11k: +0.0019, CI [-0.0007,+0.0045], 1 w->l flip; everything else |d| <= 0.006,
+zero flips), wall CG 0.54x / gob 0.90x / others 0.96-1.05x.
+
+**Budget A/B (45k games, 9 decks x {ship,cal} x {default,B100,B500}, seeds 90000+, new
+engine).** The user's gate, in their words: at higher budget a performance hit is LESS
+concerning; the failure mode would be cal failing to RECOVER quality that ship can buy with a
+big budget. Result: **quality recovery PASSES everywhere, and improves with budget.**
+- cal vs ship at B500: d = 0.0000 with ZERO moved games on cg/fc/hin/ss/th/brn/gob/ds/al
+  (only al B20 and fc/th B20-B100 lean pro-cal). CG's default-budget lean SHRINKS monotonically
+  with budget: +0.004 (B20) -> +0.002 (B100) -> 0.0000 with 0/1000 games moved (B500). The cap
+  is NOT hiding buyable quality — given headroom, cal converges to byte-identical play.
+- Performance at high budget: **CG ship brute-forces 2806 ms/g at B500 vs cal 336 ms/g (0.12x)
+  for identical outcomes** — the design thesis in one number. th 0.86x, al 0.96x at B500.
+  FC is the one high-budget wall regression: 1.23x at B500 (frac grants escalations fresh
+  allowances legacy leftover would not; FC never reaches its d6 anyway) — per the user's
+  criterion, acceptable: quality identical, and FC B20 (its operating point) is 0.95x.
+- Scaling within arm: every deck with headroom converts budget to quality on BOTH arms, cal >=
+  ship everywhere (cg cal -0.020 vs ship -0.016 at B500; hin -0.080 with 6 loss->wins; brn/gob
+  fully saturated at 0.000 — they already win as fast as possible).
+
+Status: measurement complete on the current engine; the adoption decision (7 clean decks —
+al/brn/cg/ds/fc/gob/hin — vs also ss/th whose R ~= prior) remains the user's.
