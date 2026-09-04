@@ -2055,3 +2055,56 @@ the loop live — the engine wins on turn 6 **by attacking**, activating Emiel e
 It never converts the loop into a kill. `MTG_EDF_PROSPECTIVE=1` does not change it (win 6 either
 way), so the go-off recognizer is not the missing piece. Root-causing this is separate work from the
 colour gate above, and both must land before the deck plays to the user's expectation.
+
+#### 11a. Work plan for the colour gate (written 2026-09-04 to survive a context compaction)
+
+**Where the gate is built.** `ComputeAvailableColors` (`src/ai/TurnSolver.cpp:2456`) and
+`BuildColorFeasibility` (`src/ai/ManaPayment.cpp:1395`) are each evaluated **once per enumeration**
+off the pre-plan `state` — `TurnSolver.cpp:14674-14679` inside `Solve`, and `22345-22350` inside
+`EnumeratePlans`. That "once, up front" is the defect: a land Aura in the candidate set has not
+resolved yet, so its colours are not in the gate, and every later cast needing them is pruned.
+
+**Proposed shape.** Widen both gates by the colours any land-Aura cast *in the candidate set* could
+add: `land_aura_produces` when non-empty, otherwise ALL colours (an empty list means "any colour" —
+Trace of Abundance and Fertile Ground both). The gate is a PRE-FILTER, so over-approximating is the
+safe direction: a wrongly-admitted plan is priced by the real payer and dropped at apply time, while
+under-approximating deletes the line permanently, which is what happens today.
+
+Two more sites were blind in the earlier Aura fix and must be re-checked under the same lens, since
+either can still veto a line the widened gate admits: `TapFlowInfeasible`
+(`src/core/SpellEffects.cpp:1103`, the flow oracle, which can declare a cost infeasible before the
+DFS runs) and `TapForCostBacktrackWorker` (`src/core/SpellEffects.cpp:1527`). `AddSourceToPool`
+(`src/core/SpellEffects.h:7988`) was correct both times. `LandAuraBonus`
+(`src/core/SpellEffects.h:7593`) is the existing helper for an ATTACHED aura's yield.
+
+**Expected blast radius: none outside this deck.** The only mana-producing land Auras in
+`cards.json` are Wild Growth, Overgrowth, Fertile Ground and Trace of Abundance, and all four are
+EDF-only; EDF is not in the regression suite. So smoke/regression should come back
+`configs changed: 0` and byte-identical. If they do NOT, the widening is reaching further than
+intended and that is the signal to stop, not to rebaseline.
+
+**Repro, before and after** (`--scenario`, board = Aether Hub under two Wild Growths, Conservatory,
+Brushland; hand = Trace of Abundance, Peregrine Drake, Mariposa; six mana, Drake exactly affordable
+after the Trace):
+
+```
+validate_line "land=Mariposa Military Base;cast=Trace of Abundance;cast=Peregrine Drake"
+  NOW:   verdict=illegal  "no untapped source produces blue mana"
+  AFTER: verdict=accept (or choose over the Trace host)
+```
+Fixture skeletons are in `logs/edf_t3/fx/` (`p7.fx` plays it, `p8.fx` validates the line); promote
+one into `test/scenarios/` as the permanent pin, with the discrimination check recorded.
+
+**Then re-measure, do not assume.** Re-run the §10 batch (8 seeds x 100, ONE pooled `mtg --batch`,
+d5/20ms, profile attached) and compare the win-turn distribution against
+`T4:1 T5:51 T6:368 T7:284 T8:85 unwon:11, mean 6.54`. The colour gate alone is NOT expected to
+produce turn-3 kills, because gap two below is independent.
+
+**Gap two, still un-root-caused.** Handed the assembled board (Emiel + both Drakes, loop live) the
+engine wins on turn 6 BY ATTACKING, activating Emiel exactly once per turn, and
+`MTG_EDF_PROSPECTIVE=1` does not change it. Start from `logs/edf_t3/fx/p3_trace_preplaced.json`,
+which reproduces it in one command. Suspects, in the order worth testing: whether
+`BlinkActivationCounts` ever proposes its go-off count in real play here (the §9 coherence fix makes
+the payload agree with the target, but nothing has verified the count is USED); whether the wish
+ranking fetches Essence Depleter once a loop is live; and whether `FlickerGoOffCount` returns 0 for
+want of a recognised sink on this board.
