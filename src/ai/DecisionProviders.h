@@ -1092,6 +1092,11 @@ public:
     // generic "never", so rollout tails and the d0 greedy path keep the old behaviour --
     // sacking a mana rock for a card is a judgement the search prices per game, not a default.
     // MTG_DRAGONS_DIG=0 restores the digless engine (A/B hatch).
+    // The recorded follow-up ("the dig apply is is_pre_combat-gated, so a main-2 cash-in is
+    // inexpressible") is CLOSED AS MOOT 2026-09-04: with the Utvara m2 rule retired this deck is
+    // single-main, so no m2 solve exists to dig in. The gate in TurnSolver's dig loop is shared
+    // with Treasure Hunt / Auras and stays; it only becomes a live capability-narrowing decision
+    // if a dig-capable deck ever adopts uses_second_main.
     bool        HasAnyDigSource(const GameState&) const override;
     std::string SelectDigSource(const GameState&, const ManaPool&, bool&) const override;
     bool        DigDecisionSearched() const override;

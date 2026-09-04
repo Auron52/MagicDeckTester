@@ -89,7 +89,10 @@ inline bool FirebreatheTapsEnabled()
 // dragons second-main retirement REQUIRED it: retiring m2 without it re-opens the gi94
 // producer-chain unreachability (Sol Ring -> Mind Stone same-main), violating the
 // no-strictly-better-line-dropped bar. Adopted as part of the FB_TAP/SUBRED_BAIL/m2-retirement
-// package; the suite is the gate.
+// package; the suite is the gate. PERF NOTE (2026-09-04): its unit cost has still never been
+// isolated (suite makespans stayed normal -- regression ~3 min, overnight ~30 min -- so no alarm);
+// on the next perf pass, wall-probe MTG_EXEC_FEAS=0 vs =1 per wall_probe.sh before profiling
+// anything downstream of the enumerator.
 // The enumerator's three mana gates (flat pool, colour-exists, colour-exact) price a subset's whole
 // cost against the pre-cast board SIMULTANEOUSLY, so a chain that is only payable SEQUENTIALLY --
 // an untap ritual refloating the colours of already-tapped sources mid-chain (Reality Spasm), a
@@ -132,23 +135,6 @@ inline bool SeqEtbUntapEnabled()
 {
     static const bool env_on = EnvOn("MTG_EDF_SEQ_ETB", true);
     return heurarm::Flag(heurarm::EDF_SEQ_ETB, env_on);
-}
-
-// MTG_EF_SAC -- extend the MTG_EXEC_FEAS rescue walk to subsets that ALSO hold SacForMana /
-// Suspend actions (built 2026-09-04 for the dragonstorm m2 retirement; default OFF until measured).
-// SubsetPayableSequential refused ANY non-cast action ("unmodelled kind -> no rescue"), so the
-// exact projected-turn storm composition -- sac Lotus Bloom (+3 float) + Seething Song (+5 float)
-// + Dragonstorm {8}{R} -- could never be rescued when a flat gate rejected it, and the one-main
-// line search undervalued holding for the storm turn (dragonstorm's whole remaining reason for
-// uses_second_main is that the m2 re-solve in PROJECTED turns papers over this). The extension is
-// rescue-only in the same soundness frame: SacForMana is applied to the scratch board through the
-// real ApplySacForMana + SacFloatColorFor pair (the executor/rollout's own lockstep helpers, run
-// in the same before-all-casts pre-pass position as ApplyPlanDirect/TakeTurn), and Suspend is
-// skipped exactly (the enumerator only emits "Suspend N-{0}": no mana, no board this turn).
-inline bool EfSacEnabled()
-{
-    static const bool v = EnvOn("MTG_EF_SAC");
-    return v;
 }
 
 // MTG_IRENCRAG_WASTE -- ADOPTED DEFAULT-ON 2026-09-01 (USER: "let's adopt the Irencrag gate");

@@ -173,11 +173,11 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     never surfaces it, while the m2 arm expresses the same turn as a cheap 2-cast
         //     main + 1-cast second main -- an interior plan-breadth hole (enumeration-arc
         //     follow-up, the same workaround-surface family as the retired dragons classes).
-        //     MTG_UTVARA_M2=1 restores the ritual-gated selector (dragonstorm back in);
-        //     + MTG_UTVARA_M2_WIDE=1 restores the ritual-less form (dragons too).
-        //     MTG_NO_UTVARA_M2 (the old opt-out) is retired with the rule.
+        //     MTG_UTVARA_M2=1 restores the ritual-gated selector (dragonstorm back in).
+        //     MTG_NO_UTVARA_M2 (the old opt-out) is retired with the rule, and the ritual-less
+        //     wide form (MTG_UTVARA_M2_WIDE, dragons too) was swept 2026-09-04 once dragons
+        //     measured STRICTLY better single-main (5/0 per 1000) -- `git show cd8debac` has it.
         static const bool s_utvara_m2   = EnvOn("MTG_UTVARA_M2");       // DEFAULT OFF (retired)
-        static const bool s_utvara_wide = EnvOn("MTG_UTVARA_M2_WIDE"); // DEFAULT OFF
         if (s_utvara_m2 && def->params.attack_per_matching_creates_tokens > 0)
         {
             bool ping = false, ritual = false;
@@ -188,7 +188,7 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
                 if (d2->params.dragon_ping_on_enter) { ping = true; }
                 if (IsManaRitual(*d2))               { ritual = true; }
             }
-            if (ping && (ritual || s_utvara_wide)) { return true; }
+            if (ping && ritual) { return true; }
         }
     }
     return false;

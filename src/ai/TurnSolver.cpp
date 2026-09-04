@@ -3281,21 +3281,17 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
                                     const std::vector<int>& sel)
 {
     thread_local std::vector<int> order;
-    thread_local std::vector<int> sacs;
     order.clear();
-    sacs.clear();
-    const bool ef_sac = EfSacEnabled();
     for (int j : sel)
     {
         const Action& a = cands[j];
         if (a.kind == Action::Kind::ActivateVial) { continue; }        // Vial deploys cost no mana
-        // MTG_EF_SAC: SacForMana joins the walk (applied in the pre-pass below, exactly where
-        // ApplyPlanDirect/TakeTurn run it); Suspend is skipped EXACTLY -- the enumerator only
-        // emits "Suspend N-{0}" (cost ManaCost{}, no board this turn), so it can neither fund
-        // nor need anything in this walk.
-        if (ef_sac && a.kind == Action::Kind::Suspend)    { continue; }
-        if (ef_sac && a.kind == Action::Kind::SacForMana && a.def != nullptr)
-        { sacs.push_back(j); continue; }
+        // NOTE a SacForMana/Suspend-holding subset lands here and is refused ("unmodelled kind").
+        // A rescue-only SacForMana extension was built for the dragonstorm m2 retirement
+        // (MTG_EF_SAC, 2026-09-04) and DELETED the same week: it measured inert on both probe
+        // games (gi673's phantom was MTG_FB_SBA's, gi223 is the interior plan-breadth hole) and
+        // no motivating game ever appeared. `git show cd8debac` has the working implementation
+        // (ApplySacForMana + SacFloatColorFor lockstep pre-pass) if evidence ever arrives.
         if (a.kind != Action::Kind::CastFromHand || a.def == nullptr)
         { return false; }                                              // unmodelled kind -> no rescue
         order.push_back(j);
@@ -3310,31 +3306,6 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
     { return prov.CastOrderRank(state, *cands[x].def) < prov.CastOrderRank(state, *cands[y].def); });
 
     GameState cp = state;
-    // MTG_EF_SAC pre-pass: fire the subset's SacForMana actions BEFORE any cast, mirroring the
-    // apply/executor pre-pass (apply_continuation_precasts / TakeTurn) position exactly. The
-    // colour pick goes through the SAME SacFloatColorFor the real apply uses (scarcity-aware,
-    // sequential across the subset's sacs), fed a copy of the selected actions because it
-    // resolves "which sac am I" by pointer identity within the vector it is handed. A no-op
-    // ApplySacForMana (source gone/tapped) simply earns no float and the walk fails -> no
-    // rescue, the conservative direction.
-    if (!sacs.empty())
-    {
-        thread_local std::vector<Action> acts_sel;
-        acts_sel.clear();
-        for (int j : sel) { acts_sel.push_back(cands[j]); }
-        for (int j : sacs)
-        {
-            const Action& a = cands[j];
-            // sel and acts_sel are index-aligned, so "which sac am I" is a position lookup.
-            std::size_t pos = 0;
-            while (pos < sel.size() && sel[pos] != j) { ++pos; }
-            const std::string color = TurnSolver::SacFloatColorFor(cp, acts_sel, acts_sel[pos]);
-            if (_dbg) { std::fprintf(stderr, "[dbgseq]   sac %s -> float %d %s\n",
-                                     a.card_name.str().c_str(), a.ritual_float, color.c_str()); }
-            ApplySacForMana(cp, cp.active_player_index, a.sac_source_id, color,
-                            a.ritual_float, a.sac_victim_id);
-        }
-    }
     for (int j : order)
     {
         const Action& a   = cands[j];

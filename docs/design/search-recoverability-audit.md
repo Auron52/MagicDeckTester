@@ -504,7 +504,9 @@ arm verified byte-identical at smoke scale (48/48, 0 configs changed).
    now JOIN the EF walk's scratch board (with the Incubator ETB type choice) so later casts
    price at the live discount. After all three: **dragons single-main is STRICTLY BETTER (5
    faster / 0 slower per 1000 at value-play) — dragons is OUT of the whitelist** (the
-   predicate now also requires a mana ritual; `MTG_UTVARA_M2_WIDE=1` restores it for the A/B).
+   predicate now also requires a mana ritual; the `MTG_UTVARA_M2_WIDE=1` A/B hatch that
+   restored the ritual-less form was swept in the 2026-09-04 cleanup — `git show cd8debac`
+   has it, and the strictly-better probe above is the evidence it no longer earns its keep).
    **Dragonstorm KEEPS m2 — real value under honest accounting (17 slower / 5 faster without
    it, net +15).** ITS CLASS IS NOW CHARACTERIZED (2026-09-04 census, 15 of 17 d8b0-structural,
    gi673 + gi8 traced): **the value is NOT executed m2 casts** — the winning detonations are
@@ -531,11 +533,13 @@ arm verified byte-identical at smoke scale (48/48, 0 configs changed).
    combo win=4 and won the scan order. **Fix: `MTG_FB_SBA` (default ON) — one lockstep
    `SacrificeDepletedLands` at the end of `SimulateCombat`.** gi673 repro: no-m2+fix = T4
    (recovered), no-m2+`MTG_FB_SBA=0` = T6 (clean attribution), m2-on+fix = T4 (no regression).
-   The `SubsetPayableSequential` SacForMana/Suspend refusal is nonetheless real and the
-   rescue-only extension was built alongside (`MTG_EF_SAC`, default OFF, unmeasured — it did
-   NOT move gi673 and awaits its own evidence before adoption; sacs pre-pass through the real
-   `ApplySacForMana`/`SacFloatColorFor` lockstep pair, Suspend skipped exactly as the {0}
-   enumerator emits it).**
+   The `SubsetPayableSequential` SacForMana/Suspend refusal is nonetheless real and a
+   rescue-only extension was built alongside (`MTG_EF_SAC`, default OFF; sacs pre-pass through
+   the real `ApplySacForMana`/`SacFloatColorFor` lockstep pair, Suspend skipped exactly as the
+   {0} enumerator emits it) — then DELETED in the 2026-09-04 cleanup: it measured inert on both
+   probe games (gi673 was `MTG_FB_SBA`'s phantom, gi223 the plan-breadth hole) and no motivating
+   game appeared. `git show cd8debac` holds the working implementation if evidence arrives; the
+   refusal itself remains documented at the walk's "unmodelled kind" line.**
    **DRAGONSTORM RETIRED (same day).** With MTG_FB_SBA the 1000-game play-settings probe
    flipped: no-m2 4.397 vs m2 4.400 (6 faster / 3 slower) — the old net +15 for m2 was the
    phantom. 8 of 9 movers d8b0-churn; the ONE structural residual (gi223, T5 vs T6) is NOT a
@@ -545,8 +549,9 @@ arm verified byte-identical at smoke scale (48/48, 0 configs changed).
    cheap 2-cast main + 1-cast second main — an **interior plan-breadth hole** (enumeration-arc
    follow-up, the same workaround-surface family as the retired dragons classes; MTG_EF_SAC
    measured inert on it too, so it is not the walk refusal either). The whole Utvara+ping rule
-   is now **OPT-IN**: `MTG_UTVARA_M2=1` restores dragonstorm, `+MTG_UTVARA_M2_WIDE=1` dragons;
-   `MTG_NO_UTVARA_M2` is retired. Suite: only dragonstorm configs moved — searched depths
+   is now **OPT-IN**: `MTG_UTVARA_M2=1` restores dragonstorm (the dragons-restoring
+   `MTG_UTVARA_M2_WIDE` was swept in the 2026-09-04 cleanup); `MTG_NO_UTVARA_M2` is retired.
+   Suite: only dragonstorm configs moved — searched depths
    score-identical-or-slightly-better with ~200 digest-only line changes (the m2 phase gone,
    frequently LESS overkill), every searched slower game churn (gi153 d8b0-converges both-T5);
    d0 (greedy, lighter bar) +0.03–0.05 = greedy losing its m2 re-pricing dump, a d0-only class.
