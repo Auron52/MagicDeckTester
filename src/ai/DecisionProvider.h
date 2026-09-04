@@ -1468,6 +1468,27 @@ public:
     // (unpruned) plan set; MTG_UNPRUNED / MTG_UNPRUNE=saclandhold reopens it for burn too.
     virtual bool HoldsSacLandBurnUntilLethal() const { return false; }
 
+    // HoldsCastAsCycleFodder -- opt IN to holding a cast because the card is worth MORE as fodder
+    // for a live cycling chain than as the permanent it would become.
+    //
+    // The trade this prices, on Fluctuator: Hollow One is a {0} 4/4 mid-combo, which looks free and
+    // is not. It has no haste, so casting it deals ZERO damage the turn it lands. Cycling it
+    // instead deals 1 immediately (Drannith Stinger) -- and, far bigger, KEEPS THE CHAIN ALIVE.
+    // A cycle is 1-for-1 (discard one, draw one), so the chain runs until the hand holds no
+    // cyclable card; casting a cycler removes one from hand WITHOUT drawing a replacement, which
+    // shortens every remaining cycle in the turn. With ~55 of 60 cards cyclable, one buffer slot
+    // is worth ~12 further cycles in expectation -- so a 4/4 body costs about 12 damage to gain 4.
+    //
+    // Measured trace (seed 9001 gi=9): the T3 chain ran at hand size 3, cast Hollow One at cycle 9
+    // (hand 3 -> 2), and died two draws later on {Enlightened Tutor, Fluctuator} -- both
+    // non-cyclable -- at opp 8 life with the library still full.
+    //
+    // This is a NARROWING (the cast is dropped from the plan set), hence provider-owned and
+    // opt-in; base false keeps the full plan set for every other deck. The caller supplies the
+    // fodder test it cares about, so a provider can scope this as tightly as its deck needs.
+    virtual bool HoldsCastAsCycleFodder(const GameState& /*s*/,
+                                        const CardDefinition& /*def*/) const { return false; }
+
     // ScaledCastVariants -- SCALED-CAST variants: for a spell whose cost depends on how much output it
     // commits, the candidate (opponent-face damage, cost) levels to branch on. This is the DIVIDED-damage
     // analogue of XCandidates: Magma Opus deals 4 damage divided among any number of targets, and committing
