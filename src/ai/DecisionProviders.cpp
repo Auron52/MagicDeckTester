@@ -13504,7 +13504,14 @@ const bool s_edf_goff = !EnvOn("MTG_NO_ELDRAZI_GOFF");
 // configuration -- a lever behind a default-off gate is dead code, and this repo has shipped that
 // mistake twice. MTG_EDF_PROSPECTIVE=0 restores the board-only recognizer, which is what the A/B
 // arm uses.
-const bool s_edf_prospective = EnvOn("MTG_EDF_PROSPECTIVE", true);
+//
+// Read through a heurarm slot rather than straight off the env static, so BOTH arms of its A/B can
+// ride ONE pooled batch. Two sequential per-arm batches is the wave pattern CLAUDE.md forbids, and
+// it is what the first two attempts at this measurement did: the arms could not backfill each
+// other's tail, and the second arm ran on a differently-loaded box than the first.
+const bool s_edf_prospective_env = EnvOn("MTG_EDF_PROSPECTIVE", true);
+inline bool EdfProspectiveOn()
+{ return heurarm::Flag(heurarm::EDF_PROSPECTIVE, s_edf_prospective_env); }
 
 }  // namespace
 
@@ -13690,7 +13697,7 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
     // scored, which is what both of the user's hand-played lines do (seed 1 casts the payload and
     // wins T3; seed 2 casts payload + outlet and wins T4). Reading `casting` is the whole change:
     // the projection can now see a plan that turns the combo on.
-    const FlickerLoop loop = s_edf_prospective ? RecogniseFlickerLoopProspective(s, me, casting)
+    const FlickerLoop loop = EdfProspectiveOn() ? RecogniseFlickerLoopProspective(s, me, casting)
                                                : RecogniseFlickerLoop(s, me);
     if (!loop.ok) { return 0; }
 
@@ -13780,7 +13787,7 @@ bool EldraziFlickerProvider::ProjectsAlternateWin(
 {
     if (!s_edf_goff || !s.opponent_library_dealt || s.opponent_decked) { return false; }
     const int me = s.active_player_index;
-    const FlickerLoop loop = s_edf_prospective ? RecogniseFlickerLoopProspective(s, me, casting)
+    const FlickerLoop loop = EdfProspectiveOn() ? RecogniseFlickerLoopProspective(s, me, casting)
                                                : RecogniseFlickerLoop(s, me);
     if (!loop.ok || loop.exile_cost_mv <= 0 || loop.net <= 0) { return false; }
 

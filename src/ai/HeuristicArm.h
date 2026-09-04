@@ -139,6 +139,7 @@ enum Slot : int
     ETB_TAP_YIELD,            // MTG_ETB_TAP_YIELD         ETB-untap tap-ahead takes the HIGHEST-yield lands
     CONDEMN_M1_BP,            // MTG_CONDEMN_M1_BP         m1 condemnation filter at breakpoint continuations
     SUBSET_ROCK_COLOR,        // MTG_SUBSET_ROCK_COLOR     colour-presence gate credits same-subset rock colours
+    EDF_PROSPECTIVE,          // MTG_EDF_PROSPECTIVE      go-off recognizer sees a loop the PLAN assembles
     COUNT
 };
 
@@ -255,6 +256,7 @@ inline const char* Name(int slot)
         "MTG_ETB_TAP_YIELD",
         "MTG_CONDEMN_M1_BP",
         "MTG_SUBSET_ROCK_COLOR",
+        "MTG_EDF_PROSPECTIVE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

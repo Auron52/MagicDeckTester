@@ -1558,9 +1558,148 @@ using** -- `MTG_EDF_SEQ_ETB` was adopted at t = -3.97 on the same deck and the s
 Doubling the sample moved t not at all (-1.68 -> -1.64), which is what a small real effect and a
 weak one look like alike at this power. It does buy one concrete thing: seed 2 gi 1 goes T6 -> T5.
 
-It did NOT deliver what it was built for -- seed 1 stays T5 against the user's T3 and seed 2 stays
-T5 against their T4 -- and it is currently DEFAULT ON, which is the wrong default for an unproven
-lever by this repo's own convention (cf. `MTG_MAIN2_DROP`, "DEFAULT OFF until the adoption A/B is
-accepted"). Open question for the user, carried forward rather than decided here: settle it with a
-properly powered run (a `heurarm` slot would let both arms share ONE pooled batch instead of two
-sequential ones), or flip the default to OFF until it clears the bar.
+**SETTLED 2026-09-04 -- REFUTED on held-out seeds.** Given a `heurarm` slot (so both arms ride ONE
+pooled batch of 3200 games instead of two sequential per-arm batches), 16 seeds x 2 arms x 100:
+
+| block | delta | se | t | seeds | games |
+|-------|-------|----|----|-------|-------|
+| **HELD-OUT (8 fresh)** | **-0.0088** | 0.0099 | **-0.88** | 3 better / 3 worse | 31 faster : 23 slower : 746 same |
+| prior 8 (the seeds that suggested it) | -0.0237 | 0.0091 | -2.62 | 6 / 2 | 36 : 17 : 747 |
+| pooled 16 | -0.0163 | 0.0067 | -2.42 | 9 / 5 | 67 : 40 : 1493 |
+
+The held-out block is the confirmation and it is **nothing** -- t = -0.88, 3 seeds better and 3
+worse. The pooled t = -2.42 is carried entirely by the seeds that generated the hypothesis, which is
+textbook regression to the mean; quoting the pooled number as the result would be the
+[[valueleaf-phaseE-8-seeds-underpowered]] mistake with the sign reversed. It also did NOT deliver
+what it was built for -- seed 1 stays T5 and seed 2 stays T5.
+
+VERDICT: not established. Flip `MTG_EDF_PROSPECTIVE` to DEFAULT OFF and keep it as a measured lever
+(the `heurarm` slot stays -- it is what made the honest measurement affordable).
+
+### Why the SEARCH still does not take the T3 line (2026-09-04)
+
+With the deletion bug fixed, the autonomous search **does** enumerate `Trace of Abundance + Living
+Wish` at the turn-3 root -- 24 scanned tails. It rejects it on score. `MTG_FS_ROOT_DUMP=3` on
+seed 1 gi 0, best tail per distinct plan at ship settings (d5/20ms):
+
+| best tail | value | plan |
+|-----------|-------|------|
+| **win=5** | 1200 | Emiel the Blessed |
+| win=6 | 1300 | Living Wish + Peregrine Drake + Peregrine Drake |
+| win=6 | 700 | Living Wish + Peregrine Drake |
+| **win=9** | 200 | **Trace of Abundance + Living Wish** |
+| **win=9** | 100 | **Trace of Abundance** |
+
+Every plan that casts Trace scores **9 = max_turns+1 = unwon**, the maximal penalty, so it can never
+compete with Emiel's win=5. That verdict is not credible on its face: hand-playing the T3 plan
+reaches turn 4 with `Cloud of Faeries + Emiel the Blessed + Peregrine Drake + Peregrine Drake` all
+castable in one menu -- the entire combo -- and "no win in the five remaining turns" from there is
+not a plausible read of the position.
+
+**It is a horizon artifact, and it is NON-MONOTONIC in budget**, which is the tell:
+
+| depth / budget | best plan | Trace lines | game win turn |
+|----------------|-----------|-------------|---------------|
+| d5 / 20ms (ship) | Emiel (5) | **9** | T5 |
+| d5 / 200ms | **Trace + Wish (6)** | **6** | **T6** |
+| d5 / 1000ms | Emiel (5) | **9** | T5 |
+| d6 / 20ms | Emiel (5) | **9** | T5 |
+| d6 / 200ms | **Trace + Wish (6)** | **6** | **T6** |
+
+The axis is BUDGET, not depth -- both depths agree at each budget -- and it is NON-MONOTONIC: 20ms
+and 1000ms both score the Trace line 9, while 200ms scores it 6. That is the iterative-deepening
+START GATE's knife-edge (`fits = estimate <= gate_alpha * remaining`): which pass commits decides
+the answer, not how much total budget there was. And note
+the one setting that DOES take the Trace line lands on **T6, worse than the T5 it gets by ignoring
+it** -- so at least as the engine plays the continuation, the search is not obviously wrong to
+decline it.
+
+**The deck has NO value-leaf sidecar** (`ls decks/EldraziDisplacerFlicker/` -- no `.value.json`) and
+runs at the bare `depth=5 budget=20ms source=default`. Per `value-leaf.md` the value leaf exists
+precisely to replace the horizon rollout with an O(1) evaluator, and a missing model costs
+1.35-84.8x. A combo deck whose payoff lies several casts beyond the horizon is the worst case for
+the rollout leaf, and the win=9 above is what that looks like from the inside. **Generating the
+value leaf is the principled next step** (`bash scripts/valueleaf.sh run decks/EldraziDisplacerFlicker`),
+and per the serial-stages rule it must run ALONE on the box, after any in-flight measurement, on a
+frozen commit.
+
+OPEN, and being measured separately: whether the user's T3 kill is available on this board AT ALL.
+The T3 sources are Aether Hub ({C} + {G}{G} from two Wild Growths), Conservatory (one G-or-W) and
+Mariposa ({C}) -- and Cloud of Faeries is `{1}{U}`. Whether any blue exists there decides it.
+
+### CORRECTION (user, 2026-09-04): the T3 line IS live -- and it dies at the PAYMENT, not the search
+
+Everything above about "no blue on the board" was analysed on the WRONG BOARD. The reproduction
+prefix `--choices "1,0,0"` puts BOTH Wild Growths on Aether Hub. The user's game puts the second one
+on **Conservatory** (`--choices "1,0,1"`, T2 plan 1 = `land=Conservatory; cast: Wild Growth ->
+Conservatory`), which is a different and much better board:
+
+```
+Aether Hub  (num 3)   + Wild Growth 53          -> {C} + {G}          (+ wild once Trace lands)
+Conservatory (num 13) + Wild Growth 54          -> {W|G} + {G}        = 2 mana, self-sufficient
+Mariposa Military Base (the T3 drop)            -> {C}
+```
+
+**Conservatory alone pays Trace of Abundance `{R/W}{G}`** ({W} for the hybrid, its Wild Growth's {G}
+for the green) -- so Aether Hub is NEVER tapped for it, which is exactly what the user said and what
+the earlier note got wrong. Trace then lands on Aether Hub, which taps for `{C}` + `{G}` + one WILD,
+and Hub(3) + Mariposa(1) = 4 covers Living Wish `{1}{G}` plus Cloud of Faeries `{1}{U}`.
+
+**Confirmed live:** on this board the T3 main phase does NOT end after the plan -- the engine
+re-prompts within turn 3, holding Cloud of Faeries in hand. (On the wrong board it ended, which is
+what made "not castable" look true.)
+
+**And here is where it dies.** State after plan 13 (`Trace -> Aether Hub, Living Wish -> Cloud of
+Faeries`):
+
+```
+Aether Hub    tapped:true      Conservatory  tapped:true      Mariposa  untapped
+floating_mana: {"C": 1}
+plans offered: ["cycle Cloud of Faeries to draw"]      <-- casting it is NOT offered
+```
+
+The payment produced 5 and spent 4. The leftover was booked as **`{C}`**. Demand was one R-or-W, two
+G and one GENERIC; the only assignment that matters is which source covers the generic. Spending
+Aether Hub's `{C}` there leaves the WILD floating -- and wild + Mariposa's `{C}` pays Cloud of
+Faeries `{1}{U}` exactly. The engine did the reverse: it spent the WILD on the generic and floated
+the `{C}`, and `{C}` cannot pay `{U}`. That wild is the ONLY blue on the board (Aether Hub's own
+coloured mode is energy-gated and the energy is spent), so the choice is the whole game.
+
+**This is a mana-payment ASSIGNMENT defect, not an enumeration or search-depth one**, and it is
+general rather than EDF-specific: when several sources can cover a GENERIC pip, spend the least
+flexible one and retain the flexible (any-colour) mana. The engine has no such preference here.
+
+Neither existing lever fixes it -- `MTG_PREPAY_SHRINK=1`, `MTG_COLOR_RESERVE=1` and both together
+all still float `{C}` and still offer only the cycle. So the fix is a new spend-ordering preference
+(the `heuristic-optimization.md` route: mana-source tap/spend order is exactly its worked domain),
+not a knob that already exists.
+
+**Status of the two claims that started this:** the T3 CONTINUATION is real and the engine loses it
+at the payment step. Whether a T3 KILL then exists still has to be replayed on this corrected board
+-- the earlier "no T3 kill" analysis is void because it used the wrong one.
+
+
+## OPEN WORK QUEUE (2026-09-04, post-correction)
+
+1. **Mana SPEND-ORDER heuristic (the T3 blocker).** When several sources can cover a GENERIC pip,
+   spend the least flexible one and RETAIN any-colour/wild mana. Today the engine does the reverse
+   and it strands the seed-1 T3 line (floats `{C}`, throws away the board's only blue). General, not
+   EDF-specific. Route: `.claude/skills/heuristic-optimization.md` -- mana-source tap/spend order is
+   that skill's worked domain. NOTE `MTG_PREPAY_SHRINK` and `MTG_COLOR_RESERVE` are both measured
+   NOT to fix it, so this is a new preference, not an existing knob.
+2. **Mariposa `{5}, {T}: Draw a card` offered but unpayable -> silent no-op.** `AvailableManaPool`
+   credits the source's own mana, but `{T}` is part of the cost so the exact payer cannot. Repro:
+   `--choices "1,0,0,17,0,7"` -> library stays 50, Mariposa stays UNTAPPED, hand unchanged, and the
+   plan stays in the menu so it burns main-phase segments to the `seg < 64` cap. Control: plan 6
+   (`cast: Peregrine Drake`, also 5 mana) executes fine. `MTG_POOL_AUDIT=1` reports `gapped=0` --
+   it does not cover this class. Counterexample to §1 of
+   `docs/design/enumerated-but-unplayable-activations.md`, which closed the same `{cost}, {T}` shape.
+3. **`Plan::rad_mode` invisible to claude-play.** The optional enters-tapped-for-2-rad-counters is a
+   real searched axis (TurnSolver ~25337 duplicates every land plan) but `grep rad_mode src/main.cpp`
+   returns nothing, so the decision JSON never emits it. Turn 3 offered 168 plans of which 106-167
+   are rad twins of 0-105 with byte-identical `summary` strings; picking 119 instead of 13 gives
+   life 18 / library 47 instead of 20 / 49. The viewer hook `g_play_land_rad_chooser` exists but
+   `--claude-play` never installs it. Same class as the known Aether Vial charge gap.
+4. **Flip `MTG_EDF_PROSPECTIVE` to default OFF** (refuted above; keep the `heurarm` slot).
+5. **Re-derive whether a T3 KILL exists**, on the CORRECTED board (`--choices "1,0,1"`). The earlier
+   "no T3 kill under any opening" analysis is void -- it was run on the both-Growths-on-Hub board.
