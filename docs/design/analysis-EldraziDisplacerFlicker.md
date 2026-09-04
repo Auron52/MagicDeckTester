@@ -2454,3 +2454,94 @@ the target to reproduce.
   is exactly what the user was trying to account for. Neither is in the decision payload.
 * **`EnumerateMainPlans` non-idempotency** (above). Worth root-causing on its own: the first call
   produces two extra ordering variants that no later call reproduces.
+
+### 14. THE FLOAT WAS ALL GREEN — the tap-ahead's colour commit, root-caused (2026-09-04)
+
+**USER, looking at the viewer mid-combo:** *"the mana mentioned as floating in the viewer seemed a
+bit off"*, then *"it should not be wild as it needs to be stuff we can produce"*, then *"we should
+try to get good color coverage, particularly of black, colourless and green (and maybe red if we have
+shivan gorge)"*.
+
+Those three sentences name a real defect, and the instrumentation makes it hard to overstate. Eight
+games at ship settings (d5 / 20 ms, profile attached), counters via the new `MTG_REFLOAT_STATS`:
+
+```
+[refloat] tapahead=1158948 tapped=1809546 commit=767460 wild=66090 wild_c=66090
+          committed W=0 U=0 B=0 R=0 G=767460 C=0
+```
+
+**Every one of 767,460 colour commitments was green.** Not one colourless, on the only deck in the
+repo whose costs carry `{C}` pips.
+
+#### The three defects, in the order they bite
+
+`EtbUntapTapAheadIntoFloat` banks a tapped land's output as float, and for a choice-of-N source it
+must pick which colour that unit is. It scored each candidate by the coloured pips in HAND:
+
+1. **`{C}` was invisible.** The scoring `switch` covered White..Green with `default: break`, so
+   `Color::Colorless` scored 0 unconditionally. A `{C}` pip is the one thing no colour substitutes
+   for (CR 107.4c), and it could never be chosen by demand.
+2. **Only the hand counted.** Activated abilities of permanents ALREADY ON THE BATTLEFIELD were not
+   demand at all — Essence Depleter's `{1}{C}` drain, Eldrazi Displacer's `{2}{C}` blink, Shivan
+   Gorge's `{2}{R}`. Mid-combo the hand is usually empty and those abilities are the ONLY thing the
+   float will be spent on, so the model was scoring against nothing and falling through to `prod[0]`
+   — i.e. to list order. This is why the user had to name black, colourless, green and red
+   specifically: they are the pips of the four ability/cast costs the model could not see.
+3. **No coverage.** Demand never decremented as units were committed, so N taps all piled into the
+   same argmax. Hence 767,460 of one colour.
+
+And separately, in `AddRefloatContribution`: a **rainbow** source (`prod.size() >= 5` — Aether Hub,
+this deck's fixer) fell to `pool.wild += amt` with **no `wild_c` credit**, so the engine forgot the
+Hub makes `{C}` at all. That is not merely a scoring loss. **An unpayable cost is an unenumerated
+action**: with the float booked as bare `wild`, `CanPayFlat`'s colourless deficit check fails, so
+TurnSolver never emits the Drain action and it is absent from the human's menu. That is the mechanism
+behind the other half of the user's report — *"It seems you cannot activate Essence Depleter
+yourself."*
+
+#### The fix, and a first cut that did the opposite
+
+Two levers, both with `heurarm` slots so all arms ride ONE pooled batch:
+
+* **`MTG_REFLOAT_WILD_C`** — a rainbow source's wild float also credits `wild_c` when its produces
+  include `{C}`. `wild_c` is a subset count, never extra supply, so this can only ever unlock a
+  payment the real card could always have made.
+* **`MTG_REFLOAT_NEED`** — demand counts `{C}`, counts battlefield ability costs (through
+  `EffectiveActivationCost`, so a Training Grounds reduction is priced as the payment will price it),
+  decrements as it commits, and stops excluding rainbow sources.
+
+**The first cut of the need model made things worse in exactly the direction the user warned about,
+and only the counters caught it.** It seeded demand by subtracting existing float WITHOUT a floor and
+then laundered a non-positive argmax into `wild` ("don't commit to a colour nothing demands"). Mid-
+loop the float is large, so every entry went negative and the fallback fired almost always:
+
+```
+commit 767460 -> 57713   (-93%)      wild 66090 -> 809776   (+12x)
+```
+
+The average was unchanged, so an outcome-only A/B would have called this "no effect" and shipped a
+lever that does the reverse of its purpose. Floored at zero per colour and always committing, it does
+what was asked:
+
+```
+[refloat] tapahead=1188082 tapped=1903285 commit=924778 wild=0 wild_c=0
+          committed W=0 U=0 B=0 R=6 G=802620 C=122152
+```
+
+`wild = 0` — every float unit is now a concrete colour the board can actually produce — and
+colourless goes from **0 to 122,152**. Black stays ~0 and that is correct rather than a miss: `{B}`
+demand is Essence Depleter's CAST cost, and mid-loop the Depleter is already on the battlefield, so
+only its `{1}{C}` drain is live demand.
+
+#### Status
+
+Both levers are measured as changing the mana model heavily and the OUTCOME not at all over 8 games
+(7.1250 either way). `MTG_REFLOAT_WILD_C` ships default ON — it is a modelling repair with a
+user-visible unreachable-action symptom. `MTG_REFLOAT_NEED` ships **default OFF pending the pooled
+A/B** (`test/edf_refloat_ab.sh`, three arms × 8 seeds × 100 games, paired by seed and game index),
+because "more accurate" has lost on this engine three times before — the mana-projection repairs
+whose pessimism turned out to be load-bearing. Correctness of the model is not by itself a reason to
+ship a change to the search.
+
+**Lesson worth keeping: an unchanged average cannot distinguish "the lever does nothing" from "the
+lever's code never runs" from "the lever does the opposite of its purpose".** All three appeared in
+this one session, and only per-path counters told them apart.

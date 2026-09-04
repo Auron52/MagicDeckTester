@@ -1147,7 +1147,13 @@ public:
         // `target` == 0 means "any target", which is what a legacy line (or one written before this
         // verb existed) degenerates to -- so EMPTY `blinks` keeps the old cast-multiset matching and
         // no saved reference moves.
-        struct BlinkSpec { std::string name; int target = 0; };
+        // `count` is the ACTIVATION count (Action::chosen_x): 1 for an ordinary blink, N for the
+        // human-play FINISH plan that runs the loop N times and cashes the sinks. 0 = wildcard, and
+        // it must stay the default -- every saved reference predates the field and declares
+        // `blink=<outlet>@<target>` with no count, which has to keep matching whatever it matched
+        // before. Without this field the two plans are indistinguishable to CheckLine and it would
+        // hand back the index of whichever came first, which is the exact bug class d1698c5d fixed.
+        struct BlinkSpec { std::string name; int target = 0; int count = 0; };
         std::vector<BlinkSpec> blinks;
     };
     // One concrete plan variant the human's line matched -- when several enumerated plans

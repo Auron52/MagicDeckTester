@@ -18,6 +18,7 @@
 #include "../ai/HeuristicArm.h"        // per-job lever overrides, so ONE pooled batch runs both arms
 #include "Trace.h"                     // MTG_TRACE=discard: cleanup-discard tie distribution
 #include <algorithm>
+#include <climits>   // INT_MIN -- the refloat need model's argmax seed (demand can go negative)
 #include <array>
 #include <atomic>
 #include <cstdio>
@@ -9359,20 +9360,85 @@ inline const std::vector<Color>& EffectiveProduces(const GameState& state, int c
 // covers it. A full-rainbow source keeps WILD (the controller genuinely chooses any colour).
 // The FLOAT MODEL's credit keeps the old wild semantics (constrain=false) -- its GT depends
 // on them and it is the model being replaced, not repaired.
+//
+// MTG_REFLOAT_STATS -- diagnostic counters for this whole path. Added because the first A/B of the
+// two levers below came back with ZERO games changed across three arms, and "the lever does
+// nothing" and "the lever's code never runs" are indistinguishable from an unchanged average. They
+// need different responses (accept the null result vs go find the real call site), so measure which
+// one it is instead of guessing. Same reason MTG_ROLLOUT_STATS and MTG_HASTE_TAP_STATS exist.
+namespace refloatstats
+{
+    inline std::atomic<long long> g_tapahead{ 0 };   // EtbUntapTapAheadIntoFloat calls
+    inline std::atomic<long long> g_tapped{ 0 };     // lands actually tapped ahead
+    inline std::atomic<long long> g_commit{ 0 };     // choice sources committed to a concrete colour
+    inline std::atomic<long long> g_by_color[6];     // ...broken out per Color (W,U,B,R,G,C)
+    inline std::atomic<long long> g_wild{ 0 };       // units left as `wild` by the rainbow branch
+    inline std::atomic<long long> g_wild_c{ 0 };     // ...of those, credited {C}-capable
+    inline bool On() { static const bool on = EnvOn("MTG_REFLOAT_STATS"); return on; }
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!On()) { return; }
+            std::fprintf(stderr,
+                         "[refloat] tapahead=%lld tapped=%lld commit=%lld wild=%lld wild_c=%lld"
+                         "  committed W=%lld U=%lld B=%lld R=%lld G=%lld C=%lld\n",
+                         g_tapahead.load(), g_tapped.load(), g_commit.load(),
+                         g_wild.load(), g_wild_c.load(),
+                         g_by_color[0].load(), g_by_color[1].load(), g_by_color[2].load(),
+                         g_by_color[3].load(), g_by_color[4].load(), g_by_color[5].load());
+        }
+    };
+    inline Dumper g_dumper;
+}
+//
+// MTG_REFLOAT_WILD_C -- a rainbow source's wild float also credits `wild_c` when its produces
+// include {C}. See the has_c comment in the body for why this is a modelling repair rather than a
+// preference. Levered so a pooled batch can carry both arms; =0 restores the pre-2026-09-04 credit.
+inline bool RefloatWildCOn()
+{
+    static const bool env_on = EnvOn("MTG_REFLOAT_WILD_C", true);
+    return heurarm::Flag(heurarm::REFLOAT_WILD_C, env_on);
+}
+
 inline void AddRefloatContribution(ManaPool& pool, int amt, const std::vector<Color>& prod,
                                    bool constrain_partial_choice = false)
 {
     if (amt <= 0) { return; }
+    // Does this source's CHOICE include {C}? Then every wild unit it credits is {C}-capable and must
+    // say so. `wild` alone pays any COLOUR and any generic pip but provably cannot pay a {C} pip --
+    // CanPayFlat gates the colourless deficit on `wild_c` (CR 107.4c: {C} is not a colour). So
+    // crediting a rainbow source's tap as bare `wild` silently FORGETS that Aether Hub, whose modes
+    // are "{T}: Add {C}" and "{T}, Pay {E}: Add one mana of any colour", makes colourless at all.
+    //
+    // That omission is not cosmetic and it is not confined to scoring: an unpayable cost is an
+    // UNENUMERATED action. With the deck's float held as bare wild, Eldrazi Displacer's {2}{C} blink
+    // and Essence Depleter's {1}{C} drain fail CanPay, so TurnSolver never emits them and they vanish
+    // from the human's menu. USER, 2026-09-04, mid-combo: "It seems you cannot activate Essence
+    // Depleter yourself." This is why -- the mana to do it was on the books as a kind that cannot
+    // pay for it. wild_c is a SUBSET COUNT (never added to Total, never extra supply), so this only
+    // ever unlocks a payment the real card could always have made.
+    const bool has_c = RefloatWildCOn()
+                    && std::find(prod.begin(), prod.end(), Color::Colorless) != prod.end();
     if (prod.size() == 1)                { pool.Add(prod[0], amt); }
     else if (amt > 1 && prod.size() > 1)
     {
         int left = amt;
         for (Color c : prod) { if (left <= 0) { break; } pool.Add(c, 1); --left; }
         pool.wild += left;                     // more output than colours -> the rest is free choice
+        if (has_c) { pool.wild_c += left; }
     }
     else if (constrain_partial_choice && prod.size() > 1 && prod.size() < 5)
     { pool.Add(prod[0], amt); }                // partial choice: commit, never launder
-    else                                 { pool.wild += amt; }   // rainbow / unknown: real choice
+    else
+    {
+        pool.wild += amt; if (has_c) { pool.wild_c += amt; }
+        if (refloatstats::On())
+        {
+            refloatstats::g_wild.fetch_add(amt, std::memory_order_relaxed);
+            if (has_c) { refloatstats::g_wild_c.fetch_add(amt, std::memory_order_relaxed); }
+        }
+    }
 }
 
 inline ManaPool RitualRefloatPool(const GameState& state, int count)
@@ -10272,6 +10338,24 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         }
     }
     HoldColorlessScope _hcs(want_hold_colorless ? true : g_hold_colorless_for_pips);
+    // THE AUTONOMOUS CASH-OUT, AND IN HUMAN PLAY IT IS OPT-IN VIA THE ITERATION COUNT.
+    //
+    // The three sink spends below convert the loop's surplus into damage / life loss / an emptied
+    // library without asking. That is right for the search and wrong for a human -- but "wrong for a
+    // human" is not "wrong for every human action", and the distinction is exactly the iteration
+    // count. Under human play the enumerator folds a blink to ONE activation and re-prompts (see
+    // TurnSolver's fold (a)), so `iterations > 1` cannot arise by accident: it is only ever reached
+    // by committing the explicit multi-iteration FINISH plan, which the enumerator emits only when
+    // the go-off recognizer says the loop is live and a sink is on the board.
+    //
+    // So the two complaints resolve to opposite settings of one predicate. Blink once: your float is
+    // yours, nothing fires, you activate Essence Depleter yourself if and when you want to (USER,
+    // 2026-09-04: "I was losing mana every time Peregrine Drake was untapped"). Choose Finish: the
+    // whole package runs, which is the shortcut asked for in the same message -- "once we get the
+    // combo activated it would actually be helpful to have a shortcut to win the game" -- instead of
+    // thirty hand-driven segments. The search is untouched (it never sets HumanPlayActive), so every
+    // point of the -0.0812 drain measurement stands.
+    const bool cash_sinks = !HumanPlayActive() || iterations > 1;
     int done = 0;
     for (int k = 0; k < iterations; ++k)
     {
@@ -10292,7 +10376,14 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // Gorge for its one {C} and the damage ability would find it already tapped -- turning the
         // deck's kill into a rounding error on the mana. Firing it first also means the Gorge is
         // tapped when the ETB untap runs, which is what puts it back for the next iteration.
-        SpendSurplusOnDamageSinks(state, controller, c, pay);
+        //
+        // GATED IN HUMAN PLAY for the same reason the drain below is, and it is the SAME BUG the user
+        // reported -- just on the sink they happened not to have on the battlefield that game. Shivan
+        // Gorge spends the human's float and taps their land without asking; that the spend happens to
+        // point at the opponent's face does not make it the human's decision. The Gorge keeps its own
+        // ActivatePermAbility action, so nothing becomes unreachable by hand -- it stops being
+        // automatic. The search never sets HumanPlayActive, so every point of the measurement stands.
+        if (cash_sinks) { SpendSurplusOnDamageSinks(state, controller, c, pay); }
         if (untaps > 0) { EtbUntapTapAheadIntoFloat(state, controller, untaps); }
         if (!pay(c)) { break; }
         // Emiel's optional {G/W} counter trigger fires inside ApplyBlink's ETB cascade; hand it this
@@ -10354,7 +10445,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // playing the human's turn for them. The search keeps every point of the measurement (it
         // never sets HumanPlayActive), and the human keeps their mana and their choice: Essence
         // Depleter has its own searched ActivatePermAbility, which is what the menu should offer.
-        if (!HumanPlayActive())
+        if (cash_sinks)
         {
             SpendSurplusOnDrain(state, controller, c, pay);
             // The library-exile sink rides the same position for the same reason. No keep_payable:
@@ -10368,14 +10459,11 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     // iteration to keep payable and any float left is genuinely surplus. Only after a loop that
     // actually ran -- a blink that never fired must not quietly tap a land for damage the plan
     // did not ask for (the Gorge has its own ActivatePermAbility action for that).
-    if (done > 0)
+    if (done > 0 && cash_sinks)
     {
         SpendSurplusOnDamageSinks(state, controller, ManaCost{}, pay);
-        if (!HumanPlayActive())
-        {
-            SpendSurplusOnDrain(state, controller, ManaCost{}, pay);
-            SpendSurplusOnExile(state, controller, pay);
-        }
+        SpendSurplusOnDrain(state, controller, ManaCost{}, pay);
+        SpendSurplusOnExile(state, controller, pay);
     }
     return done;
 }
@@ -10538,9 +10626,101 @@ inline bool EtbTapYieldOn()
     return heurarm::Flag(heurarm::ETB_TAP_YIELD, env_on);
 }
 
+// MTG_REFLOAT_NEED -- the tap-ahead's colour-commit demand model.
+//
+// The tap-ahead banks a tapped land's output as float, and for a choice-of-N source it must decide
+// WHICH colour that unit is. The shipped model scored each candidate colour by the coloured pips in
+// the player's HAND and took the argmax. Three defects, all of which bite hardest on exactly the
+// board where the float matters most -- a live combo loop:
+//
+//   1. {C} WAS INVISIBLE. The scoring switch covered White..Green with `default: break`, so
+//      Color::Colorless scored 0 every time and no source was ever committed to {C} by demand. A {C}
+//      pip is the one thing no colour can substitute for (CR 107.4c).
+//   2. ONLY THE HAND COUNTED. Activated abilities of permanents ALREADY ON THE BATTLEFIELD were not
+//      demand at all -- Essence Depleter's {1}{C} drain, Eldrazi Displacer's {2}{C} blink, Shivan
+//      Gorge's {2}{R}. Mid-combo the hand is often empty and those abilities are the ONLY thing the
+//      float will ever be spent on, so the model was scoring against nothing and falling to
+//      `prod[0]` -- i.e. to list order.
+//   3. NO COVERAGE. Demand never decremented as units were committed, so N taps all piled into the
+//      single argmax colour. A board wanting {B}{B} and {G} committed B,B,B and never made the G.
+//
+// USER, 2026-09-04: "it should not be wild as it needs to be stuff we can produce" and "we should
+// try to get good color coverage, particularly of black, colourless and green (and maybe red if we
+// have shivan gorge)". Those five pips are precisely this deck's four demand sources: Essence
+// Depleter costs {2}{B} to cast and {1}{C} to drain, Living Wish {1}{G}, Displacer {2}{C} to blink,
+// Shivan Gorge {2}{R} to burn -- and none of the ability halves were counted.
+// Default OFF pending measurement. The {C}-blindness and ability-blindness above are genuine
+// modelling defects, but "more accurate" has lost here three times before (three mana-projection
+// repairs, all of which cost turns -- the search's pessimism is load-bearing), so this ships behind
+// the lever until a pooled A/B says otherwise rather than on the strength of the argument.
+inline bool RefloatNeedOn()
+{
+    static const bool env_on = EnvOn("MTG_REFLOAT_NEED");
+    return heurarm::Flag(heurarm::REFLOAT_NEED, env_on);
+}
+
+// Adds a cost's coloured AND colourless pips into a per-Color demand array. Generic pips are
+// deliberately excluded: any colour pays them, so they cannot discriminate between candidates.
+inline void AddCostToRefloatDemand(int* need, const ManaCost& mc)
+{
+    need[static_cast<int>(Color::White)]     += mc.white;
+    need[static_cast<int>(Color::Blue)]      += mc.blue;
+    need[static_cast<int>(Color::Black)]     += mc.black;
+    need[static_cast<int>(Color::Red)]       += mc.red;
+    need[static_cast<int>(Color::Green)]     += mc.green;
+    need[static_cast<int>(Color::Colorless)] += mc.colorless;
+}
+
+// Per-colour pip demand: the hand's casts PLUS the repeatable activated abilities already on the
+// battlefield. Ability costs run through EffectiveActivationCost so a Training Grounds reduction is
+// priced the same way the payment will price it.
+inline void ComputeRefloatDemand(const GameState& state, int controller, int* need)
+{
+    for (const Card& hc : state.players[controller].hand) { AddCostToRefloatDemand(need, hc.m_mana_cost); }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& q = d->params;
+        const std::optional<ManaCost>* costs[] = {
+            &q.drain_cost, &q.exile_opponent_top_cost, &q.blink_cost, &q.tap_damage_cost,
+            &q.tap_investigate_cost, &q.tap_draw_cost, &q.sac_draw_cost,
+        };
+        for (const std::optional<ManaCost>* c : costs)
+        {
+            if (!c->has_value()) { continue; }
+            AddCostToRefloatDemand(need, EffectiveActivationCost(state, controller, p.card, c->value()));
+        }
+    }
+}
+
 inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int count)
 {
     if (count <= 0) { return; }
+    // Demand computed ONCE, then decremented as each unit is committed -- that decrement IS the
+    // coverage. Net of what is already floating, so mana banked earlier this phase counts as demand
+    // already met and the next tap moves on to a colour that still is not.
+    //
+    // FLOORED AT ZERO PER COLOUR, and the floor is not a detail. Un-floored, a phase that has banked
+    // a lot of float drives every entry negative, and an argmax over negatives has no natural
+    // meaning -- the first cut of this shipped a "nothing demands any of these, hold it as wild
+    // instead" fallback on exactly that condition, which fired almost always and drove `wild` UP
+    // 12x (66k -> 810k units) while commits fell 93%. That is the precise opposite of the point:
+    // laundering a unit into `wild` makes it LESS like mana we can produce, not more. Floored, an
+    // already-covered colour scores 0 rather than negative, all-zero degenerates to "commit to the
+    // source's first produces colour" -- which is exactly what constrain_partial_choice already did
+    // -- and the unit stays concrete either way.
+    const bool need_model = RefloatNeedOn();
+    int need[6] = { 0, 0, 0, 0, 0, 0 };
+    if (need_model)
+    {
+        ComputeRefloatDemand(state, controller, need);
+        const ManaPool& f = state.floating_mana;
+        const int have[6] = { f.white, f.blue, f.black, f.red, f.green, f.colorless };
+        for (int i = 0; i < 6; ++i) { need[i] = std::max(0, need[i] - have[i]); }
+    }
+    if (refloatstats::On()) { refloatstats::g_tapahead.fetch_add(1, std::memory_order_relaxed); }
     int tapped_n = 0;
     for (const Permanent& p : state.battlefield)
     {
@@ -10583,6 +10763,7 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         if (depletion) { continue; }
         p.tapped = true;
         ++tapped_n;
+        if (refloatstats::On()) { refloatstats::g_tapped.fetch_add(1, std::memory_order_relaxed); }
         // COMMIT A COLOUR for a choice-limited source, exactly as RitualTapAheadIntoFloat does and
         // for the same reason: this float is REAL spendable mana, and AddSourceToPool books a
         // multi-colour land as `wild`, which pays ANY pip. Floating it wild is free colour-fixing.
@@ -10593,28 +10774,51 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         // demand picks it); ties keep list order.
         const int amt = ManaProducedPerTap(*d);
         const std::vector<Color>& prod = EffectiveProduces(state, controller, *d, false);
-        if (amt == 1 && prod.size() > 1 && prod.size() < 5)
+        // The RAINBOW CAP (prod.size() < 5) is lifted under the need model, and lifting it is most of
+        // the point. It excluded exactly one class of source -- the any-colour fixer -- so this deck's
+        // Aether Hub fell to the `else` and floated as bare `wild`. Committing a rainbow source to a
+        // colour the board actually needs is strictly better than laundering it: `wild` pays any
+        // COLOUR but no {C} pip, so an uncommitted rainbow unit is not the most permissive outcome, it
+        // is merely a different and usually worse one.
+        const bool choice_source = (amt == 1 && prod.size() > 1)
+                                && (need_model || prod.size() < 5);
+        if (choice_source)
         {
-            Color best = prod[0]; int best_need = -1;
+            Color best = prod[0]; int best_need = INT_MIN;
             for (Color c : prod)
             {
-                int need = 0;
-                for (const Card& hc : state.players[controller].hand)
+                int n = 0;
+                if (need_model) { n = need[static_cast<int>(c)]; }
+                else
                 {
-                    const ManaCost& mc = hc.m_mana_cost;
-                    switch (c)
+                    for (const Card& hc : state.players[controller].hand)
                     {
-                        case Color::White: need += mc.white; break;
-                        case Color::Blue:  need += mc.blue;  break;
-                        case Color::Black: need += mc.black; break;
-                        case Color::Red:   need += mc.red;   break;
-                        case Color::Green: need += mc.green; break;
-                        default: break;
+                        const ManaCost& mc = hc.m_mana_cost;
+                        switch (c)
+                        {
+                            case Color::White: n += mc.white; break;
+                            case Color::Blue:  n += mc.blue;  break;
+                            case Color::Black: n += mc.black; break;
+                            case Color::Red:   n += mc.red;   break;
+                            case Color::Green: n += mc.green; break;
+                            default: break;
+                        }
                     }
                 }
-                if (need > best_need) { best_need = need; best = c; }
+                if (n > best_need) { best_need = n; best = c; }
             }
+            // ALWAYS COMMIT -- never fall back to `wild`. See the floor comment above: the
+            // laundering fallback this replaces was measured doing the opposite of its purpose.
             state.floating_mana.Add(best, 1);
+            if (refloatstats::On())
+            {
+                refloatstats::g_commit.fetch_add(1, std::memory_order_relaxed);
+                refloatstats::g_by_color[static_cast<int>(best)].fetch_add(1, std::memory_order_relaxed);
+            }
+            // The coverage decrement, floored: a colour whose demand is already met stays at 0
+            // rather than going negative and dragging the argmax around by how OVER-covered it is.
+            if (need_model)
+            { int& n = need[static_cast<int>(best)]; n = std::max(0, n - 1); }
         }
         else
         {

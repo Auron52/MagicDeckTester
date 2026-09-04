@@ -11983,9 +11983,36 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                 != seen_targets.end()) { continue; }
                             seen_targets.push_back(std::move(key));
                         }
-                        const std::vector<int> counts =
-                            fold_fanout ? std::vector<int>{ 1 }
-                                        : prov.BlinkActivationCounts(state, src, tgt, affordable);
+                        // THE FINISH SHORTCUT (user, 2026-09-04: "once we get the combo activated it
+                        // would actually be helpful to have a shortcut to win the game"). Fold (a)
+                        // above is right that K is a repetition rather than a decision -- but a
+                        // repetition thirty deep is a terrible interface, and the user's turn-3 win
+                        // took 47 committed segments in a single main phase to reach by hand.
+                        //
+                        // So human play keeps the one-at-a-time route AND gains exactly ONE extra
+                        // plan per (outlet, target): the largest count the provider would give the
+                        // search, which is its go-off count when the loop is live. Bounded by
+                        // construction -- one plan, not a count fan-out -- so the 278k-plan blowup
+                        // fold (a) exists to prevent cannot come back through here. Committing it is
+                        // also what opts into the sink cash-out (see ApplyBlinkLoop's cash_sinks):
+                        // "blink once" leaves the float alone, "finish" spends it.
+                        std::vector<int> counts;
+                        if (fold_fanout)
+                        {
+                            counts.push_back(1);
+                            // > 3, not > 1. The provider returns GENERIC counts 1..min(3,affordable)
+                            // for any blink at all, and appends the recogniser's go-off count only
+                            // when it exceeds those. So a max of 3 or less means "no go-off was
+                            // recognised" -- offering it would label an ordinary three-blink as
+                            // FINISH and, worse, trip the sink cash-out on a board with no combo.
+                            // A real go-off is ~20 drains (up to 53 exiles), never 3.
+                            int k_go = 0;
+                            for (int k : prov.BlinkActivationCounts(state, src, tgt, affordable))
+                            { k_go = std::max(k_go, k); }
+                            if (k_go > 3) { counts.push_back(k_go); }
+                        }
+                        else
+                        { counts = prov.BlinkActivationCounts(state, src, tgt, affordable); }
                         for (int k : counts)
                         {
                             if (k <= 0) { continue; }
@@ -33800,6 +33827,7 @@ static bool BlinkAssign(const std::vector<TurnSolver::LineSpec::BlinkSpec>& want
     {
         if (used[j] || have[j].name != want[i].name) { continue; }
         if (want[i].target != 0 && want[i].target != have[j].target) { continue; }
+        if (want[i].count  != 0 && want[i].count  != have[j].count)  { continue; }
         used[j] = true;
         if (BlinkAssign(want, have, used, i + 1)) { return true; }
         used[j] = false;
@@ -34010,7 +34038,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             // by outlet name in the ordinary cast multiset -- the legacy behaviour every saved
             // reference was written under. sac_victim_id is the blinked creature's m_number.
             if (blink_declared && a.kind == Action::Kind::ActivateBlink)
-            { blinkActs.push_back({ a.card_name.str(), a.sac_victim_id }); continue; }
+            { blinkActs.push_back({ a.card_name.str(), a.sac_victim_id,
+                                    std::max(1, a.chosen_x) }); continue; }
             orderNames.push_back(a.card_name);
         }
         if (planLE != spec.lands_edge) { continue; }

@@ -580,6 +580,14 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
        << std::max(0, me.LandDropsAvailable() - me.lands_played_this_turn);
     // Floating (unspent) mana in the pool. Usually empty at a main-phase breakpoint (the pool is
     // cleared at turn start and a line is committed atomically), so emit only when non-empty.
+    //
+    // wild_c IS EMITTED AND IT IS NOT OPTIONAL. It is a SUBSET COUNT of `wild` (see ManaPool), not
+    // extra supply -- how many of those wild units come from a source that can also make {C}. It is
+    // the difference between "◇×6, drain six times" and "◇×6, drain ZERO times", because a {C} pip
+    // is not a colour and no amount of coloured mana pays it (CR 107.4c). Omitting it made the float
+    // read as strictly more permissive than it is on the one deck whose combo is gated on {C}
+    // (Eldrazi Displacer's {2}{C} blink, Essence Depleter's {1}{C} drain). USER, 2026-09-04:
+    // "the mana mentioned as floating in the viewer seemed a bit off". This was the off part.
     {
         const ManaPool& fm = s.floating_mana;
         if (fm.Total() > 0)
@@ -591,9 +599,19 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
             };
             emit("W", fm.white); emit("U", fm.blue); emit("B", fm.black); emit("R", fm.red);
             emit("G", fm.green); emit("C", fm.colorless); emit("wild", fm.wild);
+            // Clamped exactly as CanPayFlat clamps it -- the many sites that decrement `wild` without
+            // maintaining the subset can leave it larger than its superset, and the viewer must show
+            // what the payment path will actually honour, not the raw field.
+            emit("wild_c", std::min(fm.wild_c, fm.wild));
             os << "}";
         }
     }
+    // Energy counters. Aether Hub's COLOURED modes are energy-gated ("{T}, Pay {E}: Add one mana of
+    // any colour") while its "{T}: Add {C}" is free -- so with zero energy a Hub is a colourless
+    // source and nothing else (see EffectiveProduces' strip). Without this the player cannot tell
+    // which of those two lands they are looking at. Emitted only when nonzero -> absent for every
+    // deck without an energy card.
+    if (me.energy_counters > 0) { os << ", \"energy\": " << me.energy_counters; }
     if (reveal_count > 0)
     {
         // Optional partial clairvoyance (--reveal N): the next N draws, in draw order
@@ -2342,6 +2360,12 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "blink")
         {
             TurnSolver::LineSpec::BlinkSpec bs;
+            // Optional "*<count>" tail, parsed BEFORE the '@' so "Emiel@42*9" splits correctly.
+            // '*' cannot occur in an MTG card name, same argument as '@'. Absent = 0 = wildcard,
+            // which is what keeps every pre-existing `blink=<outlet>@<target>` reference matching.
+            const size_t star = val.rfind('*');
+            if (star != std::string::npos)
+            { bs.count = std::atoi(val.c_str() + star + 1); val = val.substr(0, star); }
             const size_t at = val.rfind('@');
             if (at != std::string::npos)
             { bs.target = std::atoi(val.c_str() + at + 1); val = val.substr(0, at); }

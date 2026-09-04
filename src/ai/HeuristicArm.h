@@ -140,6 +140,8 @@ enum Slot : int
     CONDEMN_M1_BP,            // MTG_CONDEMN_M1_BP         m1 condemnation filter at breakpoint continuations
     SUBSET_ROCK_COLOR,        // MTG_SUBSET_ROCK_COLOR     colour-presence gate credits same-subset rock colours
     EDF_PROSPECTIVE,          // MTG_EDF_PROSPECTIVE      go-off recognizer sees a loop the PLAN assembles
+    REFLOAT_WILD_C,           // MTG_REFLOAT_WILD_C       a rainbow source's float is {C}-capable (wild_c)
+    REFLOAT_NEED,             // MTG_REFLOAT_NEED         tap-ahead colour commit: {C}+ability demand, coverage
     COUNT
 };
 
@@ -257,6 +259,8 @@ inline const char* Name(int slot)
         "MTG_CONDEMN_M1_BP",
         "MTG_SUBSET_ROCK_COLOR",
         "MTG_EDF_PROSPECTIVE",
+        "MTG_REFLOAT_WILD_C",
+        "MTG_REFLOAT_NEED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
