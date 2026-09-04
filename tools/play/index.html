@@ -784,13 +784,30 @@ function counterBadges(o) {
 // later cast in the same line needs. It stays visible across a mid-phase re-prompt (a cantrip draw
 // breakpoint) because mana empties at the END of a phase, not between spells (CR 500.4) -- so it is
 // really yours to spend on the rest of this main phase. Labelled for what it is.
+// The `wild` bucket is SPLIT by its {C}-capability, because that split is the whole difference
+// between a live combo and a dead one. fm.wild_c is a SUBSET COUNT of fm.wild (never extra supply):
+// how many of those units came from a source that can also produce {C}. A {C} PIP is not a colour and
+// no amount of coloured mana pays it (CR 107.4c) -- so with Essence Depleter's {1}{C} drain and
+// Eldrazi Displacer's {2}{C} blink on the board, "◇×6 / none {C}-capable" buys ZERO activations while
+// "◇×6 / all {C}-capable" wins the game. Rendering one undifferentiated ◇×6 for both states is what
+// made the float look wrong (user, 2026-09-04). Shown as two pip kinds, never summed.
 function floatingManaHtml(me) {
   const fm = me.floating_mana; if (!fm) return '';
   const order = [['W','#f0e6c8','white'],['U','#a6d8ff','blue'],['B','#b0a4bc','black'],
-                 ['R','#ffb0a0','red'],['G','#a8e0b0','green'],['C','#d8d8d8','colorless'],['wild','#ffd86b','generic']];
-  const pips = order.filter(([k])=>fm[k]>0).map(([k,col,nm])=>
-    `<span class="mpip" style="background:${col}" title="${fm[k]} ${esc(nm)} mana${k==='wild'?' — already tapped for this line; pays generic costs':''}">${k==='wild'?'◇':k}${fm[k]>1?'×'+fm[k]:''}</span>`).join('');
+                 ['R','#ffb0a0','red'],['G','#a8e0b0','green'],['C','#d8d8d8','colorless']];
+  let pips = order.filter(([k])=>fm[k]>0).map(([k,col,nm])=>
+    `<span class="mpip" style="background:${col}" title="${fm[k]} ${esc(nm)} mana">${k}${fm[k]>1?'×'+fm[k]:''}</span>`).join('');
+  const wild = fm.wild|0, wc = Math.min(fm.wild_c|0, wild), plain = wild - wc;
+  if (plain > 0) pips += `<span class="mpip" style="background:#ffd86b" title="${plain} generic/any-colour mana — already tapped for this line. Pays a generic pip or any COLOURED pip, but NOT a {C} pip (CR 107.4c)">◇${plain>1?'×'+plain:''}</span>`;
+  if (wc > 0) pips += `<span class="mpip" style="background:#ffd86b;box-shadow:inset 0 0 0 2px #555" title="${wc} any-colour mana from a {C}-capable source — pays a generic pip, any coloured pip, OR a {C} pip (Eldrazi Displacer's blink, Essence Depleter's drain)">◇C${wc>1?'×'+wc:''}</span>`;
   return pips ? `<span class="floatmana" title="floating (unspent) mana in your pool — it survives until the end of this phase (CR 500.4)">${pips}</span>` : '';
+}
+// Energy counters, beside the Lands header: Aether Hub's coloured modes cost {E} while its "{T}: Add
+// {C}" is free, so at zero energy a Hub is a colourless source and nothing else. Absent for decks
+// with no energy card.
+function energyHtml(me) {
+  const e = me.energy|0; if (e <= 0) return '';
+  return `<span class="floatmana"><span class="mpip" style="background:#8fd6c0" title="${e} energy counter${e===1?'':'s'} — Aether Hub spends 1 to make a COLOURED mana; its {C} mode is free">⚡${e}</span></span>`;
 }
 // Dig abilities (human play). The engine enumerates cycling (a land in HAND, e.g. Lonely Sandbar /
 // Forgotten Cave) and sac-to-draw (a land in play, e.g. Fiery Islet) as standalone ONE-action plans
@@ -911,10 +928,15 @@ function activatableSources(){
       // both write `cast=Emiel the Blessed`. Without the target in the key every variant deduped to
       // one unlabelled entry, so the picker never opened and the human could not choose (reported
       // 2026-09-04). Keyed AND carried, so queueActivation can write `blink=<outlet>@<target num>`.
+      // ...and the COUNT joins the key for the same reason the target did. Human play folds a blink
+      // to one activation and re-prompts, plus ONE extra "finish the combo" plan carrying the go-off
+      // count (TurnSolver's fold (a)). Those two are the same verb on the same target and would
+      // dedupe to a single entry, which would hide the shortcut behind the single blink.
       const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload
-                + (a.verb==='blink' ? '|'+a.blink_target : '');
+                + (a.verb==='blink' ? '|'+a.blink_target+'|'+(a.blink_count||1) : '');
       (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload,
                                          blinkTarget:(a.verb==='blink' ? a.blink_target : undefined),
+                                         blinkCount:(a.verb==='blink' ? (a.blink_count||1) : undefined),
                                          blinkTargetName:(a.verb==='blink' ? a.blink_target_name : undefined) };
     }});
     Object.keys(per).forEach(n=>{ if (!(max[n]>=per[n])) max[n]=per[n]; });
@@ -1000,8 +1022,10 @@ function queueActivation(src, opt){
   S.plan.push({ name:opt.name, src, kind:'activate', verb:(sac ? 'sacout' : (opt.verb||'cast')),
                 mode:opt.mode, sacout: sac || undefined,
                 // The blinked creature's m_number, so the line can write `blink=<outlet>@<num>` and
-                // CheckLine can tell two target variants of one outlet apart.
-                blinkTarget: opt.blinkTarget, blinkTargetName: opt.blinkTargetName });
+                // CheckLine can tell two target variants of one outlet apart. blinkCount rides along
+                // for the same reason -- it separates one blink from the go-off FINISH plan.
+                blinkTarget: opt.blinkTarget, blinkTargetName: opt.blinkTargetName,
+                blinkCount: opt.blinkCount });
   flashHint(sac
     ? `${src}: sacrificing ${have+1} creature${have?'s':''}${cap>1?` (max ${cap})`:''} — click again to sac another, then commit. You pick WHICH creature as each one resolves.`
     : opt.verb==='sfput' ? `${src}: putting ${opt.name} from hand onto the battlefield. Commit the phase to resolve it.`
@@ -1336,7 +1360,7 @@ function renderBoard() {
   };
   const suspendCards = (me.exile||[]).filter(c=>c.reason==='suspend');
   const exiledDead   = (me.exile||[]).filter(c=>c.reason!=='suspend');
-  const landsZone = `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands), plannedLands.length?'padrow':'')+`</div>`;
+  const landsZone = `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}${energyHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands), plannedLands.length?'padrow':'')+`</div>`;
   if (suspendCards.length)
     h += `<div class="fieldrow">${landsZone}<div class="zone suspend"><h3>Suspended (${suspendCards.length})</h3>`+zoneRow(suspendCards.map(exThumb))+`</div></div>`;
   else h += landsZone;
@@ -2266,7 +2290,9 @@ function activationPickerHtml(pick){
                    : o.verb==='gyreturn'  ? `Sacrifice — return ${o.name} from your graveyard to your hand`
                    : o.verb==='animate'   ? `Animate ${o.name} — it becomes a creature and can attack`
                    : o.verb==='taptoken'  ? `Tap ${o.name} to create a token`
-                   : o.verb==='blink'     ? `Blink ${o.blinkTargetName||'a creature'} — exile it and return it`
+                   : o.verb==='blink'     ? (o.blinkCount > 1
+                        ? `★ FINISH — blink ${o.blinkTargetName||'a creature'} ${o.blinkCount}× and spend the mana on your sinks`
+                        : `Blink ${o.blinkTargetName||'a creature'} — exile it and return it`)
                    :                        `Activate ${o.name}`;
   let h=`<h3>${esc(pick.src)} — choose an ability</h3>`;
   h+=`<div class="sub">This permanent offers more than one activation this phase. Pick the one to add to your line, then <b>Commit phase</b>.</div>`;

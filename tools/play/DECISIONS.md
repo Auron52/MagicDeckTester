@@ -517,3 +517,59 @@ previously queued one, which leaves the plan the same LENGTH, so the old "only i
 guard never stamped that land either. A queued land carrying queued Auras renders as a planned
 enchant group, exactly as a queued creature does. Pinned by `checkQueuedLandIsAuraHost` in
 `test/viewer_linebuild_check.js` (which CI runs).
+
+## The float display tells you what the mana can PAY, not just how much (2026-09-04)
+
+**User:** *"the mana mentioned as floating in the viewer seemed a bit off"*, and, sharper: *"it
+should not be wild as it needs to be stuff we can produce."*
+
+Both halves were real, and the second one is an engine defect the display was faithfully reporting.
+
+**The display half.** `ManaPool::wild_c` is a SUBSET COUNT of `wild` — how many of those any-colour
+units came from a source that can also make `{C}` — and the decision payload simply did not emit it.
+A `{C}` pip is not a colour and no amount of coloured mana pays one (CR 107.4c), so `◇×6` with no
+`{C}`-capable units and `◇×6` with six of them rendered identically while being the difference
+between zero Essence Depleter drains and six. The float now renders as two pip kinds, `◇` and `◇C`,
+never summed. Energy is shown beside it for the same reason: Aether Hub's coloured modes cost `{E}`
+while its `{T}: Add {C}` is free, so at zero energy a Hub is a colourless source and nothing else,
+and nothing on screen said so.
+
+**The engine half, which is why the float looked wrong in the first place.** The tap-ahead's
+colour-commit scored each candidate colour by the coloured pips in HAND and took the argmax. Measured
+over 8 games at ship settings, that produced **767,460 commits, every single one of them green** —
+`W=0 U=0 B=0 R=0 G=767460 C=0`. Three defects compounded: the scoring switch had `default: break`, so
+`Color::Colorless` scored 0 unconditionally and no source was EVER committed to `{C}`; only the hand
+counted, so Essence Depleter's `{1}{C}` drain and Eldrazi Displacer's `{2}{C}` blink — mid-combo the
+only things the float will be spent on — were not demand at all; and demand never decremented, so
+every tap piled into the same argmax. `MTG_REFLOAT_NEED` counts `{C}`, counts battlefield ability
+costs, decrements as it commits, and stops excluding rainbow sources; `MTG_REFLOAT_WILD_C` credits a
+rainbow source's float as `{C}`-capable when its produces include `{C}`.
+
+That second lever is also why the Depleter could not be activated by hand: an unpayable cost is an
+**unenumerated action**, so float booked as bare `wild` made `{1}{C}` unpayable and TurnSolver never
+put the drain on the menu at all.
+
+## Nothing spends your mana for you — and "Finish" is how you ask it to (2026-09-04)
+
+**User, mid-combo:** *"I was losing mana every time Peregrine Drake was untapped because it was also
+activating Essence Depleter. It seems you cannot activate Essence Depleter yourself. As a side note,
+once we get the combo activated it would actually be helpful to have a shortcut to win the game."*
+
+Both halves of the first complaint were the bug: the engine took the decision AND the human could not
+take it back. `ApplyBlinkLoop`'s three sink spends (damage / drain / library-exile) are right for the
+search — they are worth −0.0812 turns and are monotone against a passive opponent — and wrong for a
+human. They are now gated, Shivan Gorge's included: that its spend points at the opponent's face does
+not make it the human's decision.
+
+But "never automatic" is not "unreachable", and thirty hand-driven blink segments is a terrible
+interface — the user's turn-3 win took **47 committed segments in one main phase**. So the gate is
+the ITERATION COUNT, which makes one predicate serve both complaints. Human play folds a blink to one
+activation and re-prompts, plus exactly ONE extra plan carrying the provider's go-off count, rendered
+as **★ FINISH**. Blink once: your float is yours and nothing fires. Choose Finish: the whole package
+runs. `iterations > 1` cannot arise by accident, because the fold means the only way to reach it is
+to pick Finish.
+
+The count joins the blink line token (`blink=<outlet>@<target>*<count>`) and the viewer's dedup key,
+because without it the two plans are the same verb on the same target: they would collapse to one
+entry, and CheckLine would hand back the wrong index — the exact bug class `d1698c5d` fixed. A missing
+count reads as the wildcard, so every saved reference keeps matching.

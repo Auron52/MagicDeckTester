@@ -261,6 +261,21 @@ function checkActivationVerbs() {
     [{ name: 'Balan, Wandering Knight', src: 'Balan, Wandering Knight', kind: 'activate', verb: 'attachall' }, 'attachall=Balan, Wandering Knight'],
     [{ name: 'Colossus Hammer', src: 'Stoneforge Mystic', kind: 'activate', verb: 'sfput' }, 'sfput=Colossus Hammer'],
     [{ name: "Umezawa's Jitte", src: "Umezawa's Jitte", kind: 'activate', verb: 'jittemode', mode: 1 }, 'jittemode=1'],
+    // BLINK: the target is part of the decision, and so is the COUNT. Human play offers one blink
+    // plus (when the go-off recognizer sees a live loop) a single FINISH plan at the go-off count;
+    // both are the same verb on the same target, so a token without the count cannot tell CheckLine
+    // which of the two the human picked -- and CheckLine would hand back the other one's index.
+    // Count 1 and a missing count must both encode WITHOUT a tail: every saved reference predates
+    // the field and has to keep matching (the engine reads a missing count as the 0 wildcard).
+    [{ name: 'Emiel the Blessed', src: 'Emiel the Blessed', kind: 'activate', verb: 'blink', blinkTarget: 42 },
+     'blink=Emiel the Blessed@42'],
+    [{ name: 'Emiel the Blessed', src: 'Emiel the Blessed', kind: 'activate', verb: 'blink', blinkTarget: 42, blinkCount: 1 },
+     'blink=Emiel the Blessed@42'],
+    [{ name: 'Emiel the Blessed', src: 'Emiel the Blessed', kind: 'activate', verb: 'blink', blinkTarget: 42, blinkCount: 9 },
+     'blink=Emiel the Blessed@42*9'],
+    // No target (the legacy any-target wildcard) still takes a count tail.
+    [{ name: 'Eldrazi Displacer', src: 'Eldrazi Displacer', kind: 'activate', verb: 'blink', blinkCount: 12 },
+     'blink=Eldrazi Displacer*12'],
   ];
   cases.forEach(([entry, want]) => {
     const got = enc(entry);

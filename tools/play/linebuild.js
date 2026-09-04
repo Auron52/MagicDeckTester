@@ -132,7 +132,13 @@
   // blinking anything else both read `blink=Emiel the Blessed`, so without the target the engine
   // matches whichever variant sorted first and the human's pick is silently discarded. Omitted (read
   // as "any") when the viewer somehow has no target, which keeps a legacy line parsing.
-  function blinkIds(p) { return p.blinkTarget ? '@' + p.blinkTarget : ''; }
+  // ...and a "*<count>" tail for the FINISH plan (the go-off: run the loop N times and cash the
+  // sinks). Emitted only for count > 1, so an ordinary one-shot blink writes the identical token it
+  // always did and every saved reference keeps matching. No MTG card name contains '*'.
+  function blinkIds(p) {
+    return (p.blinkTarget ? '@' + p.blinkTarget : '')
+         + (p.blinkCount > 1 ? '*' + p.blinkCount : '');
+  }
 
   function encodeLine(plan) {
     const parts = []; const l = planLand(plan); if (l) parts.push('land=' + l.name);
