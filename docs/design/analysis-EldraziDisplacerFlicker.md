@@ -2214,3 +2214,41 @@ That is worth knowing for the fix, though, because it says where the colorless a
 The deck's `{C}` sources are Aether Hub, Mariposa and Brushland, and Brushland is precisely the one
 the tap-ahead will not bank — so it is the drain's only per-iteration colorless that the blink has not
 already had first crack at. A colour-aware reservation should start there.
+
+#### 12d. The isolating fixtures, inline (`logs/` is gitignored — this is the durable copy)
+
+All three are the SAME turn-4 board and differ only in the sink, which is what makes the pair
+decisive: `c` (Gorge) wins turn 4, `a` (Depleter) wins turn 5. Board, shared by all three — four
+lands worth 7 mana a tap, loop net +4/iteration:
+
+```json
+{ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 20,
+  "energy_counters": 0, "library_filler": "Forest", "library_size": 40,
+  "depth": 5, "budget_ms": 20, "max_turns": 8,
+  "battlefield": [
+    { "name": "Aether Hub",             "controller": 0, "tapped": false },
+    { "name": "Wild Growth",            "controller": 0, "tapped": false, "equips": "Aether Hub" },
+    { "name": "Wild Growth",            "controller": 0, "tapped": false, "equips": "Aether Hub" },
+    { "name": "Mariposa Military Base", "controller": 0, "tapped": false },
+    { "name": "Trace of Abundance",     "controller": 0, "tapped": false,
+      "equips": "Mariposa Military Base" },
+    { "name": "Conservatory",           "controller": 0, "tapped": false },
+    { "name": "Brushland",              "controller": 0, "tapped": false },
+    { "name": "Emiel the Blessed",      "controller": 0, "tapped": false },
+    { "name": "Peregrine Drake",        "controller": 0, "tapped": false }
+  ],
+  "hand": [] }
+```
+
+* **`a`** — append `{ "name": "Essence Depleter", "controller": 0, "tapped": false }` to the
+  battlefield. **Currently win_turn=5.** This is the one the fix must turn into 4; promote it into
+  `test/scenarios/` with `expect_win_turn: 4` at that point, NOT before (a fixture asserting the
+  buggy 5 is a test of the bug).
+* **`c`** — append `{ "name": "Shivan Gorge", "controller": 0, "tapped": false }` instead.
+  **win_turn=4 today**, and it must STAY 4 — it is the control that says the loop and the go-off
+  count are both fine, and any reservation change that breaks it has broken the working route.
+* **`b`** — no extra permanent; set `"hand": ["Living Wish"]`. **win_turn=7.** The wish chain, which
+  is a further hop and should not be touched until `a` is green.
+
+Run with `./build/Release/mtg --scenario <file>`, and add `MTG_EDF_GOFF_DEBUG=1` for the count trace.
