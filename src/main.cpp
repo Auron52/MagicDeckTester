@@ -368,6 +368,16 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::ActivatePermAbility:
                 tag = a.card_name + ": " + PermAbilityLabel(a.ability_mode);
                 break;
+            // Birthing Pod: the VICTIM and the FETCH are the whole decision (the blink lesson
+            // above) -- without both, every Pod variant renders identically.
+            case Action::Kind::ActivatePod:
+                tag = a.card_name + ": sac " + EnchantTargetName(s, a.sac_victim_id)
+                    + " \xE2\x86\x92 " + a.tutor_target.str();
+                break;
+            // Scavenging Ooze: which graveyard card is exiled distinguishes the variants.
+            case Action::Kind::GraveyardExileGrow:
+                tag = a.card_name + ": exile " + a.tutor_target.str();
+                break;
             case Action::Kind::ActivatePump:
             {
                 const int k = std::max(1, a.chosen_x);
@@ -1043,7 +1053,9 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
              || ac.kind == Action::Kind::TapForTokenPay
              || ac.kind == Action::Kind::JitteModeAbility
              || ac.kind == Action::Kind::ActivateBlink
-             || ac.kind == Action::Kind::ActivatePermAbility))
+             || ac.kind == Action::Kind::ActivatePermAbility
+             || ac.kind == Action::Kind::ActivatePod
+             || ac.kind == Action::Kind::GraveyardExileGrow))
             {
                 os << ", \"activate\": true";
                 // `sacout` tells the GUI to encode this as the sacout= line verb rather than cast=,
@@ -5357,6 +5369,29 @@ int main(int argc, char* argv[])
         std::cout << "Games played  : " << result.games_played << "\n";
         std::cout << "avg (turns)   : " << avgline
                   << "    [mean turn-to-win, unwon = max_turns+1; lower is better]\n";
+
+        // "Infinite life" split (USER feature 2026-09-04): a demonstrated unbounded lifegain loop
+        // counts as a win under its own kind (GameState::infinite_life_win). Printed only when the
+        // kind occurred, so every other deck's output is byte-identical.
+        if (result.games_won_inf_life > 0)
+        {
+            long long s_inf = 0, s_kill = 0; int n_kill = 0;
+            for (int i = 0; i < static_cast<int>(result.win_turns.size()); ++i)
+            {
+                if (result.win_turns[i] <= 0) { continue; }
+                if (result.inf_life[i]) { s_inf += result.win_turns[i]; }
+                else                    { s_kill += result.win_turns[i]; ++n_kill; }
+            }
+            char b1[32], b2[32];
+            std::snprintf(b1, sizeof(b1), "%.4f",
+                          static_cast<double>(s_inf) / result.games_won_inf_life);
+            std::snprintf(b2, sizeof(b2), "%.4f",
+                          n_kill > 0 ? static_cast<double>(s_kill) / n_kill : 0.0);
+            std::cout << "infinite life : " << result.games_won_inf_life << " wins, avg turn " << b1
+                      << "   [kill wins: " << n_kill << (n_kill > 0 ? std::string(", avg turn ") + b2
+                                                                    : std::string())
+                      << "; MTG_INFLIFE_WIN=0 for the pure-kill arm]\n";
+        }
 
         // Unwon games (no lethal by max_turns) listed as a REPRO aid -- game index + seed to replay
         // and inspect the slow line -- not as a win/loss metric (which goldfishing does not report).

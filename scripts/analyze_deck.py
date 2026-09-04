@@ -329,9 +329,15 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
                 and not is_d("next turn") and not is_d("staged"):
             gaps.append("Staged exile in oracle text but stages_cards not set")
 
-        # Death trigger
+        # Death trigger. Also satisfied by the structural death models: persist ("when this
+        # creature dies ... return it"), the dies_* watcher family (Voice of Resurgence's
+        # dies-token), and Melira Pod's other dies-adjacent params.
         if ("creature dies" in oracle or "that creature dies" in oracle) \
                 and not params.get("death_trigger_damage") \
+                and not params.get("persist") \
+                and not params.get("dies_trigger_creates_tokens") \
+                and not params.get("dies_trigger_damage") \
+                and not params.get("dies_watch_includes_self") \
                 and not is_d("dies") and not is_d("death"):
             gaps.append("Death trigger in oracle text but death_trigger_damage not set")
 

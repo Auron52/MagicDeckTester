@@ -401,6 +401,11 @@ struct CardParams
     // damage time. Counts every creature the controller controls (including itself and
     // tokens), plus animated lands.
     bool power_equals_creature_count = false;
+    // Toughness twin of the above (Voice of Resurgence's Elemental token: "This token's power and
+    // toughness are each equal to the number of creatures you control"). Applied via
+    // DynamicBaseToughness at every DynamicBasePower call site + the SBA toughness checks (a CDA
+    // 0/0 token with zero other creatures is 0/0 and dies to SBA -- rules-correct).
+    bool toughness_equals_creature_count = false;
 
     // Cast-trigger token creation (e.g. Worthy Knight: "Whenever you cast a Knight spell,
     // create a 1/1 white Human token"). When cast_trigger_creates_tokens > 0, casting a
@@ -569,6 +574,32 @@ struct CardParams
     bool                     tutor_to_hand = false;
     bool                     tutor_to_top  = false;
     std::vector<std::string> tutor_types;
+    // Numeric target filters, applied as EXTRA CONJUNCTS at all three tutor filter sites
+    // (SpellEffects.h TutorCandidates' unpruned + heuristic branches, GenericProvider::
+    // TutorCandidates). -1 = no filter, so every existing tutor is byte-identical.
+    //   tutor_max_mv        -- "with mana value N or less" (Ranger of Eos 1). Printed MV.
+    //   tutor_max_toughness -- "with toughness N or less" (Recruiter of the Guard 2). Printed
+    //                          toughness off the CardDefinition (no continuous effect applies to a
+    //                          card in a library).
+    int                      tutor_max_mv = -1;
+    int                      tutor_max_toughness = -1;
+    // Ranger of Eos: "search your library for up to two creature cards with mana value 1 or less,
+    // reveal them, put them into your hand, then shuffle." > 1 routes the ETB through
+    // PerformEtbTutorToHandMulti (provider-ranked ordered list, one entry per library COPY, human-
+    // overridable via the sac_tutor chooser; ONE ShuffleAfterSearch after both leave the library)
+    // INSTEAD of the single-target PerformTutor, and is excluded from the cast-time tutor_target
+    // plan axis (the pair is chosen once, at resolution, on both the cast and the put path).
+    // 0/1 = the existing single-tutor path, byte-identical.
+    int                      etb_tutor_hand_count = 0;
+    // Chord of Calling: "{X}{G}{G}{G}, Convoke -- search your library for a creature card with mana
+    // value X OR LESS, put it onto the battlefield, then shuffle." tutor_mv_max_is_x caps the fetch
+    // at the cast's chosen_x (a LEGALITY filter, threaded identically through enumeration and
+    // resolution off the same chosen_x -- diverging desyncs the human --choices index pin).
+    // convoke marks the cast-time cost reduction (see ConvokeBodies in SpellEffects.h): each
+    // untapped creature you control may be tapped while casting to pay {1} or one mana of its
+    // colour; summoning sickness is irrelevant (no {T} symbol). Both false/absent = byte-identical.
+    bool                     convoke = false;
+    bool                     tutor_mv_max_is_x = false;
     // Dragonstorm (Storm) tutor-TO-BATTLEFIELD: on resolution, put min(spells_cast_this_turn,
     // #library cards matching tutor_types) cards (Dragons) from the library ONTO THE BATTLEFIELD
     // (not hand/top). Each put routes through the shared FireEtbWatchers cascade (Scourge ping /
@@ -852,6 +883,18 @@ struct CardParams
     // worlds).
     int gy_exile_instant_sorcery_drain = 0;
     int gy_exile_creature_lifegain     = 0;
+
+    // Scavenging Ooze: "{G}: Exile target card from a graveyard. If it was a creature card, put a
+    // +1/+1 counter on this creature and you gain 1 life." A REPEATABLE activated ability -- no
+    // {T} in the cost (unlike Deathrite's gy_exile_* modes above), so N activations per turn
+    // bounded only by green mana and graveyard size (Action::Kind::GraveyardExileGrow). WHICH card
+    // is exiled is a SEARCHED choice, one action per distinct graveyard card NAME (the Haven of
+    // the Spirit Dragon pattern): exiling our own creature cards strips Reveillark's LTB targets,
+    // so it is not fungible. Explicitly NOT under the MTG_SKIP_INERT_LIFEGAIN cut -- the +1/+1
+    // counter is a real clock; the 1 life is modelled but scored 0 vs the passive opponent.
+    std::optional<ManaCost> gy_exile_grow_cost;
+    int                     gy_exile_grow_counters = 0;
+    int                     gy_exile_grow_lifegain = 0;
 
     // Faeburrow Elder: "This creature gets +1/+1 for each color among permanents you control."
     // A characteristic P/T buff on the creature ITSELF (not a lord effect); applied in
@@ -1190,6 +1233,12 @@ struct CardParams
     // ETB single-target burn ("When THIS enters, it deals N damage to any target" — Twinshot
     // Sniper 2). Collapses to the opponent's face vs a passive goldfish (optimal). > 0 gates it.
     int etb_damage_any = 0;
+    // Ravenous Chupacabra: "When this creature enters, destroy target creature an opponent
+    // controls." The ETB analogue of destroy_target_creature (Terror); pick = largest opponent
+    // creature via the shared DestroyLargestOppCreature helper. In Melira Pod the payoff is
+    // provably 0 (the opponent-creature spawn params all live in Creature Giving), so it carries
+    // no eval credit -- implemented faithfully + reusable rather than stubbed.
+    bool etb_destroy_opp_creature = false;
     // ETB "each opponent" ping ("deals N damage to each opponent and each creature/planeswalker
     // they control" — Goblin Chainwhirler 1). N to the opponent face (race-relevant, via the
     // OpponentGainsLife life-loss path so the win projection sees it) AND N to each permanent the
@@ -1248,6 +1297,68 @@ struct CardParams
     std::string              dies_impulse_requires_subtype;  // "Goblin"
     bool                     dies_impulse_expiry_next_turn = false;
 
+    // --- Persist (Kitchen Finks, Murderous Redcap) + the Melira Pod counter statics. ---
+    // Persist (CR 702.79): "When this creature dies, if it had no -1/-1 counters on it, return it
+    // to the battlefield under its owner's control with a -1/-1 counter on it." Modelled in
+    // OnCreatureDies: every death site passes the dead permanent's -1/-1 counter count + token
+    // flag; a persist card that died with ZERO -1/-1 counters (and is not a token, CR 111.7) is
+    // pulled back from the graveyard (newest matching copy) and re-enters through both ETB
+    // cascades, carrying MinusCounterReplacement(state, ctrl, 1) counters. The -1/-1 counter IS
+    // the "already persisted" tracking -- no extra flag. Counter::Type::MinusOneMinusOne already
+    // exists (Permanent.h) and EffectivePower/Toughness subtract it.
+    bool                     persist = false;
+    // Melira, Sylvok Outcast: "Creatures you control can't have -1/-1 counters put on them"
+    // (a CR 614 replacement read by MinusCounterReplacement at the single site that puts -1/-1
+    // counters -- the persist return). With it in play a persist creature returns clean and the
+    // loop never spends itself.
+    bool                     prevents_minus_counters = false;
+    // Vizier of Remedies: "If one or more -1/-1 counters would be put on a creature you control,
+    // that many -1/-1 counters minus one are put on it instead." Faithfully n -> max(0, n-1) --
+    // NOT a Melira-equivalent boolean (differs for n >= 2); for persist (n=1) both yield 0.
+    bool                     reduces_minus_counters_by_one = false;
+    // Kitchen Finks: "When this creature enters, you gain 2 life." A CREATURE ETB lifegain fired
+    // from FireOwnEtbTriggers -- deliberately NOT the land-only etb_lifegain (whose only firing
+    // site is LandPlay), so no shipped land deck moves.
+    int                      etb_self_lifegain = 0;
+    // Murderous Redcap: "When this creature enters, it deals damage equal to ITS POWER to any
+    // target." Rides etb_damage_any (set to the PRINTED power so every valuation reader keeps
+    // working) but substitutes the entering permanent's live EffectivePower() at resolution --
+    // a persisted 1/1 Redcap deals 1, not 2.
+    bool                     etb_damage_equals_power = false;
+
+    // --- Celes, Rune Knight. ---
+    // ETB rummage: "discard any number of cards, then draw that many cards plus one." N is chosen
+    // 0..hand (N=0 still draws etb_discard_any_draw_bonus, never a downside). On a CAST, N rides
+    // the searched Action::etb_kx axis; on a PUT (Birthing Pod / Chord -- the deck's real route)
+    // there is no cast to fan, so N comes from a provider resolution heuristic off the cleanup-
+    // discard ranking.
+    bool                     etb_discard_any_number = false;
+    int                      etb_discard_any_draw_bonus = 0;
+    // "Whenever one or more OTHER creatures you control enter, if one or more of them entered from
+    // a graveyard or was cast from a graveyard, put a +1/+1 counter on each creature you control."
+    // Fired from FireEtbWatchers when the enter came from a graveyard (persist returns,
+    // Reveillark's LTB returns -- those sites set the g_enter_from_graveyard scope); simultaneous
+    // entries fire ONCE (batch id). The cast-from-graveyard half is NOT modelled (no such route in
+    // this deck or engine; bracket-noted on the card).
+    int                      other_creature_gy_enter_team_counters = 0;
+
+    // --- Reveillark. ---
+    // LTB (leaves-the-battlefield -- NOT a dies watcher: fires on ANY leave, including the exile
+    // half of a Felidar flicker and the evoke self-sac): "return up to two target creature cards
+    // with power 2 or less from your graveyard to the battlefield." The power filter reads the
+    // PRINTED card power (LookupCached), never a Permanent's modified power -- a Kitchen Finks
+    // wearing a persist -1/-1 counter is a 2/1 on the battlefield but a power-3 CARD in the yard.
+    // Which cards = DecisionProvider::ReviveCandidates (resolution-time; the trigger also fires on
+    // paths no plan action carries), human-overridable via the `revive` decision type.
+    int                      ltb_return_creatures = 0;
+    int                      ltb_return_max_power = 0;
+    // Evoke (Reveillark {5}{W}): an alternate-cost cast variant (Action::evoke, mutually exclusive
+    // with the hard cast by hand_index) that self-sacrifices the just-entered creature -- which
+    // routes through the ordinary death cascade and thus fires the LTB. Here evoke costs MORE than
+    // the hard cast; it stays a searched mode because it is the only way to buy the LTB with no
+    // sac outlet in play. nullopt = no evoke.
+    std::optional<ManaCost>  evoke_cost;
+
     // Sacrifice-a-creature activated outlets. A permanent you control offers an activated ability
     // whose cost is {sac_creature_cost} mana + Sacrifice one creature you control whose subtype is
     // sac_creature_requires_subtype (self-inclusive). Distinct from sac_for_mana_amount (Lotus:
@@ -1269,6 +1380,37 @@ struct CardParams
     int                      sac_outlet_token_power = 0;
     int                      sac_outlet_token_toughness = 0;
     std::vector<std::string> sac_outlet_token_subtypes;
+    //   sac_outlet_add_counter_to_self -- put N +1/+1 counters on the OUTLET ITSELF per activation
+    //                                 (Carrion Feeder "Sacrifice a creature: Put a +1/+1 counter on
+    //                                 this creature"). PERMANENT growth (Counter::PlusOnePlusOne) --
+    //                                 under the Kitchen Finks persist loop this is the deck's combat
+    //                                 wincon. If the outlet sacrificed ITSELF the payload fizzles
+    //                                 (source gone; re-locate by id after the victim erase).
+    int                      sac_outlet_add_counter_to_self = 0;
+    //   sac_outlet_self_pump_power/_toughness -- the outlet gets +P/+T UNTIL END OF TURN per
+    //                                 activation (Bloodthrone Vampire "Sacrifice a creature: This
+    //                                 creature gets +2/+2 until end of turn"; temp_power_bonus /
+    //                                 temp_tough_bonus, decays at cleanup). Distinct from
+    //                                 sacrifice_watch_pump_power (Priest of Gix), a PASSIVE watcher
+    //                                 that fires on ANY sacrifice and is power-only; this fires only
+    //                                 on the outlet's OWN activation.
+    int                      sac_outlet_self_pump_power = 0;
+    int                      sac_outlet_self_pump_toughness = 0;
+
+    // --- Birthing Pod ("{1}{G/P}, {T}, Sacrifice a creature: Search your library for a creature
+    // card with mana value equal to 1 plus the sacrificed creature's mana value, put that card onto
+    // the battlefield, then shuffle. Activate only as a sorcery."). pod_mv_delta != 0 is the gate
+    // (Action::Kind::ActivatePod); the activation taps the Pod (pod_taps), pays pod_activation_cost,
+    // sacrifices a chosen creature through the SHARED death cascade (persist / dies-watchers fire
+    // BEFORE the search -- CR 601.2h, costs are paid before resolution, so a persisted Kitchen Finks
+    // is itself back on the battlefield and its CARD is not in the graveyard), then puts a library
+    // creature with MV == victim's MV + pod_mv_delta onto the battlefield via
+    // PerformTutorToBattlefield(require_mv=...), then shuffles (tutor_shuffle_after). "Only as a
+    // sorcery" needs no gate: CollectActions runs only in the mains. The (victim, fetch) pair is a
+    // fully-enumerated searched axis (core invariant) with lossless folds only.
+    std::optional<ManaCost>  pod_activation_cost;
+    int                      pod_mv_delta = 0;
+    bool                     pod_taps = true;
 
     // Krenko, Mob Boss: "{T}: Create X 1/1 red Goblin tokens, where X = the number of Goblins you
     // control." Non-empty subtype gates a {T}-activated (no mana) ability creating N tokens where
@@ -1676,6 +1818,19 @@ struct CardParams
     std::optional<ManaCost> blink_cost;
     bool                    blink_returns_tapped = false;
     bool                    blink_own_only       = false;
+    // Felidar Guardian: "When this creature enters, you may exile ANOTHER target PERMANENT you
+    // control, then return that card to the battlefield under its owner's control." A ONE-SHOT
+    // ETB flicker (structurally unlike the repeatable activated blink_cost above); re-usable only
+    // by re-entering Felidar itself (Pod / Chord / a Reveillark return). Reuses the ApplyBlink
+    // primitive WIDENED past creatures (permanents_ok): the deck's best targets are non-creatures
+    // -- a tapped Birthing Pod returns untapped and can be activated a second time that turn, a
+    // tapped land returns untapped as +1 mana. Returns UNTAPPED. The return is a NEW OBJECT (CR
+    // 400.7): a persisted Kitchen Finks comes back with no -1/-1 counter, a flickered Reveillark
+    // fires its LTB on the exile half. "You may" is a REAL decline (flickering Orzhov Basilica
+    // re-fires its land-bounce, a downside) -- a decline variant is emitted alongside the
+    // per-target ones. Cast-time target rides the plan variant; put-into-play entries resolve via
+    // DecisionProvider::FlickerTarget + the `flicker` viewer decision.
+    bool                    etb_blink_permanent  = false;
 
     // Training Grounds: "Activated abilities of creatures you control cost {2} less to activate.
     // This effect can't reduce the mana in that cost to less than one mana." A STATIC cost reducer

@@ -793,6 +793,10 @@ inline void CreateToken(GameState&, int, int, int, const std::vector<std::string
 // token entering re-fires the cascade). Defined after CreateToken; called FROM CreateToken so
 // every token enter fires the watchers too.
 inline void FireEtbWatchers(GameState&, int controller, int entered_index);
+inline void ApplyBlink(GameState&, int controller, int source_id, int target_id,
+                       bool returns_tapped, bool permanents_ok);
+inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card& left);
+inline void DestroyLargestOppCreature(GameState&, int controller);
 inline void FireOwnEtbTriggers(GameState&, int controller, int entered_index,
                            const std::string& chosen_tutor, int etb_kx);
 // etb_kx sentinel: "PUT entry with no searched destroy-K axis -- pick heuristically at
@@ -1112,6 +1116,22 @@ TutorZoneView(const Player& ap, const std::vector<Card>* wish_pool)
     return out;
 }
 
+// Numeric tutor target filters (tutor_max_mv: Ranger of Eos "mana value 1 or less";
+// tutor_max_toughness: Recruiter of the Guard "toughness 2 or less"). PRINTED characteristics off
+// the CardDefinition -- no continuous effect applies to a card in a library. An extra CONJUNCT on
+// top of the type/colour filters, applied at every tutor filter site (both branches below + the
+// providers' TutorCandidates); deliberately NOT a unification of those sites, whose empty-
+// tutor_types semantics differ on purpose (SpellEffects = "no match", Generic = "no restriction").
+// -1 defaults = no filter -> every existing tutor byte-identical.
+inline bool TutorNumericFilterOk(const Card& card, const CardParams& pp)
+{
+    if (pp.tutor_max_mv >= 0 && card.m_mana_cost.ManaValue() > pp.tutor_max_mv) { return false; }
+    if (pp.tutor_max_toughness >= 0
+        && (!card.m_toughness.has_value()
+            || card.m_toughness.value() > pp.tutor_max_toughness)) { return false; }
+    return true;
+}
+
 inline std::vector<std::string> TutorCandidates(const GameState& state, int controller_index,
                                                 const CardParams& pp)
 {
@@ -1136,6 +1156,7 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
             for (const std::string& t : pp.tutor_types)
             { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
             if (!CardHasColorNamed(card, pp.tutor_color)) { type_ok = false; }   // colour filter
+            if (!TutorNumericFilterOk(card, pp)) { type_ok = false; }            // MV / toughness
             if (type_ok && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
         }
         return all;
@@ -1150,6 +1171,7 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
         bool type_ok = false;
         for (const std::string& t : pp.tutor_types) { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
         if (!type_ok) { continue; }
+        if (!TutorNumericFilterOk(card, pp)) { continue; }   // MV / toughness conjunct
         if (any_name.empty()) { any_name = lc.m_name; }
         if (def && def->params.lifegain_to_loss && enabler_name.empty()) { enabler_name = lc.m_name; }
         if (def && def->params.verse_damage      && wincon_name.empty())  { wincon_name  = lc.m_name; }
@@ -1299,6 +1321,15 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
                          const std::string& target_name = "",
                          const std::string& source_name = "Tutor");
 
+// Ranger of Eos ("search your library for up to two creature cards with mana value 1 or less,
+// reveal them, put them into your hand, then shuffle"): the etb_tutor_hand_count > 1 multi-tutor,
+// resolved ONCE at the ETB (both the cast and the Pod/Chord put path -- no cast-time plan axis;
+// the pair pick is DecisionProvider::TutorHandPutList, human-overridable). ONE ShuffleAfterSearch
+// after all cards leave the library -- a second call would burn a search_count ordinal and reseed
+// every later fetch's reshuffle. Body in SpellEffects.cpp (cold, per-resolution).
+void PerformEtbTutorToHandMulti(GameState& state, int controller_index, const CardParams& pp,
+                                const std::string& source_name);
+
 // Dragonstorm (Storm) tutor-TO-BATTLEFIELD. Put up to `max_puts` cards matching pp.tutor_types
 // (Dragons) from the controller's library ONTO THE BATTLEFIELD, each routed through the shared
 // FireEtbWatchers cascade (Scourge ping / Lathliss token) so a put Dragon is a live body, not inert
@@ -1343,6 +1374,53 @@ inline bool CardHasColorNamed(const Card& c, const std::string& col)
 // and the front became raw-power Worldspine over the actually-lethal Craterhoof).
 inline thread_local bool g_tutor_at_resolution = false;
 
+// True while a card is entering the battlefield FROM A GRAVEYARD (a persist return, a Reveillark
+// LTB return). Read by FireEtbWatchers' graveyard-enter watchers (Celes, Rune Knight: "whenever
+// one or more other creatures you control enter, if one or more of them entered from a graveyard
+// ..."). RAII-scoped by the put sites; plain thread_local (no GameState field), so no sim-key
+// change and no rollout-lockstep risk.
+inline thread_local bool g_enter_from_graveyard = false;
+struct GraveyardEnterScope
+{
+    bool prev;
+    GraveyardEnterScope() : prev(g_enter_from_graveyard) { g_enter_from_graveyard = true; }
+    ~GraveyardEnterScope() { g_enter_from_graveyard = prev; }
+};
+// "One or more ... enter" batch guard (Celes): a SIMULTANEOUS multi-return (Reveillark's two
+// cards) is ONE event and fires the watcher once. PerformReturnFromGraveyardToBattlefield opens
+// a batch scope around its whole loop; the watcher sets `fired` on the first enter and skips the
+// rest. Outside any batch scope (a persist return -- one event each) every enter fires.
+inline thread_local bool g_gy_batch_scope_active = false;
+inline thread_local bool g_gy_batch_fired        = false;
+struct GyEnterBatchScope
+{
+    bool prev_active, prev_fired;
+    GyEnterBatchScope() : prev_active(g_gy_batch_scope_active), prev_fired(g_gy_batch_fired)
+    { g_gy_batch_scope_active = true; g_gy_batch_fired = false; }
+    ~GyEnterBatchScope() { g_gy_batch_scope_active = prev_active; g_gy_batch_fired = prev_fired; }
+};
+
+// MTG_INFLIFE_WIN (default ON; =0 = the pure-kill measurement arm): a demonstrated unbounded
+// lifegain loop counts as a win (GameState::infinite_life_win; USER feature 2026-09-04). ONE
+// reader at the ONE apply site (ApplySacCreatureOutlet), shared by executor and rollout.
+inline bool InfLifeWinEnabled()
+{
+    static const bool on = EnvOn("MTG_INFLIFE_WIN", true);
+    return on;
+}
+
+// Total -1/-1 counters on a permanent (persist reads this at every death site: a persist creature
+// returns only if it died with none).
+inline int MinusCountersOn(const Permanent& p)
+{
+    int n = 0;
+    for (const Counter& c : p.counters)
+    {
+        if (c.type == Counter::Type::MinusOneMinusOne) { n += c.count; }
+    }
+    return n;
+}
+
 // True while candidates are being enumerated FOR THE SEARCH (variant fan); false on the greedy
 // paths (d0 decision + rollout leaves), which bind the provider's first pick with no branch.
 // Set/reset by TurnSolver around enumeration (was file-local there; shared 2026-08-26 so a
@@ -1364,8 +1442,15 @@ inline thread_local bool g_searched_play = false;
 inline void PerformTutorToBattlefield(GameState& state, int controller, const CardParams& pp,
                                       int max_puts,
                                       const std::vector<std::string>& preferred = {},
-                                      const std::string& source_name = {})
+                                      const std::string& source_name = {},
+                                      int require_mv = -1,
+                                      int max_mv_cap = -1)
 {
+    // require_mv >= 0 (Birthing Pod: "a creature card with mana value equal to 1 plus the
+    // sacrificed creature's mana value"): an EXACT printed-MV legality filter on the search.
+    // max_mv_cap >= 0 (Chord of Calling, tutor_mv_max_is_x: "mana value X or less"): a <= cap,
+    // threaded off the SAME chosen_x the enumeration used (diverging would desync the human
+    // --choices index pin). Defaults -1 = no filter -> Dragonstorm / Natural Order byte-identical.
     if (max_puts <= 0 || pp.tutor_types.empty()) { return; }
     struct ResolveScope
     {
@@ -1379,6 +1464,8 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         const Card& card = d ? d->card : c;
         if (!CardHasColorNamed(card, pp.tutor_color)) { return false; }   // Natural Order: green only
+        if (require_mv >= 0 && card.m_mana_cost.ManaValue() != require_mv) { return false; }   // Pod
+        if (max_mv_cap >= 0 && card.m_mana_cost.ManaValue() > max_mv_cap) { return false; }    // Chord
         for (const std::string& t : pp.tutor_types)
         { if (CardMatchesTypeName(card, t)) { return true; } }
         return false;
@@ -3212,6 +3299,44 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
     }
     if (state.battlefield[entered_index].card.IsCreature())
     { FireCreatureEnterWatchers(state, state.battlefield[entered_index].controller_index, entered_index); }
+    // Celes, Rune Knight: "Whenever one or more OTHER creatures you control enter, if one or more
+    // of them entered from a graveyard ..., put a +1/+1 counter on each creature you control."
+    // Fires only under GraveyardEnterScope (a persist return, a Reveillark LTB return); the
+    // g_gy_enter_batch guard makes a SIMULTANEOUS multi-return (Reveillark's two cards) fire ONCE
+    // (CR: one trigger per event). "Other" = the entering creature is not Celes herself. The
+    // cast-from-graveyard half of the card is a disclosed deferral (no such route exists here).
+    if (g_enter_from_graveyard && state.battlefield[entered_index].card.IsCreature()
+        && !(g_gy_batch_scope_active && g_gy_batch_fired))
+    {
+        const int ectrl = state.battlefield[entered_index].controller_index;
+        const int enum_ = state.battlefield[entered_index].card.m_number;
+        int per = 0;
+        for (const Permanent& w : state.battlefield)
+        {
+            if (w.controller_index != ectrl || w.card.m_number == enum_) { continue; }
+            const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+            if (wd && wd->params.other_creature_gy_enter_team_counters > 0)
+            { per += wd->params.other_creature_gy_enter_team_counters; }
+        }
+        if (per > 0)
+        {
+            if (g_gy_batch_scope_active) { g_gy_batch_fired = true; }
+            int pumped = 0;
+            for (Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != ectrl || !q.card.IsCreature()) { continue; }
+                q.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, per});
+                ++pumped;
+            }
+            if (g_play_event_sink && !g_tap_speculating && pumped > 0)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xE2\x9A\x94\xEF\xB8\x8F graveyard enter -- +"
+                              + std::to_string(per) + "/+" + std::to_string(per) + " counter on "
+                              + std::to_string(pumped) + " creature(s) (Celes)");
+            }
+        }
+    }
     // Dragon Tempest: "Whenever a creature you control with flying enters, it gains haste until end
     // of turn." Rides this universal cascade so it covers a hard-cast Dragon AND every token
     // (Lathliss's 5/5 and Utvara's 6/6 both enter with flying, and CreateToken routes through here)
@@ -3769,6 +3894,20 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         state.players[controller].life = p.etb_life_floor;
     }
 
+    // Kitchen Finks: "When this creature enters, you gain 2 life." A CREATURE ETB lifegain --
+    // deliberately not the land-only etb_lifegain (see CardParams). Fires on every enter,
+    // including a persist return (new object, new ETB).
+    if (p.etb_self_lifegain > 0)
+    {
+        state.players[controller].life += p.etb_self_lifegain;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "lifegain",
+                          "\xE2\x9D\xA4\xEF\xB8\x8F " + def->card.m_name.str() + " -- gain "
+                          + std::to_string(p.etb_self_lifegain) + " life");
+        }
+    }
+
     // Craterhoof Behemoth: "creatures you control ... get +X/+X until end of turn, where X is the
     // number of creatures you control" (counted AFTER it enters -> includes itself). Temp bonuses
     // (cleared at cleanup); creatures entering later this turn correctly get nothing (CR 611.2c).
@@ -3887,7 +4026,13 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     // "Each opponent" damage (Chainwhirler ping, Fanatic's devotion burn) fires once per head
     // (2HG = x2 into the shared team pool); the single-target etb_damage_any stays x1.
     const int heads    = gamesetup::OpponentHeads();
-    const int face_dmg = p.etb_damage_any
+    // Murderous Redcap ("damage equal to its power"): substitute the entering permanent's LIVE
+    // EffectivePower() for the printed etb_damage_any value -- a persisted 1/1 Redcap deals 1,
+    // not 2. Every other reader (valuation, face_burst) keeps the printed number.
+    const int any_dmg  = (p.etb_damage_equals_power && p.etb_damage_any > 0)
+                       ? std::max(0, state.battlefield[entered_index].EffectivePower())
+                       : p.etb_damage_any;
+    const int face_dmg = any_dmg
                        + (p.etb_damage_each_opponent + devotion_dmg) * heads;
     if (face_dmg > 0)
     {
@@ -3939,7 +4084,12 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
 
     // (4) ETB tutor to hand keyed on subtype (Goblin Matron). Reuses PerformTutor; the chosen
     //     target rides in from the cast (search/human) or falls back to the provider's pick.
-    if ((p.tutor_to_hand || p.tutor_to_top) && !p.tutor_types.empty()
+    if (p.etb_tutor_hand_count > 1 && p.tutor_to_hand)
+    {
+        // Ranger of Eos: the multi-tutor path (provider pair pick at resolution; no cast axis).
+        PerformEtbTutorToHandMulti(state, controller, p, def->card.m_name.str());
+    }
+    else if ((p.tutor_to_hand || p.tutor_to_top) && !p.tutor_types.empty()
         && p.etb_reveal_count == 0)   // Muxus (reveal) is handled below, not as a tutor
     {
         PerformTutor(state, controller, p, chosen_tutor, def->card.m_name.str());
@@ -3950,6 +4100,78 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     if (p.etb_reveal_count > 0)
     {
         PerformMuxusReveal(state, controller, p);
+    }
+
+    // Ravenous Chupacabra: "When this creature enters, destroy target creature an opponent
+    // controls." No legal target in this deck's games (the opponent never has a creature) -> the
+    // trigger simply never fires; the helper is the faithful, reusable model. AFTER this block
+    // entered_index may be stale (an erase shifts indices) -- but only when this very card set
+    // the param, and it sets no later-read one.
+    if (p.etb_destroy_opp_creature) { DestroyLargestOppCreature(state, controller); }
+
+    // Celes, Rune Knight ETB rummage: "discard any number of cards, then draw that many cards
+    // plus one." N chosen by a RESOLUTION heuristic on both the cast and the put path (uniform;
+    // a searched cast-time N axis is a disclosed 5e refinement): discard the hand's EXCESS LANDS
+    // (beyond two -- colour coverage + the next drop), the cards this deck most wants to trade
+    // for gas. N=0 still draws the bonus, so the trigger is never a downside. Human `discard`
+    // any_number context is the viewer-pass follow-up.
+    if (p.etb_discard_any_number)
+    {
+        Player& cp_ = state.players[controller];
+        std::vector<int> land_idx;
+        for (int hi = 0; hi < static_cast<int>(cp_.hand.size()); ++hi)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(cp_.hand[hi]);
+            if ((hd ? hd->card : cp_.hand[hi]).IsLand()) { land_idx.push_back(hi); }
+        }
+        int n_disc = std::max(0, static_cast<int>(land_idx.size()) - 2);
+        for (int k = 0; k < n_disc; ++k)
+        {
+            const int hi = land_idx[land_idx.size() - 1 - k];   // erase from the back: stable idx
+            Card gone = cp_.hand[hi];
+            cp_.hand.erase(cp_.hand.begin() + hi);
+            cp_.graveyard.push_back(std::move(gone));
+        }
+        const int n_draw = n_disc + p.etb_discard_any_draw_bonus;
+        for (int k = 0; k < n_draw && !cp_.library.empty(); ++k)
+        {
+            std::size_t before = cp_.hand.size();
+            cp_.library.DrawN(1, cp_.hand);
+            cp_.cards_drawn_this_turn += static_cast<int>(cp_.hand.size() - before);
+            if (g_play_draw_sink && !g_tap_speculating)
+            {
+                for (std::size_t hi = before; hi < cp_.hand.size(); ++hi)
+                { g_play_draw_sink->push_back({ state.turn_number, cp_.hand[hi].m_name.str() }); }
+            }
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "draw",
+                          "\xF0\x9F\x83\x8F " + def->card.m_name.str() + " -- discarded "
+                          + std::to_string(n_disc) + ", drew " + std::to_string(n_draw));
+        }
+    }
+
+    // Felidar Guardian: "When this creature enters, you may exile another target permanent you
+    // control, then return that card to the battlefield under its owner's control." On a CAST
+    // the target rode the searched chosen_x axis (etb_kx carries the target's m_number; 0 =
+    // decline); on a PUT (Pod / Chord / a Reveillark return) there is no cast variant, so the
+    // provider's FlickerTarget resolves it (human `flicker` chooser overrides -- viewer pass).
+    // The return is a NEW OBJECT: a persisted Kitchen Finks comes back clean, a flickered
+    // Reveillark fires its LTB on the exile half, a tapped Birthing Pod / land returns UNTAPPED.
+    // LAST in this cascade, deliberately: ApplyBlink erases + re-pushes a permanent, which can
+    // shift entered_index -- nothing may read it after this block.
+    if (p.etb_blink_permanent)
+    {
+        const int self_num = state.battlefield[entered_index].card.m_number;
+        int tgt = etb_kx;
+        if (tgt == kEtbKxHeuristic || tgt < 0)
+        { tgt = ResolveProvider(state).FlickerTarget(state, controller, self_num); }
+        if (tgt > 0 && tgt != self_num)
+        {
+            ApplyBlink(state, controller, self_num, tgt,
+                       /*returns_tapped=*/false, /*permanents_ok=*/true);
+        }
     }
 }
 
@@ -3996,9 +4218,143 @@ inline void FireSacrificeWatchers(GameState& state, int controller)
     }
 }
 
-inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card,
-                           bool dead_was_token = false)
+// -1/-1 counter replacement chain (CR 614/616): the single site that puts -1/-1 counters (the
+// persist return) routes the count through here. Melira, Sylvok Outcast ("creatures you control
+// can't have -1/-1 counters put on them") zeroes it; Vizier of Remedies ("that many minus one are
+// put instead") reduces by one per event. Applying the most preventive first is the controller's
+// (strictly optimal) CR 616.1 ordering choice. For persist's n=1 either card yields 0, which is
+// what makes both loop enablers.
+inline int MinusCounterReplacement(const GameState& state, int controller, int n)
 {
+    bool prevent_all = false, minus_one = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.prevents_minus_counters)       { prevent_all = true; }
+        if (d->params.reduces_minus_counters_by_one) { minus_one   = true; }
+    }
+    if (prevent_all) { return 0; }
+    if (minus_one)   { return n > 0 ? n - 1 : 0; }
+    return n;
+}
+
+// Put a CARD (not from the library -- persist / Reveillark pull from the graveyard) onto the
+// battlefield through both ETB cascades, optionally entering WITH -1/-1 counters already on it
+// (persist: the counter must be on the body BEFORE its own ETB fires, so a persisted Murderous
+// Redcap's "damage equal to its power" reads the reduced power). Preserves the per-copy m_number
+// like the tutor-to-battlefield put. Returns the new battlefield index, or -1.
+inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& card,
+                                  const std::string& source_name, int minus_counters = 0)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
+    Permanent perm;
+    perm.card              = d ? d->card : card;
+    perm.card.m_number     = card.m_number;   // preserve per-copy id (logging / state key)
+    perm.controller_index  = controller;
+    perm.owner_index       = controller;
+    perm.entered_this_turn = true;
+    if (minus_counters > 0)
+    {
+        perm.counters.push_back(Counter{Counter::Type::MinusOneMinusOne, minus_counters});
+    }
+    state.battlefield.push_back(perm);
+    const int idx = static_cast<int>(state.battlefield.size()) - 1;
+    if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
+    {
+        EmitPlayEvent(state.turn_number, "return",
+                      "\xE2\x99\xBB\xEF\xB8\x8F " + card.m_name.str()
+                      + " -- returned to the battlefield (" + source_name + ")");
+    }
+    FireEtbWatchers(state, controller, idx);
+    FireOwnEtbTriggers(state, controller, idx, std::string(), kEtbKxHeuristic);
+    return idx;
+}
+
+// Reveillark's LTB return: "return up to two target creature cards with power 2 or less from
+// your graveyard to the battlefield." Candidates = graveyard creature cards whose PRINTED power
+// (LookupCached -- never a Permanent's modified power: a Kitchen Finks wearing a persist -1/-1
+// counter is a 2/1 on the battlefield but a power-3 CARD in the yard) passes the filter, ranked
+// by the provider's ReviveCandidates (empty = the deck-agnostic default: printed MV descending,
+// name ascending -- shuffle-independent, the MTG_TUTOR_RANKED_DEFAULT rationale). Each return
+// re-enters through both ETB cascades under GraveyardEnterScope (Celes's graveyard-enter
+// watcher). A RESOLUTION-time provider pick, not a search axis: the trigger fires on paths no
+// plan action carries (a sac cost, a Felidar flicker) -- disclosed in Stage 6a; the human-play
+// `revive` chooser overrides it.
+inline void PerformReturnFromGraveyardToBattlefield(GameState& state, int controller,
+                                                    int max_returns, int max_power,
+                                                    const std::string& source_name)
+{
+    if (max_returns <= 0) { return; }
+    Player& ap = state.players[controller];
+    std::vector<std::string> order =
+        ResolveProvider(state).ReviveCandidates(state, controller, max_power, max_returns);
+    if (order.empty())
+    {
+        struct Cand { int mv; std::string nm; };
+        std::vector<Cand> cands;
+        for (const Card& gc : ap.graveyard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(gc);
+            const Card& card = d ? d->card : gc;
+            if (!card.IsCreature() || card.m_power.value_or(0) > max_power) { continue; }
+            cands.push_back(Cand{card.m_mana_cost.ManaValue(), gc.m_name.str()});
+        }
+        std::sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b)
+                  { if (a.mv != b.mv) { return a.mv > b.mv; } return a.nm < b.nm; });
+        for (const Cand& c : cands) { order.push_back(c.nm); }
+    }
+    int done = 0;
+    GyEnterBatchScope one_event;   // Reveillark's two returns are ONE event for Celes's watcher
+    for (const std::string& nm : order)
+    {
+        if (done >= max_returns) { break; }
+        for (int i = 0; i < static_cast<int>(ap.graveyard.size()); ++i)
+        {
+            const Card& gc = ap.graveyard[i];
+            if (gc.m_name.str() != nm) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(gc);
+            const Card& card = d ? d->card : gc;
+            if (!card.IsCreature() || card.m_power.value_or(0) > max_power) { break; }
+            Card back = gc;
+            ap.graveyard.erase(ap.graveyard.begin() + i);
+            GraveyardEnterScope from_gy;   // Celes's graveyard-enter watcher reads this
+            PutCardOntoBattlefield(state, controller, back, source_name);
+            ++done;
+            break;
+        }
+    }
+}
+
+// The dead/left card's OWN leaves-the-battlefield trigger (Reveillark). Distinct from the dies_*
+// watcher family in BOTH directions: it fires on ANY leave (death, sacrifice-as-cost, the exile
+// half of a Felidar flicker), and it is the LEFT card's own ability, not another permanent's
+// watch. Called from OnCreatureDies (every death site funnels there) and from ApplyBlink.
+inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, const Card& left)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(left);
+    if (!d || d->params.ltb_return_creatures <= 0) { return; }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xF0\x9F\x95\x8A\xEF\xB8\x8F " + left.m_name.str()
+                      + " left the battlefield -- return up to "
+                      + std::to_string(d->params.ltb_return_creatures)
+                      + " creature(s) with power <= "
+                      + std::to_string(d->params.ltb_return_max_power));
+    }
+    PerformReturnFromGraveyardToBattlefield(state, controller, d->params.ltb_return_creatures,
+                                            d->params.ltb_return_max_power, left.m_name.str());
+}
+
+inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card,
+                           bool dead_was_token, int dead_minus_counters)
+{
+    // LTB triggers fire on every death (Reveillark sacrificed to Carrion Feeder / Pod / combat).
+    // Before the persist block: independent mechanics, and Reveillark itself has no persist.
+    FireLeavesBattlefieldTriggers(state, dead_controller, dead_card);
+
     std::vector<CardParams> reactions;
     // Other watchers still in play under the same controller: "another <subtype> you control dies".
     for (const Permanent& w : state.battlefield)
@@ -4041,6 +4397,36 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
                     gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(g));
                     state.players[dead_controller].library.push_back(std::move(back));
                     ShuffleAfterSearch(state, dead_controller);
+                    break;
+                }
+            }
+        }
+    }
+
+    // Persist (Kitchen Finks / Murderous Redcap): "When this creature dies, if it had no -1/-1
+    // counters on it, return it to the battlefield under its owner's control with a -1/-1 counter
+    // on it." The death site pushed the card into the graveyard before calling here and passed
+    // the dead permanent's -1/-1 count; pull the newest matching copy back and re-enter it through
+    // both ETB cascades WITH its new counter already on (a persisted Redcap's ETB reads the
+    // reduced power). The counter routes through MinusCounterReplacement, so with Melira / Vizier
+    // in play the body returns CLEAN and the loop can run again -- the -1/-1 counter IS the
+    // "already persisted" tracking (CR: persist checks the dying object's counters). Token copies
+    // cease to exist instead (CR 111.7). Runs regardless of `reactions`, like Worldspine above.
+    if (!dead_was_token && dead_minus_counters == 0)
+    {
+        const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead_card);
+        if (dd && dd->params.persist)
+        {
+            std::vector<Card>& gy = state.players[dead_controller].graveyard;
+            for (std::size_t g = gy.size(); g-- > 0; )
+            {
+                if (gy[g].m_name == dead_card.m_name)
+                {
+                    Card back = gy[g];
+                    gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(g));
+                    const int n = MinusCounterReplacement(state, dead_controller, 1);
+                    GraveyardEnterScope from_gy;   // Celes's graveyard-enter watcher reads this
+                    PutCardOntoBattlefield(state, dead_controller, back, "Persist", n);
                     break;
                 }
             }
@@ -4811,6 +5197,50 @@ inline bool EquipmentAttachedTo(const GameState& state, int controller, int equi
 // graveyard (fungible within the type filter -- deterministic in both worlds), and realise the
 // effect. A source that is tapped/missing or has no fuel makes this a no-op -> stranded-outlet
 // safe, lockstep.
+// Scavenging Ooze: "{G}: Exile target card from a graveyard. If it was a creature card, put a
+// +1/+1 counter on this creature and you gain 1 life." REPEATABLE (no {T} -- unlike Deathrite's
+// GraveyardExileAbility below); the mana half is paid by the caller (Action::cost per
+// activation). WHICH card was decided by the searched axis (one action per distinct graveyard
+// name -- exiling own creature cards strips Reveillark's LTB targets, so it is not fungible).
+// "A graveyard" collapses to ours: the passive opponent's is always empty. The exiled card is
+// simply removed (nothing reads exile in goldfish -> disclosed). The 1 life is modelled but
+// carries no eval (inert vs a passive opponent); the counter is the real clock. Shared by
+// rollout trailing pass + executor mirror -> lockstep.
+inline void ApplyGraveyardExileGrow(GameState& state, int controller, int source_id,
+                                    const std::string& card_name)
+{
+    Player& ap = state.players[controller];
+    int idx = -1;
+    for (int i = 0; i < static_cast<int>(ap.graveyard.size()); ++i)
+    { if (ap.graveyard[i].m_name.str() == card_name) { idx = i; break; } }
+    if (idx < 0) { return; }   // named card no longer there (search/real drift guard)
+    const Card ex = ap.graveyard[idx];
+    ap.graveyard.erase(ap.graveyard.begin() + idx);
+    const CardDefinition* xd = CardDatabase::Instance().LookupCached(ex);
+    const bool was_creature = (xd ? xd->card : ex).IsCreature();
+    if (!was_creature) { return; }
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.card.m_number != source_id) { continue; }
+        const CardDefinition* od = CardDatabase::Instance().LookupCached(q.card);
+        if (!od) { break; }
+        if (od->params.gy_exile_grow_counters > 0)
+        {
+            q.counters.push_back(Counter{Counter::Type::PlusOnePlusOne,
+                                         od->params.gy_exile_grow_counters});
+        }
+        ap.life += od->params.gy_exile_grow_lifegain;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          "\xF0\x9F\xA6\xA0 " + q.card.m_name.str() + " -- exiled " + card_name
+                          + " (+1/+1, gain "
+                          + std::to_string(od->params.gy_exile_grow_lifegain) + ")");
+        }
+        break;
+    }
+}
+
 inline void ApplyGraveyardExileAbility(GameState& state, int controller, int source_id, int mode)
 {
     Permanent* src = nullptr;
@@ -4993,10 +5423,11 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
     const Card dead     = state.battlefield[idx].card;
     const bool was_tok  = state.battlefield[idx].is_token;
+    const int  dead_m1  = MinusCountersOn(state.battlefield[idx]);
     state.players[controller].graveyard.push_back(dead);
     state.battlefield.erase(state.battlefield.begin() + idx);
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
-    OnCreatureDies(state, controller, dead, was_tok);
+    OnCreatureDies(state, controller, dead, was_tok, dead_m1);
 }
 
 // Call of the Wild -- ONE activation: "Reveal the top card of your library. If it's a creature
@@ -5395,11 +5826,12 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     const int hidx = ChooseSacOutletVictimIndex(state, controller, source_id,
                                                 op->sac_creature_requires_subtype, victim_id, src_name);
     // Find + remove the chosen victim (a controlled creature of the required subtype; self-inclusive).
-    Card victim; bool found = false; bool victim_tok = false;
+    Card victim; bool found = false; bool victim_tok = false; int victim_m1 = 0;
     if (hidx >= 0)
     {
         victim = state.battlefield[hidx].card; found = true;
         victim_tok = state.battlefield[hidx].is_token;
+        victim_m1  = MinusCountersOn(state.battlefield[hidx]);
         state.players[controller].graveyard.push_back(victim);
         state.battlefield.erase(state.battlefield.begin() + hidx);
     }
@@ -5433,6 +5865,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             if (!op->sac_creature_requires_subtype.empty() && q.card.IsCreature()
                 && !CardHasSubtype(q.card, op->sac_creature_requires_subtype)) { continue; }
             victim = q.card; found = true; victim_tok = q.is_token;
+            victim_m1 = MinusCountersOn(q);
             state.players[controller].graveyard.push_back(q.card);
             state.battlefield.erase(state.battlefield.begin() + i);
             break;
@@ -5450,12 +5883,59 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     const int mana_amt = op->sac_outlet_add_mana_amount, dmg = op->sac_outlet_damage;
     const int ntok = op->sac_outlet_creates_tokens, tp = op->sac_outlet_token_power,
               tt = op->sac_outlet_token_toughness;
+    const int self_ctr = op->sac_outlet_add_counter_to_self;
+    const int self_pp  = op->sac_outlet_self_pump_power, self_pt = op->sac_outlet_self_pump_toughness;
     const std::vector<std::string> tsub = op->sac_outlet_token_subtypes;
     if (!mana_color.empty()) { AddChosenColorFloat(state, mana_color, mana_amt); }
     if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
     for (int k = 0; k < ntok; ++k) { CreateToken(state, controller, tp, tt, tsub); }
+    // Self payloads (Carrion Feeder permanent +1/+1 counter; Bloodthrone Vampire +2/+2 UEOT).
+    // Re-locate the SOURCE by id -- the victim erase shifted indices, and (rules-correct) the
+    // outlet may have sacrificed ITSELF, in which case the payload fizzles (no target).
+    if (self_ctr > 0 || self_pp > 0 || self_pt > 0)
+    {
+        for (Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller || q.card.m_number != source_id) { continue; }
+            if (self_ctr > 0) { q.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, self_ctr}); }
+            q.temp_power_bonus += self_pp;
+            q.temp_tough_bonus += self_pt;
+            break;
+        }
+    }
+    const bool outlet_free = !op->sac_creature_cost.has_value()
+                          || op->sac_creature_cost->ManaValue() == 0;
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
-    OnCreatureDies(state, controller, victim, victim_tok);   // Pashalik ping / Rundvelt impulse / Mogg death token
+    OnCreatureDies(state, controller, victim, victim_tok, victim_m1);   // Pashalik ping / Rundvelt impulse / Mogg death token / persist
+
+    // "Infinite life" win detection (USER feature 2026-09-04 -- see GameState::infinite_life_win).
+    // EXECUTION-VERIFIED: this activation just sacrificed a persist creature with an ETB lifegain
+    // to a FREE outlet and the body RETURNED CLEAN (persist fired, Melira/Vizier zeroed the
+    // counter). Nothing changed except our life total going UP, so the iteration can repeat
+    // without bound -- the loop is proven, not pattern-matched. Shared by executor and rollout
+    // (this function is the one apply site) -> lockstep.
+    if (outlet_free && !victim_tok && victim_m1 == 0 && InfLifeWinEnabled())
+    {
+        const CardDefinition* vd = CardDatabase::Instance().LookupCached(victim);
+        if (vd && vd->params.persist && vd->params.etb_self_lifegain > 0)
+        {
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index == controller && q.card.m_number == victim.m_number
+                    && MinusCountersOn(q) == 0)
+                {
+                    state.infinite_life_win = true;
+                    if (g_play_event_sink && !g_tap_speculating)
+                    {
+                        EmitPlayEvent(state.turn_number, "win",
+                                      "\xE2\x99\xBE\xEF\xB8\x8F INFINITE LIFE -- " + victim.m_name.str()
+                                      + " persist loop online (free outlet + counter prevention)");
+                    }
+                    break;
+                }
+            }
+        }
+    }
 }
 
 // Multi-sac BURST: sacrifice up to `count` canonical victims to a damage sac-outlet in ONE activation
@@ -5490,6 +5970,176 @@ inline void ApplySacCreatureOutletBurst(GameState& state, int controller, int so
         if (victim_id < 0) { break; }   // ran out of victims
         ApplySacCreatureOutlet(state, controller, source_id, victim_id);
     }
+}
+
+// PERSIST LOOP (Melira Pod): sacrifice the SAME persist creature to the SAME free outlet
+// `iterations` times. Each iteration the body dies with no -1/-1 counter, persist returns it, and
+// Melira/Vizier zero the returned counter (MinusCounterReplacement), so it is legal fodder again
+// -- the persisted copy keeps its m_number (PutCardOntoBattlefield preserves it), which is what
+// lets one (source_id, victim_id) pair drive every iteration. BREAKS the moment an iteration is
+// not legal (outlet gone, body gone, or body carrying a counter -- e.g. the replacement enabler
+// left the battlefield mid-loop), so an over-large count costs a wasted branch and never phantom
+// damage (the ApplyBlinkLoop contract). Emitted demand-driven and capped (kPersistLoopCap) by
+// the enumeration; shared verbatim by rollout (apply_one) and executor (AIEngine) -> lockstep.
+inline constexpr int kPersistLoopCap = 60;
+inline int ApplyPersistLoop(GameState& state, int controller, int source_id, int victim_id,
+                            int iterations)
+{
+    int done = 0;
+    for (int k = 0; k < iterations; ++k)
+    {
+        bool outlet_ok = false, victim_ok = false;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller) { continue; }
+            if (q.card.m_number == source_id) { outlet_ok = true; }
+            if (q.card.m_number == victim_id && q.card.IsCreature()
+                && MinusCountersOn(q) == 0) { victim_ok = true; }
+        }
+        if (!outlet_ok || !victim_ok) { break; }
+        ApplySacCreatureOutlet(state, controller, source_id, victim_id);
+        ++done;
+    }
+    return done;
+}
+
+// ---- Convoke (Chord of Calling) ---------------------------------------------------------------
+// "Your creatures can help cast this spell. Each creature you tap while casting this spell pays
+// for {1} or one mana of that creature's color." Modelled as a cast-time COST REDUCTION with an
+// explicit tap set carried on the Action (convoke_green / convoke_other counts): the enumeration
+// reduces Action::cost by the taps' contribution, and the apply pre-pass taps the actual bodies
+// through ApplyConvokeTaps below. ONE classification function is the single source of truth for
+// eligibility and ordering, shared by enumeration and both apply worlds -> lockstep.
+//
+// Eligibility: an UNTAPPED creature you control. Summoning sickness is IRRELEVANT (no {T} symbol
+// in a convoke tap -- CR 702.51). A mana dork with a LIVE mana tap is EXCLUDED by dominance: its
+// tap yields a full mana usable as {1} or any colour it makes, a superset of convoke's "{1} or
+// its own colour" -- and the exclusion is also what stops AvailableManaPool double-counting a
+// body convoke consumed. A summoning-SICK dork is the asymmetric case: ineligible for mana,
+// eligible for convoke.
+// Ordering (cheapest opportunity cost first, deterministic): free bodies (cannot attack, or zero
+// power -- tapping them costs nothing vs the passive opponent, which never attacks so an untapped
+// blocker is worthless) before would-attack bodies; ascending effective power, then m_number.
+struct ConvokeClasses
+{
+    std::vector<int> free_green, free_other;   // m_numbers, cheapest-first
+    std::vector<int> atk_green,  atk_other;    // would-attack bodies (real opportunity cost)
+};
+inline ConvokeClasses ClassifyConvokeBodies(const GameState& s, int controller)
+{
+    ConvokeClasses out;
+    struct Ent { int pw, num; bool green, free; };
+    std::vector<Ent> ents;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsCreature() || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        const bool live_dork = d && d->tmpl == CardTemplate::ManaDork && p.CanTap();
+        if (live_dork) { continue; }
+        const int  pw   = p.EffectivePower();
+        const bool atk  = CanAttackFull(p, s.battlefield, controller) && pw > 0;
+        ents.push_back(Ent{pw, p.card.m_number, p.card.HasColor(Color::Green), !atk});
+    }
+    std::sort(ents.begin(), ents.end(), [](const Ent& a, const Ent& b)
+              { if (a.pw != b.pw) { return a.pw < b.pw; } return a.num < b.num; });
+    for (const Ent& e : ents)
+    {
+        (e.free ? (e.green ? out.free_green : out.free_other)
+                : (e.green ? out.atk_green  : out.atk_other)).push_back(e.num);
+    }
+    return out;
+}
+// Tap `green` green and `other` non-green convoke bodies -- free bodies first, then attackers,
+// in the classification's deterministic order. Taps fewer if the board changed (stale-plan
+// guard); the cost was reduced at enumeration, so a shortfall costs payment quality (the reduced
+// cost may then fail to pay), never phantom mana.
+inline void ApplyConvokeTaps(GameState& state, int controller, int green, int other)
+{
+    if (green <= 0 && other <= 0) { return; }
+    const ConvokeClasses cc = ClassifyConvokeBodies(state, controller);
+    auto tap_ids = [&](const std::vector<int>& ids, int& want)
+    {
+        for (int id : ids)
+        {
+            if (want <= 0) { return; }
+            for (Permanent& p : state.battlefield)
+            {
+                if (p.controller_index == controller && p.card.m_number == id && !p.tapped)
+                { p.tapped = true; --want; break; }
+            }
+        }
+    };
+    int g = green, o = other;
+    tap_ids(cc.free_green, g); tap_ids(cc.atk_green, g);
+    tap_ids(cc.free_other, o); tap_ids(cc.atk_other, o);
+    if (g_play_event_sink && !g_tap_speculating && (green - g + other - o) > 0)
+    {
+        EmitPlayEvent(state.turn_number, "convoke",
+                      "\xF0\x9F\x99\x8C Convoke -- tapped "
+                      + std::to_string(green - g + other - o) + " creature(s)");
+    }
+}
+
+// Birthing Pod activation sentinel: an ActivatePod whose tutor_target is this string sacrifices
+// with NO search -- legal, and a real line when the death itself is the payoff (a Carrion Feeder
+// counter, a persist return, a Voice token). Dropping the variant would be a generic limiter
+// deleting a real decision branch (core invariant).
+inline const char* const kPodNoFetch = "(no fetch)";
+
+// Birthing Pod: "{1}{G/P}, {T}, Sacrifice a creature: Search your library for a creature card
+// with mana value equal to 1 plus the sacrificed creature's mana value, put that card onto the
+// battlefield, then shuffle." The MANA cost is paid by the caller (it rides Action::cost through
+// the ordinary pay path); this applies everything else, in rules order: tap the Pod, sacrifice
+// the chosen victim through the SHARED death cascade (persist / Carrion Feeder counter / dies-
+// watchers fire BEFORE the search -- CR 601.2h, costs are paid before resolution, so a persisted
+// Kitchen Finks is back on the battlefield and its card is NOT in the graveyard for the search),
+// read the victim's PRINTED MV before it leaves, then put a library creature with MV exactly
+// victim+pod_mv_delta onto the battlefield through the full ETB cascade
+// (PerformTutorToBattlefield's require_mv), then shuffle. A missing Pod / already-tapped Pod /
+// missing REAL victim no-ops (the stale-plan-premise rule). Shared verbatim by rollout
+// (apply_one) and executor (AIEngine) -> lockstep.
+inline bool PerformPodActivate(GameState& state, int controller, int pod_id, int victim_id,
+                               const std::string& target_name)
+{
+    int pod_idx = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == controller && p.card.m_number == pod_id) { pod_idx = i; break; }
+    }
+    if (pod_idx < 0) { return false; }
+    const CardDefinition* pd = CardDatabase::Instance().LookupCached(state.battlefield[pod_idx].card);
+    if (!pd || pd->params.pod_mv_delta == 0) { return false; }
+    if (pd->params.pod_taps)
+    {
+        if (state.battlefield[pod_idx].tapped) { return false; }
+        state.battlefield[pod_idx].tapped = true;
+    }
+    int vic_idx = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index == controller && q.card.IsCreature()
+            && q.card.m_number == victim_id) { vic_idx = i; break; }
+    }
+    if (vic_idx < 0) { return false; }
+    const int vic_mv = state.battlefield[vic_idx].card.m_mana_cost.ManaValue();
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "sacrifice",
+                      "\xF0\x9F\x94\xAA Birthing Pod -- sacrificed "
+                      + state.battlefield[vic_idx].card.m_name.str()
+                      + " (MV " + std::to_string(vic_mv) + ")");
+    }
+    SacrificePermanentAt(state, controller, vic_idx);   // shared cascade: watchers + persist
+    if (target_name != kPodNoFetch)
+    {
+        std::vector<std::string> pref;
+        if (!target_name.empty()) { pref.push_back(target_name); }
+        PerformTutorToBattlefield(state, controller, pd->params, /*max_puts=*/1, pref,
+                                  "Birthing Pod", vic_mv + pd->params.pod_mv_delta);
+    }
+    return true;
 }
 
 // Twinshot Sniper "Channel -- {1}{R}, Discard this card: 2 damage to any target." From HAND: discard
@@ -6806,6 +7456,40 @@ inline int DynamicBasePower(const CardDefinition& def, const GameState& state, i
 {
     if (def.params.power_equals_creature_count) { return CreatureCount(state, controller_index); }
     return 0;
+}
+
+// Toughness twin (Voice of Resurgence's Elemental token: "power and toughness are each equal to
+// the number of creatures you control"). Read by the SBA toughness check (a CDA 0/0 token with
+// zero other creatures is 0/0 and dies -- rules-correct) alongside ComputeLordBonus.
+inline int DynamicBaseToughness(const CardDefinition& def, const GameState& state,
+                                int controller_index)
+{
+    if (def.params.toughness_equals_creature_count) { return CreatureCount(state, controller_index); }
+    return 0;
+}
+
+// Ravenous Chupacabra ("When this creature enters, destroy target creature an opponent
+// controls"): the ETB analogue of the Terror pick -- largest opponent creature by effective
+// power (no colour/artifact filter; Chupacabra has none). Payoff is provably 0 in a deck whose
+// games never give the opponent a creature; implemented faithfully + reusable rather than
+// stubbed. Mirrors the Terror branch: graveyard push for a real card, token ceases.
+inline void DestroyLargestOppCreature(GameState& state, int controller)
+{
+    int pick = -1, best_pw = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index == controller || !q.card.IsCreature()) { continue; }
+        const int pw = q.EffectivePower();
+        if (pw > best_pw) { best_pw = pw; pick = i; }
+    }
+    if (pick >= 0)
+    {
+        const Permanent dead = state.battlefield[pick];
+        if (!dead.is_token)
+        { state.players[dead.owner_index].graveyard.push_back(dead.card); }
+        state.battlefield.erase(state.battlefield.begin() + pick);
+    }
 }
 
 // Fires "whenever you attack, create N tokens tapped and attacking" triggers (Adeline,
@@ -8613,13 +9297,16 @@ inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
 // deck that did would need the detach, so it is called out rather than assumed. Returns false if
 // the target is gone (a stranded activation must not pay).
 inline bool CanApplyBlink(const GameState& state, int controller, int source_id, int target_id,
-                          bool own_only)
+                          bool own_only, bool permanents_ok = false)
 {
+    // permanents_ok (Felidar Guardian: "exile another target PERMANENT you control"): widen the
+    // creature-only gate. Default false -> Displacer / Emiel byte-identical.
     bool src_ok = false, tgt_ok = false;
     for (const Permanent& p : state.battlefield)
     {
         if (p.card.m_number == source_id && p.controller_index == controller) { src_ok = true; }
-        if (p.card.m_number != target_id || !p.card.IsCreature())            { continue; }
+        if (p.card.m_number != target_id
+            || !(permanents_ok || p.card.IsCreature()))                      { continue; }
         if (own_only && p.controller_index != controller)                    { continue; }
         if (target_id == source_id)                                          { continue; }  // "another"
         tgt_ok = true;
@@ -8628,19 +9315,23 @@ inline bool CanApplyBlink(const GameState& state, int controller, int source_id,
 }
 
 inline void ApplyBlink(GameState& state, int controller, int source_id, int target_id,
-                       bool returns_tapped)
+                       bool returns_tapped, bool permanents_ok = false)
 {
     int idx = -1;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         if (state.battlefield[i].card.m_number == target_id
-            && state.battlefield[i].card.IsCreature() && state.battlefield[i].card.m_number != source_id)
+            && (permanents_ok || state.battlefield[i].card.IsCreature())
+            && state.battlefield[i].card.m_number != source_id)
         { idx = i; break; }
     }
     if (idx < 0) { return; }
     const Card    raw   = state.battlefield[idx].card;
     const int     owner = state.battlefield[idx].owner_index;
     state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(idx));
+    // The exile half IS a leave: a flickered Reveillark fires its LTB ("return up to two creature
+    // cards with power 2 or less") before it returns. No-op for every card without an LTB param.
+    FireLeavesBattlefieldTriggers(state, owner, raw);
 
     const CardDefinition* d = CardDatabase::Instance().LookupCached(raw);
     Permanent perm;
@@ -12028,6 +12719,7 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
     if (idx < 0) { return; }   // no legal victim (enumeration should have gated the cast)
     const Card dead    = state.battlefield[idx].card;
     const bool was_tok = state.battlefield[idx].is_token;
+    const int  dead_m1 = MinusCountersOn(state.battlefield[idx]);
     state.players[state.battlefield[idx].owner_index].graveyard.push_back(dead);
     state.battlefield.erase(state.battlefield.begin() + idx);
     if (g_play_event_sink && !g_tap_speculating)
@@ -12036,7 +12728,7 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
                       "\xF0\x9F\x94\xAA " + spell_name + " -- sacrificed " + dead.m_name.str());
     }
     FireSacrificeWatchers(state, active);   // Slaughter-Priest (a sac cost IS a sacrifice)
-    OnCreatureDies(state, active, dead, was_tok);
+    OnCreatureDies(state, active, dead, was_tok, dead_m1);
 }
 
 // Crop Rotation resolution (CardParams::tutor_land_to_battlefield): "Search your library for a

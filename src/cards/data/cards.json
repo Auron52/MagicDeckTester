@@ -1925,6 +1925,26 @@
    }
   },
   {
+   "name": "Orzhov Basilica",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {W}{B}. [Karoo bounce land: enters tapped, makes 2 mana ({W}{B}, modelled as wild like other duals), and on ETB returns one of your lands to hand (BounceKarooLand prefers a tapped land so no mana is lost this turn; the returned land must be replayed, the real tempo cost).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "B"
+    ],
+    "produces_amount": 2,
+    "enters_tapped": true,
+    "etb_bounce_land": true
+   }
+  },
+  {
    "name": "Soulfire Eruption",
    "mana_cost": "{6}{R}{R}{R}",
    "types": [
@@ -2720,6 +2740,24 @@
    }
   },
   {
+   "name": "Blooming Marsh",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {B} or {G}.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "G"
+    ],
+    "fastland_max_other_lands": 2
+   }
+  },
+  {
    "name": "Brushland",
    "mana_cost": "",
    "types": [
@@ -2755,6 +2793,26 @@
     "mdfc_back_name": "Boulderloft Pathway",
     "mdfc_back_produces": [
      "W"
+    ]
+   }
+  },
+  {
+   "name": "Darkbore Pathway",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {B}. // Slitherbore Pathway: {T}: Add {G}. [Modal double-faced LAND: play EITHER Darkbore ({B}) OR Slitherbore ({G}); the chosen face enters untapped and taps for its one colour, committing to one colour like the real card. In hand it counts as its FRONT colour ({B}) for mulligan/colour eval (minor disclosed simplification); the played battlefield face is exact.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B"
+    ],
+    "mdfc_back_name": "Slitherbore Pathway",
+    "mdfc_back_produces": [
+     "G"
     ]
    }
   },
@@ -5667,6 +5725,25 @@
    }
   },
   {
+   "name": "Caves of Koilos",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{T}: Add {W} or {B}. This land deals 1 damage to you. [Painland, both modes modelled -- see Adarkar Wastes.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "B",
+     "C"
+    ],
+    "tap_self_damage": 1
+   }
+  },
+  {
    "name": "Yavimaya Coast",
    "mana_cost": "",
    "types": [
@@ -5680,6 +5757,25 @@
     "produces": [
      "G",
      "U",
+     "C"
+    ],
+    "tap_self_damage": 1
+   }
+  },
+  {
+   "name": "Llanowar Wastes",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{T}: Add {B} or {G}. This land deals 1 damage to you. [Painland, both modes modelled -- see Adarkar Wastes.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "G",
      "C"
     ],
     "tap_self_damage": 1
@@ -6341,6 +6437,406 @@
     "enters_tapped": true,
     "enters_tapped_with_depletion": 2,
     "produces_amount": 2
+   }
+  },
+  {
+   "name": "Melira, Sylvok Outcast",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Scout"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "You can't get poison counters.\nCreatures you control can't have -1/-1 counters put on them.\nCreatures your opponents control lose infect. [Clause 2 is the live one: a replacement read by MinusCounterReplacement() at the single site that puts -1/-1 counters (the persist return) -- with Melira out a persist creature returns CLEAN and the loop never spends itself. Clause 1 inert: Player::poison_counters exists but nothing in the engine ever increments it (no infect/poison source implemented, opponent never attacks). Clause 3 inert: the passive opponent controls no creatures in this deck's games (the only opponent-creature spawn params live in Creature Giving).]",
+   "template": "custom",
+   "parameters": {
+    "prevents_minus_counters": true
+   }
+  },
+  {
+   "name": "Vizier of Remedies",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Cleric"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "If one or more -1/-1 counters would be put on a creature you control, that many -1/-1 counters minus one are put on it instead. [Modelled FAITHFULLY as n -> max(0, n-1) in MinusCounterReplacement, not as a Melira-equivalent boolean: it differs for n >= 2. For persist (n=1) both yield 0, which is why either card enables the loop.]",
+   "template": "custom",
+   "parameters": {
+    "reduces_minus_counters_by_one": true
+   }
+  },
+  {
+   "name": "Kitchen Finks",
+   "mana_cost": "{1}{G/W}{G/W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Ouphe"
+   ],
+   "keywords": [
+    "Persist"
+   ],
+   "power": 3,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, you gain 2 life.\nPersist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.) [Hybrid pips are real either-colour pips. Lifegain via etb_self_lifegain (a CREATURE ETB -- deliberately NOT the land-only etb_lifegain). Persist via the persist param (OnCreatureDies return through MinusCounterReplacement); the Keyword::Persist tag is an inert tag, Suspend/Splice idiom. Known gap, disclosed: the +1/+1 / -1/-1 annihilation SBA (CR 704.5q) is not modelled -- nothing in this deck ever puts +1/+1 counters on a persist body.]",
+   "template": "custom",
+   "parameters": {
+    "persist": true,
+    "etb_self_lifegain": 2
+   }
+  },
+  {
+   "name": "Murderous Redcap",
+   "mana_cost": "{2}{B/R}{B/R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Goblin",
+    "Assassin"
+   ],
+   "keywords": [
+    "Persist"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, it deals damage equal to its power to any target.\nPersist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.) [\"Any target\" collapses to the opponent's face (etb_damage_any precedent, provably optimal vs the passive opponent -- no opponent permanent exists in this deck's games). etb_damage_any 2 is the PRINTED-power value so every valuation reader keeps working; etb_damage_equals_power substitutes the entering permanent's live EffectivePower() at resolution, so a persisted 1/1 Redcap deals 1, not 2.]",
+   "template": "custom",
+   "parameters": {
+    "persist": true,
+    "etb_damage_any": 2,
+    "etb_damage_equals_power": true
+   }
+  },
+  {
+   "name": "Carrion Feeder",
+   "mana_cost": "{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Zombie"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "This creature can't block.\nSacrifice a creature: Put a +1/+1 counter on this creature. [cant_block inert -- the passive goldfish opponent never attacks, so we never block. Free sac outlet (no mana cost, no {T}): sac_creature_outlet with the NEW sac_outlet_add_counter_to_self payload -- PERMANENT +1/+1 growth (Counter::PlusOnePlusOne), which under the Kitchen Finks persist loop is the deck's combat wincon.]",
+   "template": "custom",
+   "parameters": {
+    "sac_creature_outlet": true,
+    "sac_outlet_add_counter_to_self": 1
+   }
+  },
+  {
+   "name": "Bloodthrone Vampire",
+   "mana_cost": "{1}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Vampire"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Sacrifice a creature: This creature gets +2/+2 until end of turn. [Free sac outlet: sac_creature_outlet with the NEW sac_outlet_self_pump payload -- +2/+2 until end of turn (temp_power/tough_bonus, decays at cleanup). Distinct from sacrifice_watch_pump_power (Priest of Gix), a passive any-sacrifice watcher, power-only; this fires only on the outlet's OWN activation.]",
+   "template": "custom",
+   "parameters": {
+    "sac_creature_outlet": true,
+    "sac_outlet_self_pump_power": 2,
+    "sac_outlet_self_pump_toughness": 2
+   }
+  },
+  {
+   "name": "Recruiter of the Guard",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "When this creature enters, you may search your library for a creature card with toughness 2 or less, reveal it, put it into your hand, then shuffle. [ETB tutor to HAND on the Goblin Matron / Stoneforge machinery (tutor_to_hand + tutor_types + tutor_shuffle_after), narrowed by the NEW tutor_max_toughness filter -- PRINTED toughness off the CardDefinition (no continuous effect applies to a card in a library). WHICH creature: on a cast, the searched tutor_target plan axis; on a Birthing Pod / Chord PUT, the provider's front pick with the human tutor_etb chooser override (-1 declines the optional search). 'Reveal it' unobservable (nothing reads reveals).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [
+     "Creature"
+    ],
+    "tutor_max_toughness": 2,
+    "tutor_shuffle_after": true
+   }
+  },
+  {
+   "name": "Ranger of Eos",
+   "mana_cost": "{3}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Soldier",
+    "Ranger"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, you may search your library for up to two creature cards with mana value 1 or less, reveal them, put them into your hand, then shuffle. [ETB MULTI-tutor to HAND: etb_tutor_hand_count 2 + tutor_types + NEW tutor_max_mv 1 + tutor_shuffle_after. WHICH two = DecisionProvider::TutorHandPutList (ordered, one entry per library COPY -- 'two Carrion Feeders' is legal), resolved ONCE at the ETB on both the cast and the Pod/Chord put path (no cast-time axis), human-overridable via the sac_tutor multi-pick chooser. ONE shuffle after both leave the library. Legal pool in this deck: Birds of Paradise, Ignoble Hierarch, Carrion Feeder. 'Up to two' is always taken at the full count when available (fetching fewer is legal but never right here; disclosed).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "etb_tutor_hand_count": 2,
+    "tutor_types": [
+     "Creature"
+    ],
+    "tutor_max_mv": 1,
+    "tutor_shuffle_after": true
+   }
+  },
+  {
+   "name": "Severance Priest",
+   "mana_cost": "{W}{B}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Djinn",
+    "Cleric"
+   ],
+   "keywords": [
+    "Deathtouch"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Deathtouch\nWhen this creature enters, target opponent reveals their hand. You may choose a nonland card from it. If you do, exile that card.\nWhen this creature leaves the battlefield, the exiled card's owner creates an X/X white Spirit creature token, where X is the mana value of the exiled card. [Deathtouch parsed (Keyword::Deathtouch) but structurally inert -- the passive opponent never blocks or attacks. PARTIAL, PROVISIONAL (user sign-off pending): clauses 2 and 3 are DEFERRED as a PAIR. Clause 2 (hand exile) -- the passive opponent never casts anything, so removing a card from its hand cannot change any outcome; its only live consequence is ARMING clause 3, which hands the OPPONENT a Spirit token. Clause 3 -- an opponent body in a model where opponent creatures never act, and this deck sacs the Priest constantly (Carrion Feeder / Pod), so every firing would be a small gift. The exile is OPTIONAL ('you may'), so the optimal line vs this opponent is to DECLINE -- which is exactly what modelling neither clause produces: the deferral reproduces optimal play rather than approximating it.]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Birthing Pod",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "({G/P} can be paid with either {G} or 2 life.)\n{1}{G/P}, {T}, Sacrifice a creature: Search your library for a creature card with mana value equal to 1 plus the sacrificed creature's mana value, put that card onto the battlefield, then shuffle. Activate only as a sorcery. [PHYREXIAN MANA UNMODELLED, PROVISIONAL: printed cost {3}{G/P} / activation {1}{G/P}; ManaCostFromString collapses {G/P} to {G} with the CORRECT MV 4. Green-only is the CONSERVATIVE side on purpose -- vs a passive goldfish opponent life is not a pressured resource, so modelling 'or 2 life' would make the pip nearly free and FLATTER the card; revisit only if the {G} pip measurably gates Pod turns. ACTIVATION (Action::Kind::ActivatePod -> PerformPodActivate): cost pod_activation_cost + {T} (pod_taps) + sacrifice a chosen creature through the SHARED death cascade (CR 601.2h -- costs paid before resolution, so a sacrificed Kitchen Finks persists back BEFORE the search and its card is not in the graveyard); victim MV read before it leaves; fetch = library creature with MV exactly victim+pod_mv_delta via PerformTutorToBattlefield(require_mv), full ETB cascade, then shuffle. 'Only as a sorcery' needs no gate (actions are enumerated in the mains only). The (victim, fetch) pair is a fully-searched axis: victims fold by a death-equivalence key, library names dedup, and the no-fetch variant '(no fetch)' is always emitted (the death itself can be the payoff). Second main enabled via DeckUsesSecondMain(pod_mv_delta): attack with a persist body, sac it to Pod post-combat.]",
+   "template": "custom",
+   "parameters": {
+    "pod_activation_cost": "{1}{G}",
+    "pod_mv_delta": 1,
+    "pod_taps": true,
+    "tutor_types": [
+     "Creature"
+    ],
+    "tutor_shuffle_after": true
+   }
+  },
+  {
+   "name": "Chord of Calling",
+   "mana_cost": "{X}{G}{G}{G}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [
+    "Convoke"
+   ],
+   "oracle_text": "Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)\nSearch your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle. [CONVOKE modelled as a cast-time COST REDUCTION with an explicit tap set (Action convoke_green/convoke_other; ClassifyConvokeBodies is the single source of truth, shared by enumeration and both apply worlds): bodies tapped BEFORE the reduced cost is paid, summoning sickness IRRELEVANT (no {T} symbol), a green body pays a {G} pip or {1}, others {1} only; mana dorks with a LIVE mana tap are excluded by dominance (their tap yields a superset -- also prevents AvailableManaPool double-count), summoning-sick dorks ARE eligible; free (cannot-attack / 0-power) bodies tapped first, then a free+attackers arm (the real trade: damage now vs the fetch). X AXIS: one variant per (distinct library creature name, X = its MV) -- X > MV(target) is strictly dominated -- with X, target and tap counts all in the plan signature. FETCH: tutor_to_battlefield_single + tutor_mv_max_is_x (target MV <= chosen X, the cap threaded identically through enumeration and resolution), full ETB cascade on the put creature, then shuffle. [PARTIAL: instant speed collapses to YOUR MAIN PHASES -- the engine has no opponent-turn priority window, so the classic end-of-opponent's-turn Chord (fetched body untap-ready on your turn, mana spent on their turn) is NOT modelled. A real, non-inert loss, deferred as Tier 4 engine infrastructure; PROVISIONAL pending user sign-off. Both YOUR mains are modelled (DeckUsesSecondMain fires on convoke).]]",
+   "template": "custom",
+   "parameters": {
+    "convoke": true,
+    "tutor_to_battlefield_single": true,
+    "tutor_mv_max_is_x": true,
+    "tutor_types": [
+     "Creature"
+    ],
+    "tutor_shuffle_after": true
+   }
+  },
+  {
+   "name": "Reveillark",
+   "mana_cost": "{4}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [
+    "Flying",
+    "Evoke"
+   ],
+   "power": 4,
+   "toughness": 3,
+   "oracle_text": "Flying\nWhen this creature leaves the battlefield, return up to two target creature cards with power 2 or less from your graveyard to the battlefield.\nEvoke {5}{W} (You may cast this spell for its evoke cost. If you do, it's sacrificed when it enters.) [LTB (leaves-the-battlefield) trigger, NOT a dies watcher: fires on ANY leave -- every death site (sacrificed to Carrion Feeder / Birthing Pod, combat) via OnCreatureDies AND the exile half of a Felidar Guardian flicker via ApplyBlink -> FireLeavesBattlefieldTriggers. 'Power 2 or less' reads the PRINTED card power in the graveyard (a persisted Kitchen Finks is a 2/1 on the battlefield but a power-3 CARD in the yard -- never a legal target). 13 of the deck's 18 creatures qualify, incl. Melira, Vizier, Redcap, Carrion Feeder -- one trigger can rebuild the kill. WHICH two = MeliraPodProvider::ReviveCandidates (resolution-time: the trigger fires on paths no plan action carries; missing loop pieces first, then MV desc), human `revive` chooser planned in the viewer pass. Flying inert (passive opponent never blocks; Peregrine Drake precedent). [PARTIAL, PROVISIONAL: EVOKE is NOT modelled as a cast mode. WHY: {5}{W} evoke costs MORE than the {4}{W} hard cast, so it is strictly dominated whenever ANY free sac outlet (4 Carrion Feeder, 1 Bloodthrone) or untapped Birthing Pod is available -- hard-cast + sac buys the same LTB cheaper; its only live line is LTB-now with ZERO outlets, a narrow corner, while wiring evoke's self-sac through both worlds' cast paths touches ~20 hot-path sites. Deferred pending user sign-off; the keyword tag is parsed and inert.]]",
+   "template": "custom",
+   "parameters": {
+    "ltb_return_creatures": 2,
+    "ltb_return_max_power": 2
+   }
+  },
+  {
+   "name": "Felidar Guardian",
+   "mana_cost": "{3}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Cat",
+    "Beast"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 4,
+   "oracle_text": "When this creature enters, you may exile another target permanent you control, then return that card to the battlefield under its owner's control. [ONE-SHOT ETB flicker (etb_blink_permanent) -- structurally unlike the repeatable activated blink_cost (Displacer/Emiel); re-usable only by re-entering Felidar itself (Pod / Chord / a Reveillark return). Reuses the ApplyBlink primitive WIDENED to any PERMANENT (permanents_ok): the deck's best targets are non-creatures -- a tapped Birthing Pod returns UNTAPPED and can be activated a second time that turn, a tapped land returns untapped as +1 mana. The return is a NEW OBJECT (CR 400.7): a persisted Kitchen Finks comes back with NO -1/-1 counter, a flickered Reveillark fires its LTB on the exile half, every flickered creature is summoning-sick again. 'You may' is a REAL decline (flickering Orzhov Basilica re-fires its land-bounce, a downside) -- a decline variant is emitted alongside the per-target cast variants (chosen_x carries the target m_number); PUT entries resolve via MeliraPodProvider::FlickerTarget (tapped Pod > spent persist body > Reveillark > tapped land > Finks > tutors > decline), human `flicker` chooser planned in the viewer pass. Re-firing Ravenous Chupacabra / Reclamation Sage is inert: the passive opponent controls no creatures, artifacts or enchantments.]",
+   "template": "custom",
+   "parameters": {
+    "etb_blink_permanent": true
+   }
+  },
+  {
+   "name": "Voice of Resurgence",
+   "mana_cost": "{G}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Whenever an opponent casts a spell during your turn and when this creature dies, create a green and white Elemental creature token with \"This token's power and toughness are each equal to the number of creatures you control.\" [PARTIAL: the opponent-casts clause is DEAD -- the passive goldfish opponent never casts a spell (players[1] has no hand/library/action path); disclosed, nothing to model. The DIES clause is fully modelled: dies_watch_includes_self + dies_trigger_creates_tokens 1 with empty dies_watch_subtype = watch only its own death (Mogg War Marshal pattern). The token is created 0/0 so CreateToken names it \"0/0 Elemental Token\", whose cards.json def carries the characteristic-defining P/T on BOTH axes (power_equals_creature_count + toughness_equals_creature_count -- the Eldrazi Spawn / Treasure Token def-by-name precedent). Real value here is sac fodder: Voice into Carrion Feeder / Bloodthrone / Birthing Pod yields a body that can itself be sacrificed. Token colour (green AND white) unmodelled -- the dies_token spec carries no colour and nothing in this deck reads token colour; disclosed.]",
+   "template": "custom",
+   "parameters": {
+    "dies_watch_includes_self": true,
+    "dies_trigger_creates_tokens": 1,
+    "dies_token_power": 0,
+    "dies_token_toughness": 0,
+    "dies_token_subtypes": [
+     "Elemental"
+    ]
+   }
+  },
+  {
+   "name": "0/0 Elemental Token",
+   "mana_cost": "",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "This token's power and toughness are each equal to the number of creatures you control. [Token DEFINITION (created by Voice of Resurgence's death trigger; never in a decklist). CreateToken names a token \"<P>/<T> <first subtype> Token\", so this name is what LookupCached resolves -- the Eldrazi Spawn / Treasure Token precedent. Printed 0/0 with a CDA on BOTH axes (DynamicBasePower / DynamicBaseToughness); with zero other creatures it is 0/0 and dies to the SBA, which is rules-correct.]",
+   "template": "custom",
+   "parameters": {
+    "power_equals_creature_count": true,
+    "toughness_equals_creature_count": true
+   }
+  },
+  {
+   "name": "Scavenging Ooze",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Ooze"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "{G}: Exile target card from a graveyard. If it was a creature card, put a +1/+1 counter on this creature and you gain 1 life. [gy_exile_grow_cost {G}: a REPEATABLE activated ability (no {T} -- unlike Deathrite's gy_exile_* modes), N activations per turn bounded by green mana and graveyard size (Action::Kind::GraveyardExileGrow). 'A graveyard' collapses to OURS (the passive opponent's is always empty; disclosed). NOT under the MTG_SKIP_INERT_LIFEGAIN cut: the +1/+1 counter is a real clock; the 1 life is modelled but scored 0. WHICH card is exiled is a SEARCHED choice, one action per distinct graveyard card NAME (Haven of the Spirit Dragon pattern) -- exiling our own creature cards strips Reveillark's LTB targets, so it is not fungible. Melira bans -1/-1 counters only; +1/+1 growth is unaffected. Exiled cards are simply removed (nothing reads exile in goldfish).]",
+   "template": "custom",
+   "parameters": {
+    "gy_exile_grow_cost": "{G}",
+    "gy_exile_grow_counters": 1,
+    "gy_exile_grow_lifegain": 1
+   }
+  },
+  {
+   "name": "Ravenous Chupacabra",
+   "mana_cost": "{2}{B}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Beast",
+    "Horror"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, destroy target creature an opponent controls. [etb_destroy_opp_creature: the ETB analogue of destroy_target_creature (Terror), pick = largest opponent creature (DestroyLargestOppCreature, shared both worlds). PAYOFF IS PROVABLY 0 IN THIS DECK: the only opponent-creature spawn params in the engine (Forbidden Orchard / Hunted Phantasm / Varchild's) all live in Creature Giving, so the trigger never has a legal target and never fires here. Implemented faithfully + reusable rather than stubbed (the Terror-stub alternative was declined -- see the analysis ledger); carries no eval credit.]",
+   "template": "custom",
+   "parameters": {
+    "etb_destroy_opp_creature": true
+   }
+  },
+  {
+   "name": "Reclamation Sage",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "When this creature enters, you may destroy target artifact or enchantment. [PARTIAL, PROVISIONAL: the ETB is not modelled. WHY inert -- the trigger is OPTIONAL ('you may', declined at resolution) and the passive opponent controls no artifacts or enchantments ever, so the ONLY legal target in this deck is our own Birthing Pod, which is strictly dominated to destroy; modelling it would add a permanently-declined, strictly-dominated action to the plan space (the MTG_SKIP_INERT_LIFEGAIN precedent; follows the user-approved Disenchant stub). Viewer cost, disclosed: a human cannot choose to destroy their own Pod -- promote to a Tier-2 param with a human-play-gated enumeration if the user wants parity.]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Celes, Rune Knight",
+   "mana_cost": "{1}{R}{W}{B}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Wizard",
+    "Knight"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "When Celes enters, discard any number of cards, then draw that many cards plus one.\nWhenever one or more other creatures you control enter, if one or more of them entered from a graveyard or was cast from a graveyard, put a +1/+1 counter on each creature you control. [ETB RUMMAGE: etb_discard_any_number + etb_discard_any_draw_bonus 1 -- N chosen by a RESOLUTION heuristic on both the cast and the Pod/Chord put path (the deck's real route: NO red land exists, only Hierarch/Birds make {R}, so Celes is essentially uncastable from hand and enters via Pod/Chord): discard the hand's excess lands beyond two; N=0 still draws 1, never a downside. A searched cast-time N axis is a disclosed refinement (5e). GRAVEYARD-ENTER WATCHER: other_creature_gy_enter_team_counters 1 -- fires from FireEtbWatchers when the entering OTHER creature came from a graveyard (persist returns, Reveillark's LTB returns set GraveyardEnterScope), +1/+1 counter on EVERY creature we control; simultaneous entries fire ONCE (Reveillark's two-card return = one event, GyEnterBatchScope). A real second kill: under the persist loop each iteration pumps the team. [PARTIAL: the 'or was cast from a graveyard' half is NOT modelled; WHY inert -- no card in this deck has any cast-from-graveyard route and the engine has no such zone for creatures; zero reachable trigger. PROVISIONAL pending sign-off.]]",
+   "template": "custom",
+   "parameters": {
+    "etb_discard_any_number": true,
+    "etb_discard_any_draw_bonus": 1,
+    "other_creature_gy_enter_team_counters": 1
    }
   }
  ]

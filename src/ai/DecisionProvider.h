@@ -159,6 +159,35 @@ public:
     virtual std::vector<std::string>
     SacTutorPutList(const GameState& s, int controller, const CardParams& pp, int max_puts) const;
 
+    // TutorHandPutList -- Ranger of Eos's ETB multi-tutor TO HAND ("search your library for up to
+    // two creature cards with mana value 1 or less"): which cards (by NAME, ordered, one entry per
+    // library COPY -- repeats honour multiplicity) to fetch. Resolved once at the ETB on both the
+    // cast and the put path (no cast-time axis; same architectural position as SacTutorPutList).
+    // Default = library order over the cards passing the tutor's type + numeric filters, truncated
+    // to max_puts -- deliberately unopinionated; an archetype provider ranks (e.g. missing combo
+    // outlet first, then a dork). Human play overrides via the sac_tutor chooser.
+    virtual std::vector<std::string>
+    TutorHandPutList(const GameState& s, int controller, const CardParams& pp, int max_puts) const;
+
+    // ReviveCandidates -- Reveillark's LTB return ("return up to two target creature cards with
+    // power 2 or less from your graveyard to the battlefield"): ordered card names to return.
+    // A RESOLUTION-time pick (the trigger fires on paths no plan action carries -- a sac cost, a
+    // Felidar flicker), same architectural position as SacTutorPutList. Empty (the default) =
+    // the shared deck-agnostic ranking in PerformReturnFromGraveyardToBattlefield (printed MV
+    // desc). Human play overrides via the `revive` chooser. Disclosed in Stage 6a.
+    virtual std::vector<std::string>
+    ReviveCandidates(const GameState&, int /*controller*/, int /*max_power*/,
+                     int /*max_returns*/) const { return {}; }
+
+    // FlickerTarget -- Felidar Guardian's ETB flicker ("you may exile another target permanent
+    // you control, then return that card"): the target's card.m_number, or 0 to decline. Used on
+    // the PUT paths (Pod / Chord / a Reveillark return), where no cast-time plan variant carries
+    // the choice; a cast rides the searched chosen_x axis instead. `self_num` = Felidar's own
+    // m_number ("another" excludes it). Default declines -- only a deck provider that knows the
+    // flicker's value (untap a tapped Birthing Pod, reset a Kitchen Finks) opts in.
+    virtual int FlickerTarget(const GameState&, int /*controller*/, int /*self_num*/) const
+    { return 0; }
+
     // FetchCandidates -- fetch priority: ordered land-name candidates for a fetchland.
     virtual std::vector<std::string>
     FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const = 0;

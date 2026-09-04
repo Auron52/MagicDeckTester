@@ -4806,6 +4806,15 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
                     && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
             }
         }
+        // Birthing Pod: one activation per Pod per plan (the {T} cost).
+        if (cands[sel[a]].kind == Action::Kind::ActivatePod)
+        {
+            for (size_t b = a + 1; b < sel.size(); ++b)
+            {
+                if (cands[sel[b]].kind == Action::Kind::ActivatePod
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+            }
+        }
     }
     return false;
 }
@@ -6353,6 +6362,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p)
         fold(static_cast<uint64_t>(a.sac_count) * 17 + static_cast<uint64_t>(a.discard_lands));
         fold(static_cast<uint64_t>(a.soulfire_own_targets + 3) * 13
              + static_cast<uint64_t>(a.enchant_target));
+        fold(static_cast<uint64_t>(a.convoke_green) * 37
+             + static_cast<uint64_t>(a.convoke_other));
         fold(static_cast<uint64_t>(a.gy_exile_mode + 2) * 11
              + static_cast<uint64_t>(a.loyalty_ability + 2));
     }
@@ -8819,6 +8830,71 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 actions.push_back(std::move(a));
                 continue;
             }
+            // Chord of Calling ({X}{G}{G}{G}, Convoke, Instant: "search your library for a
+            // creature card with mana value X or less, put it onto the battlefield, then
+            // shuffle"). Without this branch the terminal `continue` below drops the card from
+            // enumeration ENTIRELY (the Luxurious Libation trap). Axis: one variant per
+            // (distinct library creature name, X = that name's MV) -- X > MV(target) is strictly
+            // dominated (same fetch, more mana), so the (target, X) pairs ARE the X axis --
+            // times a small convoke set: no-convoke is dominated by free-convoke (tapping a
+            // zero-opportunity-cost body vs the passive opponent costs nothing), so emit
+            // free-only and, when it differs, free+attackers (the real trade: damage now vs the
+            // fetch). The action's cost is emitted already reduced (green body -> {G} pip first,
+            // then {1}; other body -> {1} only; greedy pip assignment is optimal for this
+            // two-pip shape); ApplyConvokeTaps taps the same bodies at apply (both worlds).
+            if (def.params.tutor_to_battlefield_single && def.params.tutor_mv_max_is_x)
+            {
+                const ManaCost chord_base = EffectiveCost(def, state);   // {G}{G}{G}; X excluded
+                int cpips = def.card.m_mana_cost.x_pips; if (cpips < 1) { cpips = 1; }
+                const ConvokeClasses cc = def.params.convoke
+                    ? ClassifyConvokeBodies(state, state.active_player_index) : ConvokeClasses{};
+                const int fg = static_cast<int>(cc.free_green.size());
+                const int fo = static_cast<int>(cc.free_other.size());
+                const int ag = static_cast<int>(cc.atk_green.size());
+                const int ao = static_cast<int>(cc.atk_other.size());
+                const int pool_total = AvailableManaPool(state).Total();
+                std::unordered_set<std::string> chord_seen;
+                for (const Card& lc : ap.library)
+                {
+                    const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+                    const Card& lcard = ld ? ld->card : lc;
+                    if (!lcard.IsCreature()) { continue; }
+                    if (!chord_seen.insert(lc.m_name.str()).second) { continue; }
+                    const int x = lcard.m_mana_cost.ManaValue();
+                    // Two convoke arms: free bodies only; free + would-attack bodies.
+                    for (int arm = 0; arm < 2; ++arm)
+                    {
+                        const int avail_g = fg + (arm ? ag : 0);
+                        const int avail_o = fo + (arm ? ao : 0);
+                        if (arm == 1 && ag == 0 && ao == 0) { break; }   // identical to arm 0
+                        // Greedy assignment, tapping no more than the cost can absorb:
+                        // green pips first from green bodies, then generic from others, then
+                        // generic from leftover green.
+                        const int g1 = std::min(avail_g, chord_base.green);
+                        const int o1 = std::min(avail_o, x * cpips);
+                        const int g2 = std::min(avail_g - g1, x * cpips - o1);
+                        ManaCost c  = chord_base;
+                        c.green     = chord_base.green - g1;
+                        c.generic  += x * cpips - o1 - g2;
+                        if (c.ManaValue() > pool_total) { continue; }   // unpayable even now
+                        Action a;
+                        a.kind           = Action::Kind::CastFromHand;
+                        a.card_name      = ap.hand[i].m_name;
+                        a.hand_index     = i;
+                        a.cost           = c;
+                        a.chosen_x       = x;
+                        a.tutor_target   = lc.m_name;
+                        a.convoke_green  = g1 + g2;
+                        a.convoke_other  = o1;
+                        a.eval           = x;
+                        a.direct_damage  = 0;
+                        a.is_noncreature = true;
+                        a.card_mv        = def.card.m_mana_cost.ManaValue();
+                        actions.push_back(std::move(a));
+                    }
+                }
+                continue;
+            }
             // Tuck removal (Unexpectedly Absent, Removal + {X}): X buries the target deeper --
             // never better vs the passive opponent, so the provider proposes X=0 (unpruned /
             // human play opens the full 0..max range as mutually-exclusive variants). Cost =
@@ -9108,9 +9184,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // hand_index, hence mutually exclusive in the plan enumerator) and let the search pick.
         // Narrowing to the few cards that matter keeps the search's branching factor small --
         // the general "heuristic narrows, search decides the rest" pattern.
-        if (def.params.tutor_to_hand || def.params.tutor_to_top
+        if ((def.params.tutor_to_hand || def.params.tutor_to_top
             || def.params.tutor_land_to_battlefield || def.params.tutor_to_battlefield_single
             || def.params.look_top_put_creature_count > 0)
+            // Ranger of Eos (etb_tutor_hand_count > 1): the PAIR is picked once at resolution
+            // (PerformEtbTutorToHandMulti), on the cast and the Pod/Chord put path alike -- a
+            // single-target cast axis here would desync from that resolution.
+            && def.params.etb_tutor_hand_count <= 1)
         {
             // Natural Order: "sacrifice a green creature" additional cost -- uncastable without a
             // matching creature; otherwise emit one variant per DISTINCT victim NAME (most-
@@ -9997,6 +10077,34 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // fan the explicit 0..cap so the person (or the audit) still sees every count; the cap is
         // the WIDENED victim-pool count (EtbDestroyVictimClass), the same predicate resolution
         // destroys by, so an offered K always resolves in full.
+        // Felidar Guardian (etb_blink_permanent): WHICH permanent to flicker is a real searched
+        // axis -- untap a tapped Birthing Pod (second activation), untap a tapped land, reset a
+        // persisted Kitchen Finks, re-fire an ETB tutor -- plus a genuine DECLINE ("you may";
+        // flickering Orzhov Basilica re-fires its land-bounce, a downside). chosen_x carries the
+        // target's m_number (0 = decline), riding the etb_kx channel to FireOwnEtbTriggers (the
+        // Terastodon vehicle); a PUT entry resolves via the provider's FlickerTarget instead.
+        // Targets fold by an equivalence key (lossless): same name + tapped-state + sick-state +
+        // counter count are interchangeable in every modelled respect.
+        if (def.params.etb_blink_permanent)
+        {
+            { Action v = a; v.chosen_x = 0; actions.push_back(std::move(v)); }   // decline
+            std::vector<std::string> seen_fk;
+            for (const Permanent& t : state.battlefield)
+            {
+                if (t.controller_index != state.active_player_index) { continue; }
+                std::string key = t.card.m_name.str();
+                key += t.tapped ? "|t" : "|u";
+                key += t.entered_this_turn ? "|s" : "|r";
+                key += "|" + std::to_string(t.counters.size());
+                if (std::find(seen_fk.begin(), seen_fk.end(), key) != seen_fk.end()) { continue; }
+                seen_fk.push_back(std::move(key));
+                Action v   = a;
+                v.chosen_x = t.card.m_number;
+                v.eval     = a.eval + (t.tapped ? 2 : 1);   // untapping something is the point
+                actions.push_back(std::move(v));
+            }
+            continue;
+        }
         if (def.params.etb_destroy_own_noncreature_max > 0 && TeraKHeuristicEnabled())
         {
             if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::TeraK))
@@ -12105,6 +12213,199 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     actions.push_back(std::move(b));
                 }
             }
+
+            // PERSIST-LOOP bursts (Melira Pod): a FREE outlet + a persist creature carrying no
+            // -1/-1 counter + an ACTIVE counter-prevention replacement (Melira / Vizier) = the
+            // same body can be sacrificed every iteration (it returns clean each time). Emitted
+            // demand-driven and bounded like the damage burst above -- one action per (outlet,
+            // persist body, purpose), never a per-count fan. sac_victim_id != 0 with sac_count > 1
+            // is the ApplyPersistLoop discriminator at both apply sites. The K=1 cases (a single
+            // sac that fires persist, or the Kitchen Finks infinite-life proof -- see
+            // GameState::infinite_life_win) already ride the ordinary single-victim action.
+            if (!is_mana_outlet && !sd->params.sac_creature_cost.has_value())
+            {
+                const int me = state.active_player_index;
+                if (MinusCounterReplacement(state, me, 1) == 0)   // loop actually closes
+                {
+                    for (const Permanent& v : state.battlefield)
+                    {
+                        if (v.controller_index != me || !v.card.IsCreature()) { continue; }
+                        if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+                        if (sd->params.sac_outlet_excludes_self
+                            && v.card.m_number == src.card.m_number) { continue; }
+                        const CardDefinition* vd = CardDatabase::Instance().LookupCached(v.card);
+                        if (!vd || !vd->params.persist || MinusCountersOn(v) != 0) { continue; }
+                        // Explicit K=1 sac of the persist body itself. Distinct from the canonical
+                        // single-sac action above, whose victim heuristic ranks EXPENDABILITY and
+                        // may pick a dork -- but the persist body is the right victim exactly when
+                        // the death is the point: the Kitchen Finks infinite-life proof
+                        // (GameState::infinite_life_win fires on this apply) or a free Redcap
+                        // ping + Feeder counter with the body returned clean.
+                        {
+                            Action b;
+                            b.kind           = Action::Kind::SacCreatureOutlet;
+                            b.card_name      = src.card.m_name;
+                            b.hand_index     = -1;
+                            b.sac_source_id  = src.card.m_number;
+                            b.sac_victim_id  = v.card.m_number;
+                            b.cost           = ManaCost{};
+                            b.direct_damage  = vd->params.etb_damage_any > 0 ? v.EffectivePower() : 0;
+                            b.eval           = std::max(1, b.direct_damage);
+                            b.is_noncreature = true;
+                            actions.push_back(std::move(b));
+                        }
+                        // Murderous Redcap loop: each iteration re-fires the ETB for its live
+                        // power. K = fewest iterations that could be lethal (the Siege-Gang
+                        // demand-driven shape); direct_damage carries the projection so the
+                        // generic win-check sees the kill with no provider hook.
+                        const int pwr = v.EffectivePower();
+                        if (vd->params.etb_damage_any > 0 && pwr > 0)
+                        {
+                            const int opp_life = state.players[1 - me].life;
+                            int k = (opp_life + pwr - 1) / pwr;
+                            if (k > kPersistLoopCap) { k = kPersistLoopCap; }
+                            if (k >= 2)
+                            {
+                                Action b;
+                                b.kind           = Action::Kind::SacCreatureOutlet;
+                                b.card_name      = src.card.m_name;
+                                b.hand_index     = -1;
+                                b.sac_source_id  = src.card.m_number;
+                                b.sac_victim_id  = v.card.m_number;   // the SAME body each time
+                                b.sac_count      = k;
+                                b.cost           = ManaCost{};        // free outlet (gated above)
+                                b.direct_damage  = pwr * k;
+                                b.eval           = pwr * k * DMG;
+                                b.is_noncreature = true;
+                                actions.push_back(std::move(b));
+                            }
+                        }
+                        // Carrion Feeder growth loop (outlet's add_counter_to_self payload): grow
+                        // the outlet itself toward a lethal attack. Demand-driven: enough counters
+                        // that the outlet's power reaches the opponent's life total.
+                        const int per = sd->params.sac_outlet_add_counter_to_self;
+                        if (per > 0)
+                        {
+                            const int opp_life = state.players[1 - me].life;
+                            const int cur      = src.EffectivePower();
+                            if (opp_life > cur)
+                            {
+                                int k = (opp_life - cur + per - 1) / per;
+                                if (k > kPersistLoopCap) { k = kPersistLoopCap; }
+                                if (k >= 2)
+                                {
+                                    Action b;
+                                    b.kind           = Action::Kind::SacCreatureOutlet;
+                                    b.card_name      = src.card.m_name;
+                                    b.hand_index     = -1;
+                                    b.sac_source_id  = src.card.m_number;
+                                    b.sac_victim_id  = v.card.m_number;
+                                    b.sac_count      = k;
+                                    b.cost           = ManaCost{};
+                                    b.eval           = per * k;   // permanent growth, not damage
+                                    b.is_noncreature = true;
+                                    actions.push_back(std::move(b));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Birthing Pod activations ("{1}{G/P}, {T}, Sacrifice a creature: search for a creature
+        // with MV exactly 1 more, put it onto the battlefield, shuffle. Only as a sorcery" -- the
+        // sorcery gate needs no code: CollectActions runs only in the mains). FULL (victim, fetch)
+        // cross product with LOSSLESS folds only (core invariant): victims fold by an equivalence
+        // key covering everything a death reads (the blink target-equivalence precedent -- two
+        // Kitchen Finks, one wearing a spent persist counter, are NOT equivalent); duplicate
+        // library names fold to one; the no-fetch sentinel variant is always emitted (saccing with
+        // nothing to get is legal, and the death itself can be the payoff). Every variant of one
+        // Pod shares an option group (the {T} bounds it to one activation per Pod per plan).
+        for (const Permanent& src : state.battlefield)
+        {
+            if (src.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || sd->params.pod_mv_delta == 0) { continue; }
+            if (sd->params.pod_taps && src.tapped) { continue; }
+            const Player& pod_ap = state.players[state.active_player_index];
+            std::vector<std::string> seen_victims;
+            for (const Permanent& v : state.battlefield)
+            {
+                if (v.controller_index != state.active_player_index
+                    || !v.card.IsCreature()) { continue; }
+                std::string key = v.card.m_name.str();
+                key += "|" + std::to_string(v.card.m_mana_cost.ManaValue());
+                key += v.tapped ? "|t" : "|u";
+                key += v.entered_this_turn ? "|s" : "|r";
+                key += "|" + std::to_string(v.EffectivePower())
+                     + "/" + std::to_string(v.EffectiveToughness());
+                key += "|" + std::to_string(v.counters.size());
+                key += v.is_token ? "|tok" : "|c";
+                if (std::find(seen_victims.begin(), seen_victims.end(), key)
+                    != seen_victims.end()) { continue; }
+                seen_victims.push_back(std::move(key));
+                const int want_mv = v.card.m_mana_cost.ManaValue() + sd->params.pod_mv_delta;
+                auto emit_pod = [&](const std::string& target, int eval)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::ActivatePod;
+                    a.card_name      = src.card.m_name;
+                    a.def            = sd;
+                    a.hand_index     = -1;
+                    a.sac_source_id  = src.card.m_number;
+                    a.sac_victim_id  = v.card.m_number;
+                    a.tutor_target   = target;
+                    a.cost           = sd->params.pod_activation_cost.value_or(ManaCost{});
+                    a.eval           = eval;
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                };
+                std::unordered_set<std::string> seen_names;
+                for (const Card& lc : pod_ap.library)
+                {
+                    const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+                    const Card& lcard = ld ? ld->card : lc;
+                    if (!lcard.IsCreature()
+                        || lcard.m_mana_cost.ManaValue() != want_mv) { continue; }
+                    if (!seen_names.insert(lc.m_name.str()).second) { continue; }
+                    emit_pod(lc.m_name.str(), want_mv);
+                }
+                emit_pod(kPodNoFetch, 0);
+            }
+        }
+
+        // Scavenging Ooze ("{G}: Exile target card from a graveyard. If it was a creature card,
+        // put a +1/+1 counter on this creature and you gain 1 life."): REPEATABLE (no {T}), so
+        // actions are independent (no option group) and a plan may take several -- each pays
+        // gy_exile_grow_cost. One action per (Ooze source, distinct graveyard card NAME): WHICH
+        // card is exiled is a SEARCHED choice (the Haven of the Spirit Dragon pattern) because
+        // exiling our own creature cards strips Reveillark's LTB targets. Eval = the counter
+        // only; the lifegain is modelled at apply but buys nothing vs a passive opponent.
+        for (const Permanent& src : state.battlefield)
+        {
+            if (src.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || !sd->params.gy_exile_grow_cost.has_value()) { continue; }
+            const Player& oz_ap = state.players[state.active_player_index];
+            std::unordered_set<std::string> seen_gy;
+            for (const Card& gc : oz_ap.graveyard)
+            {
+                if (!seen_gy.insert(gc.m_name.str()).second) { continue; }
+                const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+                const bool creat = (gd ? gd->card : gc).IsCreature();
+                Action a;
+                a.kind           = Action::Kind::GraveyardExileGrow;
+                a.card_name      = src.card.m_name;
+                a.def            = sd;
+                a.hand_index     = -1;
+                a.sac_source_id  = src.card.m_number;
+                a.tutor_target   = gc.m_name;
+                a.cost           = sd->params.gy_exile_grow_cost.value();
+                a.eval           = creat ? sd->params.gy_exile_grow_counters : 0;
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+            }
         }
 
         // Twinshot Sniper channel: a from-hand ability (pay channel_cost + discard -> 2 face damage).
@@ -12434,6 +12735,9 @@ static int ActivationFamilyKey(const Action& a)
         case Action::Kind::ActivateBlink:
         // Permanent ability: one {T} per source across its modes (the Deathrite precedent).
         case Action::Kind::ActivatePermAbility:
+        // Birthing Pod: every (victim, fetch) variant of one Pod is mutually exclusive -- the {T}
+        // bounds it to one activation per Pod per plan.
+        case Action::Kind::ActivatePod:
             return (a.sac_source_id >= 0) ? -1000 - a.sac_source_id : 0;
         default:
             return 0;
@@ -17955,6 +18259,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ApplySuspend(state, state.active_player_index, a.card_name);
                 if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(a); }
             }
+            else if (a.kind == Action::Kind::CastFromHand
+                     && (a.convoke_green > 0 || a.convoke_other > 0))
+            {
+                ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other);
+            }
         }
     };
 
@@ -19334,7 +19643,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             std::vector<std::string> pref;
             if (!tutor_target.empty()) { pref.push_back(tutor_target); }
             PerformTutorToBattlefield(state, state.active_player_index, def.params,
-                                      /*max_puts=*/1, pref, def.card.m_name.str());
+                                      /*max_puts=*/1, pref, def.card.m_name.str(),
+                                      /*require_mv=*/-1,
+                                      def.params.tutor_mv_max_is_x ? chosen_x : -1);
         }
         else if (def.params.tutor_to_battlefield)
         {
@@ -20111,6 +20422,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                           TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float, a.sac_victim_id); }
         else if (a.kind == Action::Kind::Suspend)
         { ApplySuspend(state, state.active_player_index, a.card_name); }
+        // Convoke (Chord of Calling): tap the chosen bodies BEFORE the batch pre-pay / casts, so
+        // AvailableManaPool no longer counts anything convoke consumed; the action's cost was
+        // reduced at enumeration by exactly their contribution. Same deterministic body order in
+        // both worlds (ApplyConvokeTaps) -> lockstep.
+        else if (a.kind == Action::Kind::CastFromHand
+                 && (a.convoke_green > 0 || a.convoke_other > 0))
+        { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
     }
 
     // PLAN TRAITS for the payment layer (mana-order-and-reserve-overhaul.md layer 3): computed
@@ -20176,7 +20494,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             {
-                if (a.sac_count > 1)
+                if (a.sac_count > 1 && a.sac_victim_id != 0)
+                { ApplyPersistLoop(state, state.active_player_index, a.sac_source_id, a.sac_victim_id, a.sac_count); }
+                else if (a.sac_count > 1)
                 { ApplySacCreatureOutletBurst(state, state.active_player_index, a.sac_source_id, a.sac_count); }
                 else
                 { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
@@ -20195,6 +20515,26 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 for (int k = 0; k < std::max(1, a.chosen_x); ++k)
                 { if (!ApplyRevealTopDeploy(state, state.active_player_index)) { break; } }
+            }
+        }
+        else if (a.kind == Action::Kind::ActivatePod)
+        {
+            // Birthing Pod: pay the mana half here (the ordinary trailing-pass pay path); the tap,
+            // the sacrifice cascade and the MV-filtered put live in the shared PerformPodActivate
+            // (executor mirror calls the identical function -> lockstep).
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            {
+                PerformPodActivate(state, state.active_player_index, a.sac_source_id,
+                                   a.sac_victim_id, a.tutor_target.str());
+            }
+        }
+        else if (a.kind == Action::Kind::GraveyardExileGrow)
+        {
+            // Scavenging Ooze: pay {G}, exile the named graveyard card, grow if it was a creature.
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            {
+                ApplyGraveyardExileGrow(state, state.active_player_index, a.sac_source_id,
+                                        a.tutor_target.str());
             }
         }
         else if (a.kind == Action::Kind::ActivateBlink)
@@ -21220,9 +21560,11 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         // Declined or unaffordable -> sacrifice; fire OnCreatureDies (Mogg's death token, etc.).
         const Card dead = p.card;
         const int  ctrl = p.controller_index;
+        const bool tok  = p.is_token;
+        const int  m1   = MinusCountersOn(p);
         state.players[ctrl].graveyard.push_back(dead);
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
-        OnCreatureDies(state, ctrl, dead);   // may append a token at the end -> safe (no echo_cost)
+        OnCreatureDies(state, ctrl, dead, tok, m1);   // may append a token at the end -> safe (no echo_cost)
         // Do not advance i: the erased slot now holds the next permanent.
     }
     // END OF THE UPKEEP STEP (CR 500.4): the pool empties, so an echo cost paid off a lumpy source
@@ -23824,7 +24166,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // param, so only a bestow deck's signature moves -- the #S/#V/#K precedent.
                         + ((act.def && act.def->params.bestow_cost.has_value()
                             && !s_legacy_bestow_sig)
-                           ? (act.bestow ? "#B1" : "#B0") : "")); break;
+                           ? (act.bestow ? "#B1" : "#B0") : "")
+                        // Chord of Calling: X, the fetch target AND the convoke tap counts are all
+                        // real decisions (core invariant; the MTG_SIG_X_AUDIT class -- without the
+                        // gate the autonomous dedup collapses the X axis). Gated on the params so
+                        // no existing deck's signature moves.
+                        + ((act.def && (act.def->params.convoke
+                                        || act.def->params.tutor_mv_max_is_x))
+                           ? ("#X" + std::to_string(act.chosen_x) + "#T" + act.tutor_target
+                              + "#C" + std::to_string(act.convoke_green) + "/"
+                              + std::to_string(act.convoke_other)) : "")
+                        // Felidar Guardian: distinct flicker targets (and the decline) are
+                        // DISTINCT plans (core invariant); gated on the param.
+                        + ((act.def && act.def->params.etb_blink_permanent)
+                           ? ("#F" + std::to_string(act.chosen_x)) : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
@@ -23845,6 +24200,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     msf.push_back("SAC#" + std::to_string(act.sac_source_id)
                                   + ">" + std::to_string(act.sac_victim_id)
                                   + "x" + std::to_string(act.sac_count)); break;
+                // Birthing Pod: victim AND fetch target are both real decisions -- key on both
+                // (the Gamble tutor-dedup lesson: drop the target and every Pod variant collapses
+                // to the first-enumerated fetch).
+                case Action::Kind::ActivatePod:
+                    msf.push_back("POD#" + std::to_string(act.sac_source_id)
+                                  + ">" + std::to_string(act.sac_victim_id)
+                                  + ":" + act.tutor_target.str()); break;
+                // Scavenging Ooze: WHICH graveyard card is exiled is a searched choice.
+                case Action::Kind::GraveyardExileGrow:
+                    msf.push_back("OOZE#" + std::to_string(act.sac_source_id)
+                                  + ":" + act.tutor_target.str()); break;
                 case Action::Kind::Channel:
                     s.push_back("CHANNEL#" + act.card_name); break;
                 // Deathrite gy-exile outlet: which source AND which mode are distinct decisions.

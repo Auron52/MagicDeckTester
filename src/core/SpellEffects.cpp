@@ -3291,3 +3291,79 @@ std::string DescribeLifeWatchers(const GameState& state, int subject_controller,
     return (drained ? "\xF0\x9F\xA9\xB8 " : "\xF0\x9F\x92\x9A ")   // U+1FA78 blood / U+1F49A heart
          + head + " \xE2\x80\x94 " + body;                          // em dash
 }
+
+// Ranger of Eos: "search your library for up to two creature cards with mana value 1 or less,
+// reveal them, put them into your hand, then shuffle." The etb_tutor_hand_count > 1 multi-tutor:
+// resolved once, at the ETB, identically on the cast path and the Birthing Pod / Chord put path
+// (there is no cast-time plan axis for the pair -- see the enumeration exclusion in TurnSolver).
+// WHICH cards = DecisionProvider::TutorHandPutList (ordered, one entry per library COPY, so "two
+// Carrion Feeders" is a legal pick); human play overrides through the existing sac_tutor
+// multi-pick chooser. ONE ShuffleAfterSearch after every fetched card has left the library --
+// a second call would burn a search_count ordinal and reseed every later fetch's reshuffle.
+void PerformEtbTutorToHandMulti(GameState& state, int controller_index, const CardParams& pp,
+                                const std::string& source_name)
+{
+    Player& ap = state.players[controller_index];
+    const int want = pp.etb_tutor_hand_count;
+    std::vector<std::string> list =
+        ResolveProvider(state).TutorHandPutList(state, controller_index, pp, want);
+    if (g_play_sac_tutor_chooser)
+    {
+        // Human play (--claude-play / viewer): surface the pair pick through the sac_tutor
+        // multi-pick decision (candidates = every matching library copy, heuristic subset =
+        // the provider list). Nulled by RevealLogPause during search/rollout -> byte-identical.
+        std::vector<Card> cands;
+        for (const Card& lc : ap.library)
+        {
+            const CardDefinition* d    = CardDatabase::Instance().LookupCached(lc);
+            const Card&           card = d ? d->card : lc;
+            bool type_ok = false;
+            for (const std::string& t : pp.tutor_types)
+            { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+            if (type_ok && TutorNumericFilterOk(card, pp)) { cands.push_back(lc); }
+        }
+        std::vector<int> heur;
+        std::vector<bool> used(cands.size(), false);
+        for (const std::string& nm : list)
+        {
+            for (int i = 0; i < static_cast<int>(cands.size()); ++i)
+            {
+                if (!used[i] && cands[i].m_name.str() == nm)
+                { used[i] = true; heur.push_back(i); break; }
+            }
+        }
+        const std::vector<int> picked = (*g_play_sac_tutor_chooser)(
+            state, controller_index, source_name + " (put in HAND)", cands, want, heur);
+        list.clear();
+        for (int i : picked)
+        {
+            if (i >= 0 && i < static_cast<int>(cands.size()))
+            { list.push_back(cands[i].m_name.str()); }
+        }
+    }
+    int put = 0;
+    for (const std::string& nm : list)
+    {
+        if (put >= want) { break; }
+        for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+        {
+            if (ap.library[i].m_name.str() == nm)
+            {
+                Card c = ap.library[i];
+                ap.library.erase(ap.library.begin() + i);
+                ap.hand.push_back(std::move(c));
+                ++put;
+                if (g_play_event_sink && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "tutor",
+                                  "\xF0\x9F\x94\x8D " + nm + " -- searched to hand ("
+                                  + source_name + ")");
+                }
+                break;
+            }
+        }
+    }
+    // Searching the library shuffles it (CR 701.19) -- unconditional like PerformTutor's, and
+    // exactly ONCE for the whole multi-fetch.
+    ShuffleAfterSearch(state, controller_index);
+}

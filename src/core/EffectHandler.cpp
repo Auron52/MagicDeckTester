@@ -323,7 +323,10 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     std::vector<std::string> pref;
                     if (!entry.tutor_target.empty()) { pref.push_back(entry.tutor_target); }
                     PerformTutorToBattlefield(state, entry.controller_index, def.params,
-                                              /*max_puts=*/1, pref, def.card.m_name.str());
+                                              /*max_puts=*/1, pref, def.card.m_name.str(),
+                                              /*require_mv=*/-1,
+                                              def.params.tutor_mv_max_is_x
+                                                  ? entry.chosen_x.value_or(-1) : -1);
                 }
                 else if (def.params.tutor_to_battlefield)
                 {

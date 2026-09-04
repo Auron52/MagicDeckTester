@@ -369,6 +369,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // having an opponent library at all: an unconditional fold would shift every key for every
     // deck and give up byte-identity to record a field that is permanently false for them.
     if (s.opponent_library_dealt) { fold(s.opponent_decked ? 0xD3CDull : 0xD3CEull); }
+    // Infinite-life win flag (Melira Pod): only ever true in a deck that runs the loop, so this
+    // fold is byte-identical everywhere else.
+    if (s.infinite_life_win) { fold(0x1F1F1Full); }
     fold(s.on_the_play ? 1u : 0u);
     fold(s.opponent_lost_life_this_turn ? 1u : 0u);
     fold(static_cast<std::uint64_t>(s.vial_target_mv));

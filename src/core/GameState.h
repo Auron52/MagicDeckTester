@@ -213,6 +213,16 @@ struct GameState
     // turn number and not the next one: the opponent never gets a main phase in this model, so on
     // the user's instruction (2026-09-02) the game is over as of our last turn.
     bool                     opponent_decked              = false;
+    // "Infinite life" win (USER feature, 2026-09-04, Melira Pod): a demonstrated unbounded
+    // lifegain loop counts as a WIN, reported under its own kind -- "most decks can't win when
+    // you have a massive amount of life ... only losing to taking them out that turn."
+    // EXECUTION-VERIFIED, never pattern-matched: set inside ApplySacCreatureOutlet (both worlds,
+    // lockstep) the moment a FREE sac outlet sacrifices a persist creature with an ETB lifegain
+    // and the body RETURNS CLEAN (no -1/-1 counter -- Melira/Vizier active). That one iteration
+    // changed nothing but our life total, so it can repeat without bound. Gated behind
+    // InfLifeWinEnabled() (MTG_INFLIFE_WIN, default ON; =0 = pure-kill measurement arm) at the
+    // set site; false for every deck without the loop -> byte-identical elsewhere.
+    bool                     infinite_life_win            = false;
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
     // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack
@@ -459,5 +469,8 @@ struct GameState
 // byte-identical to the old `life <= 0` for every deck that cannot mill.
 inline bool OpponentHasLost(const GameState& s)
 {
-    return s.Opponent().HasLost() || s.opponent_decked;
+    // infinite_life_win is OUR alternate win (not an opponent loss), but every win consumer --
+    // search projection, executor, fd-oracle -- reads this one predicate, so folding it here is
+    // what keeps all of them agreeing about the same game (the opponent_decked precedent).
+    return s.Opponent().HasLost() || s.opponent_decked || s.infinite_life_win;
 }

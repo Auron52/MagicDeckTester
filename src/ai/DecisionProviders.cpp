@@ -236,6 +236,7 @@ GenericProvider::TutorCandidates(const GameState& s, int controller, const CardP
         for (const std::string& t : pp.tutor_types)
         { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
         if (!CardHasColorNamed(card, pp.tutor_color)) { type_ok = false; }   // Natural Order: green only
+        if (!TutorNumericFilterOk(card, pp)) { type_ok = false; }   // Ranger/Recruiter MV/toughness
         if (type_ok && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
     }
     // RANKED DEFAULT for put-onto-battlefield tutors (MTG_TUTOR_RANKED_DEFAULT, default off --
@@ -895,6 +896,26 @@ std::vector<int> DecisionProvider::LightPawsAuraCandidates(
         TRACE("aura", "legal=%zu gap=%d pick=%s(%d) runnerup=%s", out.size(), top - second,
               ap.library[out.front()].m_name.str().c_str(), top,
               out.size() > 1 ? ap.library[out[1]].m_name.str().c_str() : "-");
+    }
+    return out;
+}
+
+std::vector<std::string> DecisionProvider::TutorHandPutList(
+    const GameState& s, int controller, const CardParams& pp, int max_puts) const
+{
+    // Default (deck-agnostic): library order over the cards passing the tutor's type + numeric
+    // filters, one entry per COPY, truncated to max_puts. See the header contract; an archetype
+    // provider overrides with a ranking (missing combo outlet first, then a dork).
+    std::vector<std::string> out;
+    for (const Card& lc : s.players[controller].library)
+    {
+        if (static_cast<int>(out.size()) >= max_puts) { break; }
+        const CardDefinition* d    = CardDatabase::Instance().LookupCached(lc);
+        const Card&           card = d ? d->card : lc;
+        bool type_ok = false;
+        for (const std::string& t : pp.tutor_types)
+        { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+        if (type_ok && TutorNumericFilterOk(card, pp)) { out.push_back(lc.m_name.str()); }
     }
     return out;
 }
@@ -9227,6 +9248,7 @@ namespace
     const DragonsProvider        g_dragons;
     const AurasProvider          g_auras;
     const EldraziFlickerProvider g_eldrazi_flicker;
+    const MeliraPodProvider      g_melira_pod;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -9243,6 +9265,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool stompy = false;   // StompySurprise (elf ramp) -- routes to Generic BEFORE the anti check
     bool minotaur = false; // Minotaur tribal -- routes to Generic BEFORE the goblin check
     bool dragons = false;  // Mono-red Dragons ramp -- routes to Generic BEFORE the goblin check
+    bool melira_pod = false; // Persist combo -- routes to MeliraPodProvider BEFORE the goblin check
     bool aura = false;     // Bogle Auras -- Light-Paws' aura_cast_tutor_attach is unique to it
     // Eldrazi Displacer / Emiel flicker combo. MUST be detected and MUST return ABOVE the `anti`
     // check: Eladamri's Call carries tutor_to_hand, which is the anti-lifegain signature, and this
@@ -9326,6 +9349,23 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.firebreathing_threshold_power > 0)
         {
             dragons = true;
+        }
+
+        // Melira Pod persist combo. MUST be detected and MUST win over the goblin check below --
+        // Carrion Feeder / Bloodthrone Vampire carry sac_creature_outlet, which ALONE sets the
+        // Goblin signature (the FIFTH occurrence of the misroute class recorded for Mirrorwing,
+        // StompySurprise, Minotaur and Dragons), and GoblinsProvider's sac-outlet deferral would
+        // silently delete the persist loop (see MeliraPodProvider's comment). Signature = the
+        // persist-combo gated params, OR'd across SEVERAL different cards (persist: Kitchen Finks
+        // / Murderous Redcap; the counter statics: Melira / Vizier of Remedies; pod_mv_delta:
+        // Birthing Pod; convoke: Chord of Calling; the LTB return: Reveillark; the ETB flicker:
+        // Felidar Guardian) so no single deckbuilding swap can lose it. Every one is new + gated
+        // (false/0 inert) -- no existing deck can set it.
+        if (p.persist || p.prevents_minus_counters || p.reduces_minus_counters_by_one
+            || p.pod_mv_delta != 0 || p.convoke || p.ltb_return_creatures > 0
+            || p.etb_blink_permanent)
+        {
+            melira_pod = true;
         }
 
         if (p.sac_creature_outlet
@@ -9472,6 +9512,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // own. It was routed to g_generic when that misroute was fixed, because a deck earns its own
     // provider only once it has a MEASURED hook to hold; the bucket policy is that hook.
     if (dragons) { return g_dragons; }
+    // Melira Pod: MeliraPodProvider (Generic-inheriting). Must WIN OVER goblin -- its free sac
+    // outlets set that signature on their own (see the detection block note).
+    if (melira_pod) { return g_melira_pod; }
     if (goblin) { return g_goblins; }
     // Equipment aggro; must WIN OVER anti (Stoneforge Mystic's tutor_to_hand sets that signature
     // on its own -- see the equipment detection note above). No other deck carries the equipment
@@ -14116,5 +14159,72 @@ EldraziFlickerProvider::TutorCandidates(const GameState& s, int controller,
     std::vector<std::string> out;
     out.reserve(ranked.size());
     for (const Ranked& r : ranked) { out.push_back(r.name); }
+    return out;
+}
+
+// ---- MeliraPodProvider ------------------------------------------------------
+
+int MeliraPodProvider::FlickerTarget(const GameState& s, int controller, int self_num) const
+{
+    int best = 0, best_rank = 99;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number == self_num) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        int rank = 99;
+        if (d->params.pod_mv_delta != 0 && p.tapped)                  { rank = 0; }
+        else if (d->params.persist && MinusCountersOn(p) > 0)         { rank = 1; }
+        else if (d->params.ltb_return_creatures > 0)                  { rank = 2; }
+        else if (p.card.IsLand() && p.tapped && !d->params.etb_bounce_land) { rank = 3; }
+        else if (d->params.etb_self_lifegain > 0)                     { rank = 4; }
+        else if (d->params.tutor_to_hand)                             { rank = 5; }
+        if (rank < best_rank) { best_rank = rank; best = p.card.m_number; }
+    }
+    return best_rank < 99 ? best : 0;
+}
+
+std::vector<std::string> MeliraPodProvider::ReviveCandidates(
+    const GameState& s, int controller, int max_power, int max_returns) const
+{
+    bool have_prev = false, have_outlet = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.prevents_minus_counters || d->params.reduces_minus_counters_by_one)
+        { have_prev = true; }
+        if (d->params.sac_creature_outlet && !d->params.sac_creature_cost.has_value())
+        { have_outlet = true; }
+    }
+    struct Cand { int score; std::string nm; };
+    std::vector<Cand> cands;
+    std::unordered_set<std::string> seen;
+    for (const Card& gc : s.players[controller].graveyard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(gc);
+        const Card& card = d ? d->card : gc;
+        if (!card.IsCreature() || card.m_power.value_or(0) > max_power) { continue; }
+        if (!seen.insert(gc.m_name.str()).second) { continue; }
+        int score = card.m_mana_cost.ManaValue();
+        if (d)
+        {
+            if ((d->params.prevents_minus_counters || d->params.reduces_minus_counters_by_one)
+                && !have_prev) { score += 100; }
+            if (d->params.sac_creature_outlet && !d->params.sac_creature_cost.has_value()
+                && !have_outlet) { score += 80; }
+            if (d->params.persist && d->params.etb_damage_any > 0) { score += 60; }
+        }
+        cands.push_back(Cand{score, gc.m_name.str()});
+    }
+    std::sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b)
+              { if (a.score != b.score) { return a.score > b.score; } return a.nm < b.nm; });
+    std::vector<std::string> out;
+    for (const Cand& c : cands)
+    {
+        if (static_cast<int>(out.size()) >= max_returns) { break; }
+        out.push_back(c.nm);
+    }
     return out;
 }

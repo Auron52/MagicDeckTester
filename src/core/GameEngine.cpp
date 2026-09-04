@@ -739,7 +739,8 @@ void GameEngine::CheckStateBasedActions(GameState& state)
         // Collect creatures that died this pass so their death-watchers (Pashalik ping / Rundvelt
         // impulse / Mogg death token) fire AFTER the erase loop -- OnCreatureDies may append tokens
         // to the battlefield, which would invalidate the iterator if fired mid-loop.
-        std::vector<std::pair<Card, int>> died;   // (dead card, controller)
+        struct DeadCreature { Card card; int controller; bool was_token; int minus_counters; };
+        std::vector<DeadCreature> died;
         for (std::vector<Permanent>::iterator it = state.battlefield.begin();
              it != state.battlefield.end(); )
         {
@@ -758,6 +759,12 @@ void GameEngine::CheckStateBasedActions(GameState& state)
                     // every ordinary creature (their damage check keeps the raw value).
                     tough += ComputeLordBonus(p.card, state,
                                               p.controller_index, p.is_animated, &p).second;
+                    // Voice of Resurgence's Elemental token (toughness = creatures you control):
+                    // same rationale as the domain self-pump above -- the SBA must see the CDA.
+                    {
+                        const CardDefinition* cd = CardDatabase::Instance().LookupCached(p.card);
+                        if (cd) { tough += DynamicBaseToughness(*cd, state, p.controller_index); }
+                    }
                     tough += EquipBonusFor(p, state).second;   // Grafted Wargear +3/+2 etc. --
                                                                // equipment toughness must be seen
                                                                // here or a Jitte -1/-1'd 0-tough
@@ -769,7 +776,8 @@ void GameEngine::CheckStateBasedActions(GameState& state)
             }
             if (destroy)
             {
-                if (is_creature) { died.emplace_back(p.card, p.controller_index); }
+                if (is_creature)
+                { died.push_back(DeadCreature{p.card, p.controller_index, p.is_token, MinusCountersOn(p)}); }
                 state.players[p.controller_index].graveyard.push_back(p.card);
                 it = state.battlefield.erase(it);
                 changed = true;
@@ -778,16 +786,17 @@ void GameEngine::CheckStateBasedActions(GameState& state)
         }
         // Equipment falls off a dead host (CR 301.5c): zero equipped_to for every died creature.
         // The Equipment itself stays on the battlefield.
-        for (const std::pair<Card, int>& dd : died)
+        for (const DeadCreature& dd : died)
         {
             for (Permanent& q : state.battlefield)
             {
-                if (q.equipped_to == dd.first.m_number) { q.equipped_to = 0; }
+                if (q.equipped_to == dd.card.m_number) { q.equipped_to = 0; }
             }
         }
-        for (const std::pair<Card, int>& d : died)
+        for (const DeadCreature& d : died)
         {
-            OnCreatureDies(state, d.second, d.first);   // no-op unless a death-watcher is in play
+            // no-op unless a death-watcher (or persist) is in play
+            OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters);
         }
     }
 }

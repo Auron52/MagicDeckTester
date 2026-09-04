@@ -64,6 +64,15 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         if (def->params.spectacle_cost.has_value()) { return true; }
+        // MELIRA POD (2026-09-04). Birthing Pod (pod_mv_delta): the classic line is "attack with
+        // Kitchen Finks / Murderous Redcap, THEN sac the attacker to Pod post-combat" -- banking
+        // the combat damage AND the ladder climb off one body; a single main forces the trade.
+        // Chord of Calling (convoke): pre-combat every untapped body is convoke fuel but tapping
+        // one forfeits its attack; post-combat the attackers are tapped and convoke runs on the
+        // leftovers -- materially different lines the search should weigh. (Instant speed
+        // otherwise reduces to "castable in both mains" in this engine; the real end-of-opponent-
+        // turn Chord is a disclosed Tier-4 gap -- no opponent-turn priority window exists.)
+        if (def->params.pod_mv_delta != 0 || def->params.convoke) { return true; }
         // MTG_AL_SINGLE_MAIN=1: measurement lever (2026-08-21, USER: "skipping main 2 is not
         // terrible as long as it doesn't cause anything to regress") -- drop the lifegain_to_loss
         // trigger so the deck plays a single main, the A/B arm against the enforced m1/m2 split
@@ -585,6 +594,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     result.seed         = base_seed;
     result.games_played = num_games;
     result.win_turns.resize(num_games, -1);
+    result.inf_life.resize(num_games, 0);
 
     // Detect once whether this deck's second main is relevant (e.g. spectacle
     // finishers cast after combat). All worker AIs get the same setting.
@@ -696,12 +706,20 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                     }
                 }
                 result.win_turns[gi] = win_turn;
+                result.inf_life[gi]  = state.infinite_life_win ? 1 : 0;
                 // Diagnostic (MTG_DUMP_WINS, inert by default): per-game win turn, for
                 // per-game A/B diffs between builds (e.g. `join` two runs to find the
-                // games a change moved). Single-thread for ordered output.
+                // games a change moved). Single-thread for ordered output. kind=inflife marks
+                // the infinite-life win kind (absent = a damage/deck-out win) so per-game
+                // diffs can attribute a moved game to the loop.
                 static const bool s_dump_wins = EnvOn("MTG_DUMP_WINS");
                 if (s_dump_wins)
-                { std::fprintf(stderr, "[win] gi=%d wt=%d\n", gi, win_turn); }
+                {
+                    if (state.infinite_life_win)
+                    { std::fprintf(stderr, "[win] gi=%d wt=%d kind=inflife\n", gi, win_turn); }
+                    else
+                    { std::fprintf(stderr, "[win] gi=%d wt=%d\n", gi, win_turn); }
+                }
 
                 if (logging)
                 {
@@ -728,6 +746,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
         result.average_win_turn = static_cast<double>(sum) / result.games_won;
     }
     result.avg_turns = ComputeAvgTurns(result.win_turns, max_turns);
+    for (uint8_t f : result.inf_life) { if (f) { ++result.games_won_inf_life; } }
 
     if (logging)
     {

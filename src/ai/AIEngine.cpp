@@ -1046,9 +1046,11 @@ void AIEngine::ResolveEchoUpkeep(GameState& state)
         // Declined or unaffordable -> sacrifice; fire OnCreatureDies (Mogg's death token, etc.).
         const Card dead = p.card;
         const int  ctrl = p.controller_index;
+        const bool tok  = p.is_token;
+        const int  m1   = MinusCountersOn(p);
         state.players[ctrl].graveyard.push_back(dead);
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
-        OnCreatureDies(state, ctrl, dead);   // may append a token at the end -> safe (no echo_cost)
+        OnCreatureDies(state, ctrl, dead, tok, m1);   // may append a token at the end -> safe (no echo_cost)
         // Do not advance i: the erased slot now holds the next permanent.
     }
     // END OF THE UPKEEP STEP (CR 500.4): the pool empties. Echo is resolved here rather than in
@@ -2941,7 +2943,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
-            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count); } resolve_now(); }
+            { if (a.convoke_green > 0 || a.convoke_other > 0)
+              { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
+              if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count); } resolve_now(); }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
             else if (a.kind == Action::Kind::SacForMana)
@@ -3070,6 +3074,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                               TurnSolver::SacFloatColorFor(state, extra.actions, a), a.ritual_float, a.sac_victim_id); }
             else if (a.kind == Action::Kind::Suspend)
             { ApplySuspend(state, state.active_player_index, a.card_name); }
+            else if (a.kind == Action::Kind::CastFromHand
+                     && (a.convoke_green > 0 || a.convoke_other > 0))
+            { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
         }
         for (const Action& a : extra.actions)
         { if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); } }
@@ -3310,6 +3317,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                           TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float, a.sac_victim_id); }
         else if (a.kind == Action::Kind::Suspend)
         { ApplySuspend(state, state.active_player_index, a.card_name); }
+        // Convoke (Chord of Calling): tap the chosen bodies BEFORE the batch pre-pay / casts, so
+        // AvailableManaPool no longer counts anything convoke consumed; the action's cost was
+        // reduced at enumeration by exactly their contribution. Same deterministic body order in
+        // both worlds (ApplyConvokeTaps) -> lockstep.
+        else if (a.kind == Action::Kind::CastFromHand
+                 && (a.convoke_green > 0 || a.convoke_other > 0))
+        { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
     }
     // PLAN TRAITS -- executor mirror of ApplyPlanDirect (lockstep, same builder): in scope over the
     // prepay and every cast payment below. Null scope (levers off) changes nothing.
@@ -3697,7 +3711,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             {
                 if (a.sac_count > 1)
-                { ApplySacCreatureOutletBurst(state, state.active_player_index, a.sac_source_id, a.sac_count); }
+                { if (a.sac_victim_id != 0)
+                  { ApplyPersistLoop(state, state.active_player_index, a.sac_source_id, a.sac_victim_id, a.sac_count); }
+                  else
+                  { ApplySacCreatureOutletBurst(state, state.active_player_index, a.sac_source_id, a.sac_count); } }
                 else
                 { ApplySacCreatureOutlet(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
             }
@@ -3727,6 +3744,32 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 for (int k = 0; k < std::max(1, a.chosen_x); ++k)
                 { if (!ApplyRevealTopDeploy(state, state.active_player_index)) { break; } }
+            }
+        }
+        else if (a.kind == Action::Kind::ActivatePod)
+        {
+            // Birthing Pod (executor mirror): the SAME PerformPodActivate the rollout ran.
+            ManaPool avail = AvailableManaPool(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            {
+                const bool done = PerformPodActivate(state, state.active_player_index,
+                                                     a.sac_source_id, a.sac_victim_id,
+                                                     a.tutor_target.str());
+                if (m_logger && done)
+                {
+                    m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                         "pod -> " + a.tutor_target.str());
+                }
+            }
+        }
+        else if (a.kind == Action::Kind::GraveyardExileGrow)
+        {
+            // Scavenging Ooze (executor mirror of the rollout's trailing pass).
+            ManaPool avail = AvailableManaPool(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            {
+                ApplyGraveyardExileGrow(state, state.active_player_index, a.sac_source_id,
+                                        a.tutor_target.str());
             }
         }
         else if (a.kind == Action::Kind::ActivateBlink)

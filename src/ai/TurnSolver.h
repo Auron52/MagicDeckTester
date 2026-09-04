@@ -160,6 +160,21 @@ struct Action
                              // sac_source_id = the source; ability_mode selects which effect:
                              // Shivan Gorge's damage, Conservatory/Kitchen's investigate,
                              // Mariposa's draw, a Clue's sacrifice-to-draw.
+        ActivatePod,         // Birthing Pod "{1}{G/P}, {T}, Sacrifice a creature: search for a
+                             // creature with MV exactly 1 more, put onto the battlefield, shuffle.
+                             // Only as a sorcery." sac_source_id = the Pod, sac_victim_id = the
+                             // sacrificed creature (a real searched axis: one variant per
+                             // equivalence-classed victim), tutor_target = the fetched name (one
+                             // variant per legal MV+1 library name, plus the no-fetch sentinel
+                             // "(no fetch)" -- saccing with nothing to get is legal and can be the
+                             // play when the death itself is the payoff). cost = pod_activation_cost;
+                             // the {T} bounds it to one activation per Pod per untap.
+        GraveyardExileGrow,  // Scavenging Ooze "{G}: Exile target card from a graveyard. If it was
+                             // a creature card, +1/+1 counter + gain 1 life." REPEATABLE (no {T});
+                             // sac_source_id = the Ooze, tutor_target = the exiled graveyard card
+                             // NAME (a searched choice -- exiling own creatures strips Reveillark
+                             // targets, so it is not fungible; one action per distinct name).
+                             // cost = gy_exile_grow_cost per activation.
     };
 
     // ActivatePermAbility sub-mode. Defined in the CORE layer (core/Permanent.h) because the shared
@@ -257,6 +272,13 @@ struct Action
                                        // SLOT id -1000-slot so two free casts never share a slot).
                                        // Emitted by CollectActions' free-variant post-pass only when
                                        // the counter is > 0 (the post-combat main).
+    int         convoke_green = 0;     // Chord of Calling (CastFromHand + params.convoke): how many
+    int         convoke_other = 0;     // GREEN / non-green creatures this cast taps for convoke.
+                                       // The action's `cost` is emitted ALREADY REDUCED by their
+                                       // contribution (green body -> a {G} pip or {1}; other -> {1}
+                                       // only), so the payment machinery is untouched; the apply
+                                       // pre-pass (ApplyConvokeTaps, both worlds) taps the actual
+                                       // bodies -- deterministic shared order, free bodies first.
     int         soulfire_own_targets = 0;
                                        // Soulfire Eruption: searched COUNT of own creatures to add
                                        // as extra targets (0..#own creatures). CollectActions emits

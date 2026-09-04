@@ -1114,6 +1114,31 @@ public:
 // GenericProvider from the 2026-08-21 misroute fix (Slaughter-Priest's sac_creature_outlet had it
 // riding GoblinsProvider) until that policy was authored, user-amended and measured -- a deck earns
 // its own provider only once it has a hook to hold.
+// Melira Pod (persist combo / creature toolbox: Melira / Vizier of Remedies + Kitchen Finks /
+// Murderous Redcap + free sac outlets, Birthing Pod + Chord of Calling as the tutors). Exists
+// FIRST for routing correctness: Carrion Feeder / Bloodthrone Vampire carry sac_creature_outlet,
+// which ALONE sets the Goblin signature -- the fifth occurrence of the recorded misroute class
+// (Mirrorwing, StompySurprise, Minotaur, Dragons) -- and GoblinsProvider::DeferSacOutletPreCombat
+// would then defer the outlets to a second main this deck does not have, silently DELETING the
+// persist loop from the autonomous search (verified live before this fix: zero outlet activations
+// across 8 probe games under provider=Goblins). Inherits every Generic hook; deck-specific
+// narrowings are added here only once measured (the Minotaur/Dragons rule).
+class MeliraPodProvider : public GenericProvider
+{
+public:
+    const char* Name() const override { return "MeliraPod"; }
+    // Felidar Guardian's ETB flicker on the PUT paths (Pod / Chord / a Reveillark return), where
+    // no cast-time variant carries the target: tapped Birthing Pod (a second activation this
+    // turn) > spent persist body (counter reset) > Reveillark (fire the LTB) > tapped plain land
+    // > Kitchen Finks re-gain > ETB tutor re-fire > decline. Resolution heuristic, disclosed 6a.
+    int FlickerTarget(const GameState& s, int controller, int self_num) const override;
+    // Reveillark's LTB return: missing loop pieces first (a counter-prevention enabler when none
+    // is on the battlefield, a free sac outlet when none, the Redcap damage payload), then
+    // printed MV descending. Resolution heuristic, disclosed 6a.
+    std::vector<std::string> ReviveCandidates(const GameState& s, int controller, int max_power,
+                                              int max_returns) const override;
+};
+
 class MinotaurProvider : public GenericProvider
 {
 public:

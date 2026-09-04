@@ -95,7 +95,21 @@ enum class Keyword
     // makers with it) -- the mechanic is modelled structurally via CardParams::tap_investigate_cost
     // + the "Clue Token" card def's sac_draw_cost. Kept only so the Scryfall keywords field stays
     // faithful; no engine code reads it.
-    Investigate
+    Investigate,
+    // Persist (Kitchen Finks, Murderous Redcap): an INERT keyword-ability tag -- the mechanic is
+    // modelled structurally via CardParams::persist (OnCreatureDies returns the card with a -1/-1
+    // counter through MinusCounterReplacement). Kept only so the Scryfall keywords field stays
+    // faithful; no engine code reads this enumerator.
+    Persist,
+    // Evoke (Reveillark): an INERT keyword-ability tag -- the mechanic is modelled structurally via
+    // CardParams::evoke_cost + Action::evoke (alternate-cost cast variant that self-sacrifices on
+    // entry). Kept only so the Scryfall keywords field stays faithful; no engine code reads it.
+    Evoke,
+    // Convoke (Chord of Calling): an INERT keyword-ability tag -- the mechanic is modelled
+    // structurally via CardParams::convoke (cast-time cost reduction from tapping creatures, see
+    // ConvokeBodies). Kept only so the Scryfall keywords field stays faithful; no engine code reads
+    // this enumerator.
+    Convoke
 };
 enum class Supertype { Legendary, Basic, Snow, World };
 

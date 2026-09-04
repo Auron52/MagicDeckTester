@@ -359,6 +359,9 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Cycling")       { return Keyword::Cycling; }    // inert tag; mechanic is param-modelled
     if (s == "Devoid")        { return Keyword::Devoid; }     // inert tag; no colour reader exists
     if (s == "Investigate")   { return Keyword::Investigate; } // inert tag; mechanic is param-modelled
+    if (s == "Persist")       { return Keyword::Persist; }    // inert tag; mechanic is param-modelled
+    if (s == "Evoke")         { return Keyword::Evoke; }      // inert tag; mechanic is param-modelled
+    if (s == "Convoke")       { return Keyword::Convoke; }    // inert tag; mechanic is param-modelled
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -667,6 +670,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.affects_all_creatures        = params.value("affects_all_creatures", false);
     p.lord_excludes_self           = params.value("lord_excludes_self", false);
     p.power_equals_creature_count  = params.value("power_equals_creature_count", false);
+    p.toughness_equals_creature_count = params.value("toughness_equals_creature_count", false);
 
     p.cast_trigger_subtype         = params.value("cast_trigger_subtype", std::string{});
     p.cast_trigger_creates_tokens  = params.value("cast_trigger_creates_tokens", 0);
@@ -735,6 +739,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.tutor_types.push_back(s);
     p.tutor_to_battlefield      = params.value("tutor_to_battlefield", false);
     p.tutor_shuffle_after       = params.value("tutor_shuffle_after", false);
+    p.tutor_max_mv              = params.value("tutor_max_mv", -1);
+    p.tutor_max_toughness       = params.value("tutor_max_toughness", -1);
+    p.etb_tutor_hand_count      = params.value("etb_tutor_hand_count", 0);
+    p.convoke                   = params.value("convoke", false);
+    p.tutor_mv_max_is_x         = params.value("tutor_mv_max_is_x", false);
     p.wish_from_sideboard       = params.value("wish_from_sideboard", false);
     p.etb_energy                = params.value("etb_energy", 0);
     p.energy_per_colored_tap    = params.value("energy_per_colored_tap", 0);
@@ -806,6 +815,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.gy_land_exile_mana        = params.value("gy_land_exile_mana", false);
     p.gy_exile_instant_sorcery_drain = params.value("gy_exile_instant_sorcery_drain", 0);
     p.gy_exile_creature_lifegain     = params.value("gy_exile_creature_lifegain", 0);
+    if (params.contains("gy_exile_grow_cost"))
+        p.gy_exile_grow_cost = ManaCostFromString(params["gy_exile_grow_cost"].get<std::string>());
+    p.gy_exile_grow_counters         = params.value("gy_exile_grow_counters", 0);
+    p.gy_exile_grow_lifegain         = params.value("gy_exile_grow_lifegain", 0);
     p.cast_scry                 = params.value("cast_scry", 0);
     p.cast_reorder              = params.value("cast_reorder", 0);
     p.x_damage_multiplier       = params.value("x_damage_multiplier", 1);
@@ -870,6 +883,19 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.chooses_creature_type     = params.value("chooses_creature_type", false);
     p.etb_self_creates_tokens   = params.value("etb_self_creates_tokens", 0);
     p.etb_damage_any            = params.value("etb_damage_any", 0);
+    p.etb_destroy_opp_creature  = params.value("etb_destroy_opp_creature", false);
+    p.etb_damage_equals_power   = params.value("etb_damage_equals_power", false);
+    p.persist                   = params.value("persist", false);
+    p.prevents_minus_counters   = params.value("prevents_minus_counters", false);
+    p.reduces_minus_counters_by_one = params.value("reduces_minus_counters_by_one", false);
+    p.etb_self_lifegain         = params.value("etb_self_lifegain", 0);
+    p.etb_discard_any_number    = params.value("etb_discard_any_number", false);
+    p.etb_discard_any_draw_bonus = params.value("etb_discard_any_draw_bonus", 0);
+    p.other_creature_gy_enter_team_counters = params.value("other_creature_gy_enter_team_counters", 0);
+    p.ltb_return_creatures      = params.value("ltb_return_creatures", 0);
+    p.ltb_return_max_power      = params.value("ltb_return_max_power", 0);
+    if (params.contains("evoke_cost"))
+        p.evoke_cost = ManaCostFromString(params["evoke_cost"].get<std::string>());
     p.etb_damage_each_opponent  = params.value("etb_damage_each_opponent", 0);
     p.etb_reveal_count          = params.value("etb_reveal_count", 0);
     for (const std::string& s : params.value("etb_reveal_put_subtypes", json::array()))
@@ -904,6 +930,13 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.sac_outlet_token_toughness = params.value("sac_outlet_token_toughness", 0);
     for (const std::string& s : params.value("sac_outlet_token_subtypes", json::array()))
         p.sac_outlet_token_subtypes.push_back(s);
+    p.sac_outlet_add_counter_to_self = params.value("sac_outlet_add_counter_to_self", 0);
+    p.sac_outlet_self_pump_power     = params.value("sac_outlet_self_pump_power", 0);
+    p.sac_outlet_self_pump_toughness = params.value("sac_outlet_self_pump_toughness", 0);
+    if (params.contains("pod_activation_cost"))
+        p.pod_activation_cost = ManaCostFromString(params["pod_activation_cost"].get<std::string>());
+    p.pod_mv_delta              = params.value("pod_mv_delta", 0);
+    p.pod_taps                  = params.value("pod_taps", true);
     p.tap_creates_tokens_per_controlled_subtype = params.value("tap_creates_tokens_per_controlled_subtype", std::string());
     p.tap_created_token_power     = params.value("tap_created_token_power", 0);
     p.tap_created_token_toughness = params.value("tap_created_token_toughness", 0);
@@ -1009,6 +1042,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.blink_cost = ManaCostFromString(params["blink_cost"].get<std::string>());
     p.blink_returns_tapped          = params.value("blink_returns_tapped", false);
     p.blink_own_only                = params.value("blink_own_only", false);
+    p.etb_blink_permanent           = params.value("etb_blink_permanent", false);
     p.reduces_creature_activation   = params.value("reduces_creature_activation", 0);
     if (params.contains("other_creature_etb_counter_cost"))
         p.other_creature_etb_counter_cost =
