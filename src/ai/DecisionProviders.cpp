@@ -13500,16 +13500,26 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
 
 const bool s_edf_goff = !EnvOn("MTG_NO_ELDRAZI_GOFF");
 
-// PROSPECTIVE go-off recognition (2026-09-03). Default ON so it is live in the shipped
-// configuration -- a lever behind a default-off gate is dead code, and this repo has shipped that
-// mistake twice. MTG_EDF_PROSPECTIVE=0 restores the board-only recognizer, which is what the A/B
-// arm uses.
+// PROSPECTIVE go-off recognition (2026-09-03) -- MEASURED AND REFUTED, so the default is OFF.
+//
+// It was default ON while under measurement, on the "a lever behind a default-off gate is dead
+// code" rule. That rule is about levers still awaiting a verdict; this one HAS its verdict. The
+// held-out block (8 fresh seeds x 100 games) reads -0.0088 +- 0.0099, t = -0.88, 3 seeds better and
+// 3 worse -- nothing. The pooled t = -2.42 that includes the 8 hypothesis-generating seeds is
+// regression to the mean, not evidence: those seeds are where the idea came from, so their signal
+// cannot also confirm it.
+//
+// The slot is deliberately KEPT rather than the code deleted. The recognizer is correct in what it
+// claims (it sees a loop the PLAN assembles rather than one already on board); it simply does not
+// pay at this deck's depth/budget. If EDF ever gets a value leaf -- it has none today, and runs at
+// bare depth=5 budget=20ms -- the horizon that made it inert moves, and this is worth re-measuring
+// with one flag rather than one reimplementation.
 //
 // Read through a heurarm slot rather than straight off the env static, so BOTH arms of its A/B can
 // ride ONE pooled batch. Two sequential per-arm batches is the wave pattern CLAUDE.md forbids, and
 // it is what the first two attempts at this measurement did: the arms could not backfill each
 // other's tail, and the second arm ran on a differently-loaded box than the first.
-const bool s_edf_prospective_env = EnvOn("MTG_EDF_PROSPECTIVE", true);
+const bool s_edf_prospective_env = EnvOn("MTG_EDF_PROSPECTIVE", false);
 inline bool EdfProspectiveOn()
 { return heurarm::Flag(heurarm::EDF_PROSPECTIVE, s_edf_prospective_env); }
 

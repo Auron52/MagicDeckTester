@@ -1679,27 +1679,128 @@ at the payment step. Whether a T3 KILL then exists still has to be replayed on t
 -- the earlier "no T3 kill" analysis is void because it used the wrong one.
 
 
-## OPEN WORK QUEUE (2026-09-04, post-correction)
 
-1. **Mana SPEND-ORDER heuristic (the T3 blocker).** When several sources can cover a GENERIC pip,
-   spend the least flexible one and RETAIN any-colour/wild mana. Today the engine does the reverse
-   and it strands the seed-1 T3 line (floats `{C}`, throws away the board's only blue). General, not
-   EDF-specific. Route: `.claude/skills/heuristic-optimization.md` -- mana-source tap/spend order is
-   that skill's worked domain. NOTE `MTG_PREPAY_SHRINK` and `MTG_COLOR_RESERVE` are both measured
-   NOT to fix it, so this is a new preference, not an existing knob.
-2. **Mariposa `{5}, {T}: Draw a card` offered but unpayable -> silent no-op.** `AvailableManaPool`
-   credits the source's own mana, but `{T}` is part of the cost so the exact payer cannot. Repro:
-   `--choices "1,0,0,17,0,7"` -> library stays 50, Mariposa stays UNTAPPED, hand unchanged, and the
-   plan stays in the menu so it burns main-phase segments to the `seg < 64` cap. Control: plan 6
-   (`cast: Peregrine Drake`, also 5 mana) executes fine. `MTG_POOL_AUDIT=1` reports `gapped=0` --
-   it does not cover this class. Counterexample to §1 of
-   `docs/design/enumerated-but-unplayable-activations.md`, which closed the same `{cost}, {T}` shape.
-3. **`Plan::rad_mode` invisible to claude-play.** The optional enters-tapped-for-2-rad-counters is a
-   real searched axis (TurnSolver ~25337 duplicates every land plan) but `grep rad_mode src/main.cpp`
-   returns nothing, so the decision JSON never emits it. Turn 3 offered 168 plans of which 106-167
-   are rad twins of 0-105 with byte-identical `summary` strings; picking 119 instead of 13 gives
-   life 18 / library 47 instead of 20 / 49. The viewer hook `g_play_land_rad_chooser` exists but
-   `--claude-play` never installs it. Same class as the known Aether Vial charge gap.
-4. **Flip `MTG_EDF_PROSPECTIVE` to default OFF** (refuted above; keep the `heurarm` slot).
-5. **Re-derive whether a T3 KILL exists**, on the CORRECTED board (`--choices "1,0,1"`). The earlier
-   "no T3 kill under any opening" analysis is void -- it was run on the both-Growths-on-Hub board.
+## WORK QUEUE OUTCOMES (2026-09-04)
+
+All five queued items are resolved. Two turned out to be REAL bugs with wider blast radius than the
+deck; one was a diagnosis I got wrong twice before measuring it properly; two were paperwork.
+
+### 1. The T3 blocker: WILD MANA WAS SPENT ON A GENERIC PIP -- FIXED
+
+`SpendFloatingTowardCost` (SpellEffects.h) drains generic pips **wild first**. At its original
+caller that is right and load-bearing: after `BatchPrepayMainCasts` the reserve's `wild` IS the
+turn's own generic requirement, with every coloured pip pinned to its colour, so draining generic
+from wild is exactly what stops an earlier cast's generic pip from eating a later cast's pinned
+colour.
+
+It is exactly backwards at the OTHER caller -- `TapForCostBacktrackWorker`'s `out_leftover`
+(SpellEffects.cpp). **That call is not paying anything.** The tap set is already chosen and the cost
+is already known payable (`floating.CanPay(cost)` is the branch it sits in); all it decides is which
+of the produced mana counts as spent, and therefore what the rest of the main phase inherits.
+Wild-first there spends the one unit that can pay any colour and banks the one that can pay almost
+nothing.
+
+On the user's board: Aether Hub carrying a Wild Growth and a Trace of Abundance taps for `{C}{G}`
+plus one wild. Living Wish `{1}{G}` took the `{G}` for its coloured pip and the **wild** for its
+generic, leaving `{C}`. With Mariposa's `{C}` that is two colourless against Cloud of Faeries'
+`{1}{U}` -- unpayable, and the turn stops. Spending the `{C}` leaves the wild, which pays the `{U}`
+while Mariposa pays the `{1}`.
+
+`MTG_KEEP_FLEXIBLE_FLOAT` (default ON) inverts the order for that one call. Measured live: turn 3
+now offers `cast: Cloud of Faeries` where it previously offered only `cycle Cloud of Faeries to
+draw`, and the line runs on to the Emiel + double-Drake menu. Pinned by
+`test/scenarios/flexible_float_retained.json` (opponent_life 19 vs 20).
+
+**Two wrong diagnoses preceded this, and both are worth recording because the second cost real work.**
+
+* *"The payment taps the Aura's own future host."* Plausible -- an aura ramping a land it enchants is
+  worthless if the land is already tapped -- and I built `LandAuraHostReserve` (a third producer for
+  `g_plan_reserved_sources`) on it. **It is false.** A Trace-only plan leaves Aether Hub untapped on
+  both arms: Conservatory already pays Trace by itself, because its `{W}` is the only white on the
+  board for the hybrid pip. The reservation was measured INERT and REVERTED rather than shipped --
+  the same call as the `MTG_LAND_AURA_RAMP` episode earlier in this file, and for the same reason.
+  The one-line A/B that settled it (cast Trace ALONE, look at the board) cost a minute and should
+  have come first.
+* *"The leftover mana is not floated at all."* I read `floating_mana` as absent from the decision
+  JSON. It is not absent -- it is emitted **inside the `me` object**, next to `land_drops_left`, and
+  I was reading the top level. `MTG_FLOAT_TRACE` (added with this fix, ManaPayment.cpp) is what
+  settled it: it prints what each payment LEFT BEHIND, which is the quantity that actually matters,
+  and it showed `cost={1}{G} leftover{c1}` immediately. It also showed **no tap lines** for that
+  payment, which is how the backtracker rather than the greedy was identified as the decision-maker.
+
+### 2. Mariposa's `{5}, {T}: Draw a card` offered but unpayable -- FIXED, AND IT IS NOT A TEMPO BUG
+
+`{T}` is part of the cost, so a source that also taps for mana **cannot fund its own ability**.
+`AvailableManaPool` counts every untapped source, this one included, so the ability priced as
+payable off its own mana. The apply was never wrong (AIEngine taps the source first, then pays, then
+untaps on failure), which is exactly why the symptom was a silent no-op that re-prompted to the
+`seg < 64` cap.
+
+`PermAbilityTapDebitOf` (TurnSolver.cpp) debits the source's own yield per selection, computed as
+the difference between the real pool and `AvailableManaPool(state, &source)` so it cannot drift from
+that function's accounting. Applied after every same-turn credit, so a plan that casts a rock and
+then activates still gets the rock's mana -- the distinction an emission-time gate would destroy
+(and the reason the human-play trial-pay was removed from the Wirewood Lodge untap).
+
+**All four `{cost}, {T}` cards in cards.json are affected**, because all four are mana sources whose
+own yield covers part of the cost: Mariposa (`{5}` draw), Shivan Gorge (`{2}{R}` ping), Conservatory
+and Kitchen (`{4}` Investigate). **Shivan Gorge is why this is correctness and not tempo** -- it is
+this deck's lethal outlet, so an over-claimed activation is over-claimed DAMAGE, the `[fd-diverge]`
+shape where the search projects a kill the game never deals.
+
+The viewer half was fixed with it. `CheckLine` charged battlefield activations **nothing at all**, on
+a stale assumption that every ability reached through the `cast=` verb is free -- so an unpayable
+Mariposa draw came back `legal_not_enumerated`, i.e. the viewer told the user the search had a
+reachability bug when the line simply could not be paid for. It now verdicts `illegal` with
+`can't pay {5} for 'Mariposa Military Base' with the mana available this phase`.
+
+Pinned by the boundary PAIR `tap_ability_self_funding_unpayable.json` (4 Forests, must be `illegal`)
+and `tap_ability_self_funding_payable.json` (5 Forests, must stay `accept`). The positive half is the
+one that would catch an over-tight fix, and it is deliberately non-discriminating.
+
+### 3. `Plan::rad_mode` invisible to claude-play -- FIXED
+
+The mode is a real searched axis, so 62 of turn 3's 168 plans were byte-identical TWINS of the other
+106 and picking one over the other silently changed the game. `SummarizePlan` now appends
+`(enters tapped, +rad)` and the plan JSON carries a structured `rad_mode` when the plan has the
+choice. Emitted only then, so every deck without such a land serialises byte-identically.
+
+**No chooser was installed, deliberately.** `g_play_land_rad_chooser` exists but nothing installs it
+-- not claude-play, not the GUI. Installing it would OVERRIDE the plan's `rad_mode` (it takes
+precedence in `LandPlay.cpp`), asking the human a second time for something they just answered by
+picking the plan, and contradicting it. Surfacing the axis in the plan is the whole fix.
+
+**Left open, one tier down:** turn 3 still shows 19 summaries duplicated 8x each, differing only in
+`Living Wish`'s `tutor_target`. That is NOT the same defect -- the information IS in the JSON
+(`actions[].tutor_target`), so the GUI renders it and only the summary STRING collapses. Adding it
+would change every tutor deck's summaries and drop 262 references from the checker's exact-summary
+tier to its `(land, casts)` fallback, which is a real cost for a display nicety. Worth doing
+alongside a reference refresh, not on its own.
+
+### 4. `MTG_EDF_PROSPECTIVE` -- FLIPPED TO DEFAULT OFF
+
+Refuted on held-out seeds (t = -0.88). The `heurarm` slot is kept: the recognizer is correct in what
+it claims, it just does not pay at this deck's depth/budget, and if EDF ever gets a value leaf the
+horizon that made it inert moves. Re-measuring should cost one flag, not one reimplementation.
+
+### 5. Is there a T3 KILL on the corrected board? NO -- and now derived on the RIGHT board
+
+Re-derived on `--choices "1,0,1"` (Wild Growth #53 on Aether Hub, #54 on Conservatory), which is the
+board the user described. **The opponent takes zero damage on turn 3 under any line**, for a reason
+that needs no search: every damage source the deck can reach on that turn is either a creature (all
+summoning sick -- the deck has no haste) or a permanent not on the battlefield. Shivan Gorge is in
+the library; the only non-combat outlet Living Wish can reach is Essence Depleter, whose drain is
+`{1}{C}` repeatable, so 20 life costs 40 mana.
+
+The T3 mana ceiling is nowhere near that. Three lands (Aether Hub +Wild Growth, Conservatory +Wild
+Growth, Mariposa off the land drop) make 5; Trace of Abundance is net -1 for the turn (costs 2, adds
+1); Living Wish and Cloud of Faeries are 2 each; Cloud of Faeries' ETB untaps 2 lands for at most
++5. That leaves ~4, which does not cast Emiel `{2}{W}{W}` AND Peregrine Drake `{4}{U}`, so the
+blink loop -- the only route to the mana a drain kill would need -- cannot start on turn 3.
+
+So the earlier "no T3 kill under any opening" verdict was RIGHT, but it was reached on the wrong
+board and could not have been trusted. It is now derived on the right one, from a mana ceiling rather
+than from a search that failed to find one.
+
+**What the user's line actually was, then:** a T3 combo CONTINUATION (Trace -> Aether Hub, Living
+Wish -> Cloud of Faeries, cast Cloud of Faeries), not a T3 kill. The engine now reaches all of it.
