@@ -519,7 +519,14 @@ arm verified byte-identical at smoke scale (48/48, 0 configs changed).
    phase boundary is the only re-pricing point). The suspend clock and sac emission are both
    modeled, so the residual is in the projected-turn pricing/enumeration, not the action space.
    **Follow-up: find the exact projected-turn gate that fails the one-main storm composition;
-   when it lands, re-run the retirement probe — ds should then retire like dragons did.**
+   when it lands, re-run the retirement probe — ds should then retire like dragons did.
+   PRIME SUSPECT (noted 2026-09-04, unverified): `SubsetPayableSequential` REFUSES any subset
+   holding a `Kind::SacForMana` action ("unmodelled kind -> no rescue") — so the exact
+   {LotusSac, Seething, Dragonstorm} composition can never be EF-rescued if a flat gate
+   rejects it. The walk already applies ritual float; teaching it SacForMana (apply the
+   action's ritual_float, remove the source) and Suspend (skip: no mana, no board this turn)
+   is a small, rescue-only extension in the same soundness frame. Verify by probing whether
+   the flat gates actually reject that subset at gi673's projected T4 first.**
    gi320 is hereby pinned: it was the double-spend class. The `MTG_WATCHER_ORDER` lever's dragons numbers
    above predate the honest accounting and the total-order adoption; treat them as historical.
 8. **DONE — Karoo lockstep fix.** The executor's searched-continuation land play now honours
