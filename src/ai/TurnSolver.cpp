@@ -767,6 +767,80 @@ static int CountLands(const GameState& state)
     return n;
 }
 
+// ---- "{cost}, {T}" ability SELF-FUNDING debit ------------------------------------------------
+//
+// A "{cost}, {T}: <effect>" ability taps its OWN source as part of the cost, so a source that also
+// taps for mana cannot fund the ability it is paying for -- nor anything else in the same plan.
+// AvailableManaPool counts every untapped source, this one included, so with no debit the ability
+// prices as payable off its own mana.
+//
+// Every card carrying such an ability today is a mana source whose own yield covers part of the
+// cost, so all four are affected:
+//     Mariposa Military Base   {T}: Add {C}     |  {5}, {T}: Draw a card
+//     Shivan Gorge             {T}: Add {C}     |  {2}{R}, {T}: 1 damage to each opponent
+//     Conservatory             {T}: Add {G}/{W} |  {4}, {T}: Investigate
+//     Kitchen                  {T}: Add {G}/{U} |  {4}, {T}: Investigate
+//
+// Mariposa is where the USER found it (EldraziDisplacerFlicker, seed 1 turn 3). The pool held
+// exactly 5 -- Aether Hub's {C}{G}{G}, Mariposa's own {C}, and the Trace of Abundance riding ON
+// Mariposa -- so the {5} draw priced as affordable to the mana. Tapping Mariposa removes BOTH of
+// its mana, leaving 3. The apply is sound (AIEngine taps the source first, then pays, then untaps
+// on failure), so the only symptom was a SILENT NO-OP: nothing happened, and because the plan
+// stayed in the menu the main phase re-prompted on it until the `seg < 64` cap.
+//
+// SHIVAN GORGE is why this is a correctness fix and not a tempo one. It is this deck's lethal
+// outlet, and an over-claimed activation is over-claimed DAMAGE -- the [fd-diverge] shape, where
+// the search projects a kill the real game never deals.
+//
+// The debit is EXACT rather than a scalar: it is the difference between the real pool and the pool
+// AvailableManaPool builds with that source skipped. That keeps it in lockstep with the pool's own
+// accounting (Deathrite fuel, ManaSubtypeGateLive, CanTapNow, attached-aura yield) with no second
+// copy of the loop to maintain -- the mistake AvailableManaPoolNoAttackers already warns about.
+//
+// It is a property of the SOURCE, not of the selection, so callers precompute one debit per
+// candidate ONCE per enumeration (the haste_unlock pattern) and the per-subset path is a bool test
+// plus a walk. Zero cost for every board with no such ability.
+static ManaPool PermAbilityTapDebitOf(const GameState& state, const ManaPool& full, int source_id)
+{
+    ManaPool d;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.card.m_number != source_id) { continue; }
+        if (p.controller_index != state.active_player_index || p.tapped) { break; }
+        const ManaPool without = AvailableManaPool(state, &p);
+        d.white     = std::max(0, full.white     - without.white);
+        d.blue      = std::max(0, full.blue      - without.blue);
+        d.black     = std::max(0, full.black     - without.black);
+        d.red       = std::max(0, full.red       - without.red);
+        d.green     = std::max(0, full.green     - without.green);
+        d.colorless = std::max(0, full.colorless - without.colorless);
+        d.wild      = std::max(0, full.wild      - without.wild);
+        d.wild_c    = std::max(0, full.wild_c    - without.wild_c);
+        break;
+    }
+    return d;
+}
+
+// Apply a debit to a credited pool, clamped at zero per colour. `wild_c` is a SUBSET COUNT of
+// `wild` (ManaPool.h), so it is re-clamped to the survivor rather than tracked independently.
+static void SubtractPoolClamped(ManaPool& p, const ManaPool& d)
+{
+    p.white     = std::max(0, p.white     - d.white);
+    p.blue      = std::max(0, p.blue      - d.blue);
+    p.black     = std::max(0, p.black     - d.black);
+    p.red       = std::max(0, p.red       - d.red);
+    p.green     = std::max(0, p.green     - d.green);
+    p.colorless = std::max(0, p.colorless - d.colorless);
+    p.wild      = std::max(0, p.wild      - d.wild);
+    p.wild_c    = std::min(std::max(0, p.wild_c - d.wild_c), p.wild);
+}
+
+// MTG_TAP_ABILITY_DEBIT=0 restores the self-funding behaviour, for A/B and for bisecting a GT move.
+// Default ON: this is a correctness fix, not a heuristic -- the plans it drops are ones the engine
+// could never execute.
+static const bool g_tap_ability_debit = EnvOn("MTG_TAP_ABILITY_DEBIT", true);
+static bool TapAbilityDebitEnabled() { return g_tap_ability_debit; }
+
 // Color-producibility gate for a chosen action subset. ManaPool::CanPay stores every
 // multi-color land as one "wild" mana that satisfies ANY single colored pip — an
 // over-approximation for a land that produces only a SUBSET of colors (e.g. Tournament
@@ -4493,6 +4567,7 @@ std::vector<int> TurnSolver::PlanReserveSources(const GameState& state,
     { if (std::find(out.begin(), out.end(), n) == out.end()) { out.push_back(n); } }
     return out;
 }
+
 
 std::vector<int> TurnSolver::ColorCriticalReserve(const GameState& state,
                                                   const std::vector<Action>& acts)
@@ -14491,6 +14566,25 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // Cheap scan -> the credit below is inert for every deck without such a rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
+    // "{cost}, {T}" ability SELF-FUNDING debit (see PermAbilityTapDebitOf). State-only, so it is
+    // built ONCE here and the per-subset path is a bool test plus a walk of the selection. Lockstep
+    // twin of the scan in EnumeratePlans.
+    std::vector<ManaPool> tap_debit;
+    bool any_tap_debit = false;
+    if (TapAbilityDebitEnabled())
+    {
+        for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+        {
+            const Action& ta = cands[j];
+            if (ta.kind != Action::Kind::ActivatePermAbility || ta.sac_source_id < 0) { continue; }
+            if (!PermAbilityTaps(ta.ability_mode)) { continue; }   // SacDraw/Drain/ExileTop: no {T}
+            ManaPool d = PermAbilityTapDebitOf(state, pool, ta.sac_source_id);
+            if (d.Total() <= 0) { continue; }                      // source produces no mana -> free
+            if (tap_debit.empty()) { tap_debit.resize(cands.size()); }
+            tap_debit[j]  = d;
+            any_tap_debit = true;
+        }
+    }
     // Same-turn affinity (Thrumming Hivepool). Inert unless an affinity card is castable this turn.
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
@@ -14821,6 +14915,33 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             {
                 combined.generic             = std::max(0, combined.generic - rcred);
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - rcred);
+            }
+        }
+        // "{cost}, {T}" SELF-FUNDING DEBIT -- applied LAST, after every same-turn credit, because it
+        // is not a correction to the credits: a plan may legitimately cast a rock and then activate,
+        // and the rock's mana is real. What is not real is the tapped source's OWN mana. Debiting
+        // here rather than at the emission site is what keeps that distinction (an emission-time gate
+        // would price the ability against the pre-cast board and hide the funded line -- the same
+        // reason the human-play trial-pay was removed from the Wirewood Lodge untap).
+        //
+        // Runs through `eff`, which is already a copy of `pool`, so flipping `credited` is all that
+        // is needed to route the flat test at it.
+        //
+        // NOT propagated to the colour-feasibility gate below: PoolCredit clamps at zero, so that
+        // gate keeps scoring against the undebited board colours. That is deliberate and sound --
+        // ColorFeasibility only ever REJECTS, so leaving it optimistic prunes less, never more, and
+        // the flat CanPay here already carries the total. (BuildColorFeasibility does take a `skip`,
+        // so a per-source pass is available if a coloured self-funding pip ever shows up. None of
+        // the four cards has one today: three cost pure generic and Shivan Gorge's {R} cannot come
+        // from its own {C}.)
+        if (any_tap_debit)
+        {
+            for (int j : sel)
+            {
+                if (tap_debit[j].Total() <= 0) { continue; }
+                SubtractPoolClamped(eff,    tap_debit[j]);
+                SubtractPoolClamped(eff_nc, tap_debit[j]);
+                credited = true;
             }
         }
         bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
@@ -21759,6 +21880,24 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Same-turn mana-rock ramp scan (mirrors Solve). Inert without a non-creature rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
+    // "{cost}, {T}" ability SELF-FUNDING debit scan (see PermAbilityTapDebitOf). Lockstep twin of
+    // the scan in Solve; inert on every board with no such ability -> byte-identical.
+    std::vector<ManaPool> tap_debit;
+    bool any_tap_debit = false;
+    if (TapAbilityDebitEnabled())
+    {
+        for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+        {
+            const Action& ta = cands[j];
+            if (ta.kind != Action::Kind::ActivatePermAbility || ta.sac_source_id < 0) { continue; }
+            if (!PermAbilityTaps(ta.ability_mode)) { continue; }   // SacDraw/Drain/ExileTop: no {T}
+            ManaPool d = PermAbilityTapDebitOf(state, pool, ta.sac_source_id);
+            if (d.Total() <= 0) { continue; }                      // source produces no mana -> free
+            if (tap_debit.empty()) { tap_debit.resize(cands.size()); }
+            tap_debit[j]  = d;
+            any_tap_debit = true;
+        }
+    }
     // Same-turn HASTED mana dork scan (EnumeratePlans ONLY -- see the credit below). `haste_unlock[j]`
     // is what Equip candidate j's host adds to this turn's pool once the equip grants it haste; the
     // parallel _nc vector is the same credit for the non-creature pool. State-only, so it is built
@@ -22567,6 +22706,33 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                         : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined)));
                 }
+            }
+        }
+        // "{cost}, {T}" SELF-FUNDING DEBIT -- applied LAST, after every same-turn credit, because it
+        // is not a correction to the credits: a plan may legitimately cast a rock and then activate,
+        // and the rock's mana is real. What is not real is the tapped source's OWN mana. Debiting
+        // here rather than at the emission site is what keeps that distinction (an emission-time gate
+        // would price the ability against the pre-cast board and hide the funded line -- the same
+        // reason the human-play trial-pay was removed from the Wirewood Lodge untap).
+        //
+        // Runs through `eff`, which is already a copy of `pool`, so flipping `credited` is all that
+        // is needed to route the flat test at it.
+        //
+        // NOT propagated to the colour-feasibility gate below: PoolCredit clamps at zero, so that
+        // gate keeps scoring against the undebited board colours. That is deliberate and sound --
+        // ColorFeasibility only ever REJECTS, so leaving it optimistic prunes less, never more, and
+        // the flat CanPay here already carries the total. (BuildColorFeasibility does take a `skip`,
+        // so a per-source pass is available if a coloured self-funding pip ever shows up. None of
+        // the four cards has one today: three cost pure generic and Shivan Gorge's {R} cannot come
+        // from its own {C}.)
+        if (any_tap_debit)
+        {
+            for (int j : sel)
+            {
+                if (tap_debit[j].Total() <= 0) { continue; }
+                SubtractPoolClamped(eff,    tap_debit[j]);
+                SubtractPoolClamped(eff_nc, tap_debit[j]);
+                credited = true;
             }
         }
         bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
@@ -33194,6 +33360,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                                           // of an alt-cost spell
         bool has_spectacle;   ManaCost spectacle_cost;
         bool alt_free;                    // alt cost payable (controls the subtype) -> costs no mana
+        bool board_act = false;           // a "{cost}, {T}" battlefield ACTIVATION, not a hand cast
     };
     std::vector<PendingCast> pending;
     // `cast=` is ALSO the verb for a battlefield ACTIVATION (Krenko's "{T}: create X Goblins" -- see
@@ -33201,9 +33368,19 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // names are not in hand, so charging them as hand casts produced the nonsense verdict "'Krenko,
     // Mob Boss' is not in hand (already cast, or never there)" for a perfectly ordinary line. Peel
     // them off first: a name is an activation when the hand cannot cover it but a permanent we
-    // control has that name. They cost no mana here (the tap abilities that use this verb are free;
-    // the costed sac outlets go through `sacout=` instead), so they simply drop out of the sim.
+    // control has that name.
+    //
+    // They used to cost NOTHING here, on the assumption that "the tap abilities that use this verb
+    // are free; the costed sac outlets go through `sacout=` instead". That was never true of the
+    // "{cost}, {T}" family (Mariposa's {5} draw, Shivan Gorge's {2}{R} ping, Conservatory/Kitchen's
+    // {4} Investigate), and charging them nothing is what made an UNPAYABLE Mariposa draw verdict
+    // `legal_not_enumerated` -- i.e. the viewer told the user the search had a reachability bug when
+    // the line simply could not be paid for. `board_acts` below charges the ability's real cost and
+    // debits the source's own mana (see PermAbilityTapDebitOf: {T} is part of the cost, so a source
+    // that taps for mana cannot fund its own ability), which turns that into a truthful `illegal`.
     std::vector<std::string> line_casts;   // spec.casts MINUS the battlefield activations
+    struct BoardActivation { const Permanent* src; const CardDefinition* def; ManaCost cost; };
+    std::vector<BoardActivation> board_acts;   // COSTED "{cost}, {T}" activations named by cast=
     {
         std::map<std::string, int> hand_left;
         for (const Card& c : s.ActivePlayer().hand) { ++hand_left[c.m_name.str()]; }
@@ -33211,11 +33388,32 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         {
             auto it = hand_left.find(name);
             if (it != hand_left.end() && it->second > 0) { --it->second; line_casts.push_back(name); continue; }
-            bool on_battlefield = false;
+            const Permanent* on_battlefield = nullptr;
             for (const Permanent& p : s.battlefield)
             { if (p.controller_index == s.active_player_index && p.card.m_name == name)
-              { on_battlefield = true; break; } }
-            if (!on_battlefield) { line_casts.push_back(name); }   // genuinely missing -> reported below
+              { on_battlefield = &p; break; } }
+            if (!on_battlefield) { line_casts.push_back(name); continue; }   // genuinely missing -> reported below
+            // Costed "{cost}, {T}" ability on this source? Modes are probed in the same order as the
+            // enumerator's ModeSpec table and the FIRST present one wins. No card carries two of
+            // these params today, so the choice is never actually ambiguous; if one ever does, the
+            // line spec would need to name the mode (the `jittemode=` precedent).
+            const CardDefinition* bd = CardDatabase::Instance().Lookup(name);
+            if (!bd) { continue; }
+            const std::pair<Action::AbilityMode, const std::optional<ManaCost>*> modes[] = {
+                { Action::AbilityMode::TapDamage,      &bd->params.tap_damage_cost      },
+                { Action::AbilityMode::TapInvestigate, &bd->params.tap_investigate_cost },
+                { Action::AbilityMode::TapDraw,        &bd->params.tap_draw_cost        },
+            };
+            for (const auto& m : modes)
+            {
+                if (!m.second->has_value()) { continue; }
+                ManaCost ac = EffectiveActivationCost(s, s.active_player_index, on_battlefield->card,
+                                                      m.second->value());
+                if (m.first == Action::AbilityMode::TapDraw && bd->params.tap_draw_cost_less_per_rad)
+                { ac.generic = std::max(0, ac.generic - s.players[s.active_player_index].rad_counters); }
+                if (ac.ManaValue() > 0) { board_acts.push_back({ on_battlefield, bd, ac }); }
+                break;
+            }
         }
     }
     for (const std::string& name : line_casts)
@@ -33273,7 +33471,6 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         pc.alt_free = alt_free;
         pending.push_back(pc);
     }
-
     // Each named card must actually be in hand (multiset-correct for duplicates).
     {
         std::vector<std::string> handNames;
@@ -33289,6 +33486,27 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             }
             handNames.erase(it);
         }
+    }
+
+    // Costed "{cost}, {T}" activations join the affordability sim only AFTER the in-hand check
+    // above -- their source is on the BATTLEFIELD, so running them through it reported the exact
+    // nonsense verdict ("not in hand (already cast, or never there)") that the peel-off exists to
+    // prevent. Appended after the hand casts so the declared-order walk pays them LAST: that is the
+    // permissive reading (a mana rock cast earlier in the same line funds the activation) and it
+    // matches the apply, where ActivatePermAbility runs in the trailing pass. Marked so the
+    // same-turn SPELL reducers skip them -- a Ruby Medallion discounts spells, not abilities.
+    for (const BoardActivation& ba : board_acts)
+    {
+        PendingCast pc;
+        pc.name = ba.def->card.m_name.str();
+        pc.def  = ba.def;
+        pc.rock = false;
+        pc.full_cost      = ba.cost;
+        pc.has_spectacle  = false;
+        pc.spectacle_cost = ba.cost;
+        pc.alt_free       = false;
+        pc.board_act      = true;
+        pending.push_back(pc);
     }
 
     // Credit in-play untapped SAC-FOR-MANA sources (Lotus Bloom: "{T}, Sacrifice: add three mana of
@@ -33381,6 +33599,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // independent, so it doesn't penalise the human's click order.
     ManaPool avail = AvailableManaPool(s);
     avail.wild += sac_wild;                                // Lotus Bloom & co. (see sac_wild above)
+    // A "{cost}, {T}" activation taps its own source, so that source's mana is not available to this
+    // line -- not for the ability, and not for anything else in it (PermAbilityTapDebitOf). Lockstep
+    // twin of the debit in the declared-order walk below.
+    for (const BoardActivation& ba : board_acts)
+    { SubtractPoolClamped(avail, PermAbilityTapDebitOf(s, AvailableManaPool(s), ba.src->card.m_number)); }
     bool spectacle_on = s.opponent_lost_life_this_turn;   // set as damage spells cast in this line
     // The mana cost to pay for pending[k] RIGHT NOW: free for an available alt cost; the spectacle
     // cost once a same-line burn has turned spectacle on; else the printed cost.
@@ -33424,6 +33647,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         const LineSpec& line_spec = spec;    // `spec` is shadowed by the spectacle bool below
         ManaPool p = AvailableManaPool(s);
         p.wild += sac_wild;                  // Lotus Bloom & co. (see sac_wild above)
+        for (const BoardActivation& ba : board_acts)   // see the twin above the greedy walk
+        { SubtractPoolClamped(p, PermAbilityTapDebitOf(s, AvailableManaPool(s), ba.src->card.m_number)); }
         bool spec = s.opponent_lost_life_this_turn;
         std::vector<std::string> reducers;   // reduces_spell_color of Medallions cast so far in-line
         std::vector<std::string> sub_reducers; // reduces_spell_subtype of Warchiefs cast so far in-line
@@ -33449,7 +33674,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             ManaCost cost = pc.alt_free ? ManaCost{}
                           : (pc.has_spectacle && spec) ? pc.spectacle_cost
                           : pc.full_cost;
-            if (!cost.has_x && pc.def)   // same-turn Ruby-Medallion discount (generic -1 per matching reducer)
+            if (!cost.has_x && pc.def && !pc.board_act)   // same-turn Ruby-Medallion discount (generic -1 per matching reducer)
             {
                 const ManaCost& mc = pc.def->card.m_mana_cost;   // printed pips
                 int disc = 0;
@@ -33473,7 +33698,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             }
             // Ragemonger same-turn COLOURED reduction: one application per live in-line reducer
             // (vialed up front, or cast earlier in the walk) whose subtype this spell carries.
-            if (!cost.has_x && pc.def)
+            if (!cost.has_x && pc.def && !pc.board_act)   // spells only -- see the generic twin above
             {
                 for (const CardDefinition* rd : col_reducers)
                 {

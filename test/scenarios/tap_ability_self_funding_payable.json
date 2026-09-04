@@ -1,0 +1,41 @@
+{
+  "_comment": [
+    "The POSITIVE half of the '{cost}, {T}' self-funding pair -- see",
+    "tap_ability_self_funding_unpayable.json for the bug, the cause, and the four affected cards.",
+    "",
+    "Identical board plus a fifth Forest, so the pool is 6 and Mariposa's '{5}, {T}: Draw a card' is",
+    "genuinely payable once its own {C} is debited: tap Mariposa for the ability, pay {5} off the",
+    "five Forests. It must still verdict `accept`.",
+    "",
+    "This half is the one that would catch an over-tight fix, and it is the reason the debit lives in",
+    "the per-selection pool rather than at the emission site. An emission-time affordability gate",
+    "prices the ability against the PRE-CAST board, which would also hide an activation funded by a",
+    "mana rock the same plan casts -- the identical unsoundness that got the human-play trial-pay",
+    "removed from the Wirewood Lodge untap (docs/design/enumerated-but-unplayable-activations.md).",
+    "A fixture that only pinned the negative direction would have passed that broken fix.",
+    "",
+    "It passes on BOTH arms of MTG_TAP_ABILITY_DEBIT by design: a non-discriminating fixture is the",
+    "point of a boundary pair. Its twin carries the discrimination."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Mariposa Military Base", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "validate_line": "cast=Mariposa Military Base",
+  "expect_verdict": "accept"
+}
