@@ -29711,6 +29711,22 @@ namespace
         std::atomic<long long> esc_verified{0};                 // escalations that COMMITTED a verified win (win <= turn+hcommitted-1)
         std::atomic<long long> esc_verified_short{0};           // ... AND at hcommitted < probe committed (verified win the probe pruned)
         std::array<std::atomic<long long>, 16> esc_ver_hdepth{}; // achieved-depth histogram of the VERIFIED-win escalations
+        // Escalation budget/cost accounting (2026-09-04): separates "probe genuinely spent the budget"
+        // from "the gate/prior misprices heuristic passes and stops short with budget in hand".
+        std::atomic<long long> esc_rem_sum{0};   // probe-budget units REMAINING at escalation entry
+        std::atomic<long long> esc_lim_sum{0};   // ... and that budget's limit (mean leftover = rem/lim)
+        std::array<std::atomic<long long>, 10> esc_rem10{};   // decile histogram of remaining/limit at escalation
+        std::atomic<long long> esc_r_milli{0};   // g_esc_R x1000 at escalation record (LEARNED heuristic units/leaf)
+        std::atomic<long long> esc_r_cnt{0};
+        std::atomic<long long> probe_lc_milli{0}; // probe (limit-remaining)/probe_leaves x1000 (value-leaf units/leaf)
+        std::atomic<long long> probe_lc_cnt{0};
+        // Single-pass (deck cap path) hint accuracy: does the frozen-R affordability hint over/under-shoot?
+        std::array<std::atomic<long long>, 16> esc_target{};  // hint target-depth histogram
+        std::atomic<long long> esc_abort_first{0};  // first attempt OVERRAN (hint too deep -> 2x-budget torch)
+        std::atomic<long long> esc_fellback{0};     // final depth < hint target (any fallback)
+        std::atomic<long long> esc_waste_sum{0};    // units consumed by ABORTED (discarded) passes
+        std::atomic<long long> esc_rs_milli{0};     // measured Rsample x1000 (actual heuristic units per probe leaf)
+        std::atomic<long long> esc_rs_cnt{0};
         ~HybridStats()
         {
             if (!enabled || decisions.load() == 0) { return; }
@@ -29743,6 +29759,48 @@ namespace
                 long long c = redo_hdepth[d].load();
                 if (c == 0) { continue; }
                 std::cerr << "    h" << d << ": " << c << "\n";
+            }
+            if (esc_lim_sum.load() > 0)
+            {
+                std::cerr << "[hybrid-stats] probe-budget leftover at escalation: mean "
+                          << (100.0 * esc_rem_sum.load() / esc_lim_sum.load())
+                          << "% of decision budget; decile histogram (0-10%..90-100%):";
+                for (int d = 0; d < 10; ++d) { std::cerr << " " << esc_rem10[d].load(); }
+                std::cerr << "\n";
+            }
+            if (esc_r_cnt.load() > 0)
+            {
+                std::cerr << "[hybrid-stats] learned heuristic units/leaf R: mean "
+                          << (esc_r_milli.load() / 1000.0 / esc_r_cnt.load())
+                          << " over " << esc_r_cnt.load() << " escalations (frozen prior 120)\n";
+            }
+            if (probe_lc_cnt.load() > 0)
+            {
+                std::cerr << "[hybrid-stats] probe (value-leaf) units/leaf: mean "
+                          << (probe_lc_milli.load() / 1000.0 / probe_lc_cnt.load())
+                          << " over " << probe_lc_cnt.load() << " escalations\n";
+            }
+            {
+                long long tsum = 0;
+                for (int d = 0; d < 16; ++d) { tsum += esc_target[d].load(); }
+                if (tsum > 0)
+                {
+                    std::cerr << "[hybrid-stats] single-pass hint target histogram (t:count):";
+                    for (int d = 0; d < 16; ++d)
+                    {
+                        long long c = esc_target[d].load();
+                        if (c > 0) { std::cerr << " t" << d << ":" << c; }
+                    }
+                    std::cerr << "\n[hybrid-stats] hint accuracy: abort_first=" << esc_abort_first.load()
+                              << " fellback=" << esc_fellback.load()
+                              << " wasted_units_in_aborted_passes=" << esc_waste_sum.load() << "\n";
+                }
+            }
+            if (esc_rs_cnt.load() > 0)
+            {
+                std::cerr << "[hybrid-stats] MEASURED heuristic units per probe leaf (Rsample): mean "
+                          << (esc_rs_milli.load() / 1000.0 / esc_rs_cnt.load())
+                          << " over " << esc_rs_cnt.load() << " first-fit passes (frozen prior 120)\n";
             }
         }
     };
@@ -30035,6 +30093,29 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     }
     if (escalate)
     {
+        // Diagnostics: how much of the probe's budget is left when we decide to escalate. Under the
+        // legacy shared budget this IS the escalation's whole allowance; under fresh/split arms it
+        // still measures what the probe consumed. Probe units/leaf uses the recorded probe structure
+        // (armed only on predictor/cap paths; cnt tracks coverage).
+        if (g_hybrid_stats.enabled && probe_budget && !probe_budget->Unlimited())
+        {
+            const long long lim = probe_budget->Limit();
+            const long long rem = std::max<long long>(0, probe_budget->Remaining());
+            g_hybrid_stats.esc_rem_sum.fetch_add(rem);
+            g_hybrid_stats.esc_lim_sum.fetch_add(lim);
+            if (lim > 0)
+            {
+                const int decile = static_cast<int>(std::min<long long>(9, (rem * 10) / lim));
+                g_hybrid_stats.esc_rem10[decile].fetch_add(1);
+                long long pl = 0;
+                for (int d = 0; d < 16; ++d) { pl += std::max<long long>(0, g_probe_leaves[d]); }
+                if (pl > 0)
+                {
+                    g_hybrid_stats.probe_lc_milli.fetch_add(((lim - rem) * 1000) / pl);
+                    g_hybrid_stats.probe_lc_cnt.fetch_add(1);
+                }
+            }
+        }
         // ONE heuristic search on the REMAINING shared budget (not a fresh one): its start gate commits the
         // deepest AFFORDABLE depth Hd -- "the best result we can afford", per the fallback design. TAKE it only
         // if it clears the crossover: value-leaf-d(committed) ~= heuristic-d(committed - kValueTrustOffset), so
@@ -30441,6 +30522,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             bool aborted = true;
             bool first = true;
             long long c_last = 0;   // measured budget-work of the last COMPLETED pass (for the climb estimate)
+            if (g_hybrid_stats.enabled)
+            {
+                g_hybrid_stats.esc_target[std::clamp(target, 0, 15)].fetch_add(1);
+            }
             for (; td >= 1; --td)
             {
                 if (esc_budget && !esc_budget->Unlimited())
@@ -30453,6 +30538,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 hline = FSLineWin(state, td, max_turns, single_cut, second_main, single_tt, &single_cache, esc_budget);
                 aborted = (esc_budget && esc_budget->Overrun());
                 if (!aborted && esc_budget) { c_last = esc_budget->Used() - r_ub0; }
+                if (g_hybrid_stats.enabled && aborted)
+                {
+                    if (first) { g_hybrid_stats.esc_abort_first.fetch_add(1); }
+                    if (esc_budget) { g_hybrid_stats.esc_waste_sum.fetch_add(esc_budget->Used() - r_ub0); }
+                }
                 // Self-calibrate R = heuristic cost per (un-beamed) PROBE leaf, anchored to this pass's actual
                 // cost. CRITICAL: the affordability walk uses the PROBE's un-beamed per-depth leaf counts, but the
                 // escalation runs BEAMED -- so R must be measured against the probe's CUMULATIVE leaves through td
@@ -30479,11 +30569,19 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                         // Adaptive EMA ONLY on the env research path -- the adopted per-deck path (frozen_R) holds
                         // R fixed for determinism (see the frozen_R note above).
                         if (!frozen_R) { g_esc_R = 0.6 * g_esc_R + 0.4 * Rsample; }
+                        // Stats-only sample (frozen path included): the deck's ACTUAL heuristic units per
+                        // probe leaf, to audit the frozen prior. No behavior change.
+                        if (g_hybrid_stats.enabled)
+                        {
+                            g_hybrid_stats.esc_rs_milli.fetch_add(static_cast<long long>(Rsample * 1000.0));
+                            g_hybrid_stats.esc_rs_cnt.fetch_add(1);
+                        }
                     }
                 }
                 first = false;
                 if (!aborted || !eff_fallback) { break; }
             }
+            if (g_hybrid_stats.enabled && td < target) { g_hybrid_stats.esc_fellback.fetch_add(1); }
             // CLIMB: only when the hint pass FIT ON THE FIRST try (td == target). A descent means the hint OVER-shot,
             // so climbing would just re-overrun -- the affordable depth is at/below where we landed. Estimate the
             // next depth's cost from the last pass's LIVE cost x a growth factor; climb while it fits the remaining
@@ -30597,6 +30695,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         {
             int hi = (hcommitted >= 0 && hcommitted < 16) ? hcommitted : 15;
             g_hybrid_stats.redo_hdepth[hi].fetch_add(1);
+            if (g_esc_R > 0.0)
+            {
+                g_hybrid_stats.esc_r_milli.fetch_add(static_cast<long long>(g_esc_R * 1000.0));
+                g_hybrid_stats.esc_r_cnt.fetch_add(1);
+            }
             // Did the escalation COMMIT a verified win (lethal within its searched horizon)? If so and at a
             // depth < the probe's committed depth, it's a verified win the value-leaf probe PRUNED (leaf-driven
             // B&B cutoff differs) -- proving the shallow escalation passes are NOT skippable.

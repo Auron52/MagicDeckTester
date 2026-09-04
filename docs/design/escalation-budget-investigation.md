@@ -104,3 +104,75 @@ the single-pass path exists precisely to skip that.
 (all carry per-deck-frac framing), `analysis-Creature Giving.md` (rejection record),
 `learned-d0-policy.md`. The stale parked model `Creature Giving.value.DISABLED.json` is superseded
 by the fresh staged one when adoption lands.
+
+## Session 3 (2026-09-04): the accounting defect found — R=120 misprices heuristic passes fleet-wide
+
+The user's hypothesis — "value-leaf cost and heuristic cost may not be the same; if heuristic nodes
+cost more perhaps we need to change how we account for them" — is CONFIRMED, with the sign varying
+per deck. The single-pass escalation's affordability walk prices a heuristic pass at
+`chat[d] = probe_cost[d] + R * probe_leaves[d]` with R frozen at the deck-agnostic 120 prior
+(`value_play.escalation_r`, designed to be "calibrated offline" — **no deck in the fleet carries
+it**; all 11 enabled decks run the prior). Measured actual R (heuristic rollout units per un-beamed
+probe leaf, sampled from first-fit passes; new MTG_HYBRID_STATS diagnostics in the working tree):
+
+| deck | measured R | prior error | esc rate/depth (250g s2002, own budget) |
+|------|-----------|-------------|------------------------------------------|
+| Anti-Lifegain | 15.6 | 8x overpriced | 47 esc, d3.28 |
+| Creature Giving (staged) | 15–21 | 6x overpriced | 89 esc, d1.42 legacy |
+| burn | 35 (n=4) | 3x over | 24 esc, d1.46 |
+| Hinata2 | 40.8 | 3x over | 325 esc, d2.58 |
+| Dragonstorm | 81 | mild over | 61 esc, d2.80 |
+| FiveColour | 86 | mild over | **455 esc, d1.22** (starvation poster child, legacy budget) |
+| Goblins | 96 (n=2) | ~ok | 5 esc |
+| treasure_hunt | 156 | UNDERpriced | 66 esc, d1.53 |
+| StompySurprise | 180 | UNDERpriced | 61 esc, d1.18 |
+| Auras / slivers_vial / Knights | — | few/no escalations | R barely matters |
+
+Pattern: beam decks (W3/ld2) measure R 15–41 (the beam prunes the rollout frontier); no-beam decks
+measure 85–180. A flat prior cannot serve both. Everywhere measured: `abort_first=0, fellback=0,
+wasted_units=0` — the walk NEVER overshoots, i.e. the current design errs exclusively toward
+under-search, so lowering R to the measured value is waste-free by construction (and the overrun
+fallback + climb still guard a wrong calibration in either direction).
+
+**Decomposition of the CG starvation (esc depth 1.42 vs control 2.11):** two stacked causes.
+(a) ACCOUNTING: with R=120 the hint targets t1 on 79/89 escalations *with budget in hand*
+(probe leftover at escalation: mean 27%, bimodal — 37/89 arrive <10%, ~40/89 arrive 30–80%).
+Calibrated R alone on the LEGACY budget: 1.42 -> 1.93 (R=5..25 ladder plateaus ~1.9), zero cost.
+(b) GENUINE starvation: the <10%-leftover cohort is pinned at h1 under any R; only a
+fresh/reserved budget helps. Probe units/leaf ~0.9 vs heuristic 15–180: the probe's cheap leaves
+are why it can afford d4–d5 while the escalation cannot re-search there.
+
+**Depth ladder (CG d5/b20 s2002, cap5+beam, control unverified mean 2.11):** legacy 1.42;
+R120 arms: f0.5 1.90, f0.6 2.08, f0.7 2.20, f0.8 2.36, f1.0 2.53. R=10 arms: legacy 1.93,
+f0.4 2.31, f0.5 2.42, f0.6 2.58. Calibrated R reaches f1.0-class depth at ~half the allowance.
+MTG_ESC_SPLIT (probe cap, total<=1.0 by construction): 0.5 -> 2.03 but perturbs ALL probe
+decisions (378 vs 339) — dominated by r10leg (1.93, probe untouched); set aside.
+
+**CG held-out quality (16 seeds x 500g d5/b40, ho6 batch paired vs the ho4 ctl arm; smoke
+51/51 byte-identical first so old/new runs pair validly):**
+- r10leg (zero-cost R fix alone): +0.0056 t=+3.05, 3 win->loss — WORSE. Depth 1.93 is not enough;
+  the accounting fix alone does NOT buy quality parity.
+- r10f04: t=+0.63, 0 flips, **0.39x ctl wall — cheapest arm measured, beats cap10's 0.43x**.
+- r10f05: t=+0.09, 0 flips, 0.42x. r10f06: t=-0.40, 0 flips, 0.43x.
+- (cap10 = R120+f1.0 reference: t=-0.33, 0 flips, 0.43x.)
+So calibrated-R + fresh 0.5 (+/-0.1) reproduces the fresh-full design's held-out quality at equal
+or lower wall with HALF the worst-case budget allowance — the user's "same depth without 100%"
+exists and is measured.
+
+**Hinata2 (worst-cost deck under fresh-full):** shipped (f0.5, R120) esc depth 2.58 (ctl 2.35);
+r40f05 -> 2.75, r40f04 -> 2.60 (shipped depth at 20% less allowance). Held-out A/B vs shipped:
+see hho batch (logs/esc_diag/manifest_hho.json, hho.log/.err).
+
+**Candidate design for the USER's decision (nothing adopted):** per-deck calibrated
+`escalation_r` (measured, ideally emitted by the value-leaf generation so per-deck numbers stay
+one-process) + `escalation_fresh_frac` ~0.4–0.5 fleet-wide, replacing the flat-1.0 proposal. The
+open fleet question is the suite-makespan cost vs shipped at f0.4–0.5 (the reverted flat-1.0
+package measured ~+15%; the allowance halves but actual spend is what counts — needs a tier-scale
+A/B). The 3 blockless model decks (Dragons/Minotaur/Mirrorwing, full-ladder escalation, no cap)
+sit outside this mechanism and still need generated cap/beam blocks.
+
+Artifacts: logs/esc_diag/ run_sweep2.sh + sw2_*/sw3_*/sw4_* (depth ladders), fleet_*.err (fleet R
+table), ship_cap_r*/ship_cap_f0[67]/hin_r40* (scratch sidecars), manifest_ho6.json + ho6.log/.err +
+analyze_ho6.py (CG held-out), manifest_hho.json + hho.* (hinata held-out). Diagnostics code: the
+MTG_HYBRID_STATS additions in src/ai/TurnSolver.cpp (working tree; leftover deciles, Rsample,
+hint-target histogram, abort/waste counters) — byte-identical with stats off (smoke-verified).
