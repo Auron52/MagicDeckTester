@@ -195,3 +195,23 @@ escalation allowance as an ABSOLUTE per-deck `escalation_budget_ms` (frac x budg
 units — e.g. hinata frac 0.5 @ B20 == 10ms) instead of a hidden multiplier. Total worst-case
 effort = budget_ms + escalation_budget_ms, both visible in the block, both emittable per-deck by
 one process alongside escalation_r. Semantics honest; mechanism unchanged; nothing adopted.
+
+### Session 3c (2026-09-04): budget scaling under the calibrated design — measured USEFUL
+
+The user's requirement: the design must scale up usefully (extra budget -> better play), and their
+refinement: probe-deepening is NOT low-value — a deeper probe that VERIFIES a win is the best
+outcome (done, real simulation, no escalation needed); the harm is only starving the heuristic redo
+when the win is not going to be found. Both confirmed. Trust coverage is already maximal by default
+(no value_trust_depth -> escalate_below = lookahead_depth+1: EVERY unverified commit escalates),
+and the frac allowance scales with the operating budget automatically, so the calibrated design
+has no fixed-depth saturation. Hinata held-out (r=40, frac=0.5; 16x500g paired): B20->B30
+d=-0.0165 t=-6.84 (net +10 games) at 1.204x wall; B30->B40 a further d=-0.0076 t=-6.28; total
+B20->B40 d=-0.0241 t=-8.80 at 1.402x wall — monotone quality gain, SUB-linear wall growth (2x
+budget -> 1.4x wall; verified decisions stop early and spend nothing). Structure scales in the
+healthy shape: verified d5 probe commits RISE (249->280->294 per 250g) while escalations become
+fewer but deeper (320@2.75 -> 288@3.07 -> 270@3.32). Contrast the legacy-leftover B-raise arms
+(3b): same budgets, quality flat-to-worse with heavy win-flip churn. The allowance form stays a
+FRACTION (absolute ms was considered and rejected: cells/gen override budget_ms per context —
+b3 gen cells to b40 held-out — so the allowance must track the operating budget). CG note: CG is
+budget-saturated at b40 (all arms within ±0.004 of avg 4.672), so scaling tests there are
+insensitive by construction — use hinata-class decks.
