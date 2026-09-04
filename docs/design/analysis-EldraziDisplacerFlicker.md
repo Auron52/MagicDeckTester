@@ -1783,24 +1783,94 @@ Refuted on held-out seeds (t = -0.88). The `heurarm` slot is kept: the recognize
 it claims, it just does not pay at this deck's depth/budget, and if EDF ever gets a value leaf the
 horizon that made it inert moves. Re-measuring should cost one flag, not one reimplementation.
 
-### 5. Is there a T3 KILL on the corrected board? NO -- and now derived on the RIGHT board
+### 5. Is there a T3 KILL on the corrected board? **YES -- my "NO" was WRONG (RETRACTED 2026-09-04)**
 
-Re-derived on `--choices "1,0,1"` (Wild Growth #53 on Aether Hub, #54 on Conservatory), which is the
-board the user described. **The opponent takes zero damage on turn 3 under any line**, for a reason
-that needs no search: every damage source the deck can reach on that turn is either a creature (all
-summoning sick -- the deck has no haste) or a permanent not on the battlefield. Shivan Gorge is in
-the library; the only non-combat outlet Living Wish can reach is Essence Depleter, whose drain is
-`{1}{C}` repeatable, so 20 life costs 40 mana.
+I wrote, and pushed, that no turn-3 kill exists, "and it needs no search to see". That was wrong,
+and the USER corrected it: *"No, T3 happens in a straightforward manner."*
 
-The T3 mana ceiling is nowhere near that. Three lands (Aether Hub +Wild Growth, Conservatory +Wild
-Growth, Mariposa off the land drop) make 5; Trace of Abundance is net -1 for the turn (costs 2, adds
-1); Living Wish and Cloud of Faeries are 2 each; Cloud of Faeries' ETB untaps 2 lands for at most
-+5. That leaves ~4, which does not cast Emiel `{2}{W}{W}` AND Peregrine Drake `{4}{U}`, so the
-blink loop -- the only route to the mana a drain kill would need -- cannot start on turn 3.
+**The claim, and why it was wrong.** I derived a turn-3 mana ceiling of about 4 after the Living
+Wish line, concluded that it "does not cast Emiel {2}{W}{W} AND Peregrine Drake {4}{U}, so the blink
+loop cannot start", and stopped there. Walking the ACTUAL engine to that point takes one command and
+shows the opposite: on turn 3 the board reaches **Emiel the Blessed + BOTH Peregrine Drakes + Cloud
+of Faeries**, with Aether Hub and Conservatory still UNTAPPED and only Mariposa spent.
 
-So the earlier "no T3 kill under any opening" verdict was RIGHT, but it was reached on the wrong
-board and could not have been trusted. It is now derived on the right one, from a mana ceiling rather
-than from a search that failed to find one.
+I mis-modelled the ETB-untap chain. Each Drake untaps five lands as it resolves, and the payment
+tap-aheads into the float (`EtbUntapTapAheadIntoFloat`), so a Drake cast very nearly refunds itself
+and the board comes back near-full between casts. I priced each cast against a pool that had already
+paid for the previous one, which is simply not how the sequence runs.
 
-**What the user's line actually was, then:** a T3 combo CONTINUATION (Trace -> Aether Hub, Living
-Wish -> Cloud of Faeries, cast Cloud of Faeries), not a T3 kill. The engine now reaches all of it.
+**The loop is live on turn 3, and it has a draw sink.** With five mana up, Emiel blinks a Drake for
+{3}; the Drake's ETB untaps all three lands, so the pool returns to six -- the iteration is free and
+repeatable. Crucially the untap also re-arms **Mariposa Military Base**, whose `{5}, {T}: Draw a
+card` is a {T} ability and therefore once-per-untap: every blink buys another draw. Verified by
+walking it -- turn 3, library 50 -> 47 over the first iterations, blinks still offered. Draw far
+enough and Shivan Gorge arrives, and its `{2}{R}, {T}` ping is re-armed by the same untap, which is
+the kill.
+
+**The lesson is the one this file already records twice.** A mana ceiling is a MODEL, and I asserted
+it instead of running the line. The falsifier was the same single command that settled the other two
+wrong diagnoses in this session. See [[hypothesis-before-measurement-mirrorwing]].
+
+### 6. The turn ENDING after Living Wish -- the ordering search was offering a lie
+
+USER: *"The problem is that it chooses to go to the next turn after living wish, which is
+incorrect."* Reproduced exactly, and it is a third distinct bug, upstream of both mana fixes.
+
+The cast-ordering search expands each action set into its distinct orderings, applies each on a copy,
+and dedups by end-of-phase state. It never asked whether an ordering **dropped one of its own
+casts**. A drop changes the end state, so it survives the dedup and ships as a distinct plan whose
+summary advertises a cast it never makes.
+
+Turn 3 offered both orderings of `{Trace of Abundance -> Aether Hub, Living Wish}` as adjacent menu
+entries with the same cast set and the same `cast_order_canonical`:
+
+* **Trace first** pays it off Conservatory alone -- whose `{W}` is the board's only white for Trace's
+  `{R/W}` pip -- leaving Aether Hub untapped to receive the Aura and tap for three. The line runs.
+* **Living Wish first** spends Conservatory on ITS pips, so Trace has no white left, is DROPPED
+  (`dropped_casts: ["Trace of Abundance"]`), and the turn dies with Cloud of Faeries uncastable.
+
+The dropping ordering sorts FIRST, so it is the one a player naturally picks. `MTG_ORDER_DROP_GUARD`
+(default on) rejects any ordering that drops one of its own casts; if no ordering survives, the base
+plan is kept rather than deleted -- deleting a whole plan when no variant survives is exactly the
+failure mode of `OrderingPlacesAuraBeforeCreature` (34abe486's third symptom) and is not worth
+reintroducing one loop later. Turn 3's menu goes from 163 plans to 99, and the only surviving variant
+of that pair is the one that works.
+
+### 7. Emiel's blink: the viewer could activate it but not TARGET it
+
+USER: *"Emiel's ability is bugged in the viewer. I should be able to choose just to pay 3 with it
+and what to target, but no options are given."*
+
+The engine was fine -- it fans out one plan variant per legal blink target and tags each
+`activate: true` with `blink_target`. The VIEWER collapsed them. `activatableSources()` keys a
+permanent's activation options by `(verb, mode, payload)`, and for a blink all three are identical
+across targets (`cast`, null, the outlet's own name) -- so every variant deduped to ONE unlabelled
+entry, the picker never opened (it opens only at `opts.length > 1`), and the committed line read
+`cast=Emiel the Blessed`, which carries no target at all. CheckLine then matched whichever variant
+sorted first: the human's choice was not overridden so much as never collected.
+
+Fixed with a `blink=<outlet>[@<target m_number>]` LineSpec verb, the `equip=`/`gyreturn=` precedent:
+the engine emits `"verb": "blink"`, the viewer keys and labels options by target (showing the
+TARGET's art -- four rows of the same Emiel picture is the undifferentiated menu this fix exists to
+end), and `BlinksMatch` pairs declared targets to plan actions with `0` as the any-target wildcard.
+EMPTY `spec.blinks` keeps the legacy cast-multiset matching, so every saved reference is unaffected
+by construction. Verified: `@42` resolves to the Drake plan, `@200002` to the Cloud of Faeries plan,
+a bare `blink=` and a legacy `cast=` both still accept, and a nonexistent target verdicts `illegal`.
+
+### 8. USER HEURISTIC: the search always blinks the Drake when one is available
+
+USER: *"In the search Drake should always be targeted if available. (a heuristic rule)."*
+
+`EldraziFlickerProvider::BlinkTargetCandidates` already ranked the Drake first -- `best_payload` is
+the highest `etb_untap_lands` on the board and Peregrine Drake's 5 is the deck's maximum -- but it
+returned a SECOND candidate too, the best attacker to grow with Emiel's counters. Now, when an
+untapper is available, the attacker branch is dropped and the whole blink budget goes to the line
+that actually goes off.
+
+The rule holds up on its own terms, which is why it is safe as a hard preference rather than a score
+nudge: blinking the untapper is the only target that refunds its own activation cost, so it is the
+only one that can be REPEATED. Every other target spends {3} for one ETB. Growing an attacker is
+real but cashes NEXT turn (a blinked creature returns summoning-sick), whereas the untap loop can
+win this one -- and if the loop is live, its iterations put those same counters on anyway.
+`MTG_EDF_BLINK_DRAKE_ONLY=0` restores the two-candidate set. Not yet A/B'd: EDF is not in the
+regression suite, so this needs a deck-specific pooled run, which is queued rather than done.

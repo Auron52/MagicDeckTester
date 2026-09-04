@@ -85,6 +85,7 @@
   //   ooze=       Scavenging Ooze's exile (names the EXILED graveyard card)    (LineSpec::ooze_exiles)
   //   channel=    Twinshot Sniper's from-HAND channel ability (names the card) (LineSpec::channels)
   //   suspend=    Lotus Bloom's from-HAND Suspend (names the card)             (LineSpec::suspends)
+  //   blink=      Emiel / Eldrazi Displacer, "<outlet>[@<target m_number>]"    (LineSpec::blinks)
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one
   // rule instead of a growing `v === 'jittemode' || v === 'gyexile' || ...` chain.
   const MODE_VERBS = { jittemode: true, gyexile: true };
@@ -126,6 +127,13 @@
     return (p.srcNum ? '#' + p.srcNum : '') + (p.target ? '@' + p.target : '');
   }
 
+  // The "@<blinked creature m_number>" suffix a `blink=` token carries. Same reason equipIds exists:
+  // the outlet's NAME is not the decision -- blinking a Peregrine Drake (refill five lands) and
+  // blinking anything else both read `blink=Emiel the Blessed`, so without the target the engine
+  // matches whichever variant sorted first and the human's pick is silently discarded. Omitted (read
+  // as "any") when the viewer somehow has no target, which keeps a legacy line parsing.
+  function blinkIds(p) { return p.blinkTarget ? '@' + p.blinkTarget : ''; }
+
   function encodeLine(plan) {
     const parts = []; const l = planLand(plan); if (l) parts.push('land=' + l.name);
     for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && lineVerb(p) === 'cast') parts.push('cast=' + p.name);
@@ -137,7 +145,8 @@
     for (const p of plan) {
       const v = lineVerb(p);
       if (v === 'cast') continue;
-      parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode) : p.name) + (v === 'equip' ? equipIds(p) : ''));
+      parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode) : p.name)
+                 + (v === 'equip' ? equipIds(p) : v === 'blink' ? blinkIds(p) : ''));
     }
     const n = leCount(plan); if (n > 0) parts.push('landsedge=' + n);
     return parts.length ? parts.join(';') : 'pass';

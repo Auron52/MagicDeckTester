@@ -237,6 +237,17 @@ static std::atomic<long long> g_units[kSiteCount];
 // PLAY order IS the rank order (see the gate's note).
 static bool OrderingSearchEnabled(const GameState& state);
 
+// Top-level main-plan casts DROPPED (declared, then unpayable) on this thread, monotonically. The
+// play viewer learns dropped casts from `g_play_dropped_cast_sink`, but that hook is nulled for
+// every search/rollout/enumeration scope -- so enumeration itself had no way to ask the one question
+// that matters when it is about to OFFER an ordering: does applying it drop one of its own casts?
+// A plain counter needs no hook and no allocation, and a snapshot/compare around ApplyPlanDirect
+// catches a drop for ANY reason, not just a mana shortfall. See the cast-ordering search.
+thread_local std::uint64_t g_dropped_cast_count = 0;
+// ... and the NAMES, for the one caller that wants to label rather than just detect. Null on every
+// other path, so the drop site pays one null check and the search's rollouts allocate nothing.
+thread_local std::vector<std::string>* g_enum_drop_names = nullptr;
+
 // MTG_IRENCRAG_WASTE relevance counters (print-only, MTG_ROLLOUT_STATS). The question they answer:
 // of the subsets the waste gate drops, how many hold a payoff that Irencrag's float COULD have paid
 // for if the order let it follow him (Magma Opus / Soulfire, both ranked BEFORE him today)? That is
@@ -18750,6 +18761,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // main-plan casts (sink_stack empty) -- nested breakpoint re-solve casts are engine-driven,
                 // not part of the user's committed line. Sink is nulled off real play so GT stays identical.
                 if (sink_stack.empty() && g_play_dropped_cast_sink) { g_play_dropped_cast_sink->push_back(name); }
+                // ... and the same fact WITHOUT needing a hook. The sink above is nulled for every
+                // search/enumeration scope, so the cast-ordering search could not see that an ordering
+                // it was about to offer drops one of its own casts. See g_dropped_cast_count.
+                if (sink_stack.empty())
+                {
+                    ++g_dropped_cast_count;
+                    if (g_enum_drop_names) { g_enum_drop_names->push_back(name); }
+                }
                 return;
             }
             // ...and the life half of a phyrexian payment, now that the mana half is committed
@@ -22146,6 +22165,29 @@ static std::string SimulateLandPlay(GameState& state)
 // heuristic batches wrong (enabler / destroy-all-payload rebuilds) are reachable. Off by
 // default => byte-identical (canonical order). On via MTG_SEARCH_ORDER or the global
 // MTG_UNPRUNED. Expensive (applies each tried ordering on a copy); run with a high budget.
+// LABEL a cast-ordering variant that DROPS one of its own casts -- do NOT delete it.
+//
+// The problem is real: to a human picking by summary, "cast: Living Wish, Trace of Abundance ->
+// Aether Hub" that silently casts only the Wish is a lie, and the lying variant sorts first
+// (USER-reported: "it chooses to go to the next turn after living wish"). But DELETING those
+// orderings was measured wrong twice over, and both failures are worth recording because they point
+// the same way -- a dropped cast is a legitimate LINE, not a corrupt plan:
+//
+//  * Autonomously it moved DRAGONSTORM, the one deck whose provider turns the ordering search on by
+//    default: 5 GT cells, 13 searched games slower, 99 play-changed at the same score. Its go-off
+//    chains routinely declare more rituals than a given ordering can pay for and cast what they can.
+//    To the SEARCH nothing is being misrepresented -- the plan is scored by the rollout's real
+//    outcome, so the drop is priced honestly and the branch wins or loses on its merits.
+//  * Scoping the deletion to human play then broke a SAVED REFERENCE: StompySurprise s9_gi8
+//    replayed to win turn 6 instead of the recorded 4, because the line the human actually played
+//    ran through a plan the guard had removed. Deleting a plan to fix a LABEL destroys real user
+//    work -- and a changed reference win turn means the engine got worse, full stop.
+//
+// So the plan stays and carries `would_drop`, which the decision JSON surfaces as `drops` and the
+// viewer renders as a warning. Every line stays reachable, summaries are byte-identical, and the
+// menu stops lying. MTG_ORDER_DROP_LABEL=0 stops collecting the names.
+static const bool g_order_drop_label = EnvOn("MTG_ORDER_DROP_LABEL", true);
+
 static bool OrderingSearchEnabled(const GameState& state)
 {
     // Global A/B knob (env / MTG_UNPRUNED), cached once.
@@ -24885,6 +24927,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
 
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> seen_states;
+        const std::size_t ordered_before = ordered.size();
         for (const std::vector<int>& idx : orderings)
         {
             TurnSolver::Plan cand = p;
@@ -24897,8 +24940,24 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (AuraOnNewCreatureEnabled() && OrderingPlacesAuraBeforeCreature(state, cand.actions)) { continue; }
 
             // Apply this ordering on a copy; dedup by the resulting end-of-phase state.
+            std::vector<std::string> dropped;
+            if (g_order_drop_label) { g_enum_drop_names = &dropped; }
             GameState copy = state;
             ApplyPlanDirect(copy, cand, is_pre_combat);
+            g_enum_drop_names = nullptr;
+            cand.would_drop = std::move(dropped);
+            // `cand.would_drop` now names the casts this ORDERING declares but cannot make. It is
+            // carried, not acted on -- see the note at g_order_drop_label for the two measurements
+            // that rejected deleting these variants.
+            //
+            // USER-FOUND (EldraziDisplacerFlicker seed 1 turn 3, "it chooses to go to the next turn
+            // after living wish"): the two orderings of {Trace of Abundance -> Aether Hub, Living Wish}
+            // are adjacent menu entries with the SAME cast set and the same cast_order_canonical.
+            // Casting Trace first pays it off Conservatory alone -- whose {W} is the board's only
+            // white for Trace's {R/W} pip -- and leaves Aether Hub untapped to receive the Aura and
+            // tap for three. Casting Living Wish first spends Conservatory on ITS pips, so Trace has
+            // no white left, is dropped, and the combo turn dies. The dropping ordering sorts FIRST,
+            // so it is the one a player naturally picks -- which is why it has to SAY so.
             if (seen_states.insert(BuildDedupKey(copy)).second)
             {
                 // Combat is order-independent, so inherit the base plan's combat-based win; a reordering
@@ -24908,6 +24967,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 ordered.push_back(std::move(cand));
             }
         }
+        // No ordering survived (every one places an Aura before its creature): keep the base plan
+        // rather than deleting it. Deleting a whole plan when no variant survives is exactly the
+        // failure mode of OrderingPlacesAuraBeforeCreature above (34abe486's third symptom), and it
+        // is not worth reintroducing one loop later.
+        if (ordered.size() == ordered_before) { ordered.push_back(std::move(p)); }
     }
 
     return ordered;
@@ -33401,6 +33465,35 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         }
     }
 
+    // --- blink= : Emiel's "{3}:" / Eldrazi Displacer's "{2}{C}:" exile-and-return. Source presence,
+    // the ability existing on that card, and -- when the line PINNED a target -- that the target is a
+    // creature we could legally blink. A "another target creature" ability cannot take the outlet
+    // itself (CR: "another"), and a pinned target that is not on the battlefield at all is a stale
+    // line, not a reachability gap, so both are safe to call Illegal here.
+    for (const TurnSolver::LineSpec::BlinkSpec& b : spec.blinks)
+    {
+        if (!live(b.name))
+        { return "you control no '" + b.name + "' to activate"; }
+        const CardDefinition* d = def_of(b.name);
+        if (d && !d->params.blink_cost.has_value())
+        { return "'" + b.name + "' has no blink ability"; }
+        if (b.target == 0) { continue; }
+        const Permanent* tgt = nullptr;
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_number == b.target) { tgt = &p; break; } }
+        if (tgt == nullptr || !tgt->card.IsCreature())
+        { return "'" + b.name + "' can only blink a creature, and its declared target is not one"; }
+        if (d && d->params.blink_own_only && tgt->controller_index != active)
+        { return "'" + b.name + "' can only blink a creature YOU control"; }
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.card.m_name != b.name || p.controller_index != active) { continue; }
+            if (p.card.m_number == b.target)
+            { return "'" + b.name + "' blinks ANOTHER creature -- it cannot target itself"; }
+            break;
+        }
+    }
+
     // --- animate= : Mutavault's "{1}: becomes a 2/2". Source presence + the ability existing.
     for (const std::string& name : spec.animates)
     {
@@ -33647,6 +33740,45 @@ static bool EquipsMatch(const std::vector<TurnSolver::LineSpec::EquipSpec>& want
     return EquipAssign(want, have, used, 0);
 }
 
+// Backtracking assignment behind BlinksMatch -- the EquipAssign shape, one wildcard field instead of
+// two. A spec entry's `target == 0` means "any target", so first-fit could reject a matchable pair
+// ("Emiel@42" + "Emiel" against actions "Emiel->200002" + "Emiel->42" fails if the wildcard eats 42
+// first). n is one main phase's blink count: under human play the fan-out folds K to 1 and the phase
+// re-prompts, so this is tiny.
+static bool BlinkAssign(const std::vector<TurnSolver::LineSpec::BlinkSpec>& want,
+                        const std::vector<TurnSolver::LineSpec::BlinkSpec>& have,
+                        std::vector<bool>& used, size_t i)
+{
+    if (i == want.size()) { return true; }
+    for (size_t j = 0; j < have.size(); ++j)
+    {
+        if (used[j] || have[j].name != want[i].name) { continue; }
+        if (want[i].target != 0 && want[i].target != have[j].target) { continue; }
+        used[j] = true;
+        if (BlinkAssign(want, have, used, i + 1)) { return true; }
+        used[j] = false;
+    }
+    return false;
+}
+
+// Does a plan's set of blink activations perform exactly the ones the line DECLARED?
+//
+// Unlike EquipsMatch this keeps the declared-vs-legacy split every other activation verb has: an
+// EMPTY spec.blinks means the line did not use the verb, and a blink then falls through to the
+// ordinary `cast=<outlet>` multiset exactly as it always did. Equip could drop that fallback because
+// an Equipment's name is ALSO a castable hand card, so the fallback was actively wrong there; a
+// blink outlet's activation and its hand cast are already distinguishable (the outlet is on the
+// battlefield and out of hand), so keeping the fallback costs nothing and keeps every saved
+// reference matching unchanged.
+static bool BlinksMatch(const std::vector<TurnSolver::LineSpec::BlinkSpec>& want,
+                        const std::vector<TurnSolver::LineSpec::BlinkSpec>& have)
+{
+    if (want.empty()) { return true; }          // legacy: matched via the cast multiset instead
+    if (want.size() != have.size()) { return false; }
+    std::vector<bool> used(have.size(), false);
+    return BlinkAssign(want, have, used, 0);
+}
+
 TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_combat,
                                             const LineSpec& spec)
 {
@@ -33663,7 +33795,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                       spec.gy_exiles.empty() && spec.gy_returns.empty() && spec.channels.empty() &&
                       spec.suspends.empty() &&
                       spec.animates.empty() && spec.tap_tokens.empty() &&
-                      spec.pods.empty() && spec.ooze_exiles.empty()))
+                      spec.pods.empty() && spec.ooze_exiles.empty() && spec.blinks.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -33730,6 +33862,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     const bool ooze_declared      = !spec.ooze_exiles.empty();
     std::vector<std::string> sortedOoze = spec.ooze_exiles;
     std::sort(sortedOoze.begin(), sortedOoze.end());
+    const bool blink_declared     = !spec.blinks.empty();
 
     // --- 1) Does the line match a plan (or several variants) the model would play? ----
     // A "match" is same land + same multiset of cast card names. Several enumerated plans can
@@ -33775,6 +33908,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         std::vector<int> jitteModes, gyExileModes;
         std::vector<TurnSolver::LineSpec::PodSpec> podActs;
         std::vector<std::string> oozeNames;
+        // One entry per blink activation: (outlet name, blinked creature's m_number). Matched
+        // against spec.blinks by BlinksMatch below, which honours the 0 wildcard.
+        std::vector<LineSpec::BlinkSpec> blinkActs;
         for (const Action& a : p.actions)
         {
             if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
@@ -33817,6 +33953,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             { podActs.push_back({ a.tutor_target.str(), a.sac_victim_id }); continue; }
             if (ooze_declared && a.kind == Action::Kind::GraveyardExileGrow)
             { oozeNames.push_back(a.tutor_target); continue; }
+            // Blink: matched against its own verb when declared (the target is the decision), else
+            // by outlet name in the ordinary cast multiset -- the legacy behaviour every saved
+            // reference was written under. sac_victim_id is the blinked creature's m_number.
+            if (blink_declared && a.kind == Action::Kind::ActivateBlink)
+            { blinkActs.push_back({ a.card_name.str(), a.sac_victim_id }); continue; }
             orderNames.push_back(a.card_name);
         }
         if (planLE != spec.lands_edge) { continue; }
@@ -33845,6 +33986,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             if (v2 != sortedJitteModes) { continue; }
         }
         if (!EquipsMatch(spec.equips, equipActs)) { continue; }
+        if (!BlinksMatch(spec.blinks, blinkActs)) { continue; }
         if (gyexile_declared)
         {
             std::vector<int> v2 = gyExileModes;

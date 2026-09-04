@@ -13769,7 +13769,26 @@ std::vector<int> EldraziFlickerProvider::BlinkTargetCandidates(const GameState& 
     }
     std::vector<int> out;
     if (best_payload  != 0) { out.push_back(best_payload); }
-    if (best_attacker != 0 && best_attacker != best_payload) { out.push_back(best_attacker); }
+    // USER RULE (2026-09-04): "in the search Drake should always be targeted if available."
+    //
+    // `best_payload` IS that Drake -- it is the highest etb_untap_lands on the board, and Peregrine
+    // Drake's 5 is the deck's maximum. When one is available the attacker branch is dropped
+    // entirely, so the search spends its whole blink budget on the line that actually goes off
+    // rather than splitting it with the grow-an-attacker line.
+    //
+    // The reasoning behind the rule, which is why it is safe as a hard preference rather than a
+    // score nudge: blinking the untapper is the ONLY target that refunds its own activation cost,
+    // so it is the only one that can be repeated. Every other target is a one-shot that spends {3}
+    // for one ETB. Growing an attacker with Emiel's counters is real, but it cashes NEXT turn
+    // (a blinked creature comes back summoning-sick), whereas the untap loop can win THIS one --
+    // and if the loop is live, its iterations put those same counters on anyway.
+    //
+    // MTG_EDF_BLINK_DRAKE_ONLY=0 restores the two-candidate set.
+    static const bool s_drake_only = EnvOn("MTG_EDF_BLINK_DRAKE_ONLY", true);
+    const bool have_untapper = (best_payload != 0 && best_untaps > 0);
+    if (!(s_drake_only && have_untapper)
+        && best_attacker != 0 && best_attacker != best_payload)
+    { out.push_back(best_attacker); }
     return out;
 }
 

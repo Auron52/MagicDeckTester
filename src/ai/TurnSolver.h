@@ -486,6 +486,15 @@ public:
         // MTG_UNPRUNED), which dedups orderings by end-of-phase state.
         bool searched_order = false;
 
+        // Casts this ORDERING declares but provably cannot make -- filled only by the cast-ordering
+        // enumeration, by watching the apply on its scoring copy. It is a LABEL, never a filter: two
+        // orderings of one cast set can differ entirely in what actually resolves (Living Wish before
+        // Trace of Abundance spends the board's only white, so Trace is dropped), and the dropping
+        // one sorts first, so a human picking by summary picks the line that silently does less.
+        // Surfaced as the decision JSON's `drops`. Empty for every plan that makes all its casts,
+        // and for every deck that never runs the ordering search -> byte-identical there.
+        std::vector<std::string> would_drop;
+
         // Land drop folded into the plan (searched alongside spells). When
         // land_decided is true the executor plays exactly land_to_play this turn
         // ("" == a deliberate defer / no land available); when false the land was
@@ -1125,6 +1134,21 @@ public:
         // (repeatable -- no {T}). Names the EXILED graveyard card, the real choice (exiling own
         // creatures strips Reveillark targets). EMPTY => legacy matching by source card name.
         std::vector<std::string> ooze_exiles;
+        // "blink=<outlet name>[@<target m_number>]": Emiel the Blessed's "{3}:" / Eldrazi
+        // Displacer's "{2}{C}:" exile-and-return, one entry per activation.
+        //
+        // Its own verb because the TARGET is the whole decision and `cast=<outlet>` cannot carry it.
+        // The blink action already fans out one plan variant per legal target, but every one of them
+        // reduces to the same `cast=Emiel the Blessed` token -- so the viewer's option list collapsed
+        // them to a single unlabelled entry, and CheckLine then matched whichever variant happened to
+        // sort first. USER-REPORTED 2026-09-04: "I should be able to choose just to pay 3 with it and
+        // what to target, but no options are given."
+        //
+        // `target` == 0 means "any target", which is what a legacy line (or one written before this
+        // verb existed) degenerates to -- so EMPTY `blinks` keeps the old cast-multiset matching and
+        // no saved reference moves.
+        struct BlinkSpec { std::string name; int target = 0; };
+        std::vector<BlinkSpec> blinks;
     };
     // One concrete plan variant the human's line matched -- when several enumerated plans
     // share the same land + cast names but differ in a per-spell sub-decision (tutor target,

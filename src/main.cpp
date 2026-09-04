@@ -917,6 +917,18 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         os << ", \"land\": ";
         if (p.land_decided && !p.land_to_play.empty()) { JsonStr(os, p.land_to_play); }
         else                                            { os << "null"; }
+        // Casts this plan DECLARES but cannot make in its own cast order. Emitted only when
+        // non-empty, so summaries and every other plan serialise byte-identically -- which is
+        // deliberate: the alternative (deleting these plans) was measured to move Dragonstorm's GT
+        // and to break a saved StompySurprise reference, because a dropped cast is a legitimate line
+        // and some recorded human games run through one. The menu has to SAY so, not hide it.
+        if (!p.would_drop.empty())
+        {
+            os << ", \"drops\": [";
+            for (size_t k = 0; k < p.would_drop.size(); ++k)
+            { if (k) { os << ", "; } JsonStr(os, p.would_drop[k]); }
+            os << "]";
+        }
         // The searched rad mode, structured (the summary above carries the human-readable half).
         // Emitted only when the plan actually HAS the choice, so every existing reference and every
         // deck without such a land serialises byte-identically. 1 = enter tapped and take the
@@ -1121,6 +1133,15 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 // Scavenging Ooze: names the SOURCE; the exiled card rides tutor_target.
                 else if (ac.kind == Action::Kind::GraveyardExileGrow)
                 { os << ", \"verb\": \"ooze\""; }
+                // Blink names the OUTLET and carries a TARGET, so like Haven's rebuy it needs both a
+                // verb and the target token: every target variant of one outlet otherwise writes the
+                // identical `cast=Emiel the Blessed`, the viewer's picker dedupes them to a single
+                // unlabelled entry, and CheckLine matches whichever sorted first. The human could
+                // activate Emiel but not say WHAT to blink -- and blinking a Peregrine Drake (refill
+                // five lands) versus anything else is the entire decision. USER-reported 2026-09-04:
+                // "I should be able to choose just to pay 3 with it and what to target, but no
+                // options are given." `blink_target` / `blink_target_name` are emitted below.
+                else if (ac.kind == Action::Kind::ActivateBlink)  { os << ", \"verb\": \"blink\""; }
                 // `activate_source` = the permanent the human CLICKS, when that is not `card`.
                 // PutFromHandAbility's card_name is the Equipment being PUT (it is in hand), so
                 // without this the viewer would look for a board thumb that isn't there.
@@ -2315,6 +2336,18 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
             ls.pods.push_back(std::move(ps));
         }
         else if (key == "ooze")      { ls.ooze_exiles.push_back(val); }   // Scavenging Ooze exile
+        // "blink=<outlet>[@<target num>]": Emiel / Eldrazi Displacer exile-and-return. Same '@'
+        // convention as equip= (no MTG name contains it), and a bare "blink=<outlet>" is the
+        // any-target wildcard. See LineSpec::BlinkSpec.
+        else if (key == "blink")
+        {
+            TurnSolver::LineSpec::BlinkSpec bs;
+            const size_t at = val.rfind('@');
+            if (at != std::string::npos)
+            { bs.target = std::atoi(val.c_str() + at + 1); val = val.substr(0, at); }
+            bs.name = val;
+            ls.blinks.push_back(std::move(bs));
+        }
     }
     return ls;
 }

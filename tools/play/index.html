@@ -301,6 +301,9 @@
   #verdict.choose .vtag { background:var(--acc); } #verdict.legal .vtag { background:var(--warn); }
   #verdict.illegal .vtag { background:var(--bad); } #verdict.unsupported .vtag { background:var(--muted); }
   #verdict .variant { display:block; width:100%; text-align:left; margin:5px 0; }
+  /* A plan whose own cast order cannot pay for one of its declared casts (see `drops`). Clickable
+     like any other -- it is a real line -- but it must not read the same as the one that works. */
+  #verdict .dropwarn { color:var(--bad); font-weight:600; white-space:nowrap; }
   #verdict .actions { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
   #verdict .modelplans { margin-top:10px; font-size:12px; color:var(--muted); }
 
@@ -897,8 +900,16 @@ function activatableSources(){
       const payload = (a.verb==='gyreturn' && a.gyreturn_target) ? a.gyreturn_target
                     : ((a.verb==='pod' || a.verb==='ooze') && a.tutor_target) ? a.tutor_target
                     : a.card;
-      const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload;
-      (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload };
+      // A BLINK's payload is the outlet, but its real choice is the TARGET -- Emiel blinking a
+      // Peregrine Drake (refill five lands) and Emiel blinking anything else are different plays that
+      // both write `cast=Emiel the Blessed`. Without the target in the key every variant deduped to
+      // one unlabelled entry, so the picker never opened and the human could not choose (reported
+      // 2026-09-04). Keyed AND carried, so queueActivation can write `blink=<outlet>@<target num>`.
+      const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload
+                + (a.verb==='blink' ? '|'+a.blink_target : '');
+      (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload,
+                                         blinkTarget:(a.verb==='blink' ? a.blink_target : undefined),
+                                         blinkTargetName:(a.verb==='blink' ? a.blink_target_name : undefined) };
     }});
     Object.keys(per).forEach(n=>{ if (!(max[n]>=per[n])) max[n]=per[n]; });
   });
@@ -981,7 +992,10 @@ function queueActivation(src, opt){
   // A sac outlet's verb is sacout=, whatever the action said — the engine only tags `verb` on the
   // kinds with a dedicated one, and `sacout` predates that field.
   S.plan.push({ name:opt.name, src, kind:'activate', verb:(sac ? 'sacout' : (opt.verb||'cast')),
-                mode:opt.mode, sacout: sac || undefined });
+                mode:opt.mode, sacout: sac || undefined,
+                // The blinked creature's m_number, so the line can write `blink=<outlet>@<num>` and
+                // CheckLine can tell two target variants of one outlet apart.
+                blinkTarget: opt.blinkTarget, blinkTargetName: opt.blinkTargetName });
   flashHint(sac
     ? `${src}: sacrificing ${have+1} creature${have?'s':''}${cap>1?` (max ${cap})`:''} — click again to sac another, then commit. You pick WHICH creature as each one resolves.`
     : opt.verb==='sfput' ? `${src}: putting ${opt.name} from hand onto the battlefield. Commit the phase to resolve it.`
@@ -2017,8 +2031,16 @@ function handleVerdict(v, line) {
   // matching combined plan the model DOES offer -- e.g. "land=Izzet Boilerworks; cast Crackle, Irencrag
   // Feat" -- instead of rebuilding it. Plans with a valid index are buttons; the "(only pass)" fallback
   // is inert text.
+  // `drops` names the casts a plan DECLARES but cannot make in its own cast order -- two orderings
+  // of one cast set can resolve completely differently (casting Living Wish before Trace of
+  // Abundance spends the board's only white, so Trace never happens), and the dropping ordering
+  // sorts FIRST. Without this the two read identically and picking the top one silently does less,
+  // which is how a combo turn "just ended" (user-reported 2026-09-04). The plan stays clickable:
+  // it is a legitimate line, and saved references run through such plans -- it just has to say so.
+  const dropNote = p => (p.drops&&p.drops.length)
+    ? ` <span class="dropwarn" title="this cast order cannot pay for ${esc(p.drops.join(', '))}, so it will NOT be cast">⚠ ${esc(p.drops.join(', '))} not cast</span>` : '';
   const mp=(plans.length
-    ? plans.map(p=>`<button class="variant vplan" data-plan="${p.index}">${esc(p.summary)}</button>`).join('')
+    ? plans.map(p=>`<button class="variant vplan" data-plan="${p.index}">${esc(p.summary)}${dropNote(p)}</button>`).join('')
     : '<div>• (only pass)</div>')
     // Fan-out nodes enumerate 100k+ plans; the engine emits only the top slice (plans_total
     // carries the real count). The line-check still validates against the FULL list.
@@ -2230,13 +2252,19 @@ function activationPickerHtml(pick){
                    : o.verb==='gyreturn'  ? `Sacrifice — return ${o.name} from your graveyard to your hand`
                    : o.verb==='animate'   ? `Animate ${o.name} — it becomes a creature and can attack`
                    : o.verb==='taptoken'  ? `Tap ${o.name} to create a token`
+                   : o.verb==='blink'     ? `Blink ${o.blinkTargetName||'a creature'} — exile it and return it`
                    :                        `Activate ${o.name}`;
   let h=`<h3>${esc(pick.src)} — choose an ability</h3>`;
   h+=`<div class="sub">This permanent offers more than one activation this phase. Pick the one to add to your line, then <b>Commit phase</b>.</div>`;
   h+=`<div class="tutgrid">`;
   pick.opts.forEach((o,i)=>{
+    // Blink shows the TARGET's art, not the outlet's: the target is what the choice is about, and
+    // four rows of the same Emiel picture is exactly the undifferentiated menu this fix exists to end.
+    const art = o.verb==='jittemode'||o.verb==='attachall' ? pick.src
+              : o.verb==='blink' ? (o.blinkTargetName||pick.src)
+              : o.name;
     h+=`<span class="cardmini tdig" data-actopt="${i}" title="${esc(label(o))}">`+
-       `<img loading="lazy" src="${scryImg(o.verb==='jittemode'||o.verb==='attachall'?pick.src:o.name,'small')}" onerror="this.style.opacity=.15"/>`+
+       `<img loading="lazy" src="${scryImg(art,'small')}" onerror="this.style.opacity=.15"/>`+
        `<em>${esc(label(o))}</em></span>`;
   });
   h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
