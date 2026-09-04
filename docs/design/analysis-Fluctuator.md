@@ -3,7 +3,9 @@
 **Deck:** `decks/Fluctuator/Fluctuator.cod` (60 cards: 42 lands, 18 spells)
 **Started:** 2026-09-04
 **Branch:** `phase-1-2-deck-analyzer`
-**Status:** IN PROGRESS — Stage 2 (implement gaps)
+**Status:** IN PROGRESS — play quality settled (see §7.7); deck NOT yet in the regression suite
+(O-4 perf gate). Current: **avg 3.6500** turn-to-win, 57/100 games won on T3
+(100 games, seed 9001, d3/b200).
 
 This is the git-tracked per-deck ledger required by `.claude/skills/analyze-deck.md`
 ("Running this at scale"). It is the durable memory a resumed session or a second
@@ -280,6 +282,12 @@ opponent-life measures. No opt-out is needed.
 
 ## 7.4 Where the time actually goes (O-4 root-cause, 2026-09-04)
 
+> **Superseded in part by §7.7.** This section's *diagnosis* stands — the cost is chain LENGTH
+> re-simulated per node, not decision width — but its numbers predate the dig-chain and fodder-hold
+> fixes, which lifted the per-turn cycle cap and made turns longer while making games shorter. Net
+> effect measured AFTER both: wall 124s -> 87s and games over 30 s 21 -> 13 on the same 100-game
+> run, i.e. the cost went DOWN. Re-measure before quoting any figure below.
+
 **It is NOT the width of cycling decisions.** Measured with `MTG_BRANCH_STATS` on a matched
 pair — gi=21 (win T4, **0.2 s**) vs gi=19 (win T4, **25.6 s**), near-identical games:
 
@@ -408,6 +416,125 @@ hand/graveyard and changes the state key. That - a fodder-equivalence fold in th
 a canonical fodder representative - is the real form of this prune, and it is the highest-value
 remaining perf work. **Verify the branching claim above with a driver-card-level probe before
 building anything**, since it rests on an empty stats table rather than a positive test.
+
+
+## 7.7 The missing turn, found (2026-09-04) - 4.52 -> 3.65, T3 wins 10 -> 57
+
+**User report:** *"I think your win turn is still a bit high. This deck normally wins T3, so I
+would expect it to be under or very close to 4."*
+
+They were right, and the cause was not search quality. It was two hardcoded stopping conditions
+in the **shared dig loop** - present in BOTH the rollout (`TurnSolver.cpp`) and the executor
+(`AIEngine::UseSurplusLandAbilities`) - plus one cast the search systematically over-values.
+
+### (a) The 16-dig cap was an ARITHMETIC ceiling on the kill
+
+```
+while (guard++ < 16 && ...)          // AIEngine.cpp
+while (dig_guard++ < 16 && ...)      // TurnSolver.cpp
+```
+
+Drannith Stinger pings for 1 per cycle. With ONE Stinger out, 16 cycles is **16 damage against a
+20-life opponent** - so the T3 kill this deck is built to make was unreachable **at any depth or
+breadth**. That is the entire explanation of the old `3:10 4:51` distribution: the deck was
+forced into a second cycling turn to find 4 more damage.
+
+This is the sharpest lesson of the whole analysis: **a guard constant can be a correctness bug.**
+No amount of depth, budget or heuristic tuning could have found it, because the winning line was
+not being scored badly - it was not representable. It also would not have shown up in any
+aggregate; it took reading a per-turn trace and noticing `DISCARD: 16` sitting exactly on a
+round number.
+
+### (b) The post-re-solve `break` stopped the combo at its first payoff
+
+The loop re-solves when a NONLAND is drawn, casts it, then breaks - *"once we have action we are
+no longer stuck"*. Right for Treasure Hunt (digging FINDS action); wrong here, where cycling IS
+the action. Trace, seed 9001 gi=1: T3 cycled 14, cast a free Hollow One, **stopped at opp 6 life
+with 22 cards still in library**.
+
+Both are now provider-owned - `DecisionProvider::MaxDigsPerTurn` / `DigContinueAfterResolve`,
+`MTG_UNPRUNE=digchain` - with defaults reproducing the legacy behaviour exactly. Note the gate
+polarity is the INVERSE of `DigResolve`'s: these hooks WIDEN (they remove stopping conditions and
+reach strictly more states), so the callsites read `unpruned || opts-in`.
+
+Termination never rested on the counter: every iteration draws one card under a non-empty-library
+guard, so the loop is bounded by library size regardless. The executor needed one extra
+distinction to continue safely - `PerformDig` returns false for BOTH "drew a nonland" and "could
+not perform", which mean opposite things only once you stop breaking on the first. It now tests
+`cards_drawn_this_turn`, so a failed dig still breaks unconditionally and cannot spin.
+
+### (c) Casting Hollow One is a trap, and the search cannot see why
+
+With the cap lifted, the binding constraint became **hand starvation**, which the traces show
+directly. A cycle is 1-for-1 (discard one, draw one), so the chain runs until the hand holds no
+cyclable card. This deck's only non-cyclable cards are 4 Fluctuator + 1 Enlightened Tutor, so
+with ~55 of 60 cards cyclable, **one buffer slot is worth ~12 further cycles in expectation**.
+
+Casting a cycler removes it from hand *without* drawing a replacement. So a {0} 4/4 Hollow One -
+which, having no haste, deals **0 damage the turn it lands** - costs about 12 damage to gain 4.
+The search cannot price this because the loss is spread over the tail of the chain rather than
+attached to the cast.
+
+Full worked trace (seed 9001 gi=9, T3), which is what made the mechanism visible:
+
+| point | hand | opp life |
+|---|---|---|
+| chain start (after Fluctuator, cycle Stinger, Unearth it back) | 3 cyclable | 20 |
+| cycle 9 - **casts Hollow One** | 3 -> **2** | 11 |
+| cycle 11 - draws Enlightened Tutor (non-cyclable) | 2 -> 1 | 9 |
+| cycle 12 - draws Fluctuator (non-cyclable) | 1 -> **0** | 8 |
+| chain dead, library still full | - | **8** |
+
+Wired as `DecisionProvider::HoldsCastAsCycleFodder` (base false; `MTG_UNPRUNE=cyclefodder`),
+scoped to PURE fodder - the card must cycle and its cast must add nothing to the chain, so
+Fluctuator, Drannith Stinger and Unearth are excluded by construction.
+
+**Both conditions were measured, and both cut against the obvious guess:**
+
+| condition | avg | note |
+|---|---|---|
+| no hold | 3.8600 | |
+| hold only while a Stinger is already OUT | 3.7800 | **worse** - the buffer matters for the chain that is COMING |
+| hold unconditionally | 3.6700 | **worse** - 2 games 5 -> 6 where the 4/4 was the only clock left |
+| **hold from when cycling is free, + library ceiling escape** | **3.6500** | adopted |
+
+The escape valve is `library * stingers < opponent life`, optimistic on both factors (a Stinger
+not yet out counts as one) so the hold lapses only when the chain **provably** cannot get there.
+
+### Result
+
+| | avg | T3 wins | wall (100g, 24t) | games > 30s |
+|---|---|---|---|---|
+| before (session start) | 4.5200 | 10 | 124s | 21 |
+| + dig chain (a)+(b) | 3.8600 | 41 | 95s | 17 |
+| + fodder hold (c) | **3.6500** | **57** | **87s** | **13** |
+
+Distribution `3:10 4:51 5:25 6:8 7:3 8:3` -> `3:57 4:32 5:4 6:5 8:2`. Paired: dig chain 60
+better / 0 worse; fodder hold a further 22 better / 1 worse (gi=73, 5->6). **Quality and cost
+both improved** - this was never a speed/quality trade. Smoke 51 passed with **0 configs
+changed** after each step, so every other deck is byte-identical.
+
+### Two process notes worth keeping
+
+* **A single wall-clock number on a shared box is worthless.** The adopted config first measured
+  200s / 31 slow games and looked like a 2x perf regression; the identical config re-run measured
+  95s / 18, and the final collapsed build 87s / 13, with byte-identical per-game results. The
+  earlier number was pure contention noise. Per-game outcome sets are the reliable comparison;
+  wall needs an uncontended box.
+* **A probe that changes two things measures two things.** The first "never cast Hollow One" test
+  set `goldfish_inert`, which ALSO promotes the card to fodder rank 0 in `SelectDigSource` - so
+  its 3.67 conflated the hold with a cycle-order change. Re-tested cleanly afterwards, the order
+  change alone is **inert (0 of 100 games)**; the whole effect was the hold.
+
+### What is NOT the cause (checked, so it is not re-litigated)
+
+* **Not budget or depth.** gi=9 was re-run at 200/1000/5000 ms and at d3/d4/d5 - identical result
+  every time. Where the search picks a line this ledger disagrees with (e.g. playing a tapped
+  Canyon Slough on T2 while holding an untapped Blasted Landscape, delaying Fluctuator a turn),
+  the land fan DID contain the alternative (`MTG_TRACE=landfan` shows 4-5 options on T2) and the
+  search rated it no better. That is a valuation question, not a reachability one, and it is
+  **open** rather than diagnosed.
+* **Not the mulligan.** Unchanged across all three steps here.
 
 
 ## Claude-play sweep
