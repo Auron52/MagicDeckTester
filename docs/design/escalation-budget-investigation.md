@@ -269,3 +269,14 @@ are >= on both axes; leave ss/th shipped (their R ~= prior anyway). Apparatus:
 logs/esc_diag/stage/<deck>/ scratch sidecars, manifest_fab.json, analyze via the fab parser.
 NOTHING adopted — sidecars/GT/defaults untouched pending the user's decision (the escalation
 redesign remains a reserved decision).
+
+**CG precision follow-up (20k-game paired batch, fresh held-out s70000+).** The user asked for
+the actual extent of CG's wrong-way lean. d/game = +0.0019 (se 0.00143, t=+1.33,
+95% CI [-0.0009, +0.0047]); 82 games faster / 93 slower / 1 win->loss in 10k pairs; wall 0.57x.
+Pooled with the fab block (11k independent-seed pairs): +0.0019, t=+1.43, CI [-0.0007, +0.0045].
+Read: the sign repeated across two independent seed blocks, so a TINY real cost is plausible —
+best estimate ~+0.002 turns/game (one extra turn per ~500 games), worst case ~+0.005, in
+exchange for -43% wall. Not statistically confirmed; settling it at t=2 resolution would need
+~30k more games. Fleet moved-game breakdown for the other lean-positive decks: hin +1 net turn
+per 1000 games (7 faster/8 slower), th +1 net per 2000 (one game, one turn); al/ds/fc lean
+NEGATIVE (fc -6 net per 1000); brn/gob/ss byte-identical outcomes.
