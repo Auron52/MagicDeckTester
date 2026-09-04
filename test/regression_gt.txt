@@ -1,4 +1,4 @@
-# Regression ground truth -- commit e72b38a4  date 2026-09-04
+# Regression ground truth -- commit 6ee7389f  date 2026-09-04
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -49,9 +49,9 @@ minotaur_smoke_d5_s1001=4.9000/808ce153bb80571e
 kitty_smoke_d0_s1001=4.9900/4b96809105a7d663
 kitty_smoke_d3_s1001=4.4520/7efb4e1fa724ad18
 kitty_smoke_d5_s1001=4.4667/81d28b277b2051c3
-dragons_smoke_d0_s1001=5.9920/bc3d338341e15629
-dragons_smoke_d3_s1001=5.6640/a8bb04ae954b2373
-dragons_smoke_d5_s1001=5.5533/67ffac8c06aca609
+dragons_smoke_d0_s1001=5.9920/5842df3cf2be0986
+dragons_smoke_d3_s1001=5.6640/0f4fb34dd77566e9
+dragons_smoke_d5_s1001=5.5533/54d871189323d826
 breaching_smoke_d0_s1001=4.8460/8c8e7d2fb5fd0181
 breaching_smoke_d3_s1001=3.1000/03766483807acbd5
 breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
@@ -132,11 +132,11 @@ kitty_regression_d3_s2002=4.3300/ef8d61876391ffe4
 kitty_regression_d3_s3003=4.3800/fef85df2a993212a
 kitty_regression_d5_s2002=4.3160/010eedae99c7a811
 kitty_regression_d5_s3003=4.3320/2b96686c8a4114d3
-dragons_regression_d0_s2002=5.9830/bc288e8a6727f06e
-dragons_regression_d3_s2002=5.5067/e790f7490e621350
-dragons_regression_d3_s3003=5.5767/e4683de2e542c775
-dragons_regression_d5_s2002=5.4520/8cc55c08b1a89c94
-dragons_regression_d5_s3003=5.6080/a9be99d5ff2e693c
+dragons_regression_d0_s2002=5.9750/4494c06a6d49bfec
+dragons_regression_d3_s2002=5.5067/d16966832ee0dbe8
+dragons_regression_d3_s3003=5.5767/b3dac3961e9da264
+dragons_regression_d5_s2002=5.4520/95bd2479497e431d
+dragons_regression_d5_s3003=5.6080/d5bd4ca27a66c3ab
 breaching_regression_d0_s2002=4.8320/18efada389e8ecfd
 breaching_regression_d3_s2002=3.0933/754d6fb14d56c14f
 breaching_regression_d3_s3003=3.0833/8d3103f293ae7026

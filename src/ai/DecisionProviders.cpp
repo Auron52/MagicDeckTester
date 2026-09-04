@@ -11200,52 +11200,113 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
 
 // ---- DragonsProvider::CastOrderRank -----------------------------------------
 //
-// THE USER'S REVIEWED FULL ORDER (2026-09-04). Verbatim ruling: "Dragon tempest should indeed
-// be before everything else, Lathliss after and Scourge after that. Also, Urza's Incubator
-// should go at the same time as Dragonspeaker. Though, to be fair here, we don't need to
-// consider more than 1 order. We could fully fill out this order." So: ONE total order, fully
-// authored, no order search for this deck.
+// THE USER'S REVIEWED TOTAL ORDER (2026-09-04, second revision). Two rulings, same day:
+//   * first: "Dragon tempest should indeed be before everything else, Lathliss after and
+//     Scourge after that... We could fully fill out this order."
+//   * second (supersedes the Tempest-first and Shaman+Incubator-tied parts): "the rocks should
+//     come before Dragon Tempest and after land", and "we would also want a full order where
+//     all cards are separate in this design" -- a TOTAL order, no ties anywhere.
 //
-//   1  Dragon Tempest      -- before EVERYTHING: every same-main dragon then pings on entry and
-//                             gets haste. (Params: ping/haste enter-watcher, not a creature.)
-//                             NOTE (flagged at review time): this also precedes the mana rocks,
-//                             so a Tempest+rock turn pays Tempest before the rock's mana exists;
-//                             sequential-payment stranding is possible in tight-mana turns and
-//                             is exactly what the A/B measures.
-//   5  mana rocks          -- generic tier (Sol Ring / Fire Diamond / Mind Stone).
-//   8  Dragonspeaker Shaman + Urza's Incubator -- the reducers together (the USER's explicit
-//                             pairing). Incubator's chooses_creature_type form has an EMPTY
-//                             reduces_spell_subtype, so the generic tier-8 test missed it and it
-//                             sat at 20 -- keyed here on reduces_spell_subtype_amount instead.
-//   9  Lathliss            -- after Tempest, before the dragons she watches (each nontoken
-//                             dragon entering under her mints a hasted 5/5).
-//  10  Scourge of Valkas   -- after Lathliss: Scourge entering under a live Lathliss mints a
-//                             token, and that token's own entry pings; the reverse order mints
-//                             nothing for Lathliss and sees no extra entries.
-//  11  the other dragons   -- Atsushi / Glorybringer / Inferno / Utvara (tie-break unchanged).
-//  20  the rest            -- Lightning Bolt / Lightning Greaves keep the generic tier.
+//  slot  1  Sol Ring             {1}, nets +2 the turn it lands.
+//  slot  2  Mind Stone           {2}, enters untapped -> can fund this very turn.
+//  slot  3  Fire Diamond         {2} but ENTERS TAPPED -> produces nothing until next untap, so
+//                                it is strictly the last rock (the Hinata Sol-Ring-vs-Signet
+//                                argument: split rocks on what they do the turn they land).
+//  slot  4  Dragon Tempest      -- the enter-watcher, before everything it watches: every
+//                                same-main dragon then pings on entry and gets haste.
+//  slot  5  Dragonspeaker Shaman -- the reducers before everything they discount. Shaman before
+//  slot  6  Urza's Incubator       Incubator is the one near-arbitrary adjacency (both {3},
+//                                both -{2}); Shaman first because it is also a body on board.
+//                                Incubator's chooses_creature_type form has an EMPTY
+//                                reduces_spell_subtype, so it needs its own predicate
+//                                (reduces_spell_subtype_amount defaults to 1 -- never gate on
+//                                it alone; that collapse is documented history).
+//  slot  7  Lathliss             -- before the dragons she watches (each nontoken dragon
+//                                entering under her mints a hasted 5/5 token).
+//  slot  8  Scourge of Valkas    -- after Lathliss: Scourge entering under a live Lathliss
+//                                mints a token whose own entry pings; reverse order mints
+//                                nothing and sees no extra entries.
+//  slots 9..13  the dragons, CHEAPEST FIRST: Atsushi (mv4) -> Glorybringer (5) -> Inferno (6)
+//                                -> Utvara (8), keyed 9 + (mv-4) so a future dragon slots by
+//                                cost; a same-mv pair would separate by name hash under the x64
+//                                scale (deterministic, no plan-order tie).
+//  slot 14  Lightning Greaves    -- the only equipment.
+//  slot 15  Lightning Bolt       -- last: burn keeps its flexibility behind every permanent.
+//
+// WHY NO TIES: within-bucket order otherwise falls to the stable sort's plan order --
+// arbitrary and draw-dependent, not a judgement -- and rank ties are mutually un-condemnable
+// (BpSlotIsAfterSite's >= exemption), so a total order is what makes every decline meaningful.
 //
 // MTG_DRAGONS_ORDER=0 restores the generic rank wholesale (the A/B hatch). The generic
 // MTG_WATCHER_ORDER lever never fires here (Tempest/Scourge match above before falling
 // through); it remains the measurement lever for other decks holding these params
 // (Dragonstorm holds Tempest/Scourge too -- its provider owns its own order machinery and the
 // watcher lever measured +/-1 there, so it is deliberately untouched by this adoption).
+static bool DragonsOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_DRAGONS_ORDER", true);
+    return on;
+}
+static int DragonsFullOrderSlot(const CardDefinition& def)
+{
+    const CardParams& p  = def.params;
+    const int         mv = static_cast<int>(def.card.m_mana_cost.ManaValue());
+    if (p.mana_rock) { return mv <= 1 ? 1 : (p.enters_tapped ? 3 : 2); }
+    const bool ping = p.dragon_ping_on_enter;
+    if ((ping || p.haste_on_flying_enter) && !def.card.IsCreature()) { return 4; }   // Dragon Tempest
+    if (!p.reduces_spell_subtype.empty())                            { return 5; }   // Dragonspeaker Shaman
+    if (p.chooses_creature_type && p.reduces_spell_subtype_creature_only) { return 6; }   // Urza's Incubator
+    if (p.etb_other_subtype_creates_tokens)                          { return 7; }   // Lathliss
+    if (ping)                                                        { return 8; }   // Scourge of Valkas
+    if (def.card.IsCreature())                    { return 9 + std::max(0, mv - 4); }   // dragons, cheapest first
+    if (p.is_equipment)                                              { return 14; }  // Lightning Greaves
+    if (def.tmpl == CardTemplate::DirectDamage)                      { return 15; }  // Lightning Bolt
+    return -1;   // unrecognised: keep the generic tier (totality guard below separates it)
+}
 int DragonsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
-    static const bool s_on = EnvOn("MTG_DRAGONS_ORDER", true);
-    if (!s_on) { return GenericProvider::CastOrderRank(s, def); }
-    const bool ping  = def.params.dragon_ping_on_enter;
-    const bool haste = def.params.haste_on_flying_enter;
-    if ((ping || haste) && !def.card.IsCreature())     { return 1;  }   // Dragon Tempest
-    // reduces_spell_subtype_amount DEFAULTS to 1, so it cannot gate alone: require the named
-    // subtype (Shaman) or the chooses-a-type creature-only form (Incubator).
-    if (!def.params.reduces_spell_subtype.empty()
-        || (def.params.chooses_creature_type
-            && def.params.reduces_spell_subtype_creature_only)) { return 8; }   // Shaman + Incubator
-    if (def.params.etb_other_subtype_creates_tokens)   { return 9;  }   // Lathliss
-    if (ping)                                          { return 10; }   // Scourge of Valkas
-    if (def.card.IsCreature())                         { return 11; }   // the other dragons
-    return GenericProvider::CastOrderRank(s, def);     // rocks -> 5, Bolt/Greaves -> 20
+    if (!DragonsOrderEnabled()) { return GenericProvider::CastOrderRank(s, def); }
+    const int slot = DragonsFullOrderSlot(def);
+    // TOTALITY GUARD (the Hinata pattern): the x64 scale leaves room to separate any residual
+    // peers deterministically -- a future same-mv dragon, or an unrecognised card on a generic
+    // tier -- so a decklist change cannot silently re-introduce the ties this order removes.
+    if (slot >= 0)
+    {
+        int r = slot * 64;
+        if (slot >= 9 && slot <= 13)
+        { r += static_cast<int>(def.card.m_name_hash & 0x1F); }
+        return r;
+    }
+    return GenericProvider::CastOrderRank(s, def) * 64
+         + static_cast<int>(def.card.m_mana_cost.ManaValue() & 0x1F)
+         + static_cast<int>(def.card.m_name_hash & 0x1F);
+}
+const char* DragonsProvider::CastOrderTierName(int rank) const
+{
+    if (!DragonsOrderEnabled()) { return GenericProvider::CastOrderTierName(rank); }
+    switch (rank / 64)
+    {
+        case 1:  return "ROCK: Sol Ring -- nets +2 the turn it lands";
+        case 2:  return "ROCK: Mind Stone -- untapped, funds this turn";
+        case 3:  return "ROCK: Fire Diamond -- enters tapped, mana next turn";
+        case 4:  return "WATCHER: Dragon Tempest -- before every dragon it watches";
+        case 5:  return "REDUCER: Dragonspeaker Shaman";
+        case 6:  return "REDUCER: Urza's Incubator (choosing Dragon)";
+        case 7:  return "WATCHER: Lathliss -- mints a 5/5 per dragon entering";
+        case 8:  return "WATCHER-DRAGON: Scourge -- enters under Lathliss, then pings entries";
+        case 9: case 10: case 11: case 12: case 13:
+                 return "DRAGON: cheapest first (9 + mv-4)";
+        case 14: return "EQUIPMENT: Lightning Greaves";
+        case 15: return "LAST: Lightning Bolt -- burn stays flexible";
+        default: return nullptr;   // unrecognised card on a scaled generic tier
+    }
+}
+bool DragonsProvider::OrderOpaqueCastsByRank() const
+{
+    // Adopted-full-order marker (report renders ranks AS the order). Inert in play today:
+    // nothing in this deck is order-opaque (no cast-draw / staging / cascade), so the opaque
+    // path never fires. Gated on the same hatch so MTG_DRAGONS_ORDER=0 restores generic fully.
+    return DragonsOrderEnabled();
 }
 
 // ---- DragonsProvider::CleanupDiscardCandidates ------------------------------

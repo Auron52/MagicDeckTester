@@ -1073,10 +1073,17 @@ class DragonsProvider : public GenericProvider
 {
 public:
     const char* Name() const override { return "Dragons"; }
-    // CastOrderRank -- the USER's reviewed FULL order for this deck (2026-09-04): Dragon Tempest
-    // before everything, Lathliss then Scourge before the dragons they watch, Urza's Incubator
-    // with Dragonspeaker in the reducer tier. MTG_DRAGONS_ORDER=0 restores generic (A/B hatch).
+    // CastOrderRank -- the USER's reviewed TOTAL order for this deck (2026-09-04, second
+    // revision): land, then the rocks, then Dragon Tempest, reducers, Lathliss, Scourge, the
+    // dragons cheapest-first, Greaves, Bolt -- EVERY card on its own slot, no ties anywhere
+    // ("we would also want a full order where all cards are separate"). See the .cpp table.
+    // MTG_DRAGONS_ORDER=0 restores generic wholesale (A/B hatch).
     int CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    // The adopted-full-order marker (report semantics: ranks ARE the order, no draw promotion).
+    // Currently inert in play -- nothing in this deck is order-opaque (no cast-draw, no staging)
+    // -- but a future opaque addition stays under the authored order rather than the search.
+    bool OrderOpaqueCastsByRank() const override;
     // The generic fallback is DESCENDING MANA VALUE, which on this deck sheds Utvara Hellkite (8),
     // then Lathliss/Inferno (6), then Glorybringer/Scourge (5) -- the payoffs in almost exactly
     // descending order of importance -- while keeping Lightning Bolt and Sol Ring. That is not
