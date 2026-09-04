@@ -233,20 +233,50 @@ deck is ever tuned further.
 
 ## 7. Verification (Stage 5)
 
+`python3 scripts/verify_deck.py decks/Fluctuator/Fluctuator.cod` — **all gates green**
+(re-run after the Unearth fix):
+
 | check | status |
 |---|---|
-| Stage 3 coverage clean (`missing: []`, no PARTIAL status) | **PASS** |
-| Stage 4a provider audit — no existing deck misrouted | **PASS** |
-| Smoke tier byte-identity (shared-code changes) | running |
-| 5a nonconv / fd-diverge | not yet |
-| 5b multi-depth sanity | not yet |
-| 5c2 horizon-honest tie-break | not yet |
-| 5d claude-play sweep | not yet |
-| 5f perf gate | **FAILING — see O-4** |
-| 5h viewer decision surface | not yet |
+| Stage 3 coverage | **PASS** — all 18 cards full (missing 0, partial 0) |
+| `card_fields` | **PASS** — 321 cards match the Scryfall snapshot |
+| Stage 4a provider audit | **PASS** — no existing deck misrouted |
+| Smoke tier byte-identity | **PASS** — 51 passed, 0 failed, **0 configs changed** (twice: after the build, and again after the Unearth fix) |
+| `check_gt_logs` | **PASS** — 340 consistent, 0 stale |
+| 5a nonconv / fd-diverge | **PASS** — none across seeds [7001, 7002] × 60 games, both arms |
+| `play_invariants` | **PASS** — 8 games / 280 decisions: determinism + integrity + progress |
+| 5b multi-depth sanity | **PASS** — monotonic and plausible (§7.2) |
+| 5d claude-play sweep | **PASS** — 16 games, **1 real bug found and fixed**, 0 unresolved |
+| 5h viewer decision surface | **PASS** — self-guard + surface sweep clean |
+| 5c2 horizon-honest tie-break | **PASS — KEEP THE DEFAULT (ON)**, see §7.3 |
+| 5f perf gate | **NOT MET — see O-4** |
 
-First numbers (pre-profile, CLI depth only): d0 `avg 8.00` (2/5 unwon), d3/b200 `avg 6.10`
-over 10 games (all won).
+**Headline number: `avg 5.0500` turn-to-win**, 99/100 games won, at d3/b200 with the
+profile, 100 games from seed 9001. (It measured 5.0200 before the Unearth fix, i.e. while
+the deck was allowed to reanimate illegally — 5.0500 is the honest figure.)
+
+## 7.3 Horizon-honest tie-break (5c2) — KEEP THE DEFAULT (ON)
+
+`python3 scripts/leaf_tiebreak_check.py decks/Fluctuator/Fluctuator.cod`
+(default sizing: 12 blocks × 1000 games = **24,000 games / 12,000 paired**, both arms in
+one pooled batch, 24/24 workers busy throughout).
+
+| split | games | net turns | worse | better |
+|---|---|---|---|---|
+| half A | 6000 | −4 | 15 | 19 |
+| half B | 6000 | −23 | 16 | 34 |
+| **ALL** | **12000** | **−27** | **31** | **53** |
+
+Binding rate 0.700% (84 changed games). **VERDICT: KEEP THE DEFAULT (ON)** — the tie-break
+lowers this deck's average, and the sign is consistent across both independent halves, so
+this is a decisive sample rather than the "no sign at this sample" non-result.
+
+Worth noting *why* this deck does not hit the lever's known failure mode. The tie-break
+prices a horizon position by OPPONENT LIFE, which zeroes out decks that BANK value for a
+discontinuous payoff (Dragonstorm is the measured casualty). Fluctuator looks combo-shaped
+but is not that shape: its payoff is **incremental damage** — every cycle under a Drannith
+Stinger is 1 life immediately — so partial progress toward the kill is exactly what
+opponent-life measures. No opt-out is needed.
 
 ## 8. Stage 6a disclosure — heuristics this deck relies on
 
