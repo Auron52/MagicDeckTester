@@ -12257,17 +12257,22 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
 
             // PERSIST-LOOP bursts (Melira Pod): a FREE outlet + a persist creature carrying no
-            // -1/-1 counter + an ACTIVE counter-prevention replacement (Melira / Vizier) = the
-            // same body can be sacrificed every iteration (it returns clean each time). Emitted
-            // demand-driven and bounded like the damage burst above -- one action per (outlet,
-            // persist body, purpose), never a per-count fan. sac_victim_id != 0 with sac_count > 1
-            // is the ApplyPersistLoop discriminator at both apply sites. The K=1 cases (a single
-            // sac that fires persist, or the Kitchen Finks infinite-life proof -- see
-            // GameState::inf_life_turn) already ride the ordinary single-victim action.
+            // -1/-1 counter + a loop-closer = the same body can be sacrificed every iteration
+            // (it returns clean each time). TWO closer classes (USER 2026-09-05): a
+            // counter-prevention replacement (Melira / Vizier, MinusCounterReplacement == 0), or
+            // a graveyard-enter team-counter watcher (Celes -- the return fires her trigger, the
+            // +1/+1 annihilates the body's own -1/-1 per CR 704.5r; "Celes is primarily a Melira
+            // replacement"). Emitted demand-driven and bounded like the damage burst above --
+            // one action per (outlet, persist body, purpose), never a per-count fan.
+            // sac_victim_id != 0 with sac_count > 1 is the ApplyPersistLoop discriminator at
+            // both apply sites. The K=1 cases (a single sac that fires persist, or the Kitchen
+            // Finks infinite-life proof -- see GameState::inf_life_turn) already ride the
+            // ordinary single-victim action.
             if (!is_mana_outlet && !sd->params.sac_creature_cost.has_value())
             {
-                const int me = state.active_player_index;
-                if (MinusCounterReplacement(state, me, 1) == 0)   // loop actually closes
+                const int me  = state.active_player_index;
+                const int mcr = MinusCounterReplacement(state, me, 1);
+                if (mcr == 0 || GyEnterCleanerActive(state, me, /*victim_number=*/-1))
                 {
                     for (const Permanent& v : state.battlefield)
                     {
@@ -12277,6 +12282,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             && v.card.m_number == src.card.m_number) { continue; }
                         const CardDefinition* vd = CardDatabase::Instance().LookupCached(v.card);
                         if (!vd || !vd->params.persist || MinusCountersOn(v) != 0) { continue; }
+                        // The Celes-class closer must survive the victim leaving (she is "other"
+                        // by rule); re-check excluding THIS victim in case the sole watcher is
+                        // the body being looped (impossible in the current pool, cheap to ask).
+                        if (mcr != 0 && !GyEnterCleanerActive(state, me, v.card.m_number))
+                        { continue; }
                         // Explicit K=1 sac of the persist body itself. Distinct from the canonical
                         // single-sac action above, whose victim heuristic ranks EXPENDABILITY and
                         // may pick a dork -- but the persist body is the right victim exactly when

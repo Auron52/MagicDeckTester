@@ -349,6 +349,38 @@ MEASURED (d5 b20 = the deck's bare-run defaults):
 - The real sub-second-per-game route remains the value-leaf stage (1.35–84.8x
   per value-leaf.md), which is user-initiated policy.
 
+### USER CORRECTION (2026-09-05): Celes is the deck's SECOND MELIRA EFFECT — and
+### that exposed a missing CR 704.5r rule
+User: "Celes is primarily a Melira replacement that draws. Pumping your board
+is a secondary effect ... (basically just like a bonus) ... Since +1/+1
+counters cancel out -1/-1 counters this works." Mechanism: the persist return
+itself fires her gy-enter trigger; the +1/+1 lands on the returning body and
+annihilates its own -1/-1 — one body loops clean with NO counter-prevention
+replacement. This also resolves the tier map: "Melira effects on 2 and 4" =
+Melira/Vizier and CELES (the earlier Felidar reading was wrong; Felidar
+removed from the put whitelist).
+ENGINE GAP FOUND AND FIXED: counter ANNIHILATION (CR 704.5r) was not
+implemented anywhere — counters coexisted as separate entries, P/T netted them
+but MinusCountersOn read the raw -1/-1, so persist legality saw a dirty body
+and the Celes loop stalled after one iteration. Shipped:
+- `AnnihilateCounters` (SpellEffects.h, beside MinusCountersOn): min(+1/+1,
+  -1/-1) removed from both; called eagerly at the gy-enter watcher (the only
+  site in the pool that puts both types on one body; the helper's comment
+  binds future counter sites to call it). No-op unless both types coexist →
+  byte-identical for every other deck.
+- `GyEnterCleanerActive` + the persist-burst enumeration gate extended:
+  loop-closers are now (MinusCounterReplacement==0) OR a Celes-class watcher
+  (per-victim re-check excludes the victim per "other creatures").
+- Inflife detection needed NO code change (it scans post-event state); its
+  comment now names both closer routes.
+- Provider: NotePodRoles counts Celes-class as have_prev (BATTLEFIELD only —
+  from hand her triggers do nothing and she is essentially uncastable here);
+  PodMissingRoleScore ranks her enabler-class; PutTargetOk drops
+  etb_blink_permanent (Felidar) and documents her primary role.
+MEASURED: s3100×20 5.55 → 5.45 (one game a turn faster with the Celes route
+available); s9200×16 unchanged (5.0000, same 7 loops). Smoke for other-deck
+byte-identity + CI recorded with the commit.
+
 ### Chord of Calling — Tier 3 (draft received)
 `{X}{G}{G}{G}` Instant, Convoke. CRITICAL loader fact: `KeywordFromString`
 THROWS on unknown keywords — must add `Keyword::Convoke` (inert-tag idiom) or

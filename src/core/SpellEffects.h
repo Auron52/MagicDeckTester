@@ -1405,6 +1405,45 @@ struct GyEnterBatchScope
 // bookkeeping -- GameState::inf_life_turn -- read only by reporting and by the search's no-win
 // tiebreak, which has its own lever, MTG_INFLIFE_TB in TurnSolver's leafeval.)
 
+// CR 704.5r counter ANNIHILATION: while a permanent has both a +1/+1 and a -1/-1 counter, N of
+// each are removed (N = the smaller total) as a state-based action. This is not cosmetic P/T
+// bookkeeping -- persist legality (MinusCountersOn below) reads the RAW -1/-1 total, so without
+// annihilation a persisted body "cleaned" by a +1/+1 (Celes, Rune Knight's graveyard-enter
+// trigger) would still read dirty and the loop would illegally stall (USER 2026-09-05: "Celes is
+// primarily a Melira replacement ... Since +1/+1 counters cancel out -1/-1 counters this
+// works"). Called EAGERLY at every site that can first put both types on one body (today: the
+// gy-enter team-counter watcher in FireEtbWatchers -- the only +1/+1 source that reaches a
+// persist body in the pool); ANY future site that adds either counter type to a body that may
+// carry the other MUST call this too. No-op (and byte-identical) unless both types coexist,
+// which no deck outside Melira Pod can produce.
+inline void AnnihilateCounters(Permanent& p)
+{
+    int plus = 0, minus = 0;
+    for (const Counter& c : p.counters)
+    {
+        if      (c.type == Counter::Type::PlusOnePlusOne)   { plus  += c.count; }
+        else if (c.type == Counter::Type::MinusOneMinusOne) { minus += c.count; }
+    }
+    int n = plus < minus ? plus : minus;
+    if (n <= 0) { return; }
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        const Counter::Type t = pass == 0 ? Counter::Type::PlusOnePlusOne
+                                          : Counter::Type::MinusOneMinusOne;
+        int left = n;
+        for (Counter& c : p.counters)
+        {
+            if (c.type != t || left <= 0) { continue; }
+            const int take = c.count < left ? c.count : left;
+            c.count -= take;
+            left    -= take;
+        }
+    }
+    p.counters.erase(std::remove_if(p.counters.begin(), p.counters.end(),
+                                    [](const Counter& c) { return c.count <= 0; }),
+                     p.counters.end());
+}
+
 // Total -1/-1 counters on a permanent (persist reads this at every death site: a persist creature
 // returns only if it died with none).
 inline int MinusCountersOn(const Permanent& p)
@@ -3325,6 +3364,10 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
             {
                 if (q.controller_index != ectrl || !q.card.IsCreature()) { continue; }
                 q.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, per});
+                // CR 704.5r: the +1/+1 annihilates a -1/-1 already on the body -- for the
+                // ENTERING persist body this IS the Melira-replacement mechanic (the return's
+                // own counter is cancelled by the trigger it fired, so the body loops clean).
+                AnnihilateCounters(q);
                 ++pumped;
             }
             if (g_play_event_sink && !g_tap_speculating && pumped > 0)
@@ -4237,6 +4280,26 @@ inline int MinusCounterReplacement(const GameState& state, int controller, int n
     if (prevent_all) { return 0; }
     if (minus_one)   { return n > 0 ? n - 1 : 0; }
     return n;
+}
+
+// The THIRD way a persist loop closes (USER 2026-09-05: "Celes is primarily a Melira
+// replacement"): a graveyard-enter team-counter watcher (Celes, Rune Knight). The persist
+// return itself fires her trigger, the +1/+1 lands on the returning body, and CR 704.5r
+// annihilation (AnnihilateCounters) cancels its -1/-1 -- so the body loops clean WITHOUT any
+// counter-prevention replacement. Unlike Melira/Vizier this is not a CR 614 replacement (the
+// counter really lands, then cancels), which is why it cannot fold into
+// MinusCounterReplacement; the loop-closing checks OR this in instead. The watcher must be a
+// creature OTHER than the persist body ("other creatures you control enter") -- true for every
+// watcher in the pool (Celes has no persist), asserted here by excluding the victim's number.
+inline bool GyEnterCleanerActive(const GameState& state, int controller, int victim_number)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number == victim_number) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.other_creature_gy_enter_team_counters > 0) { return true; }
+    }
+    return false;
 }
 
 // Put a CARD (not from the library -- persist / Reveillark pull from the graveyard) onto the
@@ -5910,10 +5973,12 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     // "Infinite life" detection (USER feature 2026-09-04; NOT a win since the 2026-09-05 review --
     // see GameState::inf_life_turn: turn-stamped once, reported separately, search tiebreak only).
     // EXECUTION-VERIFIED: this activation just sacrificed a persist creature with an ETB lifegain
-    // to a FREE outlet and the body RETURNED CLEAN (persist fired, Melira/Vizier zeroed the
-    // counter). Nothing changed except our life total going UP, so the iteration can repeat
-    // without bound -- the loop is proven, not pattern-matched. Shared by executor and rollout
-    // (this function is the one apply site) -> lockstep.
+    // to a FREE outlet and the body RETURNED CLEAN -- via Melira/Vizier zeroing the counter, OR
+    // via the Celes route (the return's +1/+1 trigger annihilating it, CR 704.5r) -- the scan
+    // below reads the resulting STATE, so both closers prove the loop identically. Nothing
+    // changed except our life total going UP (the Celes route also grows the board -- strictly
+    // better), so the iteration can repeat without bound -- proven, not pattern-matched. Shared
+    // by executor and rollout (this function is the one apply site) -> lockstep.
     if (outlet_free && !victim_tok && victim_m1 == 0 && state.inf_life_turn < 0)
     {
         const CardDefinition* vd = CardDatabase::Instance().LookupCached(victim);

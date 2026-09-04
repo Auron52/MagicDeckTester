@@ -14232,6 +14232,12 @@ PodRoles NotePodRoles(const GameState& s, int controller)
         note(p.card);
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && d->params.pod_mv_delta != 0) { r.pod_active = true; }
+        // Celes-class fills the enabler role (USER 2026-09-05: "Celes is primarily a Melira
+        // replacement" -- her gy-enter +1/+1 annihilates the persist return's own -1/-1,
+        // CR 704.5r). BATTLEFIELD ONLY: her triggers do nothing from hand, and in this deck she
+        // is essentially uncastable from hand anyway (no red land -- see her cards.json note),
+        // so a hand copy must not suppress fetching a real enabler.
+        if (d && d->params.other_creature_gy_enter_team_counters > 0) { r.have_prev = true; }
     }
     for (const Card& c : s.players[controller].hand) { note(c); }
     return r;
@@ -14239,7 +14245,8 @@ PodRoles NotePodRoles(const GameState& s, int controller)
 // Does this card fill a MISSING combo role? Returns the role's weight (0 = none).
 int PodMissingRoleScore(const CardDefinition& d, const PodRoles& r)
 {
-    if ((d.params.prevents_minus_counters || d.params.reduces_minus_counters_by_one)
+    if ((d.params.prevents_minus_counters || d.params.reduces_minus_counters_by_one
+         || d.params.other_creature_gy_enter_team_counters > 0)
         && !r.have_prev) { return 100; }
     if (d.params.sac_creature_outlet && !d.params.sac_creature_cost.has_value()
         && !r.have_outlet) { return 80; }
@@ -14378,15 +14385,16 @@ bool MeliraPodProvider::PutTargetOk(const PutPolicy& pol, const CardDefinition& 
     // are simply never listed. Pure O(1) param checks -- no state reads here.
     if (d.params.sac_creature_outlet && !d.params.sac_creature_cost.has_value()) { return true; }
     if (d.params.persist)                                                        { return true; }
-    // Celes IS a combo piece (USER: "which is why she is so good"): every sac-loop iteration
-    // puts a creature into the graveyard, so her gy-enter team-counter trigger turns the Finks
-    // loop into team-wide +1/+1s -- a kill payload of the Redcap class. Always useful.
+    // Celes IS a combo piece, and specifically the deck's SECOND Melira effect (USER 2026-09-05:
+    // "Melira effects on 2 and 4" / "Celes is primarily a Melira replacement that draws.
+    // Pumping your board is a secondary effect"): her gy-enter +1/+1 annihilates the persist
+    // return's own -1/-1 (CR 704.5r), so the loop closes without Melira; the team pump and the
+    // ETB rummage are the bonus. Always useful (a "second copy" also still draws).
     if (d.params.other_creature_gy_enter_team_counters > 0)                      { return true; }
-    // "Melira effects on 2 and 4": the MV4 one is Felidar's flicker -- a flickered persist body
-    // returns WITHOUT its -1/-1 counter (new object), the enabler-class backup. Same missing
-    // gate as the true enablers (a second copy of a filled role is dead).
-    if ((d.params.prevents_minus_counters || d.params.reduces_minus_counters_by_one
-         || d.params.etb_blink_permanent)
+    // True counter-prevention enablers, while the role is unfilled. (Felidar's flicker-reset
+    // was briefly classed here too -- WRONG reading of the user's tier map, whose MV4 "Melira
+    // effect" is Celes above; Felidar is not on the user's whitelist and is not offered.)
+    if ((d.params.prevents_minus_counters || d.params.reduces_minus_counters_by_one)
         && !pol.have_prev)                                                       { return true; }
     if (d.params.tutor_to_hand && pol.any_missing)                               { return true; }
     if (d.params.etb_discard_any_number && pol.any_missing)                      { return true; }
