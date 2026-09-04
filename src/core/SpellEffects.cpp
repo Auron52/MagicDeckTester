@@ -1541,7 +1541,31 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // Surface the over-produced remainder (forced filter/depletion over-tap) so the
         // caller can float it for the rest of the main phase. SpendFloatingTowardCost drains
         // exactly the cost (CanPay is true), leaving the leftover in `lo`. nullptr -> no-op.
-        if (out_leftover) { ManaPool lo = floating; ManaCost c = cost; SpendFloatingTowardCost(lo, c); *out_leftover = lo; }
+        //
+        // KEEP THE FLEXIBLE MANA (MTG_KEEP_FLEXIBLE_FLOAT). This call is not a payment -- the tap
+        // set is already chosen and the cost is already known payable. It only decides WHICH of the
+        // produced mana counts as spent, and therefore what the rest of the main phase inherits. The
+        // default wild-first order is exactly backwards for that question: it spends the one unit
+        // that could pay any colour and banks the one that can pay almost nothing.
+        //
+        // USER-FOUND, EldraziDisplacerFlicker seed 1 turn 3, and it is what kills the hand-played
+        // line. Aether Hub carrying a Wild Growth and a Trace of Abundance taps for {C}{G} + one
+        // wild; Living Wish {1}{G} takes the {G} for its coloured pip and then took the WILD for
+        // its generic, leaving {C}. With Mariposa's {C} that is two colourless against Cloud of
+        // Faeries' {1}{U} -- unpayable, and the combo turn stops there. Spending the {C} instead
+        // leaves the wild, which pays the {U} while Mariposa pays the {1}.
+        //
+        // Scoped to the LEFTOVER, deliberately: the wild-first order is load-bearing at the other
+        // consumer (TapForCost's head, spending the turn reserve), where after a batch pre-pay
+        // `wild` IS the batch's own generic requirement and draining it first is what stops an
+        // earlier cast's generic pip from eating a later cast's pinned colour.
+        if (out_leftover)
+        {
+            static const bool s_keep_flex = EnvOn("MTG_KEEP_FLEXIBLE_FLOAT", true);
+            ManaPool lo = floating; ManaCost c = cost;
+            SpendFloatingTowardCost(lo, c, /*keep_flexible=*/s_keep_flex);
+            *out_leftover = lo;
+        }
         // Whole-turn batch pre-payment (BatchPrepayMainCasts) wants the FULL produced pool at the
         // solution -- the concrete mana the chosen tap set makes -- so it can pre-load floating and
         // pay every main cast from it. nullptr on every hot path -> byte-identical there.

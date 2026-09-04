@@ -802,7 +802,10 @@ inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefi
 inline void EtbUntapLands(GameState&, int controller, int count, bool log_ledger = true);    // defined below
 inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count);                // defined below
 inline int  EtbUntapLandsCredit(const GameState&, int count);                                // defined below
-inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost);                      // defined below
+// `keep_flexible` (see the definition): spend the LEAST flexible mana on a generic pip and retain
+// the wild, instead of the default wild-first order. For the leftover computation only.
+inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost,
+                                    bool keep_flexible = false);                             // defined below
 inline bool SetPermTapped(GameState&, int controller, int source_id, bool tapped);            // defined below
 inline ManaCost EffectiveActivationCost(const GameState&, int controller, const Card& source,
                                         const ManaCost& printed);                            // defined below
@@ -10835,7 +10838,7 @@ inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
 // reserve is empty -> byte-identical for every non-ritual deck. Shared by the executor
 // (AIEngine::TapForCost) and the rollout (TurnSolver::TapForCostDirect) so a ritual's floating
 // mana is realised identically in both (lockstep). See GameState::floating_mana.
-inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost)
+inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep_flexible)
 {
     if (reserve.Total() == 0) { return; }
     auto drain = [](int& pip, int& pool) { while (pip > 0 && pool > 0) { --pip; --pool; } };
@@ -10864,6 +10867,21 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost)
     //    earlier cast's generic pip can never strand a later cast's coloured pip within the pool.
     //    Inert for non-batch floats (ritual output is wild -> drained first either way; a pool with
     //    no wild falls straight through to colourless/colours in the original order).
+    //
+    //    `keep_flexible` INVERTS that, spending the least flexible mana on the generic pip and
+    //    RETAINING the wild. It is for the one caller that is not paying at all but asking "given
+    //    this cost is payable from this pool, what is left OVER?" -- see the note on the parameter.
+    if (keep_flexible)
+    {
+        drain(cost.generic, reserve.colorless);
+        drain(cost.generic, reserve.white);
+        drain(cost.generic, reserve.blue);
+        drain(cost.generic, reserve.black);
+        drain(cost.generic, reserve.red);
+        drain(cost.generic, reserve.green);
+        drain(cost.generic, reserve.wild);
+        return;
+    }
     drain(cost.generic, reserve.wild);
     drain(cost.generic, reserve.colorless);
     drain(cost.generic, reserve.white);

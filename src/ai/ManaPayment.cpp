@@ -13,6 +13,10 @@
 #include <functional>
 #include <vector>
 
+// MTG_FLOAT_TRACE (see the two print sites below). Namespace scope, not a function-local static:
+// this is read on every payment, and a magic static would add a guard check to each.
+static const bool g_float_trace = EnvOn("MTG_FLOAT_TRACE");
+
 bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_creature,
                           std::uint64_t reserved_mask, ManaPool* available,
                           bool honor_legacy_cco)
@@ -159,6 +163,14 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         // the land Aura's mana arrives on THIS tap, in the AURA's colour (Wild Growth {G},
         // Overgrowth {G}{G}, Fertile Ground any). AvailableManaPool credited it the same way via
         // AddSourceToPool, so retire the same units from `available`. No-op with no aura attached.
+        // Per-tap half of MTG_FLOAT_TRACE. NOTE it covers only the GREEDY path: TapForCostBacktrack
+        // has its own tapping, so a cast paid by the backtracker prints a `cost=` line with no `tap`
+        // lines above it. That absence is itself the useful signal (it says which solver paid).
+        if (g_float_trace && !AllPlayHooksNull())
+        { std::fprintf(stderr, "[float]   tap %s as col=%d amt=%d -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
+                       def.card.m_name.str().c_str(), (int)col, amt,
+                       floating.white, floating.blue, floating.black, floating.red,
+                       floating.green, floating.colorless, floating.wild); }
         if (LandAuraBonus(state, p) > 0)
         {
             ManaPool bonus;
@@ -577,8 +589,21 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // reserve so a later same-(main-)phase cast can spend it (CR 500.4). state.floating_mana
     // already holds the un-spent reserve after SpendFloatingTowardCost; add the leftover on top.
     // Off (MTG_NO_FLOAT_LEFTOVER) -> no-op.
+    // MTG_FLOAT_TRACE: what a payment LEFT BEHIND, per cast. The instrument that settled the
+    // keep-the-flexible-mana bug (SpellEffects.cpp's out_leftover): the useful signal is not which
+    // sources tapped but which mana SURVIVED, because that is what the rest of the main phase gets
+    // to spend. Covers every success path including the backtracker's, which is where the interesting
+    // assignments are made -- the greedy's tap-by-tap view (below) misses them entirely.
+    // Restricted to real play (AllPlayHooksNull is false only there), so the search's millions of
+    // speculative payments stay silent.
     auto commit_leftover = [&](const ManaPool& lo)
-    { if (FloatLeftoverManaEnabled()) { state.floating_mana.AddPool(lo); } };
+    { if (FloatLeftoverManaEnabled()) { state.floating_mana.AddPool(lo); }
+      if (g_float_trace && !AllPlayHooksNull())
+      { std::fprintf(stderr, "[float] cost=%s leftover{w%d u%d b%d r%d g%d c%d *%d} -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
+                     cost.ToString().c_str(), lo.white, lo.blue, lo.black, lo.red, lo.green, lo.colorless, lo.wild,
+                     state.floating_mana.white, state.floating_mana.blue, state.floating_mana.black,
+                     state.floating_mana.red, state.floating_mana.green, state.floating_mana.colorless,
+                     state.floating_mana.wild); } };
     auto greedy = [&]() -> bool
     {
         // Pay coloured requirements first (most restrictive), then generic.
