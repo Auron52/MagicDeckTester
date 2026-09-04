@@ -117,3 +117,23 @@ MITIGATION available meanwhile: `MTG_MANA_CACHE=0` on pooled regression runs (re
 identical by design, just slower). OPEN: audit ManaCacheKey's inputs against everything
 TapForCost/TapForCostDirect actually reads (provider ManaSourceRank? job-scoped profile
 knobs?), and why antilife specifically.
+
+## 2026-09-05 ROOT-CAUSED AND FIXED: the drip-land heads delta
+
+The mechanism, confirmed in code: a cached payment solution that taps a drip land stores the
+OBSERVED opponent-life delta -- `tap_opponent_lifegain * gamesetup::OpponentHeads()`, a PER-JOB
+global -- and its replay "needs no rescale" (SpellEffects.cpp drip branch). Sound within one
+job; unsound across a job switch, because `g_mana_cache` is thread_local and never cleared. The
+2HG smoke gate (added 2026-09-04) is what first pooled heads=1 and heads=2 jobs of the SAME
+deck: identical board states -> identical 128-bit keys -> cross-job hits replaying the wrong
+gift. Only antilife ever flipped because only it plays drip lands (Grove) in both configs --
+and with Tainted Remedy the gift is damage arithmetic, so the wrong delta changes play.
+Nondeterministic per run because worker<->job assignment varies. This is the second confirmed
+instance of the codified rule ("anything that changes a memoised computation's answer -- or its
+replayed effects -- must enter the key"); the first was the MTG_FILTER_FEED_STRICT lever.
+
+FIX: fold `gamesetup::OpponentHeads()` into ManaCacheKey (one mix beside the heurarm fold).
+Byte-identical for every single-config run (constant fold); mixed-heads pools stop sharing.
+VALIDATED: two consecutive default-env smoke runs 68/68 ALL PASS after 3/3 pre-fix runs each
+flipped one antilife game. (Flips were probabilistic, so this is strong but not airtight; the
+statedump + three preserved .wins in logs/incident_20260905_antilife2hg/ remain if it recurs.)

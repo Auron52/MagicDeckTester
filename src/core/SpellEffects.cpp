@@ -2717,6 +2717,14 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     // localised it: per-job inputs clean, results still moved). heurarm::Flag is per-thread and
     // per-job, so reading it here keys each job's entries to its own arm.
     mix(h1, FilterFeedStrictOn() ? 0x9e3779b97f4a7c15ull : 0ull);
+    // Same rule, second offender (2026-09-05, batch-pool-contamination.md sightings 3-5): a drip
+    // land's stored solution records the OBSERVED opponent-life delta -- tap_opponent_lifegain x
+    // gamesetup::OpponentHeads(), a PER-JOB global -- so an entry stored under one job's heads
+    // replays the wrong gift in another job's games. The 2HG gate (2026-09-04) is what first put
+    // heads=1 and heads=2 jobs of the SAME deck (identical board keys) in one pool; only antilife
+    // flipped because only it plays drip lands in both configs. Constant within a job -> this fold
+    // is byte-identical for every single-config run; mixed-heads pools stop sharing entries.
+    mix(h2, 0xD21'4EAD5ull + static_cast<std::uint64_t>(gamesetup::OpponentHeads()));
     // Canonical mode collects one descriptor per source and hashes the SORTED multiset; indexed mode
     // hashes the sequence as it stands. `canon` holds (descriptor, index) so the sort is stable on
     // index -- which is what makes position p mean "rank within its group" and match the DFS's
