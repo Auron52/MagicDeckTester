@@ -134,6 +134,23 @@ inline bool SeqEtbUntapEnabled()
     return heurarm::Flag(heurarm::EDF_SEQ_ETB, env_on);
 }
 
+// MTG_EF_SAC -- extend the MTG_EXEC_FEAS rescue walk to subsets that ALSO hold SacForMana /
+// Suspend actions (built 2026-09-04 for the dragonstorm m2 retirement; default OFF until measured).
+// SubsetPayableSequential refused ANY non-cast action ("unmodelled kind -> no rescue"), so the
+// exact projected-turn storm composition -- sac Lotus Bloom (+3 float) + Seething Song (+5 float)
+// + Dragonstorm {8}{R} -- could never be rescued when a flat gate rejected it, and the one-main
+// line search undervalued holding for the storm turn (dragonstorm's whole remaining reason for
+// uses_second_main is that the m2 re-solve in PROJECTED turns papers over this). The extension is
+// rescue-only in the same soundness frame: SacForMana is applied to the scratch board through the
+// real ApplySacForMana + SacFloatColorFor pair (the executor/rollout's own lockstep helpers, run
+// in the same before-all-casts pre-pass position as ApplyPlanDirect/TakeTurn), and Suspend is
+// skipped exactly (the enumerator only emits "Suspend N-{0}": no mana, no board this turn).
+inline bool EfSacEnabled()
+{
+    static const bool v = EnvOn("MTG_EF_SAC");
+    return v;
+}
+
 // MTG_IRENCRAG_WASTE -- ADOPTED DEFAULT-ON 2026-09-01 (USER: "let's adopt the Irencrag gate");
 // `=0` restores the old behaviour. Adoption evidence, paired 1200x2 at play settings (d5/20ms),
 // negative = better: SHIPPED engine hold -0.0167 (t -3.26, 20 better : 4 worse) / train -0.0117

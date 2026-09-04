@@ -156,12 +156,29 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     which selects dragonstorm (4x Seething Song + 3 more) and not dragons (none).
         //     An empirical selector, as before: the ritual test is a stand-in for "this deck's
         //     m2 classes have not been worked", not a mechanism claim.
-        //     MTG_NO_UTVARA_M2=1 restores the pre-rule whitelist (the A/B hatch, the
-        //     MTG_AL_SINGLE_MAIN precedent); MTG_UTVARA_M2_WIDE=1 restores the pre-re-derivation
-        //     ritual-less predicate (dragons back in) for the A/B.
-        static const bool s_no_utvara_m2 = EnvOn("MTG_NO_UTVARA_M2");   // DEFAULT OFF
-        static const bool s_utvara_wide  = EnvOn("MTG_UTVARA_M2_WIDE"); // DEFAULT OFF
-        if (!s_no_utvara_m2 && def->params.attack_per_matching_creates_tokens > 0)
+        //
+        //     >>> RETIRED 2026-09-04 (dragonstorm's classes worked; the whole rule is now
+        //     OPT-IN via MTG_UTVARA_M2=1, attribution only). Working dragonstorm's residue
+        //     found ANOTHER phantom behind its m2 "value": the rollout's SimulateCombat never
+        //     ran state-based actions after firebreathing pumps, so a depletion land whose last
+        //     counter paid a pump survived as PHANTOM mana in every projected future turn
+        //     (gi673: a projected T4 Kolaghan off a Sandstone Needle the real game had sacked
+        //     committed a win=4 develop line that realised T6 and shadowed the honest T4 storm
+        //     line -- fixed, MTG_FB_SBA in TurnSolver::SimulateCombat). With that honest,
+        //     single-main re-measured NET BETTER at value-play: 6 faster / 3 slower per 1000
+        //     (avg 4.397 vs 4.400), 8 of 9 movers d8b0-churn. The one structural residual
+        //     (gi223, T5 vs T6) is characterized and is NOT a second-main mechanism: the
+        //     one-main 5-action plan (Pyretic + Scourge + Lathliss + double Lotus-sac) IS
+        //     offered at the real T4 decision and is legal, but the T1 root's INTERIOR T4 node
+        //     never surfaces it, while the m2 arm expresses the same turn as a cheap 2-cast
+        //     main + 1-cast second main -- an interior plan-breadth hole (enumeration-arc
+        //     follow-up, the same workaround-surface family as the retired dragons classes).
+        //     MTG_UTVARA_M2=1 restores the ritual-gated selector (dragonstorm back in);
+        //     + MTG_UTVARA_M2_WIDE=1 restores the ritual-less form (dragons too).
+        //     MTG_NO_UTVARA_M2 (the old opt-out) is retired with the rule.
+        static const bool s_utvara_m2   = EnvOn("MTG_UTVARA_M2");       // DEFAULT OFF (retired)
+        static const bool s_utvara_wide = EnvOn("MTG_UTVARA_M2_WIDE"); // DEFAULT OFF
+        if (s_utvara_m2 && def->params.attack_per_matching_creates_tokens > 0)
         {
             bool ping = false, ritual = false;
             for (const Card& c2 : deck.mainboard)

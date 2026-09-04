@@ -518,15 +518,38 @@ arm verified byte-identical at smoke scale (48/48, 0 configs changed).
    gi94 static-pricing family, one level up: inside the line search's future turns, where the
    phase boundary is the only re-pricing point). The suspend clock and sac emission are both
    modeled, so the residual is in the projected-turn pricing/enumeration, not the action space.
-   **Follow-up: find the exact projected-turn gate that fails the one-main storm composition;
-   when it lands, re-run the retirement probe — ds should then retire like dragons did.
-   PRIME SUSPECT (noted 2026-09-04, unverified): `SubsetPayableSequential` REFUSES any subset
-   holding a `Kind::SacForMana` action ("unmodelled kind -> no rescue") — so the exact
-   {LotusSac, Seething, Dragonstorm} composition can never be EF-rescued if a flat gate
-   rejects it. The walk already applies ritual float; teaching it SacForMana (apply the
-   action's ritual_float, remove the source) and Suspend (skip: no mana, no board this turn)
-   is a small, rescue-only extension in the same soundness frame. Verify by probing whether
-   the flat gates actually reject that subset at gi673's projected T4 first.**
+   **RESOLVED 2026-09-04 — the gate was found, and the recorded prime suspect was WRONG for
+   this game.** The claude-play walk proved the real T4 decision OFFERS the full one-main storm
+   plan (Seething + Dragonstorm + LotusSac) even with the whitelist off — expressibility at
+   real decisions was never the problem. `MTG_FD_TRACE` then showed the no-m2 arm's T1 root
+   COMMITS a phantom: an exact-lethal win=4 DEVELOP line (T2 Seething+Scourge, T4 Kolaghan off
+   the Lotus) whose realised replay strands at T4 — because the projected T3 firebreathing
+   pumps spend Sandstone Needle's last depletion counter, the EXECUTOR's CheckStateBasedActions
+   then sacrifices the Needle, but the rollout's `SimulateCombat` never ran
+   `SacrificeDepletedLands` after its pumps, so the projection untapped a PHANTOM Needle and
+   priced T4 Kolaghan as payable (7 mana vs the real 5). The phantom win=4 tied with the honest
+   combo win=4 and won the scan order. **Fix: `MTG_FB_SBA` (default ON) — one lockstep
+   `SacrificeDepletedLands` at the end of `SimulateCombat`.** gi673 repro: no-m2+fix = T4
+   (recovered), no-m2+`MTG_FB_SBA=0` = T6 (clean attribution), m2-on+fix = T4 (no regression).
+   The `SubsetPayableSequential` SacForMana/Suspend refusal is nonetheless real and the
+   rescue-only extension was built alongside (`MTG_EF_SAC`, default OFF, unmeasured — it did
+   NOT move gi673 and awaits its own evidence before adoption; sacs pre-pass through the real
+   `ApplySacForMana`/`SacFloatColorFor` lockstep pair, Suspend skipped exactly as the {0}
+   enumerator emits it).**
+   **DRAGONSTORM RETIRED (same day).** With MTG_FB_SBA the 1000-game play-settings probe
+   flipped: no-m2 4.397 vs m2 4.400 (6 faster / 3 slower) — the old net +15 for m2 was the
+   phantom. 8 of 9 movers d8b0-churn; the ONE structural residual (gi223, T5 vs T6) is NOT a
+   second-main mechanism: the hand held TWO Lotus Blooms, the legal one-main 5-action plan
+   (Pyretic + Scourge + Lathliss + double Lotus-sac) IS offered at the real T4 decision, but
+   the T1 root's INTERIOR T4 node never surfaces it, while m2 expresses the same turn as a
+   cheap 2-cast main + 1-cast second main — an **interior plan-breadth hole** (enumeration-arc
+   follow-up, the same workaround-surface family as the retired dragons classes; MTG_EF_SAC
+   measured inert on it too, so it is not the walk refusal either). The whole Utvara+ping rule
+   is now **OPT-IN**: `MTG_UTVARA_M2=1` restores dragonstorm, `+MTG_UTVARA_M2_WIDE=1` dragons;
+   `MTG_NO_UTVARA_M2` is retired. Suite: only dragonstorm configs moved — searched depths
+   score-identical-or-slightly-better with ~200 digest-only line changes (the m2 phase gone,
+   frequently LESS overkill), every searched slower game churn (gi153 d8b0-converges both-T5);
+   d0 (greedy, lighter bar) +0.03–0.05 = greedy losing its m2 re-pricing dump, a d0-only class.
    gi320 is hereby pinned: it was the double-spend class. The `MTG_WATCHER_ORDER` lever's dragons numbers
    above predate the honest accounting and the total-order adoption; treat them as historical.
 8. **DONE — Karoo lockstep fix.** The executor's searched-continuation land play now honours
