@@ -118,19 +118,28 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
             }
         }
 
-        //   * UTVARA HELLKITE + COUNT-SCALED PING (attack-created tokens feeding Scourge of
-        //     Valkas / Dragon Tempest ETB damage): attacking creates Dragon tokens, and a
-        //     dragon_ping_on_enter card's ETB damage scales with the Dragon count, so a
-        //     post-combat dragon cast pings strictly harder than the same cast pre-combat --
-        //     the token count is a resource GENERATED DURING COMBAT (2c-bis). Require BOTH
-        //     params in the deck (mirrors the Skyhunter/Puresteel pairwise rule): the tokens
-        //     alone are inert permanents, the ping alone has no combat-grown count to read.
-        //     MEASURED (recoverability audit §6.7 probe, MTG_FORCE_USES_M2, 1000 games/arm at
-        //     value-play): dragons 51 faster / 1 slower (net -50 turns), dragonstorm 14 / 4
-        //     (net -10); knights (Adeline: attack tokens, no ping) 2 movers net 0, so the
-        //     pairwise form leaves it correctly off. The skipped phase is not budget-recoverable
-        //     (no lever re-opens it), which made this the whitelist's confirmed violation of the
-        //     convergence-at-the-limit invariant.
+        //   * DRAGONS/DRAGONSTORM (Utvara + dragon_ping_on_enter pairwise predicate) -- an
+        //     EMPIRICAL rule; the predicate is a deck SELECTOR, not the mechanism. MEASURED
+        //     (recoverability audit §6.7 probe, MTG_FORCE_USES_M2, 1000 games/arm at value-play):
+        //     dragons 51 faster / 1 slower (net -50 turns), dragonstorm 14 / 4 (net -10);
+        //     knights 2 movers net 0 (stays off). The faster lines are m1-ONLY-unreachable even
+        //     at d8 b0, so the win is structural -- but game traces (4 movers, 2026-09-04) show
+        //     the m2 phase is a WORKAROUND SURFACE for two known m1-world constraints, NOT a
+        //     combat-resource harvest (the original "attack tokens feed count-scaled pings"
+        //     story appeared in NONE of the traced games):
+        //       - WITHIN-MAIN CAST ORDER (gi19): the collapsed per-subset order casts the dragon
+        //         before Dragon Tempest, losing the entry ping (exact-lethal games are 1 short);
+        //         m1-only + MTG_SEARCH_ORDER=1 at d8 b0 recovers the fast turn -- the phase
+        //         boundary merely re-expresses "Tempest first". Cast-order arc territory.
+        //       - SEQUENTIAL MANA (gi94): m1's static affordability cannot price "cast Sol Ring,
+        //         tap it, cast Mind Stone"; the m2 is a free re-pricing point (the recorded
+        //         MAIN2-DETECTOR / enumeration-feasibility gap). Both rocks land T1, the curve
+        //         shifts a whole turn.
+        //       - gi130/gi320: not order-recoverable; gi320 = hold-everything, pump the attack,
+        //         exact-lethal m2 Bolt (mana-allocation interplay, mechanism not fully pinned).
+        //     So the DURABLE fixes live in the cast-order and enumeration-feasibility arcs; this
+        //     rule buys the measured wins now at the cost of searching m2 on these two decks.
+        //     Re-derive (probe MTG_FORCE_USES_M2 vs this rule) when either arc lands.
         //     MTG_NO_UTVARA_M2=1 restores the pre-rule whitelist (the A/B hatch, the
         //     MTG_AL_SINGLE_MAIN precedent).
         static const bool s_no_utvara_m2 = EnvOn("MTG_NO_UTVARA_M2");   // DEFAULT OFF

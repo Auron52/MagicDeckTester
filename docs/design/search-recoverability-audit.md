@@ -236,6 +236,11 @@ the rest are fan-out code-reading claims with cites.
 ### 4c. Cast order + discard
 
 * **The ordering dimension is collapsed (all decks but Dragonstorm): one order per subset, ever.**
+  **FIRST CONFIRMED LIVE INSTANCE (2026-09-04, dragons gi19): the canonical order casts the
+  dragon before Dragon Tempest, losing the entry ping — exact-lethal T5 becomes T6, and
+  `MTG_SEARCH_ORDER=1` at d8 b0 recovers it (see §6.7's corrected mechanism). The loss here is
+  VALUE (a missed trigger), not just a no-op'd unpayable cast — watcher-before-triggerer is an
+  ordering class the collapse cannot express.**
   Membership is untouched, but the apply silently no-ops an unpayable cast — a wrong order loses
   a cast the search scored as resolving. The `MTG_SEARCH_ORDER` hatch itself silently reverts to
   canonical at k ≥ 6 (`k! > 120`, no counter). Dragonstorm's targeted generator always includes
@@ -317,9 +322,10 @@ the rest are fan-out code-reading claims with cites.
 
 ### 4e. Second main, attack projections, node scope
 
-* **`DeckUsesSecondMain` whitelist — CLOSED 2026-09-03, the incompleteness was REAL and is
-  fixed (§6.7: the Utvara+ping pairwise rule; dragons net −50/1000 games).** Original entry:
-  Dragons/Dragonstorm (Utvara Hellkite) and Knights (Adeline) read
+* **`DeckUsesSecondMain` whitelist — CLOSED 2026-09-03 (rule shipped, dragons net −50/1000),
+  mechanism CORRECTED 2026-09-04: the m2 wins compensate for the collapsed cast order and
+  static affordability, not a combat resource — see §6.7 for the trace evidence.** Original
+  entry: Dragons/Dragonstorm (Utvara Hellkite) and Knights (Adeline) read
   `uses_second_main=false`, skipping the entire post-combat main at any budget. Whether that
   costs real value is deck-specific (attack-created tokens are summoning-sick) — NEEDS-JUDGMENT,
   fix is per-param. The in-code activating comment names untap-on-attack (Bear Umbra) as a case;
@@ -449,21 +455,26 @@ arm verified byte-identical at smoke scale (48/48, 0 configs changed).
    Verify-only callers; prior clean records remain statements about cast content.
 6. **DONE — escalation K opens to the whole pool at unlimited budget** (budgeted play keeps
    K=3, byte-identical at ship settings; the d8b0 instrument now converges).
-7. **DONE — the whitelist WAS costing real wins; per-param rule shipped.** The
-   `MTG_FORCE_USES_M2=1` probe (1000 games/arm at value-play): **dragons 51 faster / 1 slower
-   (net −50 turns, avg 5.635 → 5.585), dragonstorm 14 / 4 (net −10), knights 2 movers net 0.**
-   Mechanism: Utvara Hellkite's attack-created Dragon tokens raise the Dragon count that
-   Scourge of Valkas / Dragon Tempest `dragon_ping_on_enter` ETB damage scales on, so a
-   post-combat dragon cast pings strictly harder — a combat-generated resource (2c-bis) the
-   whitelist read as absent, and a skipped phase is not budget-recoverable at ANY setting (the
-   whitelist's confirmed violation of the invariant). Shipped: pairwise rule
-   `attack_per_matching_creates_tokens > 0` AND any `dragon_ping_on_enter` card
-   (Skyhunter/Puresteel form; leaves Adeline-only knights correctly off — measured net 0).
-   Rule-arm reproduces the probe arm BYTE-FOR-BYTE on dragons+dragonstorm; knights identical to
-   default. **All 5 rule-ON ship-settings regressions (ds gi157/306/384/749, dragons gi47)
-   CONVERGE at d8 b0 — identical win turn both arms — so each is budget churn, not a cut.**
-   Hatch: `MTG_NO_UTVARA_M2=1` restores the pre-rule whitelist. Cost: m2 search now runs on two
-   more decks (wall indicative-only, box contended; dragons pooled job ms roughly +77%).
+7. **DONE — the whitelist WAS costing real wins; per-param rule shipped. MECHANISM CORRECTED
+   2026-09-04 (USER challenge: "playing them earlier still seems better" — they were right).**
+   The `MTG_FORCE_USES_M2=1` probe (1000 games/arm at value-play): **dragons 51 faster / 1
+   slower (net −50 turns, avg 5.635 → 5.585), dragonstorm 14 / 4 (net −10), knights 2 movers
+   net 0.** Shipped: pairwise rule `attack_per_matching_creates_tokens > 0` AND any
+   `dragon_ping_on_enter` card — but the predicate is a deck SELECTOR, not the mechanism: the
+   original "attack tokens feed count-scaled pings" story appeared in NONE of 4 traced movers.
+   What the traces show (all 4 faster lines m1-only-UNREACHABLE at d8 b0, so the structural
+   result stands): **the m2 phase is a workaround surface for two known m1-world constraints**
+   — (a) the collapsed within-main CAST ORDER (gi19: dragon ranked before Dragon Tempest loses
+   the entry ping; exact-lethal is 1 short; `MTG_SEARCH_ORDER=1` at d8 b0 RECOVERS the fast
+   turn — the 4c ordering item made concrete), and (b) STATIC AFFORDABILITY (gi94: Sol Ring →
+   Mind Stone same-turn chain inexpressible in one static m1 pricing; the phase boundary is the
+   free re-pricing point — the MAIN2-DETECTOR lesson / enumeration-feasibility gap §6/6a of the
+   rollout doc). gi130/gi320 are order-UNrecoverable (gi320 = hold-all, pumped attack, m2 Bolt
+   exact lethal; mechanism not fully pinned). The DURABLE fixes are the cast-order and
+   enumeration-feasibility arcs; this rule buys the measured wins now at ~2x m1 search on two
+   decks. Re-derive the probe when either arc lands. Rule-arm reproduces the probe arm
+   BYTE-FOR-BYTE; **all rule-ON ship-settings regressions (probe 5 + regression 4 + smoke 1 +
+   overnight 9) CONVERGE at d8 b0 — budget churn, zero cuts.** Hatch: `MTG_NO_UTVARA_M2=1`.
 8. **DONE — Karoo lockstep fix.** The executor's searched-continuation land play now honours
    `karoo_deferred` exactly as the rollout's `bp_play_searched_land` does
    (`MTG_KAROO_BP_LOCKSTEP=0` restores).
