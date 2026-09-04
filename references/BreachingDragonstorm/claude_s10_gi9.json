@@ -1,0 +1,508 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 3, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 18, "name": "Dwarven Ruins" }, { "num": 5, "name": "Boarding Party" }, { "num": 26, "name": "Maelstrom Wanderer" }, { "num": 9, "name": "Breaching Dragonstorm" }, { "num": 27, "name": "Maelstrom Wanderer" }, { "num": 22, "name": "Ferrous Lake" }, { "num": 19, "name": "Dwarven Ruins" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Breaching Dragonstorm", "cost": "{4}{R}", "mv": 5, "kind": "permanent" }, { "num": 18, "name": "Dwarven Ruins", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Dwarven Ruins", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Dwarven Ruins; cast: (nothing)", "land": "Dwarven Ruins", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Ferrous Lake; cast: (nothing)", "land": "Ferrous Lake", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 2,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Dwarven Ruins", "idx": 1, "num": 18, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Breaching Dragonstorm", "cost": "{4}{R}", "mv": 5, "kind": "permanent" }, { "num": 19, "name": "Dwarven Ruins", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Ferrous Lake; cast: (nothing)", "land": "Ferrous Lake", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Ferrous Lake; cast: Dwarven Ruins: sacrifice for {R}×2", "land": "Ferrous Lake", "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 2, "summary": "land=Dwarven Ruins; cast: (nothing)", "land": "Dwarven Ruins", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Dwarven Ruins; cast: Dwarven Ruins: sacrifice for {R}×2", "land": "Dwarven Ruins", "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 4, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Mountain; cast: Dwarven Ruins: sacrifice for {R}×2", "land": "Mountain", "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: Dwarven Ruins: sacrifice for {R}×2", "land": null, "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Dwarven Ruins", "idx": 1, "num": 18, "is_land": true }, { "name": "Dwarven Ruins", "idx": 3, "num": 19, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Breaching Dragonstorm", "cost": "{4}{R}", "mv": 5, "kind": "permanent" }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Dwarven Ruins: sacrifice for {R}×2", "land": null, "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Dwarven Ruins", "idx": 1, "num": 18, "is_land": true }, { "name": "Dwarven Ruins", "idx": 3, "num": 19, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Breaching Dragonstorm", "cost": "{4}{R}", "mv": 5, "kind": "permanent" }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Dwarven Ruins: sacrifice for {R}×2", "land": null, "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Remote Farm" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Dwarven Ruins", "idx": 1, "num": 18, "is_land": true }, { "name": "Dwarven Ruins", "idx": 3, "num": 19, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Breaching Dragonstorm", "cost": "{4}{R}", "mv": 5, "kind": "permanent" }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Ferrous Lake; cast: Breaching Dragonstorm, Dwarven Ruins: sacrifice for {R}×2, Dwarven Ruins: sacrifice for {R}×2", "land": "Ferrous Lake", "casts": ["Breaching Dragonstorm", "Dwarven Ruins", "Dwarven Ruins"], "actions": [{ "card": "Breaching Dragonstorm" }, { "card": "Dwarven Ruins", "float_color": "R" }, { "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Breaching Dragonstorm, Dwarven Ruins: sacrifice for {R}×2, Dwarven Ruins: sacrifice for {R}×2", "land": "Mountain", "casts": ["Breaching Dragonstorm", "Dwarven Ruins", "Dwarven Ruins"], "actions": [{ "card": "Breaching Dragonstorm" }, { "card": "Dwarven Ruins", "float_color": "R" }, { "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 2, "summary": "land=Ferrous Lake; cast: (nothing)", "land": "Ferrous Lake", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Ferrous Lake; cast: Dwarven Ruins: sacrifice for {R}×2", "land": "Ferrous Lake", "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 4, "summary": "land=Ferrous Lake; cast: Dwarven Ruins: sacrifice for {R}×2", "land": "Ferrous Lake", "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 5, "summary": "land=Ferrous Lake; cast: Dwarven Ruins: sacrifice for {R}×2, Dwarven Ruins: sacrifice for {R}×2", "land": "Ferrous Lake", "casts": ["Dwarven Ruins", "Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }, { "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 6, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Mountain; cast: Dwarven Ruins: sacrifice for {R}×2", "land": "Mountain", "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 8, "summary": "land=Mountain; cast: Dwarven Ruins: sacrifice for {R}×2", "land": "Mountain", "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 9, "summary": "land=Mountain; cast: Dwarven Ruins: sacrifice for {R}×2, Dwarven Ruins: sacrifice for {R}×2", "land": "Mountain", "casts": ["Dwarven Ruins", "Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }, { "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 10, "summary": "land=Remote Farm; cast: (nothing)", "land": "Remote Farm", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Remote Farm; cast: Dwarven Ruins: sacrifice for {R}×2", "land": "Remote Farm", "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 12, "summary": "land=Remote Farm; cast: Dwarven Ruins: sacrifice for {R}×2", "land": "Remote Farm", "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 13, "summary": "land=Remote Farm; cast: Dwarven Ruins: sacrifice for {R}×2, Dwarven Ruins: sacrifice for {R}×2", "land": "Remote Farm", "casts": ["Dwarven Ruins", "Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }, { "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: Dwarven Ruins: sacrifice for {R}×2", "land": null, "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 16, "summary": "land=none; cast: Dwarven Ruins: sacrifice for {R}×2", "land": null, "casts": ["Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }] },
+    { "index": 17, "summary": "land=none; cast: Dwarven Ruins: sacrifice for {R}×2, Dwarven Ruins: sacrifice for {R}×2", "land": null, "casts": ["Dwarven Ruins", "Dwarven Ruins"], "actions": [{ "card": "Dwarven Ruins", "float_color": "R" }, { "card": "Dwarven Ruins", "float_color": "R" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "type": "free_cast",
+  "source": "Breaching Dragonstorm",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Annoyed Altisaur" }],
+  "walked": ["Remote Farm", "Ferrous Lake", "Saprazzan Skerry"],
+  "reveals": [{ "turn": 3, "source": "Breaching Dragonstorm (exile until nonland)", "cards": [{ "name": "Remote Farm", "disposition": "stays in exile" }, { "name": "Ferrous Lake", "disposition": "stays in exile" }, { "name": "Saprazzan Skerry", "disposition": "stays in exile" }, { "name": "Annoyed Altisaur", "disposition": "found" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "type": "free_cast",
+  "source": "Annoyed Altisaur (cascade)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Breaching Dragonstorm" }],
+  "walked": ["Mossfire Valley", "Mountain", "Ferrous Lake", "Annoyed Altisaur"],
+  "reveals": [{ "turn": 3, "source": "Annoyed Altisaur (cascade)", "cards": [{ "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Annoyed Altisaur", "disposition": "to the bottom" }, { "name": "Breaching Dragonstorm", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "type": "free_cast",
+  "source": "Breaching Dragonstorm",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 45, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Call Forth the Tempest" }],
+  "reveals": [{ "turn": 3, "source": "Breaching Dragonstorm (exile until nonland)", "cards": [{ "name": "Call Forth the Tempest", "disposition": "found" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "free_cast",
+  "source": "Call Forth the Tempest (cascade)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 44, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Sakashima's Protege" }],
+  "reveals": [{ "turn": 3, "source": "Call Forth the Tempest (cascade)", "cards": [{ "name": "Sakashima's Protege", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "free_cast",
+  "source": "Sakashima's Protege (cascade)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Creative Technique" }],
+  "walked": ["Annoyed Altisaur", "Mossfire Valley", "Mountain", "Mossfire Valley", "Peat Bog"],
+  "reveals": [{ "turn": 3, "source": "Sakashima's Protege (cascade)", "cards": [{ "name": "Annoyed Altisaur", "disposition": "to the bottom" }, { "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Creative Technique", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "type": "demonstrate",
+  "source": "Creative Technique",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 43, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 1,
+  "note": "reply 1 to copy the spell (the copy resolves first, with its own free cast), or 0 to decline. Default = copy."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "type": "free_cast",
+  "source": "Creative Technique",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 42, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Sakashima's Protege" }],
+  "walked": ["Mountain"],
+  "reveals": [{ "turn": 3, "source": "Creative Technique (reveal)", "cards": [{ "name": "Mountain", "disposition": "to the bottom" }, { "name": "Sakashima's Protege", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "type": "free_cast",
+  "source": "Sakashima's Protege (cascade)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 41, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Breaching Dragonstorm" }],
+  "walked": ["Maelstrom Wanderer", "Mountain", "Saprazzan Skerry", "Annoyed Altisaur", "Boarding Party", "Mountain", "Mossfire Valley"],
+  "reveals": [{ "turn": 3, "source": "Sakashima's Protege (cascade)", "cards": [{ "name": "Maelstrom Wanderer", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Saprazzan Skerry", "disposition": "to the bottom" }, { "name": "Annoyed Altisaur", "disposition": "to the bottom" }, { "name": "Boarding Party", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Breaching Dragonstorm", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "type": "free_cast",
+  "source": "Breaching Dragonstorm",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 38, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Maelstrom Wanderer" }],
+  "walked": ["Mountain", "Mossfire Valley"],
+  "reveals": [{ "turn": 3, "source": "Breaching Dragonstorm (exile until nonland)", "cards": [{ "name": "Mountain", "disposition": "stays in exile" }, { "name": "Mossfire Valley", "disposition": "stays in exile" }, { "name": "Maelstrom Wanderer", "disposition": "found" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "type": "free_cast",
+  "source": "Maelstrom Wanderer (cascade)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 37, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Annoyed Altisaur" }],
+  "walked": ["Ferrous Lake", "Mossfire Valley", "Mountain"],
+  "reveals": [{ "turn": 3, "source": "Maelstrom Wanderer (cascade)", "cards": [{ "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Annoyed Altisaur", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 16,
+  "type": "free_cast",
+  "source": "Annoyed Altisaur (cascade)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 36, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Boarding Party" }],
+  "reveals": [{ "turn": 3, "source": "Annoyed Altisaur (cascade)", "cards": [{ "name": "Boarding Party", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "free_cast",
+  "source": "Boarding Party (cascade)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 8, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 35, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Creative Technique" }],
+  "walked": ["Mountain", "Peat Bog", "Mossfire Valley", "Remote Farm", "Peat Bog", "Svyelunite Temple", "Remote Farm", "Peat Bog", "Svyelunite Temple", "Peat Bog", "Svyelunite Temple", "Ferrous Lake", "Mountain"],
+  "reveals": [{ "turn": 3, "source": "Boarding Party (cascade)", "cards": [{ "name": "Mountain", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Remote Farm", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Remote Farm", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Creative Technique", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 18,
+  "type": "demonstrate",
+  "source": "Creative Technique",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 8, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 35, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 1,
+  "note": "reply 1 to copy the spell (the copy resolves first, with its own free cast), or 0 to decline. Default = copy."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "type": "free_cast",
+  "source": "Creative Technique",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 8, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 34, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Creative Technique" }],
+  "walked": ["Mountain", "Peat Bog", "Svyelunite Temple", "Ferrous Lake", "Mountain", "Ferrous Lake"],
+  "reveals": [{ "turn": 3, "source": "Creative Technique (reveal)", "cards": [{ "name": "Mountain", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Creative Technique", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 20,
+  "type": "demonstrate",
+  "source": "Creative Technique",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 8, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 34, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 1,
+  "note": "reply 1 to copy the spell (the copy resolves first, with its own free cast), or 0 to decline. Default = copy."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 21,
+  "type": "free_cast",
+  "source": "Creative Technique",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 8, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 33, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Boarding Party" }],
+  "walked": ["Remote Farm", "Peat Bog", "Mossfire Valley", "Peat Bog", "Mountain", "Saprazzan Skerry", "Ferrous Lake", "Mossfire Valley", "Remote Farm"],
+  "reveals": [{ "turn": 3, "source": "Creative Technique (reveal)", "cards": [{ "name": "Remote Farm", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Saprazzan Skerry", "disposition": "to the bottom" }, { "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Remote Farm", "disposition": "to the bottom" }, { "name": "Boarding Party", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "type": "free_cast",
+  "source": "Boarding Party (cascade)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 32, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Creative Technique" }],
+  "walked": ["Mountain", "Dwarven Ruins", "Svyelunite Temple", "Saprazzan Skerry", "Svyelunite Temple", "Peat Bog", "Annoyed Altisaur", "Mountain", "Svyelunite Temple", "Svyelunite Temple", "Mountain", "Ferrous Lake"],
+  "reveals": [{ "turn": 3, "source": "Boarding Party (cascade)", "cards": [{ "name": "Mountain", "disposition": "to the bottom" }, { "name": "Dwarven Ruins", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Saprazzan Skerry", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Annoyed Altisaur", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Creative Technique", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 23,
+  "type": "demonstrate",
+  "source": "Creative Technique",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 32, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 1,
+  "note": "reply 1 to copy the spell (the copy resolves first, with its own free cast), or 0 to decline. Default = copy."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 24,
+  "type": "free_cast",
+  "source": "Creative Technique",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 31, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Maelstrom Wanderer" }],
+  "walked": ["Mossfire Valley", "Ferrous Lake"],
+  "reveals": [{ "turn": 3, "source": "Creative Technique (reveal)", "cards": [{ "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Maelstrom Wanderer", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 25,
+  "type": "free_cast",
+  "source": "Maelstrom Wanderer (cascade)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 30, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Boarding Party" }],
+  "walked": ["Svyelunite Temple", "Svyelunite Temple", "Dwarven Ruins", "Remote Farm", "Mountain"],
+  "reveals": [{ "turn": 3, "source": "Maelstrom Wanderer (cascade)", "cards": [{ "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Dwarven Ruins", "disposition": "to the bottom" }, { "name": "Remote Farm", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Boarding Party", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 26,
+  "type": "free_cast",
+  "source": "Boarding Party (cascade)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 29, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Breaching Dragonstorm" }],
+  "walked": ["Svyelunite Temple", "Saprazzan Skerry", "Mountain", "Peat Bog", "Remote Farm", "Annoyed Altisaur", "Mountain", "Mountain", "Ferrous Lake", "Peat Bog", "Mountain", "Mountain", "Peat Bog", "Mossfire Valley", "Svyelunite Temple", "Mountain", "Saprazzan Skerry", "Saprazzan Skerry", "Peat Bog", "Dwarven Ruins", "Mossfire Valley"],
+  "reveals": [{ "turn": 3, "source": "Boarding Party (cascade)", "cards": [{ "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Saprazzan Skerry", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Remote Farm", "disposition": "to the bottom" }, { "name": "Annoyed Altisaur", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Saprazzan Skerry", "disposition": "to the bottom" }, { "name": "Saprazzan Skerry", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Dwarven Ruins", "disposition": "to the bottom" }, { "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Breaching Dragonstorm", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 27,
+  "type": "free_cast",
+  "source": "Breaching Dragonstorm",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 7, "num": 11, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 28, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Annoyed Altisaur" }],
+  "reveals": [{ "turn": 3, "source": "Breaching Dragonstorm (exile until nonland)", "cards": [{ "name": "Annoyed Altisaur", "disposition": "found" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 28,
+  "type": "free_cast",
+  "source": "Maelstrom Wanderer (cascade)",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Annoyed Altisaur", "idx": 8, "num": 4, "is_land": false }, { "name": "Boarding Party", "idx": 9, "num": 6, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 7, "num": 11, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Dwarven Ruins", "Dwarven Ruins"], "library_size": 27, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "ai_pick": 0,
+  "candidates": [{ "index": 0, "name": "Annoyed Altisaur" }],
+  "walked": ["Mossfire Valley", "Ferrous Lake", "Svyelunite Temple", "Svyelunite Temple", "Dwarven Ruins", "Remote Farm", "Mountain", "Svyelunite Temple", "Saprazzan Skerry", "Mountain", "Peat Bog", "Remote Farm"],
+  "reveals": [{ "turn": 3, "source": "Annoyed Altisaur (cascade)", "cards": [{ "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Dwarven Ruins", "disposition": "to the bottom" }, { "name": "Remote Farm", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Saprazzan Skerry", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Remote Farm", "disposition": "to the bottom" }, { "name": "Annoyed Altisaur", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Saprazzan Skerry", "disposition": "to the bottom" }, { "name": "Saprazzan Skerry", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Dwarven Ruins", "disposition": "to the bottom" }, { "name": "Mossfire Valley", "disposition": "to the bottom" }] }, { "turn": 3, "source": "Maelstrom Wanderer (cascade)", "cards": [{ "name": "Mossfire Valley", "disposition": "to the bottom" }, { "name": "Ferrous Lake", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Dwarven Ruins", "disposition": "to the bottom" }, { "name": "Remote Farm", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Svyelunite Temple", "disposition": "to the bottom" }, { "name": "Saprazzan Skerry", "disposition": "to the bottom" }, { "name": "Mountain", "disposition": "to the bottom" }, { "name": "Peat Bog", "disposition": "to the bottom" }, { "name": "Remote Farm", "disposition": "to the bottom" }, { "name": "Annoyed Altisaur", "disposition": "kept" }] }],
+  "note": "reply a candidate index to cast that spell WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 29,
+  "type": "target",
+  "source": "Sakashima's Protege",
+  "turn": 3,
+  "copy": "enters as a copy of the chosen this-turn entrant",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 0,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Annoyed Altisaur", "idx": 8, "num": 4, "is_land": false }, { "name": "Annoyed Altisaur", "idx": 10, "num": 2, "is_land": false }, { "name": "Annoyed Altisaur", "idx": 14, "num": 3, "is_land": false }, { "name": "Boarding Party", "idx": 9, "num": 6, "is_land": false }, { "name": "Boarding Party", "idx": 12, "num": 8, "is_land": false }, { "name": "Boarding Party", "idx": 13, "num": 5, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 7, "num": 11, "is_land": false }, { "name": "Maelstrom Wanderer", "idx": 11, "num": 27, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Creative Technique", "Creative Technique", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Maelstrom Wanderer"], "library_size": 27, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "legal_targets": [{ "kind": "permanent", "index": 3, "label": "Mountain (yours)" }, { "kind": "permanent", "index": 4, "label": "Breaching Dragonstorm (yours)" }, { "kind": "permanent", "index": 5, "label": "Breaching Dragonstorm (yours)" }, { "kind": "permanent", "index": 6, "label": "Breaching Dragonstorm (yours)" }, { "kind": "permanent", "index": 7, "label": "Breaching Dragonstorm (yours)" }, { "kind": "permanent", "index": 8, "label": "Annoyed Altisaur (yours)" }, { "kind": "permanent", "index": 9, "label": "Boarding Party (yours)" }, { "kind": "permanent", "index": 10, "label": "Annoyed Altisaur (yours)" }, { "kind": "permanent", "index": 11, "label": "Maelstrom Wanderer (yours -- copy would immediately die to the legend rule!)" }, { "kind": "permanent", "index": 12, "label": "Boarding Party (yours)" }, { "kind": "permanent", "index": 13, "label": "Boarding Party (yours)" }, { "kind": "permanent", "index": 14, "label": "Annoyed Altisaur (yours)" }],
+  "heuristic_default": 6,
+  "options": [{ "index": 0, "label": "(no target)", "targets": [] }, { "index": 1, "label": "Mountain (yours)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 2, "label": "Breaching Dragonstorm (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 3, "label": "Breaching Dragonstorm (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 4, "label": "Breaching Dragonstorm (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 5, "label": "Breaching Dragonstorm (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 6, "label": "Annoyed Altisaur (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 7, "label": "Boarding Party (yours)", "targets": [{ "kind": "permanent", "index": 9 }] }, { "index": 8, "label": "Annoyed Altisaur (yours)", "targets": [{ "kind": "permanent", "index": 10 }] }, { "index": 9, "label": "Maelstrom Wanderer (yours -- copy would immediately die to the legend rule!)", "targets": [{ "kind": "permanent", "index": 11 }] }, { "index": 10, "label": "Boarding Party (yours)", "targets": [{ "kind": "permanent", "index": 12 }] }, { "index": 11, "label": "Boarding Party (yours)", "targets": [{ "kind": "permanent", "index": 13 }] }, { "index": 12, "label": "Annoyed Altisaur (yours)", "targets": [{ "kind": "permanent", "index": 14 }] }],
+  "note": "reply an option index. Sakashima's Protege enters as a COPY of the chosen this-turn entrant (any permanent that entered this turn; a Breaching Dragonstorm copy re-fires its exile trigger); pick the \"(no target)\" option to decline and enter as the printed 3/1. Default = the AI's pick."
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 30,
+  "type": "target",
+  "source": "Sakashima's Protege",
+  "turn": 3,
+  "copy": "enters as a copy of the chosen this-turn entrant",
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 0,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Annoyed Altisaur", "idx": 8, "num": 4, "is_land": false }, { "name": "Annoyed Altisaur", "idx": 10, "num": 2, "is_land": false }, { "name": "Annoyed Altisaur", "idx": 14, "num": 3, "is_land": false }, { "name": "Annoyed Altisaur", "idx": 15, "num": 52, "printed": "Sakashima's Protege", "is_land": false }, { "name": "Boarding Party", "idx": 9, "num": 6, "is_land": false }, { "name": "Boarding Party", "idx": 12, "num": 8, "is_land": false }, { "name": "Boarding Party", "idx": 13, "num": 5, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 4, "num": 9, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 5, "num": 10, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 6, "num": 12, "is_land": false }, { "name": "Breaching Dragonstorm", "idx": 7, "num": 11, "is_land": false }, { "name": "Maelstrom Wanderer", "idx": 11, "num": 27, "is_land": false }, { "name": "Mountain", "idx": 3, "num": 34, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "Boarding Party", "cost": "{5}{R}", "mv": 6, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Maelstrom Wanderer", "cost": "{5}{U}{R}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Remote Farm", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Creative Technique", "Creative Technique", "Creative Technique", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Maelstrom Wanderer"], "library_size": 27, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "legal_targets": [{ "kind": "permanent", "index": 3, "label": "Mountain (yours)" }, { "kind": "permanent", "index": 4, "label": "Breaching Dragonstorm (yours)" }, { "kind": "permanent", "index": 5, "label": "Breaching Dragonstorm (yours)" }, { "kind": "permanent", "index": 6, "label": "Breaching Dragonstorm (yours)" }, { "kind": "permanent", "index": 7, "label": "Breaching Dragonstorm (yours)" }, { "kind": "permanent", "index": 8, "label": "Annoyed Altisaur (yours)" }, { "kind": "permanent", "index": 9, "label": "Boarding Party (yours)" }, { "kind": "permanent", "index": 10, "label": "Annoyed Altisaur (yours)" }, { "kind": "permanent", "index": 11, "label": "Maelstrom Wanderer (yours -- copy would immediately die to the legend rule!)" }, { "kind": "permanent", "index": 12, "label": "Boarding Party (yours)" }, { "kind": "permanent", "index": 13, "label": "Boarding Party (yours)" }, { "kind": "permanent", "index": 14, "label": "Annoyed Altisaur (yours)" }, { "kind": "permanent", "index": 15, "label": "Annoyed Altisaur (yours)" }],
+  "heuristic_default": 6,
+  "options": [{ "index": 0, "label": "(no target)", "targets": [] }, { "index": 1, "label": "Mountain (yours)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 2, "label": "Breaching Dragonstorm (yours)", "targets": [{ "kind": "permanent", "index": 4 }] }, { "index": 3, "label": "Breaching Dragonstorm (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 4, "label": "Breaching Dragonstorm (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }, { "index": 5, "label": "Breaching Dragonstorm (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 6, "label": "Annoyed Altisaur (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }, { "index": 7, "label": "Boarding Party (yours)", "targets": [{ "kind": "permanent", "index": 9 }] }, { "index": 8, "label": "Annoyed Altisaur (yours)", "targets": [{ "kind": "permanent", "index": 10 }] }, { "index": 9, "label": "Maelstrom Wanderer (yours -- copy would immediately die to the legend rule!)", "targets": [{ "kind": "permanent", "index": 11 }] }, { "index": 10, "label": "Boarding Party (yours)", "targets": [{ "kind": "permanent", "index": 12 }] }, { "index": 11, "label": "Boarding Party (yours)", "targets": [{ "kind": "permanent", "index": 13 }] }, { "index": 12, "label": "Annoyed Altisaur (yours)", "targets": [{ "kind": "permanent", "index": 14 }] }, { "index": 13, "label": "Annoyed Altisaur (yours)", "targets": [{ "kind": "permanent", "index": 15 }] }],
+  "note": "reply an option index. Sakashima's Protege enters as a COPY of the chosen this-turn entrant (any permanent that entered this turn; a Breaching Dragonstorm copy re-fires its exile trigger); pick the \"(no target)\" option to decline and enter as the printed 3/1. Default = the AI's pick."
+}
+}
+  ]
+}
