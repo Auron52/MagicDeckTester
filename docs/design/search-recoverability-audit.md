@@ -485,6 +485,30 @@ arm verified byte-identical at smoke scale (48/48, 0 configs changed).
    dragonstorm ±1, knights byte-identical; no other deck holds the params). The gain is the
    same-main Tempest→dragon lines WITH the haste attack, which the m2 crowbar cannot express.
    ADOPTION AWAITS THE USER (cast order is user-reviewed per deck).**
+   >>> **§6.7 RE-DERIVED AND LARGELY RETRACTED 2026-09-04 (USER: "work through everything so
+   that main 2 is either not necessary or we come up with a real reason for it").** Working
+   the whitelist's win classes game-by-game found the measurement above was dominated by an
+   **illegal mana double-spend**: firebreathing paid pumps from a READ-ONLY pool ("combat is
+   the last mana use" — an invariant THIS RULE broke), so a post-combat cast re-read the same
+   untapped lands and pump mana spent twice (gi29: identical casts both arms, the m2 arm's
+   Bolt {R} pumped Inferno in combat AND paid the Bolt — exact lethal). **`MTG_FB_TAP`
+   (default ON): pumps pay-as-you-go through each world's real shared payment (FbPayer;
+   executor+rollout lockstep); removed 56/1000 dragons + 46/1000 dragonstorm "wins", also
+   fixed the flat pool funding pumps with Haven's dragon-spells-only mana, and re-accounted
+   five 5C games whose pumps came from a Garth-conjured Shivan Dragon.** The legal remainder
+   on dragons was three composable m1-expressibility holes, all closed: (a) producer chains —
+   `MTG_EXEC_FEAS` **flipped default ON** (its 12k-paired never-worse ladder + gi94); (b) the
+   subtype-reducer bail MISSING from ManaPruneBound/the selection-exact gate — the maintenance
+   breadcrumb's exact predicted bug (`MTG_SUBRED_BAIL`, default ON; {Incubator, Atsushi} is 5
+   payable mana with the credit, printed 7 tripped the bound; gi431); (c) resolved reducers
+   now JOIN the EF walk's scratch board (with the Incubator ETB type choice) so later casts
+   price at the live discount. After all three: **dragons single-main is STRICTLY BETTER (5
+   faster / 0 slower per 1000 at value-play) — dragons is OUT of the whitelist** (the
+   predicate now also requires a mana ritual; `MTG_UTVARA_M2_WIDE=1` restores it for the A/B).
+   **Dragonstorm KEEPS m2 — real value under honest accounting (17 slower / 5 faster without
+   it, net +15) — and its classes are NOT yet worked: the open follow-up.** gi320 is hereby
+   pinned: it was the double-spend class. The `MTG_WATCHER_ORDER` lever's dragons numbers
+   above predate the honest accounting and the total-order adoption; treat them as historical.
 8. **DONE — Karoo lockstep fix.** The executor's searched-continuation land play now honours
    `karoo_deferred` exactly as the rollout's `bp_play_searched_land` does
    (`MTG_KAROO_BP_LOCKSTEP=0` restores).
