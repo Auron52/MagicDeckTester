@@ -11198,6 +11198,56 @@ std::vector<int> MinotaurProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
+// ---- DragonsProvider::CastOrderRank -----------------------------------------
+//
+// THE USER'S REVIEWED FULL ORDER (2026-09-04). Verbatim ruling: "Dragon tempest should indeed
+// be before everything else, Lathliss after and Scourge after that. Also, Urza's Incubator
+// should go at the same time as Dragonspeaker. Though, to be fair here, we don't need to
+// consider more than 1 order. We could fully fill out this order." So: ONE total order, fully
+// authored, no order search for this deck.
+//
+//   1  Dragon Tempest      -- before EVERYTHING: every same-main dragon then pings on entry and
+//                             gets haste. (Params: ping/haste enter-watcher, not a creature.)
+//                             NOTE (flagged at review time): this also precedes the mana rocks,
+//                             so a Tempest+rock turn pays Tempest before the rock's mana exists;
+//                             sequential-payment stranding is possible in tight-mana turns and
+//                             is exactly what the A/B measures.
+//   5  mana rocks          -- generic tier (Sol Ring / Fire Diamond / Mind Stone).
+//   8  Dragonspeaker Shaman + Urza's Incubator -- the reducers together (the USER's explicit
+//                             pairing). Incubator's chooses_creature_type form has an EMPTY
+//                             reduces_spell_subtype, so the generic tier-8 test missed it and it
+//                             sat at 20 -- keyed here on reduces_spell_subtype_amount instead.
+//   9  Lathliss            -- after Tempest, before the dragons she watches (each nontoken
+//                             dragon entering under her mints a hasted 5/5).
+//  10  Scourge of Valkas   -- after Lathliss: Scourge entering under a live Lathliss mints a
+//                             token, and that token's own entry pings; the reverse order mints
+//                             nothing for Lathliss and sees no extra entries.
+//  11  the other dragons   -- Atsushi / Glorybringer / Inferno / Utvara (tie-break unchanged).
+//  20  the rest            -- Lightning Bolt / Lightning Greaves keep the generic tier.
+//
+// MTG_DRAGONS_ORDER=0 restores the generic rank wholesale (the A/B hatch). The generic
+// MTG_WATCHER_ORDER lever never fires here (Tempest/Scourge match above before falling
+// through); it remains the measurement lever for other decks holding these params
+// (Dragonstorm holds Tempest/Scourge too -- its provider owns its own order machinery and the
+// watcher lever measured +/-1 there, so it is deliberately untouched by this adoption).
+int DragonsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    static const bool s_on = EnvOn("MTG_DRAGONS_ORDER", true);
+    if (!s_on) { return GenericProvider::CastOrderRank(s, def); }
+    const bool ping  = def.params.dragon_ping_on_enter;
+    const bool haste = def.params.haste_on_flying_enter;
+    if ((ping || haste) && !def.card.IsCreature())     { return 1;  }   // Dragon Tempest
+    // reduces_spell_subtype_amount DEFAULTS to 1, so it cannot gate alone: require the named
+    // subtype (Shaman) or the chooses-a-type creature-only form (Incubator).
+    if (!def.params.reduces_spell_subtype.empty()
+        || (def.params.chooses_creature_type
+            && def.params.reduces_spell_subtype_creature_only)) { return 8; }   // Shaman + Incubator
+    if (def.params.etb_other_subtype_creates_tokens)   { return 9;  }   // Lathliss
+    if (ping)                                          { return 10; }   // Scourge of Valkas
+    if (def.card.IsCreature())                         { return 11; }   // the other dragons
+    return GenericProvider::CastOrderRank(s, def);     // rocks -> 5, Bolt/Greaves -> 20
+}
+
 // ---- DragonsProvider::CleanupDiscardCandidates ------------------------------
 //
 // USER-AUTHORED role-bucket policy (approved 2026-08-30; see

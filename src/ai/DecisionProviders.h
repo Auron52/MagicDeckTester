@@ -1073,6 +1073,10 @@ class DragonsProvider : public GenericProvider
 {
 public:
     const char* Name() const override { return "Dragons"; }
+    // CastOrderRank -- the USER's reviewed FULL order for this deck (2026-09-04): Dragon Tempest
+    // before everything, Lathliss then Scourge before the dragons they watch, Urza's Incubator
+    // with Dragonspeaker in the reducer tier. MTG_DRAGONS_ORDER=0 restores generic (A/B hatch).
+    int CastOrderRank(const GameState&, const CardDefinition&) const override;
     // The generic fallback is DESCENDING MANA VALUE, which on this deck sheds Utvara Hellkite (8),
     // then Lathliss/Inferno (6), then Glorybringer/Scourge (5) -- the payoffs in almost exactly
     // descending order of importance -- while keeping Lightning Bolt and Sol Ring. That is not
