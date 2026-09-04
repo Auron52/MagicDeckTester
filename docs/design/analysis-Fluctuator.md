@@ -543,6 +543,20 @@ changed** after each step, so every other deck is byte-identical.
 - seeds: 45001 games: 16
 - flags: 0 unresolved
 
+> **THE RECORD ABOVE IS STALE — the re-sweep is UN-RUN (2026-09-04), not deferred and not
+> signed off.** Play changed materially three times after `71e547d8` (§7.7: `41c35e9c`
+> dig-chain, `ffceaafd` fodder hold). This is not a cosmetic drift — a combo turn went from
+> at most 16 cycles that stopped at the first payoff to a 30+ cycle chain that runs until the
+> hand is dry, so the decision stream the sweep validated is not the one the deck plays now.
+> `verify_deck.py` still reports GATE PASS because a commit mismatch is only a *disclosed
+> staleness note*, and it warns why that is weak here: **Fluctuator is not a regression case,
+> so no digest tracks its play and nothing will ever tell you this record went stale.**
+> It was not re-run because this session's harness directs against agent fan-out; the repo's
+> standing rule (CLAUDE.md, 2026-08-26) is otherwise to run it without asking. Re-run before
+> treating this deck's play as verified:
+> `~16 games, base seed disjoint from the suite, one agent per game, Opus (CLAUDE.md overrides
+> the skill's Sonnet pin), flags verified against cards.json per Rule 0.`
+
 **16 games, one Opus agent each, seed base 45001 (disjoint from every suite seed).**
 It found **one confirmed engine bug — in code written this session — and it is exactly
 the class of bug this step exists to catch.**
