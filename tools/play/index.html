@@ -466,6 +466,12 @@
 <header>
   <h1>MagicDeckTester — Play</h1>
   <label>Deck <select id="deck"></select></label>
+  <!-- Archived/variant lists get their OWN select rather than being folded into the deck list.
+       A deck with three lists used to put three entries in the one dropdown, so the list grew with
+       every archived version and the shipping list was no longer the obvious pick (USER 2026-09-04:
+       "the one thing I don't want is them to all be included in the one huge dropdown"). Hidden
+       entirely for a deck that has only its shipping list, which is every deck but one today. -->
+  <label id="versionwrap" style="display:none">Version <select id="version"></select></label>
   <label>Seed <input id="seed" type="number" value="1"/></label>
   <button id="newgame" class="primary">New game</button>
   <button id="nextgame" title="increment Seed + Game# and start a fresh game">Next game ▸</button>
@@ -525,7 +531,20 @@ let S = { choices:[], history:[], decision:null, prev:null, over:false, result:n
 
 // The SELECTED deck entry (see /api/decks): carries the decklist file name and, for an
 // archived list, the version folder it lives in. Both travel on every request.
-const selDeck = () => (typeof DECK_META!=='undefined' && DECK_META[$('deck').value]) || { deck:$('deck').value, version:null };
+//
+// The selection is now TWO controls -- #deck holds a deck NAME, #version holds an entry id -- so the
+// id has to be recomposed rather than read straight off #deck. #version is authoritative whenever it
+// holds a value for the current deck; the fallback is the deck's shipping list, which is what a deck
+// with no variants (and the moment before fillVersions runs) resolves to.
+function selEntryId(){
+  const v=$('version'); const name=$('deck').value;
+  if (v && v.value && typeof DECK_META!=='undefined' && DECK_META[v.value]
+      && DECK_META[v.value].name===name) { return v.value; }
+  const list=(typeof DECKS_BY_NAME!=='undefined' && DECKS_BY_NAME[name]) || [];
+  const ship=list.find(d=>!d.version) || list[0];
+  return ship ? (ship.id||ship.deck) : name;
+}
+const selDeck = () => (typeof DECK_META!=='undefined' && DECK_META[selEntryId()]) || { deck:selEntryId(), version:null };
 
 function cfg(extra) {
   return Object.assign({
@@ -3482,8 +3501,33 @@ async function checkReference() {
     else { el.style.display='none'; el.textContent=''; el.title=''; }
   } catch(e){ el.style.display='none'; }
 }
-// Deck maturity, keyed by the deck FILE (the <option> value) -- see deckMaturity in server.js.
+// Deck maturity, keyed by the ENTRY ID (deck file, or "<file>@<version>") -- see deckMaturity in
+// server.js. NOT keyed by filename: an archived list shares its parent's filename, so keying by
+// file collapsed a deck's lists onto one entry and silently played the shipping list.
 const DECK_META={};
+// The same entries grouped by deck NAME, which is what #deck now holds. One group per deck; within
+// a group the shipping list (version null) is first, then archived lists alphabetically.
+let DECKS_BY_NAME={};
+
+// Fill the Version select for whichever deck is picked, and show it ONLY when there is a choice to
+// make. Keeps the current version when the deck has one by that name (re-selecting the same deck
+// must not silently jump you back to the shipping list).
+function fillVersions(){
+  const wrap=$('versionwrap'), sel=$('version'); if(!sel||!wrap) return;
+  const list=DECKS_BY_NAME[$('deck').value]||[];
+  const want=sel.value && DECK_META[sel.value] && DECK_META[sel.value].version;
+  sel.innerHTML=list.map(d=>{
+    const id=d.id||d.deck;
+    // "Current" rather than the deck name: the label sits under a control already titled Version,
+    // and repeating the deck name is exactly the noise this split removed from the deck list.
+    const lbl=d.version ? d.version : 'Current';
+    return `<option value="${esc(id)}"${d.hasProfile?'':' disabled'}>${esc(lbl)}${betaTag(d)}</option>`;
+  }).join('');
+  const keep=list.find(d=>d.version===want && d.hasProfile);
+  const pick=keep || list.find(d=>!d.version && d.hasProfile) || list.find(d=>d.hasProfile) || list[0];
+  if(pick) sel.value=pick.id||pick.deck;
+  wrap.style.display = list.length>1 ? '' : 'none';
+}
 // Three maturity tiers (see tierFrom in server.js): "(alpha)" is missing a piece of its apparatus,
 // "(beta)" has one but has not proven it -- fewer than 30 references, or the search does not match
 // the human win turn on the ones it has -- and the top tier carries no suffix at all.
@@ -3495,7 +3539,7 @@ const TIER_TAG={ unplayable:' (no profile)', alpha:' (alpha)', beta:' (beta)', s
 function betaTag(d){ return TIER_TAG[d.tier] !== undefined ? TIER_TAG[d.tier] : ''; }
 function showBetaNote(){
   const el=$('betanote'); if(!el) return;
-  const d=DECK_META[$('deck').value];
+  const d=DECK_META[selEntryId()];
   const reasons=(d && d.tierReasons) || [];
   if(!d || (d.tier!=='alpha' && d.tier!=='beta') || !reasons.length){
     el.style.display='none'; el.textContent=''; el.title=''; el.classList.remove('alpha'); return;
@@ -3521,7 +3565,23 @@ async function loadDecks() {
   // decks/<Deck>/<Version>/<Deck>.cod and so shares its parent's filename. Keying the option (and
   // DECK_META) by filename collapsed all of a deck's lists onto one entry, and selecting the
   // archived one silently played the shipping list.
-  $('deck').innerHTML=j.decks.map(d=>`<option value="${esc(d.id||d.deck)}"${d.hasProfile?'':' disabled'}>${esc(d.label||d.name)}${betaTag(d)}</option>`).join('');
+  // GROUPED BY DECK NAME. #deck holds one option per deck; its archived lists live in #version.
+  // A deck is selectable if ANY of its lists is playable -- gating on the shipping list alone would
+  // make a playable archived list unreachable whenever the current list has no profile yet.
+  DECKS_BY_NAME={};
+  j.decks.forEach(d=>{ (DECKS_BY_NAME[d.name] = DECKS_BY_NAME[d.name] || []).push(d); });
+  Object.values(DECKS_BY_NAME).forEach(l=>l.sort((a,b)=>(!!a.version - !!b.version)
+                                                       || String(a.version||'').localeCompare(String(b.version||''))));
+  const names=Object.keys(DECKS_BY_NAME).sort((a,b)=>
+      (DECKS_BY_NAME[b].some(x=>x.hasProfile) - DECKS_BY_NAME[a].some(x=>x.hasProfile)) || a.localeCompare(b));
+  $('deck').innerHTML=names.map(n=>{
+    const l=DECKS_BY_NAME[n], ship=l.find(d=>!d.version)||l[0], playable=l.some(d=>d.hasProfile);
+    // The tag describes the SHIPPING list (what you get by picking the deck and nothing else); each
+    // archived list carries its own tag on its own option below.
+    return `<option value="${esc(n)}"${playable?'':' disabled'}>${esc(n)}${betaTag(ship)}`
+         + `${l.length>1?` · ${l.length} lists`:''}</option>`;
+  }).join('');
+  fillVersions();
   if(!j.binExists) showError('Simulator binary not found — build it first:\n  Linux/macOS:  ./build.sh\n  Windows:      build.cmd\n\nOr start the viewer with ./play.sh (play.cmd on Windows), which builds it for you.');
   showBetaNote();     // reflect the initially-selected deck
   checkReference();   // reflect the initial deck/seed/game# on load
@@ -3566,7 +3626,8 @@ $('newgame2').onclick=newGame; $('nextgame2').onclick=nextGame;   // end-of-game
 $('optbtn').onclick=toggleOptMenu;
 $('saveref').onclick=()=>saveRef(false); $('saveref-sub').onclick=()=>saveRef(true);
 // Refresh the reference badge whenever the game selector changes.
-$('deck').addEventListener('change', ()=>{ showBetaNote(); checkReference(); });
+$('deck').addEventListener('change', ()=>{ fillVersions(); showBetaNote(); checkReference(); });
+$('version').addEventListener('change', ()=>{ showBetaNote(); checkReference(); });
 $('seed').addEventListener('input', checkReference);
 
 // Scryfall hover popover

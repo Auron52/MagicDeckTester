@@ -88,6 +88,18 @@ if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_deck_beta_check.js" ]; 
   fi
 fi
 
+# 0b) DECK SELECTION check (node + jsdom). Sub-second, no binary. The deck list is two controls --
+#     Deck holds one row per deck, archived lists live in their own Version select -- and the pair
+#     they resolve to travels on EVERY request. Getting the pair wrong does not throw: it plays the
+#     shipping list while the UI says otherwise. Deck-agnostic; skips when no deck has a variant.
+if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_deck_select_check.js" ]; then
+  echo "--- viewer deck select (one row per deck; archived lists resolve) ---"
+  if node "$HERE/viewer_deck_select_check.js"; then :; else
+    echo "FAIL: the viewer's deck/version selection does not resolve to the right decklist."
+    rc=1
+  fi
+fi
+
 # 1) Frontend line-build check (node). Sub-second, no binary.
 if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_linebuild_check.js" ]; then
   echo "--- viewer line-build check (frontend) ---"

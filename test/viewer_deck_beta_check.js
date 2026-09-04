@@ -292,12 +292,15 @@ if (!JSDOM) {
     await win.loadDecks();
     for (let i = 0; i < 50; i++) await tick();
     const sel = win.document.getElementById('deck');
-    const label = n => { const o = [...sel.options].find(o => o.value === n + '.cod'); return o ? o.textContent : '(missing)'; };
+    // The option VALUE is the deck NAME, not its filename: since 2026-09-04 #deck holds one row per
+    // deck and a deck's archived lists live in the separate #version select, so the entry id (which
+    // is what carries the filename, and "<file>@<version>" for an archived list) moved there.
+    const label = n => { const o = [...sel.options].find(o => o.value === n); return o ? o.textContent : '(missing)'; };
     ok(label('Stable') === 'Stable',              'a stable deck gets no suffix', label('Stable'));
     ok(label('Beta')   === 'Beta (beta)',         'an unproven deck is "(beta)"', label('Beta'));
     ok(label('Alpha')  === 'Alpha (alpha)',       'an apparatus-missing deck is "(alpha)"', label('Alpha'));
     ok(label('NoProf') === 'NoProf (no profile)', 'a profile-less deck stays "(no profile)"', label('NoProf'));
-    const noProfOpt = [...sel.options].find(o => o.value === 'NoProf.cod');
+    const noProfOpt = [...sel.options].find(o => o.value === 'NoProf');
     ok(noProfOpt && noProfOpt.disabled, 'a profile-less deck is still disabled');
 
     // The badge follows the SELECTED deck. It is a COMPACT CHIP -- visible text is the tier word
@@ -309,7 +312,7 @@ if (!JSDOM) {
     const refBadge = win.document.getElementById('refnote');
     ok(refBadge && badge.compareDocumentPosition(refBadge) & 2 /* PRECEDING */,
        'the reference-saved badge comes BEFORE the maturity chip, so it can never be pushed by it');
-    sel.value = 'Alpha.cod'; win.showBetaNote();
+    sel.value = 'Alpha'; win.showBetaNote();
     ok(badge.style.display !== 'none', 'the badge is shown for an alpha deck');
     ok(badge.classList.contains('alpha'), 'the alpha badge is styled differently from beta');
     ok(badge.textContent === 'alpha 0/10',
@@ -318,7 +321,7 @@ if (!JSDOM) {
     for (const r of FIXTURE[2].tierReasons) {
       ok(badge.title.includes(r), 'the tooltip names the reason: ' + r, badge.title);
     }
-    sel.value = 'Beta.cod'; win.showBetaNote();
+    sel.value = 'Beta'; win.showBetaNote();
     ok(badge.style.display !== 'none', 'the badge is shown for a beta deck');
     ok(!badge.classList.contains('alpha'), 'the beta badge drops the alpha styling on re-select',
        badge.className);
@@ -326,16 +329,16 @@ if (!JSDOM) {
        badge.textContent);
     ok(badge.title.includes('24/30 reference games'), 'the beta tooltip names its reason',
        badge.title);
-    sel.value = 'Alpha2.cod'; win.showBetaNote();
+    sel.value = 'Alpha2'; win.showBetaNote();
     ok(badge.textContent === 'alpha 13/30',
        'the fraction shows even when the count is NOT a tier reason (met 10, chasing 30)',
        badge.textContent);
-    sel.value = 'Beta2.cod'; win.showBetaNote();
+    sel.value = 'Beta2'; win.showBetaNote();
     ok(badge.textContent === 'beta',
        'past the last count requirement the chip is the bare tier word', badge.textContent);
-    sel.value = 'Stable.cod'; win.showBetaNote();
+    sel.value = 'Stable'; win.showBetaNote();
     ok(badge.style.display === 'none', 'the badge is hidden for a stable deck', badge.textContent);
-    sel.value = 'NoProf.cod'; win.showBetaNote();
+    sel.value = 'NoProf'; win.showBetaNote();
     ok(badge.style.display === 'none', 'the badge is hidden for a profile-less deck');
     finish();
   })().catch(e => { ok(false, 'UI rendering threw', String(e && e.message || e)); finish(); });
