@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "WHY: measured 2026-09-04 over 60 logged games, the combo funnel is two near-independent gates:",
+    "53% of games get an outlet + Peregrine Drake onto the battlefield, 55% get a SINK, and only 33%",
+    "get both. The engine is not at fault -- 84% of boards holding engine+sink went off, and of the",
+    "13 that assembled and did not, nine had no sink at all, so declining to loop was correct.",
+    "",
+    "The sink gate is a DECKBUILDING fact: the whole 60-card universe holds three sinks, and one of",
+    "them (Shivan Gorge) is LEGENDARY, taps only for {C}, and costs {2}{R} to fire in a deck with no",
+    "red source. The other two are singleton SIDEBOARD creatures reachable only off 4 Living Wishes.",
+    "",
+    "So: does maindecking the drain raise the go-off rate enough to pay for what it cuts? Cloud of",
+    "Faeries is the cut candidate because it untaps only TWO lands against a 3-mana blink, so it is",
+    "a marginal engine (it needs an aura'd land to be net-positive at all) where the Drake never is."
+  ],
+  "base": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "profile": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+  "games": 600,
+  "seed": 910000,
+  "max_turns": 8,
+  "combinations": {
+    "depleter3": { "Essence Depleter": 3, "Cloud of Faeries": 0 },
+    "depleter2": { "Essence Depleter": 2, "Cloud of Faeries": 1 }
+  },
+  "replace": {
+    "depleter3": { "Cloud of Faeries": "Essence Depleter" },
+    "depleter2": { "Cloud of Faeries": "Essence Depleter" }
+  }
+}

@@ -117,13 +117,25 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from analyze_deck import LoadDeckCounts, LoadImplementedNames, CheckExistingCoverage  # noqa: E402
 
 
-def read_decklist(path):
+def read_decklist(path, board="main"):
     """-> [(count, name)] in FILE ORDER. File order defines the base numbering, so it is load-bearing.
 
     Both formats, via analyze_deck's parser: 14 of the 17 decks in `decks/` are Cockatrice `.cod`
     XML, and a `.cod` fed to a split-on-space text parser does not fail loudly -- it yields nonsense
-    card names. `LoadDeckCounts` returns an insertion-ordered dict, so file order survives."""
-    return [(c, n) for n, c in LoadDeckCounts(Path(path)).items()]
+    card names. `LoadDeckCounts` returns an insertion-ordered dict, so file order survives.
+
+    board="side" reads the sideboard, which a wish deck needs carried onto every arm."""
+    return [(c, n) for n, c in LoadDeckCounts(Path(path), board=board).items()]
+
+
+def decklist_body(ordered, side):
+    """The text a decklist file holds: main zone, then the side zone under the header the loaders
+    recognise. ONE helper because three call sites write decklists here and two of them silently
+    omitted the sideboard -- see Spec.side for what that cost."""
+    body = "\n".join(f"{c} {n}" for c, n in ordered) + "\n"
+    if side:
+        body += "Sideboard\n" + "\n".join(f"{c} {n}" for c, n in side) + "\n"
+    return body
 
 
 def base_numbering(deck):
@@ -505,6 +517,16 @@ class Spec:
         self.threads = int(s.get("threads", 0))
         self.base_path = s["base"] if os.path.isabs(s["base"]) else os.path.join(ROOT, s["base"])
         self.deck  = read_decklist(self.base_path)
+        # THE SIDEBOARD IS PART OF THE DECK when anything wishes for it. LoadDeckCounts defaults to
+        # board="main", so every arm decklist was written WITHOUT a side zone -- which turns a Living
+        # Wish into a blank and, worse, silently deletes whatever the base kept back there. On
+        # EldraziDisplacerFlicker that is the deck's only two repeatable mana sinks (Essence Depleter,
+        # Dimensional Infiltrator), so a screen of "should we maindeck a sink?" would have compared an
+        # arm holding one against a base holding NONE -- biased towards the change under test, in
+        # silence. Same bug class as the scenario harness never dealing the wish pool (analysis doc
+        # section 12g). Carried through unchanged: no combination may edit it, because a sideboard
+        # count is not one of the knobs a screen turns.
+        self.side  = read_decklist(self.base_path, board="side")
         self.counts = {n: c for c, n in self.deck}
         self.nums   = base_numbering(self.deck)
         # The arm decklists are always written as <name>.txt, whatever the base's format: the engine
@@ -599,7 +621,7 @@ class Spec:
         ordered  = [(counts[n], n) for _, n in self.deck if counts.get(n)]
         ordered += [(counts[n], n) for n in sorted(set(counts) - set(self.counts))]
         dp = os.path.join(outdir, self.stem)
-        open(dp, "w").write("\n".join(f"{c} {n}" for c, n in ordered) + "\n")
+        open(dp, "w").write(decklist_body(ordered, self.side))
         np_ = os.path.join(outdir, "numbering.json")
         nums = (self.nums if tag == "base" else
                 inherit_numbering(self.nums, self.counts, counts, self.replace.get(tag)))
@@ -854,7 +876,7 @@ def pool_profile(spec, unscored):
         return out
 
     deck = os.path.join(gen, spec.name + ".txt")
-    open(deck, "w").write("\n".join(f"{c} {n}" for c, n in ordered) + "\n")
+    open(deck, "w").write(decklist_body(ordered, spec.side))
     log = os.path.join(spec.out, "poolgen.log")
     print(f"  deriving card scores for {', '.join(unscored)} over the {sum(union.values())}-card union"
           f"\n  (one mtg-analyze run, log {os.path.relpath(log, ROOT)})")
@@ -934,7 +956,7 @@ def pool_table(spec, why, dry=False):
     ordered  = [(counts[n], n) for _, n in spec.deck if counts.get(n)]
     ordered += [(counts[n], n) for n in sorted(set(counts) - set(spec.counts))]
     deck = os.path.join(d, spec.stem)
-    open(deck, "w").write("\n".join(f"{c} {n}" for c, n in ordered) + "\n")
+    open(deck, "w").write(decklist_body(ordered, spec.side))
     log = os.path.join(spec.out, "pooltable.log")
     print(f"  keep table     {why}\n"
           f"                 generating a POOL table (R={R}) over the {sum(counts.values())}-card union"
