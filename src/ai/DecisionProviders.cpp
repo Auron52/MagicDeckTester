@@ -13470,7 +13470,27 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
             const int refund = FlickerTopLandYields(s, controller, n);
             const int net = refund - cost_mv;
             if (net <= 0) { continue; }
-            if (best.ok && net <= best.net) { continue; }
+            // TIE-BREAK BY UNTAP COUNT -- load-bearing, not cosmetic, and MEASURED (2026-09-04).
+            //
+            // `refund` is the top-N land yields, so it SATURATES once N exceeds the land count: on a
+            // two-land board a Peregrine Drake (5) and a Cloud of Faeries (2) refund the same amount
+            // and tie on net. A plain `net <= best.net` then keeps whichever sat earlier in
+            // battlefield order -- and if that was the Cloud, this recognizer names the Cloud as the
+            // payload while BlinkTargetCandidates offers only the Drake (the best untapper, per the
+            // user's rule). BlinkActivationCounts requires `loop.payload_id == target`, so the two
+            // disagree and the go-off count is offered for NEITHER: the Drake is the only target and
+            // it is not the recognised payload, and the Cloud is the payload but is never a target.
+            //
+            // The failure was insertion-order-dependent, which is why no aggregate would find it.
+            // On one board, swapping only the order of the two creatures moved the offered counts
+            // from `1 2 3` to `1 2 3 40` -- i.e. the deck's kill was reachable or unreachable
+            // according to which untapper happened to be added first. Pinned by
+            // test/unit/test_edf_blink_target.cpp, which asserts BOTH orders.
+            //
+            // Preferring more untaps on an exact net tie makes the two agree by construction: for a
+            // fixed outlet `net` is monotone nondecreasing in N, so the max-net payloads always
+            // include the max-N one, and picking it is exactly what BlinkTargetCandidates returns.
+            if (best.ok && (net < best.net || (net == best.net && n <= best.untaps))) { continue; }
             best.ok = true; best.outlet_id = src.card.m_number; best.payload_id = tgt.card.m_number;
             best.untaps = n; best.cost_mv = cost_mv; best.refund = refund; best.net = net;
         }
@@ -13571,7 +13591,12 @@ FlickerLoop RecogniseFlickerLoopProspective(const GameState& s, int controller,
             FlickerLoop cand;
             FlickerEconomics(s, controller, od, pd, &cand);
             if (cand.net <= 0) { continue; }                       // point 4: unbounded or nothing
-            if (best.ok && cand.net <= best.net) { continue; }
+            // Same untap-count tie-break as the board recognizer above, for the same reason: the
+            // refund saturates at the land count, so two payloads tie on net and the arbitrary
+            // winner would be list order (here: battlefield order, then the plan's cast order). The
+            // two recognizers must never disagree about which payload a board supports.
+            if (best.ok && (cand.net < best.net
+                            || (cand.net == best.net && cand.untaps <= best.untaps))) { continue; }
             cand.ok = true; cand.prospective = true;
             best = cand;
         }
@@ -13769,24 +13794,32 @@ std::vector<int> EldraziFlickerProvider::BlinkTargetCandidates(const GameState& 
     }
     std::vector<int> out;
     if (best_payload  != 0) { out.push_back(best_payload); }
-    // USER RULE (2026-09-04): "in the search Drake should always be targeted if available."
+    // USER RULE (2026-09-04): "in the search Drake should always be targeted if available" --
+    // CLARIFIED the same day: "we should target Cloud of Faeries if Drake is not there, it is just
+    // that the drake has the strictly better ETB ability."
     //
-    // `best_payload` IS that Drake -- it is the highest etb_untap_lands on the board, and Peregrine
-    // Drake's 5 is the deck's maximum. When one is available the attacker branch is dropped
-    // entirely, so the search spends its whole blink budget on the line that actually goes off
-    // rather than splitting it with the grow-an-attacker line.
+    // So the rule is BEST UNTAPPER, not Drake. `best_payload` is already exactly that: the highest
+    // etb_untap_lands on the board, by card PARAMS and never by name. Peregrine Drake's 5 outranks
+    // Cloud of Faeries' 2, which is the whole of "strictly better" -- both are the same ability and
+    // the deck holds no other. Drop the Drake and the Cloud is the candidate; hold both and only
+    // the Drake is offered. (Pinned three ways in test/unit/test_edf_blink_target.cpp, because the
+    // Cloud-only board is the case a Drake-shaped implementation would get wrong.)
+    //
+    // When an untapper is available the attacker branch is dropped entirely, so the search spends
+    // its whole blink budget on the line that actually goes off rather than splitting it with the
+    // grow-an-attacker line.
     //
     // The reasoning behind the rule, which is why it is safe as a hard preference rather than a
-    // score nudge: blinking the untapper is the ONLY target that refunds its own activation cost,
-    // so it is the only one that can be repeated. Every other target is a one-shot that spends {3}
-    // for one ETB. Growing an attacker with Emiel's counters is real, but it cashes NEXT turn
-    // (a blinked creature comes back summoning-sick), whereas the untap loop can win THIS one --
-    // and if the loop is live, its iterations put those same counters on anyway.
+    // score nudge: blinking the untapper is the ONLY target that refunds part of its own activation
+    // cost, so it is the only one that can be repeated. Every other target is a one-shot that
+    // spends {3} for one ETB. Growing an attacker with Emiel's counters is real, but it cashes NEXT
+    // turn (a blinked creature comes back summoning-sick), whereas the untap loop can win THIS one
+    // -- and if the loop is live, its iterations put those same counters on anyway.
     //
-    // MTG_EDF_BLINK_DRAKE_ONLY=0 restores the two-candidate set.
-    static const bool s_drake_only = EnvOn("MTG_EDF_BLINK_DRAKE_ONLY", true);
+    // MTG_EDF_BLINK_UNTAPPER_ONLY=0 restores the two-candidate set.
+    static const bool s_untapper_only = EnvOn("MTG_EDF_BLINK_UNTAPPER_ONLY", true);
     const bool have_untapper = (best_payload != 0 && best_untaps > 0);
-    if (!(s_drake_only && have_untapper)
+    if (!(s_untapper_only && have_untapper)
         && best_attacker != 0 && best_attacker != best_payload)
     { out.push_back(best_attacker); }
     return out;

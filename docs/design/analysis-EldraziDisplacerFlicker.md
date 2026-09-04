@@ -1857,9 +1857,11 @@ EMPTY `spec.blinks` keeps the legacy cast-multiset matching, so every saved refe
 by construction. Verified: `@42` resolves to the Drake plan, `@200002` to the Cloud of Faeries plan,
 a bare `blink=` and a legacy `cast=` both still accept, and a nonexistent target verdicts `illegal`.
 
-### 8. USER HEURISTIC: the search always blinks the Drake when one is available
+### 8. USER HEURISTIC: the search always blinks the BEST UNTAPPER when one is available
 
 USER: *"In the search Drake should always be targeted if available. (a heuristic rule)."*
+USER, clarifying: *"we should target Cloud of Faeries if Drake is not there, it is just that the
+drake has the strictly better ETB ability."*
 
 `EldraziFlickerProvider::BlinkTargetCandidates` already ranked the Drake first -- `best_payload` is
 the highest `etb_untap_lands` on the board and Peregrine Drake's 5 is the deck's maximum -- but it
@@ -1867,10 +1869,75 @@ returned a SECOND candidate too, the best attacker to grow with Emiel's counters
 untapper is available, the attacker branch is dropped and the whole blink budget goes to the line
 that actually goes off.
 
+**The rule is "best untapper", not "Drake".** That distinction is the user's clarification and it is
+what the code has always computed: the ranking is by the `etb_untap_lands` param, never by name, so
+Drake (5) outranks Cloud of Faeries (2) only because 5 > 2, and on a board with no Drake the Cloud
+is the candidate. The deck holds exactly these two untappers, so the two readings differ on exactly
+one board -- Cloud present, Drake absent -- which is why that case is the one the tests exist for.
+The flag was named `MTG_EDF_BLINK_DRAKE_ONLY` and is now `MTG_EDF_BLINK_UNTAPPER_ONLY`, because a
+name that asserts a card the rule does not mention is the same class of defect as the misleading
+plan label in §6: the behaviour was right and the label was wrong.
+
 The rule holds up on its own terms, which is why it is safe as a hard preference rather than a score
-nudge: blinking the untapper is the only target that refunds its own activation cost, so it is the
-only one that can be REPEATED. Every other target spends {3} for one ETB. Growing an attacker is
-real but cashes NEXT turn (a blinked creature returns summoning-sick), whereas the untap loop can
+nudge: blinking the untapper is the only target that refunds part of its own activation cost, so it
+is the only one that can be REPEATED. Every other target spends {3} for one ETB. Growing an attacker
+is real but cashes NEXT turn (a blinked creature returns summoning-sick), whereas the untap loop can
 win this one -- and if the loop is live, its iterations put those same counters on anyway.
-`MTG_EDF_BLINK_DRAKE_ONLY=0` restores the two-candidate set. Not yet A/B'd: EDF is not in the
-regression suite, so this needs a deck-specific pooled run, which is queued rather than done.
+`MTG_EDF_BLINK_UNTAPPER_ONLY=0` restores the two-candidate set.
+
+**Pinned by `test/unit/test_edf_blink_target.cpp`** (4 cases): Drake preferred over a Cloud sharing
+the board; **Cloud is the target with no Drake**; the attacker branch survives when there is no
+untapper at all; and `blink_own_only` excludes an opponent's Drake, so "best untapper" is read
+within the legal target set rather than naming an untargetable one and suppressing the attacker in
+favour of nothing. A unit test rather than a scenario fixture on purpose -- what is under test is
+the CANDIDATE SET, and blinking a Cloud is mana-negative on its own ({3} for two untaps), so no
+reachable win turn or life total separates "offered" from "offered and correctly declined". The
+cases were checked to DISCRIMINATE, not merely to pass: with `MTG_EDF_BLINK_UNTAPPER_ONLY=0` the two
+that carry the rule fail and the other two are unaffected.
+
+Still not A/B'd: EDF is not in the regression suite, so the *value* of the preference needs a
+deck-specific pooled run, which is queued rather than done. The unit tests fix the behaviour, they
+do not measure it.
+
+### 9. The go-off count was gated on BATTLEFIELD INSERTION ORDER (found by testing §8, not reported)
+
+Writing the §8 tests surfaced a second, unreported bug in the same Drake-vs-Cloud choice — and it
+was found by *running* the pair of heuristics against each other rather than by reading them.
+
+**Two heuristics have to agree and did not.** `BlinkActivationCounts` proposes the one big "finish
+it" iteration count only when `loop.payload_id == target`, where the target is whatever
+`BlinkTargetCandidates` offered. So the go-off recognizer and the target preference must name the
+same untapper. `FlickerTopLandYields` sums the **top-N** land yields, which means the refund
+**saturates at the land count**: on a two-land board a Peregrine Drake (untap 5) and a Cloud of
+Faeries (untap 2) hand back the same mana and tie on `net`. `RecogniseFlickerLoop` broke that tie
+with `net <= best.net`, i.e. it kept whichever creature sat **earlier in `s.battlefield`** — so with
+the Cloud earlier it named the Cloud as payload while the preference offered only the Drake. The
+go-off count was then offered for **neither**: the Drake is the only target but is not the payload,
+and the Cloud is the payload but is never a target.
+
+**Measured, on one board, changing nothing but the order the two creatures were added:**
+
+| battlefield order | target offered | counts from `BlinkActivationCounts` |
+|---|---|---|
+| Cloud, then Drake | Drake | `1 2 3` |
+| Drake, then Cloud | Drake | `1 2 3` **`40`** |
+
+The deck's kill was reachable or unreachable according to insertion order. Nothing aggregate could
+have found this: both arms are legal play, the difference is one absent candidate, and it is
+invisible in a win-rate or an avg-win-turn until it happens to matter.
+
+**Fix:** on an exact `net` tie both recognizers now prefer the **larger untap count** (the board one
+and `RecogniseFlickerLoopProspective`, which had the identical tie-break and would have drifted from
+it otherwise). That makes them agree *by construction* rather than by coincidence: for a fixed
+outlet `net` is monotone nondecreasing in N, so the max-net payloads always contain the max-N one,
+and max-N is exactly what `BlinkTargetCandidates` returns.
+
+Pinned by `test/unit/test_edf_blink_target.cpp`, which asserts **both orders** — a single-order test
+would have passed for the whole life of the bug. Checked to discriminate: restore `net <= best.net`
+and the Cloud-first order fails.
+
+**Method note.** §5 of this ledger records a claim I made by hand-derivation that the user had to
+correct, and the queue above records a ~60-line reservation feature built on a hypothesis that one
+A/B refuted. This bug is the same lesson from the other side: the two heuristics *read* as though
+they agreed, and one probe that ran them against each other showed they did not. On this deck,
+derive nothing about mana or lines that a command could tell you instead.
