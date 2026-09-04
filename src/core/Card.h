@@ -179,6 +179,35 @@ struct ManaCost
         for (int i = 0; i < colorless; ++i) { s += "{C}"; }
         return s;
     }
+
+    // DISPLAY-ONLY rendering that keeps hybrid pips intact ({R/W}{G} rather than ToString()'s
+    // {R}{G}). Strictly separate from ToString() because that one is folded into the regression
+    // PLAY DIGEST (GameLogger::LogCastSpell manaPaid), so it must keep rendering the baked first
+    // colour forever -- see its note. This one has no such consumer: it exists for the human-facing
+    // decision JSON, where showing Trace of Abundance as {R}{G} tells the player the deck's white
+    // sources cannot cast it, which is false and is exactly the kind of thing a play viewer must
+    // not get wrong. Identical to ToString() for every cost with no hybrid pip.
+    std::string ToDisplayString() const
+    {
+        if (hybrid_count == 0) { return ToString(); }
+        int rem[6] = { white, blue, black, red, green, colorless };
+        static const char* kSym[6] = { "W", "U", "B", "R", "G", "C" };
+        auto sym = [&](int col) -> const char*
+        { return (col >= 0 && col < 6) ? kSym[col] : "?"; };
+        std::string s;
+        if (has_x)       { s += "{X}"; }
+        if (generic > 0) { s += "{" + std::to_string(generic) + "}"; }
+        // Hybrids first (printed order), each un-baked from the first colour's flat count.
+        for (int i = 0; i < hybrid_count; ++i)
+        {
+            const int c1 = hybrid_pair[i] >> 4, c2 = hybrid_pair[i] & 0xF;
+            if (c1 >= 0 && c1 < 6 && rem[c1] > 0) { --rem[c1]; }
+            s += "{"; s += sym(c1); s += "/"; s += sym(c2); s += "}";
+        }
+        for (int c = 0; c < 6; ++c)
+        { for (int i = 0; i < rem[c]; ++i) { s += "{"; s += sym(c); s += "}"; } }
+        return s;
+    }
 };
 
 struct Card

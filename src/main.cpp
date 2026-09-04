@@ -246,7 +246,20 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         const Action& a = plan.actions[0];
         return (a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name + " to draw";
     }
-    if (plan.land_decided && !plan.land_to_play.empty()) { os << "land=" << plan.land_to_play << "; "; }
+    if (plan.land_decided && !plan.land_to_play.empty())
+    {
+        os << "land=" << plan.land_to_play;
+        // RAD MODE (Mariposa Military Base: "You may have this land enter tapped. If you do, you get
+        // two rad counters"). A real SEARCHED axis -- EnumeratePlans duplicates every land plan, one
+        // per mode -- so leaving it out of the summary made 62 of turn 3's 168 plans byte-identical
+        // TWINS of the other 106. Picking index 119 instead of 13 gave a different game (life 18 /
+        // library 47 rather than 20 / 49) off two menu entries that read exactly the same, which is
+        // the one thing a decision menu must never do. Only ACCEPT is annotated: rad_mode -1 is
+        // "no such land in this plan" and 0 is the ordinary decline, and both print as they always
+        // did, so every deck without such a land is byte-identical.
+        if (plan.rad_mode == 1) { os << " (enters tapped, +rad)"; }
+        os << "; ";
+    }
     else if (plan.land_decided)                           { os << "land=none; "; }
     std::vector<std::string> casts;
     for (const Action& a : plan.actions)
@@ -461,7 +474,9 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         if (!hand_first) { os << ", "; }
         hand_first = false;
         os << "{ \"num\": " << hc->m_number << ", \"name\": "; JsonStr(os, hc->m_name);
-        os << ", \"cost\": "; JsonStr(os, d ? d->card.m_mana_cost.ToString() : std::string());
+        // ToDisplayString, not ToString: the player must see {R/W}{G}, not the baked {R}{G} (see
+        // ManaCost). This is a human-facing field only -- no digest folds it.
+        os << ", \"cost\": "; JsonStr(os, d ? d->card.m_mana_cost.ToDisplayString() : std::string());
         os << ", \"mv\": " << (d ? d->card.m_mana_cost.ManaValue() : 0);
         os << ", \"kind\": \"" << HandKind(d) << "\"";
         if (HandIsDraw(d)) { os << ", \"is_draw\": true"; }
@@ -875,6 +890,11 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         os << ", \"land\": ";
         if (p.land_decided && !p.land_to_play.empty()) { JsonStr(os, p.land_to_play); }
         else                                            { os << "null"; }
+        // The searched rad mode, structured (the summary above carries the human-readable half).
+        // Emitted only when the plan actually HAS the choice, so every existing reference and every
+        // deck without such a land serialises byte-identically. 1 = enter tapped and take the
+        // counters, 0 = decline; -1 (no such land) is omitted.
+        if (p.rad_mode >= 0) { os << ", \"rad_mode\": " << p.rad_mode; }
         // Plain name list (used for the land+cast multiset match). Land's Edge activations
         // are NOT casts -- they are surfaced via the action's "landsedge" count below and the
         // top-level "lands_edge" object, so the GUI's cast match doesn't treat them as spells.
