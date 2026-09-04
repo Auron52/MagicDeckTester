@@ -2803,7 +2803,10 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
             if (!validate_line.empty())
             {
                 TurnSolver::LineSpec spec = ParseLineSpec(validate_line);
-                TurnSolver::LineCheck chk = TurnSolver::CheckLine(s, is_pre, spec);
+                // Hand CheckLine the menu the engine just enumerated -- the SAME list `--choices`
+                // will index when the viewer commits the variant it picks. Without this the two
+                // lists disagree and the human's chosen variant applies a different plan.
+                TurnSolver::LineCheck chk = TurnSolver::CheckLine(s, is_pre, spec, &plans);
                 using Vd = TurnSolver::LineCheck::Verdict;
                 const char* vstr =
                     chk.verdict == Vd::Accept             ? "accept" :

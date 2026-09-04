@@ -1179,8 +1179,27 @@ public:
         std::string failed_action;           // Illegal: the action that could not be made
         std::vector<LineVariant> variants;   // Choose: the distinct sub-decision variants
     };
+    // `menu` = the plan list the CALLER already enumerated and will COMMIT against, or nullptr to
+    // enumerate one internally.
+    //
+    // Passing it is not an optimisation, it is a correctness requirement for the play viewer, and
+    // the bug it fixes was reported as "it put the Trace of Abundance on the Conservatory when I
+    // specifically put it on the Aether Hub". The viewer picks a variant by `plan_index` in one
+    // process and commits that integer with --choices in ANOTHER, so the index has to mean the same
+    // thing in both. It did not: EnumerateMainPlans called a SECOND time on the SAME state returns a
+    // DIFFERENT list (measured on EldraziDisplacerFlicker seed 1 turn 3 -- the engine's own menu
+    // holds 203 plans, CheckLine's re-enumeration 201, missing a cast-ORDER variant at index 50), so
+    // every variant from that point on named a plan one place to its left. The human picked
+    // "Trace -> Aether Hub" at index 56 and the engine applied index 56 of its own list, which is
+    // "Trace -> Conservatory". The mana went with it, which is the same report's other half ("the
+    // mana was used incorrectly ... I should still have some floating and I don't").
+    //
+    // So the caller's list is the authority whenever there is one. nullptr keeps the old behaviour
+    // for callers with no menu to be consistent with (the --scenario harness), which never commit
+    // by index.
     static LineCheck CheckLine(const GameState& state, bool is_pre_combat,
-                               const LineSpec& spec);
+                               const LineSpec& spec,
+                               const std::vector<Plan>* menu = nullptr);
 
     // Returns the plan that leads to the earliest win, evaluated by simulating
     // the rest of the game for each candidate play at this turn.

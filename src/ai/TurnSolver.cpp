@@ -33826,7 +33826,8 @@ static bool BlinksMatch(const std::vector<TurnSolver::LineSpec::BlinkSpec>& want
 }
 
 TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_combat,
-                                            const LineSpec& spec)
+                                            const LineSpec& spec,
+                                            const std::vector<Plan>* menu)
 {
     using V = LineCheck::Verdict;
     LineCheck out;
@@ -33918,7 +33919,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // sub-decisions, different order) collapse to one representative by their param signature.
     // (Crackle's full target-count range is gated on HumanPlayActive() in CollectActions, which is
     // true here AND in the apply re-run, so the count variants' plan indices stay consistent.)
-    std::vector<Plan> plans = EnumerateMainPlans(state, is_pre_combat);
+    // THE CALLER'S LIST WINS. Re-enumerating here is not equivalent: a second EnumerateMainPlans on
+    // the same state does not reproduce the first one's list, so every plan_index this function
+    // hands back would name a different plan in the menu the viewer commits against. See the header.
+    std::vector<Plan> own;
+    if (menu == nullptr) { own = EnumerateMainPlans(state, is_pre_combat); }
+    const std::vector<Plan>& plans = (menu != nullptr) ? *menu : own;
 
     // Collect every plan matching land + cast-name MULTISET, recording each plan's cast order and
     // a sub-decision signature/label (tutor target / X / Ponder keep / Soulfire count / fetch

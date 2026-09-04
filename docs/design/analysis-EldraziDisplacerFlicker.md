@@ -2402,3 +2402,55 @@ Two things follow that are worth stating plainly:
 wrong result, it was a fixture that quietly did not exercise the thing it named — and it cost a
 conclusion in this very document. A fixture that stages a card whose effect touches a zone the
 harness does not build is testing the harness, not the engine.
+
+### 13. SEED 1 IS A TURN-3 KILL — PROVEN BY HAND (2026-09-04)
+
+The user played it: `logs/play/claude_s1_gi0.json`, **`won: true, win_turn: 3`**. This retires every
+"is the deck actually that fast" question and turns the T3 gap into a pure search problem — the line
+exists, is rules-legal, and the engine's own enumerator offers every step of it.
+
+The line, from the saved decisions:
+
+| turn | play |
+|---|---|
+| 1 | `land=Conservatory`, cast nothing |
+| 2 | `land=Aether Hub`, **both** Wild Growths — one on Aether Hub, one on Conservatory |
+| 3 | `land=Mariposa`; Trace of Abundance; Living Wish -> **Cloud of Faeries**; cast Cloud of Faeries; Peregrine Drake; Peregrine Drake; Emiel the Blessed; then ~30 blinks of Peregrine Drake, three Mariposa draws folded in, a **second Living Wish -> Essence Depleter**, cast it, and keep blinking |
+
+**Turn 3 is 47 committed segments in ONE main phase.** That is the part the engine cannot express: a
+plan is atomic, so no single enumerated plan can say "blink, draw off Mariposa, wish, cast what you
+drew, blink again". The human reached it only because Commit Line now stops at the line (12g/§ above);
+under the old rule the phase ended and the line was unreachable by hand at all.
+
+So the T3 gap is NOT the go-off count, the colour gate, or the sinks — all of those are fixed and
+measured. It is that the deck's real turn-3 kill is a *sequence of dependent segments*, and the
+search only ever scores one segment at a time. That is the next real piece of work, and this log is
+the target to reproduce.
+
+#### 13a. Three viewer bugs the same session, all found by playing it
+
+1. **CheckLine's `plan_index` named a different plan than the one the viewer commits.** Root cause:
+   `EnumerateMainPlans` is **not idempotent** — measured on this exact state, the first call returns
+   **203** plans and every later call **201**, the missing two being cast-ORDER variants. CheckLine
+   re-enumerated its own list, so from the first divergence (index 50, a `Trace-first` ordering) every
+   variant named the plan one place to its left. The user picked `Trace -> Aether Hub` (variant 56)
+   and the engine applied its own plan 56, `Trace -> Conservatory`. Fixed by passing the caller's menu
+   into `CheckLine` — the list the commit will index is the only list allowed to define an index.
+   **The non-idempotency itself is NOT fixed and is a latent hazard for any other two-call site.**
+2. **The blink loop auto-fired Essence Depleter.** Today's drain fix spends the loop's surplus without
+   asking, which is right for the search (-0.0812 turns) and wrong for a human: *"I was losing mana
+   every time Peregrine Drake was untapped ... It seems you cannot activate Essence Depleter
+   yourself."* Both halves are the bug — the engine took the decision and the human could not take it
+   back. Now gated on `!HumanPlayActive()`, the same repair the earlier viewer/heuristic collisions
+   took. Shivan Gorge's damage sink has the identical shape and is NOT yet gated.
+3. **An Aura could not be dropped on the land being played** — fixed, see `tools/play/DECISIONS.md`.
+
+#### 13b. Open, from the same session
+
+* **A "finish the game" shortcut once the combo is live** (user request). With unbounded mana on
+  board, 30 hand-driven blink segments is the wrong interface.
+* **The viewer shows neither ENERGY nor FLOATING MANA.** For this deck energy decides whether Aether
+  Hub makes a colour at all — the difference between Emiel being castable and not — and floating mana
+  is exactly what the user was trying to account for. Neither is in the decision payload.
+* **`EnumerateMainPlans` non-idempotency** (above). Worth root-causing on its own: the first call
+  produces two extra ordering variants that no later call reproduces.

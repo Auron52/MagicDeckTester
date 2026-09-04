@@ -9780,6 +9780,7 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
 // 40 wins exactly as often as 0. So the naive twin -- "spend whatever is spare, every iteration" --
 // is not conservative here, it is a way to convert a real post-loop cast into nothing at all.
 //
+// NOT IN HUMAN PLAY -- see the !HumanPlayActive() gate at both call sites in ApplyBlinkLoop.
 // Hence ALL OR NOTHING: it buys the whole remaining library or it spends not one mana. That makes
 // the routine non-negative BY CONSTRUCTION -- when it spends, the game ends this turn, so there is
 // no line it can take mana away from. It is also why
@@ -10340,12 +10341,28 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         //
         // Byte-identical for every deck without a drain sink: SpendSurplusOnDrain returns 0 on an
         // empty candidate scan, and `drain_cost` is carried by exactly one card in cards.json.
-        SpendSurplusOnDrain(state, controller, c, pay);
-        // The library-exile sink rides the same position for the same reason. No keep_payable: it
-        // is all-or-nothing, so on the pass where it spends anything at all the game is over and
-        // there is no next iteration to protect -- a failed pay() below is then the correct
-        // outcome, not a starved loop.
-        SpendSurplusOnExile(state, controller, pay);
+        // AUTONOMOUS PLAY ONLY. These two spend the loop's surplus without asking, which is right
+        // for the search (face damage and a deck-out are monotone against a passive opponent, and
+        // the drain is worth -0.0812 turns) and WRONG for a human, who watched their float vanish
+        // into drains they never chose. USER, 2026-09-04, mid-combo: "I was losing mana every time
+        // Peregrine Drake was untapped because it was also activating Essence Depleter. It seems
+        // you cannot activate Essence Depleter yourself." Both halves of that are the bug: the
+        // engine took the decision AND the human could not take it back.
+        //
+        // Scoping a measured-best resolution heuristic to !HumanPlayActive() is the established
+        // repair here -- the same shape as the two viewer bugs that came out of measured heuristics
+        // playing the human's turn for them. The search keeps every point of the measurement (it
+        // never sets HumanPlayActive), and the human keeps their mana and their choice: Essence
+        // Depleter has its own searched ActivatePermAbility, which is what the menu should offer.
+        if (!HumanPlayActive())
+        {
+            SpendSurplusOnDrain(state, controller, c, pay);
+            // The library-exile sink rides the same position for the same reason. No keep_payable:
+            // it is all-or-nothing, so on the pass where it spends anything at all the game is over
+            // and there is no next iteration to protect -- a failed pay() below is then the correct
+            // outcome, not a starved loop.
+            SpendSurplusOnExile(state, controller, pay);
+        }
     }
     // One last damage-sink pass with nothing held back: the loop is over, so there is no next
     // iteration to keep payable and any float left is genuinely surplus. Only after a loop that
@@ -10354,8 +10371,11 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     if (done > 0)
     {
         SpendSurplusOnDamageSinks(state, controller, ManaCost{}, pay);
-        SpendSurplusOnDrain(state, controller, ManaCost{}, pay);
-        SpendSurplusOnExile(state, controller, pay);
+        if (!HumanPlayActive())
+        {
+            SpendSurplusOnDrain(state, controller, ManaCost{}, pay);
+            SpendSurplusOnExile(state, controller, pay);
+        }
     }
     return done;
 }
