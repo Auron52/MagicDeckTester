@@ -1,0 +1,45 @@
+{
+ "_comment": [
+  "The SOUNDNESS half of edf_land_aura_unlocks_color_same_turn. A land Aura's bonus is same-turn",
+  "supply only if a land survives the Aura's OWN cost still untapped to host it -- and this fixture",
+  "is the board where it does not.",
+  "",
+  "Board: a lone untapped Brushland. Hand: two Wild Growths ({G} each). Casting the first taps the",
+  "Brushland, which is then the only land there is to enchant -- so its additional {G} cannot arrive",
+  "this turn and the second Wild Growth is unpayable. Exactly one is castable.",
+  "",
+  "This is the fixture that says WHERE the Aura credit is allowed to live. Stamping it optimistically",
+  "at enumeration (an a.rock_mana-style 'this cast adds {G}') would admit BOTH here, which is the",
+  "same unsound-credit shape the etb_untap_lands note in CollectActions records: the enumerator spends",
+  "its breadth offering plans whose mana the executor cannot make, and human play gets offered them.",
+  "The credit therefore lives in SubsetPayableWithFilters -- a real-payment simulation, where taps",
+  "persist across the casts and the host-still-untapped condition holds by construction.",
+  "",
+  "Restore the credit as an enumeration stamp and this fixture goes green-to-red; that is the check",
+  "that it DISCRIMINATES rather than merely passing."
+ ],
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "turn": 2,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 20,
+ "energy_counters": 0,
+ "battlefield": [
+  { "name": "Brushland", "controller": 0, "tapped": false }
+ ],
+ "hand": [
+  "Wild Growth",
+  "Wild Growth"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 8,
+ "env": {
+  "MTG_HUMAN_PLAY": "1",
+  "MTG_UNPRUNED": "1"
+ },
+ "validate_line": "cast=Wild Growth;cast=Wild Growth",
+ "expect_verdict": "illegal"
+}

@@ -1,0 +1,58 @@
+{
+ "_comment": [
+  "A land AURA cast in the SAME PLAN unlocks the colour it grants, for a LATER cast in that plan.",
+  "",
+  "Board: Aether Hub under two Wild Growths (taps {C}{G}{G}), Conservatory (G/W), Brushland (G/W/C).",
+  "Hand: Trace of Abundance, Peregrine Drake, Mariposa Military Base. Nothing here makes BLUE, and",
+  "Peregrine Drake costs {4}{U}. The line is: play Mariposa, cast Trace of Abundance ({R/W}{G} -- the",
+  "{R/W} off Conservatory's white, the {G} off Brushland), which makes the enchanted land tap for one",
+  "mana of ANY colour, then cast the Drake off Hub(3) + Mariposa({C} + the Trace's any -> {U}).",
+  "",
+  "Both colour gates (ComputeAvailableColors, BuildColorFeasibility) and the flat mana pool are built",
+  "ONCE per enumeration off the pre-plan board, where the Trace is still in hand -- so all three were",
+  "blind to it. The gates rejected the line as 'no untapped source produces blue mana' and the pool",
+  "read it as one mana short of a board that pays it EXACTLY. The line was deleted before the payer",
+  "ever saw it, in every game of every seed; the play viewer only made it say so out loud.",
+  "",
+  "This is the deck's turn-3 route, so the assertion is deliberately BOTH halves:",
+  "  * verdict != illegal proves the gates admit it, and",
+  "  * expect_variants_all_contain pins that every surviving variant really casts the Drake --",
+  "    the count alone would pass on two variants that both drop it.",
+  "The two variants are the genuine sub-decision of WHICH land the Trace enchants (Hub or Mariposa);",
+  "both pay, because an empty land_aura_produces is 'one mana of any colour' either way.",
+  "",
+  "MTG_UNPRUNED=1 is not decoration: the cast-ORDERING search is gated on UnprunedGate::SearchOrder,",
+  "so without it this fixture would not exercise the path the viewer runs on."
+ ],
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "turn": 3,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 20,
+ "energy_counters": 0,
+ "battlefield": [
+  { "name": "Aether Hub",   "controller": 0, "tapped": false },
+  { "name": "Wild Growth",  "controller": 0, "tapped": false, "equips": "Aether Hub" },
+  { "name": "Wild Growth",  "controller": 0, "tapped": false, "equips": "Aether Hub" },
+  { "name": "Conservatory", "controller": 0, "tapped": false },
+  { "name": "Brushland",    "controller": 0, "tapped": false }
+ ],
+ "hand": [
+  "Trace of Abundance",
+  "Peregrine Drake",
+  "Mariposa Military Base"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 8,
+ "env": {
+  "MTG_HUMAN_PLAY": "1",
+  "MTG_UNPRUNED": "1"
+ },
+ "validate_line": "land=Mariposa Military Base;cast=Trace of Abundance;cast=Peregrine Drake",
+ "expect_verdict": "choose",
+ "expect_variants": 2,
+ "expect_variants_all_contain": "Peregrine Drake"
+}

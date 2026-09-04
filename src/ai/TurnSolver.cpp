@@ -2610,6 +2610,13 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
         if (f.green > 0) { have[4] = true; }
         if (f.wild  > 0) { have[0] = have[1] = have[2] = have[3] = have[4] = true; }
     }
+    // A land AURA still in HAND supplies its colours once the plan casts it -- the same state-only
+    // blindness the domain widen above repairs, for the one source a plan can INSTALL mid-turn. Zero
+    // mask for every deck holding none, so this is inert outside EDF. See PendingLandAuraColorMask.
+    if (const int pm = PendingLandAuraColorMask(state))
+    {
+        for (int i = 0; i < 5; ++i) { if (pm & (1 << i)) { have[i] = true; } }
+    }
 }
 
 static bool SubsetPayable(const bool have[5], const std::vector<Action>& cands,
@@ -3059,7 +3066,20 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
             // a cast off mana the executor cannot actually make. Mirrors the a.rock_mana gate.
             const bool is_rock = def && def->params.mana_rock && !def->card.IsCreature()
                               && !def->params.enters_tapped;
-            if (is_rock != want_rock) { continue; }
+            // A land AURA ("enchanted land taps for an additional {G}") is a same-turn mana PRODUCER
+            // as well: it resolves before the casts it funds, so its bonus is genuine supply for the
+            // rest of the subset -- but ONLY if a land survives the Aura's own cost still untapped to
+            // host it. Board = one Forest, subset = {Wild Growth, Llanowar Elves}: the Forest pays for
+            // the Growth and there is nothing left to enchant-and-tap, so the bonus never arrives.
+            //
+            // That condition is precisely what a flat pool cannot express, and it is why the credit
+            // lives HERE, in the real-payment simulation, rather than as an optimistic a.rock_mana
+            // stamp at enumeration. See the etb_untap_lands note in CollectActions for the price of an
+            // unsound enumeration credit: the enumerator spends its breadth offering plans whose mana
+            // the executor then cannot make.
+            const bool is_aura = def && def->params.is_land_aura
+                              && def->params.land_aura_extra_mana > 0;
+            if ((is_rock || is_aura) != want_rock) { continue; }
             const bool for_creature = def && def->card.IsCreature();
             if (!TapForCostDirect(cp, a.cost, for_creature)) { return false; }
             if (is_rock && def)   // freshly-cast rock joins the board so its mana funds later casts
@@ -3069,6 +3089,25 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
                 perm.controller_index = cp.active_player_index;
                 perm.owner_index      = cp.active_player_index;
                 cp.battlefield.push_back(perm);
+            }
+            else if (is_aura && def)   // attach it, so the host's later tap carries the extra mana
+            {
+                int host = -1;
+                for (const Permanent& lp : cp.battlefield)
+                {
+                    if (lp.controller_index != cp.active_player_index || lp.tapped) { continue; }
+                    if (!lp.card.IsLand()) { continue; }
+                    host = lp.card.m_number; break;
+                }
+                if (host >= 0)
+                {
+                    Permanent ap;
+                    ap.card             = def->card;
+                    ap.controller_index = cp.active_player_index;
+                    ap.owner_index      = cp.active_player_index;
+                    ap.aura_attached_to = host;
+                    cp.battlefield.push_back(ap);
+                }
             }
         }
     }
@@ -15266,7 +15305,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     for (const Action& ra : cands) { if (ra.def && ra.def->params.splice_onto_arcane) { any_splice = true; break; } }
     // Filter/ramp land present? Enables the real-payment affordability fallback (color conversion
     // the flat pool can't model). False for every deck without such a land -> byte-identical.
-    const bool any_filter = HasUntappedFilterSource(state);
+    // A land AURA in hand opens the same door for the same reason: its bonus is supply the flat pool
+    // cannot see (it is not on the battlefield yet) and whose availability depends on WHICH sources
+    // paid for the Aura -- an ordering only the real-payment sim can settle. See
+    // SubsetPayableWithFilters' is_aura branch and PendingLandAuraColorMask.
+    const bool any_filter = HasUntappedFilterSource(state)
+                         || PendingLandAuraColorMask(state) != 0;
 
     // Lands in hand -- a generic feasibility input (a plan cannot discard more lands than it
     // holds for retrace / Land's Edge additional costs; see the discard_lands_used check below).
@@ -22925,8 +22969,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (const Action& ra : cands)
         { if (ra.ritual_float > 0 && ra.kind == Action::Kind::SacForMana) { has_ind_accel = true; break; } }
     }
-    // Filter/ramp land present? (mirrors Solve) Enables the real-payment affordability fallback.
-    const bool any_filter = HasUntappedFilterSource(state);
+    // Filter/ramp land present, or a land Aura in hand? (mirrors Solve) Enables the real-payment
+    // affordability fallback.
+    const bool any_filter = HasUntappedFilterSource(state)
+                         || PendingLandAuraColorMask(state) != 0;
 
     int m = static_cast<int>(cands.size());
     std::vector<TurnSolver::Plan> plans;
@@ -35130,7 +35176,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // enumerator's SubsetPayableWithFilters): tap actual sources per cast, persisting taps and freshly-
     // cast rocks across the set, honouring the same rock-first + spectacle ordering. Only runs when the
     // flat check failed AND such a land is present -> filter-less lines are byte-identical.
-    if (remaining > 0 && AnyUntappedFilterSource(s))
+    // A pending land AURA reaches this same retry for the same reason (see SubsetPayableWithFilters):
+    // its bonus is supply the flat pool above cannot hold, and whether it arrives depends on which
+    // sources paid the Aura itself. Without it the EDF turn-3 line "Mariposa; Trace of Abundance;
+    // Peregrine Drake {4}{U}" reads as one mana short of a board that pays it exactly.
+    if (remaining > 0 && (AnyUntappedFilterSource(s) || PendingLandAuraColorMask(s) != 0))
     {
         GameState cp = s;
         std::vector<bool> paid(pending.size(), false);
@@ -35145,7 +35195,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                 const bool want_rock = (phase == 0);
                 for (size_t k = 0; k < pending.size(); ++k)
                 {
-                    if (paid[k] || pending[k].rock != want_rock) { continue; }
+                    // A land Aura pays in the producer pass with the rocks -- same reason (see
+                    // SubsetPayableWithFilters): what it makes has to be online for the later casts.
+                    const bool aura = pending[k].def && pending[k].def->params.is_land_aura
+                                   && pending[k].def->params.land_aura_extra_mana > 0;
+                    if (paid[k] || (pending[k].rock || aura) != want_rock) { continue; }
                     const ManaCost cost = pending[k].alt_free ? ManaCost{}
                                         : (pending[k].has_spectacle && spec) ? pending[k].spectacle_cost
                                         : pending[k].full_cost;
@@ -35158,6 +35212,25 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                         perm.controller_index = cp.active_player_index;
                         perm.owner_index      = cp.active_player_index;
                         cp.battlefield.push_back(perm);
+                    }
+                    else if (aura)   // attach it: the host's later tap is what carries the extra mana
+                    {
+                        int host = -1;
+                        for (const Permanent& lp : cp.battlefield)
+                        {
+                            if (lp.controller_index != cp.active_player_index || lp.tapped) { continue; }
+                            if (!lp.card.IsLand()) { continue; }
+                            host = lp.card.m_number; break;
+                        }
+                        if (host >= 0)
+                        {
+                            Permanent ap;
+                            ap.card             = pending[k].def->card;
+                            ap.controller_index = cp.active_player_index;
+                            ap.owner_index      = cp.active_player_index;
+                            ap.aura_attached_to = host;
+                            cp.battlefield.push_back(ap);
+                        }
                     }
                     if (deals_opponent_damage(*pending[k].def)) { spec = true; }
                     paid[k] = true; --left; prog = true; break;

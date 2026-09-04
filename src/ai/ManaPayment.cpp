@@ -1570,6 +1570,15 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
     // With no multi-colour source the flat pool holds no `wild` from the board and CanPayFlat is
     // already exact per colour -- running the matching could only reach the same verdict.
     f.usable = has_multi;
+    // A land AURA still in HAND becomes supply the moment the plan casts it, which this state-only
+    // build cannot see (see PendingLandAuraColorMask -- the presence gate has the same blindness).
+    // Credited AFTER `usable` is settled on purpose: widening supply can only make this gate prune
+    // LESS, whereas letting a pending Aura's multi-colour mask flip `has_multi` would switch the
+    // exact test ON for boards where the flat pool is already exact -- a tightening, and the one
+    // direction a pre-filter must never move in. Zero mask outside EDF -> byte-identical.
+    int pend_units = 0;
+    if (const int pend_mask = PendingLandAuraColorMask(state, &pend_units))
+    { add(pend_mask, pend_units); }
     return f;
 }
 

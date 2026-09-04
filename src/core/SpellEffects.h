@@ -8666,6 +8666,60 @@ inline int LandAuraColorMask(const GameState& state, const Permanent& land)
     return mask;
 }
 
+// The colours a land Aura still IN HAND would add to the board's producible set once it resolves --
+// the counterpart of LandAuraColorMask (which reads Auras already ATTACHED) for the two state-only
+// colour GATES, ComputeAvailableColors and BuildColorFeasibility.
+//
+// Both gates are built ONCE per enumeration off the pre-plan board and reused for every subset, and
+// that is exactly blind to an Aura which is itself one of the casts being enumerated. EDF turn 3:
+// play Mariposa Military Base, cast Trace of Abundance on it (land_aura_produces empty = "one mana
+// of any colour"), cast Peregrine Drake {4}{U}. The Trace is the green/white board's ONLY route to
+// blue, but it is not on the battlefield when the gate is built, so the whole line was rejected as
+// "no untapped source produces blue mana" -- deleted before the payer ever priced it. Land Auras are
+// the one mana source a plan can INSTALL mid-turn, which is why no other card shape needs this.
+//
+// Widening is the safe direction here and only here: both gates are PRE-FILTERS, so an over-admitted
+// subset is priced by the real payer and dropped at apply time, whereas an under-admitted one is gone
+// for good. Hence no castability test on the Aura itself -- a looser necessary condition is still
+// sound (the same reasoning the domain-widen hand scan in ComputeAvailableColors relies on).
+//
+// The one real bound: an Aura's additional mana rides the ENCHANTED LAND'S OWN TAP, so with no
+// untapped land to host it nothing arrives this turn. Ordered hand-first so every deck holding no
+// land Aura returns 0 without touching the battlefield. `out_units` receives the mana COUNT.
+inline int PendingLandAuraColorMask(const GameState& state, int* out_units = nullptr)
+{
+    if (out_units) { *out_units = 0; }
+    const int active = state.active_player_index;
+    int mask = 0;
+    int units = 0;
+    for (const Card& hc : state.players[active].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (!hd || !hd->params.is_land_aura || hd->params.land_aura_extra_mana <= 0) { continue; }
+        const std::vector<Color>& prod = hd->params.land_aura_produces;
+        if (prod.empty()) { mask |= 0x1F; }   // "any colour" -- never colourless, see LandAuraAddToPool
+        else
+        {
+            for (Color c : prod)
+            {
+                const int ci = static_cast<int>(c);
+                if (ci >= 0 && ci < 5) { mask |= (1 << ci); }
+            }
+        }
+        units += hd->params.land_aura_extra_mana;
+    }
+    if (mask == 0) { return 0; }
+    bool host = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        if (p.card.IsLand()) { host = true; break; }
+    }
+    if (!host) { return 0; }
+    if (out_units) { *out_units = units; }
+    return mask;
+}
+
 inline int PermanentManaYield(const GameState& state, const Permanent& perm, const CardDefinition& def)
 {
     if (def.params.storage_land) { return perm.storage_counters + LandAuraBonus(state, perm); }
