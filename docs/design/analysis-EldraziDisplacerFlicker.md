@@ -1469,14 +1469,56 @@ restores the green. That is a same-turn mana interaction of exactly the ETB-unta
 arrives AFTER its own cast resolves -- and the flat gate prices the pool as it stood before the
 Aura existed.
 
-**An admission clause is NOT the fix -- measured, and reverted.** The obvious repair is to admit
-mana-adding land Auras to the sequenced rescue walk beside `SeqEtbUntapEnabled`'s ETB admission.
-Built it; the line stayed `legal_not_enumerated` and the plan count stayed 40/0-multi-cast. So did
-turning on the GENERAL rescue (`MTG_EXEC_FEAS=1`), which admits the subset unconditionally. **The
-blocker is therefore upstream of the admission gate**: either the two-cast subset is never generated
-at all, or `SubsetPayableSequential` itself does not model the Aura's grant when re-pricing. Reverted
-rather than left in as an unproven widening of the walk. Whoever picks this up should start by
-instrumenting whether the subset `{Trace of Abundance, Living Wish}` is ever constructed.
+**RESOLVED 2026-09-04 -- and the cause was none of the above.** The line was never a mana problem
+at all. The board reading in the paragraph above is wrong: at that decision Aether Hub already
+carries **two** Wild Growths, so it taps for `{C}{G}{G}` and the pool is 4 before the land drop and
+5 after -- more than enough for Trace `{R/W}{G}` plus Living Wish `{1}{G}`. The subset was
+affordable all along.
+
+**The plan was BUILT and then DELETED.** Instrumenting the two layers separately settles it:
+`EnumeratePlans` returned 16 `Trace of Abundance + Living Wish` plans at that decision, and
+`add_for_land` received 11 with **none** of them. The deletion is in the cast-ORDERING search:
+
+* `IsAuraOnNewCreature` scans the battlefield for a **creature** carrying the Aura's
+  `enchant_target` m_number. An "enchant LAND" Aura's host is a **land**, so the scan never matches
+  and the predicate returns TRUE for every land Aura.
+* `OrderingPlacesAuraBeforeCreature` then rejects **every** ordering of the set, and the loop
+  `continue`s past all of them -- so the whole plan is dropped with **no fallback**.
+
+This is the **third symptom of the same `is_land_aura` root cause** as commit `34abe486` ("one root
+cause, two symptoms", which guarded `AppendCreatureTargetAuraCandidates` and
+`SubsetHasAuraOnUncastCreature`). It is the worst of the three: the other two mis-offer or
+over-reject a subset, this one deletes a plan outright. Fix is the same one-line guard, applied at
+the root predicate so all three call sites inherit it.
+
+**Why no suite ever caught it, and why it looked like an enumeration gap.** The deletion happens
+only when the cast-ordering search runs, which is gated on `UnprunedGate::SearchOrder` -- **default
+OFF**. `--claude-play` sets `MTG_UNPRUNED=1` (`src/main.cpp`), which opens that gate. So the bug was
+reachable **only through the play viewer / the claude-play oracle**: the human was refused a line
+the autonomous search kept. That is also why every autonomous win turn is unmoved by the fix, why
+smoke reports `configs changed: 0`, and why the `legal_not_enumerated` verdict was so misleading --
+`CheckLine` runs under the same widened gates as the viewer, so it reported the *viewer's*
+enumeration, not the engine's. Regression test: `test/scenarios/edf_land_aura_multicast_offered.json`
+(verified discriminating: `legal_not_enumerated` before, `accept` after; it needs the `env` block,
+because without `MTG_UNPRUNED` the fixture passes on the unfixed binary).
+
+Verdict on the real seed-1 T3 board after the fix: **`choose`**, offering `Trace of Abundance ->
+Aether Hub` with `Living Wish -> Cloud of Faeries` -- the user's line exactly.
+
+**A same-turn land-Aura ramp credit was built for the wrong diagnosis, and REVERTED.** Before the
+above was found, four coordinated gaps were closed on the theory that Trace's +1 was needed to
+afford the Wish: a CastOrderRank tier-5 slot beside the mana rocks, a `LandAuraBoundCredit` twin of
+`EtbUntapBoundCredit` for the total-mana bound, an independent rescue-walk admission, and Aura
+attachment inside `SubsetPayableSequential` (which resolves rituals, ETB-untaps and rocks but never
+attached an Aura). Every one of those is a real modelling gap and the work is recoverable from this
+note -- but none of them was this bug: with the lever on, the T3 line still verdicted
+`legal_not_enumerated` and both target games stayed at T5. Reverted rather than shipped as an
+unmeasured lever carrying a rationale now known to be false. If it is ever revived it needs its own
+motivating case and its own A/B.
+
+**Still open: the two target games are unchanged at T5.** The user's ask was to *reach* T3 (seed 1)
+and T4 (seed 2). The line is now offerable and playable; the autonomous search still does not pick
+it. Those are separate problems and only the first is fixed here.
 
 **Corrections to the record.** An earlier note in this session claimed the user's step (a) was
 "correctly rejected". That was wrong on every count and is withdrawn:
@@ -1496,3 +1538,29 @@ two-second question. Worth doing before the next viewer session.
 **Viewer nit, separately:** the decision dump renders Trace of Abundance's cost as `{R}{G}`, losing
 the hybrid. The engine pays it correctly (its refusal message says "red or white"), but a human
 reading the dump is told the card needs red.
+
+### Prospective go-off recognition -- measured, BELOW the adoption bar (2026-09-04)
+
+`RecogniseFlickerLoopProspective` (commit `9577e6d4`, `MTG_EDF_PROSPECTIVE`) lets `ExtraLethalDamage`
+see a loop the plan being scored ASSEMBLES, instead of only one already on the board -- the user's
+"it's fine to use a heuristic once it has been determined that we can go off", read as: the
+determination may come from the plan, not just the battlefield.
+
+Two paired A/Bs at play settings (d5/20ms), negative = better, pairing on (seed, gi):
+
+| run | pairs | delta | se | t | seeds better |
+|-----|-------|-------|----|----|--------------|
+| 4 seeds x 100 | 400 | -0.0225 | 0.0134 | -1.68 | 4/4 |
+| 8 seeds x 100 (4 fresh) | 800 | **-0.0137** | 0.0084 | **-1.64** | 6/8 (1 worse, 1 tied) |
+
+Consistently favourable in direction, never significant, and **well under the bar this repo has been
+using** -- `MTG_EDF_SEQ_ETB` was adopted at t = -3.97 on the same deck and the same 800-pair design.
+Doubling the sample moved t not at all (-1.68 -> -1.64), which is what a small real effect and a
+weak one look like alike at this power. It does buy one concrete thing: seed 2 gi 1 goes T6 -> T5.
+
+It did NOT deliver what it was built for -- seed 1 stays T5 against the user's T3 and seed 2 stays
+T5 against their T4 -- and it is currently DEFAULT ON, which is the wrong default for an unproven
+lever by this repo's own convention (cf. `MTG_MAIN2_DROP`, "DEFAULT OFF until the adoption A/B is
+accepted"). Open question for the user, carried forward rather than decided here: settle it with a
+properly powered run (a `heurarm` slot would let both arms share ONE pooled batch instead of two
+sequential ones), or flip the default to OFF until it clears the bar.

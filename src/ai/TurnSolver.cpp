@@ -21662,6 +21662,24 @@ static bool IsAuraOnNewCreature(const GameState& state, const Action& a)
     if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { return false; }
     const CardDefinition* d = CardDatabase::Instance().Lookup(a.card_name);
     if (!d || !d->params.is_aura) { return false; }
+    // An "enchant LAND" Aura's host is a LAND, so the battlefield scan below -- which looks for a
+    // CREATURE carrying that m_number -- can never match, and this returned TRUE for every one of
+    // them. Same root defect as AppendCreatureTargetAuraCandidates and SubsetHasAuraOnUncastCreature
+    // (34abe486, "one root cause, two symptoms"); this is the THIRD symptom and the worst of them,
+    // because OrderingPlacesAuraBeforeCreature turns the misread into a plan DELETION -- it rejects
+    // every ordering of the set and `continue`s past all of them, so the plan is dropped with no
+    // fallback, rather than merely mis-sorted.
+    //
+    // It bit ONLY under --claude-play / the play viewer, which is why no autonomous win turn ever
+    // moved and no suite ever saw it: claude_play sets MTG_UNPRUNED=1 (main.cpp), that opens
+    // UnprunedGate::SearchOrder, and the cast-ordering search is the only caller that DELETES on
+    // this predicate. USER-reported 2026-09-03 as "seed 1 T3 combo line". Verified on
+    // EldraziDisplacerFlicker seed 1 turn 3: EnumeratePlans built 16 "Trace of Abundance + Living
+    // Wish" plans and the ordering pass handed back 11 with NONE of them, so the engine's own
+    // CheckLine called the user's rules-legal line "legal_not_enumerated". With the guard the same
+    // line verdicts as "choose" and the menu offers Trace -> Aether Hub + Living Wish -> Cloud of
+    // Faeries. See test/scenarios/edf_land_aura_multicast_offered.json.
+    if (d->params.is_land_aura) { return false; }
     for (const Permanent& p : state.battlefield)
         if (p.controller_index == state.active_player_index && p.card.IsCreature()
             && p.card.m_number == a.enchant_target) { return false; }   // existing creature -> normal order
