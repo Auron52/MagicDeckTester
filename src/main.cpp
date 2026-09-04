@@ -2751,7 +2751,12 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
         [this](const GameState& s, const std::vector<TurnSolver::Plan>& plans, bool is_pre) -> int
         {
             int di = static_cast<int>(cursor);
-            const int this_main_ordinal = main_ordinal++;   // #10: this decision's main-phase ordinal
+            // #10: this decision's main-phase ordinal -- SKIPPED for a frame the engine is showing
+            // only so the human can look at the board (g_play_frame_no_ordinal). Those frames were
+            // added on 2026-09-04 so Commit Line stops at the line; numbering them would renumber
+            // every later decision and misfile the cast-order pins a saved reference replays by
+            // ordinal. -1 => WriteDecisionJson omits the field, which is what "carries no pin" means.
+            const int this_main_ordinal = g_play_frame_no_ordinal ? -1 : main_ordinal++;
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];

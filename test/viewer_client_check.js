@@ -735,9 +735,16 @@ async function testColorlessFirstTapOrder() {
     if (!p) break;
     p.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await settle(win);
   }
+  // Walk to turn 2. Committing a line no longer ENDS the phase (2026-09-04: "Commit Line literally
+  // means let me play more things"), so turn 1 hands back one or more further main-phase frames --
+  // possibly with nothing in them -- and the way past those is to PASS, i.e. commit an empty line.
+  // Anything that is not a main phase is still stepped by the AI. Before that change this loop only
+  // had to skip non-main decisions, which is why it read `type !== 'main_phase'`.
   guard = 0;
-  while (guard++ < 10 && st().decision && st().decision.type !== 'main_phase') {
-    if (!(await stepForward(win, 'ai'))) break;
+  while (guard++ < 20 && st().decision
+         && !(st().decision.type === 'main_phase' && st().decision.turn === 2)) {
+    if (st().decision.type === 'main_phase') { st().plan = []; await win.commitLine(); await settle(win); }
+    else if (!(await stepForward(win, 'ai'))) break;
   }
   chk(st().decision && st().decision.turn === 2, `reached turn 2, got ${st().decision && st().decision.turn}`);
   if (fails.length) return fails;
@@ -757,6 +764,15 @@ async function testColorlessFirstTapOrder() {
   }
   chk(!st().hadReject,
       'Wirewood Lodge + Sol Ring + Natural Order is PAID, not rejected for mana (colourless-first)');
+  // Same walk as the turn-1 one above, and for the same reason: the committed line no longer ends
+  // the phase, so reaching turn 3 means passing turn 2's remaining main-phase frames rather than
+  // just letting the engine carry on. The assertions below still want a turn-3 board.
+  guard = 0;
+  while (guard++ < 20 && st().decision
+         && !(st().decision.type === 'main_phase' && st().decision.turn === 3)) {
+    if (st().decision.type === 'main_phase') { st().plan = []; await win.commitLine(); await settle(win); }
+    else if (!(await stepForward(win, 'ai'))) break;
+  }
   chk(st().decision && st().decision.turn === 3,
       `the phase resolved and play moved on, got turn ${st().decision && st().decision.turn}`);
   const bf = ((st().decision || {}).me || {}).battlefield || [];

@@ -1732,10 +1732,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // committed plan neither drew a card nor put a new sac-to-draw source into play, which is
         // exactly why those lines were unreachable by hand.
         //
-        // The ONLY stop condition besides the human passing is "there is genuinely nothing to do"
-        // (no enumerated plan has an action or a land drop) -- a fact, not a judgement, and the
-        // same any_play test the post-combat first entry already used. Without it every phase would
-        // end with a mandatory click through a menu whose only entry is "cast nothing".
+        // THE ONLY STOP CONDITIONS ARE THE HUMAN PASSING AND A DEAD OPPONENT (user, 2026-09-04:
+        // "I don't ever want to continue to the next turn or phase", "Commit Line literally means
+        // let me play more things"). "There is genuinely nothing to do" used to be one too, and it
+        // is NOT a fact -- it is the enumerator's opinion, and a phase that ends on it takes the
+        // board away at exactly the moment a human wants to look at it and say which card they
+        // expected to be able to cast. Skipping to the next turn is what "Commit turn" is for.
         //
         // Human-play only (this whole branch is inside use_external && !m_in_rollout) -> GT-neutral;
         // the autonomous search never enters here. Saved references gain one PASS frame per main
@@ -1865,7 +1867,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             std::vector<TurnSolver::Plan> plans =
                 TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
-            if (plans.empty()) { break; }
+            // AN EMPTY MENU IS STILL A FRAME. "cast nothing is always enumerated" was not true:
+            // EnumerateMainPlans returns an EMPTY vector when it believes there is nothing to do,
+            // and breaking on that skipped the phase before the always-prompt rule below could see
+            // it -- which is what actually ended the turn the moment a Living Wish resolved, and
+            // what silently swallowed every post-combat main. Synthesize the pass-only menu instead
+            // and let the human look at the board. Committing it is an empty plan, which the break
+            // further down already reads as the pass it is, so this cannot loop.
+            const bool menu_was_empty = plans.empty();
+            if (menu_was_empty)
+            {
+                if (!s_segment_always) { break; }   // legacy rule keeps its old exit
+                plans.emplace_back();               // one entry: "cast nothing" == pass
+            }
             std::set<std::string> cur_inplay = inplay_sac(state);
             std::set<std::string> cur_offer  = offer_sac(plans);
             // Is there any real play on offer (a cast, an activation, or a land drop)? "Cast nothing"
@@ -1876,22 +1890,41 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
             if (s_segment_always)
             {
-                // Re-prompt after every committed segment until the human passes or nothing is left.
-                // Three ways a frame is shown, and the set is a strict SUPERSET of the legacy rule --
-                // which is the point: a reference must only ever GAIN frames (absorbed as `repaired`),
-                // never lose one, or the recorded pick stream desyncs and the rest of the game is
-                // replayed wrong.
-                //   * seg 0 of the PRE-combat main -- the turn's first decision, always.
-                //   * drew_last -- the legacy DRAW breakpoint. Kept even when no play is available,
-                //     because that post-draw look is a frame the references RECORD (Kor Spiritdancer
-                //     draws on every Aura cast; Light Up the Stage stages cards). Gating it on
-                //     any_play dropped those frames and cost Auras s16 / burn s21 / Anti-Lifegain s4
-                //     a recorded win turn apiece -- caught by the reference sweep, not by smoke.
-                //   * any_play -- the new reach: something is still castable/activatable/playable.
-                // Stop otherwise; "cast nothing" is always enumerated, so a menu with no action is a
-                // menu with nothing in it and forcing a click through it every turn is pure noise.
-                const bool first_pre = (seg == 0 && is_pre_combat_main);
-                if (!first_pre && !drew_last && !any_play) { break; }
+                // ALWAYS PROMPT. A phase ends when the HUMAN passes -- committing the empty line,
+                // which the break below treats as the pass it is -- or when the opponent is dead.
+                // Nothing else may end it, and in particular the engine's own opinion that there is
+                // nothing left to do may not.
+                //
+                // USER, 2026-09-04, after Living Wish resolved and the turn jumped straight to the
+                // next one: "I would like commit line to actually stop skipping to the next turn in
+                // all situations", "If I click Commit Line, I mean it literally", "I don't ever want
+                // to continue to the next turn or phase."
+                //
+                // The rule this replaces re-prompted only when the turn had DRAWN or the enumerator
+                // still offered a real play (`any_play`). That reads the engine's own enumeration as
+                // ground truth for whether the human has anything to do, which is precisely the
+                // assumption a bug breaks: a card the enumerator wrongly believes is uncastable
+                // produces an empty menu, the phase ends silently, and the human never sees the
+                // board that would have shown them why. The user's reason for wanting the frame is
+                // exactly that -- "I want to instead see what the state is and if I can't cast what I
+                // want to there, then I can report exactly what happened." A frame with no plays in
+                // it is not noise; on this viewer it is the bug report.
+                //
+                // Cost is one extra click per phase that had nothing to offer. MTG_PLAY_SEGMENT_
+                // ALWAYS=0 still restores the old draw/sac-source rule for anyone who wants it.
+                //
+                // References only ever GAIN frames, never lose one, which is the direction that is
+                // safe: viewer_protocol_check.py answers an unaligned main_phase frame -1, consuming
+                // no recorded pick, so a saved game replays as `repaired` rather than drifting.
+                // Human-play only (use_external && !m_in_rollout) -> GT-neutral.
+                //
+                // ...with ONE thing that is not free, and it is the reason g_play_frame_no_ordinal
+                // exists: an added frame must not RENUMBER the frames after it. main_ordinal is the
+                // key a cast-order pin is recorded under, so a reference whose pin sat at ordinal 4
+                // replays it against whatever decision is 4th now. Measured, not guessed:
+                // StompySurprise/claude_s1_gi0's recorded turn-4 win replayed as turn 5 with nothing
+                // else changed, and the baseline binary reproduces it at turn 4 with the identical
+                // stale-index repair. So an added frame consumes NO ordinal (below).
             }
             else
             {
@@ -1910,8 +1943,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (!is_pre_combat_main && seg == 0 && !any_play) { break; }
             }
             size_t lib_before = state.ActivePlayer().library.size();
-            const int this_main_ordinal = m_ext_main_ordinal++;   // #10 side-channel key
+            // A frame the OLD rule would have stopped on is one this change ADDED, and it takes no
+            // ordinal (see g_play_frame_no_ordinal). Every such frame is pass-only by construction --
+            // `menu_was_empty` synthesized it, and `!any_play` means every enumerated plan is empty --
+            // so it can never be the one a cast order was pinned to. The flag rides to the harness
+            // that writes the decision JSON so both counters skip in lockstep.
+            const bool first_pre   = (seg == 0 && is_pre_combat_main);
+            const bool added_frame = s_segment_always
+                                  && (menu_was_empty || (!first_pre && !drew_last && !any_play));
+            const int this_main_ordinal = added_frame ? -1 : m_ext_main_ordinal++;   // #10 key
+            g_play_frame_no_ordinal = added_frame;
             int idx = m_external_chooser(state, plans, is_pre_combat_main);
+            g_play_frame_no_ordinal = false;
             if (idx < 0 || idx >= static_cast<int>(plans.size())) { break; }  // pass / done
             // An EMPTY committed plan ("land=none; cast: (nothing)") means exactly what a pass
             // means, so it must END the phase like one. Applying it changes nothing, and under the
@@ -1925,7 +1968,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // #10: honour a human-pinned cast order for this main-phase decision (empty / unset =>
             // no-op => canonical). Copy the chosen plan so the enumerated menu stays untouched.
             TurnSolver::Plan chosen = plans[idx];
-            if (g_play_cast_order_chooser)
+            if (g_play_cast_order_chooser && this_main_ordinal >= 0)
             {
                 std::vector<std::string> ord = (*g_play_cast_order_chooser)(this_main_ordinal);
                 ReorderPlanCasts(chosen, ord);

@@ -505,6 +505,22 @@ extern thread_local TapPrefChooser* g_play_tap_pref_chooser;
 using CastOrderChooser = std::function<std::vector<std::string>(int main_ordinal)>;
 extern thread_local CastOrderChooser* g_play_cast_order_chooser;
 
+// Is the main-phase frame being offered RIGHT NOW one the engine is showing purely so the human can
+// look at the board -- i.e. one the pre-2026-09-04 rule would have ended the phase on instead
+// (nothing enumerated, or nothing enumerated that carries an action)? Set immediately before the
+// external chooser is called and cleared straight after, so the harness writing the decision JSON
+// sees it.
+//
+// It exists to keep `main_ordinal` STABLE, and that is the whole reason it is a flag rather than a
+// local. The ordinal is the KEY a human's cast-order pin is recorded under (--cast-order
+// "<ordinal>:A|B"), so inserting a frame renumbers every decision after it and a saved reference
+// replays its pin against the wrong one. That is not hypothetical: it silently turned
+// StompySurprise/claude_s1_gi0's recorded turn-4 win into a turn-5 one, with nothing else changed.
+// A frame like this can never carry a cast order -- every plan in it is empty, so there is nothing
+// to order -- so the honest fix is for it to consume no ordinal at all rather than for the pin to
+// have to chase it.
+extern thread_local bool g_play_frame_no_ordinal;
+
 // ---- Human-play storage-land TAP-vs-CHARGE chooser (#6, Dwarven Hold / Mercadian Bazaar) -------
 // A charged storage land either BURSTS this turn (tap it, spend counters as {R}) or CHARGES (leave it
 // untapped -> +1 counter at end of turn). The clairvoyant search decides this from foresight (burst =

@@ -458,3 +458,44 @@ WHICH hand cards to discard — any number, zero included (the draw is discards 
 Same reply shape as `sac_tutor` over the whole hand: one 0/1 flag per hand card, hand order.
 Default = the excess-lands heuristic (lands beyond two). The `etb_discard_any_number` param maps
 to `rummage` in the auditor manifest.
+## Commit Line stops at the LINE, never at the phase (2026-09-04)
+
+**User:** *"I would like commit line to actually stop skipping to the next turn in all situations."*
+*"If I click Commit Line, I mean it literally."* *"I don't ever want to continue to the next turn or
+phase."* *"I can always commit turn if I want to skip the whole turn. Commit Line literally means let
+me play more things."*
+
+A main phase now ends on exactly two things: **the human passing** (committing the empty line) and
+**a dead opponent**. Nothing else — and in particular the engine's own opinion that there is nothing
+left to do no longer ends it. **Commit turn** is the button for skipping the rest of a turn.
+
+**What was actually broken.** Two separate stops, and only fixing both is enough:
+
+1. The re-prompt rule required `drew_last || any_play` — the enumerator still offering a real play.
+2. `EnumerateMainPlans` returns an **empty vector** when it believes there is nothing to do, and the
+   loop broke on that *before* the rule above was even consulted. This was the one that mattered:
+   "cast nothing is always enumerated" was simply not true. It is what ended the turn the instant a
+   Living Wish resolved, and what silently swallowed **every** post-combat main. An empty menu now
+   synthesizes the pass-only frame instead.
+
+**Why an empty frame is worth a click.** The old rule takes the engine's enumeration as ground truth
+for whether the human has anything to do — exactly the assumption a bug breaks. A card the enumerator
+wrongly thinks is uncastable produces an empty menu, the phase ends, and the human never sees the
+board that would have shown them why. *"I want to instead see what the state is and if I can't cast
+what I want to there, then I can report exactly what happened."* On this viewer, a frame with no
+plays in it is not noise — it is the bug report.
+
+**The trap, which cost a reference before it was caught.** Added frames RENUMBER `main_ordinal`, and
+that ordinal is the key a human's cast-order pin is recorded under (`--cast-order "<ord>:A|B"`). A
+saved reference then replays its pin against whatever decision is 4th *now*:
+`StompySurprise/claude_s1_gi0`'s recorded turn-4 win came back as turn 5, with nothing else changed
+and the baseline binary reproducing it at turn 4. So an added frame consumes **no ordinal**
+(`g_play_frame_no_ordinal`) — sound because such a frame is pass-only by construction and can never
+be the one a cast order was pinned to. With that, play-drift is back to 0/266.
+
+`FiveColour/claude_s1_gi0` reclassifies `repaired -> shuffle-dead`, and it is worth knowing why: its
+decision #9 is a **turn-4 post-combat main in which the human cast Progenitus** — a frame the engine
+had stopped offering at all, so the replay used to terminate early and never check it. That reference
+is evidence FOR this change. Only re-playing by hand can restore it; references are the user's.
+
+`MTG_PLAY_SEGMENT_ALWAYS=0` still restores the old draw/sac-source rule.

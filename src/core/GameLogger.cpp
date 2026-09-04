@@ -56,6 +56,7 @@ thread_local FirebreatheChooser* g_play_firebreathe_chooser = nullptr;
 thread_local FirebreatheChooser* g_play_jitte_chooser = nullptr;
 thread_local int                 g_fb_activations_this_turn = 0;   // MTG_FB_TRACE diagnostic
 thread_local CastOrderChooser* g_play_cast_order_chooser = nullptr;
+thread_local bool g_play_frame_no_ordinal = false;
 thread_local AttackersChooser* g_play_attackers_chooser = nullptr;
 thread_local TapPrefChooser* g_play_tap_pref_chooser = nullptr;
 thread_local StorageHoldChooser* g_play_storage_hold_chooser = nullptr;
