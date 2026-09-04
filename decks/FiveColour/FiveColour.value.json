@@ -15080,6 +15080,8 @@
   "escalation_cap": 5,
   "mull_gen_depth": 2,
   "mull_gen_budget_ms": 1,
-  "mull_gen_note": "Mulligan GENERATION runs d2/b1, not the shipped d6/b20 (adopted 2026-08-18, user-approved). Measured fidelity-EQUAL to the prior d3/b3 gen setting by the 200-hand paired battery vs the shipped policy (rho 0.9891 vs 0.9906, dispersion 0.081 vs 0.067, 100% pairwise agreement) and result-identical on 240/240 proxy games across two seed blocks (re-verified 120/120 under the colour-exact engine), at 1.67x less work. The sidecar stays ATTACHED for gen: leaf-off at d2/b1 measured 1.57-2.20x slower on an idle box (fully separated). See docs/design/fivecolour-mullgen-labeller-sweep.md and fivecolour-gen-leaf-cost-wallclock.md. Affects generation only; play is unchanged. NOTE: adopting this forfeited the banked d3/b3 floor probe (RolloutCfg comparability)."
+  "mull_gen_note": "Mulligan GENERATION runs d2/b1, not the shipped d6/b20 (adopted 2026-08-18, user-approved). Measured fidelity-EQUAL to the prior d3/b3 gen setting by the 200-hand paired battery vs the shipped policy (rho 0.9891 vs 0.9906, dispersion 0.081 vs 0.067, 100% pairwise agreement) and result-identical on 240/240 proxy games across two seed blocks (re-verified 120/120 under the colour-exact engine), at 1.67x less work. The sidecar stays ATTACHED for gen: leaf-off at d2/b1 measured 1.57-2.20x slower on an idle box (fully separated). See docs/design/fivecolour-mullgen-labeller-sweep.md and fivecolour-gen-leaf-cost-wallclock.md. Affects generation only; play is unchanged. NOTE: adopting this forfeited the banked d3/b3 floor probe (RolloutCfg comparability).",
+  "escalation_r": 86.0,
+  "escalation_fresh_frac": 0.5
  }
 }
