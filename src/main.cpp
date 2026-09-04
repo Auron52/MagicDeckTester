@@ -5397,27 +5397,32 @@ int main(int argc, char* argv[])
         std::cout << "avg (turns)   : " << avgline
                   << "    [mean turn-to-win, unwon = max_turns+1; lower is better]\n";
 
-        // "Infinite life" split (USER feature 2026-09-04): a demonstrated unbounded lifegain loop
-        // counts as a win under its own kind (GameState::infinite_life_win). Printed only when the
-        // kind occurred, so every other deck's output is byte-identical.
-        if (result.games_won_inf_life > 0)
+        // "Infinite life" split (USER feature 2026-09-04, redesigned on review 2026-09-05): going
+        // infinite is NOT a win -- the metric above counts actual kills only, and the game plays
+        // on to that kill (usually the same turn or the next: the loop grows the outlet body into
+        // the finisher). Reported separately as the user asked: how many games proved the loop,
+        // and when -- plus the avg KILL turn of those same games so the two numbers can be
+        // compared side by side. Printed only when the loop occurred, so every other deck's
+        // output is byte-identical.
+        if (result.games_inf_life > 0)
         {
-            long long s_inf = 0, s_kill = 0; int n_kill = 0;
+            long long s_inf = 0, s_conv = 0; int n_conv = 0;
             for (int i = 0; i < static_cast<int>(result.win_turns.size()); ++i)
             {
-                if (result.win_turns[i] <= 0) { continue; }
-                if (result.inf_life[i]) { s_inf += result.win_turns[i]; }
-                else                    { s_kill += result.win_turns[i]; ++n_kill; }
+                if (result.inf_life_turn[i] < 0) { continue; }
+                s_inf += result.inf_life_turn[i];
+                if (result.win_turns[i] > 0) { s_conv += result.win_turns[i]; ++n_conv; }
             }
             char b1[32], b2[32];
             std::snprintf(b1, sizeof(b1), "%.4f",
-                          static_cast<double>(s_inf) / result.games_won_inf_life);
+                          static_cast<double>(s_inf) / result.games_inf_life);
             std::snprintf(b2, sizeof(b2), "%.4f",
-                          n_kill > 0 ? static_cast<double>(s_kill) / n_kill : 0.0);
-            std::cout << "infinite life : " << result.games_won_inf_life << " wins, avg turn " << b1
-                      << "   [kill wins: " << n_kill << (n_kill > 0 ? std::string(", avg turn ") + b2
-                                                                    : std::string())
-                      << "; MTG_INFLIFE_WIN=0 for the pure-kill arm]\n";
+                          n_conv > 0 ? static_cast<double>(s_conv) / n_conv : 0.0);
+            std::cout << "went infinite : " << result.games_inf_life << " of "
+                      << result.games_played << " games, avg turn " << b1
+                      << "   [not a win; of those, " << n_conv << " converted the kill"
+                      << (n_conv > 0 ? std::string(", avg kill turn ") + b2 : std::string())
+                      << "]\n";
         }
 
         // Unwon games (no lethal by max_turns) listed as a REPRO aid -- game index + seed to replay

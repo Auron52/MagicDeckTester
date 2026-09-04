@@ -1400,14 +1400,10 @@ struct GyEnterBatchScope
     ~GyEnterBatchScope() { g_gy_batch_scope_active = prev_active; g_gy_batch_fired = prev_fired; }
 };
 
-// MTG_INFLIFE_WIN (default ON; =0 = the pure-kill measurement arm): a demonstrated unbounded
-// lifegain loop counts as a win (GameState::infinite_life_win; USER feature 2026-09-04). ONE
-// reader at the ONE apply site (ApplySacCreatureOutlet), shared by executor and rollout.
-inline bool InfLifeWinEnabled()
-{
-    static const bool on = EnvOn("MTG_INFLIFE_WIN", true);
-    return on;
-}
+// (MTG_INFLIFE_WIN removed on USER review 2026-09-05: going infinite no longer counts as a win
+// at any setting, so the pure-kill arm IS the only behaviour. Detection is now unconditional
+// bookkeeping -- GameState::inf_life_turn -- read only by reporting and by the search's no-win
+// tiebreak, which has its own lever, MTG_INFLIFE_TB in TurnSolver's leafeval.)
 
 // Total -1/-1 counters on a permanent (persist reads this at every death site: a persist creature
 // returns only if it died with none).
@@ -5911,13 +5907,14 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
     OnCreatureDies(state, controller, victim, victim_tok, victim_m1);   // Pashalik ping / Rundvelt impulse / Mogg death token / persist
 
-    // "Infinite life" win detection (USER feature 2026-09-04 -- see GameState::infinite_life_win).
+    // "Infinite life" detection (USER feature 2026-09-04; NOT a win since the 2026-09-05 review --
+    // see GameState::inf_life_turn: turn-stamped once, reported separately, search tiebreak only).
     // EXECUTION-VERIFIED: this activation just sacrificed a persist creature with an ETB lifegain
     // to a FREE outlet and the body RETURNED CLEAN (persist fired, Melira/Vizier zeroed the
     // counter). Nothing changed except our life total going UP, so the iteration can repeat
     // without bound -- the loop is proven, not pattern-matched. Shared by executor and rollout
     // (this function is the one apply site) -> lockstep.
-    if (outlet_free && !victim_tok && victim_m1 == 0 && InfLifeWinEnabled())
+    if (outlet_free && !victim_tok && victim_m1 == 0 && state.inf_life_turn < 0)
     {
         const CardDefinition* vd = CardDatabase::Instance().LookupCached(victim);
         if (vd && vd->params.persist && vd->params.etb_self_lifegain > 0)
@@ -5927,10 +5924,10 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
                 if (q.controller_index == controller && q.card.m_number == victim.m_number
                     && MinusCountersOn(q) == 0)
                 {
-                    state.infinite_life_win = true;
+                    state.inf_life_turn = state.turn_number;
                     if (g_play_event_sink && !g_tap_speculating)
                     {
-                        EmitPlayEvent(state.turn_number, "win",
+                        EmitPlayEvent(state.turn_number, "lifegain",
                                       "\xE2\x99\xBE\xEF\xB8\x8F INFINITE LIFE -- " + victim.m_name.str()
                                       + " persist loop online (free outlet + counter prevention)");
                     }
@@ -5992,8 +5989,10 @@ inline int ApplyPersistLoop(GameState& state, int controller, int source_id, int
     for (int k = 0; k < iterations; ++k)
     {
         // Stop the moment the game is won (the SpendSurplusOnDrain guard; 5d sweep gi5: a
-        // Redcap burst ran 18 iterations past opponent death, to -72 life). Covers the damage
-        // kill AND the infinite-life flag (OpponentHasLost folds both).
+        // Redcap burst ran 18 iterations past opponent death, to -72 life). Kill-only since the
+        // 2026-09-05 redesign (going infinite is not a win), so a Finks lifegain loop runs to its
+        // emitted count -- which is the point: it banks the life and grows the outlet body into
+        // the creature that delivers the actual kill.
         if (OpponentHasLost(state)) { break; }
         bool outlet_ok = false, victim_ok = false;
         for (const Permanent& q : state.battlefield)

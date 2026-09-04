@@ -17,11 +17,12 @@ struct RunResult
     int    games_won        = 0;
     int    games_played     = 0;
     std::vector<int> win_turns;  // per-game result; -1 = did not win within max_turns
-    // "Infinite life" wins (USER feature 2026-09-04; GameState::infinite_life_win): per-game flag
-    // + the separate aggregate the user asked for. A game can be true here only if it also won
-    // (the flag IS a win), so games_won / avg_turns above include these; the split is reporting.
-    std::vector<uint8_t> inf_life;   // per-game 0/1 (uint8_t: vector<bool> is not thread-writable)
-    int    games_won_inf_life = 0;
+    // "Infinite life" split (USER feature 2026-09-04, redesigned 2026-09-05; see
+    // GameState::inf_life_turn): per-game turn the loop was proven (-1 = never), independent of
+    // whether the game then converted the kill. NOT a win -- games_won / avg_turns above count
+    // kills only; this is the separately-reported number the user asked for.
+    std::vector<int> inf_life_turn;  // per-game proof turn; -1 = never went infinite
+    int    games_inf_life = 0;
 };
 
 // --force-mulligan / manifest "force_mulligan": "<count>:<n1,n2,...>" -> keep at <count> mulligans,

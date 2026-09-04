@@ -594,7 +594,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     result.seed         = base_seed;
     result.games_played = num_games;
     result.win_turns.resize(num_games, -1);
-    result.inf_life.resize(num_games, 0);
+    result.inf_life_turn.resize(num_games, -1);
 
     // Detect once whether this deck's second main is relevant (e.g. spectacle
     // finishers cast after combat). All worker AIs get the same setting.
@@ -705,18 +705,20 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                         std::fflush(stderr);
                     }
                 }
-                result.win_turns[gi] = win_turn;
-                result.inf_life[gi]  = state.infinite_life_win ? 1 : 0;
+                result.win_turns[gi]     = win_turn;
+                result.inf_life_turn[gi] = state.inf_life_turn;
                 // Diagnostic (MTG_DUMP_WINS, inert by default): per-game win turn, for
                 // per-game A/B diffs between builds (e.g. `join` two runs to find the
-                // games a change moved). Single-thread for ordered output. kind=inflife marks
-                // the infinite-life win kind (absent = a damage/deck-out win) so per-game
-                // diffs can attribute a moved game to the loop.
+                // games a change moved). Single-thread for ordered output. ilt= is the turn
+                // the infinite-life loop was proven (absent = never went infinite; a win is
+                // always a kill/deck-out) so per-game diffs can attribute a moved game to
+                // the loop.
                 static const bool s_dump_wins = EnvOn("MTG_DUMP_WINS");
                 if (s_dump_wins)
                 {
-                    if (state.infinite_life_win)
-                    { std::fprintf(stderr, "[win] gi=%d wt=%d kind=inflife\n", gi, win_turn); }
+                    if (state.inf_life_turn >= 0)
+                    { std::fprintf(stderr, "[win] gi=%d wt=%d ilt=%d\n", gi, win_turn,
+                                   state.inf_life_turn); }
                     else
                     { std::fprintf(stderr, "[win] gi=%d wt=%d\n", gi, win_turn); }
                 }
@@ -746,7 +748,7 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
         result.average_win_turn = static_cast<double>(sum) / result.games_won;
     }
     result.avg_turns = ComputeAvgTurns(result.win_turns, max_turns);
-    for (uint8_t f : result.inf_life) { if (f) { ++result.games_won_inf_life; } }
+    for (int t : result.inf_life_turn) { if (t >= 0) { ++result.games_inf_life; } }
 
     if (logging)
     {

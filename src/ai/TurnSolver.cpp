@@ -2269,6 +2269,16 @@ inline bool TbNonland()
     static const bool on = EnvOn("MTG_LEAF_TB_NONLAND");
     return heurarm::Flag(heurarm::LEAF_TB_NONLAND, on);
 }
+// MTG_INFLIFE_TB (default ON; =0 = measurement arm): a leaf that PROVED an infinite-life loop
+// (GameState::inf_life_turn >= 0) outranks every no-win leaf that did not, earlier proof first
+// (USER 2026-09-05: going infinite is not a win, "but the search should still prioritize cases
+// that gain infinite life, if they can't find a win ... it is a good tiebreaker"). Sits inside
+// Quantity, so it can never outrank a real in-horizon win.
+inline bool InfLifeTb()
+{
+    static const bool on = EnvOn("MTG_INFLIFE_TB", true);
+    return on;
+}
 // NOTE: the per-deck opt-out lives at the PUBLISH sites (which have a GameState); a deck that opts
 // out simply never publishes, so leaf_tb stays kInvalid and the consumer falls back to plan.value.
 inline bool Active() { return GradeNoWinEnabled() || ValueRes(); }
@@ -2317,6 +2327,14 @@ inline long long Quantity(const GameState& state)
 {
     const int opp = state.players[1 - state.active_player_index].life;
     long long q = static_cast<long long>(opp) * 1000000LL;
+    // Infinite-life dominant term (see InfLifeTb above): a proven loop beats ANY life/board
+    // grade (the life term cannot reach 1e12 -- life is bounded far below 1e6 in practice), and
+    // an earlier proof beats a later one. Gated on the stamp, so every deck without the loop is
+    // byte-identical.
+    if (state.inf_life_turn >= 0 && InfLifeTb())
+    {
+        q -= 1000000000000LL - static_cast<long long>(state.inf_life_turn) * 1000000000LL;
+    }
     // Secondary terms sit strictly UNDER the life term (a board count cannot reach 1000), so life
     // always outranks development -- these only order positions the life term ties.
     if (TbBoard() || TbPerms() || TbNonland())
@@ -12237,7 +12255,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // persist body, purpose), never a per-count fan. sac_victim_id != 0 with sac_count > 1
             // is the ApplyPersistLoop discriminator at both apply sites. The K=1 cases (a single
             // sac that fires persist, or the Kitchen Finks infinite-life proof -- see
-            // GameState::infinite_life_win) already ride the ordinary single-victim action.
+            // GameState::inf_life_turn) already ride the ordinary single-victim action.
             if (!is_mana_outlet && !sd->params.sac_creature_cost.has_value())
             {
                 const int me = state.active_player_index;
@@ -12255,7 +12273,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         // single-sac action above, whose victim heuristic ranks EXPENDABILITY and
                         // may pick a dork -- but the persist body is the right victim exactly when
                         // the death is the point: the Kitchen Finks infinite-life proof
-                        // (GameState::infinite_life_win fires on this apply) or a free Redcap
+                        // (GameState::inf_life_turn is stamped on this apply) or a free Redcap
                         // ping + Feeder counter with the body returned clean.
                         {
                             Action b;

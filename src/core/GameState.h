@@ -213,16 +213,19 @@ struct GameState
     // turn number and not the next one: the opponent never gets a main phase in this model, so on
     // the user's instruction (2026-09-02) the game is over as of our last turn.
     bool                     opponent_decked              = false;
-    // "Infinite life" win (USER feature, 2026-09-04, Melira Pod): a demonstrated unbounded
-    // lifegain loop counts as a WIN, reported under its own kind -- "most decks can't win when
-    // you have a massive amount of life ... only losing to taking them out that turn."
-    // EXECUTION-VERIFIED, never pattern-matched: set inside ApplySacCreatureOutlet (both worlds,
-    // lockstep) the moment a FREE sac outlet sacrifices a persist creature with an ETB lifegain
-    // and the body RETURNS CLEAN (no -1/-1 counter -- Melira/Vizier active). That one iteration
-    // changed nothing but our life total, so it can repeat without bound. Gated behind
-    // InfLifeWinEnabled() (MTG_INFLIFE_WIN, default ON; =0 = pure-kill measurement arm) at the
-    // set site; false for every deck without the loop -> byte-identical elsewhere.
-    bool                     infinite_life_win            = false;
+    // "Infinite life" marker (USER feature, 2026-09-04; redesigned on USER review 2026-09-05):
+    // the TURN a demonstrated unbounded lifegain loop was first proven, -1 = never. NOT a win --
+    // the game plays on to the actual kill (the metric counts kills only; the loop's outlet
+    // bodies grow so large the kill usually lands the same turn or the next). Reported
+    // separately by the runner, and used by the search as a TIEBREAK below the win turn
+    // (leafeval::Quantity -- "if they can't find a win, prioritize lines that gain infinite
+    // life"). EXECUTION-VERIFIED, never pattern-matched: stamped inside ApplySacCreatureOutlet
+    // (both worlds, lockstep) the moment a FREE sac outlet sacrifices a persist creature with
+    // an ETB lifegain and the body RETURNS CLEAN (no -1/-1 counter -- Melira/Vizier active).
+    // That one iteration changed nothing but our life total, so it can repeat without bound.
+    // Stays -1 for every deck without the loop -> byte-identical elsewhere (every reader gates
+    // on >= 0).
+    int                      inf_life_turn                = -1;
     // Turn the active player last STACKED the top of their library with a tutor-to-top
     // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
     // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack
@@ -469,8 +472,9 @@ struct GameState
 // byte-identical to the old `life <= 0` for every deck that cannot mill.
 inline bool OpponentHasLost(const GameState& s)
 {
-    // infinite_life_win is OUR alternate win (not an opponent loss), but every win consumer --
-    // search projection, executor, fd-oracle -- reads this one predicate, so folding it here is
-    // what keeps all of them agreeing about the same game (the opponent_decked precedent).
-    return s.Opponent().HasLost() || s.opponent_decked || s.infinite_life_win;
+    // inf_life_turn is deliberately NOT folded here (USER 2026-09-05): going infinite is not a
+    // win, only a separately-reported marker + search tiebreak (see the field's comment), so the
+    // game plays on until the actual kill. Because every consumer -- search projection, executor,
+    // fd-oracle -- reads this one predicate, removing it here reverts all of them at once.
+    return s.Opponent().HasLost() || s.opponent_decked;
 }

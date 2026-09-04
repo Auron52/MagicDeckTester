@@ -248,6 +248,40 @@ Design (chosen, PROVISIONAL — re-raised in closing report):
   kind). Off-switch `MTG_INFLIFE_WIN` (=0 → pure-kill arm for A/Bs). All gated
   on deck params → other decks byte-identical.
 
+**REDESIGNED ON USER REVIEW (2026-09-05) — the win-kind design above is
+superseded.** User: going infinite does NOT count as a win ("I wouldn't count
+going infinite fully as a win, but it should be reported separately as a
+number ... any time you go infinite you are winning at latest next turn, since
+the sacrifice effects all make massive creatures"; "We should report both";
+"Often the kill turn is the same as the infinite life turn"; and the search
+"should still prioritize cases that gain infinite life, if they can't find a
+win ... it is a good tiebreaker"). Shipped design:
+- `GameState::infinite_life_win` (bool win) → `inf_life_turn` (int, -1=never;
+  proof turn). REMOVED from `OpponentHasLost` — kill/deck-out are the only
+  wins again, everywhere (search, executor, fd-oracle revert via the one
+  predicate); the game plays on after the proof and the loop-grown outlet body
+  (Feeder counters / Bloodthrone pump ×60 cap) delivers the actual kill,
+  usually the same turn or the next.
+- Search prioritization = a DOMINANT term in the existing no-win leaf grade
+  (`leafeval::Quantity`, default-ON MTG_LEAF_GRADE_NOWIN channel): a leaf that
+  proved the loop outranks every life/board grade, earlier proof first; can
+  never outrank a real in-horizon win. Lever `MTG_INFLIFE_TB` (default ON, =0
+  measurement arm). `MTG_INFLIFE_WIN` is REMOVED (no setting makes it a win).
+- Reporting both: `went infinite : N of G games, avg turn X [not a win; of
+  those, K converted the kill, avg kill turn Y]`; `[win]` dump gains `ilt=`.
+  Dominance fold updated (inf_life_turn folds when stamped).
+- MEASURED (16-game benchmark, seed 9200, play settings): 16/16 still win,
+  avg 5.0625 (vs 4.50 when the proof turn itself was credited as the win —
+  the shift IS the +0/+1 conversion cost). 6 of 16 went infinite, avg proof
+  T3.83, all 6 converted (avg kill T4.67; one same-turn, rest +1 — exactly
+  the user's "winning at latest next turn"). Fewer games take the loop than
+  under the win design (6 vs 9): with kills the sole objective the search
+  loops only when it is on the kill path — correct, not a regression.
+  MTG_INFLIFE_TB=0 arm byte-identical at this sample (deck wins in-horizon,
+  so the no-win grade rarely binds; the lever exists for games with no
+  in-horizon win). Smoke tier run to confirm all other decks byte-identical
+  (OpponentHasLost is core).
+
 ### Chord of Calling — Tier 3 (draft received)
 `{X}{G}{G}{G}` Instant, Convoke. CRITICAL loader fact: `KeywordFromString`
 THROWS on unknown keywords — must add `Keyword::Convoke` (inert-tag idiom) or
@@ -364,7 +398,10 @@ I3. DONE — ApplyPersistLoop (SpellEffects.h, cap 60; discriminator sac_count>1
     persist+lifegain sac; folded into OpponentHasLost + Dominance;
     MTG_INFLIFE_WIN default ON, InfLifeWinEnabled in SpellEffects.h);
     RunResult.inf_life + games_won_inf_life; [win] kind=inflife; "infinite
-    life :" summary line in main.cpp. MeliraPodProvider (Generic-inheriting,
+    life :" summary line in main.cpp. [The win-kind half of this record is
+    SUPERSEDED by the 2026-09-05 user-review redesign above: inf_life_turn,
+    not a win, tiebreak via leafeval + MTG_INFLIFE_TB.]
+    MeliraPodProvider (Generic-inheriting,
     routing block ABOVE goblin — misroute verified live first: provider=Goblins
     gave ZERO outlet activations over 8 probe games).
     PROBE (24 City of Brass + Feeder/Redcap/Finks/Melira, d3 b300 s100 x8):
