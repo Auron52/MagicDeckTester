@@ -328,6 +328,88 @@ that is where a real 5f fix would look.
 | `DigDecisionSearched() == true` | dig/no-dig is a searched axis | opens the search | |
 | Unearth target | highest MV ≤ cap, ties by lowest copy number | **structurally forced here** | Drannith Stinger (MV 2) is the only creature in the 60 within the cap |
 
+## 7.5 USER-STATED DECK POLICY (authoritative, 2026-09-04) + the resulting fixes
+
+The user supplied the deck's real lines and its whole cycling policy. **Treat this section as
+the spec; it overrides any inference from card text.**
+
+**Ideal line (usual):** T1 red-or-black land -> T2 untapped land + Fluctuator -> T3 cycle
+everything until Drannith Stinger is in hand, cast it if {1}{R} is available; otherwise cycle
+until Unearth is in hand and cast it returning a Stinger that cycling binned.
+
+**Enlightened Tutor line (T3, trickier):** T1 white tapped land -> T2 black tapped land +
+Enlightened Tutor fetching Fluctuator -> T3 untapped land + Fluctuator, cycle until a Stinger
+is in the graveyard and Unearth is in hand, cast Unearth returning it. (T2's land is black
+precisely so T3 has {B} for Unearth alongside Fluctuator's {2}.)
+
+After either line, keep cycling until the win. **Rarely** the library runs under 20 cards, and
+then a second Stinger is needed (Stinger + Unearth on a second copy, or wait a turn) - but
+usually the T3 kill still lands.
+
+> **"The only cards that need to be protected from cycling are Unearth and Drannith Stinger and
+> occasionally an untapped land, and once Drannith Stinger is on board everything is still free
+> game."**
+
+### What that exposed, and the measured payoff
+
+1. **`SelectDigSource` had the Unearth rank BACKWARDS.** It ranked *"Unearth with no legal
+   target in the graveyard"* as near-first fodder, on the reasoning that an uncastable card is
+   spendable. That inverts the deck's own line: the plan is to cycle a Stinger **into** the
+   graveyard and then Unearth it, so an Unearth held over an empty graveyard is not dead - it
+   is half the wincon. Symmetrically, cycling a Stinger is *correct* exactly when an Unearth is
+   held to rebuy it. Protection is now a package that switches **off entirely** once a Stinger
+   is on the battlefield.
+2. **The mulligan never looked for an enabler** (`required_pieces` was empty), so the deck kept
+   enabler-less hands and durdled. `required_pieces` is an **OR** gate (`AIEngine.cpp:639`),
+   which is exactly "Fluctuator or Enlightened Tutor".
+   `FluctuatorProvider::InterchangeableRequiredGroup` declares the two as ONE role.
+3. **`max_lands` 5 -> 7.** A 42-land deck where every land is a free cantrip is not flooding at
+   six lands.
+
+| configuration (100 games, seed 9001, d3/b200) | avg | T3 wins | unwon |
+|---|---|---|---|
+| baseline | 5.0500 | 5 | 1 |
+| + dig-policy fix | 5.0000 | 7 | 1 |
+| + enabler `required_pieces` | 4.6300 | 10 | 0 |
+| **+ `max_lands` 7 (ADOPTED)** | **4.5200** | **10** | **0** |
+
+Distribution now `3:10 4:51 5:25 6:8 7:3 8:3`, zero unwon. Smoke after: 51 passed, 0 configs
+changed.
+
+> **This REVERSES the rejection recorded in "Measured but NOT adopted".** Measured *alone*,
+> `max_lands=7` was worse (5.08 vs 5.02) - that test was **confounded**: without an enabler
+> requirement, keeping land-heavy hands is bad; with one, a 6-land + Fluctuator hand is
+> excellent. The two changes only pay off together. Lesson: A/B a mulligan knob against the
+> mulligan policy it interacts with, not against the old policy.
+
+## 7.6 OPEN - the decision-space prune the user proposed (NOT yet built)
+
+> "Essentially you just separate your hand into cards you potentially care about and those you
+> don't. Any cards you don't can be dumped unceremoniously... We don't need to search all 4
+> cards I don't care about as potential cycle options at each step. Instead just choose 1 and
+> search that."
+
+The care-set is exactly {Fluctuator (until one is out), Unearth, Drannith Stinger, sometimes one
+untapped land}; everything else is fungible fodder.
+
+**Status / what still needs checking before building this.** In the **autonomous** search
+`SelectDigSource` already returns exactly ONE card, so the "search all 4" fan does *not* appear
+to exist there - `MTG_BRANCH_STATS`' "by driver card" table was empty on both a fast and a slow
+game, and `dig_choice` is only a binary 0/1 axis. The per-name fan is in
+`AppendHumanPlayDigPlans`, which is **human-play only** (and there the fan is deliberate - the
+person should see the options).
+
+So the measured cost (7.4) is not the *width* of the cycle choice but the **length of the
+cycle->draw->re-solve chain re-simulated at every node**, and the 14% enum-memo hit rate says
+states that ought to be equivalent are not merging. **The user's insight still applies, in a
+stronger form:** if fodder cards are interchangeable, then the states reached by cycling any two
+of them should MERGE in the memo. They currently do not, because the specific card name lands in
+hand/graveyard and changes the state key. That - a fodder-equivalence fold in the state key, or
+a canonical fodder representative - is the real form of this prune, and it is the highest-value
+remaining perf work. **Verify the branching claim above with a driver-card-level probe before
+building anything**, since it rests on an empty stats table rather than a positive test.
+
+
 ## Claude-play sweep
 
 - commit: `71e547d8` (+ the `ReanimateTargetIndex` fix this sweep produced)
