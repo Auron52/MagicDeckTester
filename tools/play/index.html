@@ -418,6 +418,14 @@
       white-space:nowrap; box-shadow:0 0 0 2px #0b0c0e; }
   #decpanel .tutgrid .cardmini em { max-width:72px; }
   #decpanel .tutgrid .cardmini.tdig { position:relative; }
+  /* Free-cast dialog size hierarchy (USER 2026-09-04: "the card to choose to cast [should] be
+     bigger and the exiled/skipped cards smaller"): before this the walked cards (96px) dwarfed
+     the castable card (72px) — exactly backwards. The offer is THE decision, the walk is
+     context. Scoped to .fc-cands/.fc-walk so tutor grids and other reveal rows keep their sizes. */
+  #decpanel .fc-cands .cardmini { width:150px; }
+  #decpanel .fc-cands .cardmini em { max-width:150px; font-size:11px; margin-top:4px; }
+  #decpanel .reveal-card.fc-walk { width:58px; }
+  #decpanel .reveal-card.fc-walk em { font-size:9px; }
   #decpanel .tutgrid .cardmini.illegal { cursor:default; opacity:.4; }
   #decpanel .tutgrid .cardmini.illegal:hover { background:none; box-shadow:none; }
   #decpanel .tutgrid .cardmini .deftag { position:absolute; top:-7px; right:-4px; background:var(--acc); color:#0c1116;
@@ -2321,7 +2329,7 @@ function freeCastPanelHtml(d){
   h+=isArch
     ? `<div class="sub"><b>${esc(src)}</b> dealt combat damage — you may cast one spell from your hand <b>without paying its mana cost</b>. This is a one-time trigger: click a spell, or decline.</div>`
     : `<div class="sub"><b>${esc(src)}</b> found this card — you may cast it <b>without paying its mana cost</b>. Click it to cast, or decline${src.indexOf('(cascade)')>=0?' (it goes to the bottom of your library)':src.indexOf('Creative Technique')>=0?' (it stays in exile)':' (it goes to your hand)'}.</div>`;
-  h+=`<div class="tutgrid">`;
+  h+=`<div class="tutgrid fc-cands">`;
   if(!cands.length) h+=`<span class="hint">No castable spell in hand.</span>`;
   cands.forEach(c=>{
     const def=c.index===d.heuristic_default && c.name===defName;
@@ -2341,7 +2349,7 @@ function freeCastPanelHtml(d){
     h+=`<div class="sub" style="margin-top:8px">Walked past on the way (${esc(dispo)}):</div>`;
     h+=`<div class="revealrow">`;
     walked.forEach(n=>{
-      h+=`<span class="reveal-card away" title="${esc(n)}">`+
+      h+=`<span class="reveal-card away fc-walk" title="${esc(n)}">`+
          `<img loading="lazy" src="${scryImg(n,'small')}" onerror="this.style.opacity=.15"/><em>${esc(n)}</em></span>`;
     });
     h+=`</div>`;
