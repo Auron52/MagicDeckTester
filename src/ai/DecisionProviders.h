@@ -1152,6 +1152,11 @@ public:
     // dorks, then remaining outlet copies, then the rest.
     std::vector<std::string> TutorHandPutList(const GameState& s, int controller,
                                               const CardParams& pp, int max_puts) const override;
+    // Pod/Chord fetch NARROWING to the user's whitelist tiers ("narrow them down to just the
+    // useful options"). Two-step allocation-free contract -- see DecisionProvider::PutPolicy.
+    // MTG_POD_PUT_NARROW=0 -> unnarrowed A/B arm.
+    PutPolicy PutTargetPolicy(const GameState& s, int controller) const override;
+    bool      PutTargetOk(const PutPolicy& pol, const CardDefinition& d) const override;
 };
 
 class MinotaurProvider : public GenericProvider

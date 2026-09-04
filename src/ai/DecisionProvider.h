@@ -144,6 +144,36 @@ public:
     TutorToBattlefieldPutOrder(const GameState& /*s*/, int /*controller*/,
                                const CardParams& /*pp*/, int /*max_puts*/) const { return {}; }
 
+    // PutTargetPolicy / PutTargetOk -- put-tutor fetch NARROWING (Birthing Pod / Chord of
+    // Calling), the one place the core invariant allows a narrowing to live (the EldraziFlicker
+    // precedent, and its measured lesson applies: narrow only WITH a policy that keeps the
+    // contenders, because a bad cut is a quality bug the aggregate will show).
+    //
+    // TWO-STEP AND ALLOCATION-FREE, deliberately: the call sites live inside CollectActions,
+    // which a single rich game invokes >250k times, so the policy must not scan the library or
+    // build containers per call. A first version that returned a name whitelist (library scan +
+    // three hash sets per call) made the s9200 gi=9 repro 3x SLOWER (6.2s -> 18.9s) -- the
+    // narrowing paid more computing the whitelist than it saved narrowing. Instead:
+    //   1. PutTargetPolicy(state): the few STATE-dependent gates, computed once per enumeration
+    //      pass from battlefield+hand only (no library walk, no allocation). narrow=false (the
+    //      default) = unnarrowed, search-primary.
+    //   2. PutTargetOk(policy, def): pure O(1) param checks per library candidate.
+    // Call sites keep their structural constraints on top (Pod: MV == victim+delta; Chord:
+    // X = target MV) and Pod's no-fetch sentinel is unaffected. Only MeliraPodProvider
+    // overrides (USER 2026-09-05 tutor policy: missing combo pieces, piece-tutors, Pod fuel --
+    // "narrow them down to just the useful options").
+    struct PutPolicy
+    {
+        bool narrow      = false;   // false = no narrowing; PutTargetOk is not consulted
+        bool have_prev   = false;   // counter-prevention enabler on battlefield or in hand
+        bool any_missing = false;   // some combo role absent from battlefield+hand
+        bool pod_active  = false;   // a Pod is on the battlefield (gates the fuel tier)
+    };
+    virtual PutPolicy PutTargetPolicy(const GameState& /*s*/, int /*controller*/) const
+    { return {}; }
+    virtual bool PutTargetOk(const PutPolicy& /*pol*/, const CardDefinition& /*d*/) const
+    { return true; }
+
     // SacTutorPutList -- Defense of the Heart upkeep sac-tutor ("search your library for up to two
     // creature cards, put those cards onto the battlefield"): which creature cards (by NAME, an
     // ordered multiset like TutorToBattlefieldPutOrder -- repeats honour multiplicity) to put, in

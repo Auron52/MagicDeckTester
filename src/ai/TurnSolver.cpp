@@ -8883,12 +8883,20 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const int ag = static_cast<int>(cc.atk_green.size());
                 const int ao = static_cast<int>(cc.atk_other.size());
                 const int pool_total = AvailableManaPool(state).Total();
+                // Provider fetch narrowing (PutTargetPolicy/PutTargetOk; narrow=false =
+                // unnarrowed) -- the same policy as the Birthing Pod site, so the two
+                // put-tutors cannot drift. Allocation-free by contract.
+                const DecisionProvider& chord_prov = ResolveProvider(state);
+                const DecisionProvider::PutPolicy chord_pol =
+                    chord_prov.PutTargetPolicy(state, state.active_player_index);
                 std::unordered_set<std::string> chord_seen;
                 for (const Card& lc : ap.library)
                 {
                     const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
                     const Card& lcard = ld ? ld->card : lc;
                     if (!lcard.IsCreature()) { continue; }
+                    if (chord_pol.narrow && (!ld || !chord_prov.PutTargetOk(chord_pol, *ld)))
+                    { continue; }
                     if (!chord_seen.insert(lc.m_name.str()).second) { continue; }
                     const int x = lcard.m_mana_cost.ManaValue();
                     // Two convoke arms: free bodies only; free + would-attack bodies.
@@ -12362,6 +12370,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
             if (!sd || sd->params.pod_mv_delta == 0) { continue; }
             if (sd->params.pod_taps && src.tapped) { continue; }
+            // Provider fetch narrowing (PutTargetPolicy/PutTargetOk; narrow=false = unnarrowed).
+            // A PROVIDER heuristic, the one place the core invariant allows a narrowing -- the
+            // fold above stays lossless. Applied to the FETCH axis only; victims and the
+            // no-fetch sentinel are untouched. Allocation-free by contract (this loop runs at
+            // every CollectActions).
+            const DecisionProvider& pod_prov = ResolveProvider(state);
+            const DecisionProvider::PutPolicy pod_pol =
+                pod_prov.PutTargetPolicy(state, state.active_player_index);
             const Player& pod_ap = state.players[state.active_player_index];
             std::vector<std::string> seen_victims;
             for (const Permanent& v : state.battlefield)
@@ -12402,6 +12418,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     const Card& lcard = ld ? ld->card : lc;
                     if (!lcard.IsCreature()
                         || lcard.m_mana_cost.ManaValue() != want_mv) { continue; }
+                    if (pod_pol.narrow && (!ld || !pod_prov.PutTargetOk(pod_pol, *ld)))
+                    { continue; }   // provider fetch narrowing (see above)
                     if (!seen_names.insert(lc.m_name.str()).second) { continue; }
                     emit_pod(lc.m_name.str(), want_mv);
                 }

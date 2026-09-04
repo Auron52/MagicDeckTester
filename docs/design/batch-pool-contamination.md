@@ -97,3 +97,23 @@ Response per the standing rule: standalone repro is the verdict — GT untouched
 re-run, the coincident provider commit exonerated (also structurally: its code cannot execute
 without a Melira deck in the pool). If a fourth sighting lands, run the pool with
 `MTG_BATCH_STATE_DUMP=antilife` and start diffing worker job-histories clean-vs-flipped.
+
+## 2026-09-05 (same day, cont.): sightings 4-5 + DIFFERENTIAL — the payable-mana cache is the carrier
+
+Two further smoke runs each flipped exactly one antilife game (play digest only, same win
+turn): `antilife_smoke_d0_s1001` gi=97 — **d0, no search: the greedy path itself moved** —
+then `antilife2hg_smoke_d3_s1001` gi=23. Three consecutive flipping runs, all antilife, one
+game each, every one standalone-clean (x2, == GT). The instrumented run (MTG_BATCH_STATE_DUMP
+=antilife) shows all four antilife jobs' per-worker inputs CLEAN and identical (profile
+fingerprints, ekB/ekN, life/heads) — the 2026-09-01 signature: the leak is at game time via a
+thread_local memo that survives job switches. DIFFERENTIAL: the very next smoke with
+**MTG_MANA_CACHE=0 came back 68/68 ALL PASS**. The cache is designed byte-identical on/off, so
+this is evidence (not yet proof — flips are per-run probabilistic) that `g_mana_cache`
+(SpellEffects.cpp, thread_local, uint64-keyed, never cleared across jobs) is again the carrier
+— this time NOT via a per-job heurarm lever (regression pools run a homogeneous env), so the
+suspect is an unkeyed input or key collision. Artifacts:
+`logs/incident_20260905_antilife2hg/` (three flipped .wins, manifest, statedump stderr).
+MITIGATION available meanwhile: `MTG_MANA_CACHE=0` on pooled regression runs (results
+identical by design, just slower). OPEN: audit ManaCacheKey's inputs against everything
+TapForCost/TapForCostDirect actually reads (provider ManaSourceRank? job-scoped profile
+knobs?), and why antilife specifically.

@@ -309,6 +309,46 @@ Measured: s9200×16 byte-identical both arms; s3100×20 ON 5.55 vs OFF 5.60
 missing piece both times it resolved (Melira g1, Redcap g24); consecutive-turn
 Pod chains Finks→Redcap present. Smoke tier byte-identical (provider-scoped).
 
+### USER PUT-NARROWING (2026-09-05) — Pod/Chord fetch axes cut to the whitelist
+USER: "I don't think 0.74 seconds a game is good. I would cut the pod/chord
+enumerations as well. ... there are actually useless cards for goldfish. We
+should narrow them down to just the useful options." Plus the definitive tier
+map: "Sacrifice creature for 1, Melira or Voice or sac creature on 2. Finks +
+Recruiter on 3. Redcap + Ranger + Celes on 4" / "persist creatures on 3 and 4,
+Melira effects on 2 and 4, sacrifice creatures on 1 and 2 + a tutor on 3 (and
+a tutor for just 1-drops on 4)". Two corrections folded in mid-build: Celes IS
+a combo piece (gy-enter team counters × every loop iteration = a Redcap-class
+kill payload → always useful), and the MV4 "Melira effect" read as FELIDAR
+(flicker resets the -1/-1 counter — enabler-class backup, missing-gated;
+INTERPRETATION SURFACED to the user, not confirmed).
+Shipped (MTG_POD_PUT_NARROW, default ON; =0 unnarrowed arm):
+- `DecisionProvider::PutTargetPolicy/PutTargetOk` — two-step, ALLOCATION-FREE
+  contract (v1 returned a name whitelist built per call: library scan + three
+  hash sets × >250k CollectActions in the gi9 repro — the policy computation
+  cost more than the narrowing saved; the header documents the lesson).
+  Default narrow=false → every other deck byte-identical; the Pod + Chord
+  enumeration sites share one policy so the two put-tutors cannot drift.
+  Victims, the no-fetch sentinel, and the lossless folds are untouched.
+- Whitelist by params: free outlet + persist always; Celes-class
+  (other_creature_gy_enter_team_counters) always; enabler-class (prevents/
+  reduces counters, etb_blink_permanent=Felidar) while no enabler assembled;
+  tutors (tutor_to_hand) + diggers (etb_discard_any_number) while any piece
+  missing; Voice-class fuel (dies_trigger_creates_tokens) while a Pod is out.
+  Dorks/Scooze/Chupacabra/Rec Sage/Severance/Reveillark never listed.
+MEASURED (d5 b20 = the deck's bare-run defaults):
+- Quality: s9200×16 ON 5.0000 vs OFF 5.0625 (better); s3100×20 5.55 = 5.55.
+- CPU: total across both sets 99.5s ON vs 152.3s OFF (−35%); s3100 alone
+  −46%; s9200 flat.
+- TAIL GAME gi9 (s9200): ON 18.8s/T5 vs OFF 6.2s/T6 — 6.5× the rollouts
+  (276k vs 43k) but a TURN FASTER; the trajectory diverges to a richer,
+  costlier, better line. Budget-independent (persists at d3/b10). Hotspot =
+  ordinary work (ColorFeasibility::Payable 18%). Known trade, not a defect.
+- Budget saturation: b50/b100 buy nothing (identical avgs); the d3/b10 cell
+  matches d5/b20 quality on both seed sets at −25/−32% CPU — a candidate
+  cheaper default, NOT adopted (36-game sample; needs a wider sweep).
+- The real sub-second-per-game route remains the value-leaf stage (1.35–84.8x
+  per value-leaf.md), which is user-initiated policy.
+
 ### Chord of Calling — Tier 3 (draft received)
 `{X}{G}{G}{G}` Instant, Convoke. CRITICAL loader fact: `KeywordFromString`
 THROWS on unknown keywords — must add `Keyword::Convoke` (inert-tag idiom) or

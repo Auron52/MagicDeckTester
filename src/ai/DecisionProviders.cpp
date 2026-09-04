@@ -14207,7 +14207,7 @@ bool PodTutorRankOn()
     return on;
 }
 struct PodRoles { bool have_prev = false, have_outlet = false, have_persist = false,
-                       pod_active = false; };
+                       have_lifegain = false, have_damage = false, pod_active = false; };
 PodRoles NotePodRoles(const GameState& s, int controller)
 {
     PodRoles r;
@@ -14219,7 +14219,12 @@ PodRoles NotePodRoles(const GameState& s, int controller)
         { r.have_prev = true; }
         if (d->params.sac_creature_outlet && !d->params.sac_creature_cost.has_value())
         { r.have_outlet = true; }
-        if (d->params.persist) { r.have_persist = true; }
+        if (d->params.persist)
+        {
+            r.have_persist = true;
+            if (d->params.etb_self_lifegain > 0) { r.have_lifegain = true; }
+            if (d->params.etb_damage_any > 0)    { r.have_damage   = true; }
+        }
     };
     for (const Permanent& p : s.battlefield)
     {
@@ -14342,6 +14347,56 @@ std::vector<std::string> MeliraPodProvider::TutorHandPutList(
         out.push_back(nm);
     }
     return out;
+}
+
+DecisionProvider::PutPolicy
+MeliraPodProvider::PutTargetPolicy(const GameState& s, int controller) const
+{
+    // USER 2026-09-05, on the full Pod/Chord fetch fan: "I would cut the pod/chord enumerations
+    // as well. ... there are actually useless cards for goldfish. We should narrow them down to
+    // just the useful options." The state-dependent gates only -- battlefield+hand scan, no
+    // library walk, no allocation (see the header contract: CollectActions calls this >250k
+    // times in a rich game). MTG_POD_PUT_NARROW=0 -> narrow=false = unnarrowed A/B arm.
+    static const bool s_narrow = EnvOn("MTG_POD_PUT_NARROW", true);
+    PutPolicy pol;
+    if (!s_narrow) { return pol; }
+    const PodRoles r = NotePodRoles(s, controller);
+    pol.narrow      = true;
+    pol.have_prev   = r.have_prev;
+    pol.any_missing = !r.have_prev || !r.have_outlet || !r.have_lifegain || !r.have_damage;
+    pol.pod_active  = r.pod_active;
+    return pol;
+}
+
+bool MeliraPodProvider::PutTargetOk(const PutPolicy& pol, const CardDefinition& d) const
+{
+    // Whitelist, not blacklist (the user's own tier map: "persist creatures on 3 and 4, Melira
+    // effects on 2 and 4, sacrifice creatures on 1 and 2 + a tutor on 3 (and a tutor for just
+    // 1-drops on 4)"): a candidate is offered iff it is a combo piece, a piece-tutor/digger
+    // while something is missing, or Voice-class Pod fuel. The goldfish-dead toolbox bodies
+    // (Chupacabra, Rec Sage, Severance Priest, Scooze), dorks as PUT targets and Reveillark
+    // are simply never listed. Pure O(1) param checks -- no state reads here.
+    if (d.params.sac_creature_outlet && !d.params.sac_creature_cost.has_value()) { return true; }
+    if (d.params.persist)                                                        { return true; }
+    // Celes IS a combo piece (USER: "which is why she is so good"): every sac-loop iteration
+    // puts a creature into the graveyard, so her gy-enter team-counter trigger turns the Finks
+    // loop into team-wide +1/+1s -- a kill payload of the Redcap class. Always useful.
+    if (d.params.other_creature_gy_enter_team_counters > 0)                      { return true; }
+    // "Melira effects on 2 and 4": the MV4 one is Felidar's flicker -- a flickered persist body
+    // returns WITHOUT its -1/-1 counter (new object), the enabler-class backup. Same missing
+    // gate as the true enablers (a second copy of a filled role is dead).
+    if ((d.params.prevents_minus_counters || d.params.reduces_minus_counters_by_one
+         || d.params.etb_blink_permanent)
+        && !pol.have_prev)                                                       { return true; }
+    if (d.params.tutor_to_hand && pol.any_missing)                               { return true; }
+    if (d.params.etb_discard_any_number && pol.any_missing)                      { return true; }
+    // Voice-class fuel: a body that REPLACES ITSELF on death (dies-trigger tokens), wanted only
+    // while a Pod can climb it ("Voice allows you to pod into either Finks or Recruiter and
+    // then produces a token that can be podded into a 1-drop"). Every rung 1-4 of this deck
+    // holds a core card, so no live library-tier check is needed -- and deliberately NOT
+    // any-creature-below-a-tier, which would re-admit dorks and Scooze.
+    if (d.params.dies_trigger_creates_tokens > 0 && pol.pod_active)              { return true; }
+    return false;
 }
 
 std::vector<std::string> MeliraPodProvider::ReviveCandidates(
