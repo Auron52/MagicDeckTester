@@ -475,6 +475,16 @@ arm verified byte-identical at smoke scale (48/48, 0 configs changed).
    decks. Re-derive the probe when either arc lands. Rule-arm reproduces the probe arm
    BYTE-FOR-BYTE; **all rule-ON ship-settings regressions (probe 5 + regression 4 + smoke 1 +
    overnight 9) CONVERGE at d8 b0 — budget churn, zero cuts.** Hatch: `MTG_NO_UTVARA_M2=1`.
+   **THE ORDER HALF NOW HAS ITS OWN LEVER — `MTG_WATCHER_ORDER` (default OFF, GenericProvider
+   tier 9, 2026-09-04): an enter-trigger watcher (`dragon_ping_on_enter` /
+   `haste_on_flying_enter`) casts before the creatures it watches. Three-arm A/B (1000
+   games/deck at value-play): the order fix alone recovers ~1/3 of dragons' gap and none of
+   dragonstorm's (C: 5.6180/4.3630 vs old-default 5.6350/4.3630) — it does NOT replace the m2
+   rule — but ADDED to it (B: dragons 5.5740 vs A 5.5850) it is worth another 12 faster / 1
+   slower per 1000 on dragons (net −11; both slower movers converge at d8 b0 = churn;
+   dragonstorm ±1, knights byte-identical; no other deck holds the params). The gain is the
+   same-main Tempest→dragon lines WITH the haste attack, which the m2 crowbar cannot express.
+   ADOPTION AWAITS THE USER (cast order is user-reviewed per deck).**
 8. **DONE — Karoo lockstep fix.** The executor's searched-continuation land play now honours
    `karoo_deferred` exactly as the rollout's `bp_play_searched_land` does
    (`MTG_KAROO_BP_LOCKSTEP=0` restores).

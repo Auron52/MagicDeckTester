@@ -1704,6 +1704,21 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     // is also VialProvider's want-subtype tier; the two can never be live in the same deck, and no
     // comparator keys on the number alone.)
     if (DorkGrowthEnabled() && def.card.IsCreature() && FeedsLiveScaledDork(s, def)) { return 9; }
+    // ENTER-TRIGGER WATCHER tier (MTG_WATCHER_ORDER, default OFF -- measurement lever pending the
+    // USER's per-deck cast-order review): a permanent whose trigger fires when CREATURES ENTER
+    // (Dragon Tempest / Scourge of Valkas: dragon_ping_on_enter pings per entry scaling with the
+    // Dragon count; haste_on_flying_enter turns a same-main dragon into an attacker) must resolve
+    // BEFORE the creatures it watches, or the collapsed canonical order silently forfeits the
+    // triggers -- dragons gi19 lost an exact-lethal turn to exactly this (the entry ping was the
+    // 1 damage short), and MTG_SEARCH_ORDER=1 at d8 b0 recovers it. This is the same
+    // watcher-before-triggerer principle the tier-10 comment already applies to prowess (a
+    // CAST-trigger watcher casts before the spells that feed it); the generic creature-first rank
+    // encodes that pattern and inverts this one. Rank 9 = with the other before-the-creatures
+    // tiers (the dork-growth/Vial precedent above: tier numbers may be shared, no comparator keys
+    // on the number alone, and these decks hold no scaled dorks or Vials).
+    static const bool s_watcher_order = EnvOn("MTG_WATCHER_ORDER");
+    if (s_watcher_order
+        && (def.params.dragon_ping_on_enter || def.params.haste_on_flying_enter)) { return 9; }
     if (def.card.IsCreature())                 { return 10; }
     return 20;
 }
