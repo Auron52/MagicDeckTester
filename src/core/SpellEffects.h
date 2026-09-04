@@ -10792,9 +10792,18 @@ inline void ComputeRefloatDemand(const GameState& state, int controller, int* ne
 //
 // Inert for every other deck by construction: g_in_blink_loop is set only by ApplyBlinkLoop, and no
 // other deck pairs blink_cost with etb_untap_lands.
+// DEFAULT ON, and labelled honestly: NOT a measured win. Isolated against the shipped default
+// (combo - wildc, both arms carrying WILD_C) it reads +0.0112, t=1.48, 3/5 seeds -- indistinguishable
+// from zero, and smaller than the run-to-run drift that flipped another lever's SIGN between two runs
+// of the same binary. It ships because the user specified it as the behaviour they want and
+// authorised the deck to run it, it costs nothing measurable, and its value is in a dimension
+// avg-win-turn cannot see: RELIABILITY of the loop (step 0 guarantees the next activation's {C} pip)
+// rather than speed. This deck's win-turn average is dominated by the many games that never assemble
+// a combo at all, so it is close to the wrong ruler for a policy that only runs inside one.
+// MTG_REFLOAT_COMBO=0 restores the previous behaviour.
 inline bool RefloatComboOn()
 {
-    static const bool env_on = EnvOn("MTG_REFLOAT_COMBO");
+    static const bool env_on = EnvOn("MTG_REFLOAT_COMBO", true);
     return heurarm::Flag(heurarm::REFLOAT_COMBO, env_on);
 }
 

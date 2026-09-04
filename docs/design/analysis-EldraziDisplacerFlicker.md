@@ -2550,16 +2550,25 @@ over identical shuffles. 24/24 workers busy at the heartbeat.
 | `base − both` | −0.0112 | 0.0072 | −1.57 | 5/0 | 33 |
 | `both − wildc` | +0.0238 | 0.0076 | +3.14 | **0/8** | 37 |
 
-**`MTG_REFLOAT_WILD_C` — ADOPTED, default ON.** Faster than base on every seed that moved (5 of 5,
-never worse). Its own effect size (0.0125) sits at this deck's documented run-to-run noise floor
-(~0.01 turns/job), so the measurement is *support*, not proof; adoption rests on the correctness
-argument, which is independent and does not need a measurement: booking a rainbow source's float as
-bare `wild` makes `{1}{C}` unpayable, an unpayable cost is an unenumerated action, and the human
-therefore could not activate Essence Depleter at all. The A/B's job was to check that repairing it
-does not cost turns. It does not.
+**`MTG_REFLOAT_WILD_C` — ADOPTED on CORRECTNESS. Its win-turn effect is NOT reproducible.**
+The first pass read +0.0125 in its favour (t = +2.36, 5 of 5 seeds); a second pooled run, four arms
+on the same seeds, read **−0.0112 the other way** (t = −2.07). Both were nominally significant and
+they disagree in SIGN, which settles the question the other way round: there is no measurable
+outcome effect here, and the `base` arm's own mean moving 6.4763 → 6.4625 across the two runs with
+identical flags is the same noise floor showing itself directly (see
+`docs/design/batch-run-to-run-nondeterminism.md`). Recorded as a correction: the first report of
+this lever as "measurably faster" was an over-claim on a single run.
 
-**`MTG_REFLOAT_NEED` — REJECTED, stays default OFF.** Worse than `wildc` on **8 of 8 seeds**,
-+0.0238 turns, t = +3.14 — clear of the noise floor and perfectly consistent in sign.
+Adoption is unaffected, because it never rested on the average. Booking a rainbow source's float as
+bare `wild` makes `{1}{C}` unpayable; an unpayable cost is an **unenumerated action**; so the human
+could not activate Essence Depleter at all. That is a correctness defect with a reproducible,
+user-visible symptom, and the A/B's only job was to check the repair does not COST turns. Across two
+runs it does not.
+
+**`MTG_REFLOAT_NEED` — REJECTED, stays default OFF.** This one DOES reproduce, which is why it is
+the only verdict here stated without hedging. Worse than `wildc` on 8 of 8 seeds (+0.0238, t = +3.14)
+in the first run and on 5 of 5 seeds that moved (+0.0138, t = +1.76) in the second; worse than `base`
+in both (t = −1.57, then t = −3.18 on 7 of 7). Same sign every time, on every seed that moved.
 
 **And the reason is the fourth instance of a lesson this repo keeps relearning: accuracy is not the
 objective.** By every direct measure the need model is the better description of the mana. It drives
@@ -2582,3 +2591,71 @@ mana change alters what optionality is worth.
 **Lesson worth keeping: an unchanged average cannot distinguish "the lever does nothing" from "the
 lever's code never runs" from "the lever does the opposite of its purpose".** All three appeared in
 this one session, and only per-path counters told them apart.
+
+### 15. THE IN-LOOP MANA LADDER — user-specified, measured NEUTRAL, shipped on request (2026-09-04)
+
+**USER, specifying it directly:** *"this is one of the cases where we might want an override for the
+mana usage, but only once we have the pieces on the field and are untapping"* — then the ladder, then
+*"The top priority is always keeping the combo going"* and *"Finding exact ways to finish the job is
+for after you have bountiful amounts of mana."* And on autonomy: *"I do think it is appropriate for
+the deck to run this for you once the provider understands how to do so."*
+
+`MTG_REFLOAT_COMBO`, walked **per tapped source**, taking the first quota that source can satisfy:
+
+| | quota | why |
+|---|---|---|
+| 0 | cover the next activation's own `{C}` pip | keeping the loop alive outranks every stockpile |
+| 1–2 | colourless to 40 | 20 blink fuel + 20 spare |
+| 3 | one black | a mid-loop Essence Depleter is `{2}{B}` |
+| 4 | twenty red, only with a Shivan Gorge | 20 × `{2}{R}` is 20 damage |
+| 5 | bulk, any producible type | "around 300 mana of other types" — a target to exceed, not a cap |
+
+Plus yield-ordered tap-ahead while under 100 floating. (The *untap* side of the same mechanic,
+`EtbUntapLands`, already sorted by `PermanentManaYield`, so that half of the request was in place.)
+
+Walking per source is what makes the quotas cooperate rather than compete: a `{C}`-capable source
+spends itself on the colourless quota and a source that cannot make `{C}` falls through to
+black/red/bulk. "Always float 1 black" is therefore honoured without ever slowing the colourless
+build, which a strict global ordering would have done.
+
+#### Scoping is the substance, not a detail
+
+The tap-ahead has FOUR call sites and only one is the combo; the other three fire when an ETB-untap
+creature is merely CAST. `g_in_blink_loop` (set only by `ApplyBlinkLoop`) confines the ladder to a
+live loop. That distinction is exactly why this is a different question from the refuted
+`MTG_REFLOAT_NEED`, which applied a demand model *everywhere*: **outside a loop mana is scarce and
+`wild` is a valuable deferred choice; inside a live loop mana is unbounded, optionality is worth
+nothing, and holding a pile in the wrong pip type is the only way left to lose.** Same mechanism,
+opposite value. Confirmed in the counters — `C` 0 → 68,870 and `B` 0 → 119, while `wild` falls only
+to 16k rather than 0, because the non-loop sites keep their choice.
+
+#### Measured: NEUTRAL
+
+Four arms, 8 seeds × 100 games each (3200 games), one pooled batch, paired by (seed, game index),
+24/24 workers busy.
+
+| paired | mean | se | t | seeds better/worse |
+|---|---|---|---|---|
+| `combo − wildc` (isolates COMBO) | +0.0112 | 0.0076 | +1.48 | 3/5 |
+| `both − combo` | +0.0025 | 0.0064 | +0.39 | 3/3 |
+| `base − combo` | −0.0225 | 0.0081 | −2.79 | 7/0 |
+
+`combo − wildc` is the clean isolation (both arms carry `WILD_C`; only `COMBO` differs) and it is
+**not distinguishable from zero** — smaller than the run-to-run drift that flipped `base − wildc`'s
+sign between two runs of the same binary. `base − combo` looks worse, but it is confounded: it moves
+two levers, and its `WILD_C` component is exactly the one shown to be noise.
+
+**SHIPPED DEFAULT ON, and labelled honestly: this is not a measured win.** It ships because the user
+specified it as the behaviour they want and authorised the deck to run it, it costs nothing
+measurable, and its value is in a dimension avg-win-turn cannot see — *reliability* of the loop
+(step 0 guarantees the next activation's `{C}` pip) rather than speed. On this deck the win-turn
+average is dominated by the many games that never assemble a combo at all, so it is close to the
+wrong ruler for a policy that only ever runs inside one. `MTG_REFLOAT_COMBO=0` restores the previous
+behaviour.
+
+**And a methodological note that outranks the verdict.** Of the four levers measured today, only ONE
+(`REFLOAT_NEED`, worse) reproduced its sign across two runs. Every other effect sat at or under the
+noise floor, and one of them flipped sign while nominally significant at t > 2 in both directions.
+On this deck, a single pooled run of 800 games per arm cannot resolve 0.01 turns — so a t-statistic
+from one run is not evidence, and the repo's "run each tier ONCE and accept from it" applies to
+GROUND TRUTH, not to adopting a lever on a single significant-looking number.
