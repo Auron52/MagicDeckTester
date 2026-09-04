@@ -215,3 +215,57 @@ FRACTION (absolute ms was considered and rejected: cells/gen override budget_ms 
 b3 gen cells to b40 held-out — so the allowance must track the operating budget). CG note: CG is
 budget-saturated at b40 (all arms within ±0.004 of avg 4.672), so scaling tests there are
 insensitive by construction — use hinata-class decks.
+
+### Session 3d (2026-09-04): the try-out — full ladder B20..B10000, fleet R table, 9-deck A/B
+
+The user sharpened the scaling requirement: passing `--budget-ms` 100..10000 should give a MUCH
+better result (this is about honoring a caller's budget, not about changing shipped defaults —
+though starved decks like Hinata may separately deserve a default raise). They also ruled the
+worst possible form to be a hardcoded escalation budget ("literally does not allow us to support
+a higher depth when escalating") and framed the design honestly: budget can always be wasted
+without perfect information about the winning depth / whether escalation will fire; calibration
+is better than nothing, perfection is not on offer.
+
+**Fleet R table (measured Rsample, `MTG_HYBRID_STATS` at each deck's own budget; 1000g boosts
+for the thin decks).** Beam decks: Anti-Lifegain 16 (n=29), CG 21 (n=10, under ship_cap config),
+Hinata2 41 (n=171), Dragonstorm 81 (n=45). No-beam: burn 50 (n=15), Goblins 74 (n=12),
+FiveColour 86 (n=83), treasure_hunt 127 (n=85), StompySurprise 132 (n=35). The 120 prior is
+roughly right for no-beam decks and wrong ONLY for beam decks (4-8x overpriced) — the misprice
+is a beam phenomenon (beamed probe leaves are few, so the heuristic redo looks expensive
+relative to them). Auras/Knights/slivers_vial escalate ~never (0-13 redos/250g): R is moot.
+
+**Depth-vs-budget mechanism (own-process diagnostics, 100g/rung, seed 2002).** Escalation
+ACHIEVED depth climbs monotonically with budget under BOTH arms and reaches full depth by
+B2000: hinata ship 2.53 -> 3.82 -> 4.59 -> 4.91 -> 5.00 (B20/100/500/2000/10000), cal slightly
+ahead at every rung (2.70/3.88/4.62/4.97/5.00); redo_short falls 121 -> 0. Hint targets climb
+t1-mode -> t5-mode. FC (d6, no beam): much weaker climb, 1.21 -> 2.50 ship / 1.59 -> 2.80 cal,
+and redo_short == redos at EVERY budget — FC escalations never reach its d6 user depth; FC's
+budget->quality conversion flows almost entirely through the probe verifying wins (which is why
+pure-legacy leftover was "not useless" there). Rsample itself FALLS with budget (hinata 42 -> 8:
+probe leaves multiply faster than heuristic cost), so a frozen low-budget-calibrated R only
+OVERPRICES at high budget — the safe direction.
+
+**Quality ladder (pooled 15.5k-game batch, held-out s40000+, per-game paired vs B20).**
+hinata ship: B100 d=-0.044 t=-7.5, B500 -0.057 t=-6.6, B2000 -0.056, B10000 -0.058;
+cal: -0.047/-0.057/-0.052/-0.054. FC: B500 -0.020 t=-3.2, B2000 flat vs B500. Monotone,
+never-worse to B10000 — but the curve FLATTENS by ~B500 on both decks. The diagnostics say
+why, and it is NOT waste: by B2000 every escalation reaches full depth, hints are all-t5, and
+wall/game grows only ~6x for 500x budget — the search RUNS OUT OF THINGS TO BUY. target_depth
+(d5/d6) + escalation_cap pin the deepest question the engine may ask; budget beyond what
+full-depth search needs is unspendable. **Conclusion surfaced to the user: no budget-accounting
+fix makes B10000 beat B500; the lever is letting DEPTH scale with budget** (when the
+affordability walk finds the full ladder cheap, climb the probe/escalation target past
+target_depth: d5 -> 6 -> 7). Engine change to climb/cap logic — proposed, not built.
+
+**Fleet A/B (pooled 30k-game batch, held-out s60000+, ship vs calibrated at each deck's own
+budget; cal = live sidecar + measured escalation_r + frac 0.5 where absent; CG cal additionally
+carries the ship_cap cap5/W3 block since the live CG sidecar has NO cap block — it was part of
+the reverted bundle).** Quality parity fleet-wide: |t| <= 1.9 on all 9 decks, ZERO win/loss
+flips anywhere (FC mildly pro-cal t=-1.9). Wall (cal/ship): **CG 0.51x**, Goblins 0.90x,
+al/ds/hin/brn 0.98-0.99x, fc 1.01x, **ss 1.04x, th 1.04x**. ss/th are the two decks whose
+measured R (132/127) sits ABOVE the 120 prior — for them frac 0.5 adds wall and buys nothing
+(quality t=0.00/+1.00, 0-1 games moved). Cleanest adoption shape: calibrate the 7 decks that
+are >= on both axes; leave ss/th shipped (their R ~= prior anyway). Apparatus:
+logs/esc_diag/stage/<deck>/ scratch sidecars, manifest_fab.json, analyze via the fab parser.
+NOTHING adopted — sidecars/GT/defaults untouched pending the user's decision (the escalation
+redesign remains a reserved decision).
