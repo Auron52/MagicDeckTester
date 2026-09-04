@@ -1791,8 +1791,37 @@ and the USER corrected it: *"No, T3 happens in a straightforward manner."*
 **The claim, and why it was wrong.** I derived a turn-3 mana ceiling of about 4 after the Living
 Wish line, concluded that it "does not cast Emiel {2}{W}{W} AND Peregrine Drake {4}{U}, so the blink
 loop cannot start", and stopped there. Walking the ACTUAL engine to that point takes one command and
-shows the opposite: on turn 3 the board reaches **Emiel the Blessed + BOTH Peregrine Drakes + Cloud
-of Faeries**, with Aether Hub and Conservatory still UNTAPPED and only Mariposa spent.
+shows the opposite: the line **does** assemble the whole combo, and it does so a turn earlier than
+the mana ceiling allowed for.
+
+**CORRECTION (2026-09-04): the retraction's headline sentence was itself wrong.** It read "on turn 3
+the board reaches Emiel the Blessed + BOTH Peregrine Drakes + Cloud of Faeries, with Aether Hub and
+Conservatory still UNTAPPED and only Mariposa spent". No line reaches that board on turn 3, and the
+arithmetic says so plainly: turn 3 has at most three lands (Conservatory, Aether Hub with its two
+Wild Growths, Mariposa) for about five mana, while Emiel + Drake + Drake + Cloud is sixteen. The
+ETB-untap refund cannot bridge it either — a Drake untaps at most the three lands that exist, so it
+is roughly break-even rather than profitable, and it still has to be paid for at five up front.
+
+Here is what the engine ACTUALLY plays, read off the game log rather than derived (seed 1 gi 0, ship
+settings d5/20ms, profile attached):
+
+| turn | play |
+|------|------|
+| T1 | Conservatory |
+| T2 | Aether Hub, Wild Growth, Wild Growth (both on the Hub) |
+| **T3** | **Mariposa Military Base + Emiel the Blessed** — the whole turn |
+| T4 | Yavimaya Coast, Trace of Abundance, Peregrine Drake, Peregrine Drake, Living Wish → Essence Depleter |
+| T5 | Trace of Abundance, then Emiel blinks and Essence Depleter drains **nine times** — win |
+
+So the combo assembles across T3–T4 and cashes on T5. Turn 3 is one land and one four-drop, which is
+what five mana buys.
+
+**A methodology note, because I got this wrong twice in one session.** The second wrong version came
+from walking the game under `--claude-play` and taking plan index 0 at each main phase, which is NOT
+the engine's line — it is a hand-picked one, and on that line turn 3 casts `Trace → Aether Hub,
+Living Wish` and Emiel never appears. Reading a menu tells you what is OFFERED; only the game log
+tells you what is PLAYED. Both of this section's errors are the same mistake in different clothes:
+asserting a board state from something adjacent to it instead of reading the state itself.
 
 I mis-modelled the ETB-untap chain. Each Drake untaps five lands as it resolves, and the payment
 tap-aheads into the float (`EtbUntapTapAheadIntoFloat`), so a Drake cast very nearly refunds itself
@@ -1941,3 +1970,31 @@ correct, and the queue above records a ~60-line reservation feature built on a h
 A/B refuted. This bug is the same lesson from the other side: the two heuristics *read* as though
 they agreed, and one probe that ran them against each other showed they did not. On this deck,
 derive nothing about mana or lines that a command could tell you instead.
+
+### 10. "Does it work properly on T3 now?" — the BUG yes, a turn-3 KILL no (measured 2026-09-04)
+
+Two different questions live in that one, and they have different answers.
+
+**The reported T3 defect is fixed.** On the line where Living Wish is cast on turn 3, the menu now
+offers both orderings of `{Trace of Abundance → Aether Hub, Living Wish}`, and the one that silently
+drops its own Trace carries `"drops": ["Trace of Abundance"]` so it is labelled rather than played
+blind. Turn 3 no longer ends after Living Wish.
+
+**There is no turn-3 kill, and the evidence is a sample rather than an argument.** 800 games, 8
+seeds × 100, ONE pooled `mtg --batch` at ship settings (d5 / 20 ms, profile attached):
+
+| win turn | T4 | T5 | T6 | T7 | T8 | unwon |
+|---|---|---|---|---|---|---|
+| games | 1 | 51 | 368 | 284 | 85 | 11 |
+
+Mean 6.54. **One** game in 800 wins on turn 4 and **none** on turn 3. The fastest line the engine
+actually finds is the seed-1 shape above: combo assembled across T3–T4, cashed on T5 for nine
+Essence Depleter drains.
+
+This does NOT say a turn-3 kill is impossible — it says the engine does not find one in 800 games,
+and that the mana arithmetic above makes one look unreachable from a normal opener. Recorded as a
+measurement, not as the impossibility proof I wrongly wrote the first time.
+
+Utilisation note: the pool drained to 5/24 workers near the end, because 8 coarse 100-game jobs
+leave a long tail (one seed-2 game ran 0.26 h). Correct as one pooled batch per the repo rule, but
+finer jobs would have kept the box fuller.
