@@ -1,4 +1,4 @@
-# Regression ground truth -- commit e9bb12c7  date 2026-09-03
+# Regression ground truth -- commit a799d598  date 2026-09-04
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -52,9 +52,9 @@ kitty_smoke_d5_s1001=4.4667/81d28b277b2051c3
 dragons_smoke_d0_s1001=6.0090/5d8c41f3c6720c84
 dragons_smoke_d3_s1001=5.6800/9478a86845171462
 dragons_smoke_d5_s1001=5.5733/ca46ccc985666686
-breaching_smoke_d0_s1001=5.1650/25401021a96693e8
-breaching_smoke_d3_s1001=3.4933/e3f6bafd6bf5cc31
-breaching_smoke_d5_s1001=3.6000/47fe7798a1b613f6
+breaching_smoke_d0_s1001=5.1650/2a0db3ff484a84e4
+breaching_smoke_d3_s1001=3.4933/2dae38a67dda7eba
+breaching_smoke_d5_s1001=3.6000/6ff1926fb2c7b1a0
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6790/990aaa21c4bc567e
@@ -137,11 +137,11 @@ dragons_regression_d3_s2002=5.5167/aaa95c75e3014d28
 dragons_regression_d3_s3003=5.6100/8f1d04624a472a72
 dragons_regression_d5_s2002=5.4640/0202aa3c4749c6b9
 dragons_regression_d5_s3003=5.6360/765a08642ec282ec
-breaching_regression_d0_s2002=5.1740/0fdf9d9d605b1587
-breaching_regression_d3_s2002=3.4000/676a941eb27e2e0e
-breaching_regression_d3_s3003=3.5767/adf9485829bd13ba
-breaching_regression_d5_s2002=3.3800/c5d4e0e3003a09a5
-breaching_regression_d5_s3003=3.6000/f018efedf2dd16f5
+breaching_regression_d0_s2002=5.1740/530c3c2183c547be
+breaching_regression_d3_s2002=3.4000/6f02dc290af40277
+breaching_regression_d3_s3003=3.5767/4e0149c2d63b06b0
+breaching_regression_d5_s2002=3.3800/5667e323a242a5d1
+breaching_regression_d5_s3003=3.6000/5b2e7a6cfa6aa227
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/c408e174bb95edab
@@ -336,15 +336,15 @@ dragons_overnight_d5_s4004=5.5260/6424bd00a7f28a6a
 dragons_overnight_d5_s5005=5.6180/c6b1a3493b747773
 dragons_overnight_d5_s6006=5.5780/5ddd5027acd217fb
 dragons_overnight_d5_s7007=5.5880/6289bb8d16397d3f
-breaching_overnight_d0_s4004=5.1735/ba378661199c47fb
-breaching_overnight_d0_s6006=5.1640/cef907bd8e90094b
-breaching_overnight_d0_s8008=5.1760/c107a224ffef83f9
-breaching_overnight_d0_s10010=5.1545/6ceb0e9cf4a6b2d2
-breaching_overnight_d3_s4004=3.4600/c90e4a7c265400e4
-breaching_overnight_d3_s5005=3.4710/5125ef6907583799
-breaching_overnight_d3_s6006=3.4940/5cece8ba3bf1b4b5
-breaching_overnight_d3_s7007=3.4990/d3d1691a387b94c7
-breaching_overnight_d5_s4004=3.4160/37d74bc08138e031
-breaching_overnight_d5_s5005=3.5020/ad87042eb003b4cc
-breaching_overnight_d5_s6006=3.5160/defe3bb00c882768
-breaching_overnight_d5_s7007=3.4600/c0f809bf4de0e470
+breaching_overnight_d0_s4004=5.1735/0121feed984105a3
+breaching_overnight_d0_s6006=5.1640/08c76d8cf669bc35
+breaching_overnight_d0_s8008=5.1760/8223777b8dbe0da2
+breaching_overnight_d0_s10010=5.1545/dd54cd77b640260a
+breaching_overnight_d3_s4004=3.4600/809bc86e205191bd
+breaching_overnight_d3_s5005=3.4710/9482a12503264b2c
+breaching_overnight_d3_s6006=3.4940/c7b421362e03bb40
+breaching_overnight_d3_s7007=3.4990/9f28689e3419b68b
+breaching_overnight_d5_s4004=3.4160/72eca51a0fc644cf
+breaching_overnight_d5_s5005=3.5020/66af11e2bd76a5e4
+breaching_overnight_d5_s6006=3.5160/1133dd8a77652f36
+breaching_overnight_d5_s7007=3.4600/816435aea4e96368
