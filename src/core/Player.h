@@ -45,6 +45,14 @@ struct Player
     // cards_drawn_this_turn; folded into the sim key under the same >0 guard, so it is 0 forever --
     // and byte-identical -- for every deck with no lifegain-count payload.
     int life_gained_this_turn = 0;
+    // Cards this player has CYCLED OR DISCARDED this turn. Read only by Hollow One's
+    // cost_less_per_cycle_or_discard payload ("costs {2} less to cast for each card you've cycled
+    // or discarded this turn"). Incremented at the three cycle sites (executor PerformDig, the
+    // rollout auto-dig loop, the human-play DigDraw action) and at the real discard sites (cleanup
+    // discard, cost/trigger discards). Reset at BOTH untap sites in lockstep with
+    // cards_drawn_this_turn; folded into the sim key under the same >0 guard, so it is 0 forever --
+    // and byte-identical -- for every deck with no cycle/discard-count payload.
+    int cards_cycled_or_discarded_this_turn = 0;
     int poison_counters            = 0;
     // Rad counters (Mariposa Military Base: "You may have this land enter tapped. If you do, you
     // get two rad counters"). A PLAYER resource, not a permanent's. At the beginning of this

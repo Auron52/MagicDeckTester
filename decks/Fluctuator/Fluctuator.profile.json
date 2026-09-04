@@ -1,0 +1,83 @@
+{
+  "card_scores": {
+    "Blasted Landscape": [
+      0.18570318570318545,
+      -0.4361337587144032
+    ],
+    "Canyon Slough": [
+      -0.11614780844871664,
+      0.1409028727770174
+    ],
+    "Capital City": [
+      0.3181176731480644,
+      -0.3425878757004588
+    ],
+    "Drannith Stinger": [
+      0.057842094468584015,
+      0.07109607656055772
+    ],
+    "Drifting Meadow": [
+      -0.09647213724199322
+    ],
+    "Enlightened Tutor": [
+      0.3995540726957749
+    ],
+    "Festering Thicket": [
+      0.09821496655228579
+    ],
+    "Fetid Pools": [
+      -0.11077643908969215,
+      -0.10277777777777786
+    ],
+    "Fluctuator": [
+      1.5006104885878022,
+      -0.07314279480746144
+    ],
+    "Forsake the Worldly": [
+      -0.24626865671641784
+    ],
+    "Glittering Massif": [
+      -0.0016950025759916443,
+      -0.23156862745098028
+    ],
+    "Hollow One": [
+      -0.3153061224489795,
+      -0.2626441881100261
+    ],
+    "Irrigated Farmland": [
+      -0.14257065284462556,
+      0.08356164383561637
+    ],
+    "Polluted Mire": [
+      -0.08900055655449979,
+      -0.08308823529411757
+    ],
+    "Scattered Groves": [
+      -0.06569343065693456,
+      -0.3245504717820902
+    ],
+    "Sheltered Thicket": [
+      -0.043446576491559696,
+      0.19420415224913512
+    ],
+    "Smoldering Crater": [
+      -0.03143932439875119
+    ],
+    "Unearth": [
+      -0.5471750181554107,
+      -0.6688743645606383
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

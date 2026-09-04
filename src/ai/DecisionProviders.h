@@ -104,6 +104,12 @@ enum class UnprunedGate
                   // is already budget-correct (SinkCostWithLineHold) and the fan multiplies every
                   // Sliver in hand; human play always keeps the full fan, so the person -- not a
                   // greedy at resolution time -- decides how many copies the turn's mana buys
+    DigResolve,   // the dig loop's nested BREAKPOINT RE-SOLVE opened: re-solve on every nonland
+                  // drawn, instead of only when something in hand is actually castable with the
+                  // mana available (FluctuatorProvider::DigResolveOnlyWhenCastable). This is a
+                  // 5f PERFORMANCE gate, not a quality one -- see the hook's comment for the
+                  // soundness argument. Default (pruned) is the cheap form for the one deck that
+                  // opts in; every other deck never queries it.
     _Count
 };
 
@@ -1096,6 +1102,37 @@ public:
     // The dig is a SEARCHED decision here (USER 2026-08-28): ShouldConsiderDig is only the
     // default/horizon heuristic; the enumerator fans dig/no-dig variants and the rollout decides.
     bool        DigDecisionSearched() const override { return true; }
+};
+
+// Fluctuator cycling combo. This provider exists for a reason none of the others do: it does not
+// NARROW the search, it TURNS THE DECK ON. GenericProvider returns false/empty from all three dig
+// hooks (see its definitions), and cycling in this engine is reachable only through those hooks --
+// so a Fluctuator deck routed to Generic would never cycle a single card, i.e. would never play its
+// own game. That is a capability-narrowing DEFAULT, not a deck heuristic, and this class is where
+// it gets switched back on.
+//
+// It holds three hooks:
+//   * HasAnyDigSource  -- the shared "is there a cycler in hand" precondition, ungated.
+//   * ShouldConsiderDig -- the generic gate's "don't strand yourself on mana" land floor is
+//     meaningless once a Fluctuator makes cycling FREE, so a free cycle is always considered; with
+//     no Fluctuator out, a cycle really does cost {2} and the shared gate applies unchanged.
+//   * SelectDigSource  -- a deck-aware ranking replacing the shared helper's "first affordable
+//     cycler in HAND ORDER", which is exactly the arbitrary enumeration-order pick the core
+//     invariant forbids: here it would cheerfully cycle away the deck's only Fluctuator.
+// The dig itself stays a SEARCHED axis (DigDecisionSearched) -- these hooks supply the default and
+// the horizon behaviour, and the rollout scores dig/no-dig per plan.
+class FluctuatorProvider : public GenericProvider
+{
+public:
+    const char* Name() const override { return "Fluctuator"; }
+    bool        HasAnyDigSource (const GameState& s) const override;
+    bool        ShouldConsiderDig(const GameState& s) const override;
+    std::string SelectDigSource(const GameState& s, const ManaPool& pool, bool& out_is_sac) const override;
+    bool        DigDecisionSearched() const override { return true; }
+    // 5f perf: skip the dig loop's nested re-solve when nothing in hand is castable anyway.
+    // MTG_FLUCT_DIG_RESOLVE=0 (or MTG_UNPRUNE=digresolve) restores the re-solve-always form for
+    // the standing A/B. See DecisionProvider::DigResolveOnlyWhenCastable.
+    bool        DigResolveOnlyWhenCastable() const override;
 };
 
 // Mono-red Dragons ramp. Exists to hold ONE measured hook: the cleanup-discard bucket policy.

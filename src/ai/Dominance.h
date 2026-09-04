@@ -483,6 +483,26 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         fold(static_cast<std::uint64_t>(p.cards_drawn_this_turn));
         fold(static_cast<std::uint64_t>(p.life_gained_this_turn));
         fold(static_cast<std::uint64_t>(p.poison_counters));
+        // Hollow One cycle/discard-count. NOT folded unconditionally like the counters above: every
+        // dig deck (treasure_hunt / auras / dragons) drives this counter nonzero, so an
+        // unconditional fold would change THEIR keys too and churn three unrelated decks' GT for a
+        // value none of them reads. Gated exactly like the sim key's fold -- nonzero AND the hand
+        // actually holding a cost_less_per_cycle_or_discard card -- so it is byte-identical
+        // everywhere except a deck that really can cast a discount-scaled spell.
+        if (p.cards_cycled_or_discarded_this_turn > 0)
+        {
+            bool reads_cycles = false;
+            for (const Card& hc : p.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd && hd->params.cost_less_per_cycle_or_discard > 0) { reads_cycles = true; break; }
+            }
+            if (reads_cycles)
+            {
+                fold(0xC7C1ull);
+                fold(static_cast<std::uint64_t>(p.cards_cycled_or_discarded_this_turn));
+            }
+        }
         // RAD COUNTERS (Mariposa Military Base): NOT per-turn scratch like the three counters
         // above -- they persist across untaps and are future-determining twice over (they cheapen
         // Mariposa's draw, and they mill + cost life at every precombat main). Gated on nonzero so

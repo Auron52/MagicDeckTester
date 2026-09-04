@@ -910,6 +910,17 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
             ApplyColoredPipReduction(cost, pd->params.reduces_subtype_colored_cost.value());
         }
     }
+    // Hollow One: "This spell costs {2} less to cast for each card you've cycled or discarded this
+    // turn." Scaled by a PER-TURN counter rather than by a board state, which makes it the only
+    // reduction here that GROWS WITHIN A TURN -- see the ManaPruneBound bail, which must treat it
+    // like affinity or the mana prune drops a line that only becomes affordable after a few cycles.
+    // Generic half only, floor 0 (a {5} Hollow One is free after three cycles).
+    if (def.params.cost_less_per_cycle_or_discard > 0)
+    {
+        const int events = state.players[state.active_player_index].cards_cycled_or_discarded_this_turn;
+        cost.generic = std::max(0, cost.generic
+                                   - def.params.cost_less_per_cycle_or_discard * events);
+    }
     // Hinata's per-target cost reduction (fixed-cost spells; {X} spells apply it at the X-cost
     // sites where the whole generic, incl. X, is known -- CastSpellFromHand / apply_one).
     if (!def.card.m_mana_cost.has_x)

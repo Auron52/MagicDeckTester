@@ -333,6 +333,14 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     PerformLookTopPutCreature(state, entry.controller_index, def.params,
                                               entry.tutor_target, def.card.m_name.str());
                 }
+                // Unearth: "Return target creature card with mana value 3 or less from your
+                // graveyard to the battlefield." Lockstep with TurnSolver::apply_one.
+                if (def.params.reanimate_creature_max_mv > 0)
+                {
+                    PerformReanimateFromGraveyard(state, entry.controller_index,
+                                                  def.params.reanimate_creature_max_mv,
+                                                  def.card.m_name.str());
+                }
                 if (def.params.tutor_to_battlefield_single)
                 {
                     // Natural Order: search ONE matching (type + colour) creature and put it onto

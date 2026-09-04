@@ -241,6 +241,34 @@ public:
     // heuristic-only gate (Treasure Hunt's measured greedy; every digless deck trivially).
     virtual bool        DigDecisionSearched() const { return false; }
 
+    // DigResolveOnlyWhenCastable -- for decks whose cycling is FREE and therefore constant
+    // (Fluctuator). It began as a 5f PERFORMANCE lever and MEASURED AS A PLAY-QUALITY FIX; both
+    // halves are real, so do not read it as a speed-for-quality trade.
+    //
+    // WHAT IT FIXES. The dig loop digs THROUGH lands and, on the first NONLAND drawn, runs a nested
+    // breakpoint re-solve and then BREAKS -- "once we have action we are no longer stuck". That is
+    // right for Treasure Hunt, where digging is a means of FINDING action. It is wrong for a deck
+    // where CYCLING IS THE ACTION: the break halts the combo mid-turn, and because the nested
+    // re-solve digs again, every node of the search spawned a nested search (recursion).
+    //
+    // SOUNDNESS. The re-solve exists so a card the dig just FOUND can still be cast this turn. When
+    // nothing in hand is castable with the mana currently available, that re-solve cannot cast
+    // anything: the only state the cycle changed is one card hand->graveyard, one card
+    // library->hand, and (for a free cycle) no mana at all. So skipping it and CONTINUING to cycle
+    // reaches the same states more cheaply, rather than dropping a line. The castability probe is
+    // deliberately whole-HAND rather than just-the-drawn-card, which is what makes it safe when a
+    // cycled creature turns a held Unearth live.
+    //
+    // MEASURED (Fluctuator, 40 games, seed 9001, d3/b200, per-game via MTG_DUMP_WINS):
+    //   re-solve always : avg 5.6750, 10m42 CPU, 9 games > 30 s
+    //   this hook on    : avg 5.0000,  7m12 CPU, 6 games > 30 s
+    //   per game: 20 of 40 FASTER, 0 SLOWER -- strictly dominant.
+    //
+    // Returning true is opt-in per provider and is opened for the standing A/B by
+    // MTG_UNPRUNED / MTG_UNPRUNE=digresolve. Base returns false -> every other deck keeps the
+    // re-solve-always behaviour and is byte-identical.
+    virtual bool        DigResolveOnlyWhenCastable() const { return false; }
+
     // LandsEdgeFireCount -- how many lands to discard to a Land's Edge this activation.
     virtual int LandsEdgeFireCount(const GameState& s, int rate) const = 0;
 

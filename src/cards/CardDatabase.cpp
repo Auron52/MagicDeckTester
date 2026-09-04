@@ -1068,6 +1068,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.blink_own_only                = params.value("blink_own_only", false);
     p.etb_blink_permanent           = params.value("etb_blink_permanent", false);
     p.reduces_creature_activation   = params.value("reduces_creature_activation", 0);
+    p.reduces_cycling_activation    = params.value("reduces_cycling_activation", 0);
+    p.cycle_trigger_damage_each_opponent =
+        params.value("cycle_trigger_damage_each_opponent", 0);
+    p.cost_less_per_cycle_or_discard = params.value("cost_less_per_cycle_or_discard", 0);
+    p.reanimate_creature_max_mv      = params.value("reanimate_creature_max_mv", 0);
     if (params.contains("other_creature_etb_counter_cost"))
         p.other_creature_etb_counter_cost =
             ManaCostFromString(params["other_creature_etb_counter_cost"].get<std::string>());

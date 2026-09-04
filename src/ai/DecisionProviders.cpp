@@ -77,6 +77,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"mainphase",  UnprunedGate::MainPhase},
     {"terak",      UnprunedGate::TeraK},
     {"replicate",  UnprunedGate::Replicate},
+    {"digresolve", UnprunedGate::DigResolve},
 };
 
 const char* GateName(UnprunedGate g)
@@ -9228,6 +9229,7 @@ namespace
     const StompyProvider         g_stompy;
     const MinotaurProvider       g_minotaur;
     const DragonsProvider        g_dragons;
+    const FluctuatorProvider     g_fluctuator;
     const AurasProvider          g_auras;
     const EldraziFlickerProvider g_eldrazi_flicker;
     const MeliraPodProvider      g_melira_pod;
@@ -9249,6 +9251,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool dragons = false;  // Mono-red Dragons ramp -- routes to Generic BEFORE the goblin check
     bool melira_pod = false; // Persist combo -- routes to MeliraPodProvider BEFORE the goblin check
     bool aura = false;     // Bogle Auras -- Light-Paws' aura_cast_tutor_attach is unique to it
+    bool fluctuator = false;  // Fluctuator cycling combo -- routes ABOVE anti (Enlightened Tutor)
     // Eldrazi Displacer / Emiel flicker combo. MUST be detected and MUST return ABOVE the `anti`
     // check: Eladamri's Call carries tutor_to_hand, which is the anti-lifegain signature, and this
     // deck would otherwise inherit AntiLifegainProvider's narrowing wholesale -- the recorded
@@ -9264,6 +9267,25 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardParams& p = def->params;
 
         if (p.blink_cost.has_value() || p.etb_untap_lands > 0 || p.is_land_aura) { eldrazi = true; }
+
+        // Fluctuator cycling combo. Signature = the four params this deck introduced, OR-ed across
+        // FOUR DIFFERENT CARDS (Fluctuator, Drannith Stinger, Hollow One, Unearth) so a
+        // deckbuilding swap that cuts one card cannot silently lose the routing -- the
+        // deck-screening lesson, and the same discipline the Dragons/Minotaur signatures use.
+        // Every one of them is new and gated (0 inert), so no existing deck can set it.
+        //
+        // MUST return ABOVE the `anti` check: this deck's Enlightened Tutor carries tutor_to_top,
+        // which is on its own enough to set the anti-lifegain signature -- the recorded misroute
+        // class (Goblin Matron, Stoneforge, Worldly Tutor, the FiveColour fetchlands). Landing on
+        // AntiLifegainProvider would hand this deck another archetype's tutor narrowing AND leave
+        // cycling switched off, since that provider does not override the dig hooks either.
+        if (p.reduces_cycling_activation > 0
+            || p.cycle_trigger_damage_each_opponent > 0
+            || p.cost_less_per_cycle_or_discard > 0
+            || p.reanimate_creature_max_mv > 0)
+        {
+            fluctuator = true;
+        }
 
         // Goblins archetype: any Goblin-specific gated param marks the deck. Goblin Matron carries
         // tutor_to_hand, which would otherwise trip the anti-lifegain signature below and MISROUTE
@@ -9480,6 +9502,12 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // sets that signature on its own (the exact Mirrorwing/Instigator misroute class: until
     // 2026-08-21 this deck silently ran under GoblinsProvider) -- and over anti (Worldly Tutor's
     // tutor_to_top).
+    // Fluctuator cycling combo: FluctuatorProvider. Must WIN OVER anti (Enlightened Tutor's
+    // tutor_to_top sets that signature on its own -- see the detection note above). Unlike every
+    // other provider here this one is not a narrowing: GenericProvider disables the dig hooks
+    // wholesale, and cycling is reachable ONLY through them, so without this routing the deck
+    // cannot cycle at all.
+    if (fluctuator) { return g_fluctuator; }
     if (stompy) { return g_stompy; }
     // Minotaur: MinotaurProvider (Generic + the user-amended cleanup-discard bucket policy; every
     // other hook inherits Generic, and its Aether Vials stay on the ROOT hand-aware charge policy
@@ -11356,6 +11384,139 @@ bool DragonsProvider::OrderOpaqueCastsByRank() const
     // nothing in this deck is order-opaque (no cast-draw / staging / cascade), so the opaque
     // path never fires. Gated on the same hatch so MTG_DRAGONS_ORDER=0 restores generic fully.
     return DragonsOrderEnabled();
+}
+
+// ---- FluctuatorProvider: cycling is the deck, not a "dig when stuck" ---------
+//
+// See the header comment for why this provider exists at all (Generic switches cycling OFF).
+
+// Is at least one cycler in hand FREE right now? Under a Fluctuator every {2} cycler in this deck
+// reduces to {0}, which changes the character of the decision completely: a free cycle is pure
+// profit (a card, plus 1 damage for every Drannith Stinger out) and there is no mana to husband.
+static bool FluctuatorFreeCycleAvailable(const GameState& s)
+{
+    const Player& ap = s.ActivePlayer();
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || !d->params.cycling_cost.has_value()) { continue; }
+        if (EffectiveCyclingCostFor(s, *d).ManaValue() == 0) { return true; }
+    }
+    return false;
+}
+
+bool FluctuatorProvider::HasAnyDigSource(const GameState& s) const
+{
+    return ::HasAnyDigSource(s);
+}
+
+bool FluctuatorProvider::DigResolveOnlyWhenCastable() const
+{
+    static const bool s_on = EnvOn("MTG_FLUCT_DIG_RESOLVE", true);   // DEFAULT ON; =0 restores
+    return s_on;
+}
+
+bool FluctuatorProvider::ShouldConsiderDig(const GameState& s) const
+{
+    // FREE cycling: always consider. The shared gate refuses below two lands ("don't strand
+    // ourselves on mana") and that reasoning simply does not apply to a {0} activation -- there is
+    // no mana to strand. Refusing here would make the deck decline its own engine on exactly the
+    // turns it most wants to run it.
+    if (FluctuatorFreeCycleAvailable(s)) { return true; }
+    // No Fluctuator out: a cycle costs a real {2}, so the shared "dig when stuck" reasoning holds
+    // unchanged (and for this deck reduces to its two-land floor -- the deck runs no Treasure Hunt,
+    // no cascade and no retrace, so none of the gate's other bail-outs can fire).
+    return ::ShouldConsiderDig(s);
+}
+
+// WHICH card to cycle. The shared helper takes the first affordable cycler in HAND ORDER, which is
+// the arbitrary "first in enumeration order" pick the core invariant forbids -- and here it is
+// actively destructive: hand order would happily cycle the only Fluctuator, throwing away the
+// engine to draw one card. This is a genuine deck heuristic and lives here, disclosed in 6a.
+//
+// Cycle-first order (lowest rank goes first). The rule is "spend what can never be cast, then
+// redundancy, then lands, and never the last copy of a piece we do not already control":
+//   0  Forsake the Worldly -- goldfish_inert, so it can NEVER be cast (no artifact/enchantment the
+//      passive opponent controls, and self-exiling our own Fluctuator is strictly bad). It is pure
+//      cycling fodder and should always go first.
+//   1  A redundant copy of a permanent we ALREADY control (a second Fluctuator). The first one is
+//      the engine; the second does nothing a first does not (its {2} reductions do not stack
+//      usefully once every cycler is already free).
+//   2  Unearth with no legal target in the graveyard -- currently uncastable, so it is fodder now.
+//   3  Lands. The deck runs 42 and needs about five; a land is the default thing to cycle.
+//   4  Hollow One -- a real 4/4 body, but the deck holds four and casting one is not the win.
+//   5  Drannith Stinger while we control one already (redundant damage source, and cycling it puts
+//      it in the graveyard where Unearth can rebuy it).
+//   6  Unearth WITH a legal target -- it rebuys a Stinger; keep it.
+// NEVER cycled (skipped entirely, so the loop stops rather than eating them): the last Fluctuator
+// while we control none, and the last Drannith Stinger while we control none. Those two cards ARE
+// the combo; drawing one card is never worth pitching the engine or the wincon.
+std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPool& pool,
+                                                bool& out_is_sac) const
+{
+    out_is_sac = false;
+    const Player& ap  = s.ActivePlayer();
+    const int     me  = s.active_player_index;
+
+    int bf_fluctuator = 0, bf_stinger = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.reduces_cycling_activation > 0)         { ++bf_fluctuator; }
+        if (d->params.cycle_trigger_damage_each_opponent > 0) { ++bf_stinger; }
+    }
+
+    int best_rank = std::numeric_limits<int>::max();
+    int best_num  = 0;
+    std::string best_name;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || !d->params.cycling_cost.has_value()) { continue; }
+        if (!pool.CanPay(EffectiveCyclingCostFor(s, *d))) { continue; }   // lockstep with the payer
+
+        const CardParams& p = d->params;
+        int rank;
+        if (p.goldfish_inert)                                 { rank = 0; }   // Forsake the Worldly
+        else if (p.reduces_cycling_activation > 0)
+        {
+            if (bf_fluctuator == 0) { continue; }                            // NEVER: the engine
+            rank = 1;                                                        // redundant copy
+        }
+        else if (p.reanimate_creature_max_mv > 0)
+        {
+            rank = HasReanimateTarget(s, me, p.reanimate_creature_max_mv) ? 6 : 2;
+        }
+        else if (d->card.IsLand())                            { rank = 3; }
+        else if (p.cost_less_per_cycle_or_discard > 0)         { rank = 4; }  // Hollow One
+        else if (p.cycle_trigger_damage_each_opponent > 0)
+        {
+            if (bf_stinger == 0) { continue; }                               // NEVER: the wincon
+            rank = 5;                                                        // redundant copy
+        }
+        else                                                  { rank = 4; }
+
+        // Ties broken by the lowest per-copy number so the executor and the rollout pick the
+        // identical physical card (lockstep; the same discipline as the reanimate target scan).
+        if (rank < best_rank || (rank == best_rank && c.m_number < best_num))
+        { best_rank = rank; best_num = c.m_number; best_name = c.m_name.str(); }
+    }
+    if (!best_name.empty()) { return best_name; }
+
+    // No cyclable card we are willing to spend -- fall through to a sac-to-draw land in play, the
+    // shared helper's second half (this deck runs none, so it is a no-op here).
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.sacrifice_draw_cost.has_value()) { continue; }
+        if (!pool.CanPay(d->params.sacrifice_draw_cost.value())) { continue; }
+        out_is_sac = true;
+        return p.card.m_name.str();
+    }
+    return {};
 }
 
 // ---- DragonsProvider: the Mind Stone dig (searched axis) --------------------

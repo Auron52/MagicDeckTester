@@ -13479,6 +13479,165 @@ inline bool LandEntersTapped(GameState& state, const CardDefinition& def, bool a
     return tapped;
 }
 
+// ---- Reanimation: graveyard -> BATTLEFIELD (Unearth) -------------------------------------------
+//
+// "Return target creature card with mana value N or less from your graveyard to the battlefield."
+// Distinct from return_target_from_graveyard, which returns to HAND; nothing in this engine put a
+// card from a graveyard onto the battlefield before. The put block below is the same one
+// PerformTutorToBattlefield uses (build a Permanent, preserve the per-copy m_number so logging and
+// the state key stay stable, entered_this_turn = true, then FireEtbWatchers).
+//
+// TARGET CHOICE: highest mana value within the cap, ties broken by the lowest per-copy m_number so
+// the executor and the rollout pick the identical card (lockstep). "Biggest legal creature" is the
+// standard read and mirrors return_target_from_graveyard's existing highest-MV auto-pick. In the
+// Fluctuator deck the pick is not even a heuristic -- Drannith Stinger (MV 2) is the ONLY creature
+// in the 60 whose mana value is <= 3 (Hollow One is MV 5), and multiple Stingers are the same card,
+// so the choice is structurally forced. Disclosed in Stage 6a.
+//
+// The shared target scan: index of the chosen graveyard creature, or -1 when there is none.
+// Used BOTH by the resolution below and by the enumerator's castability gate, so "the spell is
+// offered" and "the spell finds a target" can never disagree.
+inline int ReanimateTargetIndex(const GameState& state, int controller, int max_mv)
+{
+    if (max_mv <= 0) { return -1; }
+    const Player& ap = state.players[controller];
+    int best = -1;
+    for (int i = 0; i < static_cast<int>(ap.graveyard.size()); ++i)
+    {
+        const Card& gc = ap.graveyard[i];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(gc);
+        const Card& probe = d ? d->card : gc;
+        if (!probe.IsCreature()) { continue; }
+        if (gc.m_mana_cost.ManaValue() > max_mv) { continue; }
+        if (best < 0) { best = i; continue; }
+        const int bmv = ap.graveyard[best].m_mana_cost.ManaValue();
+        const int cmv = gc.m_mana_cost.ManaValue();
+        if (cmv > bmv || (cmv == bmv && gc.m_number < ap.graveyard[best].m_number)) { best = i; }
+    }
+    return best;
+}
+
+inline bool HasReanimateTarget(const GameState& state, int controller, int max_mv)
+{
+    return ReanimateTargetIndex(state, controller, max_mv) >= 0;
+}
+
+// Returns true if a creature was reanimated. `controller` owns the graveyard and the permanent.
+inline bool PerformReanimateFromGraveyard(GameState& state, int controller, int max_mv,
+                                          const std::string& source_name)
+{
+    const int best = ReanimateTargetIndex(state, controller, max_mv);
+    if (best < 0) { return false; }   // no legal target -> the spell does nothing (CR 601.2c)
+    Player& ap = state.players[controller];
+
+    Card gc = ap.graveyard[best];
+    ap.graveyard.erase(ap.graveyard.begin() + best);
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(gc);
+    Permanent perm;
+    perm.card              = d ? d->card : gc;
+    perm.card.m_number     = gc.m_number;   // preserve per-copy id (logging / state key)
+    perm.controller_index  = controller;
+    perm.owner_index       = controller;
+    perm.entered_this_turn = true;
+    state.battlefield.push_back(perm);
+    if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
+    {
+        EmitPlayEvent(state.turn_number, "zone",
+                      gc.m_name.str() + " -- returned from the graveyard to the battlefield ("
+                      + source_name + ")");
+    }
+    // Route the reanimated creature through the SAME ETB cascade a hard-cast one uses, so a
+    // returned creature's enters-the-battlefield triggers fire exactly like a cast one.
+    FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+    FireOwnEtbTriggers(state, controller, static_cast<int>(state.battlefield.size()) - 1,
+                       std::string(), kEtbKxHeuristic);
+    return true;
+}
+
+// ---- Cycling: cost reduction + the "you cycled a card" watcher --------------------------------
+//
+// Fluctuator: "Cycling abilities you activate cost {2} less to activate." A THIRD cost axis,
+// distinct from EffectiveSpellCost (keyed on CASTING) and EffectiveActivationCost (keyed on an
+// activated ability of a battlefield CREATURE). Cycling is activated from HAND, so there is no
+// battlefield source to gate on -- the reducer is a static effect of a permanent the CONTROLLER
+// has out, applied to every cycling activation that controller makes.
+//
+// Two differences from EffectiveActivationCost, both deliberate:
+//   * The FLOOR IS ZERO. Training Grounds carries an explicit "can't reduce below one mana"
+//     clause; Fluctuator does not, so a {2} cycler really does become FREE. That is the entire
+//     engine of this deck and must not inherit the Training Grounds floor.
+//   * The GENERIC half only (CR 601.2f), so a coloured cycling pip (Lonely Sandbar's {U}) is
+//     untouched -- Fluctuator makes it no cheaper, which is correct.
+//
+// MUST be applied at EVERY site a cycling cost is read -- the three payments (executor PerformDig,
+// the rollout auto-dig loop, the human-play DigDraw), the two affordability filters (SelectDigSource,
+// HasAnyDigSource-adjacent probes) and the human-play offer probe. If an affordability filter keeps
+// the printed cost while the payer uses the reduced one (or vice versa) the dig loops filter in a
+// cycle they cannot buy and silently `break`. Returns `printed` unchanged when no reducer is out,
+// so every other deck stays byte-identical.
+inline ManaCost EffectiveCyclingCost(const GameState& state, int controller, const ManaCost& printed)
+{
+    int reduce = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d) { reduce += d->params.reduces_cycling_activation; }
+    }
+    if (reduce <= 0) { return printed; }
+    ManaCost c = printed;
+    c.generic  = std::max(0, c.generic - reduce);   // floor ZERO, generic half only
+    return c;
+}
+
+// Convenience overload: the active player's effective cycling cost for a hand card's definition.
+inline ManaCost EffectiveCyclingCostFor(const GameState& state, const CardDefinition& def)
+{
+    return EffectiveCyclingCost(state, state.active_player_index, def.params.cycling_cost.value());
+}
+
+// Drannith Stinger: "Whenever you cycle another card, this creature deals 1 damage to each
+// opponent." The FireSacrificeWatchers shape -- a player-ACTION watcher scanned off the
+// controller's battlefield. Called from ALL THREE cycle sites (executor PerformDig, the rollout
+// auto-dig loop, the human-play DigDraw action) so the committed line and the realised game agree.
+//
+// "another card" is structurally always satisfied and needs no check: the watcher is a permanent on
+// the battlefield while the cycled card is in HAND, so a card can never cycle-trigger itself. A
+// SECOND copy in hand cycling while this one is out is a genuine "another card" and does trigger.
+//
+// Damage goes to the opponent's FACE only ("each opponent" = players, not their creatures), and
+// sets opponent_lost_life_this_turn so Spectacle-class effects see it.
+inline void FireCycleWatchers(GameState& state, int controller)
+{
+    const int opp = 1 - controller;
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != controller) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (!wd || wd->params.cycle_trigger_damage_each_opponent <= 0) { continue; }
+        const int dmg    = wd->params.cycle_trigger_damage_each_opponent;
+        const int before = state.players[opp].life;
+        state.players[opp].life -= dmg;
+        state.opponent_lost_life_this_turn = true;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "damage",
+                          w.card.m_name.str() + " (cycle trigger): " + std::to_string(dmg)
+                          + " to opponent (" + std::to_string(before)
+                          + "\xE2\x86\x92" + std::to_string(before - dmg) + ")");
+        }
+    }
+}
+
+// Bookkeeping shared by all three cycle sites: a cycle is BOTH a "card cycled or discarded this
+// turn" (Hollow One's cost scaler) and the trigger event above. Kept as one call so a future cycle
+// site cannot pick up one half and miss the other.
+inline void OnCardCycled(GameState& state, int controller)
+{
+    state.players[controller].cards_cycled_or_discarded_this_turn += 1;
+    FireCycleWatchers(state, controller);
+}
+
 // Shared "dig when stuck" gate (cycling / sacrifice-to-draw lands, e.g. Lonely Sandbar,
 // Forgotten Cave, Fiery Islet). Decides whether the active player should consider
 // spending a surplus land to draw toward action (chiefly Treasure Hunt). The SAME gate
@@ -13557,7 +13716,10 @@ inline std::string SelectDigSource(const GameState& state, const ManaPool& pool,
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || !d->params.cycling_cost.has_value()) { continue; }
-        if (!pool.CanPay(d->params.cycling_cost.value())) { continue; }
+        // P5 -- affordability filter. MUST use the same reduced cost the payer will use
+        // (EffectiveCyclingCost), or a Fluctuator-discounted cycle is filtered out here and the
+        // dig loop breaks on a cost it could actually have paid.
+        if (!pool.CanPay(EffectiveCyclingCostFor(state, *d))) { continue; }
         return c.m_name;
     }
     // Sacrifice-to-draw: an untapped land in play (e.g. Fiery Islet) whose cost is affordable.

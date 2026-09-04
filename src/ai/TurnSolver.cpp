@@ -3798,12 +3798,37 @@ static int FindOwnProwessBurnTarget(const GameState& state, const CardDefinition
     return FindSurvivingOwnCreature(state, state.active_player_index, CreatureBurnDamage(def, state));
 }
 
+// Can ANY card in hand actually be cast with the mana available right now? Used only by the
+// dig loop's DigResolveOnlyWhenCastable perf gate (see DecisionProvider.h) -- it is deliberately
+// whole-hand rather than "is the card we just drew castable", because cycling a creature into the
+// graveyard can turn a HELD Unearth live without the drawn card being relevant at all.
+static bool AnyHandCastableNow(const GameState& state);
+
 static ManaCost EffectiveCost(const CardDefinition& def, const GameState& state, int copies = 1)
 {
     // Delegates to the UNIFIED EffectiveSpellCost (ManaPayment.cpp) -- formerly a byte-identical
     // twin of AIEngine::EffectiveCost kept in lockstep by comment discipline.
     // (Goblin Warchief's reduces_spell_subtype reduction lives inside EffectiveSpellCost.)
     return EffectiveSpellCost(def, state, copies);
+}
+
+static bool AnyHandCastableNow(const GameState& state)
+{
+    const Player& ap = state.ActivePlayer();
+    if (ap.hand.empty()) { return false; }
+    const ManaPool pool = AvailableManaPool(state);
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->card.IsLand())   { continue; }   // a land drop is not what the re-solve is for
+        if (d->params.goldfish_inert) { continue; }   // can never be cast at all
+        // A spell whose only mode needs a target it does not have is not castable (CR 601.2c).
+        if (d->params.reanimate_creature_max_mv > 0
+            && !HasReanimateTarget(state, state.active_player_index,
+                                   d->params.reanimate_creature_max_mv)) { continue; }
+        if (pool.CanPay(EffectiveCost(*d, state))) { return true; }
+    }
+    return false;
 }
 
 // Estimate how many times a creature placed NOW will attack before the game ends.
@@ -8866,6 +8891,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // offered as an action -> they sit in hand as faithful dead draws. Gated off for
         // every existing deck.
         if (def.params.goldfish_inert) { continue; }
+        // Unearth: "Return TARGET creature card with mana value 3 or less from your graveyard..."
+        // A spell whose only mode requires a target cannot be cast with no legal target (CR 601.2c),
+        // so an Unearth with no small creature in the graveyard is not an action -- it stays in hand
+        // (and, in this deck, is cycled instead). Without this the search would spend {B} on a spell
+        // that resolves to nothing. Gated on the param -> every other deck byte-identical.
+        if (def.params.reanimate_creature_max_mv > 0
+            && !HasReanimateTarget(state, state.active_player_index,
+                                   def.params.reanimate_creature_max_mv)) { continue; }
         // Duplicate legend with nothing on entry: the legend rule kills it the moment it resolves,
         // so the cast buys nothing and costs a card plus this turn's mana. Provider-owned, and a
         // PRUNE rather than a ranking -- it drops a plan variant that cannot be better, which
@@ -14233,6 +14266,13 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     // per-subset discount shape as the Medallion bail above (pip credit, not generic).
     for (const Action& a : cands)
     { if (ActionColoredReducerDef(a)) { return std::numeric_limits<int>::max(); } }
+    // Hollow One's cost_less_per_cycle_or_discard is the same class, and the most extreme instance:
+    // its discount grows WITHIN the turn as cycles resolve, so a {5} printed cost this scalar bound
+    // reads as 5 is really 0 after three free cycles. Bailing keeps the prune from dropping the
+    // deck's actual line (cycle three times, then deploy a free 4/4).
+    for (const Action& a : cands)
+    { if (a.def && a.def->params.cost_less_per_cycle_or_discard > 0)
+      { return std::numeric_limits<int>::max(); } }
     long long b = pool.Total() + extra_credit;
     int gy = 0;
     for (const Action& a : cands)
@@ -14392,6 +14432,11 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
                               // at ManaPruneBound); selecting one disables the gate exactly like
                               // a Medallion, since consider() credits what this term cannot.
                               || !a.def->params.reduces_spell_subtype.empty()
+                              // Hollow One: the discount grows WITHIN the turn as the dig loop
+                              // cycles, so the cost baked into a.cost at enumeration time is stale
+                              // (printed {5} for a card that will be free after three cycles).
+                              // Same treatment as ManaPruneBound's bail.
+                              || a.def->params.cost_less_per_cycle_or_discard > 0
                               || a.def->params.chooses_creature_type))
                    || ActionColoredReducerDef(a) != nullptr) ? 1 : 0;   // Ragemonger pip credit
     }
@@ -20495,6 +20540,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             PerformLookTopPutCreature(state, state.active_player_index, def.params, tutor_target,
                                       def.card.m_name.str());
         }
+        else if (def.params.reanimate_creature_max_mv > 0)
+        {
+            // Unearth (rollout side, lockstep with EffectHandler): return the biggest creature
+            // card in the graveyard whose mana value is within the cap to the battlefield.
+            PerformReanimateFromGraveyard(state, state.active_player_index,
+                                          def.params.reanimate_creature_max_mv,
+                                          def.card.m_name.str());
+        }
         else if (def.params.tutor_to_battlefield_single)
         {
             // Natural Order (rollout side, lockstep with CastSpellFromHand + EffectHandler): pay
@@ -21206,12 +21259,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else
             {
                 if (!sd->params.cycling_cost.has_value()) { continue; }
-                if (!TapForCostDirect(state, sd->params.cycling_cost.value(), false)) { continue; }
+                // P3 -- human-play payment, on the Fluctuator-reduced cost.
+                if (!TapForCostDirect(state, EffectiveCyclingCostFor(state, *sd), false)) { continue; }
                 std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
                     [&a](const Card& c) { return c.m_name == a.card_name; });
                 if (it == ap.hand.end()) { continue; }
                 ap.graveyard.push_back(*it);
                 ap.hand.erase(it);
+                // D2 -- the human-play cycle site.
+                OnCardCycled(state, state.active_player_index);
             }
             if (!ap.library.empty())
             {
@@ -21930,12 +21986,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             else
             {
-                if (!TapForCostDirect(state, sd->params.cycling_cost.value(), false)) { break; }
+                // P4 -- rollout payment, on the Fluctuator-reduced cost.
+                if (!TapForCostDirect(state, EffectiveCyclingCostFor(state, *sd), false)) { break; }
                 std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
                     [&src](const Card& c) { return c.m_name == src; });
                 if (it == ap.hand.end()) { break; }
                 ap.graveyard.push_back(*it);
                 ap.hand.erase(it);
+                // D3 -- the rollout's cycle site (lockstep with D1 in AIEngine::PerformDig).
+                OnCardCycled(state, state.active_player_index);
             }
 
             // Draw one. Record EVERY dig (even a land) so the executor replays the exact
@@ -21963,6 +22022,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // land we keep digging; on a nonland we re-solve so the found action is cast
             // THIS turn (exactly like the DrawUntilNonland breakpoint), then stop -- once
             // we have action we are no longer stuck.
+            //
+            // ...which is a TREASURE HUNT assumption, and it HALTS a deck whose cycling IS the
+            // action (provider-gated; MTG_UNPRUNE=digresolve opens it). Free cycling digs at every
+            // node and this re-solve digs again, so the nested searches recurse and dominate the
+            // cost -- while the `break` below stops the combo mid-turn. When nothing in hand is
+            // castable with the mana available, the re-solve provably cannot cast anything, so keep
+            // cycling instead. Measured on Fluctuator: 20 of 40 games FASTER, 0 slower, -34% CPU.
+            // See DecisionProvider::DigResolveOnlyWhenCastable for the soundness argument.
+            if (!drew_land
+                && ResolveProvider(state).DigResolveOnlyWhenCastable()
+                && !DecisionUnpruned(UnprunedGate::DigResolve)
+                && !AnyHandCastableNow(state))
+            {
+                continue;   // cycle on; nothing this re-solve could have deployed
+            }
             if (!drew_land)
             {
                 if (out_breakpoint) { sink_stack.push_back(my_bp_sink); }
@@ -22321,6 +22395,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ap.bonus_land_drops_this_turn = 0;
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
     ap.life_gained_this_turn      = 0;             // Fortifying Draught lifegain-count resets each turn (same lockstep)
+    ap.cards_cycled_or_discarded_this_turn = 0;    // Hollow One cycle/discard count (same lockstep)
 
     // Untap and advance Aether Vial counters (upkeep trigger).
     for (Permanent& p : state.battlefield)
@@ -25757,7 +25832,9 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
         if (!d || !d->params.cycling_cost.has_value()) { continue; }
         std::string nm = c.m_name.str();
         if (!seen.insert("c:" + nm).second) { continue; }
-        add_variants(nm, false, d->params.cycling_cost.value());
+        // P6 -- human-play offer probe. Same reduced cost the payer (P3) will use, so a
+        // Fluctuator-discounted cycle is actually OFFERED in the viewer's plan list.
+        add_variants(nm, false, EffectiveCyclingCostFor(state, *d));
     }
     for (const Permanent& p : state.battlefield)   // sac-to-draw lands in play (Fiery Islet)
     {
@@ -28417,6 +28494,23 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             }
             if (reads_lifegain)
             { Fold(k, 0x1F5E); Fold(k, static_cast<uint64_t>(p.life_gained_this_turn)); }
+        }
+        // Hollow One cycle/discard-count: identical shape and reasoning again -- future-determining
+        // only for a SAME-TURN cast that reads it, gated on the hand actually holding a
+        // cost_less_per_cycle_or_discard card AND the count being nonzero, so every deck without
+        // such a card keeps the EXACT prior key. This one is load-bearing rather than cosmetic:
+        // the counter is exactly what turns a {5} Hollow One into a {0} one, so two states that
+        // differ only in it are genuinely different positions.
+        if (p.cards_cycled_or_discarded_this_turn > 0)
+        {
+            bool reads_cycles = false;
+            for (const Card& hc : p.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd && hd->params.cost_less_per_cycle_or_discard > 0) { reads_cycles = true; break; }
+            }
+            if (reads_cycles)
+            { Fold(k, 0xC7C1); Fold(k, static_cast<uint64_t>(p.cards_cycled_or_discarded_this_turn)); }
         }
         // RAD COUNTERS (Mariposa Military Base). Unlike the two counters above this is NOT
         // turn-scoped scratch -- it persists across untaps, and it is future-determining twice

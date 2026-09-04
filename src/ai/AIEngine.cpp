@@ -4456,15 +4456,19 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     else
     {
         if (!sd->params.cycling_cost.has_value()) { return false; }
+        // P1/P2 -- affordability probe and the real payment, both on the Fluctuator-reduced cost.
+        const ManaCost cyc_cost = EffectiveCyclingCostFor(state, *sd);
         ManaPool avail = AvailableManaPool(state);
-        if (!avail.CanPay(sd->params.cycling_cost.value())) { return false; }
+        if (!avail.CanPay(cyc_cost)) { return false; }
         std::vector<Card>::iterator it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&source](const Card& c) { return c.m_name == source; });
         if (it == ap.hand.end()) { return false; }
-        if (!TapForCost(state, sd->params.cycling_cost.value(), avail, false)) { return false; }
+        if (!TapForCost(state, cyc_cost, avail, false)) { return false; }
         if (m_logger) { m_logger->LogDiscard(it->m_number, it->m_name); }
         ap.graveyard.push_back(*it);
         ap.hand.erase(it);
+        // D1 -- the executor's cycle site: Hollow One's counter + Drannith Stinger's trigger.
+        OnCardCycled(state, state.active_player_index);
     }
 
     if (ap.library.empty()) { return false; }

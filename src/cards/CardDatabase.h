@@ -1843,6 +1843,41 @@ struct CardParams
     // at zero: {3} -> {1}, and {2}{C} -> {C} (the generic half goes, the colourless pip stays).
     int reduces_creature_activation = 0;
 
+    // Fluctuator: "Cycling abilities you activate cost {2} less to activate." A STATIC reducer on a
+    // battlefield permanent, on the CYCLING axis -- a third axis, distinct from both
+    // EffectiveSpellCost (keyed on CASTING a card) and reduces_creature_activation (keyed on an
+    // activated ability of a battlefield CREATURE). Cycling is activated from HAND, so the
+    // "is the source a creature on the battlefield" guard of EffectiveActivationCost cannot apply.
+    // Applied by EffectiveCyclingCost at ALL SIX sites a cycling cost is read (three payments, two
+    // affordability filters, one human-play offer probe) -- the affordability sites MUST move in
+    // lockstep with the payment sites, or a loop filters in a cycle it then cannot buy and silently
+    // breaks. UNLIKE Training Grounds the floor is ZERO, not one mana: Fluctuator's wording carries
+    // no "can't reduce below one mana" clause, so a {2} cycler goes to {0} -- which is the whole
+    // point of this deck. Generic half only (CR 601.2f); a coloured cycling pip survives.
+    int reduces_cycling_activation = 0;
+
+    // Drannith Stinger: "Whenever you cycle another card, this creature deals 1 damage to each
+    // opponent." A player-ACTION watcher on a battlefield permanent (the FireSacrificeWatchers
+    // shape), fired by FireCycleWatchers at all three cycle sites (executor / rollout / human-play).
+    // "another" is structurally always satisfied: the watcher is on the battlefield and cycling
+    // happens from HAND, so a card can never cycle-trigger itself. 0 = not a cycle watcher.
+    int cycle_trigger_damage_each_opponent = 0;
+
+    // Hollow One: "This spell costs {2} less to cast for each card you've cycled or discarded this
+    // turn." A cost reduction scaled by a PER-TURN COUNTER (Player::cards_cycled_or_discarded_this_
+    // turn), i.e. the amount deducted per event -- {2} here. Applied in EffectiveSpellCost with the
+    // usual generic-only + floor-0 rules.
+    // WARNING: this discount GROWS WITHIN A TURN, so it is the anti-monotonic class -- ManaPruneBound
+    // must bail (INT_MAX) for it exactly as it does for affinity, or the mana prune drops lines that
+    // become affordable after a few cycles. 0 = no such reduction.
+    int cost_less_per_cycle_or_discard = 0;
+
+    // Unearth: "Return target creature card with mana value N or less from your graveyard to the
+    // battlefield." Reanimation -- graveyard to BATTLEFIELD, which nothing else in this engine did
+    // before. Distinct from return_target_from_graveyard (graveyard to HAND). The value is the MV
+    // ceiling (3 for Unearth); 0 = not a reanimation spell.
+    int reanimate_creature_max_mv = 0;
+
     // Emiel the Blessed's second ability: "Whenever ANOTHER creature you control enters, you may
     // pay {G/W}. If you do, put a +1/+1 counter on it. If it's a Unicorn, put two instead." An
     // optional-cost ETB WATCHER (fires from FireEtbWatchers, so a blinked creature re-triggers it

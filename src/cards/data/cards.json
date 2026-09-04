@@ -6839,6 +6839,334 @@
     "etb_discard_any_draw_bonus": 1,
     "other_creature_gy_enter_team_counters": 1
    }
+  },
+  {
+   "name": "Drifting Meadow",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {W}.\nCycling {2} ({2}, Discard this card: Draw a card.) [All clauses modelled: the mana ability via `produces`, the enters-tapped clause via `enters_tapped`, and cycling structurally via `cycling_cost` (repo convention -- cycling is deliberately NOT tagged in `keywords`; see src/core/Card.h and audit_card_fields.py's MODELED_ELSEWHERE_KEYWORDS).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Polluted Mire",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {B}.\nCycling {2} ({2}, Discard this card: Draw a card.) [All clauses modelled: the mana ability via `produces`, the enters-tapped clause via `enters_tapped`, and cycling structurally via `cycling_cost` (repo convention -- cycling is deliberately NOT tagged in `keywords`; see src/core/Card.h and audit_card_fields.py's MODELED_ELSEWHERE_KEYWORDS).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Smoldering Crater",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {R}.\nCycling {2} ({2}, Discard this card: Draw a card.) [All clauses modelled: the mana ability via `produces`, the enters-tapped clause via `enters_tapped`, and cycling structurally via `cycling_cost` (repo convention -- cycling is deliberately NOT tagged in `keywords`; see src/core/Card.h and audit_card_fields.py's MODELED_ELSEWHERE_KEYWORDS).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Blasted Landscape",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\nCycling {2} ({2}, Discard this card: Draw a card.) [All clauses modelled. NOTE: unlike the other cycling lands in this deck Blasted Landscape has NO enters-tapped clause -- it enters UNTAPPED, so `enters_tapped` is deliberately absent. Cycling structurally via `cycling_cost` (repo convention -- not tagged in `keywords`).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Fetid Pools",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Island",
+    "Swamp"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {U} or {B}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.) [All clauses modelled. The dual mana ability is granted by the land's two basic land types and is modelled directly via `produces`; enters-tapped via `enters_tapped`; cycling structurally via `cycling_cost` (repo convention -- not tagged in `keywords`).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "B"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Irrigated Farmland",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Plains",
+    "Island"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {W} or {U}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.) [All clauses modelled. The dual mana ability is granted by the land's two basic land types and is modelled directly via `produces`; enters-tapped via `enters_tapped`; cycling structurally via `cycling_cost` (repo convention -- not tagged in `keywords`).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Canyon Slough",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Swamp",
+    "Mountain"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {B} or {R}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.) [All clauses modelled. The dual mana ability is granted by the land's two basic land types and is modelled directly via `produces`; enters-tapped via `enters_tapped`; cycling structurally via `cycling_cost` (repo convention -- not tagged in `keywords`).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "R"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Sheltered Thicket",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Mountain",
+    "Forest"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {R} or {G}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.) [All clauses modelled. The dual mana ability is granted by the land's two basic land types and is modelled directly via `produces`; enters-tapped via `enters_tapped`; cycling structurally via `cycling_cost` (repo convention -- not tagged in `keywords`).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "G"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Scattered Groves",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Forest",
+    "Plains"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {G} or {W}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.) [All clauses modelled. The dual mana ability is granted by the land's two basic land types and is modelled directly via `produces`; enters-tapped via `enters_tapped`; cycling structurally via `cycling_cost` (repo convention -- not tagged in `keywords`).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "W"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Glittering Massif",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Mountain",
+    "Plains"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {R} or {W}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.) [All clauses modelled. The dual mana ability is granted by the land's two basic land types and is modelled directly via `produces`; enters-tapped via `enters_tapped`; cycling structurally via `cycling_cost` (repo convention -- not tagged in `keywords`).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "W"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Festering Thicket",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Swamp",
+    "Forest"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {B} or {G}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.) [All clauses modelled. The dual mana ability is granted by the land's two basic land types and is modelled directly via `produces`; enters-tapped via `enters_tapped`; cycling structurally via `cycling_cost` (repo convention -- not tagged in `keywords`).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "G"
+    ],
+    "enters_tapped": true,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Capital City",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Town"
+   ],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{1}, {T}: Add one mana of any color.\nCycling {2} ({2}, Discard this card: Draw a card.) [PARTIAL -- PROVISIONAL DEFERRAL (awaiting user sign-off). The free \"{T}: Add {C}\" mode and cycling are modelled. The second mode \"{1}, {T}: Add one mana of any color\" is NOT: it is a mana-NEUTRAL colour FILTER (pay one generic from another source, tap this, receive one coloured -- net 0 mana), and the engine's two filter models do not fit it (`is_filter` is fed a COLOURED pip and yields TWO; `ramp_filter` yields one of EACH `produces` colour). Expressing it needs a third variant threaded through the ~20 filter sites of the mana-payment backtracker. WHY DEFERRED RATHER THAN APPROXIMATED: this deck needs only three single coloured pips ({R} Drannith Stinger, {B} Unearth, {W} Enlightened Tutor) and already runs 14 sources of each of W/B/R across its other 34 lands, so the filter is near-redundant fixing here. Modelling it as [C] UNDER-rates the deck's fixing, which is the SAFE direction; modelling it as a free 5-colour land would OVER-rate it. Revisit if Stage 5 shows colour screw is a real limiter.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Forsake the Worldly",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Exile target artifact or enchantment.\nCycling {2} ({2}, Discard this card: Draw a card.) [Goldfish-inert CAST mode, live CYCLING mode. The passive opponent never controls an artifact or an enchantment (its only permanents are spawned creature tokens), so the ONLY legal targets are the caster's own Fluctuator / Hollow One -- exiling either is strictly self-harmful, so the cast mode can never be played to any benefit. Modelled with `goldfish_inert` (the Remand / Memory Lapse precedent: TurnSolver skips casting it) so it is never cast for nothing, while `cycling_cost` keeps its REAL role in this deck -- a free cycler under Fluctuator -- fully live.]",
+   "template": "custom",
+   "parameters": {
+    "goldfish_inert": true,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Fluctuator",
+   "mana_cost": "{2}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Cycling abilities you activate cost {2} less to activate. [The deck's engine, fully modelled via reduces_cycling_activation. Applied by EffectiveCyclingCost at ALL SIX sites a cycling cost is read (three payments, two affordability filters, one human-play offer probe), so the planner and the payer always agree. NOTE the floor is ZERO, not one mana: unlike Training Grounds this card carries no \"can't reduce below one mana\" clause, so every {2} cycler in this deck really does become FREE -- which is the whole deck. Generic half only (CR 601.2f); a coloured cycling pip would survive (none in this deck).]",
+   "template": "custom",
+   "parameters": {
+    "reduces_cycling_activation": 2
+   }
+  },
+  {
+   "name": "Drannith Stinger",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Wizard"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Whenever you cycle another card, this creature deals 1 damage to each opponent.\nCycling {1} ({1}, Discard this card: Draw a card.) [Both clauses modelled. The trigger is a battlefield watcher fired by FireCycleWatchers at all three cycle sites (executor / rollout / human-play), so the committed line and the realised game agree. \"another card\" needs no check and is structurally always satisfied: the watcher is a permanent on the battlefield while the cycled card is in HAND, so a card can never cycle-trigger itself -- while a SECOND copy cycling from hand does trigger this one, which is correct. Damage goes to the opponent's face only (\"each opponent\" = players, not their creatures) and sets opponent_lost_life_this_turn. Cycling {1} -> {0} under a Fluctuator.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cycle_trigger_damage_each_opponent": 1,
+    "cycling_cost": "{1}"
+   }
+  },
+  {
+   "name": "Hollow One",
+   "mana_cost": "{5}",
+   "types": [
+    "Artifact",
+    "Creature"
+   ],
+   "subtypes": [
+    "Golem"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "This spell costs {2} less to cast for each card you've cycled or discarded this turn.\nCycling {2} ({2}, Discard this card: Draw a card.) [PARTIAL -- PROVISIONAL (awaiting user sign-off) on ONE half of one clause. The cost scaler is modelled via cost_less_per_cycle_or_discard against the per-turn counter Player::cards_cycled_or_discarded_this_turn, so three free cycles make this a {0} 4/4. The counter is incremented at the three CYCLE sites but NOT at discard sites. WHY that is exact here: this deck's 60 cards contain no discard outlet whatsoever -- every card that leaves hand does so by cycling -- and the only other discard, the cleanup shed, happens after the last main phase and is zeroed at the following untap, so it can never cheapen a cast. Wiring the discard half would need the executor/rollout lockstep pair for a value provably unreachable in this deck. IMPORTANT: because the discount grows WITHIN a turn it is the anti-monotonic class -- ManaPruneBound bails (INT_MAX) and the selection-exact gate sets `block` for it, exactly as both do for affinity.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cost_less_per_cycle_or_discard": 2,
+    "cycling_cost": "{2}"
+   }
+  },
+  {
+   "name": "Unearth",
+   "mana_cost": "{B}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Return target creature card with mana value 3 or less from your graveyard to the battlefield.\nCycling {2} ({2}, Discard this card: Draw a card.) [Both clauses modelled. Reanimation (graveyard -> BATTLEFIELD) is new to this engine; the put reuses PerformTutorToBattlefield's block (preserve the per-copy m_number, entered_this_turn, then the full FireEtbWatchers / FireOwnEtbTriggers cascade) so a returned creature's ETB fires exactly like a cast one. TARGETING: a spell whose only mode requires a target cannot be cast with no legal target (CR 601.2c), so the enumerator refuses to offer Unearth while no creature of mana value <= 3 is in the graveyard -- it stays in hand and gets cycled instead. WHICH creature is structurally forced rather than heuristic in this deck: Drannith Stinger (MV 2) is the ONLY creature in the 60 within the cap (Hollow One is MV 5) and its copies are fungible. The general rule is highest MV within the cap, ties by lowest per-copy number (executor/rollout lockstep).]",
+   "template": "custom",
+   "parameters": {
+    "reanimate_creature_max_mv": 3,
+    "cycling_cost": "{2}"
+   }
   }
  ]
 }

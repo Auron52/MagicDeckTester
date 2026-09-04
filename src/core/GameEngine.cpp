@@ -211,6 +211,7 @@ void GameEngine::UntapStep(GameState& state)
     ap.bonus_land_drops_this_turn = 0;
     ap.cards_drawn_this_turn     = 0;   // Fists of Flame drawn-count resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
     ap.life_gained_this_turn     = 0;   // Fortifying Draught lifegain-count resets each turn (same lockstep)
+    ap.cards_cycled_or_discarded_this_turn = 0;   // Hollow One cycle/discard count (same lockstep)
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index == state.active_player_index)

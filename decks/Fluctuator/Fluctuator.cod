@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="2" name="Drifting Meadow"/>
+        <card number="4" name="Fluctuator"/>
+        <card number="4" name="Blasted Landscape"/>
+        <card number="2" name="Smoldering Crater"/>
+        <card number="4" name="Polluted Mire"/>
+        <card number="4" name="Drannith Stinger"/>
+        <card number="4" name="Fetid Pools"/>
+        <card number="4" name="Irrigated Farmland"/>
+        <card number="4" name="Canyon Slough"/>
+        <card number="4" name="Hollow One"/>
+        <card number="1" name="Forsake the Worldly"/>
+        <card number="4" name="Sheltered Thicket"/>
+        <card number="1" name="Enlightened Tutor"/>
+        <card number="4" name="Scattered Groves"/>
+        <card number="4" name="Capital City"/>
+        <card number="4" name="Unearth"/>
+        <card number="4" name="Glittering Massif"/>
+        <card number="2" name="Festering Thicket"/>
+    </zone>
+</cockatrice_deck>

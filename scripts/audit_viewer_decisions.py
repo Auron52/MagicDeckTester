@@ -778,6 +778,10 @@ INERT_PARAMS = {
     "charge_lifegain": "Jitte lifegain mode payload detail (mode pick surfaces as main_phase JitteModeAbility)",
     "allow_self_target": "targeting-legality broadening detail (Unexpectedly Absent; the pick itself rides tuck_to_library -> target)",
     "tap_put_from_hand_types": "put-from-hand card-type filter detail (rides tap_put_from_hand_cost -> main_phase)",
+    # --- Fluctuator (cycling combo) ---
+    "reduces_cycling_activation": "Fluctuator: STATIC cycling-cost reduction, no choice of its own -- it only makes the existing cycling activations cheaper (often FREE), and those already surface as cycling_cost main_phase plays. Nothing is decided when it applies.",
+    "cost_less_per_cycle_or_discard": "Hollow One: STATIC cost reduction scaled by a per-turn counter (cards cycled or discarded this turn). Like any cost reducer it creates no decision -- it only changes what the existing main_phase cast plans cost, and the cycling that drives the counter is itself already surfaced as cycling_cost main_phase plays.",
+    "cycle_trigger_damage_each_opponent": "Drannith Stinger: MANDATORY triggered ability on every cycle ('deals 1 damage to each opponent'). Not a may-ability and it takes no target -- 'each opponent' is the whole set, which in a goldfish is one player. No choice.",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click
@@ -787,6 +791,15 @@ INERT_PARAMS = {
 MAINPHASE_PARAMS = {
     "discard_land_damage": "Land's Edge discard-a-land activation (board-click source, main.cpp:100)",
     "cycling_cost":        "cycling = discard-to-draw activation from hand (main_phase play)",
+    # Unearth ("Return target creature card with mana value 3 or less from your graveyard to the
+    # battlefield"). The CAST is an ordinary main_phase plan. WHICH graveyard creature comes back is
+    # AUTO-RESOLVED (highest mana value within the cap, ties by lowest per-copy number) -- a disclosed
+    # 6a gap in the same class as Wirewood Lodge's untap target and the loyalty sub-targets.
+    # In the Fluctuator deck the pick is STRUCTURALLY FORCED and nothing is lost: Drannith Stinger
+    # (MV 2) is the only creature in the 60 within the cap (Hollow One is MV 5) and its copies are
+    # fungible. A deck holding several DISTINCT legal targets would want the per-name plan-variant
+    # fan that Haven of the Spirit Dragon's gy_return_cost already uses (GYR#).
+    "reanimate_creature_max_mv": "Unearth graveyard-reanimate cast = a main_phase plan action; WHICH creature returns is auto-resolved (highest MV within the cap) -- disclosed 6a, and forced to a single legal target in this deck",
     "sacrifice_draw_cost": "Fiery Islet sac-to-draw activation (main_phase play)",
     "stages_cards":        "Light Up the Stage: staged cards become castable (main_phase plays)",
     "tap_token_cost":      "Sliver Hive activated token ability (main_phase play)",
