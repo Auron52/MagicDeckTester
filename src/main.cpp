@@ -4586,6 +4586,10 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "expect_variants": 4,          // optional: pin how many sub-decision variants a `choose`
 //                                    // offers -- "choose" alone cannot see variants silently
 //                                    // DEDUPED away (two same-named hosts sharing a choice string)
+//     "expect_variants_all_contain": "cast: Trace",     // optional: every surviving variant's label
+//                                    // must contain this. The count cannot express WHICH variants
+//                                    // survived, and the dropped-cast defect changed only that --
+//                                    // three variants before the fix, three after, different three.
 //     "log_out": "logs/play/scenario.json" }            // optional: write the per-turn trace
 static int RunScenario(const std::filesystem::path& scenario_path)
 {
@@ -4824,6 +4828,24 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                 std::cout << "scenario: FAIL expected " << want_n << " line variants, got "
                           << chk.variants.size() << "\n";
                 return 1;
+            }
+        }
+        // Optional CONTENT assertion: every surviving variant's label must contain this substring.
+        // A count alone cannot express "the variants that survived are the RIGHT ones" -- and that
+        // is exactly the shape of the dropped-cast defect, where the human's line matched three
+        // variants both before and after the fix and only WHICH three changed. Asserting the count
+        // there would have passed on the broken engine.
+        if (j.contains("expect_variants_all_contain"))
+        {
+            const std::string need = j.at("expect_variants_all_contain").get<std::string>();
+            for (const TurnSolver::LineVariant& lv : chk.variants)
+            {
+                if (lv.label.find(need) == std::string::npos)
+                {
+                    std::cout << "scenario: FAIL variant " << lv.plan_index
+                              << " does not contain \"" << need << "\": " << lv.label << "\n";
+                    return 1;
+                }
             }
         }
         std::cout << "scenario: PASS (line " << got << ")\n";

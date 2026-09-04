@@ -1998,3 +1998,60 @@ measurement, not as the impossibility proof I wrongly wrote the first time.
 Utilisation note: the pool drained to 5/24 workers near the end, because 8 coarse 100-game jobs
 leave a long tail (one seed-2 game ran 0.26 h). Correct as one pooled batch per the repo rule, but
 finer jobs would have kept the box fuller.
+
+### 11. THE T3 BLOCKER, root-caused: a land Aura cast THIS TURN does not unlock its colour
+
+USER, on the 800-game measurement in §10: *"The deck should be killing on turn 3 a decent chunk of
+the time and turn 4 a great deal of the time."* And: *"Seed 1 is a T3 win and Seed 2 a T4 ... if
+done properly."*
+
+They are right, and the engine's own line validator names the reason in one sentence.
+
+**The T3 kill on seed 1.** T1 Aether Hub, tap it for {G} off its ETB energy, Wild Growth on it.
+T2 Conservatory, Wild Growth #2 on the Hub (Hub now taps for C+G+G). T3 play Mariposa; tap
+Conservatory for {W} and the Hub for three; cast **Trace of Abundance on Mariposa** ({R/W} off the
+Conservatory white — the board's only white); Mariposa now taps for C + *any*, which is the deck's
+only blue. Living Wish → Cloud of Faeries → cast it → its ETB untaps the Hub and Mariposa → cast
+Peregrine Drake ({4}{U} off the Trace) → its ETB untaps all three lands → second Drake → Emiel →
+Emiel blinks a Drake for {3} and the untap returns six. **Net +3 per iteration: infinite mana on
+turn 3**, with Mariposa's `{5},{T}: draw` re-armed by every blink to dig to a second Living Wish for
+Essence Depleter, then twenty drains.
+
+Every step is exact — several have zero slack — which is why the engine's miss is a single specific
+gap rather than a scoring preference.
+
+**The gap.** Ask CheckLine directly for the line, on a board with six mana and the Drake exactly
+affordable after the Trace:
+
+```
+validate_line "land=Mariposa Military Base;cast=Trace of Abundance;cast=Peregrine Drake"
+  verdict=illegal
+  reason="can't pay for 'Peregrine Drake': no untapped source produces blue mana
+          (a multi-color land makes only its own colors)"
+```
+
+The colour gate is computed against the board **as it stands before the plan**, so a land Aura being
+cast *in that very line* — whose entire function is "add one mana of any colour" — is invisible to
+it. Blue is declared absent and every plan casting a Drake, a Cloud of Faeries or anything else blue
+is pruned before the payer ever prices it.
+
+**This is the same family as the bug fixed in `edf_land_aura_pays_color`, one level deeper.** That
+one was "the colour gates never look at Auras at all". This one is "they look at ATTACHED Auras, but
+not at one the plan is about to cast". Confirmed by A/B on one board: with the Trace already
+attached, turn 3 casts Drake + Drake + Emiel + Living Wish x2; with the identical Trace in hand,
+turn 3 casts the Trace and **stops**, and the Drake is cast on turn 4.
+
+It is a MODELLING gap, not a heuristic — 16 of the 60 cards are land Auras, and Trace of Abundance
+and Fertile Ground both add mana of ANY colour, so this is the deck's primary colour fixing being
+unavailable on the turn it is deployed.
+
+**Not yet fixed.** The gate is a pre-filter, so widening it is the safe direction (an
+over-approximation costs a rejected plan at apply time; an under-approximation deletes the line
+forever, which is what happens today). Four sites were blind in the earlier fix and would need the
+same treatment. Recorded here rather than attempted at the end of a long session.
+
+**A second, separate gap, also unfixed.** Even handed the assembled board — Emiel + both Drakes with
+the loop live — the engine wins on turn 6 **by attacking**, activating Emiel exactly once per turn.
+It never converts the loop into a kill. `MTG_EDF_PROSPECTIVE=1` does not change it (win 6 either
+way), so the go-off recognizer is not the missing piece. Root-causing this is separate work from the
+colour gate above, and both must land before the deck plays to the user's expectation.

@@ -33880,7 +33880,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // surface genuine sub-decision choices.
     struct Cand { int idx; std::vector<std::string> order; std::string sig, label;
                   std::vector<std::string> cards; std::vector<SubChoice> subs; int sacs;
-                  int trick_rank; };   // solo-target-trick representative preference (lower = better)
+                  int trick_rank;      // solo-target-trick representative preference (lower = better)
+                  bool drops_declared; };   // this ORDERING silently drops a cast the human declared
     std::vector<Cand> cands;
     for (size_t i = 0; i < plans.size(); ++i)
     {
@@ -34460,7 +34461,58 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             label += " \xE2\x80\x94 ";   // em dash separating the line from its sub-decisions
             for (size_t t = 0; t < toks.size(); ++t) { label += (t ? "; " : "") + toks[t]; }
         }
-        cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards, subs, planSacs, trickRank });
+        // Does THIS ordering silently drop one of the casts the human actually asked for? A plan
+        // keeps `would_drop` naming the casts its ordering declares but cannot pay for (see the
+        // ordering-search note above). Dropping a card the human never mentioned is not this
+        // check's business; dropping one they DID name is a line that does not do what it says.
+        bool dropsDeclared = false;
+        for (const std::string& dn : p.would_drop)
+        {
+            if (std::find(spec.casts.begin(), spec.casts.end(), dn) != spec.casts.end())
+            { dropsDeclared = true; break; }
+        }
+        cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards, subs, planSacs,
+                          trickRank, dropsDeclared });
+    }
+
+    // DROPPING A DECLARED CAST DISQUALIFIES AN ORDERING -- and this must run BEFORE the order
+    // preference below, which is the whole point.
+    //
+    // USER, 2026-09-04, after the label-only fix: "That Living Wish problem where it skips to T4 in
+    // the viewer still seems to exist." It did. Labelling the plan told the human what was about to
+    // happen; it did not stop CheckLine from choosing it. On the EDF turn-3 board the human's line
+    // `land=Mariposa; cast=Living Wish; cast=Trace of Abundance` matched THREE variants and all
+    // three were the Living-Wish-first ordering, which spends Conservatory's {W} -- the board's only
+    // white -- on the Wish and then cannot pay Trace's {R/W} pip, so Trace is dropped and the turn
+    // ends. Trace-first pays it off Conservatory and the line runs.
+    //
+    // The reason the broken one won is precisely the "honour the player's ORDER" rule below: the
+    // human queued Wish-then-Trace, so the dropping ordering matched their order EXACTLY while the
+    // working one only matched the multiset. Order preference was outranking actually making the
+    // casts. It must not: a human who says "cast Trace of Abundance" has not consented to a line
+    // that quietly does not cast it, whatever order it claims to run in.
+    //
+    // FILTER, NOT DELETE, and only inside CheckLine. Enumeration is untouched, so the search's plan
+    // set is byte-identical -- which is what makes this safe where the earlier attempts were not: a
+    // guard that DELETED dropping orderings from enumeration changed Dragonstorm's ground truth (5
+    // cells, 13 searched slower, 99 play-changed), and scoping that deletion to human play instead
+    // broke a saved reference (StompySurprise/claude_s9_gi8, win turn 6 vs the recorded 4). Here
+    // only the CHOICE AMONG ALREADY-MATCHING VARIANTS moves, and only when the human declared the
+    // dropped card.
+    //
+    // The fallback is deliberate: if EVERY matching variant drops a declared cast, keep them all.
+    // The line is then genuinely unplayable as declared, and surfacing it with its `drops` label is
+    // strictly better than verdicting it un-enumerated and telling the human their legal line does
+    // not exist.
+    {
+        const bool anyClean = std::any_of(cands.begin(), cands.end(),
+                                          [](const Cand& c) { return !c.drops_declared; });
+        if (anyClean)
+        {
+            cands.erase(std::remove_if(cands.begin(), cands.end(),
+                                       [](const Cand& c) { return c.drops_declared; }),
+                        cands.end());
+        }
     }
 
     // Honour the player's ORDER: prefer candidates whose cast sequence equals the queued order, so
