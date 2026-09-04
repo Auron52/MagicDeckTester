@@ -176,3 +176,22 @@ table), ship_cap_r*/ship_cap_f0[67]/hin_r40* (scratch sidecars), manifest_ho6.js
 analyze_ho6.py (CG held-out), manifest_hho.json + hho.* (hinata held-out). Diagnostics code: the
 MTG_HYBRID_STATS additions in src/ai/TurnSolver.cpp (working tree; leftover deciles, Rsample,
 hint-target histogram, abort/waste counters) — byte-identical with stats off (smoke-verified).
+
+### Session 3b (2026-09-04): the honest-budget alternative measured — and beaten
+
+The user's proposal: budget should accurately reflect effort, so starved decks might best be fixed
+by raising THAT deck's play-profile budget (legacy leftover escalation, no hidden frac multiplier)
+rather than a fleet frac. Measured head-to-head (held-out 16x500g, hob batch; calibrated R on all
+arms): **the B-raise design loses on both decks, both axes.** CG legacy-r10 at B50 (=1.25x the ho
+rig's B40): t=+2.37 worse than ctl at 0.449x wall (frac 0.5: parity t=+0.09 at 0.418x); B60:
+t=+1.31 at 0.435x. Hinata legacy-r40 at B25: t=+2.06 worse than shipped with 32 win->loss flips at
+1.107x wall; B30: net parity t=-0.22 but 29 w->l / 11 l->w churn at 1.197x (frac 0.5: QUALITY WIN
+t=-2.74, ZERO win->loss, 1.047x). Why: a bigger B mostly feeds the PROBE (deeper commits — CG
+escalations even drop 89->47 — and wholesale different unverified lines = the flip churn), while
+frac lands its extra effort exactly on the escalated (hard) decisions. Targeted allocation wins.
+
+**Resolution of the budget-honesty concern without losing the frac mechanism:** express the
+escalation allowance as an ABSOLUTE per-deck `escalation_budget_ms` (frac x budget_ms in today's
+units — e.g. hinata frac 0.5 @ B20 == 10ms) instead of a hidden multiplier. Total worst-case
+effort = budget_ms + escalation_budget_ms, both visible in the block, both emittable per-deck by
+one process alongside escalation_r. Semantics honest; mechanism unchanged; nothing adopted.
