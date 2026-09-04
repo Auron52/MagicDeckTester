@@ -1133,6 +1133,9 @@ public:
     // MTG_FLUCT_DIG_RESOLVE=0 (or MTG_UNPRUNE=digresolve) restores the re-solve-always form for
     // the standing A/B. See DecisionProvider::DigResolveOnlyWhenCastable.
     bool        DigResolveOnlyWhenCastable() const override;
+    // Fluctuator and Enlightened Tutor fill ONE role (the enabler): the Tutor's only job in this
+    // deck is to find Fluctuator, so holding either is "on plan" and the second is redundant.
+    const std::vector<std::string>* InterchangeableRequiredGroup(const std::string&) const override;
 };
 
 // Mono-red Dragons ramp. Exists to hold ONE measured hook: the cleanup-discard bucket policy.

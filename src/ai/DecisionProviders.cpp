@@ -11434,23 +11434,26 @@ bool FluctuatorProvider::ShouldConsiderDig(const GameState& s) const
 // actively destructive: hand order would happily cycle the only Fluctuator, throwing away the
 // engine to draw one card. This is a genuine deck heuristic and lives here, disclosed in 6a.
 //
-// Cycle-first order (lowest rank goes first). The rule is "spend what can never be cast, then
-// redundancy, then lands, and never the last copy of a piece we do not already control":
-//   0  Forsake the Worldly -- goldfish_inert, so it can NEVER be cast (no artifact/enchantment the
-//      passive opponent controls, and self-exiling our own Fluctuator is strictly bad). It is pure
-//      cycling fodder and should always go first.
-//   1  A redundant copy of a permanent we ALREADY control (a second Fluctuator). The first one is
-//      the engine; the second does nothing a first does not (its {2} reductions do not stack
-//      usefully once every cycler is already free).
-//   2  Unearth with no legal target in the graveyard -- currently uncastable, so it is fodder now.
-//   3  Lands. The deck runs 42 and needs about five; a land is the default thing to cycle.
-//   4  Hollow One -- a real 4/4 body, but the deck holds four and casting one is not the win.
-//   5  Drannith Stinger while we control one already (redundant damage source, and cycling it puts
-//      it in the graveyard where Unearth can rebuy it).
-//   6  Unearth WITH a legal target -- it rebuys a Stinger; keep it.
-// NEVER cycled (skipped entirely, so the loop stops rather than eating them): the last Fluctuator
-// while we control none, and the last Drannith Stinger while we control none. Those two cards ARE
-// the combo; drawing one card is never worth pitching the engine or the wincon.
+// USER-SPECIFIED RULE (2026-09-04). The cycling decisions in this deck are easy, and the user
+// stated the whole policy: "the only cards that need to be protected from cycling are Unearth and
+// Drannith Stinger and occasionally an untapped land, and once Drannith Stinger is on board
+// everything is still free game."
+//
+// THE SUBTLETY THAT THE FIRST VERSION OF THIS FUNCTION GOT BACKWARDS. It ranked "Unearth with no
+// legal target in the graveyard" as near-first fodder, reasoning that an uncastable card is
+// spendable. That inverts the deck's own T3 line, which is: cycle a Drannith Stinger INTO the
+// graveyard and then Unearth it back. At the moment Unearth is held over an empty graveyard it is
+// not a dead card -- it is half the wincon, and the Stinger it will rebuy has not been binned yet.
+// Symmetrically, cycling a Stinger away is CORRECT precisely when we hold an Unearth (that is the
+// line) and wrong when we do not (that pitches the wincon).
+//
+// So the protection is a PACKAGE, and it switches off entirely the moment a Stinger is on board:
+//   * A Stinger on the battlefield  -> nothing is protected. Everything is fodder, per the user.
+//   * Otherwise, the last Fluctuator (with none on board) is never cycled -- it is the engine.
+//   * Otherwise, the last Unearth is never cycled -- it is the only route from a binned Stinger
+//     back onto the battlefield.
+//   * Otherwise, the last Drannith Stinger is cycled ONLY when we hold an Unearth to rebuy it.
+// Ranks below decide the order among what IS spendable (lowest goes first).
 std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPool& pool,
                                                 bool& out_is_sac) const
 {
@@ -11467,6 +11470,18 @@ std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPo
         if (d->params.reduces_cycling_activation > 0)         { ++bf_fluctuator; }
         if (d->params.cycle_trigger_damage_each_opponent > 0) { ++bf_stinger; }
     }
+    // Hand census: how many of each combo piece we hold decides what counts as "the last one".
+    int hand_stinger = 0, hand_unearth = 0;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        if (d->params.cycle_trigger_damage_each_opponent > 0) { ++hand_stinger; }
+        if (d->params.reanimate_creature_max_mv > 0)          { ++hand_unearth; }
+    }
+    // "Once Drannith Stinger is on board everything is still free game" (user). With the wincon
+    // already deployed there is nothing left to hold back, so every protection below is dropped.
+    const bool protect = (bf_stinger == 0);
 
     int best_rank = std::numeric_limits<int>::max();
     int best_num  = 0;
@@ -11482,21 +11497,25 @@ std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPo
         if (p.goldfish_inert)                                 { rank = 0; }   // Forsake the Worldly
         else if (p.reduces_cycling_activation > 0)
         {
-            if (bf_fluctuator == 0) { continue; }                            // NEVER: the engine
+            if (protect && bf_fluctuator == 0) { continue; }                  // NEVER: the engine
             rank = 1;                                                        // redundant copy
         }
         else if (p.reanimate_creature_max_mv > 0)
         {
-            rank = HasReanimateTarget(s, me, p.reanimate_creature_max_mv) ? 6 : 2;
+            // The last Unearth is the only way a binned Stinger comes back -- hold it. Spare
+            // copies are ordinary fodder.
+            if (protect && hand_unearth <= 1) { continue; }
+            rank = 5;
         }
-        else if (d->card.IsLand())                            { rank = 3; }
-        else if (p.cost_less_per_cycle_or_discard > 0)         { rank = 4; }  // Hollow One
         else if (p.cycle_trigger_damage_each_opponent > 0)
         {
-            if (bf_stinger == 0) { continue; }                               // NEVER: the wincon
-            rank = 5;                                                        // redundant copy
+            // Cycling the last Stinger is the deck's OWN line when an Unearth is held to rebuy it,
+            // and throwing away the wincon when one is not.
+            if (protect && hand_stinger <= 1 && hand_unearth == 0) { continue; }
+            rank = 2;   // with an Unearth in hand this is a play we WANT, so it goes early
         }
-        else                                                  { rank = 4; }
+        else if (d->card.IsLand())                            { rank = 3; }
+        else                                                  { rank = 4; }   // Hollow One / rest
 
         // Ties broken by the lowest per-copy number so the executor and the rollout pick the
         // identical physical card (lockstep; the same discipline as the reanimate target scan).
@@ -11517,6 +11536,17 @@ std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPo
         return p.card.m_name.str();
     }
     return {};
+}
+
+// The deck's two ENABLERS fill one role: Enlightened Tutor's only job here is to find Fluctuator,
+// so a hand holding either is "on plan" and holding both makes the second redundant. Declaring the
+// group stops CleanupDiscardProtected from treating each as a separate irreplaceable last copy.
+const std::vector<std::string>* FluctuatorProvider::InterchangeableRequiredGroup(
+    const std::string& name) const
+{
+    static const std::vector<std::string> kEnablers = { "Fluctuator", "Enlightened Tutor" };
+    if (name == "Fluctuator" || name == "Enlightened Tutor") { return &kEnablers; }
+    return nullptr;
 }
 
 // ---- DragonsProvider: the Mind Stone dig (searched axis) --------------------

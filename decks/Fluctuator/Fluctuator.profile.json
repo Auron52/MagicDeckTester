@@ -72,11 +72,14 @@
   "mulligan": {
     "bottom_order": "count_first",
     "curve_check": "two_drop",
-    "max_lands": 5,
+    "max_lands": 7,
     "min_color_sources": {},
     "min_lands": 1,
     "min_playable": 0,
-    "required_pieces": [],
+    "required_pieces": [
+      "Fluctuator",
+      "Enlightened Tutor"
+    ],
     "stop_at": 4
   },
   "version": 1
