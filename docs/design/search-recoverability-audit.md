@@ -506,8 +506,21 @@ arm verified byte-identical at smoke scale (48/48, 0 configs changed).
    faster / 0 slower per 1000 at value-play) — dragons is OUT of the whitelist** (the
    predicate now also requires a mana ritual; `MTG_UTVARA_M2_WIDE=1` restores it for the A/B).
    **Dragonstorm KEEPS m2 — real value under honest accounting (17 slower / 5 faster without
-   it, net +15) — and its classes are NOT yet worked: the open follow-up.** gi320 is hereby
-   pinned: it was the double-spend class. The `MTG_WATCHER_ORDER` lever's dragons numbers
+   it, net +15).** ITS CLASS IS NOW CHARACTERIZED (2026-09-04 census, 15 of 17 d8b0-structural,
+   gi673 + gi8 traced): **the value is NOT executed m2 casts** — the winning detonations are
+   PURE MAIN-1 (gi673 T4: suspend-Lotus T1, hold Needle charges, m1 Seething → Dragonstorm
+   storm-2, three dragons, ping + attack lethal) — **it is the PROJECTION**: `uses_second_main`
+   threads to the solver as `search_post_combat`, giving projected future turns an m2 re-solve,
+   and exactly that makes the search VALUE the hold-for-the-storm-turn line; without it, even
+   d8 b0 develops early (spends the depletion charges and storm fodder) and loses two turns.
+   The projected one-main detonation must statically compose lotus-sac + ritual float + the
+   {8}{R} payoff + storm in ONE subset — a composition some projection gate still fails (the
+   gi94 static-pricing family, one level up: inside the line search's future turns, where the
+   phase boundary is the only re-pricing point). The suspend clock and sac emission are both
+   modeled, so the residual is in the projected-turn pricing/enumeration, not the action space.
+   **Follow-up: find the exact projected-turn gate that fails the one-main storm composition;
+   when it lands, re-run the retirement probe — ds should then retire like dragons did.**
+   gi320 is hereby pinned: it was the double-spend class. The `MTG_WATCHER_ORDER` lever's dragons numbers
    above predate the honest accounting and the total-order adoption; treat them as historical.
 8. **DONE — Karoo lockstep fix.** The executor's searched-continuation land play now honours
    `karoo_deferred` exactly as the rollout's `bp_play_searched_land` does
