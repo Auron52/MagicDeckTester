@@ -80,3 +80,20 @@ replayed one arm's solves inside the other arm's games. Fix: `ManaCacheKey` mixe
 
 **Rule for future levers:** a heurarm (per-job) lever that changes the answer of any memoised
 computation must be hashed into that memo's key. See `filter-feed-strict.md` §5.
+
+## 2026-09-05: third sighting (smoke pool, antilife2hg g97) — standalone-clean, tripwires silent
+
+A smoke-tier run (68 jobs, working tree = the Melira tutor-rank provider diff, a change whose
+code is unreachable for every suite deck) moved exactly one game: `antilife2hg_smoke_d3_s1001`
+gi=97, same win turn (5), play digest `7316339c60025267` → `28720f01f6eee86b`. Standalone
+reconstruction of that one job on the same binary (twice, exact manifest fields) reproduces the
+committed GT digest both times, and NONE of the c9351d7e tripwires fired (no `[profload]
+SWALLOWED`, no `.json`-fallback warning) — so the 2026-08-26 carrier is ruled out and this looks
+like the 2026-09-01 shape instead: a rare, nondeterministic in-pool flip, presumably another
+thread_local memo replayed across a job boundary under one particular worker interleaving, with
+no per-job lever involved this time (regression pools run a homogeneous env). Artifacts
+preserved: `logs/incident_20260905_antilife2hg/` (the .wins, manifest, batch.log/err).
+Response per the standing rule: standalone repro is the verdict — GT untouched, no full-tier
+re-run, the coincident provider commit exonerated (also structurally: its code cannot execute
+without a Melira deck in the pool). If a fourth sighting lands, run the pool with
+`MTG_BATCH_STATE_DUMP=antilife` and start diffing worker job-histories clean-vs-flipped.

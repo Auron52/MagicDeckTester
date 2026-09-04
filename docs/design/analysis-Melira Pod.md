@@ -282,6 +282,33 @@ win ... it is a good tiebreaker"). Shipped design:
   in-horizon win). Smoke tier run to confirm all other decks byte-identical
   (OpponentHasLost is core).
 
+### USER TUTOR POLICY (2026-09-05) — combo-aware to-hand tutor heuristics
+User spec: "You only want missing combo pieces, tutors for combo pieces and
+more rarely something that can be podded for more combo pieces when pod is
+active. ... Ranger always should get a sacrifice creature though the second
+choice is less crucial and could be a dork. Recruiter should get a combo piece
+that you are missing." Third case "only necessary when you are really
+creature-light or have duplicates at a specific mana cost. For example extra
+persist creatures, Voice of Resurgence are good options as needed to fuel
+birthing pod." Also named the canonical lines: pod Finks→Ranger, pod the
+persisted Finks again→Redcap next turn; Voice pods into Finks/Recruiter and
+its death token pods into a 1-drop.
+Shipped (MTG_POD_TUTOR_RANK, default ON; =0 generic base):
+- `MeliraPodProvider::TutorHandPutList` (Ranger, resolution-time, NEVER
+  searched → the ranking IS the decision): first free-sac-outlet copy, then
+  mana dorks (tmpl==ManaDork), then spare outlet copies, then rest.
+- `MeliraPodProvider::TutorCandidates` (Recruiter's searched axis + base
+  pick): missing-role first (enabler +100 > free outlet +80 > persist +60,
+  missing = absent from battlefield AND hand), then Pod-fuel +40 (Pod on
+  battlefield && a missing piece sits at candidate MV+1 in library), then
+  cheaper-first, name-total-order. Pod/Chord enumerations deliberately NOT
+  narrowed (search-primary; perf fine at ~0.74 s/game, ENUM_STATS clean).
+Measured: s9200×16 byte-identical both arms; s3100×20 ON 5.55 vs OFF 5.60
+(one game faster, one more loop proven, no regression anywhere). Log-verified
+(36 games): Ranger fetched Feeder+Birds in 7/7 casts; Recruiter fetched the
+missing piece both times it resolved (Melira g1, Redcap g24); consecutive-turn
+Pod chains Finks→Redcap present. Smoke tier byte-identical (provider-scoped).
+
 ### Chord of Calling — Tier 3 (draft received)
 `{X}{G}{G}{G}` Instant, Convoke. CRITICAL loader fact: `KeywordFromString`
 THROWS on unknown keywords — must add `Keyword::Convoke` (inert-tag idiom) or

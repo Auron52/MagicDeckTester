@@ -14184,6 +14184,166 @@ int MeliraPodProvider::FlickerTarget(const GameState& s, int controller, int sel
     return best_rank < 99 ? best : 0;
 }
 
+// Combo-aware tutor policy (USER 2026-09-05). The user's spec, verbatim in short: "You only want
+// missing combo pieces, tutors for combo pieces and more rarely something that can be podded for
+// more combo pieces when pod is active. ... Ranger always should get a sacrifice creature though
+// the second choice is less crucial and could be a dork. Recruiter should get a combo piece that
+// you are missing." The third case "is a bit trickier and only necessary when you are really
+// creature-light or have duplicates at a specific mana cost. For example extra persist creatures,
+// Voice of Resurgence are good options as needed to fuel birthing pod."
+//
+// Everything ranks by PARAMS, never by name (the repo rule): enabler = prevents_minus_counters |
+// reduces_minus_counters_by_one; free outlet = sac_creature_outlet with no mana cost; persist
+// body = persist. "Missing" counts battlefield AND hand -- these tutors fetch to HAND, so a copy
+// already in hand fills the role as soon as it can be cast (the EDF wish precedent). Pod and
+// Chord do NOT route through TutorCandidates (their enumerations are full and search-primary);
+// this shapes only the to-hand tutors: Recruiter's ranked axis and Ranger's resolution pair.
+// MTG_POD_TUTOR_RANK=0 reverts both overrides to the generic base (A/B hatch).
+namespace
+{
+bool PodTutorRankOn()
+{
+    static const bool on = EnvOn("MTG_POD_TUTOR_RANK", true);
+    return on;
+}
+struct PodRoles { bool have_prev = false, have_outlet = false, have_persist = false,
+                       pod_active = false; };
+PodRoles NotePodRoles(const GameState& s, int controller)
+{
+    PodRoles r;
+    auto note = [&](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { return; }
+        if (d->params.prevents_minus_counters || d->params.reduces_minus_counters_by_one)
+        { r.have_prev = true; }
+        if (d->params.sac_creature_outlet && !d->params.sac_creature_cost.has_value())
+        { r.have_outlet = true; }
+        if (d->params.persist) { r.have_persist = true; }
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        note(p.card);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.pod_mv_delta != 0) { r.pod_active = true; }
+    }
+    for (const Card& c : s.players[controller].hand) { note(c); }
+    return r;
+}
+// Does this card fill a MISSING combo role? Returns the role's weight (0 = none).
+int PodMissingRoleScore(const CardDefinition& d, const PodRoles& r)
+{
+    if ((d.params.prevents_minus_counters || d.params.reduces_minus_counters_by_one)
+        && !r.have_prev) { return 100; }
+    if (d.params.sac_creature_outlet && !d.params.sac_creature_cost.has_value()
+        && !r.have_outlet) { return 80; }
+    if (d.params.persist && !r.have_persist) { return 60; }
+    return 0;
+}
+}   // namespace
+
+std::vector<std::string>
+MeliraPodProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+    if (!PodTutorRankOn() || all.size() <= 1) { return all; }
+    const PodRoles r = NotePodRoles(s, controller);
+
+    // The user's third case, "fuel birthing pod": which library MVs hold a MISSING piece? A
+    // candidate at MV m is fuel iff a Pod is active and m+1 is one of those tiers. Sits BELOW
+    // every direct-piece tier, so it only decides when no missing piece is directly fetchable.
+    std::unordered_set<int> missing_mvs;
+    if (r.pod_active)
+    {
+        for (const Card& lc : s.players[controller].library)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+            if (d && d->card.IsCreature() && PodMissingRoleScore(*d, r) > 0)
+            { missing_mvs.insert(d->card.m_mana_cost.ManaValue()); }
+        }
+    }
+
+    struct Ranked { int score; int mv; std::string name; };
+    std::vector<Ranked> ranked;
+    ranked.reserve(all.size());
+    for (const std::string& n : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+        if (d == nullptr) { ranked.push_back(Ranked{ 0, 0, n }); continue; }
+        const int mv = d->card.m_mana_cost.ManaValue();
+        int score = PodMissingRoleScore(*d, r);
+        if (score == 0 && missing_mvs.count(mv + 1) > 0) { score = 40; }   // Pod fuel (Voice etc.)
+        ranked.push_back(Ranked{ score, mv, n });
+    }
+    // Cheaper first within a tier (castable sooner), then name -- a TOTAL order (the EDF rule).
+    std::stable_sort(ranked.begin(), ranked.end(),
+                     [](const Ranked& a, const Ranked& b)
+                     {
+                         if (a.score != b.score) { return a.score > b.score; }
+                         if (a.mv    != b.mv)    { return a.mv    < b.mv;    }
+                         return a.name < b.name;
+                     });
+    std::vector<std::string> out;
+    out.reserve(ranked.size());
+    for (const Ranked& rk : ranked) { out.push_back(rk.name); }
+    return out;
+}
+
+std::vector<std::string> MeliraPodProvider::TutorHandPutList(
+    const GameState& s, int controller, const CardParams& pp, int max_puts) const
+{
+    if (!PodTutorRankOn())
+    { return DecisionProvider::TutorHandPutList(s, controller, pp, max_puts); }
+    // Ranger of Eos (MV<=1 creatures, two copies, picked once at resolution -- never searched).
+    // USER: first pick is ALWAYS a sacrifice creature (board state notwithstanding: the free
+    // outlet is both a combo role and the growth wincon); the second "could be a dork". So:
+    // one outlet copy first, then mana dorks, then the remaining outlet copies, then the rest.
+    struct Copy { int rank; std::string nm; };
+    std::vector<Copy> copies;
+    for (const Card& lc : s.players[controller].library)
+    {
+        const CardDefinition* d    = CardDatabase::Instance().LookupCached(lc);
+        const Card&           card = d ? d->card : lc;
+        bool type_ok = pp.tutor_types.empty();
+        for (const std::string& t : pp.tutor_types)
+        { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+        if (!type_ok || !TutorNumericFilterOk(card, pp)) { continue; }
+        int rank = 2;
+        if (d && d->params.sac_creature_outlet && !d->params.sac_creature_cost.has_value())
+        { rank = 0; }
+        else if (d && d->tmpl == CardTemplate::ManaDork) { rank = 1; }
+        copies.push_back(Copy{ rank, lc.m_name.str() });
+    }
+    std::stable_sort(copies.begin(), copies.end(),
+                     [](const Copy& a, const Copy& b)
+                     {
+                         if (a.rank != b.rank) { return a.rank < b.rank; }
+                         return a.nm < b.nm;
+                     });
+    // Demote outlet copies past the first below the dorks (the role is filled; mana advances
+    // the combo) -- exactly the user's "second choice ... could be a dork".
+    std::vector<std::string> out;
+    bool outlet_taken = false;
+    std::vector<std::string> spare_outlets;
+    for (const Copy& c : copies)
+    {
+        if (static_cast<int>(out.size()) >= max_puts) { break; }
+        if (c.rank == 0)
+        {
+            if (outlet_taken) { spare_outlets.push_back(c.nm); continue; }
+            outlet_taken = true;
+        }
+        out.push_back(c.nm);
+    }
+    for (const std::string& nm : spare_outlets)
+    {
+        if (static_cast<int>(out.size()) >= max_puts) { break; }
+        out.push_back(nm);
+    }
+    return out;
+}
+
 std::vector<std::string> MeliraPodProvider::ReviveCandidates(
     const GameState& s, int controller, int max_power, int max_returns) const
 {

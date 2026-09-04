@@ -1137,6 +1137,21 @@ public:
     // printed MV descending. Resolution heuristic, disclosed 6a.
     std::vector<std::string> ReviveCandidates(const GameState& s, int controller, int max_power,
                                               int max_returns) const override;
+    // Combo-aware tutor policy (USER 2026-09-05: "You only want missing combo pieces, tutors for
+    // combo pieces and more rarely something that can be podded for more combo pieces ...
+    // Recruiter should get a combo piece that you are missing"). Ranks the to-hand tutor list
+    // (Recruiter of the Guard) missing-role-first: counter-prevention enabler > free sac outlet >
+    // persist body, each only while absent from battlefield+hand, then cheaper-first. Pod and
+    // Chord do NOT route through this -- their enumerations stay full/search-primary.
+    // MTG_POD_TUTOR_RANK=0 reverts both this and TutorHandPutList to the generic base (A/B hatch).
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller,
+                                             const CardParams& pp) const override;
+    // Ranger of Eos' two-card put, picked ONCE at resolution (not searched), so this ranking IS
+    // the decision (USER 2026-09-05: "Ranger always should get a sacrifice creature though the
+    // second choice is less crucial and could be a dork"): first free-sac-outlet copy, then mana
+    // dorks, then remaining outlet copies, then the rest.
+    std::vector<std::string> TutorHandPutList(const GameState& s, int controller,
+                                              const CardParams& pp, int max_puts) const override;
 };
 
 class MinotaurProvider : public GenericProvider
