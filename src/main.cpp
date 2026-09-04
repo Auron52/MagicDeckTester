@@ -991,7 +991,22 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // fall into the ordinary `cast=<name>` bucket in `TurnSolver::CheckLine` (the same
             // fallback ActivatePump and the sac kinds use), so -- like those two -- they stay OUT of
             // `is_activation()` above (so they remain in `casts`) and need only this flag.
-            if (ac.kind == Action::Kind::TapForTokens
+            // SELF-sac mana sources (Dwarven Ruins / Svyelunite Temple / Lotus Bloom / an Eldrazi
+            // Spawn) are NOT click activations: the engine already treats an undeclared line's
+            // SacForMana as an IMPLICIT one-shot mana source (CheckLine's legacy path -- the human
+            // declares the SPELLS, the engine sacs to pay only when the line needs it, preferring
+            // the no-sac plan), so the ⟳/🩸 chip was pure clutter and read as a required step
+            // (USER 2026-09-04: "Dwarven ruins doesn't need a dedicated activated ability in the
+            // viewer. You can just sacrifice it when we need to."). Only a sac outlet that eats
+            // OTHER creatures (Skirk Prospector's sac_creature_outlet mana ability) keeps the chip
+            // -- feeding a Goblin to it is a real decision, not a payment detail. Lines that DO
+            // declare sacout= (older references) still match via CheckLine's declared branch.
+            const bool self_sac_mana =
+                ac.kind == Action::Kind::SacForMana
+                && [&]{ const CardDefinition* sd = CardDatabase::Instance().Lookup(ac.card_name);
+                        return !(sd && sd->params.sac_creature_outlet); }();
+            if (!self_sac_mana
+             && (ac.kind == Action::Kind::TapForTokens
              || ac.kind == Action::Kind::SacForMana
              || ac.kind == Action::Kind::ActivatePump
              || ac.kind == Action::Kind::SacCreatureOutlet
@@ -1008,7 +1023,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
              || ac.kind == Action::Kind::TapForTokenPay
              || ac.kind == Action::Kind::JitteModeAbility
              || ac.kind == Action::Kind::ActivateBlink
-             || ac.kind == Action::Kind::ActivatePermAbility)
+             || ac.kind == Action::Kind::ActivatePermAbility))
             {
                 os << ", \"activate\": true";
                 // `sacout` tells the GUI to encode this as the sacout= line verb rather than cast=,
@@ -2864,9 +2879,29 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 {
                     const Permanent& p = s.battlefield[bi];
                     if (!p.entered_this_turn) { continue; }
+                    // Legend-rule self-destruction warning (user's s3 game, 2026-09-04: both
+                    // Protegés copied the Maelstrom Wanderer already in play and silently died).
+                    // The choice is LEGAL (CR 704.5j resolves it), so it stays offered -- but the
+                    // heuristic skips such candidates (ChooseCopyEntrantIndex's legal()), and a
+                    // human picking one deserves to know the copy is dead on arrival.
+                    // Doom iff the controller ends up with TWO of the name once the copy enters:
+                    // any permanent THEY control with the candidate's name counts -- INCLUDING the
+                    // candidate itself when it is theirs (copying your own sole Wanderer makes the
+                    // fatal pair; the s3 game hit exactly this shape).
+                    bool legend_doom = false;
+                    if (p.card.HasSupertype(Supertype::Legendary))
+                    {
+                        for (const Permanent& own : s.battlefield)
+                        {
+                            if (own.controller_index == controller
+                                && own.card.m_name == p.card.m_name) { legend_doom = true; break; }
+                        }
+                    }
                     legal.push_back({ 1, bi, 0 });
                     legal_labels.push_back(p.card.m_name.str()
-                        + (p.controller_index == controller ? " (yours)" : " (opponent)"));
+                        + (p.controller_index == controller ? " (yours" : " (opponent")
+                        + (legend_doom ? " -- copy would immediately die to the legend rule!)"
+                                       : ")"));
                 }
             }
             else if (crackle)

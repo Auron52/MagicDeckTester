@@ -402,7 +402,11 @@ def find_plan(recorded, plans, recorded_index=None, prefer=None):
 # restate board facts rather than naming the target. "Goblin Guide (2/2, yours)" and "Goblin Guide
 # (yours)" are the same creature; a pump between recordings must not make them different targets.
 # "(face)" / "(self)" are NOT stripped -- those distinguish real targets ("You (face)" is a player).
-_LABEL_VOLATILE = re.compile(r"\s*\((?:\d+/\d+)?(?:,\s*)?(?:yours)?\)$")
+# The trailing " -- ..." branch: advisory annotations appended inside the volatile parenthetical
+# (the copy chooser's "(yours -- copy would immediately die to the legend rule!)", 2026-09-04).
+# Warnings are display, not identity -- the recorded intent is the card name + side, so a label
+# gaining an advisory must keep matching its warning-less recording (2 false enum-gaps otherwise).
+_LABEL_VOLATILE = re.compile(r"\s*\((?:\d+/\d+)?(?:,\s*)?(?:yours)?(?:\s*--[^)]*)?\)$")
 
 
 def option_key(o):

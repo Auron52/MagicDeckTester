@@ -351,6 +351,38 @@ Fix: body is a flex column (`height:100vh; overflow:hidden`), header `flex:none`
 braces: `endcontrols` (the side-panel block the user is already looking at after a win) now
 mirrors **Next game ▸ / New game** buttons beside "Save as reference".
 
+## Viewer round 3 (2026-09-04, second play-testing feedback)
+
+USER: "Dwarven ruins doesn't need a dedicated activated ability in the viewer. You can just
+sacrifice it when we need to. Also, I still can't see the Sakashima's Protege."
+
+**"Still can't see the Protégé" — root cause found in the user's own s3 reference, and it was
+NOT the badge.** Both Protégés copied the user's own Maelstrom Wanderer (options chose it —
+it looks best, 7/5) and **died instantly to the legend rule**, invisibly: no warning at
+choice time, no history line at death. Rules-correct (CR 704.5j), UX-invisible. Three fixes:
+1. **Copy chooser warns**: a candidate whose copy would immediately legend-rule labels as
+   "(yours -- copy would immediately die to the legend rule!)". Doom test = the controller
+   controls ANY permanent of that name — including the candidate itself when it is theirs
+   (copying your own sole legendary makes the fatal pair).
+2. **Heuristic bug fixed**: `ChooseCopyEntrantIndex`'s `legal()` had the same `&own != &q`
+   blind spot, so the autonomous heuristic ALSO suicided copies into the controller's own
+   Wanderer. Fix = drop the exclusion. Smoke: 3 breaching configs play-changed at IDENTICAL
+   avgs/win turns (slower=0 faster=0 both bars; e.g. gi0's copy now survives and attacks,
+   opp −23 → −35 at the same T4); all other decks byte-identical. GT re-accepted.
+3. **Legend-rule deaths narrate**: EnforceLegendRule EmitPlayEvents kind `legend`
+   ("⚖ legend rule: X dies -- you already control a X"; a doomed copy is named by its
+   PRINTED card). This also surfaced the previously-invisible real duplicate-Wanderer deaths
+   (cast for their cascade triggers) in the user's own game.
+
+**Dwarven Ruins chip removed — the engine already had the right behavior.** CheckLine's
+legacy path treats an undeclared line's SacForMana as an IMPLICIT one-shot mana source
+(sacs only when the line needs the mana, prefers the no-sac plan). The ⟳/🩸 chip came from
+the plan emitter marking EVERY SacForMana `activate/sacout` (added for Skirk Prospector).
+Fix: suppress the flags for SELF-sac sources (`!sac_creature_outlet` — Ruins, Svyelunite
+Temple, Lotus Bloom, Spawn); Prospector-style creature-eating outlets keep the chip (a
+Goblin dying is a real decision). Old references that declared sacout= still match via the
+declared branch.
+
 ## Claude-play DELTA sweep (2026-09-03, post-sign-off round)
 
 commit: working tree over a939480f (the sign-off-round build)

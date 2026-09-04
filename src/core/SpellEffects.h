@@ -3656,9 +3656,14 @@ inline int ChooseCopyEntrantIndex(GameState& state, int controller, int copy_tar
         const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
         if (qd && qd->card.HasSupertype(Supertype::Legendary))
         {
+            // Doom iff the controller would hold TWO of the name once the copy enters: any
+            // permanent THEY control with q's name counts -- INCLUDING q itself when it is
+            // theirs. The old `&own != &q` exclusion missed exactly the common case (copying
+            // your own sole legendary), so the heuristic happily copied the controller's own
+            // Maelstrom Wanderer and the copy died on arrival (user's s3 game, 2026-09-04).
             for (const Permanent& own : state.battlefield)
             {
-                if (&own != &q && own.controller_index == controller
+                if (own.controller_index == controller
                     && own.card.m_name.str() == q.card.m_name.str()) { return false; }
             }
         }
@@ -6840,7 +6845,21 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
         }
     }
     for (int idx : doomed)   // ascending -> graveyard order matches the old scan
-    { state.players[state.battlefield[idx].owner_index].graveyard.push_back(state.battlefield[idx].card); }
+    {
+        const Permanent& dp = state.battlefield[idx];
+        // History narration (sink-guarded -> search/rollout byte-identical): a legend-rule death
+        // is otherwise INVISIBLE in the viewer -- the user's Protege copied their own Maelstrom
+        // Wanderer and "just vanished" (2026-09-04). A doomed copy-entrant is named by its
+        // PRINTED card so the player can tell which cast they lost.
+        EmitPlayEvent(state.turn_number, "legend",
+                      "\xE2\x9A\x96 legend rule: "
+                      + (dp.copy_printed_name.empty()
+                             ? dp.card.m_name.str()
+                             : dp.copy_printed_name.str() + " (as a copy of "
+                               + dp.card.m_name.str() + ")")
+                      + " dies -- you already control a " + dp.card.m_name.str());
+        state.players[dp.owner_index].graveyard.push_back(dp.card);
+    }
     for (auto it = doomed.rbegin(); it != doomed.rend(); ++it)   // descending -> indices stay valid
     { state.battlefield.erase(state.battlefield.begin() + *it); }
 }
