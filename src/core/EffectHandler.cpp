@@ -35,6 +35,13 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
         {
             perm.card          = state.battlefield[src_bi].card;
             perm.card.m_number = entry.source.m_number;
+            // Display provenance: the board now shows the COPIED card's name, so record the
+            // printed one (viewer "printed" badge) and narrate the swap in the play history --
+            // sink-guarded, so search/autonomous play is byte-identical. Lockstep: apply_one.
+            perm.copy_printed_name = def.card.m_name;
+            EmitPlayEvent(state.turn_number, "copy",
+                          "\xF0\x9F\xAA\x9E " + def.card.m_name.str() + " enters as a copy of "
+                          + perm.card.m_name.str());
             const CardDefinition* cd = CardDatabase::Instance().LookupCached(perm.card);
             if (cd) { edef = cd; }
         }

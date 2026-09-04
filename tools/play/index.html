@@ -8,9 +8,14 @@
   :root { --bg:#1a1c20; --panel:#24272d; --ink:#e8e8ea; --muted:#9aa0a8; --acc:#5aa9e6;
           --good:#5ad17a; --bad:#e6695a; --warn:#d6b84c; --land:#caa46a; --spell:#7fb3ff; --line:#33373e; }
   * { box-sizing:border-box; }
-  body { margin:0; font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  /* Flex column so <main> fills exactly the space the header leaves. The old fixed
+     `main{height:calc(100vh - 51px)}` assumed a single-line header: on a narrow window (vertical
+     monitor) the header wraps taller, the page overflowed by the difference, and a stray page
+     scroll left the New game / Next game buttons off-screen (user-reported 2026-09-03). */
+  body { margin:0; font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink);
+         display:flex; flex-direction:column; height:100vh; overflow:hidden; }
   header { padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line);
-           display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+           display:flex; gap:14px; align-items:center; flex-wrap:wrap; flex:none; }
   header h1 { font-size:15px; margin:0; font-weight:600; color:var(--acc); }
   header label { color:var(--muted); font-size:12px; display:flex; align-items:center; gap:4px; }
   header input, header select { background:#2e323a; color:var(--ink); border:1px solid var(--line);
@@ -23,7 +28,7 @@
   button.primary { background:var(--acc); color:#0c1116; border-color:var(--acc); font-weight:600; }
   button.ghost { background:transparent; }
 
-  main { display:grid; grid-template-columns:1fr 340px; height:calc(100vh - 51px); }
+  main { display:grid; grid-template-columns:1fr 340px; flex:1; min-height:0; }
   #board { padding:14px 20px 40px; overflow:auto; }
   #side  { background:var(--panel); border-left:1px solid var(--line); padding:14px 16px; overflow:auto; }
 
@@ -107,6 +112,13 @@
       border-radius:4px; font-size:10px; font-weight:700; padding:0 4px; z-index:2; }
   .thumb em { font-style:normal; font-size:10px; color:var(--muted); display:block; line-height:1.12; margin-top:3px; }
   .thumb.land em { color:var(--land); } .thumb.spell em { color:var(--spell); }
+  /* copy-entrant (Sakashima's Protege): mirror badge over the art + the PRINTED name as a dim
+     second caption line, so a copy is findable among real copies of the copied card. */
+  /* bottom-RIGHT: top-left belongs to tapbadge (a tapped copy would collide) and bottom-left to
+     the counter/act badges; battlefield thumbs never use bottom-right (srcbadge is planned-only). */
+  .thumb .copybadge { position:absolute; bottom:2px; right:2px; background:rgba(154,106,209,.95); color:#0c1116;
+      border-radius:4px; font-size:10px; font-weight:700; padding:0 4px; z-index:3; cursor:help; }
+  .thumb em .printedname { display:block; font-style:normal; color:#b794d6; opacity:.9; }
   .thumb .pip { position:absolute; top:2px; right:2px; font-size:10px; color:var(--muted);
       background:rgba(11,12,14,.82); border-radius:4px; padding:0 4px; z-index:2; }
   /* counter badges on a permanent — one colored circle per counter kind, hover for a tooltip.
@@ -433,6 +445,7 @@
   .hist li.ev-combat .lab { color:var(--warn); } .hist li.ev-damage .lab { color:var(--bad); }
   .hist li.ev-lifeloss .lab { color:var(--bad); } .hist li.ev-lifegain .lab { color:var(--good); }
   .hist li.ev-staged .lab { color:#b794d6; }   /* exiled-but-playable (Light Up the Stage) */
+  .hist li.ev-copy .lab { color:#b794d6; }     /* copy-entrant swap (Sakashima's Protege) */
   #saveinfo { margin-top:10px; font-size:12px; color:var(--muted); word-break:break-all; }
   .err { color:var(--bad); white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:12px; }
 
@@ -467,6 +480,12 @@
     <div id="endcontrols" style="display:none; margin-top:14px;">
       <button id="saveref" class="primary">Save as reference</button>
       <button id="saveref-sub" style="display:none;" title="You believe this game is winnable on an EARLIER turn — saved to references/suboptimal/ as a target, not the verified set.">Save as suboptimal (should be faster)</button>
+      <!-- Next/New game mirrored here from the header: after a win the player is looking at THIS
+           panel, and on a narrow window the header copies may need scrolling to reach. -->
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <button id="nextgame2" title="increment Seed + Game# and start a fresh game">Next game ▸</button>
+        <button id="newgame2">New game</button>
+      </div>
       <div id="saveinfo"></div>
     </div>
   </aside>
@@ -992,8 +1011,12 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
     (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
     (eqDrag?`<span class="eqbadge" title="drag onto one of your creatures to equip it">⚔ drag${eqN?` ×${eqN}`:''}</span>`:'')+
     (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
+    // Copy-entrant provenance (Sakashima's Protege): the art/name ARE the copied card — without
+    // this badge a Protege-copy of Boarding Party is indistinguishable from a real one and the
+    // player can't find their Protege on the board (user-reported 2026-09-03).
+    (o.printed?`<span class="copybadge" title="${esc(o.printed)} — entered as a copy of ${esc(o.name)}">🪞 copy</span>`:'')+
     counterBadges(o)+
-    `<em>${esc(o.name)}</em></span>`;
+    `<em>${esc(o.name)}${o.printed?`<i class="printedname">${esc(o.printed)}</i>`:''}</em></span>`;
 }
 function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS turn's plan
   const src = entry.kind==='vial'    ? `<span class="srcbadge vial" title="deployed via Aether Vial (free)">⚡</span>`
@@ -3530,6 +3553,7 @@ async function loadDecks() {
 })();
 
 $('newgame').onclick=newGame; $('nextgame').onclick=nextGame; $('undo').onclick=undo;
+$('newgame2').onclick=newGame; $('nextgame2').onclick=nextGame;   // end-of-game mirrors (side panel)
 $('optbtn').onclick=toggleOptMenu;
 $('saveref').onclick=()=>saveRef(false); $('saveref-sub').onclick=()=>saveRef(true);
 // Refresh the reference badge whenever the game selector changes.

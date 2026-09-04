@@ -319,6 +319,38 @@ spell' click". Landed:
 - First two hand-played references landed (references/BreachingDragonstorm/, commit-only) +
   the same-day DECKS row in viewer_protocol_check.py; both replay ok.
 
+## Viewer round 2 (2026-09-04, user play-testing feedback)
+
+USER: "Where are the Sakashima's Protoge? They get cast, but don't show up on the
+battlefield." + "I can't click any of the next game or new game buttons etc. after winning a
+game if the window is not very wide" (vertical monitor).
+
+**Protégé finding: the engine was CORRECT — this was a display gap.** In the user's own
+reference (s2 gi1) both Protégés entered as copies of Boarding Party exactly as chosen
+(decisions 22/25), verifiable by card number: the final board's "Boarding Party" nums 51/52
+are the Protégé slots in the deck numbering (Boarding Party owns 5–8). CR 706.2 copy = the
+printed card is replaced wholesale, so the viewer rendered two indistinguishable extra
+Boarding Parties. Fix (display-only, verified 51/51 smoke byte-identical + 265/265 refs
+replay clean):
+- `Permanent.copy_printed_name` (InternedName, 8 B; Dominance assert 256→264 with a
+  DISPLAY-ONLY classification — read by exactly one site, never game logic), set at both
+  worlds' swap sites.
+- `JsonBattlefield` emits it as `"printed"`; the board thumb gets a 🪞 `copy` badge
+  (bottom-right; top-left belongs to tapbadge) + the printed name as a dim second caption
+  line.
+- Both swap sites EmitPlayEvent kind `copy` ("🪞 Sakashima's Protege enters as a copy of
+  Boarding Party") — sink-guarded, surfaces in history at the next main-phase/result frame
+  like every other event kind.
+
+**Narrow-window buttons: root cause was the fixed-height layout.** `main` was
+`height:calc(100vh − 51px)`, assuming a single-line header; on a narrow window the header
+wraps taller, the page overflows by the difference, and a stray page scroll parks the
+New game / Next game buttons off-screen with no way back (body panels swallow wheel events).
+Fix: body is a flex column (`height:100vh; overflow:hidden`), header `flex:none`, main
+`flex:1; min-height:0` — the page can no longer scroll at any header height. Belt and
+braces: `endcontrols` (the side-panel block the user is already looking at after a win) now
+mirrors **Next game ▸ / New game** buttons beside "Save as reference".
+
 ## Claude-play DELTA sweep (2026-09-03, post-sign-off round)
 
 commit: working tree over a939480f (the sign-off-round build)

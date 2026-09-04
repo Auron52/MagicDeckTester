@@ -78,7 +78,12 @@
 //
 // Sizes are a proxy, not a proof (a same-size field swap slips through, and padding is
 // ABI-dependent), so they are a prompt to re-check, not a guarantee of correctness.
-static_assert(sizeof(Permanent) == 256,
+// 256 -> 264 (2026-09-03): Permanent gained `copy_printed_name` (InternedName, 8 bytes), the
+// PRINTED name of a Sakashima's-Protege copy-entrant. Classification: DISPLAY-ONLY -- read by
+// exactly one site, the viewer's JsonBattlefield ("printed" field); the copy's game behaviour is
+// fully determined by the copied card + m_number, both already folded. A field no game-logic path
+// reads cannot make two states evolve differently, so it is deliberately NOT folded into Build().
+static_assert(sizeof(Permanent) == 264,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // 160 -> 184 (2026-09-02): Player gained `sideboard`, the OUTSIDE-THE-GAME zone a wish searches

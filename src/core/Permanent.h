@@ -151,6 +151,15 @@ struct Permanent
                                             // read for a permanent whose card has a non-empty echo_cost, so
                                             // it is inert (never inspected) for every non-echo deck ->
                                             // byte-identical.
+    // Sakashima's Protege (CardParams::enter_as_copy_of_entrant): when the enter swap replaced the
+    // entering card with the copied permanent's PRINTED card (CR 706.2), this holds the PRINTED
+    // name of the card that was cast ("Sakashima's Protege"). DISPLAY-ONLY: set at both worlds'
+    // swap sites, read solely by the viewer's board serializer (JsonBattlefield emits it as
+    // "printed") so a copy is distinguishable on the board -- without it two Protege-copies of
+    // Boarding Party render as two more Boarding Parties and the player cannot find them
+    // (user-reported 2026-09-03). Never read by game logic: the copy IS the copied card, and
+    // per-copy identity already rides card.m_number. Empty for every non-copy permanent.
+    InternedName copy_printed_name;
 
     int  EffectivePower()     const;
     int  EffectiveToughness() const;

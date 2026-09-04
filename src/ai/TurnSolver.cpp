@@ -18555,6 +18555,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     perm.card          = state.battlefield[src_bi].card;
                     perm.card.m_number = cast_number;
+                    // Display provenance + history narration (sink-guarded -> rollouts
+                    // byte-identical). Lockstep twin: EffectHandler::EnterBattlefield.
+                    perm.copy_printed_name = def.card.m_name;
+                    EmitPlayEvent(state.turn_number, "copy",
+                                  "\xF0\x9F\xAA\x9E " + def.card.m_name.str()
+                                  + " enters as a copy of " + perm.card.m_name.str());
                     const CardDefinition* cd = CardDatabase::Instance().LookupCached(perm.card);
                     if (cd && cd->params.enters_tapped) { perm.tapped = true; }
                 }

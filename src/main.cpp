@@ -109,7 +109,8 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
     // (e.g. a depletion land that also caught a +1/+1), hence a vector.
     struct Cnt { const char* kind; const char* label; int count; };
     struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; int idx; bool tapped;
-                 int num; bool is_aura; bool is_equip; int attached_to; };
+                 int num; bool is_aura; bool is_equip; int attached_to;
+                 std::string printed; };   // copy-entrant's PRINTED card name ("" = not a copy)
     std::vector<Row> rows;
     for (int pi = 0; pi < static_cast<int>(s.battlefield.size()); ++pi)
     {
@@ -154,7 +155,7 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         bool is_equip = d && d->params.is_equipment;
         const int att = p.aura_attached_to > 0 ? p.aura_attached_to : p.equipped_to;
         rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped,
-                         p.card.m_number, is_aura, is_equip, att });
+                         p.card.m_number, is_aura, is_equip, att, p.copy_printed_name.str() });
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -169,6 +170,10 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         if (rows[i].is_aura)  { os << ", \"is_aura\": true"; }
         if (rows[i].is_equip) { os << ", \"is_equip\": true"; }
         if (rows[i].attached_to > 0) { os << ", \"attached_to\": " << rows[i].attached_to; }
+        // Copy-entrant provenance (Sakashima's Protege): the row's `name` is the COPIED card
+        // (that IS what the permanent is); `printed` names the card that was actually cast so
+        // the viewer can badge it -- otherwise the copy is indistinguishable from a real one.
+        if (!rows[i].printed.empty()) { os << ", \"printed\": "; JsonStr(os, rows[i].printed); }
         os << ", \"is_land\": " << (rows[i].is_land ? "true" : "false");
         if (rows[i].is_le) { os << ", \"is_le\": true"; }
         if (!rows[i].counters.empty())
