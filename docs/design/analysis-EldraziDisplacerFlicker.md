@@ -2659,3 +2659,63 @@ noise floor, and one of them flipped sign while nominally significant at t > 2 i
 On this deck, a single pooled run of 800 games per arm cannot resolve 0.01 turns — so a t-statistic
 from one run is not evidence, and the repo's "run each tier ONCE and accept from it" applies to
 GROUND TRUTH, not to adopting a lever on a single significant-looking number.
+
+### 16. WHY MOST GAMES DO NOT COMBO — the funnel, measured (2026-09-04)
+
+**USER, on being told the win-turn average is dominated by games that never combo:** *"That's a real
+problem. The majority of games should combo."* Correct, and the number was worse than the average
+implied. 60 logged games, seed 4101, d5 / 20 ms, ship profile.
+
+| max blink-loop length | games | % | mean win turn |
+|---|---|---|---|
+| none | 15 | 25% | 7.00 |
+| 1–2 (no loop) | 13 | 22% | 6.54 |
+| 3–8 (small loop) | 16 | 27% | 6.69 |
+| **≥9 (real go-off)** | 16 | **27%** | **5.94** |
+
+Two problems, not one: only 27% ever go off, **and** the ones that do still average turn 5.94 against
+a hand-played turn 3.
+
+#### The funnel, and the engine is not the bottleneck
+
+| gate | rate |
+|---|---|
+| outlet + Peregrine Drake together on the battlefield | 53% |
+| a sink on the battlefield at any point | 55% |
+| **both** | **33%** |
+
+Two near-independent ~55% gates multiply to a third. Card ACCESS is not the problem — only 5% of
+games never see a combo piece at all, and when the engine does assemble it does so by turn **4.19**
+on average (T3 in 8 games, T4 in 23, T5 in 17).
+
+**And the engine's behaviour is correct given the boards it gets.** Of the 32 games that assembled
+outlet + Drake, 19 looped and 13 did not — with *identical* land counts (3.95 vs 4.00), so it is not
+a mana shortage. The discriminator is the sink: **84% of the looping games had one on board, against
+31% of the non-looping ones**, and 9 of the 13 non-loopers had no sink for the entire game. Unbounded
+mana with nothing to spend it on wins nothing, so declining to loop was the right call. Only ~4 games
+(12% of assembled boards) had engine + sink + a positive net and still failed to go off — a real
+engine gap, but a secondary one.
+
+#### The sink gate is a DECKBUILDING fact
+
+The entire 60-card universe holds three sinks:
+
+| sink | copies | where | problem |
+|---|---|---|---|
+| Shivan Gorge | 1 | main | **Legendary** (so a second copy would be dead anyway), taps for `{C}` only, and its ability costs `{2}{R}` in a deck with **no red source** |
+| Essence Depleter | 1 | sideboard | wish-only |
+| Dimensional Infiltrator | 1 | sideboard | wish-only |
+
+So sink access is one near-unusable legendary land plus two singletons behind 4 Living Wishes and 1
+Eladamri's Call. 55% is roughly what that deserves. Worse, `MTG_EDF_TUTOR_RANK`'s mode-2 gate scores a
+sink at 100 only when `have_outlet && have_payload` — which is right (mode 1 fetched sinks on turn 2,
+before there was mana to pour into them) but means an early wish spends itself elsewhere and the deck
+often has no second wish left when the engine finally lands.
+
+`decks/EldraziDisplacerFlicker/screen_sinks.json` screens maindecking the drain (Essence Depleter 3
+or 2, cutting Cloud of Faeries, which untaps only two lands against a three-mana blink and so needs an
+aura'd land to be an engine at all, where the Drake never does).
+
+**Running that screen first required fixing the screener**: `deck_compare.py` dropped the sideboard
+from every decklist it wrote, so a "should we maindeck a sink?" comparison would have measured an arm
+holding a sink against a base holding none. Third instance of the missing-zone bug class.
