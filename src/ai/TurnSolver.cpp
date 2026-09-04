@@ -21951,8 +21951,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     if (!s_human_play && is_pre_combat && plan.dig_choice != 0
         && ResolveProvider(state).HasAnyDigSource(state))
     {
+        // DigChain: both stopping conditions are provider-owned (see MaxDigsPerTurn /
+        // DigContinueAfterResolve). Defaults reproduce the legacy 16-and-break exactly.
+        const bool dig_chain_open = DecisionUnpruned(UnprunedGate::DigChain);
+        const int  dig_cap        = dig_chain_open
+                                        ? std::numeric_limits<int>::max()
+                                        : ResolveProvider(state).MaxDigsPerTurn();
+        const bool dig_continue   = dig_chain_open
+                                        || ResolveProvider(state).DigContinueAfterResolve();
         int dig_guard = 0;
-        while (dig_guard++ < 16
+        while (dig_guard++ < dig_cap
                && (plan.dig_choice == 1 || ResolveProvider(state).ShouldConsiderDig(state))
                && !ap.library.empty())
         {
@@ -22056,7 +22064,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
                 if (out_breakpoint) { sink_stack.pop_back(); }
-                break;
+                // Legacy stops here ("once we have action we are no longer stuck"). A deck whose
+                // cycling IS the wincon must keep going: the re-solve just DEPLOYED a payoff (a
+                // free Hollow One), which is a reason to continue the chain, not to end the turn.
+                if (!dig_continue) { break; }
             }
         }
     }

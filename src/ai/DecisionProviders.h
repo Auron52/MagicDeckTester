@@ -110,6 +110,14 @@ enum class UnprunedGate
                   // 5f PERFORMANCE gate, not a quality one -- see the hook's comment for the
                   // soundness argument. Default (pruned) is the cheap form for the one deck that
                   // opts in; every other deck never queries it.
+    DigChain,     // the dig loop's two TREASURE HUNT stopping conditions lifted: the hard 16-dig
+                  // per-turn guard (DecisionProvider::MaxDigsPerTurn) and the `break` taken right
+                  // after the nested re-solve deploys the card just drawn
+                  // (DecisionProvider::DigContinueAfterResolve). Unlike most gates these WIDEN
+                  // rather than narrow -- opening them reaches strictly more states -- so the
+                  // callsites read `unpruned || provider-opts-in`, the inverse of DigResolve's
+                  // `provider-opts-in && !unpruned`. On Fluctuator the 16-cap alone makes a T3 kill
+                  // arithmetically impossible with one Drannith Stinger (16 pings < 20 life).
     _Count
 };
 
@@ -1133,6 +1141,13 @@ public:
     // MTG_FLUCT_DIG_RESOLVE=0 (or MTG_UNPRUNE=digresolve) restores the re-solve-always form for
     // the standing A/B. See DecisionProvider::DigResolveOnlyWhenCastable.
     bool        DigResolveOnlyWhenCastable() const override;
+    // The combo turn is ONE long chain, so neither Treasure-Hunt stopping condition applies: the
+    // 16-dig guard caps a single-Stinger kill at 16 damage vs 20 life (a T3 win is arithmetically
+    // impossible under it), and the post-re-solve `break` ends the turn at the first payoff the
+    // chain deploys. MTG_FLUCT_DIG_CHAIN=0 restores both legacy stops for the standing A/B.
+    // See DecisionProvider::MaxDigsPerTurn / DigContinueAfterResolve.
+    int         MaxDigsPerTurn() const override;
+    bool        DigContinueAfterResolve() const override;
     // Fluctuator and Enlightened Tutor fill ONE role (the enabler): the Tutor's only job in this
     // deck is to find Fluctuator, so holding either is "on plan" and the second is redundant.
     const std::vector<std::string>* InterchangeableRequiredGroup(const std::string&) const override;

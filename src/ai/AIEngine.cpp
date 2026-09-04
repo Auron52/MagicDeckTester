@@ -4412,8 +4412,14 @@ void AIEngine::UseSurplusLandAbilities(GameState& state)
     // gate (ShouldConsiderDig) keeps digging with Land's Edge in hand/play -- we still need
     // Treasure Hunt to refill ammo -- and stops only when a draw engine is already in hand,
     // a retrace engine sits in the yard, or Land's Edge is already lethal from the hand.
+    // DigChain: same two provider-owned stopping conditions as the rollout loop, kept in lockstep.
+    const bool dig_chain_open = DecisionUnpruned(UnprunedGate::DigChain);
+    const int  dig_cap        = dig_chain_open ? std::numeric_limits<int>::max()
+                                               : ResolveProvider(state).MaxDigsPerTurn();
+    const bool dig_continue   = dig_chain_open
+                                    || ResolveProvider(state).DigContinueAfterResolve();
     int guard = 0;
-    while (guard++ < 16 && ResolveProvider(state).ShouldConsiderDig(state) && !ap.library.empty())
+    while (guard++ < dig_cap && ResolveProvider(state).ShouldConsiderDig(state) && !ap.library.empty())
     {
         ManaPool avail = AvailableManaPool(state);
         bool is_sac = false;
@@ -4421,7 +4427,15 @@ void AIEngine::UseSurplusLandAbilities(GameState& state)
         if (src.empty()) { break; }
         // PerformDig returns whether the drawn card was a land; on a nonland (action found)
         // we stop digging. A false-ish "could not perform" also returns false -> stop.
-        if (!PerformDig(state, src, is_sac)) { break; }
+        //
+        // Those two falses mean opposite things, and only continuing past the first makes that
+        // distinction load-bearing: `cards_drawn_this_turn` moves iff a dig actually happened, so
+        // "could not perform" still breaks unconditionally (else an unaffordable/absent source
+        // would spin forever) while "drew a nonland" is the one the provider may continue past.
+        const int  drawn_before = ap.cards_drawn_this_turn;
+        const bool drew_land    = PerformDig(state, src, is_sac);
+        if (ap.cards_drawn_this_turn == drawn_before) { break; }   // dig did not happen
+        if (!drew_land && !dig_continue)              { break; }   // legacy: action found -> stop
     }
 }
 

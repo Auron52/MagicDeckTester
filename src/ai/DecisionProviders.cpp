@@ -78,6 +78,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"terak",      UnprunedGate::TeraK},
     {"replicate",  UnprunedGate::Replicate},
     {"digresolve", UnprunedGate::DigResolve},
+    {"digchain",   UnprunedGate::DigChain},
 };
 
 const char* GateName(UnprunedGate g)
@@ -11413,6 +11414,29 @@ bool FluctuatorProvider::HasAnyDigSource(const GameState& s) const
 bool FluctuatorProvider::DigResolveOnlyWhenCastable() const
 {
     static const bool s_on = EnvOn("MTG_FLUCT_DIG_RESOLVE", true);   // DEFAULT ON; =0 restores
+    return s_on;
+}
+
+// MaxDigsPerTurn / DigContinueAfterResolve -- lift the dig loop's two Treasure Hunt stops.
+//
+// The cap is the sharper of the two. Drannith Stinger pings for 1 per cycle, so a single Stinger
+// under the shared `guard++ < 16` tops out at 16 damage in a turn -- against 20 life the T3 kill
+// the deck is BUILT to make cannot be reached at any depth or breadth. 128 is still a finite guard
+// (comfortably above a 60-card library, which is the loop's real bound: every iteration draws one
+// card and the loop is guarded on a non-empty library) rather than a licence to spin.
+//
+// The continue matters even below the cap: the nested re-solve casts the nonland just drawn -- in
+// this deck a free Hollow One or an Unearth -- and then breaks, ending the combo turn at the first
+// payoff it deploys. Deploying a payoff mid-chain is a reason to keep cycling, not to stop.
+int FluctuatorProvider::MaxDigsPerTurn() const
+{
+    static const bool s_on = EnvOn("MTG_FLUCT_DIG_CHAIN", true);    // DEFAULT ON; =0 restores 16
+    return s_on ? 128 : GenericProvider::MaxDigsPerTurn();
+}
+
+bool FluctuatorProvider::DigContinueAfterResolve() const
+{
+    static const bool s_on = EnvOn("MTG_FLUCT_DIG_CHAIN", true);    // DEFAULT ON; =0 restores break
     return s_on;
 }
 

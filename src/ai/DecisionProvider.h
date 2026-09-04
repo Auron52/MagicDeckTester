@@ -269,6 +269,36 @@ public:
     // re-solve-always behaviour and is byte-identical.
     virtual bool        DigResolveOnlyWhenCastable() const { return false; }
 
+    // MaxDigsPerTurn / DigContinueAfterResolve -- the two remaining TREASURE HUNT assumptions in
+    // the dig loop, both of which CAP A COMBO TURN for a deck whose cycling IS the wincon.
+    //
+    // Both loops (rollout + executor) were written for "dig until you find action, then stop":
+    //   (a) a hard `guard++ < 16` per turn, and
+    //   (b) `break` right after the nested re-solve casts the card the dig just found.
+    // For Treasure Hunt both are right -- 16 is far past any sane dig and once you have action you
+    // are no longer stuck. For Fluctuator both are WRONG, and they are the deck's missing turn.
+    //
+    // WHY (a) IS A HARD CEILING ON THE KILL. Drannith Stinger pings each opponent for 1 per cycle,
+    // so with ONE Stinger on board 16 cycles is 16 damage against a 20-life opponent -- a T3 kill
+    // is ARITHMETICALLY UNREACHABLE no matter how good the line is, and the deck is forced into a
+    // second cycling turn. That is exactly the observed 10x T3 / 51x T4 split.
+    //
+    // WHY (b) BITES EVEN BELOW THE CAP. The re-solve fires when a NONLAND is drawn, casts it, and
+    // breaks. In this deck the nonlands drawn mid-combo are Hollow One (free after a few cycles)
+    // and Unearth -- so the loop stops itself at the first payoff it deploys, mid-kill. Measured
+    // trace (seed 9001 gi=1): T3 cycled 14, cast a free Hollow One, STOPPED at opp 6 life with 22
+    // cards still in library; the remaining 6 pings were there for the taking.
+    //
+    // SOUNDNESS. Neither hook narrows anything: they REMOVE two stopping conditions, so the loop
+    // reaches strictly MORE states. Termination is unchanged and is not carried by the counter --
+    // every iteration draws exactly one card and the loop is guarded on a non-empty library, so it
+    // is bounded by library size regardless of the cap. MaxDigsPerTurn keeps a finite guard anyway.
+    //
+    // Defaults reproduce today's behaviour exactly (16, and break), so every other deck stays
+    // byte-identical. Opened for the standing A/B by MTG_UNPRUNED / MTG_UNPRUNE=digchain.
+    virtual int         MaxDigsPerTurn() const { return 16; }
+    virtual bool        DigContinueAfterResolve() const { return false; }
+
     // LandsEdgeFireCount -- how many lands to discard to a Land's Edge this activation.
     virtual int LandsEdgeFireCount(const GameState& s, int rate) const = 0;
 
