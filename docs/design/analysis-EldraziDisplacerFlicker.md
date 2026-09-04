@@ -2532,15 +2532,52 @@ colourless goes from **0 to 122,152**. Black stays ~0 and that is correct rather
 demand is Essence Depleter's CAST cost, and mid-loop the Depleter is already on the battlefield, so
 only its `{1}{C}` drain is live demand.
 
-#### Status
+#### SETTLED BY MEASUREMENT: `WILD_C` ADOPTED, `NEED` REJECTED (2026-09-04)
 
-Both levers are measured as changing the mana model heavily and the OUTCOME not at all over 8 games
-(7.1250 either way). `MTG_REFLOAT_WILD_C` ships default ON — it is a modelling repair with a
-user-visible unreachable-action symptom. `MTG_REFLOAT_NEED` ships **default OFF pending the pooled
-A/B** (`test/edf_refloat_ab.sh`, three arms × 8 seeds × 100 games, paired by seed and game index),
-because "more accurate" has lost on this engine three times before — the mana-projection repairs
-whose pessimism turned out to be load-bearing. Correctness of the model is not by itself a reason to
-ship a change to the search.
+`test/edf_refloat_ab.sh` — three arms in ONE pooled batch, 8 seeds × 100 games each (2400 games),
+d5 / 20 ms with the profile attached, paired by (seed, game index) so every arm-vs-arm difference is
+over identical shuffles. 24/24 workers busy at the heartbeat.
+
+| arm | mean | T5 | T6 | T7 | T8 | unwon |
+|---|---|---|---|---|---|---|
+| `base` (both off) | 6.4763 | 64 | 439 | 194 | 58 | 45 |
+| `wildc` (WILD_C only) | **6.4638** | 67 | 440 | 192 | 57 | 44 |
+| `both` (WILD_C + NEED) | 6.4875 | 58 | 441 | 199 | 57 | 45 |
+
+| paired | mean | se | t | seeds better/worse | games changed |
+|---|---|---|---|---|---|
+| `base − wildc` | +0.0125 | 0.0053 | +2.36 | 0/5 | 18 |
+| `base − both` | −0.0112 | 0.0072 | −1.57 | 5/0 | 33 |
+| `both − wildc` | +0.0238 | 0.0076 | +3.14 | **0/8** | 37 |
+
+**`MTG_REFLOAT_WILD_C` — ADOPTED, default ON.** Faster than base on every seed that moved (5 of 5,
+never worse). Its own effect size (0.0125) sits at this deck's documented run-to-run noise floor
+(~0.01 turns/job), so the measurement is *support*, not proof; adoption rests on the correctness
+argument, which is independent and does not need a measurement: booking a rainbow source's float as
+bare `wild` makes `{1}{C}` unpayable, an unpayable cost is an unenumerated action, and the human
+therefore could not activate Essence Depleter at all. The A/B's job was to check that repairing it
+does not cost turns. It does not.
+
+**`MTG_REFLOAT_NEED` — REJECTED, stays default OFF.** Worse than `wildc` on **8 of 8 seeds**,
++0.0238 turns, t = +3.14 — clear of the noise floor and perfectly consistent in sign.
+
+**And the reason is the fourth instance of a lesson this repo keeps relearning: accuracy is not the
+objective.** By every direct measure the need model is the better description of the mana. It drives
+`wild` to **zero** — every floating unit becomes a colour the board can genuinely produce, which is
+exactly what the user asked for — and it takes colourless commitments from 0 to 122,152 on a deck
+gated on `{C}`. It is still worse to play with, and the mechanism is not mysterious: **`wild` is not
+a lie about colour, it is a DEFERRED CHOICE.** Committing a rainbow source at tap-ahead time destroys
+optionality the planner was using, and that optionality is worth more than the fixing accuracy it
+costs — the same shape as the three mana-projection repairs whose optimism/pessimism turned out to be
+load-bearing.
+
+The distinction worth carrying: the user's mental model is right *for a human reading the board*, and
+that is why the VIEWER change (splitting `◇` from `◇C`, showing energy) is correct and unconditional.
+It is wrong *as an engine representation*, because the engine is not reading a board, it is searching
+one. Same fact, opposite conclusions, and the levers let both be true at once.
+
+The `heurarm` slot stays. The model is correct and cheap to re-measure if the value leaf or a later
+mana change alters what optionality is worth.
 
 **Lesson worth keeping: an unchanged average cannot distinguish "the lever does nothing" from "the
 lever's code never runs" from "the lever does the opposite of its purpose".** All three appeared in

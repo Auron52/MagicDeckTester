@@ -26,16 +26,16 @@ def score(wt):
 
 
 def main(path):
-    # arm -> (seed, gi) -> score.  The seed in the job NAME is the chunk's base seed; the pairing key
-    # is (chunk-base seed - chunk offset, gi) == (run seed, gi), which is identical across arms.
+    # arm -> (seed, gi) -> score.  The job NAME already carries the BASE seed (the manifest names a
+    # chunk edf_<arm>_s<base seed>_g<offset> while setting "seed" to base+offset), so the key is
+    # (base seed, global game index) directly -- identical across arms, which is the pairing.
     games = collections.defaultdict(dict)
     for line in open(path, errors="replace"):
         m = LINE.search(line)
         if not m:
             continue
         arm = m.group("arm")
-        base_seed = int(m.group("seed")) - int(m.group("chunk"))
-        games[arm][(base_seed, int(m.group("gi")))] = score(int(m.group("wt")))
+        games[arm][(int(m.group("seed")), int(m.group("gi")))] = score(int(m.group("wt")))
 
     if not games:
         print("no [win] lines found -- was MTG_DUMP_WINS=1 set?", file=sys.stderr)
