@@ -13501,18 +13501,24 @@ inline int ReanimateTargetIndex(const GameState& state, int controller, int max_
 {
     if (max_mv <= 0) { return -1; }
     const Player& ap = state.players[controller];
-    int best = -1;
+    int best = -1, best_mv = -1;
     for (int i = 0; i < static_cast<int>(ap.graveyard.size()); ++i)
     {
         const Card& gc = ap.graveyard[i];
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(gc);
-        const Card& probe = d ? d->card : gc;
+        // BOTH characteristics must come from the DB definition, not the raw graveyard Card: a
+        // library/hand/graveyard Card is a NAME-ONLY placeholder (DeckLoader::MakePlaceholder), so
+        // its own masks are empty and `.ManaValue()` reads 0 for a 5-drop. Reading the mana value
+        // off `gc` made the MV cap never fire -- Unearth happily reanimated Hollow One (MV 5) and
+        // the "highest MV" pick degenerated into "lowest per-copy number". Found by the Stage 5d
+        // claude-play sweep (seed 45016 gi15); it is the same bug class this file's header records
+        // for Garth's Regrowth and Deathrite. ZoneCard is the single accessor for it.
+        const Card& probe = ZoneCard(gc);
         if (!probe.IsCreature()) { continue; }
-        if (gc.m_mana_cost.ManaValue() > max_mv) { continue; }
-        if (best < 0) { best = i; continue; }
-        const int bmv = ap.graveyard[best].m_mana_cost.ManaValue();
-        const int cmv = gc.m_mana_cost.ManaValue();
-        if (cmv > bmv || (cmv == bmv && gc.m_number < ap.graveyard[best].m_number)) { best = i; }
+        const int cmv = probe.m_mana_cost.ManaValue();
+        if (cmv > max_mv) { continue; }
+        if (best < 0 || cmv > best_mv
+            || (cmv == best_mv && gc.m_number < ap.graveyard[best].m_number))
+        { best = i; best_mv = cmv; }
     }
     return best;
 }

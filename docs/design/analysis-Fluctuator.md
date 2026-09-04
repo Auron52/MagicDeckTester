@@ -258,6 +258,113 @@ over 10 games (all won).
 | `DigDecisionSearched() == true` | dig/no-dig is a searched axis | opens the search | |
 | Unearth target | highest MV ≤ cap, ties by lowest copy number | **structurally forced here** | Drannith Stinger (MV 2) is the only creature in the 60 within the cap |
 
+## Claude-play sweep
+
+- commit: `71e547d8` (+ the `ReanimateTargetIndex` fix this sweep produced)
+- seeds: 45001 games: 16
+- flags: 0 unresolved
+
+**16 games, one Opus agent each, seed base 45001 (disjoint from every suite seed).**
+It found **one confirmed engine bug — in code written this session — and it is exactly
+the class of bug this step exists to catch.**
+
+### The bug it found (FIXED)
+
+`ReanimateTargetIndex` (`src/core/SpellEffects.h`) read the graveyard card's mana value
+off the **raw zone `Card`**. Every library/hand/graveyard `Card` is a name-only
+placeholder built by `DeckLoader::MakePlaceholder`, so `.ManaValue()` reads **0 for a
+5-drop**. Consequences:
+
+* Unearth's "mana value 3 or less" cap **never fired** — it would reanimate **Hollow One
+  (MV 5)**, an illegal play, and the enumerator offered the cast even when the graveyard's
+  only creature was a Hollow One (no legal target, CR 601.2c).
+* The documented "highest MV within the cap" pick degenerated to "lowest per-copy number".
+
+This file's own header block documents this exact trap and names two prior instances
+(Garth's Regrowth taking graveyard slot 0 because every MV read 0; Deathrite's fuel gate).
+The fix routes **both** characteristics through `ZoneCard()` — the single accessor the
+header prescribes — and tracks `best_mv` explicitly.
+
+* Repro (pre-fix), now correctly offering no Unearth cast:
+  `--claude-play --seed 45016 --game-index 15 --choices "1,1,0,4,0,4,0,3,1,4,1,1,2,2,5,5,5,5,2,2,2,2"`
+* Cost of the bug: **avg 5.0200 → 5.0500** over 100 games at d3/b200 — the deck was
+  measurably stronger than the rules allow. 5.0500 is the honest number.
+* Smoke re-run after the fix: 51 passed, **0 configs changed** (byte-identity holds).
+
+### What the sweep verified as CORRECT (repeatedly, independently)
+
+Every one of the four new mechanics was confirmed by many agents against `cards.json`:
+
+| mechanic | how it was confirmed |
+|---|---|
+| Fluctuator → `{0}` cycling | cycle plans offered **and executed with every land tapped and zero available mana** |
+| Drannith Stinger ping | exactly −1 per cycle **per Stinger**; two Stingers produce two separate 1-damage events; cycles with no Stinger out deal **0**, correctly honouring "another card"; the Stinger's own cycling is `{1}`, not `{2}` |
+| Hollow One discount | sharp and off-by-one clean — absent at 0/1/2 cycles, castable at exactly 3 ({5} − 3×{2} → {0}); resets per turn |
+| Unearth targeting | absent with an empty graveyard **with `{B}` untapped** (so mana is not the confound), present the moment a MV-2 Stinger hits the yard, and resolves graveyard→battlefield |
+| Forsake the Worldly | never offered as a cast (`goldfish_inert`), always offered as a cycler |
+| enters-tapped | matches cards.json exactly — Blasted Landscape and Capital City untapped, all others tapped |
+
+### Win-turn deltas (weak signal, but unusually one-sided)
+
+Claude ≥ the search in **16 of 16**; strictly faster in **9**. That is far above the
+skill's stated expectation ("a guided Claude is competitive but rarely faster"), so it is
+worth recording as a **search-quality lead**, not dismissed:
+
+| gi | ai | claude | | gi | ai | claude |
+|---|---|---|---|---|---|---|
+| 0 | 7 | 7 | | 8 | 4 | **3** |
+| 1 | 5 | **3** | | 9 | 5 | **4** |
+| 2 | 3 | 3 | | 10 | 4 | **3** |
+| 3 | 5 | **4** | | 11 | 6 | **5** |
+| 4 | 4 | 4 | | 12 | 4 | **3** |
+| 5 | 5 | **4** | | 13 | 5 | **4** |
+| 6 | 6 | 6 | | 14 | 3 | 3 |
+| 7 | 6 | 6 | | 15 | 6 | **4** |
+
+The recurring line the agents found and the search missed is **cycle a Drannith Stinger
+into the graveyard, then Unearth it back** — 2 mana for a 2/2 plus a cycle trigger plus a
+card, and (since every red source in the deck enters tapped) often the *only* route to an
+early Stinger. Two agents independently identified it. This is a genuine 5e/5i follow-up.
+
+### Dismissed, with reasons
+
+* **Plan-list duplicates (2–3× byte-identical entries).** Reported by nearly every agent.
+  One traced it to the unsurfaced `Plan::bp_choice` searched axis (`AppendBreakpointVariants`)
+  and verified that choosing among the twins yields identical states. Cosmetic clutter in
+  the human-play menu; no legality or state impact. Worth a viewer follow-up (`main.cpp`'s
+  own comment calls byte-identical menu twins "the one thing a decision menu must never do").
+* **Cycle plans never carry a land drop.** Deliberate — `AppendHumanPlayDigPlans` carries a
+  2026-08-27 user directive against it; the engine re-prompts within the phase, so
+  land-then-cycle is fully reachable. Four agents probed this and cleared it.
+* **Combat resolves after the opponent is already at ≤0 life.** Two agents flagged it; one
+  verified in source that the post-combat `CheckWinCondition` placement is deliberate
+  lockstep with the search leaf (`SimulateToEndImpl`). `win_turn` is unaffected.
+* **`/tmp` collisions between sweep agents.** Two agents clobbered each other's shared
+  helper scripts and briefly read another game's state. Both detected it and re-derived
+  their results through unique paths / direct invocations. **Process note for future
+  fan-outs: give each agent a unique temp path.**
+
+## 9. Measured but NOT adopted
+
+**`mulligan.max_lands` (rejected).** One agent traced its win-turn gap to
+`mulligan.max_lands = 5` — a hardcoded generic default (`src/ai/MulliganProfile.h:97`) that
+the analyzer never scales per deck, while `AIEngine.cpp:636` hard-rejects any opener above
+it. In a **42-land (70%) deck where every land is a free cantrip under Fluctuator**, that
+plausibly discards the deck's best hands, and the agent showed a concrete case where the
+engine mulliganed a 6-land + Fluctuator opener down to five cards.
+
+The mechanism is real, but **the measurement refutes the fix**: 100 paired games, d3/b200,
+
+| `max_lands` | avg turn-to-win |
+|---|---|
+| 5 (shipped) | **5.0200** |
+| 7 (no effective cap) | 5.0800 |
+
+Raising it is **worse**, so it does not clear the adoption bar and was not changed. Recorded
+here because the reasoning is compelling and someone will propose it again. (This is also a
+reminder that a claude-play misplay candidate is a *lead*, not a verdict — the aggregate at
+play settings decides.)
+
 ## Approved deferrals
 
 *(none yet — O-2 and O-3 are PROVISIONAL until the user signs them off)*
