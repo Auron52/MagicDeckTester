@@ -278,7 +278,47 @@ but is not that shape: its payoff is **incremental damage** — every cycle unde
 Stinger is 1 life immediately — so partial progress toward the kill is exactly what
 opponent-life measures. No opt-out is needed.
 
-## 8. Stage 6a disclosure — heuristics this deck relies on
+## 7.4 Where the time actually goes (O-4 root-cause, 2026-09-04)
+
+**It is NOT the width of cycling decisions.** Measured with `MTG_BRANCH_STATS` on a matched
+pair — gi=21 (win T4, **0.2 s**) vs gi=19 (win T4, **25.6 s**), near-identical games:
+
+| | gi=21 (fast) | gi=19 (slow) |
+|---|---|---|
+| `EnumeratePlans` calls | 597 | **154,705** (259x) |
+| sum_odo | 14,092 | 542,743 |
+| **avg options per enumeration** | **16.0 – 32.0** | **3.5 – 4.4** |
+| solve-memo misses | 3,181 | 788,664 |
+
+The slow game's per-decision branching is *lower* than the fast game's. Wall time tracks
+**node count**, not decision width: across 40 games the spread is 0.2 s / 3.2k nodes to
+63 s / 1.9M nodes, and the two move together.
+
+**Mechanism.** Free cycling turns ONE turn into a long *chain* of decision points — each
+cycle draws a card, which re-solves, which produces a new decision — and the depth-N search
+then explores that chain combinatorially across future turns. The visible correlate is board
+size: `board=7-10` is 105k of gi=19's 154k enumerations (more lands in play ⇒ more cycle/tap
+permutations per node). Enum-memo hit rate is only 14%, so little of that work is reused.
+Secondary contributor: Enlightened Tutor's `axis: tutor target` (10,690 calls, ~7% of odo).
+
+**The depth is nearly all wasted.** On gi=19 the turn-4 win is already found at **depth 1**;
+d2/d3/d5 cost 7x/12x/14x more and change nothing. Aggregate over the same 100 games:
+
+| depth | avg turn-to-win | wall (24 threads) | games > 30 s |
+|---|---|---|---|
+| 1 | 5.0800 | **7 s** | 0 |
+| 2 | 5.0600 | 64 s | 9 |
+| 3 (shipped) | **5.0500** | 76 s | 12 |
+
+d3 buys **0.03 turns over d1 for 11x the wall time**; per game d1 is worse on 3 of 100 and
+better on 0. d5 was already per-game identical to d3 (§7.2).
+
+**Implication (USER DECISION — not taken).** Running this deck at d1/d2 would make it
+suite-viable immediately. It is a genuine quality-for-speed trade (0.03 turns), not free, so
+it does not clear the standing adoption bar on its own and is left to the user. The
+alternative is attacking the node count directly: the chain is only cheap to search if
+identical post-cycle states memoize, and a 14% enum-memo hit rate says they largely do not —
+that is where a real 5f fix would look.
 
 | hook | what it decides | class | note |
 |---|---|---|---|
