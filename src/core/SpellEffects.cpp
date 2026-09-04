@@ -2242,7 +2242,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             // Grove of the Burnwillows drip (opponent gains -> loses with Remedy). Restored
             // below on failure alongside the active player's life.
             if (drip_ok && def->params.tap_opponent_lifegain > 0)
-            { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
+            {
+                // Grove: "each opponent gains 1" -- once per head (2HG = x2). The mana-cache's
+                // drip_life records the OBSERVED delta, so its replay needs no rescale.
+                OpponentGainsLife(state, active,
+                                  def->params.tap_opponent_lifegain * gamesetup::OpponentHeads());
+            }
             // LAND AURAS ("Whenever enchanted land is tapped for mana, add an additional {G}").
             // Credited HERE, at the single choke point every tap branch funnels through, rather
             // than in each of the six places that build `next` -- one site cannot drift out of

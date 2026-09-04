@@ -4521,9 +4521,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     }
     if (alt_lifegain > 0)
     {
-        // Alternative cost: pay no mana; instead make the opponent gain alt_lifegain life
-        // (-> that much damage with a Tainted Remedy / Plague Drone in play). Paid at cast.
-        OpponentGainsLife(state, state.active_player_index, alt_lifegain);
+        // Alternative cost: pay no mana; instead the payload's players gain alt_lifegain life
+        // (-> damage with a Tainted Remedy / Plague Drone in play; "each other player" cards
+        // hit both 2HG heads + gift the partner -- see ApplyAltLifegainPayload). Paid at cast.
+        ApplyAltLifegainPayload(state, state.active_player_index, def, alt_lifegain);
     }
     else if (!spend_free)
     {

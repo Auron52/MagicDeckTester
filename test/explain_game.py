@@ -69,8 +69,12 @@ def resolve(mode, key, cfg):
             budget = int(f[4]); break
     if budget is None:
         raise ValueError(f"no {mode} case for {deck} d{depth} s{seed}")
-    return dict(deck=deck, deckfile=cfg["DECK_FILE"][deck], profile=cfg["DECK_PROF"][deck],
-                depth=depth, seed=seed, budget=budget)
+    # "<deck>2hg" 2HG variant cases (see regression_cases.sh): the deck file/profile are the
+    # BASE deck's; the game setup (starting_life 30 + opponent_heads 2) rides as env on the
+    # re-run so the reproduction plays the same game the manifest did.
+    base = deck[:-3] if deck.endswith("2hg") else deck
+    return dict(deck=deck, deckfile=cfg["DECK_FILE"][base], profile=cfg["DECK_PROF"][base],
+                depth=depth, seed=seed, budget=budget, twohg=deck.endswith("2hg"))
 
 
 # ---- run one game under a binary, parse its per-turn line ------------------------------------
@@ -85,7 +89,11 @@ def run_game(binary, r, gi):
                "--seed", str(r["seed"] + gi), "--game-index", str(gi),
                "--depth", str(r["depth"]), "--budget-ms", str(r["budget"]),
                "--ignore-play-profile", "--log-dir", tmp]
-        subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=600)
+        env = os.environ.copy()
+        if r.get("twohg"):   # 2HG variant case: reproduce at its real game setup
+            env["MTG_START_LIFE"] = "30"
+            env["MTG_OPPONENT_HEADS"] = "2"
+        subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=600, env=env)
         logs = glob.glob(os.path.join(tmp, "*.json"))
         if not logs:
             return None

@@ -1,0 +1,78 @@
+{
+  "_comment": [
+    "Negative guard for hinata_crackle_2hg_both_heads.json: the IDENTICAL board WITHOUT",
+    "opponent_heads (default 1 head). The largest affordable Crackle is still X=3 (max_x solves",
+    "against the Hinata discount), but 15 to a single 30-life face is non-lethal, so the",
+    "hold-the-combo-piece prior keeps the lone Crackle in hand and nothing kills by the horizon",
+    "(Hinata swings 4 on T4+T5: 30 -> 22 at best; the untap step clears staged tapped/sick, so",
+    "the attacks cannot be fixtured away). If this fixture ever starts winning, the second head",
+    "is leaking into a 1-head game."
+  ],
+  "deck": "decks/Hinata2/Hinata2.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 30,
+  "battlefield": [
+    {
+      "name": "Hinata, Dawn-Crowned",
+      "controller": 0,
+      "tapped": true,
+      "sick": true
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Crackle with Power"
+  ],
+  "library_filler": "Island",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "expect_no_win": true
+}

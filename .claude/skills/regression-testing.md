@@ -527,3 +527,25 @@ arms by construction.
 
 The smoke matrix is also where to pin a few **known-troublesome specific games**
 (by seed) as decks reveal them, so the fast gate catches the bugs that bite.
+
+### 2HG variant cases (`<deck>2hg`)
+
+A case whose deck key ends in `2hg` (e.g. `"hinata2hg 3 1001 75 10"`) runs the **same
+deck file and profile** (regression.sh strips the suffix for the `DECK_FILE`/`DECK_PROF`
+lookup — no alias entries needed) at Two-Headed Giant settings: the manifest job gets
+`"starting_life": 30, "opponent_heads": 2` (see `core/GameSetup.h`). The suffix stays in
+the GT key (`hinata2hg_smoke_d3_s1001`), so 2HG and normal ground truths are separate.
+2HG deliberately shares the deck's shipped mulligan profile / value leaf (user decision
+2026-09-04 — no per-2HG artifact generation). The gate exists to catch changes that
+**obviously ignore 2HG** (second-face targeting, "each opponent" × heads): searched d3
+cases for the 2HG-relevant decks (hinata, antilife, minotaur, goblins, knights,
+fivecolour) + one hinata2hg d5, and small searched d3 canaries (50 games) for every
+other deck (smoke only — d0 canaries were tried and dropped: they cannot see a
+search-side 2HG break). The overnight tier adds the six relevant decks at DEFAULT
+settings (depth-5 rows, so `value_play` owns the depth) across all 4 seeds at each
+deck's own overnight d5 budget, ~1/3 of its sample sizes.
+`classify_turn_later.sh` and `explain_game.py` recognise the suffix and re-run single
+games under `MTG_START_LIFE=30 MTG_OPPONENT_HEADS=2`, so their repros stay faithful.
+Hand-built 2HG interaction pins live in the scenario gate
+(`test/scenarios/*_2hg_*.json`), which asserts the mechanisms exactly (both-heads
+Crackle lethal, Fanatic ×2, Cutter's "each other player" + partner gift).

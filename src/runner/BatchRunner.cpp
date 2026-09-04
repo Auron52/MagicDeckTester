@@ -117,6 +117,10 @@ struct Job
     // manifest is byte-identical. 30 is the 2HG race; as a job field the 20- and 30-life arms of
     // one comparison share ONE pooled queue instead of one batch each.
     int             starting_life       = -1;
+    // Per-job 2HG OPPONENT HEADS (see core/GameSetup.h). -1 => unset => env => 1, so every
+    // existing manifest -- including every starting_life:30 arm already in flight -- is
+    // byte-identical. A real 2HG job sets BOTH: {"starting_life": 30, "opponent_heads": 2}.
+    int             opponent_heads      = -1;
     // Per-job SHUFFLE SALTS (see core/GameSetup.h). -1 => unset => env => 0 => the identity, so
     // every existing manifest is byte-identical. A salt ensemble (or a decoupled search salt) is
     // one job per cell, pooled with every other cell.
@@ -579,6 +583,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     j.sched_weight        = jspec.value("weight", 0);      // LPT priority override (see Job::sched_weight)
     j.max_turns           = jspec.value("max_turns", 8);   // global goldfish horizon; per-job override
     j.starting_life       = jspec.value("starting_life", -1);  // -1 => env => 20 (2HG uses 30)
+    j.opponent_heads      = jspec.value("opponent_heads", -1); // -1 => env => 1  (2HG uses 2)
     // Shuffle salts (see core/GameSetup.h): -1 => env => 0. A salt ENSEMBLE -- the instrument that
     // separates a real effect from draw-order luck on any fetch/tutor-class lever -- is one cell per
     // (arm, salt), so carrying the salt per job is what keeps the ensemble in ONE pooled batch.
@@ -1480,6 +1485,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     // Same lifetime rule as the arm: set unconditionally so a previous job's
                     // starting life cannot leak into this one through the reused worker thread.
                     gamesetup::t_setup.starting_life       = jobs[wi.job].starting_life;
+                    gamesetup::t_setup.opponent_heads      = jobs[wi.job].opponent_heads;
                     gamesetup::t_setup.shuffle_salt        = jobs[wi.job].shuffle_salt;
                     gamesetup::t_setup.shuffle_salt_search = jobs[wi.job].shuffle_salt_search;
                     // Same lifetime rule, and it must also precede the engine build: a provider's
@@ -1519,7 +1525,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                                 "[statedump] job=%s prof=%p ek=%p ekB=%zu ekN=%zu bot=%d "
                                 "vsum=%lld vtr=%zu esum=%lld etr=%zu vtd=%d vnf=%d vial=%d "
                                 "cs=%zu/%.3f lands=%d..%d thr=%.3f vp=%d/%d/%d "
-                                "arm=%d/%d/%d/%.3f/%s life=%d salt=%lld/%lld num=%p hf=%u depth=%d bud=%d sm=%d\n",
+                                "arm=%d/%d/%d/%.3f/%s life=%d heads=%d salt=%lld/%lld num=%p hf=%u depth=%d bud=%d sm=%d\n",
                                 job.name.c_str(), (const void*)prof.get(),
                                 (const void*)mp.exhaustive_keep.get(),
                                 mp.exhaustive_keep ? mp.exhaustive_keep->buckets.size() : 0,
@@ -1534,6 +1540,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                                 valuearm::t_arm.esc_to_trust, valuearm::t_arm.trust_slack,
                                 valuearm::t_arm.value_profile.empty() ? "-" : valuearm::t_arm.value_profile.c_str(),
                                 gamesetup::t_setup.starting_life,
+                                gamesetup::t_setup.opponent_heads,
                                 (long long)gamesetup::t_setup.shuffle_salt,
                                 (long long)gamesetup::t_setup.shuffle_salt_search,
                                 (const void*)decknumbering::t_map, hflags,

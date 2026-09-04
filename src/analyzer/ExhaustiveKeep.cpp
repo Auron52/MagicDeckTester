@@ -139,28 +139,35 @@ struct RolloutCfg
     // stamp", which reads as UNVERIFIABLE rather than as a mismatch, so nothing already generated
     // is invalidated.
     int start_life = -1;
+    // 2HG OPPONENT HEADS (core/GameSetup.h). Same argument as start_life: a heads=2 table and a
+    // heads=1 table are otherwise indistinguishable, and the second head changes the rollouts
+    // (multi-target face damage, "each opponent" doubling). -1 = predates the stamp = UNVERIFIABLE.
+    int opp_heads  = -1;
     bool present() const { return depth >= 0 && budget_ms >= 0 && max_turns >= 0; }
     std::string str() const
     { return present() ? ("d" + std::to_string(depth) + "/b" + std::to_string(budget_ms)
                           + "/t" + std::to_string(max_turns)
-                          + (start_life >= 0 ? "/L" + std::to_string(start_life) : std::string()))
+                          + (start_life >= 0 ? "/L" + std::to_string(start_life) : std::string())
+                          + (opp_heads  >= 0 ? "/H" + std::to_string(opp_heads)  : std::string()))
                        : std::string("<not recorded>"); }
 };
 
 enum class CfgVerdict { Match, Differs, Unverifiable };
 
 RolloutCfg RolloutCfgOf(const ExhaustiveKeepConfig& cfg)
-{ return { cfg.depth, cfg.budget_ms, cfg.max_turns, gamesetup::StartingLife() }; }
+{ return { cfg.depth, cfg.budget_ms, cfg.max_turns, gamesetup::StartingLife(),
+           gamesetup::OpponentHeads() }; }
 
 RolloutCfg RolloutCfgFromMeta(const nlohmann::json& m)
 { return { m.value("depth", -1), m.value("budget_ms", -1), m.value("max_turns", -1),
-           m.value("start_life", -1) }; }
+           m.value("start_life", -1), m.value("opp_heads", -1) }; }
 
 void StampRolloutCfg(nlohmann::json& meta, const RolloutCfg& rc)
 {
     if (!rc.present()) { return; }   // never stamp a partial config -- absent means "unknown", not "zero"
     meta["depth"] = rc.depth; meta["budget_ms"] = rc.budget_ms; meta["max_turns"] = rc.max_turns;
     if (rc.start_life >= 0) { meta["start_life"] = rc.start_life; }
+    if (rc.opp_heads  >= 0) { meta["opp_heads"]  = rc.opp_heads; }
 }
 
 CfgVerdict CompareRolloutCfg(const RolloutCfg& a, const RolloutCfg& b)
@@ -171,6 +178,9 @@ CfgVerdict CompareRolloutCfg(const RolloutCfg& a, const RolloutCfg& b)
     // Life is compared only when BOTH sides recorded it: an artifact predating the stamp must stay
     // usable (Unverifiable -> warn and proceed), exactly as the other fields behave.
     if (a.start_life >= 0 && b.start_life >= 0 && a.start_life != b.start_life)
+    { return CfgVerdict::Differs; }
+    // Same both-sides rule for heads: an artifact predating the stamp stays usable (Unverifiable).
+    if (a.opp_heads >= 0 && b.opp_heads >= 0 && a.opp_heads != b.opp_heads)
     { return CfgVerdict::Differs; }
     return CfgVerdict::Match;
 }

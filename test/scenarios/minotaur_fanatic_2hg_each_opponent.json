@@ -1,0 +1,56 @@
+{
+  "_comment": [
+    "2HG (opponent_heads 2): Fanatic of Mogis's ETB 'deals damage to each opponent equal to your",
+    "devotion to red' fires once per head into the shared team pool. Devotion = Boros Reckoner's",
+    "three hybrid pips (CR 202.2b: a hybrid pip counts for both colours) + the Fanatic's own {R}",
+    "(CR 603.6a: it is on the battlefield when its own trigger resolves) = 4, so the ETB deals",
+    "4 x 2 heads = 8. The Reckoner's 3-power swing rides along (the run turn's untap step clears",
+    "any staged tapped/sick, so it cannot be fixtured away; the Fanatic enters genuinely sick):",
+    "30 - 8 - 3 = 19. At one head the same board ends at 23 (4 + 3), so the pin distinguishes",
+    "the doubling unambiguously."
+  ],
+  "deck": "decks/Minotaur/Minotaur.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 30,
+  "opponent_heads": 2,
+  "battlefield": [
+    {
+      "name": "Boros Reckoner",
+      "controller": 0,
+      "tapped": true,
+      "sick": true
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Fanatic of Mogis"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "expect_no_win": true,
+  "expect_opponent_life": 19
+}

@@ -552,6 +552,12 @@ struct CardParams
     // opponent lifegain (-> damage under Tainted Remedy) at cast time. 0 = no alt cost.
     int         alt_lifegain_cost = 0;
     std::string alt_cost_requires_subtype;
+    // The alt payload's wording: false = "an opponent gains N" (Invigorate) -- one player, always.
+    // true = "EACH OTHER PLAYER gains N" (Skyshroud Cutter / Reverent Silence) -- in 2HG
+    // (gamesetup::OpponentHeads() >= 2) that is BOTH opposing heads (x2 into their shared pool,
+    // x2 damage under a Tainted Remedy) AND your partner, whose gain lands in YOUR team pool
+    // (Remedy flips only opponents' gain, CR "If an opponent would gain life"). Inert at 1 head.
+    bool        alt_lifegain_each_player = false;
 
     // Destroy all enchantments on resolution (Reverent Silence) -- includes the caster's own.
     bool destroy_all_enchantments = false;

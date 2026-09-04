@@ -29,6 +29,22 @@ namespace gamesetup
 struct Setup
 {
     int       starting_life       = -1;   // -1 unset | >0 explicit   (manifest "starting_life")
+    // 2HG OPPONENT HEADS (manifest "opponent_heads"): how many opposing PLAYERS share the
+    // players[1] life pool. 1 = normal play (default, byte-identical). 2 = Two-Headed Giant:
+    // the opposing TEAM is two targetable players with ONE shared life total, which is exactly
+    // what players[1] already models -- damage to either head is deducted from the same pool.
+    // What a second head changes is TARGETING and "each opponent" arithmetic, not combat:
+    //   * a multi-target damage spell (Crackle with Power's "each of up to X targets",
+    //     Soulfire Eruption's "any number of target ... players") can point at BOTH faces,
+    //     so its total face output doubles (and Hinata counts one more discount target);
+    //   * "each opponent" effects (Fanatic of Mogis, Goblin Chainwhirler, Shivan Gorge,
+    //     Aria of Flame / Grove of the Burnwillows lifegain, Deathrite's drain, Adeline's
+    //     per-opponent token) fire once per head;
+    //   * DIVIDED damage (Magma Opus, Fiery Justice) is invariant -- the total is fixed and
+    //     both heads share one pool -- and combat is unchanged (starting_life covers 2HG's 30).
+    // Set it TOGETHER with starting_life 30 for a real 2HG run; neither implies the other, so
+    // every pre-existing 30-life manifest (e.g. the Mirrorwing tourney arms) is byte-identical.
+    int       opponent_heads      = -1;   // -1 unset | >=1 explicit  (manifest "opponent_heads")
     // Shuffle-variance / clairvoyance-decoupling salts (see GameState::shuffle_salt[_search]).
     // -1 unset | >=0 explicit. Same argument as starting_life, and it is the one that matters
     // most here: a SALT ENSEMBLE is how this repo separates a real effect from draw-order luck
@@ -51,6 +67,22 @@ inline int StartingLife()
         return v > 0 ? v : 20;
     }();
     return t_setup.starting_life > 0 ? t_setup.starting_life : s_env;
+}
+
+// The resolved number of opponent heads (see Setup::opponent_heads). Per-job override ->
+// MTG_OPPONENT_HEADS -> 1. Clamped to [1, 2]: the target model adds exactly one extra face
+// (2HG's second head); "each opponent" scaling would generalise but nothing above 2 exists
+// to validate against, so >2 is treated as 2 rather than silently inventing a format.
+inline int OpponentHeads()
+{
+    static const int s_env = []
+    {
+        const char* e = std::getenv("MTG_OPPONENT_HEADS");
+        const int   v = (e && *e) ? std::atoi(e) : 0;
+        return v > 0 ? v : 1;
+    }();
+    const int v = t_setup.opponent_heads > 0 ? t_setup.opponent_heads : s_env;
+    return v < 1 ? 1 : (v > 2 ? 2 : v);
 }
 
 // The resolved MID-GAME shuffle salt (the opening stays fixed; MTG_SHUFFLE_SALT_OPENING is

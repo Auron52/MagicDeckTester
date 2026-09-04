@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "2HG (opponent_heads 2): Skyshroud Cutter's alt cost is 'each OTHER player gains 5 life' --",
+    "with Tainted Remedy out, BOTH opposing heads' gains flip to losses (10 to the shared team",
+    "pool), while the PARTNER's gain is untouched (the Remedy reads 'If an OPPONENT would gain",
+    "life'), so our own team pool GAINS 5 -- the weird 2HG upside of firing your own",
+    "anti-lifegain payload. The safe-alt auto-fire pass casts the free Cutter (Forest on board),",
+    "and the fresh 2/2 is summoning-sick so nothing attacks: the whole delta is the payload.",
+    "Both teams start at 30 (2HG): opponent 30 - 10 = 20, us 30 + 5 = 35. At one head this same",
+    "board would be opponent 25, us 30 -- covered by the byte-identity GT, not re-asserted here."
+  ],
+  "deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 30,
+  "opponent_life": 30,
+  "opponent_heads": 2,
+  "battlefield": [
+    { "name": "Tainted Remedy", "controller": 0 },
+    { "name": "Forest", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Skyshroud Cutter" ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "expect_no_win": true,
+  "expect_opponent_life": 20,
+  "expect_active_life": 35
+}

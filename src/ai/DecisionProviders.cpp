@@ -1185,7 +1185,10 @@ static int FreePayloadKillCeiling(const GameState& s, int controller)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || d->params.alt_lifegain_cost <= 0) { continue; }
         if (!ControlsSubtype(s, controller, d->params.alt_cost_requires_subtype)) { continue; }
-        total += d->params.alt_lifegain_cost + VerseDamageFromCast(s, controller, *d);
+        // "Each other player" payloads (Cutter/Silence) hit once per 2HG head under the Remedy.
+        total += d->params.alt_lifegain_cost
+                     * (d->params.alt_lifegain_each_player ? gamesetup::OpponentHeads() : 1)
+               + VerseDamageFromCast(s, controller, *d);
     }
     return total;
 }
@@ -2543,7 +2546,11 @@ bool AntiLifegainProvider::CanAutoFireAltPayload(const GameState& s, int control
     if (def.params.alt_lifegain_cost <= 0 || !def.params.destroy_all_enchantments) { return false; }
     if (!::RemedyActive(s, controller)) { return false; }
     if (!::ControlsSubtype(s, controller, def.params.alt_cost_requires_subtype)) { return false; }
-    return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller)
+    // Silence is "each other player": under the Remedy both 2HG heads lose N -> N x heads lethal.
+    return s.players[1 - controller].life <= def.params.alt_lifegain_cost
+                                                 * (def.params.alt_lifegain_each_player
+                                                        ? gamesetup::OpponentHeads() : 1)
+                                             + ReadyAttackPower(s, controller)
                                              + VerseDamageFromCast(s, controller, def);
 }
 
@@ -2833,8 +2840,11 @@ bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int con
         }
         if (replacement && !strandable) { return true; }
     }
-    // (b) lethal in combination with this turn's attackers
-    return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller)
+    // (b) lethal in combination with this turn's attackers ("each other player": N x heads in 2HG)
+    return s.players[1 - controller].life <= def.params.alt_lifegain_cost
+                                                 * (def.params.alt_lifegain_each_player
+                                                        ? gamesetup::OpponentHeads() : 1)
+                                             + ReadyAttackPower(s, controller)
                                              + VerseDamageFromCast(s, controller, def);
 }
 
@@ -2901,7 +2911,8 @@ static bool AttackHasNonPowerValue(const GameState& s, const Permanent& p)
 bool AntiLifegainProvider::ArchetypeCardValue(const GameState& s, const CardDefinition& def,
                                               int DMG, int& out) const
 {
-    const int gift = def.params.etb_opponent_lifegain;
+    // Aria's "each opponent gains" fires once per head (2HG = x2 gift, and x2 Remedy damage).
+    const int gift = def.params.etb_opponent_lifegain * gamesetup::OpponentHeads();
     if (gift <= 0) { return false; }
     bool enabler_live = false;
     for (const Permanent& p : s.battlefield)
@@ -5826,7 +5837,10 @@ std::vector<int> HinataProvider::XCandidates(const GameState& s, const CardDefin
     {
         if (p.controller_index == active) { attack_ub += std::max(0, AttackPowerOf(s, p)); }
     }
-    if (max_x * mult + attack_ub >= opp_life) { return generic; }   // wins now -> cast it
+    // 2HG: with X >= 2 the second head is a face target too, so the best-case cast deals 5X to
+    // BOTH heads of the shared pool (see the CollectActions crackle branch -- lockstep).
+    const int face_hits = (gamesetup::OpponentHeads() >= 2 && max_x >= 2) ? 2 : 1;
+    if (max_x * mult * face_hits + attack_ub >= opp_life) { return generic; }   // wins now -> cast it
 
     return {};   // lone, non-lethal -> HOLD the combo piece
 }
@@ -6685,7 +6699,10 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             q.power_bonus, q.tough_bonus, q.grants_haste ? 1 : 0,
             q.reduces_spell_subtype.empty() ? 0 : 1,
             q.attack_pump_power_per_other_matching, q.etb_reveal_count, q.etb_self_creates_tokens,
-            std::max({ q.etb_damage_any, q.etb_damage_each_opponent, q.channel_damage }),
+            // "Each opponent" burn counts once per head (2HG = x2); any-target/channel stay x1.
+            std::max({ q.etb_damage_any,
+                       q.etb_damage_each_opponent * gamesetup::OpponentHeads(),
+                       q.channel_damage }),
             q.sac_outlet_add_mana_amount, q.sac_outlet_damage,
             q.combat_damage_puts_subtype_from_hand.empty() ? 0 : 1,
             q.tap_creates_tokens_per_controlled_subtype.empty() ? 0 : 1,
@@ -6742,7 +6759,10 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // 2 = drop the card out of contention entirely (rank it last).
     static const int dom_burn_mode = EnvInt("MTG_GOBLIN_DOMINATED_BURN", 0);
     auto face_of = [](const CardParams& q) {
-        return std::max({ q.etb_damage_any, q.etb_damage_each_opponent, q.channel_damage });
+        // "Each opponent" burn counts once per head (2HG = x2); any-target/channel stay x1.
+        return std::max({ q.etb_damage_any,
+                          q.etb_damage_each_opponent * gamesetup::OpponentHeads(),
+                          q.channel_damage });
     };
     int pool_best_face = 0;
     if (dom_burn_mode > 0)
@@ -6936,7 +6956,9 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
                                                TutorAxisResolveEnabled() ? 90 : 160);
         if (face_value)
         {
-            const int face = std::max({ p.etb_damage_any, p.etb_damage_each_opponent, p.channel_damage });
+            const int face = std::max({ p.etb_damage_any,
+                                        p.etb_damage_each_opponent * gamesetup::OpponentHeads(),
+                                        p.channel_damage });   // each-opponent: once per head (2HG)
             // DOMINATED BURN (user, 2026-08-05). A tutor fetches ONE card, so a burn payoff is only
             // worth its face value if it is the BEST burn still fetchable -- if a strictly better one
             // is sitting in the same library, this card's damage is not a reason to take it.
@@ -7368,7 +7390,8 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         if (p.channel_damage > 0 && p.channel_cost && p.channel_cost->ManaValue() <= untapped_mana)
         { burst = std::max(burst, p.channel_damage); }
         // ETB ping ("any target" -> face, or "each opponent" -> face): the body must ENTER this turn.
-        const int etb_face = std::max(p.etb_damage_any, p.etb_damage_each_opponent);
+        const int etb_face = std::max(p.etb_damage_any,
+                                      p.etb_damage_each_opponent * gamesetup::OpponentHeads());
         if (etb_face > 0)
         {
             const bool enters = lackey_now || mv <= untapped_mana || (vial_charge >= 0 && vial_charge >= mv);
@@ -7514,7 +7537,8 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
                 if (bp.channel_damage > 0 && bp.channel_cost
                     && bp.channel_cost->ManaValue() <= mana_next)
                 { nburst = std::max(nburst, bp.channel_damage); }
-                const int etb_face2 = std::max(bp.etb_damage_any, bp.etb_damage_each_opponent);
+                const int etb_face2 = std::max(bp.etb_damage_any,
+                                               bp.etb_damage_each_opponent * gamesetup::OpponentHeads());
                 if (etb_face2 > 0 && c.m_mana_cost.ManaValue() <= mana_next)
                 { nburst = std::max(nburst, etb_face2); }
                 if (nburst > 0)
@@ -13345,7 +13369,12 @@ static void ScanBoardSinks(const GameState& s, int controller, FlickerLoop* best
             const int mv = EffectiveActivationCost(s, controller, p.card,
                                                    d->params.tap_damage_cost.value()).ManaValue();
             if (best->gorge_dmg == 0 || mv < best->gorge_cost_mv)
-            { best->gorge_cost_mv = mv; best->gorge_dmg = d->params.tap_damage_each_opponent; }
+            {
+                best->gorge_cost_mv = mv;
+                // "Each opponent" -- once per head (2HG = x2), so the loop projection prices
+                // each iteration at its real team-pool damage (lockstep with the apply sites).
+                best->gorge_dmg = d->params.tap_damage_each_opponent * gamesetup::OpponentHeads();
+            }
         }
         if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
         {

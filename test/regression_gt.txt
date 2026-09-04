@@ -1,4 +1,4 @@
-# Regression ground truth -- commit cd8debac  date 2026-09-04
+# Regression ground truth -- commit fc2a0f7b  date 2026-09-04
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -55,6 +55,23 @@ dragons_smoke_d5_s1001=5.5867/b7981a8bf9dbc75a
 breaching_smoke_d0_s1001=4.8460/8c8e7d2fb5fd0181
 breaching_smoke_d3_s1001=3.1000/03766483807acbd5
 breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
+hinata2hg_smoke_d3_s1001=5.6267/cbb814866e963a6b
+antilife2hg_smoke_d3_s1001=3.9700/213aa7a5847cb20a
+minotaur2hg_smoke_d3_s1001=5.3500/d6096734765b010a
+goblins2hg_smoke_d3_s1001=4.0400/98eb843d496e3922
+knights2hg_smoke_d3_s1001=5.0933/2c8289b1ed029bba
+fivecolour2hg_smoke_d3_s1001=5.6500/cc63e8eef97b47a9
+slivers2hg_smoke_d3_s1001=4.8200/60f7078e6e53e52d
+burn2hg_smoke_d3_s1001=5.8400/7e4e4279467832bd
+th2hg_smoke_d3_s1001=4.5200/e0b5a30a00ce0b4f
+dragonstorm2hg_smoke_d3_s1001=4.8200/d743368c510b4975
+auras2hg_smoke_d3_s1001=4.5800/1c77361b9deb6fd5
+creature_giving2hg_smoke_d3_s1001=5.0000/41efcd6079fb2e3b
+mirrorwing2hg_smoke_d3_s1001=4.6800/ee889ff21b8d9d4d
+stompy2hg_smoke_d3_s1001=5.0000/73d0994752ca4e51
+kitty2hg_smoke_d3_s1001=4.9400/7bc28551a3faa869
+dragons2hg_smoke_d3_s1001=6.3000/43872dc33fccb094
+breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6790/990aaa21c4bc567e
@@ -142,6 +159,13 @@ breaching_regression_d3_s2002=3.0933/754d6fb14d56c14f
 breaching_regression_d3_s3003=3.0833/8d3103f293ae7026
 breaching_regression_d5_s2002=3.1000/a253d99d6bb10df1
 breaching_regression_d5_s3003=3.0760/f1ed83ebe4cb9869
+hinata2hg_regression_d3_s2002=5.5700/9684b41615451f58
+hinata2hg_regression_d5_s2002=5.5000/11fa4a57bd970ef3
+antilife2hg_regression_d3_s2002=4.3067/cb7a2532ec89f94d
+minotaur2hg_regression_d3_s2002=5.3933/a6b3c5b4ba60297a
+goblins2hg_regression_d3_s2002=4.1600/cace34cecfc985f8
+knights2hg_regression_d3_s2002=5.0100/40a525918b346540
+fivecolour2hg_regression_d3_s2002=5.3600/86798c73be25faa0
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/c408e174bb95edab
@@ -348,3 +372,27 @@ breaching_overnight_d5_s4004=3.0900/800200b70223d677
 breaching_overnight_d5_s5005=3.1240/1766df6ea14a4bdb
 breaching_overnight_d5_s6006=3.1200/282307edb6b0bf77
 breaching_overnight_d5_s7007=3.1220/6a143cd0563fe174
+hinata2hg_overnight_d5_s4004=5.5000/79b7f2b5fde7eb96
+hinata2hg_overnight_d5_s5005=5.3800/928e9caf7610377e
+hinata2hg_overnight_d5_s6006=5.7700/8203231de10b8490
+hinata2hg_overnight_d5_s7007=5.6900/1eff91ff9d1f8538
+antilife2hg_overnight_d5_s4004=4.1800/85e188c3f7026266
+antilife2hg_overnight_d5_s5005=4.2233/b6e385abf4b44d73
+antilife2hg_overnight_d5_s6006=4.1067/c45028e172f0e2dd
+antilife2hg_overnight_d5_s7007=4.0667/34c129ad87b99dc5
+minotaur2hg_overnight_d5_s4004=5.3467/ef05955b45d24a94
+minotaur2hg_overnight_d5_s5005=5.3333/fc22e028c82fc19f
+minotaur2hg_overnight_d5_s6006=5.4067/642c135d26f96e54
+minotaur2hg_overnight_d5_s7007=5.2800/e402a698dac4a936
+goblins2hg_overnight_d5_s4004=4.2567/9954538549e430c7
+goblins2hg_overnight_d5_s5005=4.2400/3678e8da6e2ffe27
+goblins2hg_overnight_d5_s6006=4.2433/32ff080bdef3be42
+goblins2hg_overnight_d5_s7007=4.2133/2b5cf845df6c21f5
+knights2hg_overnight_d5_s4004=5.0067/5a84e59e34609d4e
+knights2hg_overnight_d5_s5005=4.9967/f4b76821aea64f20
+knights2hg_overnight_d5_s6006=5.0067/8ba184f70663a6e9
+knights2hg_overnight_d5_s7007=5.0333/cc0211e759d88e47
+fivecolour2hg_overnight_d5_s4004=5.3500/f8a925d7c9312491
+fivecolour2hg_overnight_d5_s5005=5.4500/7ddd2d265922f9d5
+fivecolour2hg_overnight_d5_s6006=5.4200/e9feab3608dbce14
+fivecolour2hg_overnight_d5_s7007=5.3900/7004e2971949007b

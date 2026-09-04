@@ -85,7 +85,17 @@ printf '%s\n' "$list" | while read -r key gi_field old_new; do
   fi
   # shellcheck disable=SC2086
   set -- $spec; deck=$1; depth=$2; seed=$3; budget=$5
-  file=${DECK_FILE[$deck]}
+  # "<deck>2hg" 2HG variant cases (see regression_cases.sh): same deck file, but the repro must
+  # match the case's game setup -- starting_life 30 + opponent_heads 2 -- or the re-run plays a
+  # different game and the churn/PERSISTS verdict is meaningless. Exported (and unset for
+  # non-2hg keys, since this while-loop subshell carries exports across iterations).
+  base=$deck
+  if [[ "$deck" == *2hg ]]; then
+    base=${deck%2hg}; export MTG_START_LIFE=30 MTG_OPPONENT_HEADS=2
+  else
+    unset MTG_START_LIFE MTG_OPPONENT_HEADS
+  fi
+  file=${DECK_FILE[$base]}
   gseed=$(( seed + gi ))
   b4=$(( budget * 4 )); b16=$(( budget * 16 ))
   wt4=$(run_wt "$file" "$gseed" "$gi" "$depth" "$b4")

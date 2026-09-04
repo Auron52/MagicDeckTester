@@ -2439,13 +2439,19 @@ std::cout << "  \"win_turn\": " << (won ? win_turn : -1)
 ChosenTarget SentinelToChosen(int t, int ci)
 {
     if (t == TARGET_OPP_FACE)  { return ChosenTarget{ 0, 1 - ci, 0 }; }
+    if (t == TARGET_OPP_FACE2) { return ChosenTarget{ 0, 2,      0 }; }  // 2HG head 2 (shared pool)
     if (t == TARGET_SELF_FACE) { return ChosenTarget{ 0, ci,     0 }; }
     return ChosenTarget{ 1, t, 0 };
 }
 
 int ChosenToSentinel(const ChosenTarget& c, int ci)
 {
-    if (c.kind == 0) { return (c.index == ci) ? TARGET_SELF_FACE : TARGET_OPP_FACE; }
+    if (c.kind == 0)
+    {
+        return (c.index == ci) ? TARGET_SELF_FACE
+             : (c.index == 2)  ? TARGET_OPP_FACE2   // 2HG head 2
+                               : TARGET_OPP_FACE;
+    }
     return c.index;
 }
 
@@ -3820,6 +3826,7 @@ void ClaudePlayHarness::InstallLandAndSoulfireChoosers(AIEngine& ai)
             {
                 legal_ct.push_back(SentinelToChosen(t, controller));
                 if      (t == TARGET_OPP_FACE)  { legal_labels.push_back("Opponent (face)"); }
+                else if (t == TARGET_OPP_FACE2) { legal_labels.push_back("Opponent head 2 (face)"); }
                 else if (t == TARGET_SELF_FACE) { legal_labels.push_back("You (face)"); }
                 else if (t >= 0 && t < static_cast<int>(s.battlefield.size()))
                 {
@@ -4374,6 +4381,10 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // code is untested code.
     state.players[0].energy_counters = j.value("energy_counters", 0);
     state.players[1].life       = j.value("opponent_life", 20);
+    // 2HG opponent heads (core/GameSetup.h): how many opposing players share players[1]'s pool.
+    // A fixture field (default unset -> env -> 1) so the second-face targeting and "each opponent"
+    // scaling are reachable from a scenario -- unreachable code is untested code.
+    gamesetup::t_setup.opponent_heads = j.value("opponent_heads", -1);
     // Stage the OPPONENT'S library at an arbitrary size (core/OpponentDeck.h). Same reason
     // rad_counters is settable: reaching a deck-out through real play means milling 53 cards, which
     // no fixture can do in a handful of turns -- so without this the entire deck-out path, the win

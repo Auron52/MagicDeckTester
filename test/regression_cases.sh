@@ -178,6 +178,33 @@ SMOKE_CASES=(
   "breaching 0 1001 1000 0"
   "breaching 3 1001  150 10"
   "breaching 5 1001   75 20"
+  # 2HG gate (user request 2026-09-04): "<deck>2hg" = the SAME deck/profile at starting_life 30
+  # + opponent_heads 2 (regression.sh strips the suffix for file lookup and adds the job fields).
+  # Small on purpose -- just enough that a change which obviously ignores 2HG (second-face
+  # targeting, "each opponent" x heads) moves a committed digest. Searched d3 cases for the decks
+  # with 2HG-RELEVANT cards: hinata (Crackle both heads / Soulfire second flip), antilife
+  # (Cutter/Silence "each other player" + partner gift, Aria/Grove x2), minotaur (Fanatic
+  # devotion x2), goblins (Chainwhirler ping x2), knights (Adeline token per head), fivecolour
+  # (Deathrite drain x2). Every OTHER deck gets a small SEARCHED canary -- d3 at 50 games (user,
+  # 2026-09-04: d0 "isn't all that useful"; fewer games at search depth instead) -- so a
+  # heads-plumbing break in the search/rollout path moves a committed digest too.
+  "hinata2hg     3 1001   75 10"
+  "antilife2hg   3 1001  100 10"
+  "minotaur2hg   3 1001  100 10"
+  "goblins2hg    3 1001   75 10"
+  "knights2hg    3 1001   75 10"
+  "fivecolour2hg 3 1001   40 10"
+  "slivers2hg         3 1001 50 10"
+  "burn2hg            3 1001 50 10"
+  "th2hg              3 1001 50 10"
+  "dragonstorm2hg     3 1001 50 10"
+  "auras2hg           3 1001 50 10"
+  "creature_giving2hg 3 1001 50 10"
+  "mirrorwing2hg      3 1001 50 10"
+  "stompy2hg          3 1001 50 10"
+  "kitty2hg           3 1001 50 10"
+  "dragons2hg         3 1001 50 10"
+  "breaching2hg       3 1001 50 10"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -289,6 +316,17 @@ REGRESSION_CASES=(
   "breaching 3 3003  300 10"
   "breaching 5 2002  250 20"
   "breaching 5 3003  250 20"
+  # 2HG gate, second seed (see the SMOKE block for the design): the six 2HG-relevant decks at
+  # d3, plus ONE d5 case (hinata2hg -- the value_play/deep-search path under two heads, covering
+  # the Crackle declared-count search where the second face changes lethality). No canaries here
+  # (smoke owns them); the deep default-settings 2HG coverage is the OVERNIGHT block below.
+  "hinata2hg     3 2002  100 10"
+  "hinata2hg     5 2002   50 20"
+  "antilife2hg   3 2002  150 10"
+  "minotaur2hg   3 2002  150 10"
+  "goblins2hg    3 2002  100 10"
+  "knights2hg    3 2002  100 10"
+  "fivecolour2hg 3 2002   50 10"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -560,4 +598,34 @@ OVERNIGHT_CASES=(
   "breaching 5 5005  500 40"
   "breaching 5 6006  500 40"
   "breaching 5 7007  500 40"
+  # 2HG gate, deep tier (user request 2026-09-04): the six 2HG-relevant decks at DEFAULT
+  # SETTINGS -- depth-5 rows drop the depth key so each deck's value_play block owns the play
+  # depth (fivecolour runs d6), at the SAME per-deck overnight d5 budget as the deck's own rows.
+  # Counts at ~1/3 of each deck's own d5 sample: the 2HG gate is a digest tripwire plus a real
+  # deep-search 2HG behaviour sample, not a statistics tier (~55 min ST added, pools inside the
+  # existing makespan). Seed spacing rule holds (all counts < the 1001 base spacing).
+  "hinata2hg     5 4004 100 20"
+  "hinata2hg     5 5005 100 20"
+  "hinata2hg     5 6006 100 20"
+  "hinata2hg     5 7007 100 20"
+  "antilife2hg   5 4004 300 20"
+  "antilife2hg   5 5005 300 20"
+  "antilife2hg   5 6006 300 20"
+  "antilife2hg   5 7007 300 20"
+  "minotaur2hg   5 4004 150 40"
+  "minotaur2hg   5 5005 150 40"
+  "minotaur2hg   5 6006 150 40"
+  "minotaur2hg   5 7007 150 40"
+  "goblins2hg    5 4004 300 40"
+  "goblins2hg    5 5005 300 40"
+  "goblins2hg    5 6006 300 40"
+  "goblins2hg    5 7007 300 40"
+  "knights2hg    5 4004 300 40"
+  "knights2hg    5 5005 300 40"
+  "knights2hg    5 6006 300 40"
+  "knights2hg    5 7007 300 40"
+  "fivecolour2hg 5 4004 100 20"
+  "fivecolour2hg 5 5005 100 20"
+  "fivecolour2hg 5 6006 100 20"
+  "fivecolour2hg 5 7007 100 20"
 )

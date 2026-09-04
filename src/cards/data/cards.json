@@ -1502,11 +1502,12 @@
    "keywords": [],
    "power": 2,
    "toughness": 2,
-   "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have each other player gain 5 life.\n[Alt cost modelled: free 2/2 that makes the opponent gain 5 (-> 5 damage with Tainted Remedy out).]",
+   "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have each other player gain 5 life.\n[Alt cost modelled: free 2/2. 'EACH OTHER PLAYER gains 5' (alt_lifegain_each_player): in 2HG (opponent_heads 2) both opposing heads gain (-> 10 damage with Tainted Remedy out -- the Remedy flips only opponents) AND your partner gains 5 into your shared team pool. At one head: opponent gains 5 (-> 5 damage with a Remedy).]",
    "template": "vanilla_creature",
    "parameters": {
     "alt_lifegain_cost": 5,
-    "alt_cost_requires_subtype": "Forest"
+    "alt_cost_requires_subtype": "Forest",
+    "alt_lifegain_each_player": true
    }
   },
   {
@@ -1599,7 +1600,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have an opponent gain 3 life.\nTarget creature gets +4/+4 until end of turn. [+4/+4 modelled on your own best attacker (until end of turn). Alt cost: free, opponent gains 3 (-> 3 damage with Tainted Remedy), offered only while a Remedy effect is active.]",
+   "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have an opponent gain 3 life.\nTarget creature gets +4/+4 until end of turn. [+4/+4 modelled on your own best attacker (until end of turn). Alt cost: free, 'AN opponent gains 3' -- ONE player even in 2HG (no alt_lifegain_each_player; no partner gift) -> 3 damage with Tainted Remedy, offered only while a Remedy effect is active.]",
    "template": "pump_spell",
    "parameters": {
     "power_bonus": 4,
@@ -1618,12 +1619,13 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have each other player gain 6 life.\nDestroy all enchantments. [Alt cost: free, opponent gains 6 (-> 6 damage with Tainted Remedy). Destroy-all-enchantments includes your own Aria/Remedy -- the search avoids casting it when it would break the combo.]",
+   "oracle_text": "If you control a Forest, rather than pay this spell's mana cost, you may have each other player gain 6 life.\nDestroy all enchantments. [Alt cost: free. 'EACH OTHER PLAYER gains 6' (alt_lifegain_each_player): in 2HG both opposing heads gain (-> 12 damage with Tainted Remedy; the lethal gates scale accordingly) and your partner gains 6 into your team pool. At one head: opponent gains 6 (-> 6 damage with a Remedy). Destroy-all-enchantments includes your own Aria/Remedy -- the search avoids casting it when it would break the combo.]",
    "template": "custom",
    "parameters": {
     "destroy_all_enchantments": true,
     "alt_lifegain_cost": 6,
-    "alt_cost_requires_subtype": "Forest"
+    "alt_cost_requires_subtype": "Forest",
+    "alt_lifegain_each_player": true
    }
   },
   {
@@ -1812,7 +1814,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Crackle with Power deals five times X damage to each of up to X targets. [Modelled as an {X} DirectDamage with x_damage_multiplier 5 and three {X} pips (cost = 3X + {R}{R}). The win-relevant case is targeting the opponent's face for 5X; 'up to X targets' only matters for Hinata's per-target cost reduction (Layer-2 HinataProvider) -- extra targets never add face damage (the player is still one target taking 5X), so the single-target face model is exact for lethality and conservative for the discount.]",
+   "oracle_text": "Crackle with Power deals five times X damage to each of up to X targets. [Modelled as an {X} DirectDamage with x_damage_multiplier 5 and three {X} pips (cost = 3X + {R}{R}). The win-relevant case is targeting the opponent's face for 5X; 'up to X targets' matters for Hinata's per-target cost reduction AND, in 2HG (opponent_heads 2, core/GameSetup.h), for the SECOND opposing head: CrackleExtraTargetOrder offers it first, so a declared count >= 1 deals 5X to both heads of the shared team pool (lethal at X=3 vs 30). In a 1-head game extra targets never add face damage, so the single-target face model is exact there.]",
    "template": "direct_damage",
    "parameters": {
     "damage": 0,
@@ -1930,7 +1932,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Choose any number of target creatures, planeswalkers, and/or players. For each of them, exile the top card of your library, then Soulfire Eruption deals damage equal to that card's mana value to that permanent or player. You may play the exiled cards until the end of your next turn. [MODELLED (bounded multi-target dig, SoulfireDig in SpellEffects.h): targets the opponent's face + each opponent creature + yourself (only if life > 9, else a self-exiled Soulfire MV 9 is lethal) + a SEARCHED count of your OWN creatures (soulfire_own_targets, 0..#own creatures; expendable first, Hinata last). For each target, exile+STAGE the top library card (playable until end of next turn -- the deck's real dig of N); the exiled cards are assigned to targets in a FIXED, NON-clairvoyant order (face = the TOP card, then self, then opponent creatures in board order, then own creatures) -- the controller cannot steer the random flip onto the face. Creature targets take their card's mana value and are DESTROYED if lethal, so a killed creature leaves the target pool for later target-dependent spells (the faithful interaction). More own targets = deeper dig + a bigger Hinata discount ({1} less per target), weighed by the clairvoyant search against the damage to those creatures (e.g. killing Hinata removes her discount and makes the rest of the combo unaffordable -> the search rejects it). Lockstep across EffectHandler (executor) + ApplyPlanDirect (rollout) + SoulfireFaceDamage (the Solve projection = top-card MV).]",
+   "oracle_text": "Choose any number of target creatures, planeswalkers, and/or players. For each of them, exile the top card of your library, then Soulfire Eruption deals damage equal to that card's mana value to that permanent or player. You may play the exiled cards until the end of your next turn. [MODELLED (bounded multi-target dig, SoulfireDig in SpellEffects.h): targets the opponent's face (BOTH heads in 2HG, opponent_heads 2 -- the second head is the second positional target, so its flip's MV also hits the shared team pool) + each opponent creature + yourself (only if life > 9, else a self-exiled Soulfire MV 9 is lethal) + a SEARCHED count of your OWN creatures (soulfire_own_targets, 0..#own creatures; expendable first, Hinata last). For each target, exile+STAGE the top library card (playable until end of next turn -- the deck's real dig of N); the exiled cards are assigned to targets in a FIXED, NON-clairvoyant order (face = the TOP card, then self, then opponent creatures in board order, then own creatures) -- the controller cannot steer the random flip onto the face. Creature targets take their card's mana value and are DESTROYED if lethal, so a killed creature leaves the target pool for later target-dependent spells (the faithful interaction). More own targets = deeper dig + a bigger Hinata discount ({1} less per target), weighed by the clairvoyant search against the damage to those creatures (e.g. killing Hinata removes her discount and makes the rest of the combo unaffordable -> the search rejects it). Lockstep across EffectHandler (executor) + ApplyPlanDirect (rollout) + SoulfireFaceDamage (the Solve projection = top-card MV).]",
    "template": "direct_damage",
    "parameters": {
     "damage": 0,
@@ -5124,7 +5126,7 @@
    "keywords": [],
    "power": 4,
    "toughness": 2,
-   "oracle_text": "When this creature enters, it deals damage to each opponent equal to your devotion to red. (Each {R} in the mana costs of permanents you control counts toward your devotion to red.) [ETB devotion burn via etb_damage_devotion_color 'R'. DevotionTo() counts red mana symbols across the mana costs of every permanent the controller controls (CR 700.5), INCLUDING this Fanatic -- it is already on the battlefield when its own ETB trigger resolves (CR 603.6a) -- and counts a HYBRID pip for both its colours (CR 202.2b), so a Boros Reckoner contributes 3. 'Each opponent' is one face hit vs the single goldfish opponent, routed through the same life sink the win projection reads.]",
+   "oracle_text": "When this creature enters, it deals damage to each opponent equal to your devotion to red. (Each {R} in the mana costs of permanents you control counts toward your devotion to red.) [ETB devotion burn via etb_damage_devotion_color 'R'. DevotionTo() counts red mana symbols across the mana costs of every permanent the controller controls (CR 700.5), INCLUDING this Fanatic -- it is already on the battlefield when its own ETB trigger resolves (CR 603.6a) -- and counts a HYBRID pip for both its colours (CR 202.2b), so a Boros Reckoner contributes 3. 'Each opponent' is one face hit per head (x2 into the shared team pool in 2HG, opponent_heads 2), routed through the same life sink the win projection reads.]",
    "template": "vanilla_creature",
    "parameters": {
     "etb_damage_devotion_color": "R"
@@ -5736,7 +5738,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}: Add {C}.\n{2}{R}, {T}: Shivan Gorge deals 1 damage to each opponent. [Both modes modelled. The damage ability is this deck's same-turn kill: a blink loop untaps the Gorge every iteration, so N iterations are N activations. 'Each opponent' is one player in a goldfish. Legendary, so the legend rule caps the board at one.]",
+   "oracle_text": "{T}: Add {C}.\n{2}{R}, {T}: Shivan Gorge deals 1 damage to each opponent. [Both modes modelled. The damage ability is this deck's same-turn kill: a blink loop untaps the Gorge every iteration, so N iterations are N activations. 'Each opponent' is one hit per head (x2 per activation into the shared team pool in 2HG, opponent_heads 2). Legendary, so the legend rule caps the board at one.]",
    "template": "basic_land",
    "parameters": {
     "produces": [

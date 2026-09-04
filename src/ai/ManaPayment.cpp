@@ -102,7 +102,12 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         // with Tainted Remedy out). A `col == Colorless` tap is the painless "{T}: Add {C}" mode --
         // no drip (see DripLandAnyPipColor: a generic pip absent a Remedy routes here as Colorless).
         if (def.params.tap_opponent_lifegain > 0 && col != Color::Colorless)
-        { OpponentGainsLife(state, active, def.params.tap_opponent_lifegain, def.card.m_name.str()); }
+        {
+            // Grove: "each opponent gains 1" -- once per head (2HG = x2, shared pool).
+            OpponentGainsLife(state, active,
+                              def.params.tap_opponent_lifegain * gamesetup::OpponentHeads(),
+                              def.card.m_name.str());
+        }
         // Karoo bounce land ({U}{R} from one tap): produce one mana of EACH colour it makes, so a
         // lone Izzet Boilerworks can pay a two-colour cost (Expressive Iteration {U}{R}) the planner
         // promised. Crediting `amt` of the single matched colour would lose the second colour --

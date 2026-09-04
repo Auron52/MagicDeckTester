@@ -287,7 +287,16 @@ MANIFEST="$LOGDIR/manifest.json"
   for spec in "${CASES[@]}"; do
     # shellcheck disable=SC2086
     set -- $spec; deck=$1; depth=$2; seed=$3; games=$4; budget=$5
-    file=${DECK_FILE[$deck]}; prof=${DECK_PROF[$deck]}
+    # 2HG VARIANT cases: a "<deck>2hg" case key runs the SAME deck/profile (user decision
+    # 2026-09-04: 2HG shares the shipped mulligan profile / value leaf -- no per-2HG artifacts)
+    # at Two-Headed Giant settings: starting_life 30 + opponent_heads 2 (core/GameSetup.h).
+    # The suffix stays in the GT key, so hinata2hg_* and hinata_* are separate ground truths.
+    base=$deck; extra2hg=""
+    if [[ "$deck" == *2hg ]]; then
+      base=${deck%2hg}
+      extra2hg='"starting_life": 30, "opponent_heads": 2, '
+    fi
+    file=${DECK_FILE[$base]}; prof=${DECK_PROF[$base]}
     name="${deck}_${MODE}_d${depth}_s${seed}"
     # depth>0 searches with its budget; depth 0 is the clean greedy baseline (budget 0).
     # Lookahead bottoming is no longer a flag -- the engine derives it from depth (ON iff
@@ -301,7 +310,7 @@ MANIFEST="$LOGDIR/manifest.json"
     # those games start FIRST and the cheap games backfill while they grind. d5 outranks d3. Other
     # jobs keep weight 0 (the depth/budget proxy). Ordering is lossless -- results are unchanged.
     weight=0
-    if [ "$deck" = "hinata" ] && [ "$depth" -gt 0 ]; then weight=$((depth * 1000 + bud)); fi
+    if [ "$base" = "hinata" ] && [ "$depth" -gt 0 ]; then weight=$((depth * 1000 + bud)); fi
     [ $first -eq 1 ] && first=0 || printf ',\n'
     # value_play integration (docs/design/value-leaf-fallback-table.md): every deck ships an ENABLED value_play
     # block that OWNS the play depth. The depth-5 case is the "value_play-driven" case -- we DROP the depth key
@@ -310,11 +319,11 @@ MANIFEST="$LOGDIR/manifest.json"
     # burn/th=80, so burn runs d6 under deep search). The d0/d3 coverage cases PIN their explicit shallow depth,
     # which conflicts with the enabled block's depth lock, so they carry ignore_play_profile:true to bypass it.
     if [ "$depth" -eq 5 ]; then
-      printf '  { "name": "%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "budget_ms": %s, "weight": %s }' \
-        "$name" "$file" "$prof" "$games" "$seed" "$bud" "$weight"
+      printf '  { "name": "%s", "deck": "%s", "profile": "%s", %s"games": %s, "seed": %s, "budget_ms": %s, "weight": %s }' \
+        "$name" "$file" "$prof" "$extra2hg" "$games" "$seed" "$bud" "$weight"
     else
-      printf '  { "name": "%s", "deck": "%s", "profile": "%s", "games": %s, "seed": %s, "depth": %s, "budget_ms": %s, "ignore_play_profile": true, "weight": %s }' \
-        "$name" "$file" "$prof" "$games" "$seed" "$depth" "$bud" "$weight"
+      printf '  { "name": "%s", "deck": "%s", "profile": "%s", %s"games": %s, "seed": %s, "depth": %s, "budget_ms": %s, "ignore_play_profile": true, "weight": %s }' \
+        "$name" "$file" "$prof" "$extra2hg" "$games" "$seed" "$depth" "$bud" "$weight"
     fi
   done
   printf '\n] }\n'

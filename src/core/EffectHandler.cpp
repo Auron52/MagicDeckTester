@@ -271,11 +271,13 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                                            def.card.m_mana_cost.ManaValue(), "EXEC");
                 }
                 // ETB "each opponent gains N life" (Aria of Flame) -> reversed to damage by
-                // a Tainted Remedy / Plague Drone via OpponentGainsLife.
+                // a Tainted Remedy / Plague Drone via OpponentGainsLife. Once per head (2HG =
+                // x2 on the shared pool -- and x2 Remedy damage).
                 if (def.params.etb_opponent_lifegain > 0)
                 {
                     OpponentGainsLife(state, entry.controller_index,
-                                      def.params.etb_opponent_lifegain);
+                                      def.params.etb_opponent_lifegain
+                                          * gamesetup::OpponentHeads());
                 }
             }
             else

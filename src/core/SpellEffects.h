@@ -7,6 +7,7 @@
 // that run once per RESOLUTION of a specific card or effect may move; the per-cast / per-death /
 // per-combat helpers stay inline. See SpellEffects.cpp for the measurement and the rule.
 #include "EnvFlags.h"
+#include "GameSetup.h"                 // OpponentHeads(): 2HG second-face targeting + "each opponent"
 #include "GameState.h"
 #include "ManaPool.h"
 #include "GameLogger.h"                // g_reveal_logger: capture scry/dig reveals (real play only)
@@ -897,6 +898,39 @@ inline void OpponentGainsLife(GameState& state, int controller_index, int amount
         EmitPlayEvent(state.turn_number, remedied ? "lifeloss" : "lifegain",
                       std::string(remedied ? "🩸 opponent −" : "＋ opponent +") + std::to_string(amount)
                       + " life" + src);
+    }
+}
+
+// The ALT-COST lifegain payload ("rather than pay this spell's mana cost, you may have ... gain N
+// life"), def-aware for the wording split (see CardParams::alt_lifegain_each_player):
+//   * "an opponent gains N"          (Invigorate)                   -> ONE gain, always.
+//   * "EACH OTHER PLAYER gains N"    (Skyshroud Cutter / Silence)   -> in 2HG, once per opposing
+//     head (x2 into their shared pool -- x2 damage under a Tainted Remedy) PLUS your partner,
+//     whose gain lands in YOUR team pool. Remedy flips only OPPONENTS' gain ("If an opponent
+//     would gain life..."), so the partner's is a real gain -- the weird 2HG upside that firing
+//     your own anti-lifegain payload heals your team a little.
+// The partner gain deliberately does NOT bump life_gained_this_turn: the PARTNER gained, not you,
+// so "you gain life" style triggers must never fire off it.
+// ONE shared helper called by the executor (AIEngine::CastSpellFromHand) and the rollout
+// (apply_one) so the two stay lockstep. At OpponentHeads() == 1 both wordings reduce to the
+// pre-existing single OpponentGainsLife -> byte-identical.
+inline void ApplyAltLifegainPayload(GameState& state, int controller,
+                                    const CardDefinition* def, int amount)
+{
+    if (amount <= 0) { return; }
+    const bool each  = def && def->params.alt_lifegain_each_player;
+    const int  heads = each ? gamesetup::OpponentHeads() : 1;
+    OpponentGainsLife(state, controller, amount * heads,
+                      def ? def->card.m_name.str() : std::string());
+    if (each && gamesetup::OpponentHeads() >= 2)
+    {
+        state.players[controller].life += amount;   // the partner's gain -> our shared team pool
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "lifegain",
+                          "＋ your team +" + std::to_string(amount) + " life (partner"
+                          + (def ? ", " + def->card.m_name.str() : std::string()) + ")");
+        }
     }
 }
 
@@ -3850,7 +3884,11 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     const int devotion_dmg = p.etb_damage_devotion_color.empty()
                            ? 0
                            : DevotionTo(state, controller, p.etb_damage_devotion_color);
-    const int face_dmg = p.etb_damage_any + p.etb_damage_each_opponent + devotion_dmg;
+    // "Each opponent" damage (Chainwhirler ping, Fanatic's devotion burn) fires once per head
+    // (2HG = x2 into the shared team pool); the single-target etb_damage_any stays x1.
+    const int heads    = gamesetup::OpponentHeads();
+    const int face_dmg = p.etb_damage_any
+                       + (p.etb_damage_each_opponent + devotion_dmg) * heads;
     if (face_dmg > 0)
     {
         const int before = state.players[opp].life;
@@ -4801,7 +4839,9 @@ inline void ApplyGraveyardExileAbility(GameState& state, int controller, int sou
         src->tapped = true;   // the {T} part of the cost
         if (mode == 1)
         {
-            state.players[1 - controller].life -= d->params.gy_exile_instant_sorcery_drain;
+            // Deathrite: "each opponent loses 2 life" -- once per head (2HG = x2, shared pool).
+            state.players[1 - controller].life -=
+                d->params.gy_exile_instant_sorcery_drain * gamesetup::OpponentHeads();
             state.opponent_lost_life_this_turn = true;
         }
         else
@@ -6787,7 +6827,9 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index)
         if (p.controller_index != controller_index) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.attack_creates_tokens <= 0) { continue; }
-        to_create.push_back({def->params.attack_creates_tokens,
+        // Adeline: "for each opponent, create a ... token ... attacking that player" -- one per
+        // head (2HG = x2; both heads share the team pool, so both tokens' damage counts).
+        to_create.push_back({def->params.attack_creates_tokens * gamesetup::OpponentHeads(),
                              def->params.attack_token_power,
                              def->params.attack_token_toughness,
                              def->params.attack_token_subtypes});
@@ -7881,6 +7923,10 @@ inline std::vector<Card> DrawTopAsImpulseStaged(GameState& state, int controller
 // entry >= 0 is a battlefield index; these two encode the players' faces (CRACKLE_* alias them below).
 constexpr int TARGET_SELF_FACE = -1;   // the controller's own face
 constexpr int TARGET_OPP_FACE  = -2;   // the opponent's face
+// The opposing team's SECOND head (2HG; gamesetup::OpponentHeads() >= 2 only). A distinct,
+// separately-targetable player whose damage lands in the SAME players[1] life pool -- so a
+// multi-target spell that picks both faces deals its per-target damage twice to the team total.
+constexpr int TARGET_OPP_FACE2 = -3;
 
 struct SoulfireResult { int face_damage = 0; int self_damage = 0; };
 
@@ -7889,7 +7935,7 @@ struct SoulfireResult { int face_damage = 0; int self_damage = 0; };
 inline int SoulfireTargetCount(const GameState& state, int controller, bool& target_self_out)
 {
     const int opp = 1 - controller;
-    int n = 1;   // the opponent's face
+    int n = gamesetup::OpponentHeads();   // every opposing face (2HG: both heads are player targets)
     for (const Permanent& p : state.battlefield)
     { if (p.controller_index == opp && p.card.IsCreature()) { ++n; } }
     // Self-target only with life > 9: the worst exiled card is Soulfire itself (MV 9), so at 9
@@ -7960,6 +8006,9 @@ inline std::vector<int> SoulfireTargetOrder(const GameState& state, int controll
 {
     std::vector<int> out;
     out.push_back(TARGET_OPP_FACE);
+    // 2HG: the second head is the next-best target after the first face -- another card's full MV
+    // into the shared team pool, ahead of self/creatures. Positionally it takes the SECOND flip.
+    if (gamesetup::OpponentHeads() >= 2) { out.push_back(TARGET_OPP_FACE2); }
     if (state.players[controller].life > 9) { out.push_back(TARGET_SELF_FACE); }
     for (int bi : SoulfireOppCreatureOrder(state, controller)) { out.push_back(bi); }
     for (int bi : SoulfireOwnCreatureOrder(state, controller)) { out.push_back(bi); }
@@ -7973,10 +8022,17 @@ inline std::vector<int> SoulfireTargetOrder(const GameState& state, int controll
 inline int SoulfireFaceDamage(const GameState& state, int controller, int /*own_targets*/ = 0)
 {
     const Player& ap = state.players[controller];
-    if (ap.library.empty()) { return 0; }
-    const Card& c = ap.library.front();
-    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-    return d ? d->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
+    // One flip per opposing head (2HG: head 2 is the SECOND positional target, right after head 1),
+    // each MV deducted from the shared team pool -- mirrors SoulfireDig's assignment (lockstep).
+    const int faces = gamesetup::OpponentHeads();
+    int total = 0;
+    for (int i = 0; i < faces && i < static_cast<int>(ap.library.size()); ++i)
+    {
+        const Card& c = ap.library[i];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        total += d ? d->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
+    }
+    return total;
 }
 
 inline bool HinataInPlay(const GameState& state);   // defined below; used by the discount helper
@@ -8032,7 +8088,7 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
     // the searched own_targets. Because own creatures are LAST in `order`, the first `default_count`
     // entries of `order` ARE that set -- byte-identical to the historical "base + first own_targets"
     // list, so the autonomous/search path below (chooser null) is unchanged.
-    const int base = 1 + (ap.life > 9 ? 1 : 0)
+    const int base = gamesetup::OpponentHeads() + (ap.life > 9 ? 1 : 0)
                    + static_cast<int>(SoulfireOppCreatureOrder(state, controller).size());
     const int default_count = std::min(static_cast<int>(order.size()), base + std::max(0, own_targets));
     std::vector<int> chosen(order.begin(), order.begin() + default_count);   // autonomous default
@@ -8123,6 +8179,7 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
             {
                 if (!tgts.empty()) { tgts += ","; }
                 if (t == TARGET_OPP_FACE)       { tgts += "oppface"; }
+                else if (t == TARGET_OPP_FACE2) { tgts += "oppface2"; }
                 else if (t == TARGET_SELF_FACE) { tgts += "self"; }
                 else if (t >= 0 && t < static_cast<int>(state.battlefield.size()))
                 {
@@ -8174,10 +8231,17 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
     {
         const int t   = chosen[slot];
         const int dmg = mvs[slot];
-        if (t == TARGET_OPP_FACE)
+        if (t == TARGET_OPP_FACE || t == TARGET_OPP_FACE2)
         {
-            if (capture) { disp[slot] = "→ opponent face (" + std::to_string(dmg) + ")"; }
-            r.face_damage = dmg;
+            // Both heads drain the SAME team pool (2HG), so face_damage ACCUMULATES: the caller
+            // deducts the sum from players[opp].life once. Head 1 gets the top flip, head 2 the next.
+            if (capture)
+            {
+                disp[slot] = std::string("→ opponent face")
+                           + (t == TARGET_OPP_FACE2 ? " (head 2) (" : " (")
+                           + std::to_string(dmg) + ")";
+            }
+            r.face_damage += dmg;
         }
         else if (t == TARGET_SELF_FACE)
         {
@@ -8730,7 +8794,8 @@ inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const Man
         // Pay the {T} half FIRST so the sink cannot tap itself toward its own mana cost.
         state.battlefield[i].tapped = true;
         if (!pay(c)) { SetPermTapped(state, controller, sink, false); continue; }
-        const int dmg = d->params.tap_damage_each_opponent;
+        // Shivan Gorge: "deals 1 damage to each opponent" -- once per head (2HG = x2, shared pool).
+        const int dmg = d->params.tap_damage_each_opponent * gamesetup::OpponentHeads();
         state.players[1 - controller].life -= dmg;
         state.opponent_lost_life_this_turn = true;
         dealt += dmg;
@@ -8840,7 +8905,8 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
     {
         case PermAbilityMode::TapDamage:
         {
-            const int dmg = d->params.tap_damage_each_opponent;
+            // "Each opponent" -- once per head (2HG = x2, shared pool).
+            const int dmg = d->params.tap_damage_each_opponent * gamesetup::OpponentHeads();
             state.players[1 - controller].life -= dmg;
             state.opponent_lost_life_this_turn = true;
             if (g_play_event_sink)
@@ -9605,7 +9671,7 @@ inline int HinataAvailableTargets(const CardDefinition& def, const GameState& st
         bool dummy = false;
         return SoulfireTargetCount(state, active, dummy);
     }
-    int avail = 1;                                   // the opponent (a player target)
+    int avail = gamesetup::OpponentHeads();          // every opposing face (2HG: both heads)
     if (def.params.discount_self_safe) { avail += 1; }   // yourself
     for (const Permanent& p : state.battlefield)
     {
@@ -9692,18 +9758,24 @@ inline bool IsCrackleCountSpell(const CardParams& p)
 //   -2  = OPPONENT face (the win-relevant target; order[0] of CrackleTargetOrder)
 constexpr int CRACKLE_SELF_FACE = TARGET_SELF_FACE;
 constexpr int CRACKLE_OPP_FACE  = TARGET_OPP_FACE;
+constexpr int CRACKLE_OPP_FACE2 = TARGET_OPP_FACE2;   // 2HG second head (OpponentHeads() >= 2)
 
 // Crackle with Power: ordered EXTRA beneficial targets beyond the opponent face, for the Hinata
 // per-target discount + faithful 5X damage. Encoding: >= 0 is a battlefield index (a creature);
 // -1 is SELF (the controller's face), offered ONLY when `per_target_dmg < your life` so the self
-// hit is non-lethal (the "target yourself for the discount when safe" line). Order is expendable
-// first -- opponent creatures (board order), then your NON-Hinata creatures, then self-if-safe,
-// then Hinata LAST (targeting her removes the discount for later spells, so she is only taken at
-// the maximum count). The searched/declared crackle_targets count picks the first N of this list.
+// hit is non-lethal (the "target yourself for the discount when safe" line); -3 is the 2HG SECOND
+// HEAD (CRACKLE_OPP_FACE2, OpponentHeads() >= 2 only) -- pure upside (5X more to the shared team
+// pool + a discount target), so it comes FIRST. Then expendable-first -- opponent creatures (board
+// order), then your NON-Hinata creatures, then self-if-safe, then Hinata LAST (targeting her
+// removes the discount for later spells, so she is only taken at the maximum count). The
+// searched/declared crackle_targets count picks the first N of this list.
 inline std::vector<int> CrackleExtraTargetOrder(const GameState& state, int controller,
                                                 int per_target_dmg)
 {
     std::vector<int> out;
+    // 2HG: the second head is the BEST extra -- 5X more into the shared team pool AND a discount
+    // target, at zero cost. FIRST in the order so the smallest declared count already takes it.
+    if (gamesetup::OpponentHeads() >= 2) { out.push_back(CRACKLE_OPP_FACE2); }
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)   // opponent creatures
     {
         const Permanent& p = state.battlefield[i];
@@ -9742,6 +9814,12 @@ inline void CrackleHitExtraTargets(GameState& state, int controller, int per_tar
     for (int s = 0; s < n; ++s)
     {
         int bi = order[s];
+        if (bi == CRACKLE_OPP_FACE2)   // 2HG second head: 5X more into the shared team pool
+        {
+            state.players[1 - controller].life -= per_target_dmg;
+            state.opponent_lost_life_this_turn = true;
+            continue;
+        }
         if (bi < 0) { state.players[controller].life -= per_target_dmg; continue; }   // self
         Permanent& cre = state.battlefield[bi];
         cre.damage += per_target_dmg;
@@ -9785,7 +9863,8 @@ inline bool CrackleApplyTargets(GameState& state, int controller, int per_target
     std::vector<int> dead;
     for (int t : targets)
     {
-        if (t == CRACKLE_OPP_FACE) { state.players[1 - controller].life -= per_target_dmg; hit_opp = true; }
+        if (t == CRACKLE_OPP_FACE || t == CRACKLE_OPP_FACE2)   // either head -> the shared team pool
+        { state.players[1 - controller].life -= per_target_dmg; hit_opp = true; }
         else if (t == CRACKLE_SELF_FACE) { state.players[controller].life -= per_target_dmg; }
         else if (t >= 0 && t < static_cast<int>(state.battlefield.size()))
         {

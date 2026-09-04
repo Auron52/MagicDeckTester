@@ -3571,7 +3571,7 @@ static int PendingAttackDamage(const GameState& state)
             tok.m_subtypes = d->params.attack_token_subtypes;
             tok.m_power    = d->params.attack_token_power;
             auto [tpb, ttb] = ComputeLordBonus(tok, state, active, false, nullptr);
-            dmg += d->params.attack_creates_tokens
+            dmg += d->params.attack_creates_tokens * gamesetup::OpponentHeads()   // one per head (2HG)
                  * (d->params.attack_token_power + tpb);
         }
     }
@@ -8917,7 +8917,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // LETHAL collapses to the max count (creatures die free on the win turn -> cheapest), and
             // count is naturally 0 when there are no extra targets. Gated on scale_x + Hinata, so
             // every other {X} burn keeps the single-variant path below (byte-identical).
-            const bool crackle_branch = IsCrackleCountSpell(def.params) && HinataInPlay(state);
+            // The declared-count model is live with Hinata (the discount derives from it) and, in
+            // 2HG, ALWAYS for Crackle -- without her the discount is simply 0 (HinataGenericDiscount
+            // gates on her), but the second head still needs a declared count >= 1 to be hit.
+            const bool crackle_branch = IsCrackleCountSpell(def.params)
+                                      && (HinataInPlay(state) || gamesetup::OpponentHeads() >= 2);
             const int  active_ci      = state.active_player_index;
             const int  opp_life       = state.players[1 - active_ci].life;
             for (int x : ResolveProvider(state).XCandidates(state, def, max_x))
@@ -8936,6 +8940,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // Net: the autonomous search is unchanged (non-lethal identical; lethal wins the same
                 // turn) while the faithful declared-target model is live for human play (Stage B).
                 int cnt_lo = -1, cnt_hi = -1;
+                // 2HG (OpponentHeads() >= 2): with X >= 2 the SECOND head is a targetable face --
+                // CrackleExtraTargetOrder puts it FIRST, so any count >= 1 deals 5X to it too (the
+                // shared team pool takes 10X total). That changes lethality (10X >= 30 at X=3, vs
+                // 5X >= 20 at X=4 in a normal game) and makes even a non-lethal cast declare the
+                // head (pure upside: damage + discount, no creature dies). heads == 1 is the
+                // pre-existing path, byte-identical.
+                const int heads2 = (gamesetup::OpponentHeads() >= 2 && x >= 2) ? 1 : 0;
                 if (crackle_branch)
                 {
                     const int per_tgt = x * mult;
@@ -8954,7 +8965,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                     else
                     {
-                        cnt_lo = cnt_hi = (per_tgt >= opp_life) ? cap : -1;   // lethal -> faithful max; else legacy
+                        // Lethal at this X (counting the second head's 5X when it exists) ->
+                        // faithful max count. Non-lethal: legacy -1 in a normal game; in 2HG
+                        // declare exactly the second head (count 1) -- free damage + an honest
+                        // min(X,2) discount, without killing own creatures for a chip cast.
+                        const bool lethal = per_tgt * (1 + heads2) >= opp_life;
+                        cnt_lo = cnt_hi = lethal ? cap
+                                                 : (heads2 ? std::min(1, cap) : -1);
                     }
                 }
                 for (int count = cnt_lo; count <= cnt_hi; ++count)
@@ -8973,11 +8990,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.chosen_x        = x;
                     a.crackle_targets = count;   // -1 = legacy (auto-max discount, no faithful kill)
                     a.sacrifice_land  = def.params.sacrifice_land;
-                    a.eval            = x * mult * 100;        // EvalCard's DMG unit (dmg-equivalents)
+                    // Face hits this variant actually takes: head 1, plus the 2HG second head when
+                    // the declared count reaches it (it is FIRST in CrackleExtraTargetOrder).
+                    const int face_hits = 1 + ((heads2 && count >= 1) ? 1 : 0);
+                    a.eval            = face_hits * x * mult * 100;   // EvalCard's DMG unit
                     // X burn reaches the face only when not creature-only targeted (the creature-
                     // target guard above already dropped Creature/Multi with no opponent creature).
-                    // Damage per target = chosen X * x_damage_multiplier (Crackle = 5X).
-                    a.direct_damage   = (def.params.targeting != Targeting::Creature) ? x * mult : 0;
+                    // Damage per target = chosen X * x_damage_multiplier (Crackle = 5X);
+                    // direct_damage = TOTAL life the opponent team loses (both heads in 2HG).
+                    a.direct_damage   = (def.params.targeting != Targeting::Creature)
+                                      ? face_hits * x * mult : 0;
                     a.is_noncreature  = !def.card.IsCreature();
                     a.card_mv         = def.card.m_mana_cost.ManaValue();  // X = 0 outside the stack
                     actions.push_back(std::move(a));
@@ -9063,9 +9085,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.hand_index     = i;
                 a.cost           = ManaCost{};             // free (alt cost is the opponent lifegain)
                 a.alt_cost       = true;
-                a.alt_lifegain   = def.params.alt_lifegain_cost;
-                a.eval           = def.params.alt_lifegain_cost * DMG;
-                a.direct_damage  = def.params.alt_lifegain_cost;
+                a.alt_lifegain   = def.params.alt_lifegain_cost;   // PER-PLAYER amount (helper scales)
+                // "Each other player" (Reverent Silence): under a Remedy both 2HG heads lose N, so
+                // the projected team-life loss is N x heads (the partner's gain is ours, not theirs).
+                {
+                    const int payload = def.params.alt_lifegain_cost
+                                      * (def.params.alt_lifegain_each_player
+                                             ? gamesetup::OpponentHeads() : 1);
+                    a.eval           = payload * DMG;
+                    a.direct_damage  = payload;
+                }
                 a.is_noncreature = !def.card.IsCreature();
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
                 actions.push_back(std::move(a));
@@ -11184,7 +11213,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.cost           = ManaCost{}; a.cost.black = 1;   // "{B}, {T}: ..."
                     a.sac_source_id  = p.card.m_number;
                     a.gy_exile_mode  = 1;
-                    a.eval           = pd->params.gy_exile_instant_sorcery_drain * DMG;  // real face clock
+                    a.eval           = pd->params.gy_exile_instant_sorcery_drain
+                                     * gamesetup::OpponentHeads() * DMG;  // real face clock ("each opponent")
                     a.is_noncreature = true;
                     actions.push_back(std::move(a));
                 }
@@ -11741,15 +11771,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         // paid inside the apply loop out of whatever the turn actually produces.
                         a.cost           = cost;
                         a.eval           = (m.mode == Action::AbilityMode::TapDamage)
-                                         ? sd->params.tap_damage_each_opponent * 2
+                                         ? sd->params.tap_damage_each_opponent
+                                           * gamesetup::OpponentHeads() * 2
                                          : (m.mode == Action::AbilityMode::Drain)
                                          ? sd->params.drain_amount * 2 * k : k;
                         // Life LOSS is indistinguishable from damage to the win projection -- this
                         // is "life the opponent loses this turn", which is what direct_damage means.
+                        // TapDamage is "each opponent" (Shivan Gorge) -> once per head (2HG = x2);
+                        // Drain is "target opponent" (Essence Depleter) -> x1 regardless.
                         // ExileTop deliberately contributes 0: its kill is a DECK-OUT, and claiming
                         // damage for it would corrupt every consumer that reads a damage rate.
                         a.direct_damage  = (m.mode == Action::AbilityMode::TapDamage)
                                          ? sd->params.tap_damage_each_opponent
+                                           * gamesetup::OpponentHeads()
                                          : (m.mode == Action::AbilityMode::Drain)
                                          ? sd->params.drain_amount * k : 0;
                         a.is_noncreature = true;
@@ -18155,10 +18189,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     : std::min(state.casts_remaining_this_turn, def.params.max_casts_after);
         }
 
-        // Alternative cost paid as "an opponent gains alt_lifegain life" (Invigorate / Skyshroud
-        // Cutter / Reverent Silence) -> reversed to damage by a Tainted Remedy / Plague Drone.
+        // Alternative cost paid as "an opponent / each other player gains alt_lifegain life"
+        // (Invigorate / Skyshroud Cutter / Reverent Silence) -> reversed to damage by a Tainted
+        // Remedy / Plague Drone; "each other player" cards hit both 2HG heads + gift the partner
+        // (ApplyAltLifegainPayload, lockstep with the executor's CastSpellFromHand).
         // Paid at cast (before on-cast triggers), then the spell resolves its normal effect.
-        if (alt_cost) { OpponentGainsLife(state, state.active_player_index, alt_lifegain); }
+        if (alt_cost) { ApplyAltLifegainPayload(state, state.active_player_index, &def, alt_lifegain); }
 
         // ---- Real-stack cast triggers (lockstep with the executor's PushCastTriggers) --------
         // Creative Technique's payload, shared by the demonstrate COPY and the original cast.
@@ -18543,6 +18579,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             {
                                 int t = order[n];
                                 heur.push_back(t == CRACKLE_OPP_FACE  ? ChosenTarget{ 0, 1 - ci, 0 }
+                                             : t == CRACKLE_OPP_FACE2 ? ChosenTarget{ 0, 2,      0 }  // 2HG head 2
                                              : t == CRACKLE_SELF_FACE ? ChosenTarget{ 0, ci,     0 }
                                              :                          ChosenTarget{ 1, t,      0 });
                             }
@@ -18552,7 +18589,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             std::vector<int> tlist;
                             for (const ChosenTarget& c : picked)
                             {
-                                if (c.kind == 0) { tlist.push_back(c.index == ci ? CRACKLE_SELF_FACE : CRACKLE_OPP_FACE); }
+                                if (c.kind == 0)
+                                {
+                                    tlist.push_back(c.index == ci ? CRACKLE_SELF_FACE
+                                                  : c.index == 2  ? CRACKLE_OPP_FACE2   // 2HG head 2
+                                                                  : CRACKLE_OPP_FACE);
+                                }
                                 else             { tlist.push_back(c.index); }
                             }
                             if (CrackleApplyTargets(state, ci, dmg, tlist)) { state.opponent_lost_life_this_turn = true; }
@@ -19499,7 +19541,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             if (def.params.etb_opponent_lifegain > 0)
             {
-                OpponentGainsLife(state, state.active_player_index, def.params.etb_opponent_lifegain);
+                // "Each opponent gains" (Aria) -- once per head (2HG = x2; lockstep with executor).
+                OpponentGainsLife(state, state.active_player_index,
+                                  def.params.etb_opponent_lifegain * gamesetup::OpponentHeads());
             }
             // Universal enter cascade for NONCREATURE permanents too (lockstep with the executor's
             // EffectHandler::EnterBattlefield, which fires it on EVERY entry). Concretely: a cast
