@@ -1,0 +1,43 @@
+{
+  "_comment": [
+    "THE CONTROL for edf_blink_loop_cashes_drain.json: byte-for-byte the same board and the same",
+    "assembled Emiel/Peregrine Drake loop, with Shivan Gorge ({2}{R}, {T}: 1 damage to each",
+    "opponent) as the sink instead of Essence Depleter.",
+    "",
+    "The Gorge needs a fresh UNTAP per activation, so it rides the loop's iteration count and is",
+    "fired by SpendSurplusOnDamageSinks at the TOP of each iteration -- before the tap-ahead, which",
+    "would otherwise take the tap its ability needs. That route already worked, which is exactly",
+    "what made the pair decisive when the drain route did not: same loop, same go-off count, one",
+    "sink cashed and the other not.",
+    "",
+    "So this fixture's job is to stay green while the drain side is worked on. A change to the",
+    "loop's reservation or spend order that fixes the drain and breaks this has traded one dead",
+    "route for another."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "energy_counters": 0,
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 8,
+  "battlefield": [
+    { "name": "Aether Hub",             "controller": 0, "tapped": false },
+    { "name": "Wild Growth",            "controller": 0, "tapped": false, "equips": "Aether Hub" },
+    { "name": "Wild Growth",            "controller": 0, "tapped": false, "equips": "Aether Hub" },
+    { "name": "Mariposa Military Base", "controller": 0, "tapped": false },
+    { "name": "Trace of Abundance",     "controller": 0, "tapped": false,
+      "equips": "Mariposa Military Base" },
+    { "name": "Conservatory",           "controller": 0, "tapped": false },
+    { "name": "Brushland",              "controller": 0, "tapped": false },
+    { "name": "Emiel the Blessed",      "controller": 0, "tapped": false },
+    { "name": "Peregrine Drake",        "controller": 0, "tapped": false },
+    { "name": "Shivan Gorge",           "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "expect_win_turn": 4
+}

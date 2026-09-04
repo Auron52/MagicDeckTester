@@ -10198,12 +10198,37 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
             ApplyBlink(state, controller, source_id, target_id, outlet.blink_returns_tapped);
         }
         ++done;
+        // CASH THE SURPLUS ON A {T}-LESS DRAIN SINK -- and the PLACEMENT is the whole fix.
+        //
+        // Essence Depleter has no {T} in its cost, so unlike the Gorge above it is not once-per-untap:
+        // it converts mana, and only mana, into life loss. It therefore wants the OPPOSITE position in
+        // the iteration. The damage sink fires FIRST (before the tap-ahead, so the tap-ahead cannot
+        // steal the tap its ability needs); the drain fires LAST, after both the activation is paid
+        // and the blink has untapped the board again, and that ordering is what makes it safe:
+        //   * this iteration is already funded -- pay(c) succeeded above, so nothing the drain spends
+        //     can retroactively break it;
+        //   * the next iteration is protected by `keep_payable = c` AND by the untap that just ran.
+        //     ApplyBlink's ETB has restored every land the tap-ahead tapped, so `AvailableManaPool`
+        //     at this point is the full board -- the same board the next tap-ahead will draw on, which
+        //     is exactly what makes the guard's projection honest HERE and dishonest earlier.
+        // Wiring it before the activation instead was tried and it breaks the loop outright (done=0):
+        // there the guard is projecting over a board the tap-ahead has already emptied into the float,
+        // so it admits drains against mana the blink was about to spend. See the analysis doc, gap
+        // two layer 3.
+        //
+        // Byte-identical for every deck without a drain sink: SpendSurplusOnDrain returns 0 on an
+        // empty candidate scan, and `drain_cost` is carried by exactly one card in cards.json.
+        SpendSurplusOnDrain(state, controller, c, pay);
     }
     // One last damage-sink pass with nothing held back: the loop is over, so there is no next
     // iteration to keep payable and any float left is genuinely surplus. Only after a loop that
     // actually ran -- a blink that never fired must not quietly tap a land for damage the plan
     // did not ask for (the Gorge has its own ActivatePermAbility action for that).
-    if (done > 0) { SpendSurplusOnDamageSinks(state, controller, ManaCost{}, pay); }
+    if (done > 0)
+    {
+        SpendSurplusOnDamageSinks(state, controller, ManaCost{}, pay);
+        SpendSurplusOnDrain(state, controller, ManaCost{}, pay);
+    }
     return done;
 }
 

@@ -2252,3 +2252,64 @@ lands worth 7 mana a tap, loop net +4/iteration:
   is a further hop and should not be touched until `a` is green.
 
 Run with `./build/Release/mtg --scenario <file>`, and add `MTG_EDF_GOFF_DEBUG=1` for the count trace.
+
+Both fixtures are now permanent: `test/scenarios/edf_blink_loop_cashes_drain.json` (the `a` board,
+`expect_win_turn: 4`) and `edf_blink_loop_cashes_gorge.json` (the `c` control). `b` is untouched.
+
+#### 12e. Gap two — FIXED. The bug was the drain's POSITION IN THE ITERATION, not a reservation
+
+The conclusion recorded in 12c — "the real fix is a colour-aware reservation" — was **wrong about the
+mechanism**, and the way it was wrong is worth keeping. All three failing layers were variations on
+*where in the iteration the drain gets to spend*, and once the sink is put in the one position that
+is actually safe, no reservation is needed at all and no colour logic changes.
+
+`ApplyBlinkLoop`'s iteration is: damage sinks -> tap-ahead -> `pay(c)` -> `ApplyBlink`. The two sinks
+want OPPOSITE ends of it, and for reasons that follow from their costs:
+
+* **Shivan Gorge has `{T}` in its cost**, so it is once-per-untap and it must fire FIRST — before the
+  tap-ahead, which would otherwise take the very tap the ability needs. Its value comes from the
+  loop's untap, not from the loop's mana.
+* **Essence Depleter has no `{T}`**, so it is bounded by mana alone and it must fire LAST — after
+  `pay(c)` has already funded this iteration and after `ApplyBlink`'s ETB has untapped the board
+  again. Both halves of that matter:
+  - the current iteration is already paid, so nothing the drain spends can retroactively break it;
+  - the next iteration is covered by `keep_payable = c` **and** by the untap that just ran, so
+    `AvailableManaPool` at this point really is the board the next tap-ahead will draw on. That is
+    what makes the guard's projection honest here and dishonest anywhere earlier — layer 3 ran it
+    over a board the tap-ahead had already emptied into the float, so it admitted drains against mana
+    the blink was about to spend.
+
+That is the entire change: one call after `++done` with `keep_payable = c`, and one unguarded call
+after the loop beside the existing damage-sink pass. The colorless-vs-green split described in layer
+2 is real — `SpendFloatingTowardCost` step 3 does spend generic pips from `colorless` before any
+colour, so the blink's `{3}` does eat the float's `{C}` — but it turns out not to be load-bearing:
+with the drain running while the board is fully untapped it simply taps a `{C}` land (Hub, Mariposa,
+or the Brushland the tap-ahead deliberately skips) for the pip. **Re-ordering that shared payment
+step was NOT done**, because it is a hot path used by every deck and there is now no measurement
+asking for it.
+
+**Fixture:** `a` 5 -> **4** (`blink x5`, 15 drains, then swing for 6); `c` unchanged at 4; `b` still 7.
+
+**Measured**, same 800-game pooled manifest, d5/20ms, profile attached, paired against 12a:
+
+| | dist | mean |
+|---|---|---|
+| 12a (colour gate only) | `unwon:12 T4:1 T5:42 T6:393 T7:281 T8:71` | 6.5187 |
+| + drain cashed         | `unwon:10 T4:1 T5:71 T6:395 T7:253 T8:70` | 6.4375 |
+
+**-0.0812 turns, se 0.0116, t = -7.03, better on 8 of 8 seeds** — 3.4x the size of the colour-gate
+fix and unambiguous. The movement is where the mechanism predicts: **T5 42 -> 71**, T7 281 -> 253,
+unwon 12 -> 10. And it costs nothing: solve-memo misses 49.38M -> 49.08M with hits 55.69M -> 55.76M
+(shorter games, same work per node), and the >30 s slow-game count fell 105 -> 77. Per-seed, all
+eight moved the same way: -0.070, -0.040, -0.080, -0.130, -0.120, -0.050, -0.060, -0.100.
+
+**T4 is still 1 in 800.** That is expected and is not this fix's job: reaching turn 4 needs the loop
+ASSEMBLED by turn 4, which is a draw problem, not a cashing one. What this fix bought is that a loop
+which does assemble now converts, which is the T5 column.
+
+**Still open, and the same defect class:** `FlickerGoOffCount` also sizes a go-off for the LIBRARY-
+EXILE sink (Dimensional Infiltrator, `{1}{C}`, also `{T}`-less), and `ApplyBlinkLoop` has no spend for
+it either — so the count model believes in a route the apply cannot fire, exactly the over-claim shape
+layer 1 was. It is far less reachable than the drain (sideboard-only, needs Living Wish AND the loop
+AND `opponent_library_dealt`), so its quality effect should be nil; it wants a scenario fixture rather
+than a measurement.
