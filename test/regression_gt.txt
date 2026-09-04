@@ -1,4 +1,4 @@
-# Regression ground truth -- commit b0265f55  date 2026-09-04
+# Regression ground truth -- commit fd89309d  date 2026-09-04
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -336,15 +336,15 @@ dragons_overnight_d5_s4004=5.5260/6424bd00a7f28a6a
 dragons_overnight_d5_s5005=5.6180/c6b1a3493b747773
 dragons_overnight_d5_s6006=5.5780/5ddd5027acd217fb
 dragons_overnight_d5_s7007=5.5880/6289bb8d16397d3f
-breaching_overnight_d0_s4004=5.1735/0121feed984105a3
-breaching_overnight_d0_s6006=5.1640/08c76d8cf669bc35
-breaching_overnight_d0_s8008=5.1760/8223777b8dbe0da2
-breaching_overnight_d0_s10010=5.1545/dd54cd77b640260a
-breaching_overnight_d3_s4004=3.4600/809bc86e205191bd
-breaching_overnight_d3_s5005=3.4710/9482a12503264b2c
-breaching_overnight_d3_s6006=3.4940/c7b421362e03bb40
-breaching_overnight_d3_s7007=3.4990/9f28689e3419b68b
-breaching_overnight_d5_s4004=3.4160/72eca51a0fc644cf
-breaching_overnight_d5_s5005=3.5020/66af11e2bd76a5e4
-breaching_overnight_d5_s6006=3.5160/1133dd8a77652f36
-breaching_overnight_d5_s7007=3.4600/816435aea4e96368
+breaching_overnight_d0_s4004=5.1735/e27c0c51ce55211f
+breaching_overnight_d0_s6006=5.1640/7f3543109429a1a5
+breaching_overnight_d0_s8008=5.1755/66a46555b8f24721
+breaching_overnight_d0_s10010=5.1545/5e0379ee029e163c
+breaching_overnight_d3_s4004=3.4600/c44fd5fd43293d8c
+breaching_overnight_d3_s5005=3.4710/4365b8141a7cdb66
+breaching_overnight_d3_s6006=3.4940/24e6acbbd80ecd78
+breaching_overnight_d3_s7007=3.4990/a90b69a74eb6edf1
+breaching_overnight_d5_s4004=3.4160/339f5fdeb728cec7
+breaching_overnight_d5_s5005=3.5020/f81f926535478d07
+breaching_overnight_d5_s6006=3.5160/568ace117d4c7d91
+breaching_overnight_d5_s7007=3.4600/b50d8119d6e1e2a2
