@@ -351,6 +351,31 @@ Fix: body is a flex column (`height:100vh; overflow:hidden`), header `flex:none`
 braces: `endcontrols` (the side-panel block the user is already looking at after a win) now
 mirrors **Next game ▸ / New game** buttons beside "Save as reference".
 
+## Value leaf + mulligan profile (2026-09-04, USER go: "as long as it is fast")
+
+It was fast — the deck's T3.5 average wins make every phase cheap. **Total wall clock for both
+stages ≈ 1 hour** including all GT re-baselines.
+
+**Value leaf (24 min, frozen at d26a931a, freeze intact):** 8,705 rows from 2,500 games
+(phase A: 56 s), heldout RMSE 0.7085, 52-cell × 400-game matrix in 14 min. The leaf EXACTLY
+matches the converged heuristic from V4 (3.4771 = H3–H5) at 137 ms vs H5's 2,278 ms. Trust d4
+accepted (never engages at real play — everything stays escalation-eligible, the safe side).
+**A/B: staged vs no-sidecar IDENTICAL average on all 8 held-out seeds at 0.47x core-time** — a
+clean win, adopted per the standing directive (6949ddb1). Gate: smoke byte-identical,
+regression ONE digest-only game, overnight 204/204 byte-identical. Phase F set the mullgen
+contract by measurement: **d4 b3** (rho 1.0000, 0.55x play cost), **K=11** (e548e432).
+
+**Mulligan profile (6 min gen+validation, `complete` R40):** recommend scout projected ~0.2 h;
+actual floor pass 22 s @ 2,321 rollouts/s over 51,566 cells, no degenerate cells (slowest
+rollout 445 ms). Hard gates both cleared decisively:
+- **keep** (exhaustive vs static): **−0.408 t**
+- **confounded bottoming** (peek nullified): **−0.171 t, 16/16 seeds, mean/se −35.2** — this
+  deck passes the gate Dragons/Mirrorwing v3 fail.
+Suite effect: every breaching key improves 0.28–0.51 turns (smoke d5 3.600→3.093; regression
+d3 3.577→3.083), net faster at searched depths (359 games faster / 27 slower — the 27 are
+individual shuffles where the on-average-better keep loses, expected). GT re-accepted on all
+three tiers. Deck tier: alpha → all three artifacts present (references still 3/10).
+
 ## Viewer round 3 (2026-09-04, second play-testing feedback)
 
 USER: "Dwarven ruins doesn't need a dedicated activated ability in the viewer. You can just
