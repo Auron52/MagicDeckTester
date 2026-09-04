@@ -68,7 +68,28 @@ inline bool HinataSubsetCreditEnabled()
     return heurarm::Flag(heurarm::HINATA_SUBSET_CREDIT, env_on);
 }
 
-// MTG_EXEC_FEAS -- EXECUTOR-VALIDATED sequential subset payability (default OFF -> byte-identical).
+// MTG_FB_TAP -- firebreathing pumps TAP REAL SOURCES for what they spend (default ON; =0 restores
+// the read-only pool). The historical model read AvailableManaPool without tapping, justified as
+// "goldfish combat is the turn's LAST mana use" -- an invariant the uses_second_main adoption
+// broke: a post-combat main re-reads AvailableManaPool from the same untapped lands, so pump mana
+// double-spent (dragons gi29 T5: the SAME casts in both arms, but the m2 arm's Bolt {R} both
+// pumped Inferno in combat AND paid for the Bolt after -- an illegal +1 damage at exact lethal;
+// 39 of the m2 rule's 43 dragons wins were this class, all d8b0-structural because no LEGAL line
+// reaches them). Both worlds (AIEngine::Firebreathe + the rollout's SimulateCombat site) tap via
+// the same shared payment after ApplyFirebreathing reports its spend -- lockstep rule.
+inline bool FirebreatheTapsEnabled()
+{
+    static const bool v = EnvOn("MTG_FB_TAP", true);
+    return v;
+}
+
+// MTG_EXEC_FEAS -- EXECUTOR-VALIDATED sequential subset payability.
+// >>> DEFAULT ON since 2026-09-04 (=0 restores the flat gates); it was default OFF from its
+// 2026-08-30 build (never-worse over 12,000 paired games, unit cost unmeasured) until the
+// dragons second-main retirement REQUIRED it: retiring m2 without it re-opens the gi94
+// producer-chain unreachability (Sol Ring -> Mind Stone same-main), violating the
+// no-strictly-better-line-dropped bar. Adopted as part of the FB_TAP/SUBRED_BAIL/m2-retirement
+// package; the suite is the gate.
 // The enumerator's three mana gates (flat pool, colour-exists, colour-exact) price a subset's whole
 // cost against the pre-cast board SIMULTANEOUSLY, so a chain that is only payable SEQUENTIALLY --
 // an untap ritual refloating the colours of already-tapped sources mid-chain (Reality Spasm), a
@@ -84,7 +105,7 @@ inline bool HinataSubsetCreditEnabled()
 // validate; the Medallion precedent). See docs/design/enumeration-feasibility-via-executor.md.
 inline bool ExecFeasEnabled()
 {
-    static const bool env_on = EnvOn("MTG_EXEC_FEAS");
+    static const bool env_on = EnvOn("MTG_EXEC_FEAS", true);
     return heurarm::Flag(heurarm::EXEC_FEAS, env_on);
 }
 

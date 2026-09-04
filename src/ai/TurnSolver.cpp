@@ -3365,14 +3365,24 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
         // EnumeratePlans and SeqEtbUntapEnabled in EngineFlags.h). Scratch state -> no viewer ledger.
         if (def.params.etb_untap_lands > 0)
         { EtbUntapLands(cp, cp.active_player_index, def.params.etb_untap_lands, /*log_ledger=*/false); }
+        // COST REDUCERS join too (2026-09-04, dragons gi431): the live-cost recompute reads
+        // reducers off the battlefield, so a resolved Dragonspeaker/Incubator/Medallion must be
+        // there or the walk prices the casts after it at full cost and fails a payable pair
+        // (Incubator {3} then Atsushi at {R}{R} is 5 on 5; unjoined it read 3+4=7). The choosing
+        // form needs its ETB type decision -- same shared helper as the real enter cascade.
         const bool joins_for_mana = (def.params.mana_rock && !def.card.IsCreature())
-                                 || def.params.hinata_cost_reducer;
+                                 || def.params.hinata_cost_reducer
+                                 || !def.params.reduces_spell_subtype.empty()
+                                 || def.params.chooses_creature_type
+                                 || !def.params.reduces_spell_color.empty();
         if (joins_for_mana)
         {
             Permanent perm;
             perm.card             = def.card;
             perm.controller_index = cp.active_player_index;
             perm.owner_index      = cp.active_player_index;
+            if (def.params.chooses_creature_type)
+            { perm.chosen_subtype_id = DominantCreatureSubtypeId(cp, cp.active_player_index); }
             cp.battlefield.push_back(perm);
         }
     }
@@ -13183,6 +13193,20 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     // scalar bound cannot see (like a same-turn affinity enabler), so bail when one is among the cands.
     for (const Action& a : cands)
     { if (a.def && !a.def->params.reduces_spell_color.empty()) { return std::numeric_limits<int>::max(); } }
+    // ...and the SUBTYPE reducers (Dragonspeaker's reduces_spell_subtype, Incubator's
+    // chooses_creature_type form) -- the credit CountSameTurnReducers grants in consider() that
+    // this bound cannot see. MISSING BAIL FOUND 2026-09-04 (the maintenance breadcrumb's exact
+    // predicted bug): dragons gi431's T2 {Incubator, Atsushi} is 5 payable mana WITH the credit
+    // (3 + 4-2) but the printed 7 tripped this bound first, so the pair was never enumerated and
+    // the win leaked to the second main. MTG_SUBRED_BAIL=0 restores the old (unsound) bound.
+    static const bool s_subred_bail = EnvOn("MTG_SUBRED_BAIL", true);
+    if (s_subred_bail)
+    {
+        for (const Action& a : cands)
+        { if (a.def && (!a.def->params.reduces_spell_subtype.empty()
+                        || a.def->params.chooses_creature_type))
+          { return std::numeric_limits<int>::max(); } }
+    }
     // A Ragemonger cast/vialed THIS turn takes coloured pips off later Minotaur casts -- the same
     // per-subset discount shape as the Medallion bail above (pip credit, not generic).
     for (const Action& a : cands)
@@ -13305,7 +13329,11 @@ static inline bool ManaGateWouldHelp(const std::vector<Action>& cands, const Gam
     {
         if (a.ritual_float > 0 || a.rock_mana.Total() > 0
             || (a.def && (a.def->params.affinity_for_subtype
-                          || !a.def->params.reduces_spell_color.empty()))
+                          || !a.def->params.reduces_spell_color.empty()
+                          // Subtype reducers (Dragonspeaker / Incubator) -- the missing-bail fix,
+                          // see ManaPruneBound (MTG_SUBRED_BAIL).
+                          || !a.def->params.reduces_spell_subtype.empty()
+                          || a.def->params.chooses_creature_type))
             || EtbUntapBoundCredit(etb_state, a) > 0)
         { return true; }
     }
@@ -13328,7 +13356,12 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         t.gain = a.ritual_float + a.rock_mana.Total() + EtbUntapBoundCredit(etb_state, a);
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
         t.block = ((a.def && (a.def->params.affinity_for_subtype
-                              || !a.def->params.reduces_spell_color.empty()))
+                              || !a.def->params.reduces_spell_color.empty()
+                              // Subtype reducers -- the missing-bail fix (MTG_SUBRED_BAIL note
+                              // at ManaPruneBound); selecting one disables the gate exactly like
+                              // a Medallion, since consider() credits what this term cannot.
+                              || !a.def->params.reduces_spell_subtype.empty()
+                              || a.def->params.chooses_creature_type))
                    || ActionColoredReducerDef(a) != nullptr) ? 1 : 0;   // Ragemonger pip credit
     }
     out.pool_total   = pool.Total();
@@ -20749,8 +20782,17 @@ static void SimulateCombat(GameState& state)
         // (the default) -> byte-identical.
         const std::vector<int> fb = ResolveProvider(state).FirebreatheActivations(state);
         const int fb_k = fb.empty() ? -1 : fb.front();
-        if (fb_k < 0) { ApplyFirebreathing(state, active, atk_idx, AvailableManaPool(state)); }
-        else          { ApplyFirebreathing(state, active, atk_idx, AvailableManaPool(state), fb_k); }
+        // MTG_FB_TAP (lockstep twin of AIEngine::Firebreathe; pay-as-you-go, see FbPayer): each
+        // pump taps real sources, or the rollout's post-combat main re-reads the same untapped
+        // lands and projects an illegal double-spend line the executor then realises.
+        const FbPayer fb_payer = FirebreatheTapsEnabled()
+            ? +[](GameState& s, const ManaCost& c) -> bool
+              { return TapForCostDirect(s, c, /*for_creature=*/false); }
+            : nullptr;
+        if (fb_k < 0) { ApplyFirebreathing(state, active, atk_idx, AvailableManaPool(state),
+                                           std::numeric_limits<int>::max(), fb_payer); }
+        else          { ApplyFirebreathing(state, active, atk_idx, AvailableManaPool(state), fb_k,
+                                           fb_payer); }
     }
 
     // Armored Skyhunter attack-trigger dig-and-attach: fired AFTER attack pumps/draws and BEFORE
@@ -22835,6 +22877,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 const Action& c = cands[j];
                 if (ef_on && (c.ritual_float > 0 || c.rock_mana.Total() > 0
                               || (c.def && c.def->params.untap_x_mana_sources))) { interacts = true; }
+                // Same-subset COST REDUCER (dragons gi431: Incubator {3} then Atsushi at the
+                // reduced {R}{R} is 5 mana on 5, but the flat gate prices Atsushi at full cost
+                // and rejects the pair at 7). The walk's live cost recompute prices casts AFTER
+                // the reducer resolves on the scratch state, so admitting the subset is enough --
+                // rescue-only, same soundness argument as the ritual/rock classes.
+                if (ef_on && c.def && (!c.def->params.reduces_spell_subtype.empty()
+                                       || !c.def->params.reduces_spell_color.empty()
+                                       || (c.def->params.chooses_creature_type
+                                           && c.def->params.reduces_spell_subtype_creature_only)))
+                { interacts = true; }
                 // "When this creature enters, untap up to N lands" is a same-turn mana interaction
                 // exactly like a ritual's float -- it just arrives AFTER its own cast resolves
                 // rather than before. That is why crediting it into the flat pool was unsound (the

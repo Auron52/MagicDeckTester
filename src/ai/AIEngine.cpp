@@ -4220,15 +4220,24 @@ void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_in
     // (ApplyFirebreathing takes the pool by value, so the probe does not consume it), ask the chooser
     // for k in [0, max], then apply exactly k. The chooser is nulled in every search/rollout
     // (RevealLogPause) and installed only under --claude-play, so autonomous stays greedy = byte-identical.
+    // MTG_FB_TAP (pay-as-you-go; see FbPayer in SpellEffects.h): each pump pays by tapping real
+    // sources through the SAME shared payment casts use, so a live post-combat main sees an
+    // honest pool (no double-spend) and restricted sources (Haven's dragon-spells-only mana)
+    // are refused for pumps exactly as they are for non-dragon casts.
+    const FbPayer payer = FirebreatheTapsEnabled()
+        ? +[](GameState& s, const ManaCost& c) -> bool
+          { ManaPool avail = AvailableManaPool(s); return TapForCostShared(s, c, false, &avail, false); }
+        : nullptr;
     if (g_play_firebreathe_chooser)
     {
         GameState probe = state;
-        int max_k = ApplyFirebreathing(probe, state.active_player_index, attacker_indices, pool);
+        int max_k = ApplyFirebreathing(probe, state.active_player_index, attacker_indices, pool,
+                                       std::numeric_limits<int>::max(), payer);
         if (max_k > 0)
         {
             int k = (*g_play_firebreathe_chooser)(state, state.active_player_index, attacker_indices, max_k);
             if (k < 0 || k > max_k) { k = max_k; }   // -1 / out-of-range -> greedy default (current behaviour)
-            ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, k);
+            ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, k, payer);
             return;
         }
     }
@@ -4237,8 +4246,8 @@ void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_in
     // (TurnSolver's SimulateCombat) reads the SAME hook, so executor and rollout pump alike.
     const std::vector<int> fb = ResolveProvider(state).FirebreatheActivations(state);
     const int fb_k = fb.empty() ? -1 : fb.front();
-    if (fb_k < 0) { g_fb_activations_this_turn = ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool); }
-    else          { g_fb_activations_this_turn = ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, fb_k); }
+    if (fb_k < 0) { g_fb_activations_this_turn = ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, std::numeric_limits<int>::max(), payer); }
+    else          { g_fb_activations_this_turn = ApplyFirebreathing(state, state.active_player_index, attacker_indices, pool, fb_k, payer); }
 }
 
 // ---- Mana ----

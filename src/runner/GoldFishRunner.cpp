@@ -140,16 +140,38 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     So the DURABLE fixes live in the cast-order and enumeration-feasibility arcs; this
         //     rule buys the measured wins now at the cost of searching m2 on these two decks.
         //     Re-derive (probe MTG_FORCE_USES_M2 vs this rule) when either arc lands.
+        //
+        //     >>> RE-DERIVED 2026-09-04 (both arcs landed) -- DRAGONS IS OUT, and the original
+        //     measurement is largely RETRACTED. Working the classes game-by-game found the bulk
+        //     of the m2 "wins" were an ILLEGAL MANA DOUBLE-SPEND: firebreathing paid pumps from
+        //     a read-only pool ("combat is the last mana use"), an invariant THIS RULE broke --
+        //     a post-combat cast re-read the same untapped lands, so pump mana spent twice.
+        //     MTG_FB_TAP (honest pay-as-you-go) removed 56/1000 dragons and 46/1000 dragonstorm
+        //     "wins". The legal remainder on dragons was three m1-expressibility holes, all now
+        //     closed (MTG_EXEC_FEAS producer chains; the MTG_SUBRED_BAIL missing-bail fix; the
+        //     EF walk's reducer join), after which SINGLE-MAIN MEASURED STRICTLY BETTER: 5
+        //     faster / 0 slower per 1000 at value-play. Dragonstorm retains REAL m2 value under
+        //     honest accounting (17 slower / 5 faster without m2, net +15) -- its classes are
+        //     not yet worked -- so the predicate now ALSO requires a MANA RITUAL in the deck,
+        //     which selects dragonstorm (4x Seething Song + 3 more) and not dragons (none).
+        //     An empirical selector, as before: the ritual test is a stand-in for "this deck's
+        //     m2 classes have not been worked", not a mechanism claim.
         //     MTG_NO_UTVARA_M2=1 restores the pre-rule whitelist (the A/B hatch, the
-        //     MTG_AL_SINGLE_MAIN precedent).
+        //     MTG_AL_SINGLE_MAIN precedent); MTG_UTVARA_M2_WIDE=1 restores the pre-re-derivation
+        //     ritual-less predicate (dragons back in) for the A/B.
         static const bool s_no_utvara_m2 = EnvOn("MTG_NO_UTVARA_M2");   // DEFAULT OFF
+        static const bool s_utvara_wide  = EnvOn("MTG_UTVARA_M2_WIDE"); // DEFAULT OFF
         if (!s_no_utvara_m2 && def->params.attack_per_matching_creates_tokens > 0)
         {
+            bool ping = false, ritual = false;
             for (const Card& c2 : deck.mainboard)
             {
                 const CardDefinition* d2 = CardDatabase::Instance().LookupCached(c2);
-                if (d2 && d2->params.dragon_ping_on_enter) { return true; }
+                if (!d2) { continue; }
+                if (d2->params.dragon_ping_on_enter) { ping = true; }
+                if (IsManaRitual(*d2))               { ritual = true; }
             }
+            if (ping && (ritual || s_utvara_wide)) { return true; }
         }
     }
     return false;

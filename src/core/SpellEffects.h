@@ -6138,12 +6138,28 @@ inline bool ControlsFirebreathingSource(const GameState& state, int controller)
 // of pump ACTIVATIONS performed. `max_activations` caps how many (default INT_MAX = the greedy full
 // spend, byte-identical to before). Human play passes a smaller k so the player can hold mana back
 // (viewer #4, via the turn-keyed --firebreathe side-channel); autonomous always uses the default.
+// FbPayer: MTG_FB_TAP's pay-as-you-go hook -- pays one activation's cost by TAPPING REAL
+// SOURCES on `state` (the callers bind their world's shared payment: TapForCostShared /
+// TapForCostDirect). Returns false when the cost is NOT genuinely payable, which both stops
+// the double-spend (the historical read-only pool was sound only while combat was the turn's
+// LAST mana use -- a live post-combat main re-reads AvailableManaPool, so unpaid pump mana
+// spent twice: dragons gi29's Bolt {R} pumped in combat AND cast the Bolt in main 2) and
+// fixes the pool's over-credit of restricted sources (Haven of the Spirit Dragon's any-colour
+// is dragon-SPELLS-only; the flat pool let it fund {R} pumps, the real payment refuses).
+using FbPayer = bool (*)(GameState&, const ManaCost&);
+
 inline int ApplyFirebreathing(GameState& state, int controller,
                               const std::vector<int>& attacker_indices, ManaPool pool,
-                              int max_activations = std::numeric_limits<int>::max())
+                              int max_activations = std::numeric_limits<int>::max(),
+                              FbPayer payer = nullptr)
 {
     if (attacker_indices.empty()) { return 0; }
     int activations = 0;
+    // With a payer, the flat pool's CanPay stays as a cheap OPTIMISTIC pre-filter and the real
+    // payment is authoritative: a candidate whose payment fails is disabled (per kind -- a team
+    // {1}{R} failing on its generic must not kill still-payable {R} self pumps) and the loop
+    // re-picks. Without a payer (MTG_FB_TAP=0), behaviour is the historical read-only pool.
+    bool self_dead = false, team_dead = false;
     for (;;)
     {
         if (activations >= max_activations) { break; }   // human-chosen budget reached (#4)
@@ -6155,6 +6171,7 @@ inline int ApplyFirebreathing(GameState& state, int controller,
         // Self firebreathing (Scourge {R}: this creature gets +1/+0).
         for (int idx : attacker_indices)
         {
+            if (self_dead) { break; }
             const Permanent& p = state.battlefield[idx];
             if (p.controller_index != controller) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
@@ -6180,6 +6197,7 @@ inline int ApplyFirebreathing(GameState& state, int controller,
         const int bf_size = static_cast<int>(state.battlefield.size());
         for (int si = 0; si < bf_size; ++si)
         {
+            if (team_dead) { break; }
             const Permanent& src = state.battlefield[si];
             if (src.controller_index != controller) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
@@ -6205,6 +6223,21 @@ inline int ApplyFirebreathing(GameState& state, int controller,
         }
 
         if (best_kind == 0) { break; }
+        // Real payment first (MTG_FB_TAP): a failed pay disables that KIND and re-picks --
+        // nothing was pumped and (payment is atomic) nothing was tapped.
+        if (payer != nullptr)
+        {
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(
+                state.battlefield[best_kind == 1 ? best_self_idx : best_src_idx].card);
+            const ManaCost& pc = best_kind == 1 ? pd->params.firebreathing_cost.value()
+                                                : pd->params.team_pump_cost.value();
+            if (!(*payer)(state, pc))
+            {
+                if (best_kind == 1) { self_dead = true; } else { team_dead = true; }
+                if (self_dead && team_dead) { break; }
+                continue;
+            }
+        }
         if (best_kind == 1)
         {
             const CardDefinition* d =
