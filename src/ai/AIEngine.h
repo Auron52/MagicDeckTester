@@ -444,7 +444,9 @@ private:
                            int enchant_target = 0,      // Aura: searched creature to enchant (0 = none)
                            bool free_cast = false,      // Maelstrom Archangel: spend a banked free cast
                            bool bestow    = false,      // Gnarled Scarhide: cast the AURA (bestow) mode
-                           int replicate_count = -1);   // Replicate: extra token copies the PLAN pinned
+                           int replicate_count = -1,
+                           int convoke_green = 0,       // Chord of Calling: committed convoke taps
+                           int convoke_other = 0);      // (reduce the recomputed cost -- lockstep)   // Replicate: extra token copies the PLAN pinned
                                                         // (-1 = not declared -> the greedy-max sink, the
                                                         // autonomous default; >= 0 = make exactly k, the
                                                         // count already priced into this cast's bill)

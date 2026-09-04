@@ -132,6 +132,31 @@ MANIFEST = {
     # play, the provider narrows only the autonomous search) and HOW MANY times (Action::chosen_x,
     # rendered by the existing "activations" sub, "x2"). Not their own decision type.
     "blink_cost":            ("main_phase",           truthy),
+    # ---- Melira Pod (2026-09-04) ------------------------------------------------------------
+    # Birthing Pod: WHICH creature to sacrifice AND WHICH MV+1 creature to fetch are both
+    # plan-variant sub-decisions (Action::ActivatePod, one main_phase variant per (victim, fetch)
+    # pair + the "(no fetch)" decline; SummarizePlan labels both by name).
+    "pod_mv_delta":          ("main_phase",           truthy),
+    # Chord of Calling: X, the fetch target and the convoke tap counts all ride the CastFromHand
+    # plan-variant axis (one variant per (target, X=MV) x convoke arm; #X#T#C signature keys).
+    "convoke":               ("main_phase",           truthy),
+    # Scavenging Ooze: WHICH graveyard card to exile (and how many activations) are independent
+    # main_phase plan actions, one per distinct graveyard name (Action::GraveyardExileGrow).
+    "gy_exile_grow_cost":    ("main_phase",           truthy),
+    # Felidar Guardian: WHICH permanent to flicker (+ decline) rides the CastFromHand chosen_x
+    # plan-variant axis on a cast; a PUT entry (Pod/Chord/Reveillark) resolves via the provider's
+    # FlickerTarget -- a disclosed 6a auto-resolution until a `flicker` chooser is wired.
+    "etb_blink_permanent":   ("main_phase",           truthy),
+    # Ranger of Eos: the up-to-two pick surfaces through the existing sac_tutor multi-pick
+    # chooser at resolution (PerformEtbTutorToHandMulti), on the cast and the put path alike.
+    "etb_tutor_hand_count":  ("sac_tutor",            positive),
+    # Reveillark: WHICH up-to-two power<=2 creatures return -- provider ReviveCandidates at
+    # resolution; a disclosed 6a auto-resolution until a `revive` chooser is wired (the trigger
+    # fires on planless paths: sac costs, flickers).
+    "ltb_return_creatures":  ("main_phase",           positive),
+    # Celes: the rummage N -- resolution heuristic (excess lands); a disclosed 6a auto-resolution
+    # until the `discard` any_number context is wired.
+    "etb_discard_any_number": ("main_phase",          truthy),
     # "{cost}, {T}: <effect>" permanent abilities and the Clue's sacrifice-to-draw. Each is an
     # Action::ActivatePermAbility in the turn's plan list, so choosing to activate (and which
     # source) is a main_phase plan pick -- the same shape as Mutavault's animate and Sliver Hive's
@@ -348,6 +373,26 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # ---- Melira Pod (2026-09-04) ----
+    "tutor_max_mv": "tutor target FILTER (Ranger of Eos 'mana value 1 or less') -- legality, not a choice; the pick rides tutor_to_hand -> sac_tutor/main_phase",
+    "tutor_max_toughness": "tutor target FILTER (Recruiter 'toughness 2 or less') -- legality, not a choice; the pick rides tutor_to_hand -> main_phase/tutor_etb",
+    "tutor_mv_max_is_x": "tutor MV cap = the chosen X (Chord of Calling) -- a legality filter; the X itself rides the chosen_x plan-variant axis -> main_phase",
+    "pod_taps": "Birthing Pod {T} constant -- not a choice",
+    "pod_activation_cost": "Birthing Pod activation mana cost -- a printed constant; the (victim, fetch) choices ride pod_mv_delta -> main_phase",
+    "etb_destroy_opp_creature": "automatic ETB destroy (largest opponent creature); NO legal target in this deck's games (opponent controls no creatures) -- never surfaces",
+    "etb_discard_any_draw_bonus": "draw count constant (Celes '+1')",
+    "other_creature_gy_enter_team_counters": "mandatory untargeted trigger (counter on EACH creature) -- nothing to choose",
+    "prevents_minus_counters": "static replacement (Melira) -- automatic",
+    "reduces_minus_counters_by_one": "static replacement (Vizier) -- automatic",
+    "persist": "triggered return, mandatory, no choice (the -1/-1 counter routes through the statics)",
+    "etb_self_lifegain": "mandatory lifegain amount",
+    "etb_damage_equals_power": "computed damage (live power substitution on etb_damage_any)",
+    "sac_outlet_add_counter_to_self": "outlet payload constant (Carrion Feeder +1/+1) -- the victim choice rides the sacrifice type",
+    "sac_outlet_self_pump_power": "outlet payload constant (Bloodthrone +2/+2 UEOT)",
+    "sac_outlet_self_pump_toughness": "outlet payload constant (Bloodthrone +2/+2 UEOT)",
+    "gy_exile_grow_counters": "Ooze payload constant", "gy_exile_grow_lifegain": "Ooze payload constant",
+    "ltb_return_max_power": "LTB target filter (rides ltb_return_creatures -> revive)",
+    "toughness_equals_creature_count": "computed P/T (CDA twin of power_equals_creature_count)",
     # ---- BreachingDragonstorm (2026-09-03) ----
     "cascade_count": "cascade instance count -- a printed constant ('Cascade, cascade' = 2), not a choice",
     "etb_exile_free_cast_max_mv": "oracle MV cap on Breaching Dragonstorm's free cast -- a printed constant",

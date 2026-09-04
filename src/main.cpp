@@ -333,6 +333,17 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::SacCreatureOutlet:
             {
                 const int k = std::max(1, a.sac_count);
+                // PERSIST LOOP burst (sac_count > 1 with an explicit victim): "sac 18 creatures"
+                // read as impossible on a 4-creature board (5d sweep) -- it is the SAME body
+                // sacrificed K times (persist returns it each iteration). Say so.
+                if (a.kind == Action::Kind::SacCreatureOutlet && k > 1 && a.sac_victim_id != 0)
+                {
+                    tag = a.card_name + ": loop " + EnchantTargetName(s, a.sac_victim_id)
+                        + " x" + std::to_string(k) + " (persist)";
+                    if (a.direct_damage > 0)
+                    { tag += " \xE2\x86\x92 " + std::to_string(a.direct_damage) + " damage"; }
+                    break;
+                }
                 // SacForMana sacrifices the SOURCE ITSELF (a Lotus Bloom / Treasure Token -- an
                 // artifact, not a creature); only SacCreatureOutlet feeds creatures to an outlet.
                 // The shared "creature(s)" suffix mislabeled a Treasure crack as "sac 1 creature"
@@ -1651,7 +1662,23 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
            << (p.tapped ? "true" : "false") << ", \"name\": "; JsonStr(os, p.card.m_name.str());
         os << ", \"label\": "; JsonStr(os, p.card.m_name.str()); os << " }";
     });
-    d.Note(std::string("reply an option index -- the land to ")
+    // Noun derived from the actual options: this writer is shared by the Karoo bounce (lands),
+    // Shard Volley's land sacrifice AND the creature-sac-outlet victim picker (Carrion Feeder /
+    // Bloodthrone) -- the hardcoded "land" wording on a creature list was flagged by three
+    // independent 5d sweep agents (Melira Pod, 2026-09-04).
+    std::string noun = "permanent";
+    if (!legal.empty())
+    {
+        bool all_land = true, all_creature = true;
+        for (int li : legal)
+        {
+            const Card& c = s.battlefield[li].card;
+            all_land     = all_land && c.IsLand();
+            all_creature = all_creature && c.IsCreature();
+        }
+        if (all_land) { noun = "land"; } else if (all_creature) { noun = "creature"; }
+    }
+    d.Note(std::string("reply an option index -- the ") + noun + " to "
            + (sacrifice ? "sacrifice" : "return to your hand") + ". Default = the AI's pick.");
 }
 

@@ -1,0 +1,107 @@
+{
+  "card_scores": {
+    "Birds of Paradise": [
+      0.2777633289986996
+    ],
+    "Birthing Pod": [
+      -0.27307030456326586
+    ],
+    "Bloodthrone Vampire": [
+      0.11229086229086249
+    ],
+    "Blooming Marsh": [
+      -0.11257816514788477,
+      0.03709297832730396
+    ],
+    "Branchloft Pathway": [
+      0.022350048300693537,
+      -0.2790525858322468
+    ],
+    "Carrion Feeder": [
+      0.30776681286549756,
+      -0.3789473684210529
+    ],
+    "Caves of Koilos": [
+      -0.00274959704181299
+    ],
+    "Celes, Rune Knight": [
+      -0.2654456654456654
+    ],
+    "Chord of Calling": [
+      0.3321148263627567
+    ],
+    "Darkbore Pathway": [
+      -0.05047436583415266
+    ],
+    "Felidar Guardian": [
+      -0.42032177743727317
+    ],
+    "Forest": [
+      -0.04800000000000004
+    ],
+    "Ignoble Hierarch": [
+      0.25369335551479466,
+      -0.2480992396958781
+    ],
+    "Kitchen Finks": [
+      0.5217237903225804,
+      -0.5026080988332184
+    ],
+    "Llanowar Wastes": [
+      -0.0933443250516417,
+      -0.06544971110088493
+    ],
+    "Melira, Sylvok Outcast": [
+      0.45267839687194567
+    ],
+    "Murderous Redcap": [
+      -0.0691556126087578
+    ],
+    "Orzhov Basilica": [
+      -0.21160409556313997
+    ],
+    "Ranger of Eos": [
+      -0.137141806046432
+    ],
+    "Ravenous Chupacabra": [
+      -0.31702987498583735
+    ],
+    "Razorverge Thicket": [
+      -0.016025641025640525,
+      -0.2650349650349648
+    ],
+    "Reclamation Sage": [
+      -0.2766711357977396
+    ],
+    "Recruiter of the Guard": [
+      -0.12400310073445375
+    ],
+    "Reveillark": [
+      -0.25164685869552805
+    ],
+    "Scavenging Ooze": [
+      -0.31825104396954096
+    ],
+    "Severance Priest": [
+      -0.09316839132204446
+    ],
+    "Vizier of Remedies": [
+      0.47574092339486196
+    ],
+    "Voice of Resurgence": [
+      -0.2659953815146343
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

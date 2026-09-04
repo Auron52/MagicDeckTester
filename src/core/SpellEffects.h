@@ -1645,7 +1645,10 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
             // (user-reported). `source_name` is already threaded in by both call sites
             // (EffectHandler + the rollout's apply_one); fall back only when it is absent.
             const std::string put_by = source_name.empty() ? std::string("Dragonstorm") : source_name;
-            EmitPlayEvent(state.turn_number, "dragonstorm",
+            // Event KIND follows the true source too (5d sweep: a Birthing Pod put tagged
+            // kind:"dragonstorm" confused the reader); the tag is display grouping only.
+            EmitPlayEvent(state.turn_number,
+                          put_by == "Dragonstorm" ? "dragonstorm" : "tutor",
                           "\xF0\x9F\x90\x89 " + lc.m_name.str()
                           + " -- put onto the battlefield (" + put_by + ")");
         }
@@ -5988,6 +5991,10 @@ inline int ApplyPersistLoop(GameState& state, int controller, int source_id, int
     int done = 0;
     for (int k = 0; k < iterations; ++k)
     {
+        // Stop the moment the game is won (the SpendSurplusOnDrain guard; 5d sweep gi5: a
+        // Redcap burst ran 18 iterations past opponent death, to -72 life). Covers the damage
+        // kill AND the infinite-life flag (OpponentHasLost folds both).
+        if (OpponentHasLost(state)) { break; }
         bool outlet_ok = false, victim_ok = false;
         for (const Permanent& q : state.battlefield)
         {
@@ -6049,6 +6056,23 @@ inline ConvokeClasses ClassifyConvokeBodies(const GameState& s, int controller)
     }
     return out;
 }
+// Reduce a Chord-style cost by the convoke taps' contribution: green bodies cover {G} pips
+// first, then generic; non-green bodies cover generic only. THE single source of truth for the
+// reduction -- used by the enumeration (Action::cost is emitted already reduced) AND by every
+// site that RECOMPUTES the cast's cost from the card (the executor's CastSpellFromHand, the
+// rollout apply_one, the sequential-payability sim, the split-turn accounting). The 5d sweep
+// caught the recompute sites pricing the FULL cost while the plan was committed at the reduced
+// one: a mana-legal convoke Chord tapped its bodies, failed the recomputed payment, and was
+// silently dropped ("dropped_casts") -- three independent agents reproduced it.
+inline void ApplyConvokeReduction(ManaCost& c, int green_taps, int other_taps)
+{
+    if (green_taps <= 0 && other_taps <= 0) { return; }
+    const int g1 = std::min(green_taps, c.green);
+    c.green -= g1;
+    const int gen_cover = std::min(c.generic, (green_taps - g1) + other_taps);
+    c.generic -= gen_cover;
+}
+
 // Tap `green` green and `other` non-green convoke bodies -- free bodies first, then attackers,
 // in the classification's deterministic order. Taps fewer if the board changed (stale-plan
 // guard); the cost was reduced at enumeration, so a shortfall costs payment quality (the reduced

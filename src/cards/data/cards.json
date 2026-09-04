@@ -6634,16 +6634,16 @@
   },
   {
    "name": "Birthing Pod",
-   "mana_cost": "{3}{G}",
+   "mana_cost": "{3}{G/P}",
    "types": [
     "Artifact"
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "({G/P} can be paid with either {G} or 2 life.)\n{1}{G/P}, {T}, Sacrifice a creature: Search your library for a creature card with mana value equal to 1 plus the sacrificed creature's mana value, put that card onto the battlefield, then shuffle. Activate only as a sorcery. [PHYREXIAN MANA UNMODELLED, PROVISIONAL: printed cost {3}{G/P} / activation {1}{G/P}; ManaCostFromString collapses {G/P} to {G} with the CORRECT MV 4. Green-only is the CONSERVATIVE side on purpose -- vs a passive goldfish opponent life is not a pressured resource, so modelling 'or 2 life' would make the pip nearly free and FLATTER the card; revisit only if the {G} pip measurably gates Pod turns. ACTIVATION (Action::Kind::ActivatePod -> PerformPodActivate): cost pod_activation_cost + {T} (pod_taps) + sacrifice a chosen creature through the SHARED death cascade (CR 601.2h -- costs paid before resolution, so a sacrificed Kitchen Finks persists back BEFORE the search and its card is not in the graveyard); victim MV read before it leaves; fetch = library creature with MV exactly victim+pod_mv_delta via PerformTutorToBattlefield(require_mv), full ETB cascade, then shuffle. 'Only as a sorcery' needs no gate (actions are enumerated in the mains only). The (victim, fetch) pair is a fully-searched axis: victims fold by a death-equivalence key, library names dedup, and the no-fetch variant '(no fetch)' is always emitted (the death itself can be the payoff). Second main enabled via DeckUsesSecondMain(pod_mv_delta): attack with a persist body, sac it to Pod post-combat.]",
+   "oracle_text": "({G/P} can be paid with either {G} or 2 life.)\n{1}{G/P}, {T}, Sacrifice a creature: Search your library for a creature card with mana value equal to 1 plus the sacrificed creature's mana value, put that card onto the battlefield, then shuffle. Activate only as a sorcery. [PHYREXIAN MANA UNMODELLED, PROVISIONAL: costs are stored VERBATIM ({3}{G/P} / {1}{G/P}) and ManaCostFromString itself collapses {G/P} to {G} with the CORRECT MV 4 (its documented fallback). Green-only is the CONSERVATIVE side on purpose -- vs a passive goldfish opponent life is not a pressured resource, so modelling 'or 2 life' would make the pip nearly free and FLATTER the card; revisit only if the {G} pip measurably gates Pod turns. ACTIVATION (Action::Kind::ActivatePod -> PerformPodActivate): cost pod_activation_cost + {T} (pod_taps) + sacrifice a chosen creature through the SHARED death cascade (CR 601.2h -- costs paid before resolution, so a sacrificed Kitchen Finks persists back BEFORE the search and its card is not in the graveyard); victim MV read before it leaves; fetch = library creature with MV exactly victim+pod_mv_delta via PerformTutorToBattlefield(require_mv), full ETB cascade, then shuffle. 'Only as a sorcery' needs no gate (actions are enumerated in the mains only). The (victim, fetch) pair is a fully-searched axis: victims fold by a death-equivalence key, library names dedup, and the no-fetch variant '(no fetch)' is always emitted (the death itself can be the payoff). Second main enabled via DeckUsesSecondMain(pod_mv_delta): attack with a persist body, sac it to Pod post-combat.]",
    "template": "custom",
    "parameters": {
-    "pod_activation_cost": "{1}{G}",
+    "pod_activation_cost": "{1}{G/P}",
     "pod_mv_delta": 1,
     "pod_taps": true,
     "tutor_types": [

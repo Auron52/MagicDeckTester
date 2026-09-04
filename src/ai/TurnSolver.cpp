@@ -3335,6 +3335,14 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
                                 - HinataGenericDiscount(def, cp, a.chosen_x,
                                       IsCrackleCountSpell(def.params) ? a.crackle_targets : -1));
             }
+            // Convoke (Chord of Calling): the committed action's taps reduce this cast's cost
+            // (shared ApplyConvokeReduction, identical to the enumeration's emission) and the
+            // bodies tap in this sim copy so later state (combat, further convoke) is faithful.
+            if (def.params.convoke && (a.convoke_green > 0 || a.convoke_other > 0))
+            {
+                ApplyConvokeReduction(ec, a.convoke_green, a.convoke_other);
+                ApplyConvokeTaps(cp, cp.active_player_index, a.convoke_green, a.convoke_other);
+            }
             if (def.params.damage_divided && a.crackle_targets >= 0)
             {
                 for (const ScaledCastVariant& v : prov.ScaledCastVariants(cp, def))
@@ -7912,6 +7920,10 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                         if (pd != nullptr) { ec = EffectiveCost(*pd, state); }
                         if (ec.has_x && pa.chosen_x > 0)
                         { ec.generic += pa.chosen_x * std::max(1, static_cast<int>(ec.x_pips)); }
+                        // Convoke: the committed taps reduce the cast's mana cost (lockstep with
+                        // the enumeration's reduced emission -- shared ApplyConvokeReduction).
+                        if (pd != nullptr && pd->params.convoke)
+                        { ApplyConvokeReduction(ec, pa.convoke_green, pa.convoke_other); }
                     }
                     planned.generic += ec.generic; planned.white += ec.white;
                     planned.blue += ec.blue; planned.black += ec.black;
@@ -8869,13 +8881,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (arm == 1 && ag == 0 && ao == 0) { break; }   // identical to arm 0
                         // Greedy assignment, tapping no more than the cost can absorb:
                         // green pips first from green bodies, then generic from others, then
-                        // generic from leftover green.
+                        // generic from leftover green. The REDUCTION itself is the shared
+                        // ApplyConvokeReduction -- the recompute sites (executor, apply_one,
+                        // the payability sims) apply the identical function off the identical
+                        // counts, which is what keeps a committed convoke cast payable
+                        // everywhere (the 5d dropped-cast bug).
                         const int g1 = std::min(avail_g, chord_base.green);
                         const int o1 = std::min(avail_o, x * cpips);
                         const int g2 = std::min(avail_g - g1, x * cpips - o1);
                         ManaCost c  = chord_base;
-                        c.green     = chord_base.green - g1;
-                        c.generic  += x * cpips - o1 - g2;
+                        c.generic  += x * cpips;
+                        ApplyConvokeReduction(c, g1 + g2, o1);
                         if (c.ManaValue() > pool_total) { continue; }   // unpayable even now
                         Action a;
                         a.kind           = Action::Kind::CastFromHand;
@@ -18279,12 +18295,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (act.free_cast && state.free_casts_available > 0)
         { cascade_free = true; --state.free_casts_available; }
     };
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int, int, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
                     int own_targets, int ponder_keep, int crackle_targets, int splice_count,
                     const std::string& chosen_float_color, int enchant_target, bool bestow,
-                    int replicate_count)
+                    int replicate_count, int convoke_green, int convoke_other)
     {
         // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
         // the continuation has already decided everything after it, so every remaining cast of this
@@ -18398,6 +18414,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                            - HinataGenericDiscount(def, state, chosen_x,
                                  IsCrackleCountSpell(def.params) ? crackle_targets : -1));
         }
+        // Convoke (Chord of Calling): the plan's taps reduce this cast's cost -- the SAME shared
+        // reduction the enumeration emitted, so a committed convoke cast pays here exactly what
+        // the search priced (the 5d dropped-cast bug: recomputing the FULL cost dropped a
+        // mana-legal cast after its bodies were already tapped).
+        if (def.params.convoke && (convoke_green > 0 || convoke_other > 0))
+        { ApplyConvokeReduction(ec, convoke_green, convoke_other); }
         // Scaled divided-damage spell (Magma Opus): the committed face (carried on crackle_targets)
         // fixes the cost via the archetype's model, recomputed on the CURRENT board so the rollout, the
         // executor (CastSpellFromHand), and CanPay price the same committed face identically -> lockstep
@@ -18553,7 +18575,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ap.hand.push_back(std::move(found));
                 cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                 apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                          std::string{}, 0, false, -1);
+                          std::string{}, 0, false, -1, 0, 0);
             }
             else { state.exile.push_back(std::move(found)); }
         };
@@ -18644,7 +18666,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     ap.hand.push_back(std::move(hit));
                     cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                     apply_one(hname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                              std::string{}, 0, false, -1);
+                              std::string{}, 0, false, -1, 0, 0);
                 }
                 else { ap.library.push_back(std::move(hit)); }   // declined/forbidden: bottomed
             }
@@ -18708,7 +18730,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         state.players[pe.controller].hand.push_back(std::move(found));
                         cascade_free = true;
                         apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1,
-                                  0, std::string{}, 0, false, -1);
+                                  0, std::string{}, 0, false, -1, 0, 0);
                     }
                     else { state.players[pe.controller].hand.push_back(std::move(found)); }
                 }
@@ -20075,7 +20097,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other);
                     fire_unlock();
                 }
             }
@@ -20147,7 +20169,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                          < ResolveProvider(state).CastOrderRank(state, *dy);
                 });
                 for (int i : ena)
-                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count); fire_unlock(); }
+                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); fire_unlock(); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -20171,7 +20193,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count);
+                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -20198,7 +20220,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
-                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count); fire_unlock();
+                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); fire_unlock();
                 }
             }
             else
@@ -20226,7 +20248,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other);
                     fire_unlock();
                 }
             }
@@ -20238,14 +20260,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
                 prep_free(a);
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other);
             }
         }
 
@@ -20379,7 +20401,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1, 0, 0);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };

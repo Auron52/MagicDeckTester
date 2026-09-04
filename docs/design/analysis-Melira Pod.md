@@ -410,6 +410,57 @@ I9. Viewer wiring pass (revive/flicker/any_number/sac_tutor wording/manifest/
     DECISIONS.md rows) + 2d-bis audits.
 I10. Stage 3 coverage loop → Stage 4 profile + 4a → Stage 5 battery.
 
+## Claude-play sweep
+- commit: `8f712107` (played pre-fix; every confirmed flag fixed in the follow-up
+  commit and re-verified — see resolutions below)
+- seeds: 9200 (+gi) games: 16
+- flags: 0 unresolved
+- Results: 16/16 games completed. 11 exact win-turn parity with the d5/b200
+  benchmark; 5 Claude-slower games (gi 2,3,8,9,11,15) — all but one caused by
+  the convoke bug below; none faster (expected vs the clairvoyant search).
+  Benchmark: avg 4.5625 (10 inflife avg 4.0 / 6 kill avg 5.5).
+- CONFIRMED → FIXED:
+  1. Convoke Chord dropped at execution (5 agents, ~9 repros): enumeration
+     emitted the convoke-REDUCED cost but every recompute site (executor
+     CastSpellFromHand, rollout apply_one, sequential-payability sim,
+     split-turn accounting) re-priced the FULL X cost → mana-legal casts
+     tapped their bodies then dropped ("dropped_casts"), and the autonomous
+     search self-filtered convoke arms (Chord underrated). FIX: shared
+     ApplyConvokeReduction applied at every site off the committed
+     convoke_green/other counts (threaded through cast_by_name /
+     CastSpellFromHand / apply_one).
+  2. ApplyPersistLoop over-executed past opponent death (gi5: 18 extra
+     iterations to -72 life). FIX: OpponentHasLost break each iteration
+     (the SpendSurplusOnDrain guard).
+  3. Cosmetic: creature-sac decision note said "the land to sacrifice"
+     (shared WriteBounceDecisionJson). FIX: noun derived from the options.
+  4. Cosmetic: persist bursts rendered "sac 18 creatures" on a 4-creature
+     board. FIX: "loop <victim> xN (persist)" label.
+  5. Cosmetic: Pod puts event-tagged kind:"dragonstorm". FIX: kind follows
+     the source.
+- Post-fix re-benchmark (same 16 games): avg 4.5625 → 4.5000. gi=11 7→5 (the
+  search now takes convoke-Chord lines — the direct fix payoff); gi=9 5→6 at
+  b200, EXPLAINED as a recoverable budget shift (b600/b2000 both restore the
+  T5 inflife win monotonically; the widened convoke plan space dilutes the
+  fixed budget on this one game) — the acceptable "search-budget line-shift"
+  category, not a structural deletion.
+- DISMISSED (verified non-bugs, with reasons):
+  * Win checked at step boundaries (in-turn decisions continue after the
+    win event; outcome/turn unaffected) — engine design, all decks.
+  * Avoidable painland pings (2 agents) — tap-order treats self-damage as
+    free vs a passive opponent; zero win-turn impact; noted as a global
+    heuristic-quality candidate, not deck work.
+  * Manual-sac heuristic_default badge points at the expendability rank
+    (dork) not the combo body — the autonomous search uses its own explicit
+    persist action (benchmark won); badge-only, 6a note.
+  * Self-sac outlet plan offered with no other creature — legal enumeration,
+    never chosen by the search; possible 5f prune.
+  * "0/0 Elemental Token" display name — the CDA math was verified correct
+    by the agent (token attacked for 7 with 7 creatures); name is the token
+    def-by-name convention.
+  * Same-plan entrants not Pod-sac candidates — the disclosed once-per-phase
+    enumeration limit (see Pod deferrals).
+
 ## Approved deferrals
 
 (none yet — every proposed deferral is PROVISIONAL until user sign-off)
@@ -420,4 +471,21 @@ I10. Stage 3 coverage loop → Stage 4 profile + 4a → Stage 5 battery.
 
 ## Verification verdicts (Stage 5)
 
-(pending)
+- 2d-bis: card_fields PASS (327 cards; 1 finding fixed — Pod cost now verbatim
+  {3}{G/P}, parser does the documented collapse); cost audit via field audit
+  (cost-audit 429s were transients; Celes hand-verified {1}{R}{W}{B} 4/4).
+- 4a: provider_audit → Melira Pod → MeliraPod ✓ (no suspects).
+- verify_deck (--no-network): coverage PASS (28/28 full), card_fields PASS,
+  mismatch PASS (0 nonconv / 0 fd-diverge, seeds 7001+7002 × 60 games),
+  play_invariants PASS (8 games / 132 decisions), viewer self-guard FIXED
+  (manifest/inert rows for all new params; static auditor now rc=0),
+  claude_sweep IN FLIGHT (16 Sonnet agents, seed 9200+gi / gi 0-15, commit
+  8f712107; benchmark: 16/16 wins avg 4.5625 — 10 inflife avg 4.0, 6 kill 5.5).
+- 5b multi-depth (s3100 × 20, b400): d0 8.0 / d3 5.30 / d5 5.30 — monotonic,
+  plausible combo clock. d0 wins mostly by beatdown (expected, no search).
+- 5c: no budget starvation signal (d3=d5).
+- PENDING: 5c2 leaf_tiebreak_check; viewer C++ wiring (revive/flicker choosers,
+  Celes discard any_number context, sac_tutor to-hand wording, CheckLine verbs
+  for ActivatePod/GraveyardExileGrow, DECISIONS.md rows) — HELD until the sweep
+  finishes (a rebuild mid-sweep would corrupt agent replays); 5h full auditor
+  sweep after that.

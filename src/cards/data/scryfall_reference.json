@@ -232,6 +232,15 @@
     "toughness": "1",
     "type_line": "Creature — Bird"
   },
+  "Birthing Pod": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G/P}",
+    "oracle_text": "({G/P} can be paid with either {G} or 2 life.)\n{1}{G/P}, {T}, Sacrifice a creature: Search your library for a creature card with mana value equal to 1 plus the sacrificed creature's mana value, put that card onto the battlefield, then shuffle. Activate only as a sorcery.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Black Lotus": {
     "cmc": 0.0,
     "keywords": [],
@@ -259,6 +268,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Bloodthrone Vampire": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}",
+    "oracle_text": "Sacrifice a creature: This creature gets +2/+2 until end of turn.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Vampire"
+  },
   "Bloom Tender": {
     "cmc": 2.0,
     "keywords": [
@@ -269,6 +287,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
+  },
+  "Blooming Marsh": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {B} or {G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Boarding Party": {
     "cmc": 6.0,
@@ -387,6 +414,15 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Carrion Feeder": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{B}",
+    "oracle_text": "This creature can't block.\nSacrifice a creature: Put a +1/+1 counter on this creature.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Zombie"
+  },
   "Cascade Bluffs": {
     "cmc": 0.0,
     "keywords": [],
@@ -404,6 +440,35 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Caves of Koilos": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}: Add {W} or {B}. This land deals 1 damage to you.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Celes, Rune Knight": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}{W}{B}",
+    "oracle_text": "When Celes enters, discard any number of cards, then draw that many cards plus one.\nWhenever one or more other creatures you control enter, if one or more of them entered from a graveyard or was cast from a graveyard, put a +1/+1 counter on each creature you control.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Human Wizard Knight"
+  },
+  "Chord of Calling": {
+    "cmc": 3.0,
+    "keywords": [
+      "Convoke"
+    ],
+    "mana_cost": "{X}{G}{G}{G}",
+    "oracle_text": "Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)\nSearch your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "City of Brass": {
     "cmc": 0.0,
@@ -520,6 +585,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Sliver"
+  },
+  "Darkbore Pathway": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {B}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land // Land"
   },
   "Dauntless Bodyguard": {
     "cmc": 1.0,
@@ -815,6 +889,15 @@
     "power": "4",
     "toughness": "2",
     "type_line": "Creature — Minotaur Shaman"
+  },
+  "Felidar Guardian": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{W}",
+    "oracle_text": "When this creature enters, you may exile another target permanent you control, then return that card to the battlefield under its owner's control.",
+    "power": "1",
+    "toughness": "4",
+    "type_line": "Creature — Cat Beast"
   },
   "Ferrous Lake": {
     "cmc": 0.0,
@@ -1411,6 +1494,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Kitchen Finks": {
+    "cmc": 3.0,
+    "keywords": [
+      "Persist"
+    ],
+    "mana_cost": "{1}{G/W}{G/W}",
+    "oracle_text": "When this creature enters, you gain 2 life.\nPersist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.)",
+    "power": "3",
+    "toughness": "2",
+    "type_line": "Creature — Ouphe"
+  },
   "Knight Exemplar": {
     "cmc": 3.0,
     "keywords": [
@@ -1566,6 +1660,15 @@
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
   },
+  "Llanowar Wastes": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}: Add {B} or {G}. This land deals 1 damage to you.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Lonely Sandbar": {
     "cmc": 0.0,
     "keywords": [
@@ -1686,6 +1789,15 @@
     "toughness": "5",
     "type_line": "Creature — Phyrexian Wurm"
   },
+  "Melira, Sylvok Outcast": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "You can't get poison counters.\nCreatures you control can't have -1/-1 counters put on them.\nCreatures your opponents control lose infect.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Human Scout"
+  },
   "Memory Lapse": {
     "cmc": 2.0,
     "keywords": [],
@@ -1782,6 +1894,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Basic Land — Mountain"
+  },
+  "Murderous Redcap": {
+    "cmc": 4.0,
+    "keywords": [
+      "Persist"
+    ],
+    "mana_cost": "{2}{B/R}{B/R}",
+    "oracle_text": "When this creature enters, it deals damage equal to its power to any target.\nPersist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Goblin Assassin"
   },
   "Muscle Sliver": {
     "cmc": 2.0,
@@ -1898,6 +2021,15 @@
     "power": "0",
     "toughness": "2",
     "type_line": "Artifact Creature — Thopter"
+  },
+  "Orzhov Basilica": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {W}{B}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Overgrown Tomb": {
     "cmc": 0.0,
@@ -2087,6 +2219,24 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Ranger of Eos": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{W}",
+    "oracle_text": "When this creature enters, you may search your library for up to two creature cards with mana value 1 or less, reveal them, put them into your hand, then shuffle.",
+    "power": "3",
+    "toughness": "2",
+    "type_line": "Creature — Human Soldier Ranger"
+  },
+  "Ravenous Chupacabra": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{B}{B}",
+    "oracle_text": "When this creature enters, destroy target creature an opponent controls.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Beast Horror"
+  },
   "Razorverge Thicket": {
     "cmc": 0.0,
     "keywords": [],
@@ -2104,6 +2254,24 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Reclamation Sage": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "When this creature enters, you may destroy target artifact or enchantment.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Elf Shaman"
+  },
+  "Recruiter of the Guard": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "When this creature enters, you may search your library for a creature card with toughness 2 or less, reveal it, put it into your hand, then shuffle.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Soldier"
   },
   "Reflecting Pool": {
     "cmc": 0.0,
@@ -2160,6 +2328,18 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Reveillark": {
+    "cmc": 5.0,
+    "keywords": [
+      "Evoke",
+      "Flying"
+    ],
+    "mana_cost": "{4}{W}",
+    "oracle_text": "Flying\nWhen this creature leaves the battlefield, return up to two target creature cards with power 2 or less from your graveyard to the battlefield.\nEvoke {5}{W} (You may cast this spell for its evoke cost. If you do, it's sacrificed when it enters.)",
+    "power": "4",
+    "toughness": "3",
+    "type_line": "Creature — Elemental"
   },
   "Reverent Silence": {
     "cmc": 4.0,
@@ -2254,6 +2434,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Scavenging Ooze": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "{G}: Exile target card from a graveyard. If it was a creature card, put a +1/+1 counter on this creature and you gain 1 life.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Ooze"
+  },
   "Scourge of Valkas": {
     "cmc": 5.0,
     "keywords": [
@@ -2311,6 +2500,17 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Legendary Creature — Minotaur Warrior"
+  },
+  "Severance Priest": {
+    "cmc": 3.0,
+    "keywords": [
+      "Deathtouch"
+    ],
+    "mana_cost": "{W}{B}{G}",
+    "oracle_text": "Deathtouch\nWhen this creature enters, target opponent reveals their hand. You may choose a nonland card from it. If you do, exile that card.\nWhen this creature leaves the battlefield, the exiled card's owner creates an X/X white Spirit creature token, where X is the mana value of the exiled card.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Djinn Cleric"
   },
   "Shadowspear": {
     "cmc": 1.0,
@@ -2878,6 +3078,24 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Goblin Shaman"
+  },
+  "Vizier of Remedies": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "If one or more -1/-1 counters would be put on a creature you control, that many -1/-1 counters minus one are put on it instead.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Human Cleric"
+  },
+  "Voice of Resurgence": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{G}{W}",
+    "oracle_text": "Whenever an opponent casts a spell during your turn and when this creature dies, create a green and white Elemental creature token with \"This token's power and toughness are each equal to the number of creatures you control.\"",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Elemental"
   },
   "Wild Growth": {
     "cmc": 1.0,
