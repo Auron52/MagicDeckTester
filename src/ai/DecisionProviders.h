@@ -1084,6 +1084,17 @@ public:
     // Currently inert in play -- nothing in this deck is order-opaque (no cast-draw, no staging)
     // -- but a future opaque addition stays under the authored order rather than the search.
     bool OrderOpaqueCastsByRank() const override;
+    // Mind Stone's cash-in ({1},{T},Sac: draw a card) -- USER 2026-09-04: "Mind Stone's draw
+    // could come up. I would try it out just in case." The deck's only dig source; without
+    // these overrides the generic `false` gates meant the MODELED ability could never fire in
+    // autonomous play (a capability-narrowing default). Wired the Auras way: the searched axis
+    // decides (dig/no-dig variants per base plan, rollout-scored); ShouldConsiderDig stays the
+    // generic "never", so rollout tails and the d0 greedy path keep the old behaviour --
+    // sacking a mana rock for a card is a judgement the search prices per game, not a default.
+    // MTG_DRAGONS_DIG=0 restores the digless engine (A/B hatch).
+    bool        HasAnyDigSource(const GameState&) const override;
+    std::string SelectDigSource(const GameState&, const ManaPool&, bool&) const override;
+    bool        DigDecisionSearched() const override;
     // The generic fallback is DESCENDING MANA VALUE, which on this deck sheds Utvara Hellkite (8),
     // then Lathliss/Inferno (6), then Glorybringer/Scourge (5) -- the payoffs in almost exactly
     // descending order of importance -- while keeping Lightning Bolt and Sol Ring. That is not

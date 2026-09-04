@@ -11309,6 +11309,22 @@ bool DragonsProvider::OrderOpaqueCastsByRank() const
     return DragonsOrderEnabled();
 }
 
+// ---- DragonsProvider: the Mind Stone dig (searched axis) --------------------
+// See the header comment. Gating HasAnyDigSource on the hatch kills the whole machinery at
+// =0 (the enumerator's dig fan, the executor's surplus loop and the human-play offer all
+// precondition on it), so the off arm is byte-identical to the digless engine.
+bool DragonsProvider::HasAnyDigSource(const GameState& s) const
+{
+    static const bool s_on = EnvOn("MTG_DRAGONS_DIG", true);
+    return s_on && ::HasAnyDigSource(s);
+}
+std::string DragonsProvider::SelectDigSource(const GameState& s, const ManaPool& pool,
+                                             bool& out_is_sac) const
+{
+    return ::SelectDigSource(s, pool, out_is_sac);
+}
+bool DragonsProvider::DigDecisionSearched() const { return true; }
+
 // ---- DragonsProvider::CleanupDiscardCandidates ------------------------------
 //
 // USER-AUTHORED role-bucket policy (approved 2026-08-30; see
