@@ -36,7 +36,17 @@ python3 - "$DECK" "$PROF" "$OUT/manifest.json" "$GAMES" "$CHUNK" "$DEPTH" "$BUDG
 import json, sys
 deck, prof, out, games, chunk, depth, budget = sys.argv[1:8]
 games, chunk, depth, budget = int(games), int(chunk), int(depth), int(budget)
-SEEDS = [4301, 4302, 4303, 4304, 4305, 4306, 4307, 4308]
+# SEEDS MUST BE SPACED BY AT LEAST `games`, because a game's SHUFFLE is `job.seed + local_index`
+# (GoldFishRunner/BatchRunner) -- the seed is a BASE, not a stream id. Consecutive bases 4301..4308
+# with 100 games each therefore cover [4301,4400] .. [4308,4407]: a union of 107 DISTINCT games, each
+# replayed 7.5x, masquerading as 800 independent ones. Measured 2026-09-05, and it is not a rounding
+# error: it inflated this A/B's t by sqrt(7.5) ~ 2.7x (the sibling edf_finish_ab.sh reported t=9.18
+# for what is really t=3.83), and it burned ~4.7 h re-playing ONE pathological game (shuffle 4329)
+# four times. Spacing by 100 makes the eight blocks disjoint, so "8 seeds" means 8 independent
+# replicates and a per-seed win/loss tally is real evidence again.
+# Kept disjoint from edf_finish_ab.sh's [4200,4999] as well, so the two A/Bs never share a game and
+# either can serve as held-out seeds for the other.
+SEEDS = [5000, 5100, 5200, 5300, 5400, 5500, 5600, 5700]
 ARMS = {
     # MTG_EDF_SEQ_AURA: does admitting a same-turn land Aura to the odometer / the sequential
     # payability walk PAY, given it costs ~2.9x wall clock on this deck (sixteen land Auras, so

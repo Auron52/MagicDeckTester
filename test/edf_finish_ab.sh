@@ -37,7 +37,14 @@ python3 - "$DECK" "$PROF" "$OUT/manifest.json" "$GAMES" "$CHUNK" "$DEPTH" "$BUDG
 import json, sys
 deck, prof, out, games, chunk, depth, budget = sys.argv[1:8]
 games, chunk, depth, budget = int(games), int(chunk), int(depth), int(budget)
-SEEDS = [4201, 4202, 4203, 4204, 4205, 4206, 4207, 4208]
+# SEEDS MUST BE SPACED BY AT LEAST `games` -- see the long note in test/edf_aura_ab.sh. A game's
+# SHUFFLE is `job.seed + local_index`, so consecutive bases 4201..4208 x 100 games covered
+# [4201,4400] .. [4208,4407] = 107 distinct games replayed 7.5x, not 800 independent ones. The
+# kill-chain result this script produced was FIRST REPORTED as "+0.2100 turns, t=9.18, 8/8 seeds";
+# re-aggregated to the 107 distinct games it is "+0.2410 turns, t=3.83" -- the effect is real and
+# slightly larger, but the significance was overstated by exactly sqrt(7.5), and "8/8 seeds" was
+# never 8 independent replications. Spacing by 100 makes the blocks disjoint.
+SEEDS = [4200, 4300, 4400, 4500, 4600, 4700, 4800, 4900]
 ARMS = {
     # The behaviour shipped before the kill chain: cash only into a sink ALREADY on the battlefield.
     "base":   {"MTG_EDF_COMBO_FINISH": False, "MTG_EDF_LOOP_DRAW": False},

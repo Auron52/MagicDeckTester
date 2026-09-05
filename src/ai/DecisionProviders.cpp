@@ -13601,14 +13601,29 @@ void EdfTurnTraceImpl(const GameState& s, int controller)
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (d && d->params.tutor_to_hand && d->params.wish_from_sideboard) { ++wishes; }
             }
+            // POOL and the per-route START COST, because without them the trace cannot separate the
+            // two things it exists to tell apart. ExtraLethalDamage projects a kill only when the
+            // loop is `startable(...)` -- it must afford ONE full iteration plus the hand setup out
+            // of the mana available RIGHT NOW -- so a turn showing a live loop and a reachable sink
+            // may still be a correct decline (short to start) rather than the engine leaving a kill
+            // on the table. Reading those two cases as one is how a "SINK-DECLINED" bucket turns
+            // into a bug report about arithmetic that was right all along. `gorge` therefore prints
+            // dmg/cost like `drain` does: the Gorge's own activation cost is half its startability.
+            ManaPool have = AvailableManaPool(s);
+            have.AddPool(s.floating_mana);
+            const int per_drain = std::max(1, best.drain_cost_mv);
             std::fprintf(stderr,
                          "[edf-turn] t%d lands=%d auras=%d untapper=%d outlet=%d drawland=%d "
-                         "wish=%d | ok=%d untaps=%d refund=%d cost=%d net=%d "
-                         "gorge=%d drain=%d/%d exile=%d setup=%d\n",
+                         "wish=%d | ok=%d untaps=%d refund=%d cost=%d net=%d pool=%u "
+                         "gorge=%d/%d drain=%d/%d exile=%d setup=%d "
+                         "needgorge=%d needdrain=%d\n",
                          s.turn_number, lands, auras, untapper ? 1 : 0, outlet ? 1 : 0,
                          drawland ? 1 : 0, wishes, best.ok ? 1 : 0, best.untaps, best.refund,
-                         best.cost_mv, best.net, best.gorge_dmg, best.drain_amount,
-                         best.drain_cost_mv, best.exile_cost_mv, best.hand_setup_mv);
+                         best.cost_mv, best.net, have.Total(),
+                         best.gorge_dmg, best.gorge_cost_mv, best.drain_amount,
+                         best.drain_cost_mv, best.exile_cost_mv, best.hand_setup_mv,
+                         best.cost_mv + best.gorge_cost_mv,
+                         best.cost_mv + per_drain + best.hand_setup_mv);
         }
     }
 }

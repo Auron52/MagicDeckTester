@@ -2877,3 +2877,157 @@ wider plan set, not the walks.
 dead code, and flagged here as UNMEASURED on quality.** The pooled A/B (`base` vs `aura`, 8 seeds x
 100, one batch) settles the default; if it comes back negative the lever flips off and the CheckLine
 verdict fix stands on its own, since that one has no search cost at all.
+
+### The A/B ANSWER (2026-09-05) — quality-neutral, and the harness was measuring 107 games not 800
+
+The pooled `base`-vs-`aura` A/B ran to full coverage of its game universe. Read correctly it says:
+
+| | mean | vs base | t | games |
+|---|---|---|---|---|
+| base | 6.1121 | — | | 107 distinct |
+| aura | 6.0654 | **+0.0467** | **1.00** | 107 distinct |
+
+**14 games faster, 8 slower, 85 UNCHANGED.** The admission is quality-neutral: it moves one game in
+five, and the movements very nearly cancel.
+
+**Read correctly** is doing real work in that sentence, because the harness was wrong. A batch job's
+`seed` is a **base** — game *k* of a job shuffles on `job.seed + k` — so `SEEDS = [4301..4308]` with
+100 games each covers `[4301,4400] .. [4308,4407]`: a union of **107 distinct games, each replayed
+7.5x**, reported as 800 independent ones. Consequences:
+
+* every t-statistic from these scripts was inflated by ~`sqrt(7.5)` = 2.7x;
+* "8/8 seeds agree" was never eight replications — it is one game set read eight times;
+* ~4.7 h of the run went into replaying ONE pathological game (shuffle 4329) four times, because
+  four different `(base, offset)` pairs collide on it.
+
+The sibling **kill-chain** result is corrected by the same re-aggregation. It was first reported as
+`+0.2100 turns, t=9.18, 8/8 seeds`; on the 107 distinct games it is **`+0.2410 turns, t=3.83`**, and
+`both` over `finish` alone is `+0.1577, t=2.95`. The effect is real and slightly LARGER than
+reported; only the significance was overstated. `test/edf_{finish,aura,refloat}_ab.sh` now space
+their seeds by `games` and keep disjoint ranges.
+
+#### The flag is LOAD-BEARING, so "expensive and neutral" does not mean "turn it off"
+
+With `MTG_EDF_SEQ_AURA=0` both of the user's lines revert to `legal_not_enumerated` — the exact
+symptom reported. It stays ON: the lines are rules-legal, and quality-neutral at the mean is the
+expected shape for a correctness fix that only fires on 20% of games.
+
+#### The cost is a TAIL, not a shift — and it is ONE turn
+
+Games over the 30 s slow-game threshold:
+
+| arm | n | median | p90 | max | total |
+|---|---|---|---|---|---|
+| base | 141 | 65 s | 139 s | 297 s | 3.0 h |
+| aura | 384 | 95 s | 567 s | **4722 s** | 27.1 h |
+
+The median barely moves (1.45x, matching the **1.5x** odometer measured by `MTG_BRANCH_STATS` on a
+normal game: 246,390 -> 368,954). It is the tail that explodes: p90 4.1x, **max 15.9x**.
+
+Localised by truncating the worst game (`--seed 4329 --game-index 28`) with `--max-turns`:
+
+| `--max-turns` | base | aura |
+|---|---|---|
+| 5 | 0.33 s | 0.55 s |
+| 6 | 0.38 s | 0.74 s |
+| 7 (full) | ~fast | **4722 s** |
+
+`[edf-turn]` shows why: at t6 the board is `lands=4 auras=2 untapper=1 outlet=0`. The outlet lands on
+**t7** — so the entire 4722 s is the **go-off turn**, the one node where the loop first completes and
+the plan powerset (auras x hosts x tutor targets, tutor width 8) goes live at once. A `budget_ms`
+bounds the *search*, not a single node's enumeration, which is why a 20 ms budget can spend 79
+minutes in one call.
+
+#### The fix this points at: EDF has no go-off SHORT-CIRCUIT
+
+`TurnSolver` already has exactly the right machinery — when the maximal go-off line wins this turn,
+emit just that plan and skip the odometer, verified by `ApplyPlanDirect` + `OpponentHasLost` before
+it is believed. But it is gated on `any_ritual` / `BuildStormGoffLine`, i.e. **Dragonstorm-only, and
+"inert for every non-Dragonstorm deck."** EDF has the identical shape (a huge powerset enumerated at
+the very node where the recognizer already knows the kill is arithmetic) and gets none of it. An EDF
+line-builder for the same short-circuit is the targeted fix: it collapses precisely the turn that
+costs 15.9x, and it is sound for the same reason Dragonstorm's is — the win is re-simulated, never
+projected.
+
+#### NOT a bug: the aura host is collapsed by the autonomous dedup, on purpose
+
+`LandAuraHostCandidates` proposes the best TWO hosts, but `plan_signature` keys a `CastFromHand` on
+the card NAME (`enchant_target` enters only under `HumanPlayActive()`), so the two host variants
+share a signature and the dedup keeps the first. This is the documented shortcut, not a defect —
+"NOT a correctness property ... an efficiency shortcut that DELEGATES the sub-decision to the
+heuristic." Worth recording only because the provider's own comment claims the two candidates keep
+the trade "searched at a cost of 3 odometer states per aura", and for autonomous play that is not
+true: the second host is emitted, multiplies the odometer, and is then discarded. Its only residual
+value is payability rescue (host #1's plan failing payment lets host #2 be tried).
+
+## Does a board with the pieces go off next turn? (2026-09-05) — MEASURED
+
+The user's challenge: *"That makes no sense. If we have the pieces on board, we should at least be
+able to go off next turn, not 2 turns out."* The prior answer ("genuine board weakness") was an
+inference from two hand-read game logs and was withdrawn; `MTG_EDF_TURN_TRACE` was built to settle it
+with data. `test/edf_turn_report.py` reads the stream and buckets every turn at-or-after the pieces
+landed by the reason it did not kill.
+
+The instrument needed one correction before its verdict could be trusted. Its first version bucketed
+"loop live + sink reachable + no kill" as `SINK-DECLINED` and reported 2 such turns — but
+`ExtraLethalDamage` projects a kill only when the loop is `startable(...)`, i.e. can pay one full
+iteration plus the hand setup out of the mana available *now*, and the trace printed neither the pool
+nor the Gorge's activation cost. Both are printed now (`pool=`, `gorge=<dmg>/<cost>`, `needgorge=`,
+`needdrain=`), and with startability accounted for **`SINK-DECLINED` goes to zero**. There is no
+measured case of the engine holding a kill it could afford.
+
+### The measurement: 117 games, `MTG_EDF_TURN_TRACE=1`, 12 x 10 on disjoint seeds [7100,7219]
+
+```
+pieces-on-board -> win : mean +0.84 turns (n=106)
+  +0 : 42 games      <- go off the SAME turn the pieces land
+  +1 : 33 games      <- the next turn (what the user expects)
+  +2 : 23 games
+  +3 :  5 games
+```
+
+So the deck is **not** systematically two turns late: 42 of 106 kill on the turn the pieces land and
+another 33 on the following turn. The earlier "genuine board weakness" claim was an inference from
+two hand-read game logs and is withdrawn; so is the "1.6-turn lag" figure.
+
+Why the other turns did not kill (one row per turn — `TakeTurn` re-solves at draw breakpoints, so a
+turn emits several trace lines and the LAST, most-resourced one represents it):
+
+| bucket | n | share | meaning |
+|---|---|---|---|
+| `no-sink` | 47 | **50.0%** | loop live, nothing to cash unbounded mana into |
+| `no-loop` | 21 | 22.3% | recognizer sees no loop (piece uncastable / missing) |
+| `short-to-start` | 21 | 22.3% | live + sink reachable, cannot pay one iteration + setup |
+| `SINK-DECLINED` | 5 | **5.3%** | live, sink reachable, affordable — and no kill |
+
+`no-sink` at 50% is the dominant term, and it is largely a DECKBUILDING fact: the finishers (Essence
+Depleter, Dimensional Infiltrator) sit in the 8-card sideboard reachable only through Living Wish,
+and **Peregrine Drake is not in the sideboard at all**, so a Wish cannot fetch the untapper. This is
+exactly what the kill-chain work attacks, and why `both` beats `finish` alone.
+
+### SINK-DECLINED — a REAL bug, with a clean repro (`--seed 7187 --game-index 7`)
+
+```
+t5  lands=4 auras=2 untapper=1 outlet=1 | ok=1 refund=7  cost=1 net=6 pool=7  gorge=0/0
+t6  lands=5 auras=2 untapper=1 outlet=1 | ok=1 refund=8  cost=1 net=7 pool=8  gorge=1/3 needgorge=4
+t7  lands=6 auras=4 untapper=1 outlet=1 | ok=1 refund=10 cost=1 net=9 pool=11 gorge=1/3 needgorge=4
+t8  win
+```
+
+At **t6** the Shivan Gorge lands and every condition in `ExtraLethalDamage`'s Gorge branch holds:
+`refund 8 > cost 1 + gorge 3` (the loop funds both halves of an iteration) and `startable(4)` against
+`pool 8`. The projection is therefore `FlickerMaxIterations() * 1 = 60` damage against 20 life. The
+game nonetheless wins on **t8** — two turns late, which is precisely the user's complaint.
+
+The projection is not the problem: the trace records its exact inputs and they pass. The failure is
+downstream — either the line is never enumerated/afforded, or `ApplyBlinkLoop` /
+`SpendSurplusOnDamageSinks` does not actually re-tap the Gorge across iterations (note `untaps=5`
+against 5 lands at t6, so the Gorge *is* inside the untap set). `MTG_EDF_FINISH_STATS` does not cover
+this route — the game has no drain/exile finisher at all (`drain=0/0` throughout), so the kill is the
+Gorge's, and the finish counters are silent about it. NEXT STEP: instrument the damage-sink spend.
+
+### Cost note carried by the same repro
+
+That game is itself a tail case (`SLOW-GAME 42149ms`), which is consistent with the go-off-turn
+blowup above: the turns where the loop is live are both the expensive ones and the ones leaving
+kills on the table, so the go-off short-circuit and this bug are likely to be worth fixing together.

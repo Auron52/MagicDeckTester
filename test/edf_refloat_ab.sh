@@ -37,7 +37,12 @@ python3 - "$DECK" "$PROF" "$OUT/manifest.json" "$GAMES" "$CHUNK" "$DEPTH" "$BUDG
 import json, sys
 deck, prof, out, games, chunk, depth, budget = sys.argv[1:8]
 games, chunk, depth, budget = int(games), int(chunk), int(depth), int(budget)
-SEEDS = [4101, 4102, 4103, 4104, 4105, 4106, 4107, 4108]
+# SEEDS MUST BE SPACED BY AT LEAST `games` -- see the long note in test/edf_aura_ab.sh. A game's
+# SHUFFLE is `job.seed + local_index`, so consecutive bases 4101..4108 x 100 games covered
+# [4101,4200] .. [4108,4207]: 107 distinct games replayed 7.5x, NOT 800 independent ones. That
+# inflates any t-statistic by ~sqrt(7.5) and makes a per-seed win/loss tally meaningless (the eight
+# "seeds" are re-reads of one game set). Disjoint from the sibling EDF A/Bs' ranges as well.
+SEEDS = [5800, 5900, 6000, 6100, 6200, 6300, 6400, 6500]
 ARMS = {
     # `wildc` is the SHIPPED default and therefore the control every new arm is judged against.
     # `base`/`both` are kept so the 2026-09-04 verdicts stay reproducible from one manifest.
