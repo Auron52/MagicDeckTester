@@ -1,6 +1,7 @@
 #include "ValueArm.h"
 #include "../core/EnvFlags.h"
 #include "AIEngine.h"
+#include "DecisionProviders.h"
 #include "Dominance.h"   // ModelFeatureMask (stamped onto GameState::m_model_feat_mask)
 #include "ManaPayment.h"
 #include "LandPlay.h"
@@ -1595,6 +1596,10 @@ bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial)
 bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const std::function<void(GameState&)>& resolve_stack)
 {
+    // MTG_EDF_TURN_TRACE (diagnostic, no-op unless set): dump the blink loop as it stands on the
+    // REAL board, before the search is entered. Taken here rather than inside the recognizer because
+    // every call site it has is already under a RevealLogPause -- see EdfTurnTrace.
+    if (is_pre_combat_main) { EdfTurnTrace(state, state.active_player_index); }
     // Resolve the stack after a cast when a resolver was supplied (real game path);
     // a no-op when batched (no resolver) or when the stack is empty (e.g. Vial).
     auto resolve_now = [&]()

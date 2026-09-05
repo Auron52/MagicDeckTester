@@ -1323,3 +1323,11 @@ inline const DecisionProvider& ResolveProvider(const GameState& s)
 // would deal damage (search the RELEASE); 2 = the greedy ATTACKS with a non-vigilance mana dork
 // whose mana the deferred main would spend (search the HOLD). See EngineFlags.h.
 int DorkAtkContestedKind(const GameState& s);
+
+// MTG_EDF_TURN_TRACE (diagnostic, default off): one line per REAL main phase describing the
+// EldraziDisplacerFlicker blink loop on the executor's own board -- pieces present, refund, cost,
+// net, and which sink (if any) the loop could cash into. Called from AIEngine::TakeTurn because
+// every call site inside the provider is already under a RevealLogPause, where the
+// real-vs-hypothetical discriminator is cleared. No-op unless the env flag is set, and it never
+// branches game logic.
+void EdfTurnTrace(const GameState& s, int controller);

@@ -13564,6 +13564,55 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
     return best;
 }
 
+// MTG_EDF_TURN_TRACE -- ONE line per REAL main phase: is the loop live on the board the EXECUTOR is
+// actually looking at, and if not, which term is short?
+//
+// Called from AIEngine::TakeTurn, NOT from inside the recognizer, and that is the whole point.
+// Every instrument in this file fires inside rollouts too -- millions of times, all of it
+// hypothetical -- so "why did this turn not go off" has only ever been answerable by reading a game
+// log and inferring. The obvious fix (gate the recognizer's own dump on g_real_resolution) does not
+// work: every call site the recognizer has is already inside an enumeration or scoring scope, and
+// RevealLogPause clears that flag for all of them. So the trace has to be taken from the executor,
+// on the real board, before the search is entered.
+void EdfTurnTraceImpl(const GameState& s, int controller)
+{
+    static const bool s_tt = EnvOn("MTG_EDF_TURN_TRACE");
+    if (!s_tt) { return; }
+    const FlickerLoop best = RecogniseFlickerLoop(s, controller);
+    {
+        {
+            int lands = 0, auras = 0;
+            bool untapper = false, outlet = false, drawland = false;
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != controller) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr) { continue; }
+                if (p.card.IsLand()) { ++lands; }
+                if (d->params.is_land_aura) { ++auras; }
+                if (d->params.etb_untap_lands > 0) { untapper = true; }
+                if (d->params.blink_cost.has_value()) { outlet = true; }
+                if (d->params.tap_draw_cost.has_value()
+                    || d->params.tap_investigate_cost.has_value()) { drawland = true; }
+            }
+            int wishes = 0;
+            for (const Card& c : s.players[controller].hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.tutor_to_hand && d->params.wish_from_sideboard) { ++wishes; }
+            }
+            std::fprintf(stderr,
+                         "[edf-turn] t%d lands=%d auras=%d untapper=%d outlet=%d drawland=%d "
+                         "wish=%d | ok=%d untaps=%d refund=%d cost=%d net=%d "
+                         "gorge=%d drain=%d/%d exile=%d setup=%d\n",
+                         s.turn_number, lands, auras, untapper ? 1 : 0, outlet ? 1 : 0,
+                         drawland ? 1 : 0, wishes, best.ok ? 1 : 0, best.untaps, best.refund,
+                         best.cost_mv, best.net, best.gorge_dmg, best.drain_amount,
+                         best.drain_cost_mv, best.exile_cost_mv, best.hand_setup_mv);
+        }
+    }
+}
+
 // PROSPECTIVE recognition: the loop ASSEMBLED THIS TURN, not just one already on the board.
 //
 // The board-only recognizer above answers "is the engine running?". This one answers the question
@@ -13919,6 +13968,12 @@ inline bool EdfProspectiveOn()
 { return heurarm::Flag(heurarm::EDF_PROSPECTIVE, s_edf_prospective_env); }
 
 }  // namespace
+
+// EXPORTED wrapper for the diagnostic above. The body lives inside the anonymous namespace (it needs
+// RecogniseFlickerLoop and the FlickerLoop type, both file-local); this is the only symbol
+// AIEngine::TakeTurn links against.
+void EdfTurnTrace(const GameState& s, int controller) { EdfTurnTraceImpl(s, controller); }
+
 
 // WHICH creature to blink. Unnarrowed this is "every creature on the board", and across two or
 // three outlets that product is a large part of the 1.38e9. Only two targets can matter:
