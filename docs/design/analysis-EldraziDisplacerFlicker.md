@@ -3031,3 +3031,39 @@ Gorge's, and the finish counters are silent about it. NEXT STEP: instrument the 
 That game is itself a tail case (`SLOW-GAME 42149ms`), which is consistent with the go-off-turn
 blowup above: the turns where the loop is live are both the expensive ones and the ones leaving
 kills on the table, so the go-off short-circuit and this bug are likely to be worth fixing together.
+
+#### SINK-DECLINED is NOT a recognition failure — narrowed to scoring/execution
+
+Chased on the repro with `MTG_EDF_GOFF_DEBUG_N` raised past the rollout flood (926 recognizer calls
+land on t6 alone). At t6 the recognizer is unanimous and correct:
+
+```
+926/926   ok=1 outlet=21 payload=42          (Emiel -> Peregrine Drake, the right pair)
+n=46 / 45 / 44 ...                            go-off counts ARE offered (n > kmax=3)
+242/926   gorge=1/3                           the Gorge is seen as a sink
+684/926   gorge=0/0                           ...and is NOT, in most ROLLOUT branches
+```
+
+So every upstream link holds: `FlickerGoOffCount`'s Gorge branch fires
+(`refund 8 > cost 1 + gorge 3` -> `n = clamp(life/1, 1, 60)`), `BlinkActivationCounts` appends the
+go-off count because `n > kmax`, and both `outlet_id`/`payload_id` agree with the enumerated
+(source, target) pair, so the count is not filtered out. `ExtraLethalDamage`'s Gorge gate passes on
+the same board. **The option to blink 46 times is on the menu at t6 and the game still wins on t8.**
+
+That eliminates the recognizer, the count hook and the projection, and leaves two candidates:
+
+1. **Scoring** — the go-off plan is enumerated but ranked below something else (note the go-off turn
+   is also the enumeration-blowup turn, and `budget_ms` bounds the search but not one node's
+   enumeration, so a plan can be enumerated and never reached).
+2. **Execution** — `ApplyBlinkLoop` runs with `iterations = max(1, a.chosen_x)` and re-prices every
+   activation, stopping at the first unpayable one; if it stops early the realised damage is a
+   fraction of the projected 46.
+
+The 684/926 `gorge=0/0` is a second, quieter observation: in three quarters of the rollout branches
+at t6 the Gorge is not visible as a sink at all (tapped, or spent). That is expected rather than
+wrong, but it means the go-off's VALUE is being averaged over many branches where the kill does not
+exist — which is exactly the shape that would let scoring bury it.
+
+NEXT STEP: instrument the realised iteration count and damage (`ApplyBlinkLoop`'s `done`, and
+`SpendSurplusOnDamageSinks`' return) against the projected `n`, on this repro. That single number
+separates candidate 1 from candidate 2.
