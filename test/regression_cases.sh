@@ -196,7 +196,9 @@ SMOKE_CASES=(
   # with 2HG-RELEVANT cards: hinata (Crackle both heads / Soulfire second flip), antilife
   # (Cutter/Silence "each other player" + partner gift, Aria/Grove x2), minotaur (Fanatic
   # devotion x2), goblins (Chainwhirler ping x2), knights (Adeline token per head), fivecolour
-  # (Deathrite drain x2). Every OTHER deck gets a small SEARCHED canary -- d3 at 50 games (user,
+  # (Deathrite drain x2), fluctuator (Drannith Stinger's "whenever you cycle another card,
+  # deals 1 damage to EACH OPPONENT" -- 2 per cycle under two heads, so the kill needs ~15 cycles
+  # against 30 team life instead of 20 against 20). Every OTHER deck gets a small SEARCHED canary -- d3 at 50 games (user,
   # 2026-09-04: d0 "isn't all that useful"; fewer games at search depth instead) -- so a
   # heads-plumbing break in the search/rollout path moves a committed digest too.
   "hinata2hg     3 1001   75 10"
@@ -205,6 +207,7 @@ SMOKE_CASES=(
   "goblins2hg    3 1001   75 10"
   "knights2hg    3 1001   75 10"
   "fivecolour2hg 3 1001   40 10"
+  "fluctuator2hg 3 1001   75 10"
   "slivers2hg         3 1001 50 10"
   "burn2hg            3 1001 50 10"
   "th2hg              3 1001 50 10"
@@ -342,7 +345,7 @@ REGRESSION_CASES=(
   "melira 3 3003   75 10"
   "melira 5 2002   40 20"
   "melira 5 3003   40 20"
-  # 2HG gate, second seed (see the SMOKE block for the design): the six 2HG-relevant decks at
+  # 2HG gate, second seed (see the SMOKE block for the design): the seven 2HG-relevant decks at
   # d3, plus ONE d5 case (hinata2hg -- the value_play/deep-search path under two heads, covering
   # the Crackle declared-count search where the second face changes lethality). No canaries here
   # (smoke owns them); the deep default-settings 2HG coverage is the OVERNIGHT block below.
@@ -353,6 +356,7 @@ REGRESSION_CASES=(
   "goblins2hg    3 2002  100 10"
   "knights2hg    3 2002  100 10"
   "fivecolour2hg 3 2002   50 10"
+  "fluctuator2hg 3 2002  100 10"
   # fluctuator: gate budgets at both seeds (~14 core-min). See the SMOKE block for measured costs.
   "fluctuator 0 2002 1000 0"
   "fluctuator 3 2002  150 10"
@@ -674,6 +678,10 @@ OVERNIGHT_CASES=(
   "fivecolour2hg 5 5005 100 20"
   "fivecolour2hg 5 6006 100 20"
   "fivecolour2hg 5 7007 100 20"
+  "fluctuator2hg 5 4004  80 40"
+  "fluctuator2hg 5 5005  80 40"
+  "fluctuator2hg 5 6006  80 40"
+  "fluctuator2hg 5 7007  80 40"
   # fluctuator: breaching-shaped 4-seed sweep at 2x gate budgets. Probed at the ACTUAL overnight
   # budgets 2026-09-05: d3 b20 ~2.78 s/game, d5 b40 ~4.29 s/game, NO game over 30 s at either
   # => ~2.7 core-hours added, breaching's bracket. Counts obey the seed-spacing rule

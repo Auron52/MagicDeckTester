@@ -13621,7 +13621,13 @@ inline void FireCycleWatchers(GameState& state, int controller)
         if (w.controller_index != controller) { continue; }
         const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
         if (!wd || wd->params.cycle_trigger_damage_each_opponent <= 0) { continue; }
-        const int dmg    = wd->params.cycle_trigger_damage_each_opponent;
+        // "deals N damage to EACH OPPONENT" -> once per opposing head (2HG). players[opp] is the
+        // opposing TEAM's one shared pool, so both heads' damage lands there; heads == 1 reduces
+        // to the pre-2HG single hit and is byte-identical. USER 2026-09-05: "stinger deals 2 per
+        // card in 2HG, so that case is actually a bit easier" -- with two heads a Drannith Stinger
+        // kill needs ~15 cycles against 30 team life instead of 20 against 20.
+        const int dmg    = wd->params.cycle_trigger_damage_each_opponent
+                             * gamesetup::OpponentHeads();
         const int before = state.players[opp].life;
         state.players[opp].life -= dmg;
         state.opponent_lost_life_this_turn = true;
