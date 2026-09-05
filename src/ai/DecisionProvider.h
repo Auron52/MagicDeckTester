@@ -949,6 +949,19 @@ public:
                                          bool is_mana_outlet) const
     { (void)s; (void)src; (void)is_mana_outlet; return false; }
 
+    // FodderSacUseful -- should the CANONICAL single-victim fodder sac of this outlet be offered
+    // at all? Only consulted for the generic K=1 action (the persist-loop variants, lethal-K
+    // damage bursts and growth bursts are emitted separately and are NOT gated here), so a
+    // provider can drop pure fodder sacs without touching any loop or kill line. DEFAULT true ->
+    // byte-identical everywhere. MeliraPodProvider implements the USER's 2026-09-05 rule:
+    // "there is essentially nothing you want to sacrifice to carrion feeder until the combo is
+    // active ... the only exception would be if the sacrifice gives us lethal" -- a
+    // self-payload-only outlet (Feeder's counter, Bloodthrone's EOT pump) trades a real body
+    // (future Pod fuel, a convoke tap) for a stat point that matters only mid-kill.
+    virtual bool FodderSacUseful(const GameState& s, const Permanent& src,
+                                 const CardDefinition& sd) const
+    { (void)s; (void)src; (void)sd; return true; }
+
     // PayEchoToKeep -- when an echo obligation comes due and the cost is AFFORDABLE, PAY (keep the body,
     // return true) or DECLINE (sacrifice it, return false)? The engine owns the affordability gate and the
     // sacrifice/OnCreatureDies mechanism; only this pay-vs-decline JUDGEMENT is provider-owned so the

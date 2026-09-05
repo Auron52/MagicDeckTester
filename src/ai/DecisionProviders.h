@@ -1157,6 +1157,10 @@ public:
     // MTG_POD_PUT_NARROW=0 -> unnarrowed A/B arm.
     PutPolicy PutTargetPolicy(const GameState& s, int controller) const override;
     bool      PutTargetOk(const PutPolicy& pol, const CardDefinition& d) const override;
+    // USER 2026-09-05: no fodder sacs to a self-payload outlet until the combo is active,
+    // except toward lethal. See the base hook's doc.
+    bool FodderSacUseful(const GameState& s, const Permanent& src,
+                         const CardDefinition& sd) const override;
 };
 
 class MinotaurProvider : public GenericProvider

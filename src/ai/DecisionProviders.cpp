@@ -14407,6 +14407,49 @@ bool MeliraPodProvider::PutTargetOk(const PutPolicy& pol, const CardDefinition& 
     return false;
 }
 
+bool MeliraPodProvider::FodderSacUseful(const GameState& s, const Permanent& src,
+                                        const CardDefinition& sd) const
+{
+    // USER 2026-09-05: "To be perfectly honest there is essentially nothing you want to
+    // sacrifice to carrion feeder until the combo is active. I suppose the only exception
+    // would be if the sacrifice gives us lethal." Scope: SELF-payload-only outlets (Feeder's
+    // +1/+1-to-self, Bloodthrone's EOT self-pump) -- an outlet with an external payload
+    // (damage, tokens) keeps its generic sac. The persist-loop variants and the lethal-K
+    // bursts are emitted separately and never pass through this hook, so the loop and the
+    // kill lines are untouched; this only stops trading a real body (Pod fuel, a convoke
+    // tap) for a stat point at a flat-leaf tie.
+    static const bool s_gate = EnvOn("MTG_POD_FODDER_GATE", true);   // =0: ungated A/B arm
+    if (!s_gate) { return true; }
+    const bool self_only = (sd.params.sac_outlet_add_counter_to_self > 0
+                            || sd.params.sac_outlet_self_pump_power > 0
+                            || sd.params.sac_outlet_self_pump_toughness > 0)
+                        && sd.params.sac_outlet_damage == 0
+                        && sd.params.sac_outlet_creates_tokens == 0;
+    if (!self_only) { return true; }
+    const int me = src.controller_index;
+    // Combo active: sacs are engine moves from here on (the explicit persist variants do the
+    // real looping; the generic action is harmless and occasionally the cheaper tie).
+    if (MinusCounterReplacement(s, me, 1) == 0 || GyEnterCleanerActive(s, me, -1))
+    { return true; }
+    // Lethal exception: the payload could close the kill THIS turn. Conservative static check
+    // (over-emits; the search prices the real attack): ready attack power, PLUS one payload per
+    // SPARE body -- a creature that cannot attack right now (tapped dork, sick drop) sacs for
+    // pure profit, and the gi14 lethal line was exactly two tapped Hierarchs into Feeder for the
+    // last two points. Sacking a ready attacker is net (payload - its power), never credited.
+    int atk = 0, spare = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+        if (p.card.m_number == src.card.m_number) { continue; }   // the outlet is the attacker
+        if (CanAttackFull(p, s.battlefield, me)) { atk += p.EffectivePower(); }
+        else                                     { ++spare; }
+    }
+    if (CanAttackFull(src, s.battlefield, me)) { atk += src.EffectivePower(); }
+    const int payload = std::max(sd.params.sac_outlet_add_counter_to_self,
+                                 sd.params.sac_outlet_self_pump_power);
+    return atk + payload * std::max(1, spare) >= s.players[1 - me].life;
+}
+
 std::vector<std::string> MeliraPodProvider::ReviveCandidates(
     const GameState& s, int controller, int max_power, int max_returns) const
 {

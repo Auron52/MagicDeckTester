@@ -410,6 +410,25 @@ two lines that BOTH win on turn N, nothing prefers the one that also goes
 infinite (the tiebreak only grades no-win leaves); g15's old Pod#2-over-
 activation choice was this class before the ordering fix masked it.
 
+### USER FODDER RULE (2026-09-05): no sacs to Feeder until the combo is active
+User: "there is essentially nothing you want to sacrifice to carrion feeder
+until the combo is active. I suppose the only exception would be if the
+sacrifice gives us lethal." Shipped as `DecisionProvider::FodderSacUseful`
+(default true = byte-identical everywhere; the DeferSacOutletPreCombat hook
+precedent, incl. the human-play carve-out) gating ONLY the canonical K=1
+fodder sac of SELF-payload-only outlets (Feeder counter, Bloodthrone pump);
+the persist-loop variants and lethal-K bursts are emitted separately and
+never gated, so no loop or kill line is lost. MeliraPod rule: allow when the
+loop closes (Melira/Vizier/Celes active) or a static lethal check passes
+(ready attack power + payload × spare non-attacker bodies ≥ opp life — the
+gi14 lethal was two TAPPED Hierarchs into Feeder for the last two points).
+Lever MTG_POD_FODDER_GATE (default ON; =0 ungated arm).
+MEASURED: 36-game sets moved ±1 game either way (gi14's exact-lethal race
+became infinite-T5/kill-T6 — the gated line is the policy-correct one); the
+deciding sample, s5000×100 fresh seeds: ON 5.13 vs OFF 5.12 — neutral within
+noise, with more infinite-life play ON (33 vs 31 loops). Adopted per the
+user's explicit rule.
+
 ### Chord of Calling — Tier 3 (draft received)
 `{X}{G}{G}{G}` Instant, Convoke. CRITICAL loader fact: `KeywordFromString`
 THROWS on unknown keywords — must add `Keyword::Convoke` (inert-tag idiom) or

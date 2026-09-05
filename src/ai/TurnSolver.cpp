@@ -12149,6 +12149,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             a.sac_source_id  = src.card.m_number;      // the outlet permanent
             a.sac_victim_id  = victim_id;              // the heuristically-chosen sacrificed Goblin
             a.is_noncreature = true;
+            bool emit_canonical = true;
             if (is_mana_outlet)
             {
                 // Skirk Prospector: "Sacrifice a Goblin: Add {R}." A free MANA ability -- emit it as a
@@ -12168,8 +12169,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.direct_damage  = sd->params.sac_outlet_damage;
                 a.eval           = (sd->params.sac_outlet_damage
                                     + sd->params.sac_outlet_creates_tokens) * DMG;
+                // Provider gate on the GENERIC fodder sac only (FodderSacUseful -- the Melira
+                // rule: no fodder to a self-payload outlet until the combo is active or the
+                // payload reaches lethal). The persist variants and bursts below are NOT gated,
+                // so no loop or kill line is lost. Default true -> byte-identical elsewhere.
+                // Human play keeps the option (viewer issue #2 / the DeferSacOutletPreCombat
+                // carve-out: a judgment prune must not hide a legal menu entry from a human).
+                emit_canonical = HumanPlayActive()
+                              || ResolveProvider(state).FodderSacUseful(state, src, *sd);
             }
-            actions.push_back(std::move(a));
+            if (emit_canonical) { actions.push_back(std::move(a)); }
 
             // Multi-sac MANA BURST (Skirk Prospector): "Sacrifice a Goblin: Add {R}" is REPEATABLE, so
             // the single-sac action alone under-models it (1 mana/turn) -- the ramp-into-Muxus/Krenko line
