@@ -722,6 +722,14 @@ def check_reference(path, collect=None):
     # deletion skip tell "the dialog moved into the plan and its answer was applied" apart from
     # "the dialog vanished and the answer was lost" -- only the first is a lossless repair.
     honoured = set()
+    # Free casts an inserted (ref-predating) frame already made from RECORDED INTENT, keyed by
+    # turn (FiveColour s1_gi0, 2026-09-05): Maelstrom Archangel's charge moved from a post-main
+    # #FREE plan variant to its own combat-time frame, so free_cast_intent reads the DONOR
+    # post-main pick and casts it early -- but that donor pick still sits in `kept`. When the
+    # walk reaches it the card is on the battlefield, its plan is legitimately gone, and the
+    # hand-differs classifier mis-blamed a reshuffle. This map lets the donor frame be
+    # recognised as satisfied-early and passed instead.
+    freecast_done = {}
     hand_checked = False
 
     def stale_pass_frame(entry, dec):
@@ -865,6 +873,11 @@ def check_reference(path, collect=None):
                 if dec.get("source") == "Maelstrom Archangel":
                     intent = free_cast_intent(dec, kept, ri)
                     pick, src = intent if intent else engine_default(dec)
+                    if intent and isinstance(pick, int) and pick >= 0:
+                        nm = next((c.get("name") for c in (dec.get("candidates") or [])
+                                   if c.get("index") == pick), None)
+                        if nm:
+                            freecast_done.setdefault(dec.get("turn"), []).append(nm)
                 else:
                     pick, src = engine_default(dec)
             elif dec.get("type") == "target":
@@ -950,6 +963,21 @@ def check_reference(path, collect=None):
                     if q is not None:
                         shifted.append(f"{frame_ident(dec)} replicate-count not reproducible")
                 if q is None:
+                    # SATISFIED EARLY: this recorded plan's casts were already made by an
+                    # inserted free_cast frame answered from THIS plan's own recorded intent
+                    # (see free_cast_intent / freecast_done). The card left the hand at combat
+                    # time, so the plan is legitimately gone here and passing loses nothing.
+                    # Only when the plan is NOTHING BUT those casts (no land, no extras) --
+                    # anything still unplayed falls through and stays loud.
+                    done = freecast_done.get(dec.get("turn"), [])
+                    plan_casts = sorted(recorded.get("casts") or [])
+                    if (plan_casts and recorded.get("land") in (None, "", "none")
+                            and plan_casts == sorted(done)):
+                        vanished.append(f"{frame_ident(rd)}(casts made early by the free_cast "
+                                        f"intent: {', '.join(plan_casts)})")
+                        resolved.append(-1)
+                        ri += 1
+                        continue
                     # Root-cause the miss before reporting it. If the hand at this frame is not
                     # the hand the reference recorded, a mid-game reshuffle (fetch/cantrip) moved
                     # the draws and the recorded line targets cards that are no longer there --
