@@ -358,6 +358,23 @@ def plan_key_sans_pay_sac(p):
     return (p.get("land"), tuple(sorted(casts)))
 
 
+def action_sig(a):
+    """Stable identity of ONE plan action: every variant-deciding field the emission records
+    (X, tutor target, phyrexian payment, pod victim, activation verb, ...). Missing keys read
+    as defaults so an older recording with fewer fields still matches a newer emission.
+    Serialised to a string so signatures sort/compare safely across None/str/int."""
+    return "|".join(str(a.get(k, d)) for k, d in (
+        ("card", ""), ("x", 0), ("tutor_target", ""), ("phyrexian_life", 0),
+        ("pod_victim", 0), ("activate", False), ("verb", ""), ("sacout", False),
+        ("enchant_target", ""), ("bestow", False), ("evoke", False),
+        ("landsedge", 0), ("dig", False)))
+
+
+def actions_key(p):
+    """Order-insensitive multiset of a plan's action signatures."""
+    return tuple(sorted(action_sig(a) for a in (p.get("actions") or [])))
+
+
 def find_plan(recorded, plans, recorded_index=None, prefer=None):
     """Index of `recorded` in the current `plans`, or None. Exact summary first (keeps cast-order
     variants distinct), then land+casts (tolerates a summary-format change or a dropped order
@@ -400,6 +417,18 @@ def find_plan(recorded, plans, recorded_index=None, prefer=None):
             hits = [i for i, p in enumerate(plans) if plan_key(p) == want]
     if not hits:
         return None
+    # ACTION-PAYLOAD NARROWING (USER 2026-09-05, Melira s1_gi0): identical-summary hits can be
+    # DIFFERENT plans -- the summary hides X, the tutor target and the pod victim, so eleven
+    # "Chord of Calling + pod (pay 2 life)" twins matched and hits[0] realised a Chord that
+    # fetched the wrong creature, stranding the pod half and killing the replay. The reference
+    # records the chosen plan's full `actions` payload; when several hits share the summary,
+    # narrow to the ones whose payload matches. Falls through unchanged when nothing narrows
+    # (an older emission with fewer fields, or a genuinely payload-identical set).
+    if len(hits) > 1:
+        want_acts = actions_key(recorded)
+        narrowed = [i for i in hits if actions_key(plans[i]) == want_acts]
+        if narrowed:
+            hits = narrowed
     if prefer is not None:
         want = [i for i in hits if prefer(plans[i])]
         if want:

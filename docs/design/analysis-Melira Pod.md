@@ -1246,3 +1246,22 @@ byte-identical (fan gated on phyrexian_count / pod casts), unit 64/64, scenarios
 - Battery at the final state: unit 69/69, scenarios 72/72, viewer_protocol_check --strict
   0 play-drift / 0 contract-fail (284 refs incl. the new Melira one), smoke 68/68
   byte-identical (all three fixes are human-surface-only by construction).
+
+### References resurrected (USER directive: "there should be no way for them to be dead")
+The s1_gi0/s3_gi2 shuffle-dead verdicts were WRONG, and the user's framing was exactly right:
+the shuffle is seed-deterministic and the lines were still enumerable -- the checker's repair
+was the broken part. Root cause: `find_plan` matches a recorded pick by SUMMARY, and the
+summary hides X, the Chord tutor target and the pod victim. s1's recorded T4 plan ("Chord +
+pod pay-life") had ELEVEN identical-summary twins in the live (twin-widened) enumeration;
+hits[0] realised a Chord fetching the wrong creature, the pod half stranded, the board
+diverged, and the checker blamed the shuffle. FIX: action-payload narrowing in find_plan --
+identical-summary hits narrow by the recorded plan's full `actions` signature (card, x,
+tutor_target, phyrexian_life, pod_victim, verb, ...), which the reference already records.
+RESULT: all 5 Melira refs green (s1 repaired -> T4 win as recorded; s3 repaired -> T5), and
+the fix resurrected two OTHER decks' refs too (suite shuffle-dead 3 -> 1, repaired 263 ->
+265, still 0 play-drift / 0 contract-fail on 284). The one remaining shuffle-dead
+(FiveColour/claude_s1_gi0, hand genuinely differs -- Progenitus never drawn) PREDATES today
+and is a real draw divergence, not this class; candidate for its own investigation.
+NOTE for future emission changes: a plan list that grows (the phyrexian twin widening pushed
+the recorded pick out of the 200-plan display window) is survivable ONLY because the checker
+runs uncapped (MTG_PLAY_PLANS_CAP=0) and now matches full payloads -- keep both.
