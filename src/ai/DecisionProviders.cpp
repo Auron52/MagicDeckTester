@@ -2001,6 +2001,30 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // "wasted a counter" case helps) -- but they DO get a +1 nudge past their plain-land tier at the
     // bottom of this function (DepletionTapOrderEnabled), so a plain land of the same colour count
     // pays first and the counter is only spent when the cost needs it.
+    // AN ANY-COLOUR FILTER IS NOT A 25 (USER, viewer seed 10 T3, 2026-09-05: "I want to leave
+    // black untapped and cycle until I get unearth and stinger in the graveyard, but the tap order
+    // is really bad and taps both black lands").
+    //
+    // 25 sits BEHIND a dual (20), which is right for Cascade Bluffs and Ferrous Lake -- holding
+    // those back preserves a conversion that is still live afterwards, because their feed is a
+    // colour the rest of the board makes. It is wrong here. An any_color_filter's conversion needs
+    // ANOTHER UNTAPPED SOURCE to feed it, so a payment that spares it by spending everything else
+    // does not preserve anything: Capital City alone makes {C} and nothing more. On the reported
+    // board -- Canyon Slough (B/R), Fetid Pools (U/B), Capital City -- Fluctuator's {2} spent both
+    // duals and kept the one land that cannot produce a colour, ending the turn with no black for
+    // Unearth. Keeping either dual instead keeps two colours.
+    //
+    // Its UNCONDITIONAL output is the free "{T}: Add {C}" mode, which is exactly the
+    // least-flexible-mana tier the scarcity order already has (rank 5, the {C}-only lands), and
+    // that is where it ranked before it became a conversion source at all. +1 so a PLAIN {C} land
+    // (Blasted Landscape) still spends BEFORE it -- the two are no longer interchangeable, and of
+    // two colourless taps you would rather keep the one that can convert. Same shape as the drip
+    // and depletion nudges at the bottom of this function.
+    //
+    // The conversion is NOT lost by ranking it early: the scarcity greedy only ever offers this
+    // land its {C} mode (kind 3, generic/{C} pips), and a COLOURED pip that needs the conversion
+    // falls through to the backtracker, which branches over feed and output colour explicitly.
+    if (def.params.any_color_filter) { return 6; }
     if (IsManaConversionSource(def.params)) { return 25; }
     const std::vector<Color>& prod = EffectiveProduces(s, active, def);
     const int amt = ManaProducedPerTap(def);

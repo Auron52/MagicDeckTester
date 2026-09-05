@@ -90,65 +90,69 @@ def capped(args):
         return args
     return ["/bin/sh", "-c", f'ulimit -v {AS_CAP_MB * 1024}; exec "$@"', "sh"] + args
 
-# references/<dir> -> (deckfile, profile). Mirrors test/regression_cases.sh (per-deck folder
-# layout, docs/design/per-deck-folder-layout.md).
-DECKS = {
-    "Anti-Lifegain": ("decks/Anti-Lifegain/Anti-Lifegain.cod", "decks/Anti-Lifegain/Anti-Lifegain.profile.json"),
-    "Hinata2":       ("decks/Hinata2/Hinata2.cod",             "decks/Hinata2/Hinata2.profile.json"),
-    "Knights":       ("decks/Knights/Knights.cod",             "decks/Knights/Knights.profile.json"),
-    "slivers_vial":  ("decks/slivers_vial/slivers_vial.txt",   "decks/slivers_vial/slivers_vial.profile.json"),
-    "burn":          ("decks/burn/burn.txt",                   "decks/burn/burn.profile.json"),
-    "treasure_hunt": ("decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.profile.json"),
-    "Auras":         ("decks/Auras/Auras.cod",                 "decks/Auras/Auras.profile.json"),
-    "Dragonstorm":   ("decks/Dragonstorm/Dragonstorm.cod",     "decks/Dragonstorm/Dragonstorm.profile.json"),
-    "Goblins":       ("decks/Goblins/Goblins.cod",             "decks/Goblins/Goblins.profile.json"),
-    # The reference dir is Creature_Giving; the deck folder has a SPACE. That mismatch is why this
-    # deck was never added -- and why 40 references (30 Goblins + 10 Creature Giving) sat unchecked.
-    "Creature_Giving": ("decks/Creature Giving/Creature Giving.cod",
-                        "decks/Creature Giving/Creature Giving.profile.json"),
-    "FiveColour":    ("decks/FiveColour/FiveColour.cod",       "decks/FiveColour/FiveColour.profile.json"),
-    # Reference dir uses an underscore; the deck folder has a SPACE (same shape as Creature_Giving).
+# references/<dir> -> (deckfile, profile), RESOLVED FROM THE FOLDER LAYOUT rather than
+# hand-maintained. USER 2026-09-05: "Can we make that automatic? It's annoying to keep having it be
+# a manual step."
+#
+# The manual map was the same one-line fix five times running -- StompySurprise (2026-08-23),
+# Minotaur (2026-08-28), Dragons (2026-08-29), BreachingDragonstorm (2026-09-03), Fluctuator
+# (2026-09-05). Every one had the identical shape: a deck was onboarded, its cases were added to
+# test/regression_cases.sh, and THIS list was forgotten -- so the first games anyone hand-played
+# arrived as CONTRACT-FAIL, which means NOT REPLAYED. The gate going red was the design working;
+# what was broken is that the fact lived in two places and only one of them got updated.
+#
+# So derive it. docs/design/per-deck-folder-layout.md already fixes the layout as
+# decks/<name>/<name>.{cod,txt} + decks/<name>/<name>.profile.json, which is exactly the pair this
+# map needs, and the reference dir is the deck name (with '_' standing in for a space, since a
+# reference directory cannot easily carry one). Verified against the 18 hand-written rows this
+# replaces: all 18 resolve to byte-identical paths, with ONE genuine exception below.
+#
+# A dir that still cannot be resolved is a LOUD contract-fail at the game (see below), not a silent
+# skip -- the automation removes the chore, not the alarm.
+_DECK_OVERRIDES = {
+    # The only row derivation cannot reach: this deck's list lives in a per-VARIANT subfolder, so
+    # there is no decks/<name>/<name>.cod to find. A genuine exception, not a forgotten chore.
     "Mirrorwing_Dragon": ("decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.cod",
                           "decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.profile.json"),
-    # Added 2026-08-23: f0a6d9e7 committed 4 hand-played StompySurprise references, and an unmapped
-    # reference dir is a CONTRACT-FAIL here (not a skip) -- so the whole gate went red the moment
-    # they landed. Any new references/<dir> needs a row the same day.
-    "StompySurprise": ("decks/StompySurprise/StompySurprise.cod",
-                       "decks/StompySurprise/StompySurprise.profile.json"),
-    # Added 2026-08-27: first hand-played KittyEquipment reference (s31) landed; same-day row per
-    # the StompySurprise lesson above.
-    "KittyEquipment": ("decks/KittyEquipment/KittyEquipment.cod",
-                       "decks/KittyEquipment/KittyEquipment.profile.json"),
-
-    # Added 2026-09-04: the user's hand-played TURN-3 KILL. It is the fastest line anyone has shown
-    # on this deck (the search's best in 800 games was ONE turn-4), so it is the benchmark the go-off
-    # work is aimed at -- and it took 47 committed segments in a single main phase to play, which is
-    # exactly the kind of work that must never be lost. Same-day row per the StompySurprise lesson:
-    # an unmapped references/<dir> is a CONTRACT-FAIL here, not a skip.
-    "EldraziDisplacerFlicker": ("decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
-                                "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json"),
-
-    # Added 2026-08-28: references/Minotaur/claude_s2_gi1.json was sitting UNTRACKED in the working
-    # tree -- saved from the viewer, never committed, so the row was never added and the gate went
-    # red exactly as designed. Committed with this row (references/ is commit-only; an untracked
-    # reference is user work waiting to be lost, not a stray file).
-    "Minotaur":      ("decks/Minotaur/Minotaur.cod",           "decks/Minotaur/Minotaur.profile.json"),
-    # Added 2026-08-29: the user hand-played the first Dragons references, creating references/Dragons/
-    # from nothing. Ten of them landed at once and every one was a CONTRACT-FAIL -- "unknown deck dir"
-    # means NOT REPLAYED, so the gate was red while the games it was meant to check went unexamined.
-    # Third time this exact row has been the fix (StompySurprise, Minotaur, now Dragons): a new
-    # reference directory is not self-registering, and the day it appears is the day it needs a row.
-    "Dragons":       ("decks/Dragons/Dragons.cod",             "decks/Dragons/Dragons.profile.json"),
-    # Added 2026-09-03: the user hand-played the first BreachingDragonstorm references (fourth
-    # time this row has been the same-day fix -- see the Dragons note above).
-    "BreachingDragonstorm": ("decks/BreachingDragonstorm/BreachingDragonstorm.cod",
-                             "decks/BreachingDragonstorm/BreachingDragonstorm.profile.json"),
-    # Added 2026-09-05: the user's first Melira Pod reference (s1 gi0, a T4 win -- one turn
-    # faster than the search's own seed-1 game). Reference dir uses an underscore; the deck
-    # folder has a SPACE (the Creature_Giving/Mirrorwing shape). Same-day row, fifth time.
-    "Melira_Pod":    ("decks/Melira Pod/Melira Pod.cod",
-                      "decks/Melira Pod/Melira Pod.profile.json"),
 }
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _resolve_deck_dir(ref_dir):
+    """decks/<name>/<name>.{cod,txt} + .profile.json for a references/<dir>, or None."""
+    for cand in (ref_dir, ref_dir.replace("_", " ")):
+        base = os.path.join("decks", cand)
+        if not os.path.isdir(os.path.join(_REPO_ROOT, base)):
+            continue
+        for ext in (".cod", ".txt"):
+            deck = f"{base}/{cand}{ext}"
+            prof = f"{base}/{cand}.profile.json"
+            if (os.path.exists(os.path.join(_REPO_ROOT, deck))
+                    and os.path.exists(os.path.join(_REPO_ROOT, prof))):
+                return (deck, prof)
+    return None
+
+
+class _DeckMap(dict):
+    """Lazy references/<dir> -> (deck, profile). Overrides win; everything else is derived once."""
+
+    def __missing__(self, ref_dir):
+        hit = _resolve_deck_dir(ref_dir)
+        if hit is None:
+            raise KeyError(ref_dir)
+        self[ref_dir] = hit
+        return hit
+
+    def __contains__(self, ref_dir):
+        try:
+            self[ref_dir]
+        except KeyError:
+            return False
+        return True
+
+
+DECKS = _DeckMap(_DECK_OVERRIDES)
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)
 RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>\s*(\{.*?\})\s*<<<END_RESULT>>>", re.S)
@@ -689,7 +693,10 @@ def check_reference(path, collect=None):
         # counted as verified while never being replayed at all -- 30 Goblins + 10 Creature Giving
         # references sat in that blind spot, including the deck a 13-issue viewer batch was built
         # against. A reference we cannot resolve a deck for is UNVERIFIED, and must say so.
-        return False, "play", (f"unknown deck dir {deck_dir!r} -- NOT replayed; add it to DECKS "
+        return False, "play", (f"unknown deck dir {deck_dir!r} -- NOT replayed; expected "
+                               f"decks/{deck_dir}/{deck_dir}.cod|.txt + .profile.json "
+                               "(the per-deck folder layout this map is DERIVED from), "
+                               "else add a row to _DECK_OVERRIDES "
                                f"in this file (note references/<dir> need not match decks/<dir>)")
     deck, prof = DECKS[deck_dir]
     seed, gi = ref["seed"], ref["game_index"]

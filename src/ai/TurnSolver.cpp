@@ -22736,7 +22736,7 @@ static std::string SimulateLandPlay(GameState& state)
         const std::string name = ap.hand[idx].m_name;
         const CardDefinition* pdef =
             LandFaceDefOf(CardDatabase::Instance().LookupCached(ap.hand[idx]));
-        const int pass = (pdef && pdef->params.produces.size() > 1) ? 0 : 1;
+        const int pass = (pdef && pdef->params.produces.size() > 1) ? 0 : 1;   // see LandPlay.cpp
         PlayLandByName(state, name);
         landdrop::Record(name, pass, alternatives);
         return name;
@@ -22756,7 +22756,7 @@ static std::string SimulateLandPlay(GameState& state)
             // real land first (matches the searched land drop, which rejects the self-bounce).
             if (def->params.etb_bounce_land && !has_other_land) { continue; }
 
-            bool is_multi = def->params.produces.size() > 1;
+            bool is_multi = def->params.produces.size() > 1;   // see LandPlay.cpp's measurement
             if (pass == 0 && !is_multi) { continue; }
 
             std::string name = c.m_name;
@@ -27737,7 +27737,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         if (p.controller_index != state.active_player_index) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d || !d->card.IsLand()) { continue; }
-        for (Color col : EffectiveProduces(state, state.active_player_index, *d))
+        // "Do we already have this colour" means WITHOUT paying another source for it, so an
+        // any-colour filter covers {C} only -- otherwise one Capital City marks all five colours
+        // covered and every uncovered-colour tiebreak below reads a manabase we do not have.
+        for (Color col : d->params.any_color_filter
+                             ? UnconditionalProduces(*d)
+                             : EffectiveProduces(state, state.active_player_index, *d))
         {
             have[static_cast<int>(col)] = true;
         }

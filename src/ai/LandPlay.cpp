@@ -257,6 +257,14 @@ int GreedyLandChoiceIndex(const GameState& state)
             // be used here, it PAYS the shock life as a side effect.
             const bool is_tapped = LegacyStaticTapped() ? def->params.enters_tapped
                                                         : LandWouldEnterTapped(state, *def);
+            // NOT UnconditionalProduces here, and the measurement is why. Semantically an
+            // any-colour filter is not a fixing land on its own -- but this test feeds the
+            // greedy's multi-colour PASS, and from turn two on Capital City really is the best
+            // fixing land the deck has (any second land feeds it). Demoting it out of pass 0
+            // measured d0 +0.0220 on both tiers, 6 games slower / 1 faster, so `produces` is the
+            // better answer here even though it is the looser one. The honest predicate would be
+            // board-dependent (has it got a feeder RIGHT NOW), which a static def-only test
+            // cannot express -- left to the search, which reads the real board.
             const bool is_multi  = def->params.produces.size() > 1;
             if (want_untapped && is_tapped)   { continue; }
             if (!want_untapped && !is_tapped) { continue; }

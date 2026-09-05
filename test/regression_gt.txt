@@ -64,7 +64,7 @@ minotaur2hg_smoke_d3_s1001=5.3500/d6096734765b010a
 goblins2hg_smoke_d3_s1001=4.0400/98eb843d496e3922
 knights2hg_smoke_d3_s1001=5.0933/2c8289b1ed029bba
 fivecolour2hg_smoke_d3_s1001=5.6500/cc63e8eef97b47a9
-fluctuator2hg_smoke_d3_s1001=3.7333/c3b02417c53cfeb8
+fluctuator2hg_smoke_d3_s1001=3.7067/8a3a9afa8dec81f7
 slivers2hg_smoke_d3_s1001=4.8200/60f7078e6e53e52d
 burn2hg_smoke_d3_s1001=5.8400/dc4e7d5057c61975
 th2hg_smoke_d3_s1001=4.5200/e0b5a30a00ce0b4f
@@ -179,12 +179,12 @@ minotaur2hg_regression_d3_s2002=5.3933/a6b3c5b4ba60297a
 goblins2hg_regression_d3_s2002=4.1600/cace34cecfc985f8
 knights2hg_regression_d3_s2002=5.0100/40a525918b346540
 fivecolour2hg_regression_d3_s2002=5.3600/86798c73be25faa0
-fluctuator2hg_regression_d3_s2002=3.9600/b0aeab9e9030dc18
-fluctuator_regression_d0_s2002=5.4730/d28673d739411624
-fluctuator_regression_d3_s2002=3.9733/3e2c3e1ba0c265dd
-fluctuator_regression_d3_s3003=3.8533/8f830c8598ccf612
-fluctuator_regression_d5_s2002=4.0267/ea0f10a41d10d203
-fluctuator_regression_d5_s3003=3.8533/2e62f1f1bddae989
+fluctuator2hg_regression_d3_s2002=3.9400/401b1518df974774
+fluctuator_regression_d0_s2002=5.4740/2fb51ca6ea37b820
+fluctuator_regression_d3_s2002=3.9733/be7e8bd7c3583de6
+fluctuator_regression_d3_s3003=3.8467/f1b5371f209ed2c4
+fluctuator_regression_d5_s2002=4.0133/ac766b4c3a90dca4
+fluctuator_regression_d5_s3003=3.8533/c5ad9d1daf335a48
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/c408e174bb95edab

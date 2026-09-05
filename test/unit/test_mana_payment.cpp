@@ -637,3 +637,50 @@ TEST_CASE("feed-filter-first: the last feeder routes THROUGH the filter so a lat
         CHECK_FALSE(TapForCostDirect(ro, Cost(1, 0, /*u=*/1), false));
     }
 }
+
+// USER, viewer seed 10 T3 (2026-09-05): "I want to leave black untapped and cycle until I get
+// unearth and stinger in the graveyard, but the tap order is really bad and taps both black lands."
+//
+// Board: Canyon Slough (B/R), Fetid Pools (U/B), Capital City -- the exact Fluctuator T3 board --
+// paying Fluctuator's {2}. One land must survive, and it has to be one that makes BLACK, because
+// Unearth {B} is the rest of the turn. Capital City cannot be that land: its "{1},{T}: Add one
+// mana of any color" needs a FEEDER, so alone it makes {C} and nothing else.
+//
+// The regression this pins: Capital City became an any_color_filter (0cd008cf), and
+// ManaSourceRank sends every conversion source to 25 -- BEHIND a dual at 20. So the generic pips
+// spent both duals and kept the one land that cannot make a colour by itself. As a plain [C] land
+// it ranked 5 and spent first, which is the correct scarcity order and what this asserts.
+TEST_CASE("any-colour filter spends its free {C} FIRST, sparing a real colour source (viewer s10)")
+{
+    EnsureCards();
+    auto board = []
+    {
+        GameState s = MakeBoard({ "Canyon Slough", "Fetid Pools", "Capital City" });
+        return s;
+    };
+    auto black_still_available = [](const GameState& s)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().Lookup(p.card.m_name.str());
+            if (d == nullptr || d->params.any_color_filter) { continue; }   // needs a feeder: not a source
+            for (Color c : d->params.produces) { if (c == Color::Black) { return true; } }
+        }
+        return false;
+    };
+    {   // EXECUTOR twin
+        GameState s = board();
+        AIEngine  eng;
+        ManaPool  avail = AvailableManaPool(s);
+        CHECK(MtgTestSeam::TapForCost(eng, s, Cost(2), avail, false));
+        CHECK_MESSAGE(black_still_available(s),
+                      "Fluctuator's {2} tapped both black lands and kept the feeder-less filter");
+    }
+    {   // ROLLOUT twin -- lockstep, or the search plans a line the executor cannot play
+        GameState s = board();
+        CHECK(TapForCostDirect(s, Cost(2), false));
+        CHECK_MESSAGE(black_still_available(s),
+                      "rollout twin tapped both black lands");
+    }
+}

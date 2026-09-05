@@ -12646,6 +12646,32 @@ inline const std::vector<Color>& EffectiveProduces(const GameState& state, int c
     return ReflectedColors(state, controller, in_hand);
 }
 
+// The colours a source can make ON ITS OWN -- with no mana fed to it from anywhere else. This is
+// the question every "is this a source of colour X" / "does our board cover white" / "is this a
+// multi-colour land" site is really asking, and reading `params.produces` raw answers a DIFFERENT
+// question the moment a conversion source is on the board.
+//
+// For an any_color_filter (Capital City) `produces` is the FED mode -- WUBRG -- and reaching any of
+// it costs another source's mana. Unfed it makes {C} and nothing else. Read raw it looks like a
+// free five-colour rainbow land, which is exactly the misread that has now produced three separate
+// bugs: the flat pool crediting two of them as {any}{any}, the deck's own reachability rule
+// believing it held a castable Stinger, and the tap order spending both real colour sources to
+// spare a land that cannot make a colour at all.
+//
+// DELIBERATELY NOT is_filter / ramp_filter. Those NET +1 MANA and their fed colours are a real
+// fixing contribution -- Cascade Bluffs turns any {U}/{R} into two, Ferrous Lake turns {1} into
+// {U}{R} -- so calling them "not a source of their colours" would be its own distortion, and
+// changing them would churn treasure_hunt and hinata for something nothing has measured. The
+// any-colour filter is the only mana-NEUTRAL conversion shape: it converts and adds nothing, which
+// is precisely why it alone is not a colour source in its own right. Identical to `produces` for
+// every other card in the database, so every deck without one is byte-identical.
+inline const std::vector<Color>& UnconditionalProduces(const CardDefinition& def)
+{
+    if (!def.params.any_color_filter) { return def.params.produces; }
+    static const std::vector<Color> kFreeModeOnly{ Color::Colorless };   // the "{T}: Add {C}" mode
+    return kFreeModeOnly;
+}
+
 // D12 payment context: the current TapForCost* call is paying the activation cost of an ability
 // whose SOURCE is a battlefield creature of the chosen type (Burning-Fist / Sethron pumps; the
 // engine's "chosen type" is simplified to "any creature", exact for the mono-tribal decks that
@@ -12783,7 +12809,10 @@ inline const std::vector<Color>& ReflectedColorsInHand(const std::vector<Card>& 
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def || def->params.reflecting || !def->card.IsLand()) { continue; }
-        for (Color col : def->params.produces) { seen[static_cast<int>(col)] = true; }
+        // A Reflecting Pool copies what your other lands MAKE, not what they could make given a
+        // feed -- so an any-colour filter contributes its {C} mode only. Inert today (no deck
+        // holds both), latent otherwise.
+        for (Color col : UnconditionalProduces(*def)) { seen[static_cast<int>(col)] = true; }
     }
     buf.clear();
     const Color order[6] = { Color::White, Color::Blue, Color::Black,

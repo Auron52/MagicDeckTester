@@ -446,7 +446,9 @@ std::vector<int> ExtractMidGameFeatures(const GameState& state, const MidGamePla
                 ++untapped_sources;
                 if (def)
                 {
-                    for (Color c : def->params.produces)
+                    // UnconditionalProduces: a feeder-less any-colour filter is a {C} source, not
+                    // a five-colour one. Latent today (no deck with one has a keep model).
+                    for (Color c : UnconditionalProduces(*def))
                     {
                         const int ci = static_cast<int>(c);
                         if (ci >= 0 && ci < kNumColors) { ++src[ci]; }
