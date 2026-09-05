@@ -378,14 +378,18 @@ recovers the host from the enumerated plan's own `enchant_target_name` before th
 dialog asks *"Aether Hub or Conservatory?"*; `'—'` for an `enchant` dimension can now only mean a
 plan past the emitted-plan cap and reads *"another host"*.
 
-> **STILL OPEN (engine, not the viewer):** because the sub is what the `CheckLine` dedup signature is
-> built from, TWO land hosts that are both already in play share an EMPTY signature and **collapse**,
-> so the human is never asked which one — the same dead-decision shape as the `plan_signature` bug
-> above, one layer down. Reproduce: EldraziDisplacerFlicker seed 1, T2+, `cast=Wild Growth` returns a
-> single variant with `subs: []` while `d.plans` lists a distinct plan per legal land. The fix is in
-> the `enchant` `addSub` branch of `TurnSolver::CheckLine` (accept a non-creature host — resolve the
-> art/label off any battlefield permanent, not `IsCreature()` only), and no client-side shortcut can
-> recover a variant the engine has already collapsed.
+> **CLOSED (engine, in two halves):** because the sub is what the `CheckLine` dedup signature is
+> built from, TWO land hosts that are both already in play shared an EMPTY signature and collapsed,
+> so the human was never asked which one. Half one (fixed 2026-09-03): the `enchant` `addSub` branch
+> of `TurnSolver::CheckLine` resolved the host off battlefield CREATURES only, so a land host in play
+> produced no sub — it now accepts any battlefield permanent. Half two (fixed 2026-09-05, USER: EDF
+> seed 2 T2 "I tried to put Wild Growth on the Conservatory and it changed it to the Yavimaya
+> Coast"): the per-cast payment in BOTH realization sites (rollout `apply_one` + executor
+> `CastSpellFromHand`) greedily spent the Aura's own declared host on the Aura's cost, so every
+> battlefield-host ordering carried `would_drop`, CheckLine's drops-filter discarded them, and the
+> only surviving host was the land being played. Both sites now RESERVE the declared host across the
+> Aura's payment (retried unreserved on failure) — the realization twins of the reservation
+> `SubsetPayableWithFilters` / `SubsetPayableSequential` already made.
 
 **Archangel free cast (`free_cast`) — a one-time TRIGGER, not a menu option.** Maelstrom Archangel's
 "whenever this creature deals combat damage to a player, you may cast a spell from your hand without

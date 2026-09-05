@@ -19004,7 +19004,35 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (sink_stack.empty() && g_play_dropped_cast_sink) { g_play_dropped_cast_sink->push_back(name); }
                 return;
             }
-            if (!TapForCostDirect(state, ec, is_creature))
+            // RESERVE THE AURA'S OWN HOST across its payment -- the REALIZATION twin of the
+            // reservation both payability walks already make (SubsetPayableWithFilters and
+            // SubsetPayableSequential). Without it the walks admit "Wild Growth on Conservatory,
+            // then Eladamri's Call" (pay the Aura off the OTHER land, tap the enchanted host for
+            // its colour + bonus), but this per-cast payment greedily taps the host for the Aura's
+            // own {G} and the follow-up cast is dropped -- so every host-on-battlefield ordering
+            // carried would_drop, CheckLine's drops-filter discarded them, and the viewer silently
+            // re-aimed the human's declared host at the land being played instead (USER, EDF seed 2
+            // T2: "I tried to put Wild Growth on the Conservatory and it changed it to the Yavimaya
+            // Coast"). Retried UNRESERVED on failure, so a board whose only payer IS the host still
+            // casts the Aura exactly as before (a failed TapForCostDirect restores atomically).
+            int reserved_host = -1;
+            if (def.params.is_land_aura && def.params.land_aura_extra_mana > 0
+                && enchant_target > 0)
+            {
+                for (Permanent& lp : state.battlefield)
+                {
+                    if (lp.controller_index != state.active_player_index || lp.tapped) { continue; }
+                    if (!lp.card.IsLand() || lp.card.m_number != enchant_target) { continue; }
+                    lp.tapped = true; reserved_host = enchant_target; break;
+                }
+            }
+            bool paid_ok = TapForCostDirect(state, ec, is_creature);
+            if (reserved_host > 0)
+            {
+                SetPermTapped(state, state.active_player_index, reserved_host, false);
+                if (!paid_ok) { paid_ok = TapForCostDirect(state, ec, is_creature); }
+            }
+            if (!paid_ok)
             {
                 if (g_bp_trace_arm) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
                 if (AffordAuditOn()) { g_afford_rollout_fails.fetch_add(1, std::memory_order_relaxed); }
@@ -24025,12 +24053,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // flat gate that rejected it was right.
             if (aura_bonus > 0 && !other_inter)
             {
-                if (nonaura == 0) { if (_ct.armed) { _ct.label = "ef-aura-solo"; } return false; }
+                if (nonaura == 0) { _ct.label = "ef-aura-solo"; return false; }
                 if (static_cast<int>(pool.Total()) + aura_bonus < combined.ManaValue())
-                { if (_ct.armed) { _ct.label = "ef-aura-scalar"; } return false; }
+                { _ct.label = "ef-aura-scalar"; return false; }
             }
             if (EnvOn("MTG_DBG_SEQ")) { std::fprintf(stderr, "[dbgseq] gate interacts=%d\n", (int)interacts); }
-            if (!interacts) { if (_ct.armed) { _ct.label = "ef-no-interact"; } return false; }
+            if (!interacts) { _ct.label = "ef-no-interact"; return false; }
             // Sound scalar ceiling: sequencing realises colours/timing and LIVE discounts, never
             // new total mana -- but a live discount can forgive up to the whole GENERIC part
             // (Hinata: -1 per target), so the only cost the walk can never talk down is the
@@ -24046,9 +24074,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (static_cast<int>((credited ? eff : pool).Total()) + aura_bonus
                 < combined.ManaValue() - combined.generic)
             { if (EnvOn("MTG_DBG_SEQ")) { std::fprintf(stderr, "[dbgseq] scalar reject\n"); }
-              if (_ct.armed) { _ct.label = "ef-scalar"; } return false; }
+              _ct.label = "ef-scalar"; return false; }
             if (SubsetPayableSequential(state, cands, sel)) { exec_feas = 1; }
-            else if (_ct.armed) { _ct.label = "ef-walk-fail"; }
+            else { _ct.label = "ef-walk-fail"; }
             return exec_feas == 1;
         };
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
@@ -24064,10 +24092,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (s_dbg_multi > 0 && state.turn_number == s_dbg_multi && sel.size() >= 2)
             {
                 std::string names;
-                for (int j : sel) { names += cands[j].card_name.str() + ","; }
-                std::fprintf(stderr, "[dbgmulti] t%d n=%zu reject=%d mana_ok=%d cost=%d [%s]\n",
+                for (int j : sel) { names += cands[j].card_name.str();
+                    if (cands[j].enchant_target > 0)
+                    { names += "#" + std::to_string(cands[j].enchant_target); }
+                    names += ","; }
+                std::fprintf(stderr, "[dbgmulti] t%d n=%zu reject=%d mana_ok=%d cost=%d why=%s [%s]\n",
                              state.turn_number, sel.size(), (int)mana_reject, (int)mana_ok,
-                             combined.ManaValue(), names.c_str());
+                             combined.ManaValue(), _ct.label ? _ct.label : "-", names.c_str());
             }
         }
         if (seq_on && seq_spend && !mana_reject) { apply_seq(); }   // survivor: keep its pool honest
@@ -24406,6 +24437,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (drop) { _ct.label = "sac-burn-hold"; return; }
         }
         _ct.label = "OFFERED";
+        {
+            static const int s_dbg_multi_off = EnvInt("MTG_DBG_MULTI", 0);
+            if (s_dbg_multi_off > 0 && state.turn_number == s_dbg_multi_off && sel.size() >= 2)
+            {
+                std::string nm;
+                for (int j : sel) { nm += cands[j].card_name.str();
+                    if (cands[j].enchant_target > 0)
+                    { nm += "#" + std::to_string(cands[j].enchant_target); }
+                    nm += ","; }
+                std::fprintf(stderr, "[dbgmulti-push] t%d cands=%zu human=%d [%s]\n",
+                             state.turn_number, cands.size(), (int)HumanPlayActive(), nm.c_str());
+            }
+        }
         TurnSolver::Plan plan;
         plan.value          = total_eval;
         plan.wins_this_turn = wins;
@@ -25287,6 +25331,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             ApplyPlanDirect(copy, cand, is_pre_combat);
             g_enum_drop_names = nullptr;
             cand.would_drop = std::move(dropped);
+            {
+                static const int s_dbg_ord = EnvInt("MTG_DBG_ORDER_PROBE", 0);
+                if (s_dbg_ord > 0 && state.turn_number == s_dbg_ord)
+                {
+                    std::string nm, dr;
+                    for (const Action& a : cand.actions) { nm += a.card_name.str();
+                        if (a.enchant_target > 0) { nm += "#" + std::to_string(a.enchant_target); }
+                        nm += ","; }
+                    for (const std::string& d : cand.would_drop) { dr += d + ","; }
+                    std::fprintf(stderr, "[dbgord] t%d order=[%s] drops=[%s]\n",
+                                 state.turn_number, nm.c_str(), dr.c_str());
+                }
+            }
             // `cand.would_drop` now names the casts this ORDERING declares but cannot make. It is
             // carried, not acted on -- see the note at g_order_drop_label for the two measurements
             // that rejected deleting these variants.

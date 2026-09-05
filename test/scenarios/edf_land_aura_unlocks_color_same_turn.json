@@ -18,8 +18,14 @@
   "  * verdict != illegal proves the gates admit it, and",
   "  * expect_variants_all_contain pins that every surviving variant really casts the Drake --",
   "    the count alone would pass on two variants that both drop it.",
-  "The two variants are the genuine sub-decision of WHICH land the Trace enchants (Hub or Mariposa);",
-  "both pay, because an empty land_aura_produces is 'one mana of any colour' either way.",
+  "The four variants are the genuine sub-decision of WHICH land the Trace enchants (Hub, Conservatory,",
+  "Brushland or Mariposa); all pay, because an empty land_aura_produces is 'one mana of any colour'",
+  "either way. This was 2 (Hub or Mariposa only) until the 2026-09-05 host-reservation fix: the",
+  "per-cast payment used to spend Conservatory/Brushland on the Trace's own {R/W}{G} whenever it was",
+  "the declared host, so those orderings dropped the Drake and CheckLine filtered them. Reserving the",
+  "declared host across the Aura's own payment (the realization twin of the reservation both",
+  "payability walks already made) makes every host's ordering really pay -- verified by the ordering",
+  "probe's ApplyPlanDirect, which is a real payment, not a bound.",
   "",
   "MTG_UNPRUNED=1 is not decoration: the cast-ORDERING search is gated on UnprunedGate::SearchOrder,",
   "so without it this fixture would not exercise the path the viewer runs on."
@@ -53,6 +59,6 @@
  },
  "validate_line": "land=Mariposa Military Base;cast=Trace of Abundance;cast=Peregrine Drake",
  "expect_verdict": "choose",
- "expect_variants": 2,
+ "expect_variants": 4,
  "expect_variants_all_contain": "Peregrine Drake"
 }

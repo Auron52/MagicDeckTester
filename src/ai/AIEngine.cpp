@@ -4781,7 +4781,34 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         {
             return;
         }
-        if (!TapForCost(state, effective, available, def->card.IsCreature()))
+        // RESERVE THE AURA'S OWN HOST across its payment -- the executor twin of the rollout
+        // apply's reservation (see apply_one) and of both payability walks. Which land pays for a
+        // land Aura and which land carries it are the same scarce resource: spending the declared
+        // host on the Aura's own cost strands the follow-up cast the Aura was played to enable
+        // (USER, EDF seed 2 T2 -- Wild Growth on Conservatory, then Eladamri's Call off the host's
+        // {W}+bonus {G}). Retried UNRESERVED on failure, so this can only ever ADD realised casts.
+        // `available` is re-derived around the reservation exactly like the tap-ahead blocks above
+        // (a failed TapForCost restores the board atomically).
+        int reserved_host = -1;
+        if (def->params.is_land_aura && def->params.land_aura_extra_mana > 0
+            && enchant_target > 0)
+        {
+            for (Permanent& lp : state.battlefield)
+            {
+                if (lp.controller_index != state.active_player_index || lp.tapped) { continue; }
+                if (!lp.card.IsLand() || lp.card.m_number != enchant_target) { continue; }
+                lp.tapped = true; reserved_host = enchant_target; break;
+            }
+            if (reserved_host > 0) { available = AvailableManaPool(state); }
+        }
+        bool paid_ok = TapForCost(state, effective, available, def->card.IsCreature());
+        if (reserved_host > 0)
+        {
+            SetPermTapped(state, state.active_player_index, reserved_host, false);
+            available = AvailableManaPool(state);
+            if (!paid_ok) { paid_ok = TapForCost(state, effective, available, def->card.IsCreature()); }
+        }
+        if (!paid_ok)
         {
             if (BpTraceEnabled() && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
             // SERVER-TRUTH RESOLUTION: a declared cast that cannot be paid is dropped (left in hand).

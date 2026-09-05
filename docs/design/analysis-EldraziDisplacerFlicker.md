@@ -3126,3 +3126,36 @@ from those three scripts before 2026-09-05 should be re-checked before it is rel
 EDF has **no keep table and no value leaf**. Per the serial-stages rule those come last and in order
 (profile -> value leaf -> mulligan), on a frozen commit, and only once play is settled — which,
 given issues 4 and 5, it is not.
+
+## Aura-host payment reservation (2026-09-05, after the handoff)
+
+**USER, seed 2 T2 (viewer):** *"I tried to put Wild Growth on the Conservatory and it changed it to
+the Yavimaya Coast for no reason. In addition, it rejects if I cast Eladamri's call which seems like
+the better cast in this situation."* Both symptoms are ONE bug, and it was the fourth site of the
+same defect: **which land pays for a land Aura and which land carries it are the same scarce
+resource.** Both payability walks (`SubsetPayableWithFilters`, `SubsetPayableSequential`) already
+RESERVED the declared host across the Aura's own payment — so enumeration admitted
+`Wild Growth -> Conservatory, then Eladamri's Call` ({G} off the Coast, then the enchanted
+Conservatory's {W} + bonus {G} pays the Call) — but neither REALIZATION site did: the rollout apply
+(`apply_one`) and the executor (`CastSpellFromHand`) both greedily tapped Conservatory for the
+Aura's own {G}. Consequences down the chain:
+
+* every host-on-battlefield ordering carried `would_drop` (the ordering probe is a real payment);
+* CheckLine's drops-filter (correctly) discarded them whenever a clean alternative existed, so for
+  `cast=Wild Growth;cast=Living Wish` the only surviving host was the land being played — the
+  viewer's choose dialog then had ONE host choice and silently re-aimed the user's drag;
+* for `cast=Wild Growth;cast=Eladamri's Call` there was NO clean ordering at all, so the line
+  could only resolve by dropping a declared cast — the user's "reject".
+
+**Fix:** both realization sites now reserve the declared host (mark it tapped, pay, unmark; retry
+unreserved on failure — can only ADD realised casts). Verified: WG->Conservatory+Wish and
+WG->Conservatory+Call both validate as `choose` with the host as a real dimension and replay to a
+fully-resolved board. Scenario `edf_land_aura_unlocks_color_same_turn` now admits 4 hosts (was 2 —
+the fixture pinned the pre-fix count; updated with rationale). EDF-only by construction (the gate
+needs `is_land_aura` + a declared host; no other deck runs land auras).
+
+Diagnostics added while hunting it (all env-gated, zero-cost off): `MTG_DBG_MULTI` verdict lines now
+carry the per-candidate enchant target and the reject label (the `_ct.label` sets are un-gated —
+label assignment is free, the destructor still prints only when armed), a `[dbgmulti-push]` line
+marks subsets that survive to `plans.push_back`, and `MTG_DBG_ORDER_PROBE=<turn>` prints each
+cast-ordering probe's order + drops.
