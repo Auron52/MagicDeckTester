@@ -106,6 +106,35 @@ What is NOT a remedy, ever: reverting a deck to the greedy interior, or a gate t
 from consideration. (`MTG_NO_M2_SOLVE` remains what it always was — a TEMPORARY measurement lever
 for the skip-it-all upper bound, never shipped behaviour.)
 
+### The ladder, driven on hinata (follow-up #1, 2026-09-05 — logs/hinata_m2cap)
+
+Hinata is the deck that pays for the deletion (+0.01..+0.04 across its seven suite cells). Pooled
+6-arm sweep, 900 games/arm on those exact cells (base reproduced current GT on all seven — the
+apparatus check):
+
+* **Rung 2 (the depth cap) collects NOTHING on hinata: cap1 == base on every cell, exactly.** A
+  real null, not a dead lever (under the split arms the same per-job flag visibly changes play).
+  Mechanism: hinata's interior spend is dominated by the ~59k d<=0 ONE-PLY searches per 50 games
+  (the calls the deletion's d<=0 flip added), with only ~5k deeper calls behind them; the cap can
+  only shorten the deep calls, and their full-depth answers agree with their 1-ply answers anyway.
+  Corollary: for a deck whose interior profile is d<=0-heavy, rung 2 is not where the recovery is.
+* **The phase-split (HINATA_ALL_MAIN2) is NOT a remedy — measured RED, all seven cells, both
+  variants** (+0.49/game with the blanket drop, +0.33 with M2_RECONSIDER covering the drop). The
+  rejection is recorded at the lever (DecisionProviders.h). It amplifies the very spend it was
+  hoped to restructure.
+* Rung 1 (the memo) already runs at 47.4% on hinata vs FiveColour's 80%; with the d<=0 calls all
+  keying at depth 1, the misses are genuinely distinct states per decision epoch, not the
+  depth-fold — there is no cheap key fix hiding there.
+* **The remaining rung is budget itself, and it CLOSES the case** — the cost the USER already
+  accepted ("the change is even expected to lose on performance"). The 2x/4x curve on the same
+  900 games (logs/hinata_budget): total old-GT 5.6800 / current-1x 5.7011 / **2x 5.6689** / 4x
+  5.6544. At 2x the searched interior is BETTER than the greedy era ever measured, every cell
+  equal-or-better than old within one game; 4x adds only −0.015 (diminishing — 2x is the knee).
+  So the deletion's quality story on hinata ends as: nothing was lost, the interior spend just
+  needs covering. Adoption candidate: hinata `value_play.budget_ms` 20 → 40 (the suite's gate
+  cells pin their own budgets, so GT does not move); held-out confirm on the overnight seeds
+  (4004–7007, d5 + 2hg-d5, 1600 games/arm) in logs/hinata_heldout.
+
 ## What stays a provider decision
 
 Per the USER (2026-09-05): skipping a main is acceptable only as an explicit opt-in, and that is a

@@ -341,7 +341,20 @@ public:
     // gi=99). So this arm is only meaningful WITH MTG_MAIN2_DROP=1, and measuring it without is
     // measuring the 2026-08-16 bug again.
     //
-    // DEFAULT OFF (measurement lever) -> byte-identical until the A/B is accepted.
+    // MEASURED AND REJECTED, 2026-09-05 (the A/B this lever waited for -- it sat un-run for a
+    // week; do not let a built lever idle unmeasured again). Pooled 6-arm sweep over hinata's
+    // seven suite GT cells, 900 games/arm (logs/hinata_m2cap): RED ON ALL SEVEN CELLS in both
+    // variants. split+MTG_MAIN2_DROP total 6.188 vs base 5.701 (+0.49/game); split relying on
+    // the since-adopted default-ON M2_RECONSIDER for the m2 land drop 6.029 (+0.33) -- so the
+    // blanket drop's plan-space bloat costs a further ~0.16, but the split itself is the loss.
+    // The shape is NOT the 2026-08-16 land-drop bug again (that dependency is closed both ways);
+    // it is interior-m2 spend amplification: classifying everything Main2 funnels the whole
+    // turn's casts into the searched second main at every interior node, and the budget dilution
+    // that costs hinata +0.02-0.04 under the unconditional searched m2 becomes +0.33 when m2
+    // carries the entire decision load. Re-proposing this needs a mechanism that caps that spend
+    // first, not a re-measure of the same arms.
+    //
+    // DEFAULT OFF -> byte-identical.
     bool ClassifiesMainPhases() const override;
     // ...and the per-card doctrine that makes "everything" literal, rather than leaving it to the
     // base template classifier (which sends Draw* to Both and Tier-3 `None` to Main1-by-doubt).
