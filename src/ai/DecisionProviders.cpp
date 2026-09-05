@@ -11440,8 +11440,104 @@ bool FluctuatorProvider::DigContinueAfterResolve() const
     return s_on;
 }
 
+// FluctuatorCastRouteReachable -- can the lands we CONTROL ever pay `cost`? Deliberately ignores
+// tapped/untapped: the question is "will waiting a turn get there" (the user's "if you can't play
+// it this turn you should wait until you can"), not "can I pay right now". Being tapped out is a
+// reason to wait, not a reason to keep spending library.
+static bool FluctuatorCastRouteReachable(const GameState& s, const ManaCost& cost)
+{
+    const int me = s.active_player_index;
+    int lands = 0;
+    bool w=false,u=false,b=false,r=false,g=false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->card.IsLand()) { continue; }
+        ++lands;
+        for (Color c : d->params.produces)
+        {
+            switch (c) { case Color::White: w=true; break; case Color::Blue:  u=true; break;
+                         case Color::Black: b=true; break; case Color::Red:   r=true; break;
+                         case Color::Green: g=true; break; default: break; }
+        }
+    }
+    if (lands < cost.ManaValue()) { return false; }
+    if (cost.white && !w) { return false; }
+    if (cost.blue  && !u) { return false; }
+    if (cost.black && !b) { return false; }
+    if (cost.red   && !r) { return false; }
+    if (cost.green && !g) { return false; }
+    return true;
+}
+
+// FluctuatorHoldsExecutableRoute -- do we already hold a route to a Drannith Stinger that our
+// LANDS can actually pay for? Two routes exist, and the difference between them is the whole
+// point (USER 2026-09-05: "that rule does not apply if you are still missing, but able to cast
+// unearth"):
+//   * Stinger in hand, and our lands can make {1}{R}  -> route in hand, nothing to dig for.
+//   * Unearth in hand, our lands can make {B}, AND a Stinger is ALREADY in the graveyard.
+// An Unearth with an EMPTY yard is NOT a route -- it has no legal target (CR 601.2c, and the
+// enumerator refuses the cast), and cycling is precisely how a Stinger gets binned for it. So that
+// state must keep digging; it is the deck's signature line, not an exception to it.
+static bool FluctuatorHoldsExecutableRoute(const GameState& s)
+{
+    const Player& ap = s.ActivePlayer();
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        if (d->params.cycle_trigger_damage_each_opponent > 0
+            && FluctuatorCastRouteReachable(s, d->card.m_mana_cost)) { return true; }
+    }
+    bool stinger_in_yard = false;
+    for (const Card& c : ap.graveyard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.cycle_trigger_damage_each_opponent > 0) { stinger_in_yard = true; break; }
+    }
+    if (!stinger_in_yard) { return false; }
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        if (d->params.reanimate_creature_max_mv > 0
+            && FluctuatorCastRouteReachable(s, d->card.m_mana_cost)) { return true; }
+    }
+    return false;
+}
+
 bool FluctuatorProvider::ShouldConsiderDig(const GameState& s) const
 {
+    // USER RULE (2026-09-05). Three statements, one rule:
+    //   "you should stop cycling the moment you can play your threat"
+    //   "if you can't play it this turn you should wait until you can"
+    //   "cards in the library are a RESOURCE. Sometimes you need to cycle to find your missing
+    //    threat or a way to play it, but otherwise you want to keep them."
+    //
+    // Cycling plays TWO roles here and they need opposite policies. Once a Drannith Stinger is on
+    // the battlefield every cycle is a PING -- that chain is the wincon and should run to the end.
+    // BEFORE that, cycling is pure DIGGING: it deals no damage, and each card it spends is a card
+    // the kill will not have. So dig only while there is something cycling can still supply --
+    // the threat itself, or a way to cast it -- and stop the moment the board and hand already
+    // hold an executable route. "Wait until you can" is why the reachability test reads the lands
+    // we CONTROL rather than untapped mana: being tapped out is a reason to wait a turn, not a
+    // reason to spend library.
+    //
+    // MEASURED before this rule (40 games, shipped arm): 271 cycles -- 25% of ALL cycling, 6.8 per
+    // game -- happened with no Stinger on board, and 15 of 40 games burned >10 cards that way.
+    // That, not the kill turn, is where the deck-out exposure came from.
+    static const bool s_stop_on_threat = EnvOn("MTG_FLUCT_STOP_ON_THREAT", true);
+    const int me = s.active_player_index;
+    bool bf_stinger = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.cycle_trigger_damage_each_opponent > 0) { bf_stinger = true; break; }
+    }
+    if (s_stop_on_threat && !bf_stinger && FluctuatorHoldsExecutableRoute(s)) { return false; }
+
     // FREE cycling: always consider. The shared gate refuses below two lands ("don't strand
     // ourselves on mana") and that reasoning simply does not apply to a {0} activation -- there is
     // no mana to strand. Refusing here would make the deck decline its own engine on exactly the

@@ -36,6 +36,7 @@ declare -A DECK_FILE=(
   [dragons]=decks/Dragons/Dragons.cod
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
   [melira]="decks/Melira Pod/Melira Pod.cod"
+  [fluctuator]=decks/Fluctuator/Fluctuator.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -56,6 +57,7 @@ declare -A DECK_PROF=(
   [dragons]=decks/Dragons/Dragons.profile.json
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
   [melira]="decks/Melira Pod/Melira Pod.profile.json"
+  [fluctuator]=decks/Fluctuator/Fluctuator.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -215,6 +217,14 @@ SMOKE_CASES=(
   "dragons2hg         3 1001 50 10"
   "breaching2hg       3 1001 50 10"
   "melira2hg          3 1001 25 10"
+  # fluctuator: free-cycling combo (Fluctuator makes every cycler {0}; Drannith Stinger turns each
+  # cycle into a ping). Measured single-thread at the GATE budgets 2026-09-05: d0 0.0001 s/game,
+  # d3 b10 1.34 s/game, d5 b20 2.81 s/game, with NO game over 30 s at any of them -- the heavy tail
+  # this deck shows at b200 is budget-driven, not structural, so the gate sizing is safe. th/hinata
+  # counts => ~7 core-min added to the pooled batch.
+  "fluctuator 0 1001 1000 0"
+  "fluctuator 3 1001  150 10"
+  "fluctuator 5 1001   75 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -343,6 +353,12 @@ REGRESSION_CASES=(
   "goblins2hg    3 2002  100 10"
   "knights2hg    3 2002  100 10"
   "fivecolour2hg 3 2002   50 10"
+  # fluctuator: gate budgets at both seeds (~14 core-min). See the SMOKE block for measured costs.
+  "fluctuator 0 2002 1000 0"
+  "fluctuator 3 2002  150 10"
+  "fluctuator 3 3003  150 10"
+  "fluctuator 5 2002   75 20"
+  "fluctuator 5 3003   75 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -658,4 +674,20 @@ OVERNIGHT_CASES=(
   "fivecolour2hg 5 5005 100 20"
   "fivecolour2hg 5 6006 100 20"
   "fivecolour2hg 5 7007 100 20"
+  # fluctuator: breaching-shaped 4-seed sweep at 2x gate budgets. Probed at the ACTUAL overnight
+  # budgets 2026-09-05: d3 b20 ~2.78 s/game, d5 b40 ~4.29 s/game, NO game over 30 s at either
+  # => ~2.7 core-hours added, breaching's bracket. Counts obey the seed-spacing rule
+  # (500/250 < 1001, 2000 < 2002).
+  "fluctuator 0  4004 2000 0"
+  "fluctuator 0  6006 2000 0"
+  "fluctuator 0  8008 2000 0"
+  "fluctuator 0 10010 2000 0"
+  "fluctuator 3 4004  500 20"
+  "fluctuator 3 5005  500 20"
+  "fluctuator 3 6006  500 20"
+  "fluctuator 3 7007  500 20"
+  "fluctuator 5 4004  250 40"
+  "fluctuator 5 5005  250 40"
+  "fluctuator 5 6006  250 40"
+  "fluctuator 5 7007  250 40"
 )
