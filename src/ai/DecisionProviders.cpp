@@ -2640,16 +2640,17 @@ int AntiLifegainProvider::CastOrderRank(const GameState& s, const CardDefinition
     return GenericProvider::CastOrderRank(s, def);
 }
 
-// MTG_AL_PHASE / MTG_AL_SSM -- the REAL m1/m2 split for Anti-Lifegain (USER ruling 2026-08-21:
+// MTG_AL_PHASE -- the REAL m1/m2 split for Anti-Lifegain (USER ruling 2026-08-21:
 // "There should be a real split between the two, not a re-evaluation"). Until now this deck's
 // m2 labels were classification-only: the pre-combat Main2 filter never ran (no
 // ClassifiesMainPhases opt-in), so every cast was enumerated m1 and the second main merely
 // re-offered leftovers. PHASE enforces the labels (Birds/Fiery Justice/Skyshroud Cutter by the
-// base rules, Reverent Silence by the 2026-08-18 override below); SSM makes the search's
-// interior second main SEARCHED, scoped to the split being live -- without the split the
-// interior m2 is leftovers-only and searching it measured as pure budget churn (train
-// d3 +0.0133/+0.0133, all 7 diverging games recover at 4-16x budget; 2026-08-21). Same
-// two-lever attribution shape as the FiveColour adoption (Fc5PhaseEnabled / MTG_5C_SSM).
+// base rules, Reverent Silence by the 2026-08-18 override below). The split is also what makes
+// the searched interior m2 carry real decisions -- without it the interior m2 is leftovers-only,
+// and searching leftovers measured as pure budget churn (train d3 +0.0133/+0.0133, all 7
+// diverging games recover at 4-16x budget; 2026-08-21). The branch site is searched engine-wide
+// regardless since 2026-09-05; this history is why the ROLLOUT-site opt-in stays scoped to the
+// split being live.
 static bool AlPhaseEnabled()
 {
     // ADOPTED DEFAULT ON 2026-08-22 (USER). The split shipped only once its two rule defects were
@@ -2664,26 +2665,6 @@ static bool AlPhaseEnabled()
 bool AntiLifegainProvider::ClassifiesMainPhases() const
 {
     return AlPhaseEnabled();
-}
-
-bool AntiLifegainProvider::SearchedSecondMainInSearch() const
-{
-    // Scoped to the phase split being live, exactly as FiveColour's hook is: a real split hands
-    // the interior m2 real deferred decisions; without it the searched interior m2 is dilution.
-    // Overridable PER JOB (heurarm) so both arms of the "drop the last greedy solve" A/B run in ONE
-    // pooled batch instead of one batch per arm -- unset everywhere => the env default, byte-identical.
-    //
-    // 2026-08-22: the recorded "+13 turns vs keeping greedy" rejection was measuring TWO things at
-    // once. Split by call site (MTG_SSM_SITE), the BRANCH site -- the actual decision -- is
-    // BYTE-IDENTICAL to the greedy Solve on this deck over 26,000 games (6000 train d3+d5, 8000
-    // held-out on all four overnight seeds, 12,000 across four shuffle salts), with the searched
-    // path demonstrably firing (163 solves / 500 games, not a dead path). All +13 turns came from
-    // the ROLLOUT site, which SearchesRolloutSecondMain() above declines. So with that override in
-    // place this hook is free: it removes the last greedy DECISION from AL's main-phase search
-    // without changing a single game. See docs/design/antilife-main-phase-split.md 2026-08-22y.
-    // ADOPTED DEFAULT ON 2026-08-22 (USER). MTG_AL_SSM=0 reverts.
-    static const bool env_on = EnvOn("MTG_AL_SSM", true);
-    return heurarm::Flag(heurarm::AL_SSM, env_on) && AlPhaseEnabled();
 }
 
 bool AntiLifegainProvider::SearchesRolloutSecondMain() const
@@ -2701,7 +2682,10 @@ bool AntiLifegainProvider::SearchesRolloutSecondMain() const
     // strict-win route to try first is MTG_M2_CAP1, which caps the interior solve to depth 1 so it
     // is still SEARCHED (no greedy pick) without compounding against the iterative-deepening pass.
     static const bool env_on = EnvOn("MTG_AL_SSM_ROLLOUT");
-    return heurarm::Flag(heurarm::AL_SSM_ROLLOUT, env_on) && SearchedSecondMainInSearch();
+    // Scoped to the phase split being live (a real split is what hands the interior m2 real
+    // decisions; without it a searched playout m2 is pure dilution). The branch site needs no
+    // scoping any more -- it is searched engine-wide (searched-second-main-unconditional.md).
+    return heurarm::Flag(heurarm::AL_SSM_ROLLOUT, env_on) && AlPhaseEnabled();
 }
 
 bool AntiLifegainProvider::CondemnsPassedMainPhase() const
@@ -2711,7 +2695,7 @@ bool AntiLifegainProvider::CondemnsPassedMainPhase() const
     // Main 2 continues with main 1's condemnation list instead of re-litigating the hand;
     // membership decided once, at m1 (the base-hook contract). Every consumption site gates on
     // MainPhaseFilterActive, so this binds only with the split live -- the && here just makes
-    // the scoping explicit, mirroring MTG_AL_SSM.
+    // the scoping explicit, mirroring MTG_AL_SSM_ROLLOUT.
     // MEASURED INERT-AT-COST (2026-08-21, decouple ensemble salts 1-2, 8000 games/salt over
     // PHASE): quality +0 (0w/0b) / +3 (2w/0b) -- the lever BINDS (126k searched drops per 300
     // games, MTG_ROLLOUT_STATS) but everything it deletes is a line AL's search never preferred
@@ -8664,17 +8648,15 @@ bool FiveColourProvider::ClassifiesMainPhases() const
     return Fc5PhaseEnabled();
 }
 
-bool FiveColourProvider::SearchedSecondMainInSearch() const
+bool FiveColourProvider::SearchesRolloutSecondMain() const
 {
-    // Scoped to the phase spec being live: without it the interior m2 is near-empty and
-    // searching it is pure budget dilution (the global lever's recorded rejection).
-    // ADOPTED default-on 2026-08-21 (USER: "change it to searched if we can do so without much
-    // additional cost"; =0 hatch). The enum memo (adopted the same day) absorbs the extra m2
-    // enumerations: the lever's pre-memo +9% wall on the heavy fivecolour game measured +0.7%
-    // (noise) post-memo on interleaved quiet-box pairs. Suite A/B vs GT: every changed key
-    // digest-only at an IDENTICAL average (30 games re-lined at the same per-game score), d0
-    // untouched. This removes the last greedy step from the interior second main -- the user's
-    // core bar (search primary; no greedy steps except attacks + mana allocation).
+    // The ROLLOUT site's searched m2 -- the branch site is unconditionally searched engine-wide
+    // since 2026-09-05 (searched-second-main-unconditional.md). This deck's adoption (2026-08-21,
+    // USER: "change it to searched if we can do so without much additional cost"; =0 hatch)
+    // measured BOTH sites on, because the old rollout default chained to the branch opt-in -- the
+    // enum memo absorbed the cost (pre-memo +9% wall -> +0.7% post-memo), and the suite A/B was
+    // digest-only at identical averages. This override preserves that measured configuration
+    // exactly; scoped to the phase spec being live, as the adoption was.
     static const bool on = EnvOn("MTG_5C_SSM", true);
     return on && Fc5PhaseEnabled();
 }

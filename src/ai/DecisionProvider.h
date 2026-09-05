@@ -539,53 +539,35 @@ public:
     // adopts. Default false -> byte-identical.
     virtual bool OrderOpaqueCastsByRank() const { return false; }
 
-    // SearchedSecondMainInSearch -- per-deck opt-in to the MTG_SEARCH_SECOND_MAIN behaviour:
-    // the search's INTERIOR second mains (SolveSecondMainInSearch, every full-search ply) run a
-    // real budgeted search instead of the greedy Solve. The global lever's recorded rejection
-    // (2026-08-09: antilife/hinata red, does not recover with budget -- truncation-shaped,
-    // classify-stack 2026-08-16) rested on "no suite deck's post-combat main carries a real
-    // decision"; a deck that adopts a main-phase specification (ClassifiesMainPhases) CREATES
-    // that deck, and the global arm re-measured 2026-08-19 shows exactly the split: fivecolour
-    // green, antilife/hinata still red. So the adoption is per-deck, like the rest of the
-    // cast-order arc: opt in where the m2 decision is real, keep greedy where searching it only
-    // dilutes the shared budget. Default false -> byte-identical.
-    //
-    // This is also the per-deck adoption route for the standing USER directive "search should be
-    // truly search at every level. Greedy is simply too unreliable to be part of it."
-    // (main-phase-classification.md). KittyEquipment opted in on the same evidence shape as
-    // fivecolour: four d3 arms x 100 games (greedy, MTG_SEARCH_SECOND_MAIN, MTG_PHASE_CLASSIFY,
-    // both) all returned avg 5.0300 and play digest 3e6ea44e9c15d572, so the searched path reaches
-    // the same decisions there for free. (Rebase 2026-08-20 collapsed a duplicate hook of mine,
-    // SearchesSecondMain, into this one -- two hooks with identical semantics is the drift this
-    // file warns about.)
-    virtual bool SearchedSecondMainInSearch() const { return false; }
+    // The BRANCH-site interior second main (SolveWithLookahead's candidate loop pricing "what does
+    // passing buy me") is SEARCHED, unconditionally, for every deck -- there is no hook, no lever,
+    // and no greedy fallback. The per-deck opt-in that used to live here
+    // (SearchedSecondMainInSearch) was DELETED 2026-09-05 on the USER's directive ("Can we delete
+    // that greedy interior? I don't want it to exist for any future decks") after every converted
+    // deck measured the searched branch site byte-identical-or-free (AL over 26,000 games, Kitty's
+    // four identical arms, 5C digest-only at identical averages). Budget problems in this area get
+    // budget HEURISTICS (the solve memo, MTG_M2_SEARCH_DEPTH / M2_CAP1), never a greedy revert and
+    // never a line-deleting gate. See docs/design/searched-second-main-unconditional.md.
 
-    // SearchesRolloutSecondMain -- the OTHER call site of the interior second main, split out
-    // 2026-08-22 because the two are not the same kind of thing:
+    // SearchesRolloutSecondMain -- the ROLLOUT site of the interior second main:
+    // SimulateToEndImpl's per-turn second main, i.e. the playout policy of the LEAF ESTIMATOR.
+    // Not a decision: a scoring device. Greedy here is by DESIGN ("HONEST where you SCORE"), and
+    // it is the ONE place in this area a provider may still choose:
     //
-    //   * SearchedSecondMainInSearch (above) is the BRANCH site -- SolveWithLookahead's candidate
-    //     loop, where the m2 prices "what does passing buy me". That is a DECISION the search makes,
-    //     and it is what the USER directive "search should be truly search at every level" is about.
-    //   * This hook is the ROLLOUT site -- SimulateToEndImpl's per-turn second main, i.e. the
-    //     playout policy of the LEAF ESTIMATOR. Not a decision: a scoring device.
+    // Anti-Lifegain measured the split and it is large and one-directional. Searching the rollout
+    // site costs +12 turns / 3000 train games at d3, reproduced in all five shuffle realisations
+    // (+52 / 30,000) and all four DECOUPLED search salts (+43 / 12,000), so it is neither
+    // draw-order variance nor reshuffle clairvoyance. It is also non-monotone: dropping the
+    // rollout's m2 entirely costs +7, i.e. greedy is an interior optimum -- more playout fidelity
+    // is not more ranking accuracy. Roughly two thirds of the cost is budget dilution and the
+    // rest survives 20x budget. See docs/design/antilife-main-phase-split.md 2026-08-22y.
     //
-    // Anti-Lifegain measured the difference and it is large and one-directional. Searching the
-    // BRANCH site is byte-identical to the greedy Solve over 26,000 games (6000 train + 8000
-    // held-out + 12,000 across four shuffle salts) -- the search and greedy simply agree there.
-    // Searching the ROLLOUT site costs +12 turns / 3000 train games at d3, reproduced in all five
-    // shuffle realisations (+52 / 30,000) and all four DECOUPLED search salts (+43 / 12,000), so it
-    // is neither draw-order variance nor reshuffle clairvoyance. It is also non-monotone: dropping
-    // the rollout's m2 entirely costs +7, i.e. greedy is an interior optimum -- more playout
-    // fidelity is not more ranking accuracy, which is the standing LAW's "HONEST where you SCORE"
-    // half. Roughly two thirds of the cost is budget dilution (the gap closes 12 -> 4 at 20x budget;
-    // the rollout charges the shared budget per simulated turn-step, and a searched m2 multiplies
-    // that) and the rest survives 20x.
-    //
-    // DEFAULT = whatever the deck answered for the branch site, so every deck that already adopted
-    // the hook (fivecolour, KittyEquipment) is byte-identical. A deck overrides this to false to
-    // keep the cheap greedy playout while its DECISIONS are fully searched.
-    // See docs/design/antilife-main-phase-split.md 2026-08-22y.
-    virtual bool SearchesRolloutSecondMain() const { return SearchedSecondMainInSearch(); }
+    // DEFAULT false = the greedy playout. A deck that measured the searched rollout as part of an
+    // adopted package (fivecolour, KittyEquipment -- adopted when this hook chained to the old
+    // branch-site opt-in) overrides to true to keep its measured behaviour. Structural guard, not
+    // hook-controllable: at depth <= 0 the rollout site is ALWAYS greedy -- rescuing it re-enters
+    // the solve with no decrementing bound.
+    virtual bool SearchesRolloutSecondMain() const { return false; }
 
     // GradesNoWinLeaf -- DEFAULT ON. When the rollout reaches the horizon with no win, publish the
     // resulting position's OPPONENT LIFE as the tie-break instead of letting every hopeless line

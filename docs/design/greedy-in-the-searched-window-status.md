@@ -1,5 +1,16 @@
 # Greedy inside the search: what we found, and what it means
 
+**Status (updated 2026-09-05): the interior second main's greedy path is DELETED for every deck —
+the per-deck opt-in era is over.** USER directive (*"Can we delete that greedy interior? I don't
+want it to exist for any future decks"*): the branch site runs `SearchedSecondMainMemoized`
+unconditionally, at every depth, for every deck; `MTG_SEARCH_SECOND_MAIN` /
+`MTG_NO_SEARCH_SECOND_MAIN` / `MTG_SSM_SITE` / `MTG_M2_D0_SEARCHED` and all
+`SearchedSecondMainInSearch` hooks are gone. The rule and its budget-remedy ladder live in
+`searched-second-main-unconditional.md` — read THAT file before touching this area; the per-deck
+conversion narrative below it is history, not current design. Remaining greedy in the search:
+the rollout leaf estimator (by design) and the bp-continuation fallbacks
+(`bp-greedy-continuation-deletion.md`).
+
 **Status (updated 2026-09-03): the hinata executor greedy is FIXED and shipped** — ebfb5f74
 (2026-09-02, the tight sound recipe) records "Executor at ship settings: NONE greedy main-phase
 decisions, zero ROOT-kind fallbacks". `MTG_KE_ORDER` (listed below as a default-OFF lever) is

@@ -34,7 +34,6 @@ enum Slot : int
     KE_ORDER = 0,             // MTG_KE_ORDER               KittyEquipment cast order
     KE_PARK,                  // MTG_KE_PARK                Kemba park/un-park loop
     EQUIP_MINPOWER_LAST,      // MTG_EQUIP_MINPOWER_LAST    O-Naginata orders last-but-one
-    NO_SEARCH_SECOND_MAIN,    // MTG_NO_SEARCH_SECOND_MAIN  force greedy m2 (per-deck opt-in killer)
     EQUIP_PAY_GUARD,          // MTG_EQUIP_PAY_GUARD       don't pay an equip ApplyEquip will refuse
     EQUIP_LOG_TRUTH,          // MTG_EQUIP_LOG_TRUTH       log an equip only if it actually attached
     METALCRAFT_CREDIT,        // MTG_METALCRAFT_CREDIT     same-turn metalcraft equip-{0} credit
@@ -53,8 +52,6 @@ enum Slot : int
     KE_BUCKET_DISCARD,        // MTG_KE_BUCKET_DISCARD     bucketed cleanup discard (creatures/mana/equipment)
     EQUIP_PIECE_DEPS,         // MTG_EQUIP_PIECE_DEPS     reject a stranded equip at the odometer digit
     KE_DISCARD_RESIDUAL,      // MTG_KE_DISCARD_RESIDUAL  discard equipment bucket is the 7-card residual
-    AL_SSM,                   // MTG_AL_SSM                Anti-Lifegain searched interior second main
-    SSM_BRANCH_ONLY,          // MTG_SSM_BRANCH_ONLY       searched interior m2 at the BRANCH site only
     LEAF_GRADE_NOWIN,         // MTG_LEAF_GRADE_NOWIN      grade a no-win leaf instead of a flat max_turns+1
     LEAF_VALUE_RES,           // MTG_LEAF_VALUE_RES        keep the value leaf's milliturn resolution
     LEAF_TB_BOARD,            // MTG_LEAF_TB_BOARD         ...and grade on board development, not life alone
@@ -72,7 +69,6 @@ enum Slot : int
     BP_CONDEMN_TAIL,          // MTG_BP_CONDEMN_TAIL_EXEMPT  don't condemn when the plan has no cast left
     BP_CONDEMN_ORDER,         // MTG_BP_CONDEMN_ORDER_AWARE  don't condemn a slot AFTER the bp site
     SF_PUT_BP,                // MTG_SF_PUT_BP             site 6 fires off a Stoneforge PUT too
-    M2_D0_SEARCHED,           // MTG_M2_D0_SEARCHED        branch-site interior m2 at d<=0 is SEARCHED
     KE_ORDER_FULL,            // MTG_KE_ORDER_FULL         KittyEquipment FULL (total) cast order
     BP_NO_GREEDY_CONT,        // MTG_BP_NO_GREEDY_CONT     canonical continuation instead of greedy Solve
     HINATA_ORDER_FULL,        // MTG_HINATA_ORDER_FULL     Hinata FULL cast order (Ponder/Preordain PEERS)
@@ -159,7 +155,6 @@ inline const char* Name(int slot)
         "MTG_KE_ORDER",
         "MTG_KE_PARK",
         "MTG_EQUIP_MINPOWER_LAST",
-        "MTG_NO_SEARCH_SECOND_MAIN",
         "MTG_EQUIP_PAY_GUARD",
         "MTG_EQUIP_LOG_TRUTH",
         "MTG_METALCRAFT_CREDIT",
@@ -178,8 +173,6 @@ inline const char* Name(int slot)
         "MTG_KE_BUCKET_DISCARD",
         "MTG_EQUIP_PIECE_DEPS",
         "MTG_KE_DISCARD_RESIDUAL",
-        "MTG_AL_SSM",
-        "MTG_SSM_BRANCH_ONLY",
         "MTG_LEAF_GRADE_NOWIN",
         "MTG_LEAF_VALUE_RES",
         "MTG_LEAF_TB_BOARD",
@@ -197,7 +190,6 @@ inline const char* Name(int slot)
         "MTG_BP_CONDEMN_TAIL_EXEMPT",
         "MTG_BP_CONDEMN_ORDER_AWARE",
         "MTG_SF_PUT_BP",
-        "MTG_M2_D0_SEARCHED",
         "MTG_KE_ORDER_FULL",
         "MTG_BP_NO_GREEDY_CONT",
         "MTG_HINATA_ORDER_FULL",

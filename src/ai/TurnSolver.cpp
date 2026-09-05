@@ -892,58 +892,27 @@ static bool HasteDorkCreditEnabled() { return !g_no_haste_dork_credit; }
 
 // ---- The second main inside the search is SEARCHED, not greedy --------------------------------
 // USER BAR (2026-08-09): "we can't afford to have second main be greedy ... I want no greedy steps
-// except attack decisions [and] mana allocation."
+// except attack decisions [and] mana allocation." Closed 2026-09-05: "Can we delete that greedy
+// interior? I don't want it to exist for any future decks."
 //
-// Three sites played the post-combat main with the d0 greedy `Solve(state, false)` -- marked
-// "(speed). The real game searches it." That made the search blind to the exact trade it exists to
-// make. The value of PASSING the pre-combat main IS the second main it buys, so scoring that second
-// main with the greedy answered the question with the heuristic the search was meant to replace: if
-// the greedy did not find the post-combat cast, holding mana looked worthless and the search cast
-// pre-combat instead. The reported case is FiveColour -- attack with vigilant Faeburrow Elder, THEN
-// spend its mana on Unite the Coalition -- but the shape is deck-agnostic (it is the same reason
-// the full-search path FSLineTail has always enumerated the second main properly).
-//
-// DEFAULT OFF (opt in with MTG_SEARCH_SECOND_MAIN=1) -- the mechanism is real and the code is
-// right, but on the only two suite decks whose play it changes it MEASURED WORSE and does not
-// recover with budget, so it has not earned default-on yet:
-//
-//   summed delta vs greedy (positive = searched WORSE), antilife d3/d5 + hinata d3/d5, seed 1001:
-//     gate budget  +0.0240      4x  +0.0174      16x  +0.0173      cost only 0.91..1.15x
-//
-// Not budget dilution, which was the obvious hypothesis and is WRONG here: dilution shrinks as the
-// budget grows, and this does not. The other eight decks are byte-identical -- including burn
-// (spectacle) and Goblins (Lackey), which both take the second-main path -- so the suite as it
-// stands simply has no deck whose post-combat main carries a real decision. Anti-Lifegain's whole
-// -0.0040 is ONE game (gi139) that diverges at a turn-3 fetch, i.e. variance by the harness's own
-// classification rule, not a like-for-like slowdown.
-//
-// See docs/design/second-main-greedy.md for the full write-up and what to do next.
-// PER-DECK ADOPTION ROUTE (2026-08-19). The suite-wide verdict above stands -- this is still not
-// default-on for everyone. But "no greedy in the search" is a per-deck gate now, exactly like every
-// other prune here: DecisionProvider::SearchedSecondMainInSearch() lets a deck whose evidence is in drop
-// the greedy path on its own. KittyEquipment is the first: four d3 arms x 100 games (greedy,
-// searched, classified, both) return the SAME avg 5.0300 and the SAME play digest
-// 3e6ea44e9c15d572, so on that deck the greedy second main can be removed for free.
-// MTG_SEARCH_SECOND_MAIN=1 still forces searched suite-wide (the A/B lever);
-// MTG_NO_SEARCH_SECOND_MAIN=1 forces greedy everywhere (the kill switch for the per-deck opt-ins).
-static const bool g_search_second_main = EnvOn("MTG_SEARCH_SECOND_MAIN");
-static bool GreedySecondMainEnabled()
-{
-    static const bool s_kill_env = EnvOn("MTG_NO_SEARCH_SECOND_MAIN");
-    const bool s_kill = heurarm::Flag(heurarm::NO_SEARCH_SECOND_MAIN, s_kill_env);
-    if (s_kill)               { return true;  }
-    return !g_search_second_main;
-}
+// The BRANCH site -- the candidate loop pricing "what does PASSING the pre-combat main buy me" --
+// runs the searched m2, unconditionally, for every deck, at every depth. The greedy route, its
+// global levers (MTG_SEARCH_SECOND_MAIN / MTG_NO_SEARCH_SECOND_MAIN / MTG_SSM_SITE /
+// MTG_M2_D0_SEARCHED) and the per-deck opt-in hook are DELETED; the shipping evidence and the
+// budget-remedy ladder (memo -> depth cap -> cost heuristics; never a greedy revert, never a
+// line-deleting gate) are in docs/design/searched-second-main-unconditional.md. The ROLLOUT site
+// -- the leaf estimator's playout policy, a scoring device rather than a decision -- keeps the
+// greedy playout unless the deck's provider opted its measured configuration in
+// (SearchesRolloutSecondMain), and is ALWAYS greedy at depth <= 0 (structural: the rescued call
+// would re-enter the solve with no decrementing bound).
 
 // Play a post-combat main INSIDE the search. ONE function for all three sites (the candidate loop,
 // the deferred-wave loop, and the rollout's future turns) so they cannot drift apart -- the drift
 // between two copies of a decision is how this codebase has lost lockstep before.
 //
-// `depth <= 0` still takes the greedy: at depth 0 there IS no search (that is the d0 runner
-// configuration, and SolveWithLookahead itself returns Solve() there), so every d0 case stays
-// byte-identical. The shared SearchBudget is threaded through, so this spends from the same
+// The shared SearchBudget is threaded through, so this spends from the same
 // per-decision allowance rather than running unbounded -- it buys second-main fidelity by making
-// the rest of the pass shallower, which is exactly the trade the A/B has to judge.
+// the rest of the pass shallower; the solve memo is what keeps that affordable.
 // MTG_CONSIDER_STATS context tags (diagnosis only -- see namespace considerstats below the
 // groupwave block). Declared here because the two functions that bump them are defined early.
 static thread_local int g_cs_m2solve_nest = 0;   // inside SolveSecondMainInSearch (either path)
@@ -1546,12 +1515,14 @@ static bool BpLandDropSlotPassed(const GameState& state)
     return drop_rank < prov.CastOrderRank(state, *g_bp_site_def);
 }
 
-// Memoized SEARCHED second main (defined after BuildBreakpointKey, far below): under
-// MTG_SEARCH_SECOND_MAIN + MTG_SOLVE_MEMO together, each DISTINCT post-combat state is searched
-// exactly once per decision and every later arrival reuses that searched plan. This is the
-// single-consideration architecture (USER 2026-08-15): no greedy solve within the search, and one
-// place where each spell is searched -- re-searching the same state per sibling/pass was exactly
-// the cost that made plain MTG_SEARCH_SECOND_MAIN regress at fixed budget (80% exact repeats).
+// Memoized SEARCHED second main (defined after BuildBreakpointKey, far below): the UNCONDITIONAL
+// branch-site route since 2026-09-05 (searched-second-main-unconditional.md). Under MTG_SOLVE_MEMO
+// (default-ON), each DISTINCT post-combat state is searched exactly once per decision and every
+// later arrival reuses that searched plan. This is the single-consideration architecture (USER
+// 2026-08-15): no greedy solve within the search, and one place where each spell is searched --
+// re-searching the same state per sibling/pass was exactly the cost that made the un-memoized
+// searched m2 regress at fixed budget (80% exact repeats), and this memo is the FIRST budget
+// remedy on the ladder when the searched interior dilutes a deck's budget.
 static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int depth, int max_turns,
                                                    SearchBudget* budget, bool second_main,
                                                    TranspositionTable* tt);
@@ -2097,23 +2068,21 @@ namespace m2yield
     // never runs is exactly the "no effect and never fired look identical" trap. Split by the two
     // reasons greedy can win: the deck/site said greedy, or depth had already run out.
     inline std::atomic<uint64_t> g_searched{0}, g_greedy_hook{0}, g_greedy_depth{0};
-    // ...split by CALL SITE, because they are two different levers: the BRANCH site is a real
-    // decision, the ROLLOUT site is the leaf estimator's playout policy (see MTG_SSM_SITE).
+    // ...split by CALL SITE, because they are two different things: the BRANCH site is a real
+    // decision (searched unconditionally since 2026-09-05), the ROLLOUT site is the leaf
+    // estimator's playout policy (SearchesRolloutSecondMain).
     inline std::atomic<uint64_t> g_br_s{0}, g_br_g{0}, g_ro_s{0}, g_ro_g{0};
-    inline std::atomic<uint64_t> g_br_d0{0}, g_ro_d0{0};   // depth<=0: no search left, greedy by structure
-    inline std::atomic<uint64_t> g_br_d0s{0};              // ...of which MTG_M2_D0_SEARCHED rescued
-    // Which iterative-deepening passes COMPLETED. sub_depth is the PASS INDEX (0..depth-1), and
-    // pass 0 is the one whose interior m2 -- and whose whole rollout -- falls to greedy, because
-    // SolveSecondMainInSearch takes Solve() at depth<=0. Every completed pass overwrites the
+    inline std::atomic<uint64_t> g_br_d0{0}, g_ro_d0{0};   // depth<=0 arrivals per site
+    inline std::atomic<uint64_t> g_br_d0s{0};              // ...branch d<=0 now ALWAYS searched (1 ply)
+    // Which iterative-deepening passes COMPLETED. sub_depth is the PASS INDEX (0..depth-1); pass
+    // 0's whole ROLLOUT is greedy by structure (depth<=0). Every completed pass overwrites the
     // previous one, so this is CUMULATIVE: p[k] counts decisions that got AS FAR AS pass k, and the
     // number that FINALLY committed at pass k is p[k]-p[k+1]. Read it that way or it inverts.
     //
-    // This is the number that says whether a greedy interior m2 ever DECIDED anything, and at
-    // production budgets it says yes, nearly always: antilife commits at pass 0 in 99.5% of
-    // decisions, fivecolour 94.7%, kitty 82.9%. So the per-deck SearchedSecondMainInSearch hooks
-    // only reach the small minority of decisions where pass 1+ completes -- which is why turning
-    // MTG_5C_SSM off is byte-identical on 60 games, and why AL's branch-site hook was
-    // byte-identical over 26,000. Not inert levers: levers on a rarely-taken path.
+    // Pass 0 commits most decisions at production budgets (antilife 99.5%, fivecolour 94.7%,
+    // kitty 82.9%) -- which is exactly why the branch site's d<=0 case runs the one-ply SEARCHED
+    // m2 rather than a greedy pick: the pass that commits nearly everything must not be the one
+    // pass priced by the heuristic the search exists to replace.
     inline std::atomic<uint64_t> g_commit[8] = {};
     inline void RecordCommit(int sub_depth)
     { if (Enabled() && sub_depth >= 0 && sub_depth < 8) { g_commit[sub_depth].fetch_add(1, std::memory_order_relaxed); } }
@@ -2392,34 +2361,6 @@ inline long long Quantity(const GameState& state)
 }
 }
 
-// MTG_M2_D0_SEARCHED -- the LAST greedy step inside the search's own branching.
-//
-// USER, 2026-08-23: *"decks must have NO GREEDY components in the search."* Everything else has been
-// converted deck by deck (DecisionProvider::SearchedSecondMainInSearch), but `depth <= 0` below has
-// always fallen to greedy Solve() *regardless of every hook*, and that is not a rare corner. The
-// branch-site depth IS the iterative-deepening PASS INDEX (SolveWithLookahead's
-// `for (sub_depth = 0; sub_depth <= depth-1; ...)`), so PASS 0 -- the pass that finally commits
-// 94.7% of FiveColour's decisions, 99.5% of Anti-Lifegain's and 82.9% of Kitty's -- prices every
-// candidate with a GREEDY interior second main. Counted on fivecolour, the reference adoption:
-// 2,025,249 greedy branch-site second mains at d<=0 against 42,502 searched ones, i.e. 98% greedy.
-// That is the open item docs/design/searched-design-deck-rollout.md §3b names.
-//
-// On, the interior m2 runs at depth 1 instead of greedy: still ONE ply (it cannot compound with the
-// outer pass, which is the budget-dilution failure MTG_M2_CAP1 was built to test), but the plan is
-// CHOSEN by enumerating the m2 candidate set and scoring each with a playout rather than by Solve()'s
-// ordering heuristic. Default OFF -- this is the hot path and the cost is the whole question.
-//
-// BRANCH SITE ONLY, and that is structural rather than a preference: the rescued call re-enters
-// SolveWithLookahead(is_pre_combat=false, depth=1), whose own rollout re-enters this function at
-// depth 0 with in_rollout=true. Rescuing there too would recurse without a decrementing bound
-// (`depth` passes through SimulateToEndImpl UNCHANGED). Declining at the rollout site terminates it,
-// and it is also where the repo's law puts it: OPTIMISTIC where you BRANCH, HONEST where you SCORE.
-static bool M2D0SearchedEnabled()
-{
-    static const bool on = EnvOn("MTG_M2_D0_SEARCHED");
-    return heurarm::Flag(heurarm::M2_D0_SEARCHED, on);
-}
-
 static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int depth, int max_turns,
                                                 SearchBudget* budget, bool second_main,
                                                 TranspositionTable* tt, bool in_rollout)
@@ -2432,32 +2373,27 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     static const bool s_no_m2_solve = EnvOn("MTG_NO_M2_SOLVE");
     if (s_no_m2_solve) { return TurnSolver::Plan{}; }
     if (SecondMainUnproductive(state)) { return TurnSolver::Plan{}; }
-    // Two routes into the searched path: the global measurement lever (MTG_SEARCH_SECOND_MAIN),
-    // or the provider's per-deck adoption (SearchedSecondMainInSearch -- see the hook note; a
-    // phase-specified deck's interior m2 carries real decisions, everyone else keeps greedy).
-    // MTG_SSM_SITE -- WHICH of the two call sites the searched m2 applies to. The interior m2 is
-    // reached from two structurally different places, and they are not the same kind of thing:
-    //   1 = BRANCH only  -- SolveWithLookahead's candidate loop, where the m2 prices "what does
-    //       passing buy me". This is a DECISION the search is making.
-    //   2 = ROLLOUT only -- SimulateToEndImpl's per-turn m2, i.e. the playout policy of the LEAF
-    //       ESTIMATOR. Not a decision: a scoring device.
-    //   0 = both (default; byte-identical to before this lever existed).
-    // Separating them is what the standing LAW ("OPTIMISTIC where you BRANCH, HONEST where you
-    // SCORE") asks for, and it is the decomposition that says whether "no greedy at any level"
-    // means the branch site alone or the rollout too. See antilife-main-phase-split.md.
-    // Per-JOB route to site 1 as well (heurarm), so both arms of the comparison pool into one batch.
-    static const int s_ssm_site = EnvInt("MTG_SSM_SITE", 0);
-    const int site = heurarm::Flag(heurarm::SSM_BRANCH_ONLY, false) ? 1 : s_ssm_site;
-    const bool site_on = (site == 0)
-                      || (site == 1 && !in_rollout)
-                      || (site == 2 && in_rollout);
-    // Per-deck: the BRANCH site asks SearchedSecondMainInSearch, the ROLLOUT site asks
-    // SearchesRolloutSecondMain (which defaults to the former -> byte-identical). See the hook.
+    // The BRANCH site (a DECISION the search is making) is SEARCHED, always, for every deck --
+    // including depth <= 0, where it runs at one ply: the plan is CHOSEN by enumerating the m2
+    // candidate set and scoring each with a playout, never by Solve()'s ordering heuristic. The
+    // d<=0 case is not a rare corner -- the branch-site depth IS the iterative-deepening PASS
+    // INDEX, so pass 0 (which commits 82.9-99.5% of decisions on the measured decks) prices every
+    // candidate through this path. Measured before shipping: play-IDENTICAL digests over 2,000
+    // unbudgeted paired games, 35/36 budget-divergent games identical under joint escalation
+    // (searched-design-deck-rollout.md §3c; rule + budget-remedy ladder in
+    // searched-second-main-unconditional.md).
+    //
+    // The ROLLOUT site (the leaf estimator's playout policy -- a scoring device, not a decision)
+    // keeps the greedy playout unless the deck's provider adopted the searched configuration
+    // (SearchesRolloutSecondMain; AL measured greedy as an interior OPTIMUM there). At depth <= 0
+    // the rollout site is ALWAYS greedy, and that is structural rather than a preference: the
+    // rescued call re-enters SolveWithLookahead(is_pre_combat=false, depth=1), whose own rollout
+    // re-enters this function at depth 0 with in_rollout=true, and `depth` passes through
+    // SimulateToEndImpl UNCHANGED -- rescuing there recurses without a decrementing bound.
+    // OPTIMISTIC where you BRANCH, HONEST where you SCORE.
     const DecisionProvider& prov = ResolveProvider(state);
-    const bool searched = site_on
-                       && (!GreedySecondMainEnabled()
-                           || (in_rollout ? prov.SearchesRolloutSecondMain()
-                                          : prov.SearchedSecondMainInSearch()));
+    const bool searched = !in_rollout
+                       || (prov.SearchesRolloutSecondMain() && depth > 0);
     // MTG_M2_SEARCH_DEPTH=<n>: cap the interior m2 solve's depth (value-carrying; unset/<=0 = no
     // cap = full sub_depth, the 5C-adopted behaviour). n=1 is the "lean form" second-main-greedy.md
     // item 2 recorded: enumerate the m2 candidate set and score each with ONE playout, instead of
@@ -2473,11 +2409,10 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     const int cap = heurarm::Flag(heurarm::M2_CAP1, false) ? 1 : s_m2_depth_cap;
     const int m2_depth = (cap > 0 && cap < depth) ? cap : depth;
     const bool depth_out = (depth <= 0);
-    // See M2D0SearchedEnabled above: rescue the d<=0 BRANCH site into a one-ply searched m2. The
-    // deck must already have opted into the searched interior m2 (`searched`), so this lever is
-    // inert on every deck that has not -- it widens an adopted design, it does not start a new one.
-    const bool d0_searched = depth_out && !in_rollout && searched && M2D0SearchedEnabled();
-    const bool greedy_here = !searched || (depth_out && !d0_searched);
+    // depth <= 0 at the branch site runs the searched m2 at ONE ply (it cannot compound with the
+    // outer pass); at the rollout site depth <= 0 is already greedy via `searched` above.
+    const bool d0_searched = depth_out && searched;
+    const bool greedy_here = !searched;
     const int eff_depth    = d0_searched ? 1 : m2_depth;
     m2yield::RecordPath(!greedy_here, depth_out, in_rollout, d0_searched);
     const TurnSolver::Plan p =
@@ -4275,8 +4210,8 @@ static bool SubsetAttackForfeit(const GameState& state,
 // MTG_UNBACKED_ETB_GIFT -- a MISSING CASE in the unbacked-gift prune, not a new heuristic. The gate below
 // rejects a subset that hands the opponent life with no lifegain->loss enabler live -- but it keys on
 // `alt_cost`, so an ETB GIFT slips through entirely: Aria of Flame's "each opponent gains 10 life" is
-// a hard-cast enchantment, not an alt payload. That hole is what makes the SEARCHED second main
-// (MTG_AL_SSM) lose games the greedy Solve wins -- AL gi940/gi970/gi695: the searched m2 casts Aria at
+// a hard-cast enchantment, not an alt payload. That hole is what made the SEARCHED second main
+// (now the unconditional branch route) lose games the greedy Solve won -- AL gi940/gi970/gi695: the searched m2 casts Aria at
 // T3 with no Tainted Remedy out, opponent 16 -> 26 (and again at T4 -> 34), and the T8 Remedy + Cutter
 // + Silence kill is gone. The greedy Solve never picks it because EvalCard prices the unbacked copy
 // (ArchetypeCardValue's `DMG - gift*DMG/2`), but that value only ORDERS candidates; the searched path
@@ -16776,8 +16711,8 @@ namespace landdrop
 {
     inline bool Enabled() { static const bool v = EnvOn("MTG_LANDDROP_STATS"); return v; }
     inline std::atomic<uint64_t> g_calls{0}, g_none{0}, g_pass0{0}, g_pass1{0}, g_choice_forced{0};
-    // SPLIT BY SITE, because these are TWO levers and this repo has read a merged count wrongly
-    // before (see MTG_SSM_SITE): `real` is the committed executor decision, `rollout` is the leaf
+    // SPLIT BY SITE, because these are TWO different things and this repo has read a merged count
+    // wrongly before (the old m2 site split): `real` is the committed executor decision, `rollout` is the leaf
     // estimator's playout. Do NOT assume the rollout half is harmless -- the breakpoint fan-out's
     // own note records the opposite result: "root-only is nearly free but recovers NONE of the
     // gain... the greedy continuation's real damage is to the LEAF EVALUATOR: it makes the rollouts
@@ -33398,13 +33333,14 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
 
 // Memoized SEARCHED second main -- the single-consideration architecture (USER 2026-08-15: "I
 // don't want greedy solve within the search"; "the purpose of ... exactly one place to search
-// each spell is to avoid that"). Active only when MTG_SEARCH_SECOND_MAIN (searched, not greedy)
-// AND MTG_SOLVE_MEMO (once per state) are BOTH set: each distinct post-combat state is searched
-// once per decision (key = BuildBreakpointKey + the search fidelity `depth`, scope =
-// g_decision_epoch) and every later arrival -- other candidates, deferred-wave variants, deeper
-// passes, rollout future turns -- reuses that searched plan. Plain MTG_SEARCH_SECOND_MAIN re-ran
-// the nested search per arrival (80% exact state repeats measured), which is exactly why it
-// regressed at fixed budget (S0/S1 A/B 2026-08-15: ship +0.10/+0.08, wall +35%).
+// each spell is to avoid that"). Since 2026-09-05 this is the UNCONDITIONAL branch-site route
+// (searched-second-main-unconditional.md); memoization is on by default (opt out with
+// MTG_NO_M2_SEARCH_MEMO): each distinct post-combat state is searched once per decision
+// (key = BuildBreakpointKey + the search fidelity `depth`, scope = g_decision_epoch) and every
+// later arrival -- other candidates, deferred-wave variants, deeper passes, rollout future turns
+// -- reuses that searched plan. The un-memoized searched m2 re-ran the nested search per arrival
+// (80% exact state repeats measured), which is exactly why it regressed at fixed budget
+// (S0/S1 A/B 2026-08-15: ship +0.10/+0.08, wall +35%).
 //
 // Deliberately NOT byte-identical to the unmemoized searched mode: a hit skips the nested
 // search's budget consumption, so the outer deepening fits more passes -- that changed budget

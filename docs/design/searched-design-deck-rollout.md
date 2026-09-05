@@ -172,6 +172,14 @@ d<=0 against 42,502 searched ones: 98% greedy. That was the open item; §3c clos
 
 ## 3c. The d<=0 branch-site greedy: MEASURED, and it is NOT unreliable -- do NOT adopt (2026-08-26)
 
+**[SUPERSEDED 2026-09-05: ADOPTED, unconditionally, for every deck.** USER: *"Can we delete that
+greedy interior? I don't want it to exist for any future decks."* The greedy interior second main
+is deleted at the branch site — every depth, every deck — per
+`searched-second-main-unconditional.md`, which carries this section's measurement as its shipping
+evidence. The verdict below ("NOT YET — cost alone") is history; the surviving work item is the
+KittyEquipment tail root-cause (gi=231 / gi=470), now tracked there as budget-heuristic
+follow-up.]
+
 `SolveSecondMainInSearch` falls to greedy `Solve()` whenever `depth <= 0`, **regardless of every
 per-deck hook**. That is not a rare corner: the branch-site depth IS the iterative-deepening PASS
 INDEX (`for (sub_depth = 0; sub_depth <= depth-1; ...)`), so pass 0 -- the pass that finally commits

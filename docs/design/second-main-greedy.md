@@ -1,5 +1,10 @@
 # The second main inside the search was greedy — searched variant built, DEFAULT OFF
 
+**[SUPERSEDED 2026-09-05: the greedy interior second main is DELETED — searched unconditionally,
+every deck, every depth; the `MTG_SEARCH_SECOND_MAIN` lever described below no longer exists.
+Current rule: `searched-second-main-unconditional.md`. This file is the build/measurement
+history.]**
+
 **Status:** implemented and gated (`MTG_SEARCH_SECOND_MAIN=1`), **default OFF** on measurement.
 Off is byte-identical to the shipped engine (smoke 30/30, 0 configs changed), so nothing here
 perturbs ground truth. Session ran out of budget before the decisive deck was measured; the exact

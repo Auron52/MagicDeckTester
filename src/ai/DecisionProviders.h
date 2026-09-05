@@ -183,9 +183,9 @@ public:
     // searched interior second main to the split being live, exactly the FiveColour package.
     // Both gated default-OFF pending measurement + the user's classification review.
     bool ClassifiesMainPhases() const override;
-    bool SearchedSecondMainInSearch() const override;
-    // ...and the ROLLOUT site separately -- the leaf estimator's playout policy is a DIFFERENT
-    // lever from the branch-site decision. See the .cpp note.
+    // The ROLLOUT site's playout policy (the branch site is unconditionally searched engine-wide
+    // since 2026-09-05; searched-second-main-unconditional.md). AL DECLINES the searched rollout
+    // on measurement. See the .cpp note.
     bool SearchesRolloutSecondMain() const override;
     bool PhaseFilterRootTurnOnly() const override;
     // The FiveColour condemnation doctrine, AL arm (USER 2026-08-21: one condemnation across a
@@ -727,10 +727,11 @@ public:
     // MTG_5C_PHASE: per-deck opt-in to the pre-combat Main2 filter (this deck actually plays a
     // second main), activating the override above with the USER's 2026-08-19 phase rules.
     bool        ClassifiesMainPhases() const override;
-    // MTG_5C_SSM: search this deck's INTERIOR second mains (the phase spec above made them carry
-    // real decisions -- the global-arm split is recorded at the base hook). Measurement lever,
-    // default OFF pending the per-deck A/B.
-    bool        SearchedSecondMainInSearch() const override;
+    // MTG_5C_SSM: the ROLLOUT site's searched m2 (the branch site is unconditionally searched
+    // engine-wide since 2026-09-05). This deck's adoption (2026-08-21) measured BOTH sites on --
+    // the old rollout default chained to the branch opt-in -- so the override preserves that
+    // measured configuration exactly.
+    bool        SearchesRolloutSecondMain() const override;
     // MTG_5C_CONDEMN: the order-condemnation post-combat filter (base hook note) -- main 2
     // continues with main 1's condemnation list instead of re-litigating the whole hand.
     // Measurement lever, default OFF pending the per-deck A/B.
@@ -966,12 +967,12 @@ public:
     // rollout-leaf Solve walks ~1M subsets and a d5 game hit 40+ min on one seed (300003 gi=2)
     // once the rollout learned Puresteel draws (enter-cascade fix). Off-switch MTG_NO_LETHAL_CUT.
     bool UseLethalShortCircuit() const override { return true; }
-    // NO GREEDY SECOND MAIN on this deck (USER 2026-08-19: "we drop the greedy solves entirely and
-    // follow the proper design"). The evidence that it is free here: four d3 arms x 100 games --
-    // greedy, MTG_SEARCH_SECOND_MAIN, MTG_PHASE_CLASSIFY, and both -- all return avg 5.0300 and
-    // play digest 3e6ea44e9c15d572, so the searched path reaches the same decisions. Kill switch
-    // MTG_NO_SEARCH_SECOND_MAIN=1.
-    bool SearchedSecondMainInSearch() const override { return true; }
+    // Searched ROLLOUT m2 (the branch site is unconditionally searched engine-wide since
+    // 2026-09-05). This deck's conversion (USER 2026-08-19: "we drop the greedy solves entirely
+    // and follow the proper design") measured all four arms identical -- avg 5.0300, play digest
+    // 3e6ea44e9c15d572 -- under the old rollout default that chained to the branch opt-in, so the
+    // override preserves that measured configuration exactly.
+    bool SearchesRolloutSecondMain() const override { return true; }
     // The USER-reviewed cast order (review held 2026-08-19; see cast-order-rankings.md for the
     // ruling verbatim). Gated on MTG_KE_ORDER, default OFF -> byte-identical.
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
