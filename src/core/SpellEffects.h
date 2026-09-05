@@ -1517,6 +1517,41 @@ inline thread_local bool g_search_candidate_enum = true;
 // both the searched executor, whose rollouts priced the line, and greedy d0, which cannot.)
 inline thread_local bool g_searched_play = false;
 
+// ---- Convoke body classification (moved above PerformTutorToBattlefield: the Chord fetch
+// picker's spare-convoke X extension consults it at resolution). Full rationale sits at the
+// convoke section below (eligibility: untapped creature, sick-dork asymmetry, live-dork
+// dominance exclusion; ordering: free bodies before would-attack, ascending power).
+inline bool CanAttackFull(const Permanent&, const std::vector<Permanent>&, int);
+struct ConvokeClasses
+{
+    std::vector<int> free_green, free_other;   // m_numbers, cheapest-first
+    std::vector<int> atk_green,  atk_other;    // would-attack bodies (real opportunity cost)
+};
+inline ConvokeClasses ClassifyConvokeBodies(const GameState& s, int controller)
+{
+    ConvokeClasses out;
+    struct Ent { int pw, num; bool green, free; };
+    std::vector<Ent> ents;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsCreature() || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        const bool live_dork = d && d->tmpl == CardTemplate::ManaDork && p.CanTap();
+        if (live_dork) { continue; }
+        const int  pw   = p.EffectivePower();
+        const bool atk  = CanAttackFull(p, s.battlefield, controller) && pw > 0;
+        ents.push_back(Ent{pw, p.card.m_number, p.card.HasColor(Color::Green), !atk});
+    }
+    std::sort(ents.begin(), ents.end(), [](const Ent& a, const Ent& b)
+              { if (a.pw != b.pw) { return a.pw < b.pw; } return a.num < b.num; });
+    for (const Ent& e : ents)
+    {
+        (e.free ? (e.green ? out.free_green : out.free_other)
+                : (e.green ? out.atk_green  : out.atk_other)).push_back(e.num);
+    }
+    return out;
+}
+
 inline void PerformTutorToBattlefield(GameState& state, int controller, const CardParams& pp,
                                       int max_puts,
                                       const std::vector<std::string>& preferred = {},
@@ -1668,12 +1703,38 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // Null chooser (autonomous / search / rollout, RevealLogPause) -> byte-identical.
     if (g_play_tutor_chooser && pp.tutor_mv_max_is_x && max_puts == 1 && !human_override)
     {
+        // SPARE-CONVOKE X EXTENSION (USER 2026-09-05, seed-7 round 2: a combined "dork + Chord"
+        // plan bakes X=1 -- enumeration classifies convoke against the PRE-cast board -- so the
+        // picker offered only 1-drops even though the just-cast dork could convoke). At
+        // resolution the same-line casts ARE on the battlefield, so every untapped
+        // convoke-eligible body (ClassifyConvokeBodies, the shared classifier -- a
+        // summoning-sick dork qualifies) extends the reachable MV by one: picking a target k
+        // above the baked X taps k spare bodies, free bodies first, in the classifier's own
+        // deterministic order. Chooser-gated -> live human play only; the default answer never
+        // exceeds the baked X, so references replay without extra taps.
+        const ConvokeClasses spare_cc = ClassifyConvokeBodies(state, controller);
+        std::vector<int> spare_ids;
+        for (const int id : spare_cc.free_green) { spare_ids.push_back(id); }
+        for (const int id : spare_cc.free_other) { spare_ids.push_back(id); }
+        for (const int id : spare_cc.atk_green)  { spare_ids.push_back(id); }
+        for (const int id : spare_cc.atk_other)  { spare_ids.push_back(id); }
+        const int n_spare = static_cast<int>(spare_ids.size());
         std::vector<std::string> pick_names;
+        std::vector<int> pick_mv;
         std::unordered_set<std::string> pick_seen;
         for (const Card& c : ap.library)
         {
-            if (matches_types(c) && pick_seen.insert(c.m_name.str()).second)
-            { pick_names.push_back(c.m_name.str()); }
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            const Card& card = cd ? cd->card : c;
+            if (!CardHasColorNamed(card, pp.tutor_color)) { continue; }
+            const int mv = card.m_mana_cost.ManaValue();
+            if (max_mv_cap >= 0 && mv > max_mv_cap + n_spare) { continue; }
+            bool tm = false;
+            for (const std::string& t : pp.tutor_types)
+            { if (CardMatchesTypeName(card, t)) { tm = true; break; } }
+            if (!tm) { continue; }
+            if (pick_seen.insert(c.m_name.str()).second)
+            { pick_names.push_back(c.m_name.str()); pick_mv.push_back(mv); }
         }
         if (!pick_names.empty())
         {
@@ -1688,7 +1749,35 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
             const int chosen = (*g_play_tutor_chooser)(state, controller, psrc, pick_names, heur);
             put_pref.clear();
             if (chosen >= 0 && chosen < static_cast<int>(pick_names.size()))
-            { put_pref.push_back(pick_names[chosen]); }
+            {
+                put_pref.push_back(pick_names[chosen]);
+                int extra = (max_mv_cap >= 0) ? pick_mv[chosen] - max_mv_cap : 0;
+                if (extra > 0)
+                {
+                    // The downstream put matching (matches_types over `remaining`) reads
+                    // max_mv_cap -- raise it to the chosen target's MV or the put silently
+                    // whiffs after the taps were already made.
+                    max_mv_cap = pick_mv[chosen];
+                    int tapped = 0;
+                    for (const int id : spare_ids)
+                    {
+                        if (extra <= 0) { break; }
+                        for (Permanent& p : state.battlefield)
+                        {
+                            if (p.controller_index == controller && p.card.m_number == id
+                                && !p.tapped)
+                            { p.tapped = true; --extra; ++tapped; break; }
+                        }
+                    }
+                    if (g_play_event_sink && !g_tap_speculating && tapped > 0)
+                    {
+                        EmitPlayEvent(state.turn_number, "convoke",
+                                      "\xF0\x9F\x99\x8C Convoke -- tapped "
+                                      + std::to_string(tapped)
+                                      + " more creature(s) to raise X");
+                    }
+                }
+            }
             human_override = true;
         }
     }
@@ -6348,35 +6437,8 @@ inline int ApplyPersistLoop(GameState& state, int controller, int source_id, int
 // Ordering (cheapest opportunity cost first, deterministic): free bodies (cannot attack, or zero
 // power -- tapping them costs nothing vs the passive opponent, which never attacks so an untapped
 // blocker is worthless) before would-attack bodies; ascending effective power, then m_number.
-struct ConvokeClasses
-{
-    std::vector<int> free_green, free_other;   // m_numbers, cheapest-first
-    std::vector<int> atk_green,  atk_other;    // would-attack bodies (real opportunity cost)
-};
-inline ConvokeClasses ClassifyConvokeBodies(const GameState& s, int controller)
-{
-    ConvokeClasses out;
-    struct Ent { int pw, num; bool green, free; };
-    std::vector<Ent> ents;
-    for (const Permanent& p : s.battlefield)
-    {
-        if (p.controller_index != controller || !p.card.IsCreature() || p.tapped) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        const bool live_dork = d && d->tmpl == CardTemplate::ManaDork && p.CanTap();
-        if (live_dork) { continue; }
-        const int  pw   = p.EffectivePower();
-        const bool atk  = CanAttackFull(p, s.battlefield, controller) && pw > 0;
-        ents.push_back(Ent{pw, p.card.m_number, p.card.HasColor(Color::Green), !atk});
-    }
-    std::sort(ents.begin(), ents.end(), [](const Ent& a, const Ent& b)
-              { if (a.pw != b.pw) { return a.pw < b.pw; } return a.num < b.num; });
-    for (const Ent& e : ents)
-    {
-        (e.free ? (e.green ? out.free_green : out.free_other)
-                : (e.green ? out.atk_green  : out.atk_other)).push_back(e.num);
-    }
-    return out;
-}
+// (ConvokeClasses / ClassifyConvokeBodies moved ABOVE PerformTutorToBattlefield, which now
+// consults the classifier for the spare-convoke X extension of the Chord fetch picker.)
 // Reduce a Chord-style cost by the convoke taps' contribution: green bodies cover {G} pips
 // first, then generic; non-green bodies cover generic only. THE single source of truth for the
 // reduction -- used by the enumeration (Action::cost is emitted already reduced) AND by every

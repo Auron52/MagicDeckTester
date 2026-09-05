@@ -34546,23 +34546,28 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     }
                 }
             }
-            if (!a.tutor_target.empty())   { addSub(a.card_name + " \xE2\x86\x92 " + a.tutor_target, a.card_name + " \xE2\x86\x92", a.tutor_target, a.tutor_target, "tutor"); }
-            // Birthing Pod: WHICH creature is sacrificed is the activation's other real axis (the
-            // fetch already rides the tutor sub above). Disambiguated (" #k") like the equip host:
-            // two same-named victims must not share a choice string or the dedup silently decides
-            // which one dies. Without this sub, victim variants of one (Pod, fetch) pair collapse.
-            if (a.kind == Action::Kind::ActivatePod && a.sac_victim_id != 0)
-            {
-                const std::string vn = SubChoiceHostLabel(state, a.sac_victim_id);
-                std::string art;
-                for (const Permanent& perm : state.battlefield)
-                { if (perm.card.m_number == a.sac_victim_id) { art = perm.card.m_name.str(); break; } }
-                if (!vn.empty())
-                {
-                    addSub(a.card_name + " sacrifices " + vn, a.card_name + " sacrifices",
-                           vn, art, "sacrifice", a.sac_victim_id);
-                }
-            }
+            // RESOLUTION-PICKED dimensions stay OUT of the choose fan (USER 2026-09-05, round 4:
+            // "it popped up two dialogs rather than one"): the Pod's victim+fetch and the
+            // Chord-class (tutor_mv_max_is_x) fetch are re-asked at RESOLUTION -- board-click +
+            // tutor_etb picker, with the committed plan's bake as the default -- so fanning them
+            // here made the queue-time dialog ask the exact question the picker asks again.
+            // Variants differing only by those axes now share a sig and collapse; a bare
+            // "cast=Chord" often auto-accepts with no queue dialog at all. Explicit pod=/verb
+            // declarations still filter candidates directly (that match is not sub-based).
+            const bool resolution_tutor =
+                a.kind == Action::Kind::ActivatePod
+                || (a.kind == Action::Kind::CastFromHand && !a.tutor_target.empty()
+                    && [&]() {
+                           const CardDefinition* cd2 = a.def ? a.def
+                               : CardDatabase::Instance().Lookup(a.card_name);
+                           return cd2 && cd2->params.tutor_mv_max_is_x;
+                       }());
+            if (!a.tutor_target.empty() && !resolution_tutor)
+            { addSub(a.card_name + " \xE2\x86\x92 " + a.tutor_target, a.card_name + " \xE2\x86\x92", a.tutor_target, a.tutor_target, "tutor"); }
+            // Birthing Pod: the victim axis is resolution-picked too (see resolution_tutor above)
+            // -- the board-click chooses it precisely by battlefield index, which supersedes the
+            // old " #k" disambiguation concern (two same-named victims collapse harmlessly now:
+            // whichever representative wins the dedup, the human re-picks the body on the board).
             // Repeat-outlet LOOP COUNT (the sacout loop-count fold above): a plan's demand-driven
             // burst (x8 lethal damage, x14 lethal growth) is a real decision once the declared
             // count matched flexibly -- without this sub two loop plans differing only in K fold

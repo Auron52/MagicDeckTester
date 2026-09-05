@@ -2792,9 +2792,16 @@ function promptPanelHtml(d, dec){
   if (dec==='sacrifice'){
     const sel=[...(S.boardSel||[])];
     const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
-    return `<h3>Sacrifice a land — ${esc(d.source||'')}</h3>`+
-      `<div class="sub">Click a land on your board to sacrifice (${esc(d.source||'this spell')}'s additional cost). Eligible lands are highlighted; ✓ marks your pick.</div>`+
-      `<div class="pbtns"><span class="pcount">Sacrificing: <b>${opt?esc(opt.name):'(pick a land)'}</b></span>`+
+    // Noun from the actual options (this panel is shared by Shard Volley's land sac AND the
+    // creature-outlet / Birthing Pod victim pickers -- the hardcoded "land" wording on a
+    // creature list was a user flag, 2026-09-05). Board entries carry is_land by perm idx.
+    const bf=(d.me&&d.me.battlefield)||[];
+    const kinds=(d.options||[]).map(o=>{const p=bf.find(b=>b.idx===o.perm_index);return p?!!p.is_land:null;});
+    const noun=kinds.length&&kinds.every(k=>k===true)?'land'
+             :(kinds.length&&kinds.every(k=>k===false)?'creature':'permanent');
+    return `<h3>Sacrifice a ${noun} — ${esc(d.source||'')}</h3>`+
+      `<div class="sub">Click a ${noun} on your board to sacrifice (${esc(d.source||'this spell')}'s cost). Eligible ${noun}s are highlighted; ✓ marks your pick.</div>`+
+      `<div class="pbtns"><span class="pcount">Sacrificing: <b>${opt?esc(opt.name):`(pick a ${noun})`}</b></span>`+
       `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
   if (dec==='attach_host'){
@@ -3283,7 +3290,7 @@ function commitBoardSel(d, dec){
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: return ${opt?opt.name:'land'}`;
   } else if (dec==='sacrifice'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
-    oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: sacrifice ${opt?opt.name:'land'}`;
+    oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: sacrifice ${opt?opt.name:'(default)'}`;
   } else if (dec==='attach_host'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: attach to ${opt?opt.name:'creature'}`;

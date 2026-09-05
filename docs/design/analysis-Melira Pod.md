@@ -1360,3 +1360,37 @@ User reports, all fixed and verified this session:
 All engine changes are human-surface-only by construction (choosers/event sink null in
 autonomous, search, and rollout play). Battery: unit SUCCESS, scenarios 72/72, all 6 Melira
 refs green; protocol + validate sweeps and smoke byte-identity recorded below on completion.
+
+## SESSION 2026-09-05g — round 4: the one-line convoke X, the double dialog, the wrong noun
+
+Three user reports on the chord-Melira flow, all fixed:
+
+1. **"Doing them in the same plan it only gave me the 1-drop option."** The combined
+   "dork + Chord" plan bakes X=1 (enumeration classifies convoke against the PRE-cast board), so
+   the fetch picker capped at MV<=1. FIX -- SPARE-CONVOKE X EXTENSION at resolution: the picker
+   now offers targets up to baked-X + (untapped convoke-eligible bodies, per the shared
+   ClassifyConvokeBodies -- the just-cast summoning-sick dork qualifies), and picking k above the
+   baked X taps k spare bodies, free-first, with a "Convoke -- tapped k more creature(s) to raise
+   X" event. The downstream put cap is raised to the chosen MV (the first build tapped the bodies
+   and then silently whiffed the put -- matches_types still filtered at the old cap). Verified:
+   one-line "Ignoble Hierarch + Chord" -> picker offers all 8 MV<=2 -> Melira ENTERS, correct
+   taps. Defaults never exceed the baked X, so references replay without extra taps.
+   (This CLOSES the "one-line convoke X" gap disclosed in session 5f.)
+
+2. **"It popped up two dialogs rather than one."** The queue-time choose fan still fanned the
+   tutor TARGET (and the pod victim), which the resolution picker then asked again. FIX: those
+   axes are dropped from CheckLine's sub fan (resolution_tutor: ActivatePod + tutor_mv_max_is_x
+   casts); variants differing only there now share a sig and collapse. A bare "cast=Chord"
+   validates to a choose fan of X ONLY (X=1 vs X=2 -- a real payment difference: X-via-mana taps
+   a land, X-via-spare-convoke taps a body), then ONE picker asks the creature. The pod-victim
+   sub is deleted outright (the board-click picks by battlefield index, superseding the " #k"
+   disambiguation the sub existed for).
+
+3. **"The text for sacrificing a creature says 'sacrifice a land'."** Frontend: the viewer's
+   `sacrifice` panel hardcoded the land wording (it predates the creature-outlet/Pod reuse; the
+   ENGINE note was already noun-derived since 2026-09-04). The panel now derives the noun from
+   the options against the board (is_land by perm idx): land / creature / permanent.
+
+Battery: unit SUCCESS, scenarios 72/72, protocol sweep 0 drift / 0 gaps / 0 contract (286 refs
+incl. the user's new s6+s7 games, both committed), validate-line 0 REGRESSION (286), smoke 68/68
+byte-identical, viewer sample checks PASS.
