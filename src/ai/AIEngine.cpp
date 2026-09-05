@@ -225,6 +225,13 @@ namespace execgreedy
 inline bool Enabled() { static const bool v = EnvOn("MTG_M2_YIELD_STATS"); return v; }
 inline std::atomic<unsigned long long> g_exec[12] = {};
 inline std::atomic<unsigned long long> g_rollout{0}, g_bp{0};
+// CAUSE split of the executor breakpoint fallback (g_bp), because the two kinds differ in what
+// they mean: BASE (the committed plan carries no searched continuation, bp_choice < 0) is
+// realized-equals-scored -- the scoring rollout ran the SAME greedy Solve at the same state
+// through the twin applier; MISMATCH (a searched continuation existed but the executor could
+// not replay it: bp_seen counting drifted or bp_choice overran the re-enumerated list) is a
+// realized-vs-scored DIVERGENCE and must read zero.
+inline std::atomic<unsigned long long> g_bp_base{0}, g_bp_mismatch{0};
 inline void Record(int depth, bool in_rollout)
 {
     if (!Enabled()) { return; }
@@ -232,13 +239,20 @@ inline void Record(int depth, bool in_rollout)
     if (in_rollout) { g_rollout.fetch_add(1, std::memory_order_relaxed); return; }
     if (depth >= 0 && depth < 12) { g_exec[depth].fetch_add(1, std::memory_order_relaxed); }
 }
+inline void RecordBpCause(bool had_choice)
+{
+    if (!Enabled()) { return; }
+    (had_choice ? g_bp_mismatch : g_bp_base).fetch_add(1, std::memory_order_relaxed);
+}
 struct Dumper
 {
     ~Dumper()
     {
         if (!Enabled()) { return; }
         std::fprintf(stderr, "=== EXECUTOR GREEDY Solve(): in-rollout=%llu breakpoint-fallback=%llu"
-                     " | REAL main-phase decisions by depth:", g_rollout.load(), g_bp.load());
+                     " (base=%llu MISMATCH=%llu)"
+                     " | REAL main-phase decisions by depth:", g_rollout.load(), g_bp.load(),
+                     g_bp_base.load(), g_bp_mismatch.load());
         bool any = false;
         for (int i = 0; i < 12; ++i)
         {
@@ -3098,7 +3112,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
             }
         }
-        if (!bp_searched_here) { execgreedy::Record(-1, m_in_rollout); extra = TurnSolver::Solve(state, is_pre_combat_main); }
+        if (!bp_searched_here) { execgreedy::Record(-1, m_in_rollout);
+                                 execgreedy::RecordBpCause(plan.bp_choice >= 0);
+                                 extra = TurnSolver::Solve(state, is_pre_combat_main); }
         // Lockstep trace (MTG_BP_TRACE): the EXECUTOR's breakpoint sequence, to be diffed against
         // ApplyPlanDirect's [bp-apply] lines for the same committed line. Diagnosis only.
         if (BpTraceEnabled())
@@ -3858,7 +3874,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         }
                     }
                     if (!pod_bp_searched)
-                    { execgreedy::Record(-1, m_in_rollout); extra = TurnSolver::Solve(state, is_pre_combat_main); }
+                    { execgreedy::Record(-1, m_in_rollout);
+                      execgreedy::RecordBpCause(plan.bp_choice >= 0);
+                      extra = TurnSolver::Solve(state, is_pre_combat_main); }
                     // Precasts (SacForMana / Suspend / convoke taps) exactly as
                     // resolve_draw_breakpoint's pre-pass, then the casts in the executor's clean
                     // canonical order, then the continuation's ACTIVATIONS via this same trailing

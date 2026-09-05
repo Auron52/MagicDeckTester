@@ -1394,3 +1394,30 @@ Three user reports on the chord-Melira flow, all fixed:
 Battery: unit SUCCESS, scenarios 72/72, protocol sweep 0 drift / 0 gaps / 0 contract (286 refs
 incl. the user's new s6+s7 games, both committed), validate-line 0 REGRESSION (286), smoke 68/68
 byte-identical, viewer sample checks PASS.
+
+## SESSION 2026-09-05h — greedy-solve audit (USER: "ensure there are no greedy solves done in the middle of search")
+
+Measured with the standing MTG_M2_YIELD_STATS apparatus (s5000 x 100 games, production settings,
+the calibrated post-canon engine). **The searched part is CLEAN by the adopted 2026-09-02
+sound-recipe standard** (canon continuation, MTG_BP_CANON_CONT default-ON):
+
+- **Executor REAL main-phase greedy decisions: NONE.** Zero ROOT-kind fallbacks (nothing in the
+  committed decision's own enumeration falls to greedy).
+- **Executor breakpoint fallbacks: 20 / 100 games -- ALL base-class, 0 MISMATCH** (new cause
+  split added to the probe this session: base = the committed plan carries no searched
+  continuation, so the scoring rollout ran the IDENTICAL greedy Solve at the identical state
+  through the twin applier -> realized == scored; MISMATCH = a searched continuation the
+  executor could not replay -> would be a divergence, and reads zero).
+- **Site 7 (the pod-chain breakpoint, built after the canon dossier): 1.88M greedy Solves per
+  100 games, 99.0% in PLAIN ROLLOUTS** -- the class the user explicitly accepted ("rollouts
+  being greedy is fine... I can always increase depth and budget to rely on them less. That is
+  not true for the searched part"). Residue: rollout+rec 1.0%, overrun 0.4%, nested 0.04% --
+  all rollout-side; canon fires/enums cover the captured applies.
+- **Site 90 (9.7M): the horizon-leaf base case** -- the search's designed evaluator, not a
+  mid-search fallback. The route to shrink it is the deck's VALUE LEAF (user-initiated stage,
+  not yet run for Melira); until then every horizon evaluation is a greedy playout by design.
+
+Conclusion: no greedy DECISION contaminates the searched structure for Melira Pod; greedy
+survives only where the user's ruling accepts it (playouts) plus a provably-consistent base-arm
+executor residue. The probe's new (base vs MISMATCH) split is permanent apparatus -- if MISMATCH
+ever reads nonzero on a future audit, that is a real scored-vs-realized divergence to chase.
