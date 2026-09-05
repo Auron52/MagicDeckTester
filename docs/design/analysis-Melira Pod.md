@@ -1084,3 +1084,25 @@ second Hierarch the freed pip paid for, Pod->Redcap T4, Pod->Celes T5, win T5.
   proper mulligan profile." Stands as-is.
 - QUEUE after gameplay items (user): viewer bucket-B choosers (revive, flicker, Severance
   exile, Rec Sage self-Pod, CheckLine #P/verbs), then the equal-win-turn inf-life preference.
+
+### EVOKE implemented (a618893c)
+Second CastFromHand variant sharing hand_index (bestow idiom), pays evoke_cost {5}{W}
+(added to Reveillark's params), self-sacs after the enter cascade via the SHARED
+SacrificePermanentAt in BOTH worlds -> LTB fires as on any leave. Emission gated on a
+printed power<=2 creature card in the graveyard (else dominated by the hard cast).
+Cost swapped at every recompute site (the convoke/phyrexian lockstep list); #E0/#E1 sig
+tags; viewer "(evoke)" + JSON key. Proof scenario melira_evoke_reveillark.json (only the
+evoke line is lethal on the turn): PASS; suite 63/63, smoke 68/68 byte-identical,
+benchmarks unchanged (0 evoke fires in 100 autonomous games -- corner line, as designed).
+
+### Equal-win-turn inf-life preference implemented (closes the OPEN item)
+User-queued. `leafeval::t_inf` publishes the winning rollout's end-state inf_life_turn at
+SimulateToEndImpl's three win exits; the ROOT ranking loop prefers the inf-proven line on
+equal-win-turn ties (above plan.value, below win turn; MTG_INFLIFE_WINTIE default ON).
+SCOPE (deliberate, disclosed): root ties only -- the interior FSLine early exits/cutoffs stop
+at the first horizon win and breaking them to surface interior ties is a search-cost trade this
+does not justify; TT cache hits also lose the tag (bare-int table; deterministic per run).
+The `better` chain restructure is provably identical when no candidate carries a stamp -> every
+other deck byte-identical by construction (smoke 68/68). Measured s5000x100: 4.96 vs 4.97 avg,
+inf 34 vs 33, inf turn 4.06 vs 4.09 -- directionally right on every axis, no drawback ->
+adopted per the clean-win rule.

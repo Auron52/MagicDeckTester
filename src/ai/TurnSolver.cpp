@@ -2319,6 +2319,23 @@ inline void Publish(long long v)
 }
 inline void PublishLife(long long v) { t_life = v; }
 
+// EQUAL-WIN-TURN INF-LIFE PREFERENCE (MTG_INFLIFE_WINTIE, default ON; =0 = measurement arm;
+// USER-QUEUED 2026-09-05, closing the ledger's OPEN item). Between two root candidates whose
+// rollouts BOTH win on the same turn, prefer the line that ALSO proved the infinite-life loop:
+// a wrong win projection realises far more safely from an infinite board. `t_inf` carries the
+// winning rollout's end-state GameState::inf_life_turn (-1 = never); reset per candidate beside
+// t_tb. SCOPE (deliberate, disclosed): the ROOT ranking loop only -- the interior FSLine
+// machinery's first-verified-win early exits and win-turn cutoffs stop at the first win at the
+// horizon, and breaking those to surface interior ties is a real search-cost trade this
+// preference does not justify. A TT cache HIT also loses the tag (the table stores bare win
+// turns): deterministic per run, and only ever costs a preference, never a win turn.
+inline thread_local int t_inf = -1;
+inline bool InfWinTie()
+{
+    static const bool on = EnvOn("MTG_INFLIFE_WINTIE", true);
+    return on;
+}
+
 // The graded no-win quantity, LOWER is better. Opponent life is the primary term because it is the
 // same currency as the metric: the Aria class raises it by 10 and that is exactly the cost the flat
 // score hides. MTG_LEAF_TB_BOARD adds development terms UNDER it (they can never outrank a life
@@ -27763,7 +27780,9 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // one game 5 -> 4 and changed a line at equal score. Whether that early-out is an
         // improvement is a separate question with its own A/B; it is not this change's business.
         // Gated on the new field, this is unreachable for every deck without an opponent library.
-        if (state.opponent_decked) { leafeval::Publish(leafeval::kInvalid); return state.turn_number; }
+        if (state.opponent_decked)
+        { leafeval::Publish(leafeval::kInvalid); leafeval::t_inf = state.inf_life_turn;
+          return state.turn_number; }
 
         // Truncated-rollout cap: K turns simulated with no win yet -> hand the tail to the cheap value leaf
         // (see MTG_ROLLOUT_HORIZON above). Fires only for lines that DON'T win fast (the expensive ones);
@@ -27852,7 +27871,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         SimulateCombat(state);
         if (OpponentHasLost(state))
         {
-            leafeval::Publish(leafeval::kInvalid);   // a win needs no tie-break
+            leafeval::Publish(leafeval::kInvalid);   // a win needs no tie-break (turn-wise)
+            leafeval::t_inf = state.inf_life_turn;   // ...but the inf proof breaks win-turn ties
             return state.turn_number;
         }
 
@@ -27893,7 +27913,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             }
             ApplyPlanDirect(state, post_plan, false);
             if (OpponentHasLost(state))
-            { leafeval::Publish(leafeval::kInvalid); return state.turn_number; }
+            { leafeval::Publish(leafeval::kInvalid); leafeval::t_inf = state.inf_life_turn;
+              return state.turn_number; }
         }
 
         // End of turn + start of next. The next turn's land drop is searched as part
@@ -32155,6 +32176,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         int       pass_best_win    = max_turns + 1;
         long long pass_best_tb     = leafeval::kInvalid;   // graded leaf quantity of pass_best
         long long pass_best_life   = leafeval::kInvalid;   // ...and its life term (exposure telemetry)
+        int       pass_best_inf    = -1;                   // ...and its winning rollout's inf stamp
         bool      pass_has_best    = false;
         bool      pass_aborted     = false;
         long long candidates_done  = 0;
@@ -32299,10 +32321,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // within-pass running best (pass_best_win) is the branch-and-bound cutoff.
             leafeval::t_tb = leafeval::kInvalid;   // this candidate's leaf publishes into it, or not
             leafeval::t_life = leafeval::kInvalid;
+            leafeval::t_inf = -1;                  // ...and its winning rollout's inf-life stamp
             int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
                                          pass_best_win, second_main, tt);
             const long long leaf_tb   = leafeval::t_tb;
             const long long leaf_life = leafeval::t_life;
+            const int       leaf_inf  = leafeval::t_inf;
             // Feed the rollout result back so the census can count HARM -- a dominated candidate
             // that outscored its dominator is a win the prune would have deleted (see RecordWin).
             if (DomActive()) { domin::RecordWin(dom_archive, dom_probe, win_turn); }
@@ -32329,17 +32353,30 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if ((leaf_tb < pass_best_tb) != (plan.value > pass_best.value))
                 { leafeval::g_flips.fetch_add(1, std::memory_order_relaxed); }
             }
-            bool better = !pass_has_best
-                       || win_turn < pass_best_win
-                       || (tb_live && leaf_tb != pass_best_tb ? leaf_tb < pass_best_tb
-                                                              : (win_turn == pass_best_win
-                                                                 && plan.value > pass_best.value));
+            // Equal-win-turn inf-life preference (leafeval::InfWinTie): sits ABOVE the leaf/
+            // value fallbacks but BELOW the win turn. Restructured from the one-expression chain
+            // -- provably the same predicate when neither candidate carries an inf stamp (t_inf
+            // is -1 for every deck without the loop detection), so every other deck is
+            // byte-identical by construction.
+            bool better;
+            if (!pass_has_best)                      { better = true; }
+            else if (win_turn != pass_best_win)      { better = win_turn < pass_best_win; }
+            else if (leafeval::InfWinTie() && win_turn <= max_turns
+                     && (leaf_inf >= 0) != (pass_best_inf >= 0))
+            { better = leaf_inf >= 0; }
+            else
+            {
+                better = (tb_live && leaf_tb != pass_best_tb)
+                           ? leaf_tb < pass_best_tb
+                           : plan.value > pass_best.value;
+            }
             if (better)
             {
                 pass_best_win = win_turn;
                 pass_best     = plan;
                 pass_best_tb   = leaf_tb;
                 pass_best_life = leaf_life;
+                pass_best_inf  = leaf_inf;
                 pass_has_best  = true;
             }
             esc_pool.push_back(EscEntry{static_cast<int>(&plan - candidates.data()), win_turn,
