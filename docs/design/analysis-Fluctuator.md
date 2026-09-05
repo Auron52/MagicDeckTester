@@ -6,8 +6,9 @@
 **Status:** REBASED onto origin 2026-09-05 (13 commits replayed; both tiers re-accepted under the
 rebased binary with **0 configs changed** for every other deck, incl. upstream's new Melira Pod).
 Play quality settled (§7.7, §7.8); **G-2 / O-2 CLOSED 2026-09-05 (§7.9** — Capital City's any-colour
-filter built as `any_color_filter`, the third mana-conversion shape: d0 −0.69 to −0.80 turns,
-neutral at searched play settings, 11-17% faster, every non-fluctuator config byte-identical**)**.
+filter built as `any_color_filter`, the third mana-conversion shape, **plus the phantom it planted
+in §7.8's own reachability rule**: d0 **−0.77**, d3 −0.008, d5 −0.017 on 1440 held-out games with
+**12 of 12 cells non-worse**, no perf cost, every non-fluctuator config byte-identical**)**.
 Deck IS A REGRESSION CASE in all three tiers
 (O-4 perf gate met at the real gate budgets — the b200 tail was budget-driven, not structural).
 Current: **avg 3.8000** turn-to-win, zero unwon (100 games, seed 9001, d3/b200; held-out bases
@@ -580,6 +581,9 @@ a Stinger. Three details carry the user's exceptions:
 
 * **Reachability reads the lands we CONTROL, not untapped mana.** That is "wait until you can":
   being tapped out is a reason to wait a turn, not to spend library.
+* **A CONVERSION source's colour costs an extra land** (added 2026-09-05 with §7.9 — this rule
+  read `produces` raw and Capital City's became WUBRG, which made it stop cycling a turn early
+  whenever one was out; see §7.9's phantom section).
 * **An Unearth with an empty graveyard is NOT a route** (no legal target, CR 601.2c). That state
   keeps digging — it is the deck's signature line (cycle a Stinger into the yard, then Unearth it),
   not an exception to the rule.
@@ -691,29 +695,57 @@ cells moved, so nothing else in the suite is touched — `any_color_filter` is o
    untapped colour source is unenumerable as a land play whenever the group's representative is
    the other card.
 
-### What it exposed, and did NOT fix: the land-drop ORDER (open)
+### The phantom it planted in §7.8's own rule — FOUND AND FIXED (2026-09-05)
 
-11 games across the two tiers lose exactly one turn and **persist at 4x and 16x budget**, so they
-are not truncation churn. They share ONE cause, and it is not in the payment:
+The first cut of §7.9 left 11 games losing exactly one turn and **persisting at 4x and 16x
+budget**. They were read as a land-drop-ORDER heuristic hole ("the engine plays its untapped land
+too early"), because that is what the traces show: base `gi93` plays Polluted Mire T1 / Capital
+City T2 and casts **Fluctuator on T2**; the new arm plays a tapped land T2 and slips Fluctuator to
+T3. **That diagnosis was wrong** — the land order was the SYMPTOM. Three facts killed it:
 
-> **The engine plays its UNTAPPED land too early.** Base `gi93`: T1 Polluted Mire, T2 Capital City
-> → two untapped sources on T2 → **Fluctuator on T2**. New: T1 Polluted Mire, T2 *Drifting Meadow*
-> (enters tapped) → one untapped source → **no Fluctuator until T3**. Same in `gi0` and `gi127`
-> with the T1 drop instead. A land that enters tapped costs nothing on a turn whose mana you
-> cannot spend; an untapped one played early wastes the only thing it has.
+* the loss was **invariant from d3/b10 to d8/b1000** — the signature of a representability limit,
+  not a valuation one (§7.7's own lesson);
+* **`MTG_UNPRUNED=1` did not recover it**, so no prune was hiding the line;
+* the **d0 greedy DID** play Capital City and cast Fluctuator on T2, so the payment was never in
+  question.
 
-This is a **pre-existing heuristic hole that the change made visible** (Capital City is now a
-distinct, differently-valued land), not one it introduced — old-code-with-new-data recovers two
-of the three probed games and loses the third, so neither half owns it. It is the deck owner's own
-idiom (*"often you don't even want to play the third land, because it costs a cycling card"*) and
-it is a `heuristic-optimization` candidate: **prefer the enters-tapped land when the drop's mana is
-not needed this turn.** Note the existing counter-evidence is for the OPPOSITE rule — a naive
-"untapped first" tie-break measured 0 better / 2 worse over 12000 games on Hinata
-(`DecisionProviders.cpp`) — so this direction is untested, not refuted.
+The cause was in §7.8's rule, one file away from anything the commit touched.
+`FluctuatorCastRouteReachable` reads each land's `produces` **raw** — and Capital City's `produces`
+had just become WUBRG. So a board of `{Polluted Mire, Capital City}` claimed it could pay Drannith
+Stinger's `{1}{R}`: two lands, red "producible". It cannot — converting eats the Mire's mana and
+leaves **one** mana. Stop-on-threat therefore believed the deck already held its route and
+**stopped cycling a turn early, every time a Capital City was on the battlefield.**
+
+This is exactly trap 1 above — an unguarded `produces` read — and it is worth naming that the
+`IsManaConversionSource` sweep did NOT catch it, because this site never tested `is_filter ||
+ramp_filter` in the first place: it is a deck provider's own helper, written when no conversion
+source was in the deck. *A predicate can only unify the guards that already exist.*
+
+The fix charges a conversion colour what it costs: a required colour only a conversion source can
+make needs its own feed, so it costs **one extra land** on top of the cost's mana value
+(`lands >= ManaValue() + extra`). That is the `min(F, ⌊(F+S)/2⌋)` arithmetic restated in the rule's
+own currency, and it is exact at both ends — `{1}{R}` off two lands where only Capital City makes
+red wants three lands, and four Capital Cities really do pay a two-pip two-colour cost.
+
+**All four probed persisters recover to T3, and every measured cell improved or held:**
+
+| | games | PRE (before §7.9) | §7.9 alone | **+ route fix** | Δ vs PRE |
+|---|---|---|---|---|---|
+| d0, 4 held-out seeds | 800 | 6.2700 | 5.5775 | **5.5025** | **−0.7675** |
+| d3/b200, 4 held-out seeds | 400 | 3.7775 | 3.7825 | **3.7700** | **−0.0075** |
+| d5/b40, 4 held-out seeds | 240 | 3.8250 | 3.8209 | **3.8083** | **−0.0167** |
+
+**12 of 12 held-out cells non-worse; 9 improved.** In the suite, all 10 fluctuator keys improved
+or held, smoke has **zero** searched slower games, and regression's 2 are pure budget churn (both
+recover at 4x and 16x). Every other config stays byte-identical.
+
+**Perf: no cost.** The A/B's pooled wall suggested 1.5–1.7x, which was contention — the recorded
+trap. Measured back-to-back on a quiet box, the same 100-game d3/b200 cell is **2508s → 2482s
+(0.99x)**, and the suite's own makespans FELL (regression 290s → 246s, smoke 117s → 107s).
 
 *(One d0 game, regression s2002 gi38, turns a T5 win into a loss: the greedy now casts Enlightened
 Tutor on T2 off two Capital Cities — the new capability firing — and then runs itself out of gas.
-That is d0 greedy quality inside a −0.72 d0 win, not a modelling error.)*
+That is d0 greedy quality inside a −0.77 d0 win, not a modelling error.)*
 
 ## Claude-play sweep
 

@@ -11449,31 +11449,47 @@ bool FluctuatorProvider::DigContinueAfterResolve() const
 // tapped/untapped: the question is "will waiting a turn get there" (the user's "if you can't play
 // it this turn you should wait until you can"), not "can I pay right now". Being tapped out is a
 // reason to wait, not a reason to keep spending library.
+// A CONVERSION source's colours are NOT free (see IsManaConversionSource): reaching one costs a
+// FEED from another land, so it is tracked separately from the plain colours and charged for.
+// This mattered the moment Capital City stopped being a {C} land: reading `produces` raw made a
+// board of {Polluted Mire, Capital City} claim it could pay Drannith Stinger's {1}{R} -- two
+// lands, red "producible" -- when converting consumes the Mire's mana and leaves ONE mana total.
+// That phantom told the stop-on-threat rule the deck already held its route, so it STOPPED
+// CYCLING a turn early, every time a Capital City was out. It is the same over-credit the flat
+// pool caps in AnyColorFilterFedSlots, in this rule's own currency.
 static bool FluctuatorCastRouteReachable(const GameState& s, const ManaCost& cost)
 {
     const int me = s.active_player_index;
     int lands = 0;
-    bool w=false,u=false,b=false,r=false,g=false;
+    bool w=false,u=false,b=false,r=false,g=false;             // plain: colour costs one land
+    bool cw=false,cu=false,cb=false,cr=false,cg=false;        // conversion: costs one land MORE
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d || !d->card.IsLand()) { continue; }
         ++lands;
+        const bool conv = IsManaConversionSource(d->params);
         for (Color c : d->params.produces)
         {
-            switch (c) { case Color::White: w=true; break; case Color::Blue:  u=true; break;
-                         case Color::Black: b=true; break; case Color::Red:   r=true; break;
-                         case Color::Green: g=true; break; default: break; }
+            switch (c) { case Color::White: (conv?cw:w)=true; break;
+                         case Color::Blue:  (conv?cu:u)=true; break;
+                         case Color::Black: (conv?cb:b)=true; break;
+                         case Color::Red:   (conv?cr:r)=true; break;
+                         case Color::Green: (conv?cg:g)=true; break; default: break; }
         }
     }
-    if (lands < cost.ManaValue()) { return false; }
-    if (cost.white && !w) { return false; }
-    if (cost.blue  && !u) { return false; }
-    if (cost.black && !b) { return false; }
-    if (cost.red   && !r) { return false; }
-    if (cost.green && !g) { return false; }
-    return true;
+    // Each required colour only a conversion source can make needs its OWN feed, so it costs one
+    // extra land on top of the cost's mana value. Exactly the min(F, (F+S)/2) arithmetic restated:
+    // {1}{R} off two lands where only a Capital City makes red wants 3 lands, and four Capital
+    // Cities (4 lands, 2 conversions) really do pay a two-pip, two-colour cost.
+    int extra = 0;
+    if (cost.white && !w) { if (!cw) { return false; } ++extra; }
+    if (cost.blue  && !u) { if (!cu) { return false; } ++extra; }
+    if (cost.black && !b) { if (!cb) { return false; } ++extra; }
+    if (cost.red   && !r) { if (!cr) { return false; } ++extra; }
+    if (cost.green && !g) { if (!cg) { return false; } ++extra; }
+    return lands >= cost.ManaValue() + extra;
 }
 
 // FluctuatorHoldsExecutableRoute -- do we already hold a route to a Drannith Stinger that our
