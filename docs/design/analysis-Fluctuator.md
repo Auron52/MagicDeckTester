@@ -810,6 +810,81 @@ where the Stingers or Unearths sit at the bottom of the library.
 each fire — worth keeping, because it is what distinguished *"the lever never fires"* from *"the
 lever fires and the search already agreed"*, and only the second of those is a reason to ship.
 
+## 7.11 The turn-one land drop — play the TAPPED land while the mana is idle (USER, 2026-09-05)
+
+**USER ruling**, shown the turn-one census: *"Wow, that is surprising on the untapped land T1. That
+is never a good idea."*
+
+`GreedyLandChoiceIndex`'s four passes prefer an untapped land **unconditionally**, and that
+preference is only ever right when the mana can be SPENT this turn. When it cannot, it is strictly
+losing:
+
+```
+untapped now, tapped next  ->  1 usable this turn, 1 usable next turn
+tapped now, untapped next  ->  0 usable this turn, 2 usable next turn
+```
+
+Nothing consumes the 1 in line one, so line two **dominates** it. Deferring the untapped land costs
+nothing now and buys a full extra mana on every later turn. That is ordinary manabase sequencing,
+not a deck quirk, so it is built in the shared ranker rather than in this deck's provider.
+
+**Why it bites here.** 38 of 42 lands enter tapped, so two mana on turn two IS the deck — an
+untapped T2 drop averages **3.554 (58% T3 wins)** against **4.306 (6.5%)** for a tapped one — and
+the ranker spent the untapped land on turn one in **~42% of the games where it had the choice**.
+
+**That was invariant across d3 and d5, and the reason is worth recording**: not that the search is
+blind to the trade, but that it rates the two land lines equal at the horizon and falls through to
+this ranker as its **last-resort plan-ordering tiebreak** (`greedy_land_name` in
+`EnumeratePlansWithLandUncached`). One ranker serves all three land-drop sites, so fixing it reaches
+the executor's drop, the enumeration tiebreak and the rollout playout at once.
+
+### Scope — and why it stops at turn one
+
+The rule fires only when the extra mana **provably** cannot be used: the pool after the untapped
+drop is still short of the cheapest action the turn has (any hand card's mana value, any *effective*
+cycling cost — Fluctuator's discount included, since a {0} cycle is a real mana sink). The test is
+by mana VALUE, not colour, which is the conservative direction: a card affordable by value but
+uncastable by colour makes the rule DECLINE to fire, never misfire.
+
+It is scoped to the **first drop of the game** because that is the only state where "no mana sink
+exists" is cheap to prove. With the board bare, the whole space of sinks is the hand, so a scan of
+hand costs is exhaustive. One turn later it is not — a permanent's activated ability is a sink too,
+and the engine has 30-odd separate `optional<ManaCost>` params for those with **no generic "has an
+activation" probe**. Enumerating them would be a hand-maintained list that rots invisibly every time
+a card shape is added (a missed sink makes the rule fire when it should not, and merely looks like a
+slightly worse land drop). Widening past turn one needs that probe to exist first.
+
+Two lands are exempt because deferring would **lose** the untapped-ness: a fastland (its window
+closes as lands arrive) and a reveal-untap land (its condition reads a hand that will have changed).
+A shock land is not exempt — its life payment is just as available next turn.
+
+### Measured — 18 decks, 80 jobs, 57,200 games, ONE pooled batch, play settings
+
+| cell | train | hold |
+|---|---|---|
+| fluctuator d0 | 5.4937 → 5.4063 (**−0.0874**) | 5.4997 → 5.4235 (**−0.0762**) |
+| fluctuator d3 | 3.8500 → 3.8480 (−0.0020) | 3.8440 → 3.8420 (−0.0020) |
+| fluctuator d5 | 3.8260 → 3.8220 (−0.0040) | 3.8320 → 3.8320 (0.0000) |
+| suite d3 mean | −0.0001 | −0.0002 |
+
+**15 of the other 17 decks read exactly 0.0000 on both blocks** — the rule never fires there, which
+is what the built-in negative controls demand (burn's greedy drop is 100% forced). The only two
+nonzero decks, fivecolour and th, **flip sign between the blocks** (+0.0025/−0.0050 and
+−0.0025/+0.0025) and are noise.
+
+**d0 is where the gap's true size shows**, exactly as with Capital City in §7.9: at searched depths
+the search partly routes around a bad drop with slower lines, so the visible delta shrinks to
+−0.002. The −0.08 at d0 is what the drop is worth with no search papering over it.
+
+Lever `MTG_LAND_IDLE_TAPPED_FIRST` (`heurarm::LAND_IDLE_TAPPED_FIRST`). Byte-identical at its
+default across the 72-config smoke tier.
+
+**A collateral finding worth acting on separately:** `MTG_ROLLOUT_LAND_RANKER` — which deletes the
+rollout's hand-rolled ranker mirror, the one with *no notion of tapped-ness at all* — was measured
+back in `0932e091` at **−0.0013 suite / −0.0009**, hinata −0.0138 (t=−2.41), **never worse on any
+deck on either block**, and was nonetheless left default OFF as "measuring". It is an unadopted
+candidate, and it is the same defect this section fixes seen from the leaf-estimator side.
+
 ## Claude-play sweep
 
 - commit: `71e547d8` (+ the `ReanimateTargetIndex` fix this sweep produced)

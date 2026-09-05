@@ -394,6 +394,18 @@ inline bool LandClosingWindowEnabled()
     return v;
 }
 
+// MTG_LAND_IDLE_TAPPED_FIRST -- DEFAULT OFF (measuring). Invert the ranker's untapped-first
+// preference on the FIRST land drop of the game when the mana provably cannot be spent this turn.
+// The full rationale, the safety conditions and the USER ruling behind it are at the one call site
+// (GreedyLandChoiceIndex, LandPlay.cpp); this is the shared reader because the ranker serves all
+// three land-drop sites (executor drop, enumeration tiebreak, rollout playout under
+// MTG_ROLLOUT_LAND_RANKER).
+inline bool LandIdleTappedFirstEnabled()
+{
+    static const bool v = EnvOn("MTG_LAND_IDLE_TAPPED_FIRST");
+    return heurarm::Flag(heurarm::LAND_IDLE_TAPPED_FIRST, v);
+}
+
 // MTG_TUTOR_AXIS_RESOLVE -- DEFAULT ON (adopted 2026-08-05); =0 restores the legacy name-bound
 // axis. Bind the searched tutor pick by INDEX resolved at the TRUE per-plan state instead of by
 // NAME ranked at the shared pre-land turn-start state (see the full note at TurnSolver's

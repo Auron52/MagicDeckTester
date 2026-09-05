@@ -76,6 +76,11 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
 // land carries enters_tapped == false yet may come down tapped). Skips Apex-exiled lands and a Karoo
 // bounce land with no other land in play (its bounce would return itself).
 //
+// MTG_LAND_IDLE_TAPPED_FIRST (default OFF, measuring) swaps the untapped and tapped halves of the
+// four passes on the FIRST drop of the game when the untapped land's mana provably cannot be spent
+// this turn -- deferring it is free then, and it buys an extra mana on every later turn. Scoped to
+// the empty board because that is the only state where "no mana sink exists" is cheap to prove.
+//
 // Extracted because it existed twice: AIEngine::TryPlayLand (which PLAYS the land) and TurnSolver's
 // `greedy_land_name` lambda (which PREDICTS it, as the search's last-resort plan-ordering tiebreak,
 // and documents itself as mirroring TryPlayLand). The mirror had silently drifted in three ways --

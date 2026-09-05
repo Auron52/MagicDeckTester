@@ -6,6 +6,7 @@
 #include "../core/RolloutTouch.h"
 #include "../core/SpellEffects.h"
 #include "EngineFlags.h"
+#include <algorithm>
 
 bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefinition& def,
                       const LandPlayOptions& opts)
@@ -148,6 +149,86 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     return true;
 }
 
+// Would the extra mana from an UNTAPPED first land sit idle this turn? See the call site in
+// GreedyLandChoiceIndex for the rationale; this is the safety envelope, and every clause below is
+// there to make a false TRUE impossible rather than to widen the rule's reach.
+//
+// SCOPED TO THE FIRST LAND DROP OF THE GAME (the active player controls no land). That is the case
+// the USER ruled on, it is where the census says the damage is, and -- decisively -- it is the only
+// state in which "nothing can consume the mana" is CHEAP TO PROVE. With a board this bare the whole
+// space of mana sinks is the hand, so a scan of hand costs is exhaustive. One turn later it is not:
+// a permanent's activated ability is a sink too, and the engine has 30-odd separate optional<ManaCost>
+// params for those with no generic "has an activation" probe. Enumerating them here would be a
+// hand-maintained list that silently rots every time a card shape is added -- the same failure mode
+// the reference-deck map just had to be rescued from -- and the rot would be INVISIBLE, because a
+// missed sink makes the rule fire when it should not and merely looks like a slightly worse land
+// drop. Widening past turn one needs that probe to exist first; it is a follow-up with its own
+// measurement, not a constant to relax.
+static bool FirstDropManaWouldSitIdle(const GameState& state, bool hold_top_consumer)
+{
+    const Player& ap = state.ActivePlayer();
+
+    for (const Permanent& p : state.battlefield)
+    {
+        // Any permanent at all disqualifies: a land is a mana source that changes the arithmetic,
+        // and a nonland is a potential activated-ability sink (see the header).
+        if (p.controller_index == state.active_player_index) { return false; }
+    }
+
+    // Both kinds must be on offer, or there is no order to invert. `untapped_net` is the most mana
+    // any DEFERRABLE untapped candidate could add -- taking the max is the conservative side: if
+    // even the best of them cannot reach the cheapest action, none of them can.
+    bool has_tapped   = false;
+    int  untapped_net = -1;
+    for (const Card& c : ap.hand)
+    {
+        if (c.m_impulse_no_land) { continue; }
+        const CardDefinition* front = CardDatabase::Instance().LookupCached(c);
+        const CardDefinition* def   = LandFaceDefOf(front);
+        if (!def) { continue; }
+        if (hold_top_consumer && front != nullptr
+            && front->params.look_top_put_creature_count > 0) { continue; }
+        // A Karoo needs another land to bounce and there is none (this is the first drop), so it is
+        // not a candidate here at all -- matching the four-pass scan's own skip.
+        if (def->params.etb_bounce_land) { continue; }
+        const bool is_tapped = LegacyStaticTapped() ? def->params.enters_tapped
+                                                    : LandWouldEnterTapped(state, *def);
+        if (is_tapped) { has_tapped = true; continue; }
+        // DEFERRING MUST KEEP THE UNTAPPED-NESS, or the trade this rule is built on does not hold.
+        // A fastland enters untapped only while few other lands are out, and a reveal-untap land
+        // reads a hand that will have changed by the time we come back to it: for those the untapped
+        // drop really is use-it-or-lose-it, so one in hand keeps the whole untapped-first order.
+        // (A shock land is fine -- its life payment is just as available next turn.)
+        if (def->params.fastland_max_other_lands >= 0)      { return false; }
+        if (!def->params.etb_untap_reveal_subtypes.empty()) { return false; }
+        untapped_net = std::max(untapped_net, SourceMaxNet(*def));
+    }
+    if (!has_tapped || untapped_net <= 0) { return false; }
+
+    // The cheapest mana outlay the turn has available. Compared by MANA VALUE, not colour, and that
+    // is the conservative direction: a card affordable by value but uncastable by colour makes this
+    // read TOO SMALL, which makes the rule DECLINE to fire. It can never manufacture a fire.
+    int cheapest = -1;
+    const auto note = [&cheapest](int mv) { if (cheapest < 0 || mv < cheapest) { cheapest = mv; } };
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        if (!d->card.IsLand()) { note(d->card.m_mana_cost.ManaValue()); }
+        // Cycling is a real mana sink and the reason this must not just read mana values: on this
+        // deck a Fluctuator-discounted cycle costs {0}, and a turn that can cycle is a turn whose
+        // mana is NOT idle. EffectiveCyclingCostFor carries the discount (SpellEffects.h).
+        if (d->params.cycling_cost.has_value())
+        { note(EffectiveCyclingCostFor(state, *d).ManaValue()); }
+        if (d->params.sacrifice_draw_cost.has_value())
+        { note(d->params.sacrifice_draw_cost->ManaValue()); }
+    }
+    if (cheapest < 0) { return true; }        // nothing but lands in hand: nothing to spend on
+
+    // Idle exactly when the untapped drop still cannot buy the cheapest thing available.
+    return untapped_net < cheapest;
+}
+
 int GreedyLandChoiceIndex(const GameState& state)
 {
     const Player& ap = state.ActivePlayer();
@@ -224,10 +305,37 @@ int GreedyLandChoiceIndex(const GameState& state)
         }
     }
 
+    // "PLAY THE TAPPED LAND WHILE THE MANA WOULD SIT IDLE" (MTG_LAND_IDLE_TAPPED_FIRST, default
+    // OFF -- measuring). USER ruling, 2026-09-05, shown the turn-one census: "Wow, that is
+    // surprising on the untapped land T1. That is never a good idea."
+    //
+    // The four passes below prefer an untapped land UNCONDITIONALLY, and that preference is only
+    // ever right when the mana can be SPENT this turn. When it cannot, it is strictly losing:
+    //
+    //     untapped now, tapped next  ->  1 usable this turn, 1 usable next turn
+    //     tapped now, untapped next  ->  0 usable this turn, 2 usable next turn
+    //
+    // Nothing consumes the 1 in line one, so line two dominates it -- deferring the untapped land
+    // costs nothing now and buys a full extra mana on every later turn. This is the ordinary
+    // manabase-sequencing principle, not a deck quirk, which is why it is built here in the shared
+    // ranker rather than in a provider.
+    //
+    // WHY IT MATTERS HERE. On Fluctuator 38 of 42 lands enter tapped, so two mana on turn two IS
+    // the deck (untapped T2 drop: 3.554 avg / 58% T3 wins; tapped: 4.306 / 6.5%), and the ranker
+    // spent the untapped land on turn one in ~42% of the games where it had the choice. That was
+    // INVARIANT across d3 and d5 -- not because the search is blind to the trade, but because it
+    // rates the two lines equal at the horizon and falls through to this ranker as its last-resort
+    // plan-ordering tiebreak (see greedy_land_name in TurnSolver's EnumeratePlansWithLandUncached).
+    // Fixing the ranker therefore reaches all three land-drop sites at once.
+    const bool idle_first_drop = LandIdleTappedFirstEnabled()
+                              && FirstDropManaWouldSitIdle(state, hold_top_consumer);
+
     // Four-pass priority: 0 = untapped+multi, 1 = untapped+any, 2 = tapped+multi, 3 = tapped+any.
+    // Under the rule above the two halves swap -- tapped+multi, tapped+any, untapped+multi,
+    // untapped+any -- so the multi-colour preference inside each half is preserved exactly.
     for (int pass = 0; pass < 4; ++pass)
     {
-        const bool want_untapped = (pass < 2);
+        const bool want_untapped = idle_first_drop ? (pass >= 2) : (pass < 2);
         const bool want_multi    = (pass == 0 || pass == 2);
         // Closing-window sub-order: a fastland enters untapped ONLY while few other lands are out, so
         // its untapped drop is use-it-or-lose-it while an always-untapped land is as good later. It
