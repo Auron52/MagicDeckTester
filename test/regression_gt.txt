@@ -63,7 +63,8 @@ antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
 minotaur2hg_smoke_d3_s1001=5.3500/d6096734765b010a
 goblins2hg_smoke_d3_s1001=4.0400/98eb843d496e3922
 knights2hg_smoke_d3_s1001=5.0933/2c8289b1ed029bba
-fivecolour2hg_smoke_d3_s1001=5.6250/f9d716de08e2b3ed
+fivecolour2hg_smoke_d3_s1001=5.6500/cc63e8eef97b47a9
+fluctuator2hg_smoke_d3_s1001=3.7600/845d4236aa6443e9
 slivers2hg_smoke_d3_s1001=4.8200/60f7078e6e53e52d
 burn2hg_smoke_d3_s1001=5.8400/dc4e7d5057c61975
 th2hg_smoke_d3_s1001=4.5200/e0b5a30a00ce0b4f
@@ -76,6 +77,9 @@ kitty2hg_smoke_d3_s1001=4.9400/7bc28551a3faa869
 dragons2hg_smoke_d3_s1001=6.3000/43872dc33fccb094
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
 melira2hg_smoke_d3_s1001=5.2000/106e7e26dd3bf0f5
+fluctuator_smoke_d0_s1001=6.2790/a5ceb96ac6b656b7
+fluctuator_smoke_d3_s1001=3.8400/3c2f29229b035325
+fluctuator_smoke_d5_s1001=3.8400/17a4107b968573cf
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6790/990aaa21c4bc567e
@@ -174,7 +178,13 @@ antilife2hg_regression_d3_s2002=4.3133/88cdae0a53b9a7f6
 minotaur2hg_regression_d3_s2002=5.3933/a6b3c5b4ba60297a
 goblins2hg_regression_d3_s2002=4.1600/cace34cecfc985f8
 knights2hg_regression_d3_s2002=5.0100/40a525918b346540
-fivecolour2hg_regression_d3_s2002=5.3800/afd832fea43d92f4
+fivecolour2hg_regression_d3_s2002=5.3600/86798c73be25faa0
+fluctuator2hg_regression_d3_s2002=3.9400/8db9e10510c3fe63
+fluctuator_regression_d0_s2002=6.2160/dfc8a21333ef280b
+fluctuator_regression_d3_s2002=3.9933/78322bf4b01d2da3
+fluctuator_regression_d3_s3003=3.8733/6e734d5ce711148d
+fluctuator_regression_d5_s2002=4.0400/3d3002dc8c26cc3a
+fluctuator_regression_d5_s3003=3.9067/c29149f5a94048d2
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/c408e174bb95edab
