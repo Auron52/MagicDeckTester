@@ -599,7 +599,7 @@ Better on both axes at once. `MTG_FLUCT_STOP_ON_THREAT=0` restores always-dig.
 
 ### Open follow-ups this policy exposed (NOT built)
 
-1. **The second-Stinger finish.** *"That is the second way to finish the job when the library is
+1. **The second-Stinger finish. — BUILT 2026-09-05 on request, see §7.10.** *"That is the second way to finish the job when the library is
    getting low. You play 2 unearth for 2 stinger and deal 2 per card."* With two Stingers a kill
    needs ~10 cycles instead of ~20, which is the right answer when the library is short — and it
    ADDS damage per card, unlike holding Hollow One. The user's threshold: *"when there are
@@ -746,6 +746,69 @@ trap. Measured back-to-back on a quiet box, the same 100-game d3/b200 cell is **
 *(One d0 game, regression s2002 gi38, turns a T5 win into a loss: the greedy now casts Enlightened
 Tutor on T2 off two Capital Cities — the new capability firing — and then runs itself out of gas.
 That is d0 greedy quality inside a −0.77 d0 win, not a modelling error.)*
+
+## 7.10 The second finish — two Stingers when the library is short (USER, 2026-09-05)
+
+§7.8's follow-up 1, built on request. *"You play 2 unearth for 2 stinger and deal 2 per card. That
+is the second way to finish the job when the library is getting low... when there are sufficient
+cards left in the library (over 20, after dropping stinger) there is no need to get a second
+stinger or hold Hollow One... the purpose of the other lines is only to handle cases where we don't
+have enough cards left. This would be pretty rare, but occasionally the stingers or unearth end up
+near the bottom of the library."*
+
+`SelectDigSource`'s `protect` package switches off entirely once a Stinger is on the battlefield
+("everything is still free game"). That is right while the library can still carry the kill and
+wrong once it cannot, because then the deck needs a SECOND Stinger and the only route to one is an
+Unearth it has already pitched. `hold_second_threat` is that one exception.
+
+**The threshold is the user's, restated as arithmetic rather than as the flat 20.** Each cycle
+draws a card, so the library bounds the cycles; each cycle pings for (Stingers on board) x
+(opposing HEADS); combat covers the rest. So hold when
+
+> `library x stingers x heads  <  opponent life - attackable power`
+
+That reproduces "over 20" exactly (1 Stinger, 1 head, 20 life, no board) **and** the user's 2HG
+remark for free — *"stinger deals 2 per card in 2HG, so that case is actually a bit easier"* is
+`heads = 2`, i.e. 15 cards against 30 team life. Two further conditions make the hold a plan rather
+than a wish: a **target** (a Stinger in the graveyard, or one in hand this chain will bin) and a
+**route** (lands that can pay `{B}`, via §7.9's conversion-aware reachability).
+
+### Both extra conditions were bought with a measured mistake
+
+* **Ignoring combat fired the rule on already-lethal boards.** The first cut asked the chain to
+  supply the whole remaining life. This deck's board is mostly free 4/4 Hollow Ones, so 8-14 power
+  is usually attacking. It fired on 2 of 200 games — and **both were false positives** that won
+  that very turn on cycles plus attacks. Holding the Unearth cost each of them a turn (T4 -> T5,
+  **0 better / 2 worse**).
+* **Ignoring castability was a strict loss.** Cycling the Unearth is worth 1 damage NOW, so holding
+  one we cannot cast gives up a ping for nothing. Adding the route check took the same sample from
+  2 worse to **0 changed**.
+
+### What it is worth: insurance, not a win
+
+| | games | rule OFF | rule ON | Δ |
+|---|---|---|---|---|
+| **d0, 6 seeds** | 3000 | 5.4833 | **5.4687** | **−0.0147** (6 of 6 seeds better) |
+| d3/b10, 3 seeds | 1500 | 3.8673 | 3.8673 | **byte-identical digests** |
+| 2HG d3, 2 seeds | 600 | 3.7817 | 3.7817 | **byte-identical digests** |
+| 2HG d0, 2 seeds | 1000 | 5.3950 | 5.3950 | 0.0000 (one seed's play differs) |
+| suite (smoke + regression) | — | — | — | only the two d0 cells move, both **−0.0020** |
+
+**Under search it is completely inert** — same committed line, same digest, on 2100 searched games
+— and it never loses anywhere. The gain is entirely at d0, where there is no search to find the
+line anyway. Both tiers report *"no searched-depth slowdowns or play changes"*.
+
+**The frequency is the honest headline, and it matches what the user predicted.** Counting the real
+trigger from game logs with a RUNNING opponent life (the first count used a stale per-phase life and
+over-reported by ~70x), the deck pitches a genuinely-needed second threat **2 times in 200 games at
+d3 and 0 times in 200 at d0** — and with combat counted, both of those two are false positives. So
+this is a rule for a state the deck almost never reaches: *"pretty rare"* was exactly right. It is
+shipped because it is correct play, costs nothing measurable, and is the right answer in the draws
+where the Stingers or Unearths sit at the bottom of the library.
+
+`MTG_FLUCT_SECOND_THREAT=0` restores the always-fodder behaviour. `MTG_FLUCT_ST_TRACE=1` reports
+each fire — worth keeping, because it is what distinguished *"the lever never fires"* from *"the
+lever fires and the search already agreed"*, and only the second of those is a reason to ship.
 
 ## Claude-play sweep
 

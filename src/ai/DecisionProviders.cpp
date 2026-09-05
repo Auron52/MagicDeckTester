@@ -11595,6 +11595,84 @@ bool FluctuatorProvider::ShouldConsiderDig(const GameState& s) const
 //     back onto the battlefield.
 //   * Otherwise, the last Drannith Stinger is cycled ONLY when we hold an Unearth to rebuy it.
 // Ranks below decide the order among what IS spendable (lowest goes first).
+// FluctuatorWantsSecondThreat -- is the library too short for the Stingers we ALREADY control to
+// finish, so that a second one is worth a card? (USER 2026-09-05: "you play 2 unearth for 2 stinger
+// and deal 2 per card. That is the second way to finish the job when the library is getting low...
+// when there are sufficient cards left in the library (over 20, after dropping stinger) there is no
+// need to get a second stinger... the purpose of the other lines is only to handle cases where we
+// don't have enough cards left. This would be pretty rare, but occasionally the stingers or unearth
+// end up near the bottom of the library.")
+//
+// Stated in the deck's own arithmetic rather than as the flat 20, because the flat 20 is the
+// SPECIAL CASE of one Stinger against 20 life in 1v1. Each cycle draws one card, so the library
+// bounds the number of cycles; each cycle pings for (Stingers on board) x (opposing HEADS). So the
+// board can deliver `lib * sting * heads` and needs the opponent's life. That reproduces the user's
+// threshold exactly (1 Stinger, 1 head, 20 life -> want a second at 20 or fewer cards) and it also
+// reproduces their 2HG remark for free -- "stinger deals 2 per card in 2HG, so that case is
+// actually a bit easier" is heads=2, i.e. 15 cards against 30 team life, not 30.
+//
+// COMBAT MUST BE COUNTED, and leaving it out was the first version's bug. This deck's board is
+// mostly free 4/4 Hollow Ones, so by the kill turn 8-14 power is usually attacking; a rule that
+// asks the cycle chain to supply the WHOLE remaining life fires on boards that were already
+// lethal. Measured: the uncounted version fired on 2 of 200 games and both were false positives --
+// each won that very turn on cycles PLUS attacks -- and holding the Unearth in them cost a turn
+// (T4 -> T5, 0 games better). So the chain only has to cover what combat does not.
+static bool FluctuatorWantsSecondThreat(const GameState& s)
+{
+    static const bool s_on = EnvOn("MTG_FLUCT_SECOND_THREAT", true);
+    if (!s_on) { return false; }
+    const int me = s.active_player_index;
+    int sting = 0, swing = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.cycle_trigger_damage_each_opponent > 0) { ++sting; }
+        if (p.card.IsCreature() && CanAttackFull(p, s.battlefield, me))
+        { swing += std::max(0, p.EffectivePower()); }
+    }
+    if (sting == 0) { return false; }   // the pre-threat case; the ordinary `protect` owns it
+    const long long lib   = static_cast<long long>(s.players[me].library.size());
+    const long long heads = gamesetup::OpponentHeads();
+    return lib * sting * heads < s.players[1 - me].life - swing;
+}
+
+// True if an Unearth held now is actually a SECOND STINGER: it needs both something to rebuy and
+// the mana to do it.
+//   * A TARGET -- a Stinger already in the graveyard, or one in hand that this very chain will bin
+//     (it ranks EARLY as fodder precisely so it becomes a target). Without either the Unearth is a
+//     dead card, the same distinction the "no legal target" subtlety above turns on, one zone later.
+//   * A ROUTE -- lands that can pay its cost, via the same conversion-aware reachability the
+//     stop-on-threat rule uses (§7.8/§7.9). Holding a card we cannot cast is not a plan, it is one
+//     ping thrown away: cycling the Unearth is worth 1 damage NOW, so an uncastable hold is a
+//     strict loss with no upside at all.
+static bool FluctuatorSecondThreatLive(const GameState& s)
+{
+    const Player& ap = s.ActivePlayer();
+    bool target = false;
+    for (const Card& c : ap.graveyard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.cycle_trigger_damage_each_opponent > 0) { target = true; break; }
+    }
+    if (!target)
+    {
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.cycle_trigger_damage_each_opponent > 0) { target = true; break; }
+        }
+    }
+    if (!target) { return false; }
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.reanimate_creature_max_mv > 0
+            && FluctuatorCastRouteReachable(s, d->card.m_mana_cost)) { return true; }
+    }
+    return false;
+}
+
 std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPool& pool,
                                                 bool& out_is_sac) const
 {
@@ -11623,6 +11701,27 @@ std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPo
     // "Once Drannith Stinger is on board everything is still free game" (user). With the wincon
     // already deployed there is nothing left to hold back, so every protection below is dropped.
     const bool protect = (bf_stinger == 0);
+    // ...WITH ONE EXCEPTION, and it is the user's second finish (2026-09-05). "Free game" is right
+    // while the library can still carry the kill; it is wrong once it cannot, because then the
+    // deck needs a SECOND Stinger and the only route to one is an Unearth it has already pitched.
+    // MEASURED before this rule (200 games, seed 9001, d3/b10): a second Stinger was REANIMATABLE
+    // -- one on board and one in the graveyard -- in 156 of 200 games, and an Unearth was in hand
+    // at some point in 144, but all three were true SIMULTANEOUSLY in only 3. The chain was
+    // burning every Unearth as fodder the moment the first Stinger landed.
+    const bool hold_second_threat = !protect
+                                 && FluctuatorWantsSecondThreat(s)
+                                 && FluctuatorSecondThreatLive(s);
+    // MTG_FLUCT_ST_TRACE (diagnosis only, default off): how often the second-finish hold actually
+    // FIRES. An inert lever that never fires and one that fires and agrees with the search are
+    // different findings, and only the counter tells them apart.
+    {
+        static const bool s_st_trace = EnvOn("MTG_FLUCT_ST_TRACE");
+        if (s_st_trace && hold_second_threat)
+        {
+            std::fprintf(stderr, "[st-hold] T%d lib=%zu opp_life=%d bf_sting=%d\n",
+                         s.turn_number, ap.library.size(), s.players[1 - me].life, bf_stinger);
+        }
+    }
 
 
     int best_rank = std::numeric_limits<int>::max();
@@ -11647,6 +11746,11 @@ std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPo
             // The last Unearth is the only way a binned Stinger comes back -- hold it. Spare
             // copies are ordinary fodder.
             if (protect && hand_unearth <= 1) { continue; }
+            // Second finish: the same "only route back" argument, one Stinger later. Holding the
+            // last Unearth costs exactly one cycle (one ping); casting it doubles every ping from
+            // then on, so it pays for itself after the second remaining cycle -- and this branch
+            // only fires when the library is already too short for the current board to finish.
+            if (hold_second_threat && hand_unearth <= 1) { continue; }
             rank = 5;
         }
         else if (p.cycle_trigger_damage_each_opponent > 0)
