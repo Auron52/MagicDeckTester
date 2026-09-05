@@ -263,10 +263,19 @@ export MTG_TT_CAP=$((  _pw_kb * 1024 / 3 / 64   ))
 # The line-cache budget is a SHARED POOL, not a per-worker slice (MTG_FSL_POOL, engine-side global):
 # appetite is heavily skewed (typical game ~100 MB, monster ~900 MB at ~600 B/entry, measured
 # 2026-08-14), so a uniform slice strangled the monsters 3.3x while most of the budget idled. The
-# pool is the whole 2/3 share at the 1 KB planning size; MTG_FSL_CAP stays as a generous PER-DECISION
+# pool is the whole 2/3 share; MTG_FSL_CAP stays as a generous PER-DECISION
 # bound (2M entries ~ 1-2 GB) so one pathological decision (the ~28 GB analyzer case) cannot drain
 # the pool for everyone else.
-export MTG_FSL_POOL=$(( _budget_mb * 1024 * 2 / 3 ))
+# PLANNING SIZE is 3 KB/entry, not the measured-600B-era 1 KB (2026-09-05, Melira phase A OOM).
+# Entry size is DECK-DEPENDENT: the 600 B slope came from Mirrorwing-era games, but Melira's
+# combo-turn SearchLines (persist loops, pod chains -- plans of 60+ actions) measured ~1.5-2 KB/entry
+# reconstructed from the OOM kill itself (26.6 GB anon = pool 12.56M entries * ~1.5-2 KB + TT <=6.4 GB
+# + ~1 GB baseline on the 23 GB box; swap was fully consumed). At the 1 KB planning size the pool's
+# nominal 12.3 GB was really ~19-25 GB and the kernel shot the batch mid-phase-A. 3 KB bounds the
+# worst deck seen with headroom; the cost is only cap-recompute wall on monster games (the
+# result-neutral contract above), never a row. If a future deck strangles badly, MEASURE its
+# B/entry (cap-ladder RSS slope, see 2026-08-13 method) before growing this.
+export MTG_FSL_POOL=$(( _budget_mb * 1024 * 2 / 3 / 3 ))
 export MTG_FSL_CAP=2000000
 AB_GAMES=1000
 AB_SEEDS="600000 601000 602000 603000 604000 605000 606000 607000"
@@ -559,9 +568,18 @@ phase_rows() {
     # (affinity-aware), exactly as phases C and E already do. The old literal 24 was the DEV box's
     # core count baked in as a number -- on a 32-thread machine it silently left a quarter of the
     # box idle through the most expensive phase.
+    # The exit status MUST gate the marker. On 2026-09-05 the kernel OOM-killed this batch 375
+    # games into 2500 and the unchecked invocation fell through to `mark A_rows`: phase B trained
+    # on 14% of the rows and phase C started measuring that model as if it were real. Rows are
+    # banked, so a failed batch costs nothing -- but a MARKED failed batch poisons every later
+    # phase. On failure: no marker, loud log, and the next `run` re-queues only the missing games.
     MTG_DUMP_VALUE_ROWS="$ALL_ROWS" MTG_EVAL_ROWS_K="$ROW_K" MTG_EVAL_ROWS_ROLLOUT=0 \
         ./build/Release/mtg --batch "$ALL_ROWS.manifest.json" --threads 0 \
-        > "$VLQ/rows.batch.log" 2>&1
+        > "$VLQ/rows.batch.log" 2>&1 \
+        || { local rc=$?
+             log "PHASE A: batch FAILED (exit $rc -- 137=SIGKILL, think OOM). Rows on disk are"
+             log "  banked and safe; NOT marking A_rows. Re-run to queue only the missing games."
+             return 1; }
     log "PHASE A done: $(grep -vc '^#' "$ALL_ROWS" 2>/dev/null || echo 0) rows total"
     mark A_rows
 }
@@ -792,7 +810,13 @@ PY
         done
       done; } | h_manifest "$VLQ/measure.manifest.json" >/dev/null
     log "PHASE E: $(grep -c '"name"' "$VLQ/measure.manifest.json") jobs (A/B + sweeps, every deck) in ONE queue"
-    ./build/Release/mtg --batch "$VLQ/measure.manifest.json" > "$VLQ/measure.log" 2> "$VLQ/measure.err"
+    # Exit status gates the phase, same as phase A (2026-09-05 OOM lesson): a killed batch must not
+    # let truncated measurements read as an A/B verdict.
+    ./build/Release/mtg --batch "$VLQ/measure.manifest.json" > "$VLQ/measure.log" 2> "$VLQ/measure.err" \
+        || { local rc=$?
+             log "PHASE E: batch FAILED (exit $rc -- 137=SIGKILL, think OOM); NOT interpreting the"
+             log "  partial measure.log. Re-run to redo the phase."
+             return 1; }
     for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
         grep "^$key-" "$VLQ/measure.log" > "$VLQ/m_$key.log" 2>/dev/null
