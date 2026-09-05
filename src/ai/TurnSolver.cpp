@@ -5097,6 +5097,21 @@ static bool SubsetPhyrexianDominated(const GameState& state,
     bool any_phy = false;
     for (int j : sel) { if (cands[j].phyrexian_life > 0) { any_phy = true; break; } }
     if (!any_phy) { return false; }
+    // THE DOMINANCE HAS A HOLE THE POD CAST FALLS THROUGH (USER 2026-09-05, seed 1 T3). The
+    // claim below is that every use of the life twin's extra leftover mana is expressible as
+    // another subset of this same enumeration -- true for casts and for activations of
+    // permanents ALREADY on the battlefield (their actions are in cands). It is FALSE for the
+    // activation of a permanent this subset is CASTING: the pod loop scans the battlefield, so
+    // a hand Pod's ActivatePod is not in cands at all, and "cast Pod {3}+2 life, keep the 4th
+    // source alive for the {1}+2-life activation next main" had NO surviving plan -- the prune
+    // deleted the only enabler and the viewer could not express the user's key T3 line. A
+    // subset casting a permanent with an activation mana cost therefore keeps its life twin.
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::CastFromHand && !a.free_cast && a.def != nullptr
+            && a.def->params.pod_activation_cost) { return false; }
+    }
     ManaCost combined;
     for (int j : sel)
     {
@@ -13113,8 +13128,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // while the SEARCHED collect and the EXECUTOR (which includes human play, so the viewer
     // always shows the option) keep the full branch. A committed plan realises its life
     // variant via Action::phyrexian_life regardless of what later leaves enumerate.
-    if (g_search_candidate_enum || g_condemn_root_turn < 0)
+    // ...with ONE rollout exception, the TIGHT-POOL ACTIVATION twin (USER 2026-09-05, seed 1
+    // T3, second finding). The committed main-1 plan "cast Pod {3}+2 life, hold a source" is
+    // only ever CHOSEN if the rollout scoring it can see main 2's {1}+2-life activation --
+    // withheld, the plan scores as Pod plus a wasted source and loses to Pod+dork every time
+    // (measured: with rollouts fully blind the seed-1 game spends all four T3 sources on
+    // Pod+Hierarch and activates T4; with the twin it casts Pod T2 and fetches Redcap T3).
+    // Un-gating the activation twin WHOLESALE re-created the original blowup (s5000x100: 11
+    // SLOW-GAMEs / >7 min vs 5 / 50s), so rollouts get the twin ONLY where the full-mana bill
+    // is UNPAYABLE from the current pool -- exactly where the twin is the difference between
+    // an activation existing and not, and nowhere else (a payable full variant already gives
+    // the rollout the line; the life-vs-mana preference is the SEARCH's business, and the
+    // searched collect keeps the full fan). Pool computed once, only when a phyrexian
+    // activation is present -> free for every other deck and every pod-less board.
     {
+        const bool phy_decision_space = g_search_candidate_enum || g_condemn_root_turn < 0;
+        bool     phy_pool_ready = false;
+        ManaPool phy_pool;
         const int life_now = state.players[state.active_player_index].life;
         const std::size_t phy_n = actions.size();
         for (std::size_t i = 0; i < phy_n; ++i)
@@ -13123,6 +13153,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 || actions[i].free_cast || actions[i].alt_cost) { continue; }
             if (actions[i].kind != Action::Kind::CastFromHand
                 && actions[i].kind != Action::Kind::ActivatePod) { continue; }
+            if (!phy_decision_space)
+            {
+                if (actions[i].kind == Action::Kind::CastFromHand) { continue; }
+                if (!phy_pool_ready)
+                {
+                    phy_pool = AvailableManaPool(state);
+                    phy_pool.AddPool(state.floating_mana);
+                    phy_pool_ready = true;
+                }
+                if (phy_pool.CanPay(actions[i].cost)) { continue; }   // full is live -> no twin
+            }
             const int pips = actions[i].cost.phyrexian_count;
             for (int k = 1; k <= pips; ++k)
             {

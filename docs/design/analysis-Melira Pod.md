@@ -1176,3 +1176,37 @@ pre-apply battlefield holds >= 2 activatable Pods.
   on committed lines (~189/game). Small quality gain at zero measured cost -> **ADOPTED
   default-ON per the clean-win rule**; suite untouched by construction (no other deck has a
   pod source; smoke 68/68 byte-identical, unit 64/64, scenarios 64/64 incl. the new one).
+
+### Seed-1 T3 cast+activate — the dominance prune had a hole (USER report, fixed)
+USER (viewer, seed 1): "I can't play Birthing pod and activate it. On turn 3." Root cause:
+`SubsetPhyrexianDominated` prunes a life-paid subset whenever the plain pool covers the full
+bill — sound only if every use of the freed mana is expressible as another subset of the same
+enumeration. The ACTIVATION of a Pod the subset is CASTING is not expressible (the pod loop
+scans the battlefield; the Pod is still in hand at collect), so "land + Pod {3}+2 life, hold
+the 4th source" was pruned everywhere the full bill was payable — plans 18–21 (Pod pay-life +
+Hierarch, all four sources dead) and 29–30 (plain Pod) were all that survived, and the human
+had no committable line reaching the activation. FIX 1: a subset casting a permanent with an
+activation mana cost (pod_activation_cost) keeps its life twin. The enabler plan now appears
+and, committed, the second-main decision offers the full pay-life activation fan (sac Finks →
+Redcap etc.) — the user's exact T3 line is playable in the viewer (cast main 1, activate main
+2, same turn; same-MAIN activation of a just-cast Pod remains inexpressible, value-identical
+in goldfish).
+
+FIX 2 (engine valuation), measured through three forms:
+- Rollouts fully blind (fix 1 alone): seed 1 spends all four T3 sources on Pod+Hierarch and
+  activates T4 — the enabler plan exists but rollouts can't see the main-2 payoff, so it
+  always loses the root comparison.
+- Activation twin un-gated for rollouts: seed 1 casts Pod T2 and fetches Redcap T3, but
+  re-creates the original blowup shape (s5000x100: 11 SLOW-GAMEs / >7 min wall vs 5 / 50s).
+  KILLED and reverted.
+- SHIPPED: the TIGHT-POOL twin — rollouts get the activation life twin only where the full
+  bill is unpayable from the current pool (exactly where the twin is the difference between
+  the activation existing and not). Pool computed once, phyrexian-actions-only.
+Final s5000x100: 4.9800 avg / 36 inf (conv 4.778) vs 4.9500 / 35 (conv 4.686) at 12m24s vs
+12m05s user (+2.6%), wall 80.7s vs 50.1s — the tail is one game (gi=24: 36s -> 80s, the
+prune-exception + tight-pool fan on a grindy pod board); SLOW-GAME count unchanged at 5.
+Seed 1 win turn unchanged (T5) in all forms — the engine's T3 dork-vs-hold choice is an
+equal-win-turn judgment it now makes SIGHTED. NOT a clean win (avg +0.03 noise-band, CPU
++2.6%, one tail game 2.2x): committed locally, PUSH HELD at user request ("Let's hold off on
+pushing for a bit") — the trade-off is the user's to accept. Suite: smoke 68/68
+byte-identical (fan gated on phyrexian_count / pod casts), unit 64/64, scenarios 64/64.
