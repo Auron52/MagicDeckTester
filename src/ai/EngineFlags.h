@@ -112,6 +112,25 @@ inline bool ExecFeasEnabled()
     return heurarm::Flag(heurarm::EXEC_FEAS, env_on);
 }
 
+// MTG_EDF_SEQ_AURA -- the LAND AURA twin of MTG_EDF_SEQ_ETB below, and a THIRD independent
+// admission to the sequential walk for the same reason: MTG_EXEC_FEAS is default OFF, so gating a
+// land Aura on it would make this dead code at ship settings (the repo's standing
+// lever-behind-a-default-off-gate lesson).
+//
+// A land Aura ("enchanted land taps for an additional {G}") is a same-turn mana PRODUCER, and unlike
+// a ritual it makes mana that did not exist -- so a subset like {Wild Growth, Living Wish} is
+// payable only SEQUENTIALLY and the flat gate rejects it. USER, 2026-09-05, seed 2 gi=1 turn 2:
+// "land=Yavimaya Coast; cast=Wild Growth; cast=Living Wish" and the Eladamri's Call variant, both
+// rules-legal, both refused. This deck runs SIXTEEN land auras, so the gap costs a spell on a large
+// share of its development turns.
+//
+// Inert for every other deck: `is_land_aura` is carried only by this deck's four Auras.
+inline bool SeqLandAuraEnabled()
+{
+    static const bool env_on = EnvOn("MTG_EDF_SEQ_AURA", true);
+    return heurarm::Flag(heurarm::EDF_SEQ_AURA, env_on);
+}
+
 // MTG_EDF_SEQ_ETB -- ADOPTED DEFAULT-ON 2026-09-02; `=0` restores the old behaviour (an ETB-untap
 // chain the flat pool rejects is dropped). Evidence, paired on (seed, gi) over 800 game-pairs at
 // play settings (d5/20ms), negative = better: -0.0338 avg win turns, se 0.0085, t -3.97, 8/8 seeds

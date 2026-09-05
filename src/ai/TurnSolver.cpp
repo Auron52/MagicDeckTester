@@ -3081,7 +3081,27 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
                               && def->params.land_aura_extra_mana > 0;
             if ((is_rock || is_aura) != want_rock) { continue; }
             const bool for_creature = def && def->card.IsCreature();
-            if (!TapForCostDirect(cp, a.cost, for_creature)) { return false; }
+            // RESERVE THE AURA'S DECLARED HOST across its own payment: which land pays for a land Aura
+            // and which land carries it are the same scarce resource, and spending the host is how a
+            // legal "Aura here, then the spell it enables" line reads as unpayable. Retried unreserved
+            // on failure, so this can only ADD payable subsets. Same fix as SubsetPayableSequential's.
+            int reserved_host = -1;
+            if (is_aura && a.enchant_target > 0)
+            {
+                for (Permanent& lp : cp.battlefield)
+                {
+                    if (lp.controller_index != cp.active_player_index || lp.tapped) { continue; }
+                    if (!lp.card.IsLand() || lp.card.m_number != a.enchant_target) { continue; }
+                    lp.tapped = true; reserved_host = a.enchant_target; break;
+                }
+            }
+            bool cost_ok = TapForCostDirect(cp, a.cost, for_creature);
+            if (reserved_host > 0)
+            {
+                SetPermTapped(cp, cp.active_player_index, reserved_host, false);
+                if (!cost_ok) { cost_ok = TapForCostDirect(cp, a.cost, for_creature); reserved_host = -1; }
+            }
+            if (!cost_ok) { return false; }
             if (is_rock && def)   // freshly-cast rock joins the board so its mana funds later casts
             {
                 Permanent perm;
@@ -3092,11 +3112,14 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
             }
             else if (is_aura && def)   // attach it, so the host's later tap carries the extra mana
             {
+                // The plan's OWN declared host first (the enumerator emits one variant per candidate),
+                // then any untapped land -- reading the plan's choice keeps the credit honest.
                 int host = -1;
                 for (const Permanent& lp : cp.battlefield)
                 {
                     if (lp.controller_index != cp.active_player_index || lp.tapped) { continue; }
                     if (!lp.card.IsLand()) { continue; }
+                    if (a.enchant_target > 0 && lp.card.m_number != a.enchant_target) { continue; }
                     host = lp.card.m_number; break;
                 }
                 if (host >= 0)
@@ -3452,7 +3475,35 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
                                      _ap.white,_ap.blue,_ap.black,_ap.red,_ap.green,_ap.colorless,_ap.wild);
                         for (const Permanent& _p : cp.battlefield)
                         { if (_p.card.IsLand()) { std::fprintf(stderr, "[dbgseq]     land %s %s\n", _p.card.m_name.str().c_str(), _p.tapped?"TAPPED":"untapped"); } } }
-            if (!TapForCostDirect(cp, ec, def.card.IsCreature()))
+            // RESERVE THE AURA'S OWN HOST across its payment. Which land pays for a land Aura and
+            // which land carries it are COUPLED: on the board that found this (USER, seed 2 gi=1 T2 --
+            // one Conservatory {G}/{W} plus a fresh Yavimaya Coast), paying Wild Growth's {G} off the
+            // Conservatory strands the only white source, and the Eladamri's Call {W}{G} the Aura was
+            // cast to enable reads as unpayable. Hiding the declared host while the Aura pays makes the
+            // payer spend something else, which is exactly what a human does.
+            //
+            // Retried WITHOUT the reservation on failure, so this can only ever ADD rescues: on a board
+            // where the host is the only source that can pay the Aura at all, the old unreserved
+            // payment still runs and still succeeds. (A failed TapForCostDirect restores the pool
+            // atomically, so the retry starts from an untouched board.)
+            int reserved_host = -1;
+            if (def.params.is_land_aura && def.params.land_aura_extra_mana > 0
+                && a.enchant_target > 0)
+            {
+                for (Permanent& lp : cp.battlefield)
+                {
+                    if (lp.controller_index != cp.active_player_index || lp.tapped) { continue; }
+                    if (!lp.card.IsLand() || lp.card.m_number != a.enchant_target) { continue; }
+                    lp.tapped = true; reserved_host = a.enchant_target; break;
+                }
+            }
+            bool paid_ok = TapForCostDirect(cp, ec, def.card.IsCreature());
+            if (reserved_host > 0)
+            {
+                SetPermTapped(cp, cp.active_player_index, reserved_host, false);
+                if (!paid_ok) { paid_ok = TapForCostDirect(cp, ec, def.card.IsCreature()); }
+            }
+            if (!paid_ok)
             { if (_dbg) { std::fprintf(stderr, "[dbgseq]   -> FAIL\n"); } return false; }
         }
         // Resolve the cast's mana-relevant effects so they fund the NEXT payment. Anything not
@@ -3470,6 +3521,52 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
         // EnumeratePlans and SeqEtbUntapEnabled in EngineFlags.h). Scratch state -> no viewer ledger.
         if (def.params.etb_untap_lands > 0)
         { EtbUntapLands(cp, cp.active_player_index, def.params.etb_untap_lands, /*log_ledger=*/false); }
+        // A LAND AURA is a same-turn mana PRODUCER too ("enchanted land taps for an additional {G}"),
+        // and this walk was the one payability path that did not know it. SubsetPayableWithFilters
+        // has carried the credit for a while; this function -- the MTG_EXEC_FEAS rescue, and the one
+        // that actually runs on a board with no filter source -- did not, so a subset whose later
+        // cast is funded BY the aura could never be rescued.
+        //
+        // Found by the USER, seed 2 gi=1 turn 2 (logs/play/rejections/..._s2_gi1_t2.json): board one
+        // Conservatory, hand holding Yavimaya Coast + Wild Growth + Living Wish. Drop the Coast, pay
+        // {G} for Wild Growth off the Conservatory, enchant the Coast, tap it for {G}{G} and cast
+        // Living Wish. Rules-legal, and the verdict was `legal_not_enumerated`: the walk priced
+        // {G} + {1}{G} against two bare lands and refused. This deck runs SIXTEEN land auras, so
+        // that gap costs a spell on a large share of its development turns.
+        //
+        // SOUND BY THE SAME ARGUMENT AS THE ETB-UNTAP CREDIT ABOVE: it is applied AFTER this cast's
+        // own TapForCostDirect, so the bonus can fund a LATER cast and can never help pay for the
+        // Aura itself -- and it only lands if a land survives the Aura's cost still untapped to host
+        // it, which is exactly the condition a flat pool cannot express.
+        //
+        // Host: the plan's OWN declared target when it has one (the enumerator emits a variant per
+        // candidate host), else the best untapped land. Reading the plan's choice keeps the rescue
+        // honest -- crediting a host the plan does not actually enchant would offer a line whose
+        // mana the executor cannot make.
+        if (def.params.is_land_aura && def.params.land_aura_extra_mana > 0)
+        {
+            int host = -1, host_yield = -1;
+            for (const Permanent& lp : cp.battlefield)
+            {
+                if (lp.controller_index != cp.active_player_index || lp.tapped) { continue; }
+                if (!lp.card.IsLand()) { continue; }
+                if (a.enchant_target > 0)
+                { if (lp.card.m_number == a.enchant_target) { host = lp.card.m_number; break; } continue; }
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(lp.card);
+                const int y = ld ? PermanentManaYield(cp, lp, *ld) : 0;
+                if (y > host_yield) { host_yield = y; host = lp.card.m_number; }
+            }
+            if (host > 0)
+            {
+                Permanent aura;
+                aura.card             = def.card;
+                aura.controller_index = cp.active_player_index;
+                aura.owner_index      = cp.active_player_index;
+                aura.aura_attached_to = host;
+                cp.battlefield.push_back(aura);
+            }
+        }
+
         // COST REDUCERS join too (2026-09-04, dragons gi431): the live-cost recompute reads
         // reducers off the battlefield, so a resolved Dragonspeaker/Incubator/Medallion must be
         // there or the walk prices the casts after it at full cost and fails a payable pair
@@ -13877,6 +13974,23 @@ static int EtbUntapBoundCredit(const GameState* etb_state, const Action& a)
     return EtbUntapLandsCredit(*etb_state, n);
 }
 
+// A LAND AURA is same-turn mana the bound cannot see either, and its absence here is what actually
+// kept the user's line off the menu. THE ODOMETER PRUNES BEFORE ANY GATE RUNS: `sum(cost) <= pool +
+// gains`, so {Wild Growth {G}, Living Wish {1}{G}} = 3 against a two-land board bounded at 2 was
+// dropped before emission -- and a rescue can only rescue a subset the odometer emitted. Exactly the
+// failure the EtbUntapBoundCredit note above describes for Drake -> Displacer, one card type over.
+//
+// SOUND for the same reason: this is an UPPER bound on the turn's mana, so a term can only LOOSEN it
+// and can never drop a payable plan. It touches no payment -- the flat pool, the per-colour gates and
+// the sequential walk all still price the Aura's own cast against the pre-cast board, and the walk
+// attaches it only AFTER that payment (optimism in the bound, exactness in the payment).
+static int LandAuraBoundCredit(const Action& a)
+{
+    if (a.def == nullptr || a.kind != Action::Kind::CastFromHand) { return 0; }
+    if (!a.def->params.is_land_aura || a.def->params.land_aura_extra_mana <= 0) { return 0; }
+    return SeqLandAuraEnabled() ? a.def->params.land_aura_extra_mana : 0;
+}
+
 // `extra_credit` = same-turn mana the bound cannot derive from `cands` alone. Today that is only
 // EnumeratePlans' hasted-dork unlock (a dork cast this turn taps once this plan equips haste onto
 // it); Solve passes 0, so its bound is byte-identical. This is an UPPER bound on the turn's mana, so
@@ -13919,6 +14033,7 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
         b += a.ritual_float;
         b += a.rock_mana.Total();
         b += EtbUntapBoundCredit(etb_state, a);   // ETB "untap up to N lands" -- see above
+        b += LandAuraBoundCredit(a);              // "enchanted land taps for an additional {G}"
         if (a.def && a.def->params.ritual_float_gy_self_bonus) { ++gy; }
     }
     // SOUNDNESS FIX (2026-07-30): this bound credited every candidate's base ritual_float but NOT the
@@ -14035,7 +14150,8 @@ static inline bool ManaGateWouldHelp(const std::vector<Action>& cands, const Gam
                           // see ManaPruneBound (MTG_SUBRED_BAIL).
                           || !a.def->params.reduces_spell_subtype.empty()
                           || a.def->params.chooses_creature_type))
-            || EtbUntapBoundCredit(etb_state, a) > 0)
+            || EtbUntapBoundCredit(etb_state, a) > 0
+            || LandAuraBoundCredit(a) > 0)
         { return true; }
     }
     return false;
@@ -14054,7 +14170,14 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         const Action& a = cands[j];
         ManaGateTerm& t = out.term[j];
         t.cost = a.cost.ManaValue();
-        t.gain = a.ritual_float + a.rock_mana.Total() + EtbUntapBoundCredit(etb_state, a);
+        // The land-Aura term has to be here AS WELL AS in ManaPruneBound, and that duplication is
+        // the whole lesson of this bug: the SELECTION-EXACT gate is default ON and supersedes the
+        // scalar bound at the odometer, so crediting only the scalar left the credit dead. The
+        // subset {Wild Growth {G}, Living Wish {1}{G}} = 3 was rejected here against pool 2 + gain 0
+        // and never reached a gate, a rescue, or the plan list -- which is why the user's line came
+        // back "legal, not enumerated" through four separate fixes further downstream.
+        t.gain = a.ritual_float + a.rock_mana.Total() + EtbUntapBoundCredit(etb_state, a)
+               + LandAuraBoundCredit(a);
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
         t.block = ((a.def && (a.def->params.affinity_for_subtype
                               || !a.def->params.reduces_spell_color.empty()
@@ -23265,6 +23388,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     auto eval_and_push = [&](const std::vector<int>& sel)
     {
+        // MTG_DBG_MULTI=<turn> -- see the reject dump further down. Logged at ENTRY too, because the
+        // two answers are different questions: "was the subset ever considered" (here) and "which
+        // gate dropped it" (there). A subset the odometer never emits shows up as silence in both,
+        // which is exactly the case that sent this hunt to the wrong layer twice.
+        {
+            static const int s_dbg_multi_in = EnvInt("MTG_DBG_MULTI", 0);
+            if (s_dbg_multi_in > 0 && state.turn_number == s_dbg_multi_in && sel.size() >= 2)
+            {
+                std::string nm;
+                for (int j : sel) { nm += cands[j].card_name.str() + ","; }
+                std::fprintf(stderr, "[dbgmulti-in] t%d n=%zu cands=%zu groups=%zu [%s]\n",
+                             state.turn_number, sel.size(), cands.size(), groups.size(), nm.c_str());
+            }
+        }
         SeqChainTrace _ct;   // MTG_SEQ_CHAIN_TRACE diagnostic; inert (armed=false) when off
         if (SeqChainTraceOn())
         {
@@ -23784,14 +23921,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // and no other deck in the repo has one.
             const bool ef_on  = ExecFeasEnabled();
             const bool seq_on_etb = SeqEtbUntapEnabled();
-            if (!ef_on && !seq_on_etb) { return false; }
+            const bool seq_on_aura = SeqLandAuraEnabled();
+            if (!ef_on && !seq_on_etb && !seq_on_aura) { return false; }
             bool interacts = ef_on && any_hinata_credit;
+            int  aura_bonus  = 0;           // new mana a same-subset land Aura brings online
+            bool other_inter = interacts;   // any interaction OTHER than a land Aura?
+            int  nonaura     = 0;           // casts the Aura could be funding
             for (int j : sel)
             {
-                if (interacts) { break; }
                 const Action& c = cands[j];
                 if (ef_on && (c.ritual_float > 0 || c.rock_mana.Total() > 0
-                              || (c.def && c.def->params.untap_x_mana_sources))) { interacts = true; }
+                              || (c.def && c.def->params.untap_x_mana_sources)))
+                { interacts = true; other_inter = true; }
                 // Same-subset COST REDUCER (dragons gi431: Incubator {3} then Atsushi at the
                 // reduced {R}{R} is 5 mana on 5, but the flat gate prices Atsushi at full cost
                 // and rejects the pair at 7). The walk's live cost recompute prices casts AFTER
@@ -23801,7 +23942,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                        || !c.def->params.reduces_spell_color.empty()
                                        || (c.def->params.chooses_creature_type
                                            && c.def->params.reduces_spell_subtype_creature_only)))
-                { interacts = true; }
+                { interacts = true; other_inter = true; }
                 // "When this creature enters, untap up to N lands" is a same-turn mana interaction
                 // exactly like a ritual's float -- it just arrives AFTER its own cast resolves
                 // rather than before. That is why crediting it into the flat pool was unsound (the
@@ -23811,7 +23952,31 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // so it answers "is this chain payable IN ORDER" instead of "is the total big
                 // enough". Conservative by construction -- it only ever RESCUES a subset the flat
                 // gate already rejected. See SeqEtbUntapEnabled() in EngineFlags.h.
-                if (seq_on_etb && c.def && c.def->params.etb_untap_lands > 0) { interacts = true; }
+                if (seq_on_etb && c.def && c.def->params.etb_untap_lands > 0)
+                { interacts = true; other_inter = true; }
+                // A LAND AURA is the same shape one step further out: it produces mana that did not
+                // exist, but only from the NEXT tap of the land it enchants, so it is a pure
+                // sequencing question. See SeqLandAuraEnabled() in EngineFlags.h.
+                if (seq_on_aura && c.def && c.def->params.is_land_aura
+                    && c.def->params.land_aura_extra_mana > 0)
+                { interacts = true; aura_bonus += c.def->params.land_aura_extra_mana; }
+                else { ++nonaura; }
+            }
+            // AURA-ONLY SUBSETS GET A TIGHT CEILING, and it is a pure cost cut. When the Aura is the
+            // only interaction there is no discount or float for the walk to talk the price down
+            // with, so "pool + the Auras' own bonus" is an EXACT upper bound on what the turn can
+            // pay -- far tighter than the general ceiling below, which forgives the whole generic
+            // part. Each walk is a GameState copy plus real payments, and admitting land Auras
+            // multiplied how many run (this deck holds sixteen of them), so declining the hopeless
+            // ones here is where the admission's cost goes back.
+            //
+            // An Aura-ONLY subset never needs the walk at all: nothing in it is being funded, so the
+            // flat gate that rejected it was right.
+            if (aura_bonus > 0 && !other_inter)
+            {
+                if (nonaura == 0) { if (_ct.armed) { _ct.label = "ef-aura-solo"; } return false; }
+                if (static_cast<int>(pool.Total()) + aura_bonus < combined.ManaValue())
+                { if (_ct.armed) { _ct.label = "ef-aura-scalar"; } return false; }
             }
             if (EnvOn("MTG_DBG_SEQ")) { std::fprintf(stderr, "[dbgseq] gate interacts=%d\n", (int)interacts); }
             if (!interacts) { if (_ct.armed) { _ct.label = "ef-no-interact"; } return false; }
@@ -23821,7 +23986,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // COLOURED/colorless pips. Comparing against the full post-credit ManaValue() was
             // measured too tight (the gi=22 no-draw chain: eff 21 vs combined 22, while the walk's
             // live discounts realise it at 16).
-            if ((credited ? eff : pool).Total() < combined.ManaValue() - combined.generic)
+            // `aura_bonus` is the one term that genuinely ADDS total mana rather than re-timing it,
+            // so it belongs on the supply side of this ceiling. Without it the Eladamri's Call line
+            // above ({W}{G} after a {G} Aura: three coloured pips against a two-land board) is
+            // rejected here and never reaches the walk that would have paid it. Optimistic on
+            // purpose -- the ceiling is a cheap pre-filter and the walk is the arbiter, which is the
+            // same division of labour the Hinata generic term relies on.
+            if (static_cast<int>((credited ? eff : pool).Total()) + aura_bonus
+                < combined.ManaValue() - combined.generic)
             { if (EnvOn("MTG_DBG_SEQ")) { std::fprintf(stderr, "[dbgseq] scalar reject\n"); }
               if (_ct.armed) { _ct.label = "ef-scalar"; } return false; }
             if (SubsetPayableSequential(state, cands, sel)) { exec_feas = 1; }
@@ -23832,6 +24004,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         bool mana_reject = !mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel));
         if (mana_reject) { _ct.label = "flat-pool"; }
         if (mana_reject && exec_feas_rescues()) { mana_reject = false; _ct.label = "early-gate"; }
+        // MTG_DBG_MULTI=<turn> -- print every MULTI-CAST odometer position considered on that turn and
+        // whether the mana gates kept it. "The line is not on the menu" has half a dozen possible
+        // causes spread across the odometer bound, three gates and two rescues, and they are
+        // indistinguishable from outside; this says which one, in one line per subset.
+        {
+            static const int s_dbg_multi = EnvInt("MTG_DBG_MULTI", 0);
+            if (s_dbg_multi > 0 && state.turn_number == s_dbg_multi && sel.size() >= 2)
+            {
+                std::string names;
+                for (int j : sel) { names += cands[j].card_name.str() + ","; }
+                std::fprintf(stderr, "[dbgmulti] t%d n=%zu reject=%d mana_ok=%d cost=%d [%s]\n",
+                             state.turn_number, sel.size(), (int)mana_reject, (int)mana_ok,
+                             combined.ManaValue(), names.c_str());
+            }
+        }
         if (seq_on && seq_spend && !mana_reject) { apply_seq(); }   // survivor: keep its pool honest
         if (mana_reject && CostReframeEnabled())
         {
@@ -24274,6 +24461,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     {
         std::fprintf(stderr, "[chain-bound] t%d any_hinata_credit=%d mana_bound=%d\n",
                      state.turn_number, any_hinata_credit ? 1 : 0, mana_bound);
+    }
+    {
+        static const int s_dbg_multi_b = EnvInt("MTG_DBG_MULTI", 0);
+        if (s_dbg_multi_b > 0 && state.turn_number == s_dbg_multi_b)
+        {
+            std::string cs;
+            for (const Action& a : cands)
+            { cs += a.card_name.str() + "(" + std::to_string(a.cost.ManaValue()) + "),"; }
+            std::string gs;
+            for (const std::vector<int>& g : groups)
+            {
+                gs += "{";
+                for (int j : g) { gs += cands[j].card_name.str() + "|"; }
+                gs += "}";
+            }
+            std::string is_;
+            for (int j : independent) { is_ += cands[j].card_name.str() + "|"; }
+            std::fprintf(stderr,
+                         "[dbgmulti-bound] t%d bound=%d pool=%u cands=%zu [%s] groups=%s ind=[%s]\n",
+                         state.turn_number, mana_bound, pool.Total(), cands.size(), cs.c_str(),
+                         gs.c_str(), is_.c_str());
+        }
     }
     // Both indices are allocated ONLY when the deck actually uses them. Solve is the rollout leaf --
     // called once per node -- so even default-constructing their (empty) vectors on every call cost a
@@ -35225,11 +35434,28 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // Peregrine Drake {4}{U}" reads as one mana short of a board that pays it exactly.
     if (remaining > 0 && (AnyUntappedFilterSource(s) || PendingLandAuraColorMask(s) != 0))
     {
+        // WHICH LAND CARRIES THE AURA IS PART OF THE LINE, and this simulation used to guess it --
+        // "the first untapped land" -- which is how a legal line came back as ILLEGAL rather than
+        // merely un-enumerated. USER, seed 2 gi=1 T2: board one Conservatory ({G} or {W}) plus a fresh
+        // Yavimaya Coast; "Wild Growth on the Conservatory, then Eladamri's Call {W}{G}" needs the
+        // Coast to pay the {G} and the Conservatory to survive untapped and tap for {W} + the Aura's
+        // {G}. Guess the host the other way round and there is no white mana left, so the verdict was
+        // "can't pay". A `cast=` token carries no target, so the host cannot simply be read off the
+        // line -- instead TRY EACH ONE.
+        //
+        // Bounded and cheap: this runs only for the viewer / --validate-line, only after the flat
+        // check already failed, and only over the untapped lands (`host_pick` indexes them; the loop
+        // stops as soon as a pick runs out of lands to name). Pick 0 reproduces the historical choice
+        // exactly, so a board where the guess was already right is answered on the first attempt.
+        const int kHostPicks = 12;
+        for (int host_pick = 0; host_pick < kHostPicks; ++host_pick)
+        {
         GameState cp = s;
         std::vector<bool> paid(pending.size(), false);
         bool spec = s.opponent_lost_life_this_turn;
         size_t left = pending.size();
         bool prog = true;
+        bool pick_in_range = (host_pick == 0);   // was there an untapped land at this index at all?
         while (left > 0 && prog)
         {
             prog = false;
@@ -35243,11 +35469,37 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     const bool aura = pending[k].def && pending[k].def->params.is_land_aura
                                    && pending[k].def->params.land_aura_extra_mana > 0;
                     if (paid[k] || (pending[k].rock || aura) != want_rock) { continue; }
+                    // The host is chosen BEFORE the payment and hidden from it, because which land
+                    // pays for the Aura and which land carries it are the same scarce resource.
+                    int host = -1;
+                    if (aura)
+                    {
+                        int seen = 0;
+                        for (const Permanent& lp : cp.battlefield)
+                        {
+                            if (lp.controller_index != cp.active_player_index || lp.tapped) { continue; }
+                            if (!lp.card.IsLand()) { continue; }
+                            if (seen++ != host_pick) { continue; }
+                            host = lp.card.m_number; pick_in_range = true; break;
+                        }
+                        if (host < 0 && host_pick > 0) { break; }   // this pick names no land
+                        if (host > 0) { SetPermTapped(cp, cp.active_player_index, host, true); }
+                    }
                     const ManaCost cost = pending[k].alt_free ? ManaCost{}
                                         : (pending[k].has_spectacle && spec) ? pending[k].spectacle_cost
                                         : pending[k].full_cost;
                     const bool for_creature = pending[k].def && pending[k].def->card.IsCreature();
-                    if (cost.ManaValue() > 0 && !TapForCostDirect(cp, cost, for_creature)) { continue; }
+                    bool cost_ok = (cost.ManaValue() == 0) || TapForCostDirect(cp, cost, for_creature);
+                    if (host > 0)
+                    {
+                        SetPermTapped(cp, cp.active_player_index, host, false);   // give the host back
+                        // Retried unreserved, so reserving can only ADD reachable lines: a board where
+                        // the host is the only source able to pay the Aura still pays it, exactly as
+                        // before, and simply carries the Aura on a land it then cannot tap.
+                        if (!cost_ok && cost.ManaValue() > 0)
+                        { cost_ok = TapForCostDirect(cp, cost, for_creature); host = -1; }
+                    }
+                    if (!cost_ok) { continue; }
                     if (pending[k].rock && pending[k].def)   // freshly-cast rock funds later casts
                     {
                         Permanent perm;
@@ -35256,24 +35508,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                         perm.owner_index      = cp.active_player_index;
                         cp.battlefield.push_back(perm);
                     }
-                    else if (aura)   // attach it: the host's later tap is what carries the extra mana
+                    else if (aura && host > 0)   // attach: the host's later tap carries the extra mana
                     {
-                        int host = -1;
-                        for (const Permanent& lp : cp.battlefield)
-                        {
-                            if (lp.controller_index != cp.active_player_index || lp.tapped) { continue; }
-                            if (!lp.card.IsLand()) { continue; }
-                            host = lp.card.m_number; break;
-                        }
-                        if (host >= 0)
-                        {
-                            Permanent ap;
-                            ap.card             = pending[k].def->card;
-                            ap.controller_index = cp.active_player_index;
-                            ap.owner_index      = cp.active_player_index;
-                            ap.aura_attached_to = host;
-                            cp.battlefield.push_back(ap);
-                        }
+                        Permanent ap;
+                        ap.card             = pending[k].def->card;
+                        ap.controller_index = cp.active_player_index;
+                        ap.owner_index      = cp.active_player_index;
+                        ap.aura_attached_to = host;
+                        cp.battlefield.push_back(ap);
                     }
                     if (deals_opponent_damage(*pending[k].def)) { spec = true; }
                     paid[k] = true; --left; prog = true; break;
@@ -35286,6 +35528,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             out.reason  = "rules-legal (a filter-aware affordability simulation can execute it), but "
                           "the search never enumerated this line";
             return out;
+        }
+        if (!pick_in_range) { break; }   // no land at this index -> no higher index will name one
         }
     }
 

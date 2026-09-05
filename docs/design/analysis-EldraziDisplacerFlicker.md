@@ -2719,3 +2719,161 @@ aura'd land to be an engine at all, where the Drake never does).
 **Running that screen first required fixing the screener**: `deck_compare.py` dropped the sideboard
 from every decklist it wrote, so a "should we maindeck a sink?" comparison would have measured an arm
 holding a sink against a base holding none. Third instance of the missing-zone bug class.
+
+### 17. THE KILL CHAIN — the loop banked the mana and could not spend it (2026-09-05)
+
+USER: *"Hmm... But if the loop fires shouldn't we always win that turn? What is preventing it?"*
+
+The measured answer, over 60 logged games at d5/20 ms with the profile attached (seed 7001):
+
+| | |
+|---|---|
+| all three combo pieces on board / in hand | turn **4.33** |
+| game won | turn **6.30** |
+| **lag** | **1.80 turns**, and 43 of 45 assembled games lagged by at least 1 |
+
+So the engine was not slow to ASSEMBLE the combo. It was slow to CASH it.
+
+#### The cause: three finish routes, one implemented
+
+The user's own list of finishers is *"Living Wish, Draw land on board or shivan gorge"*. Before this
+change the engine could only cash a loop into a sink **already on the battlefield**. The other two
+routes were invisible to it:
+
+* **a finisher in hand, or one a Living Wish could still fetch.** Seed 7001 gi=34 is the whole bug in
+  one turn: T5 cast Living Wish, fetched Essence Depleter, blinked **sixty times**, and *then* cast
+  the Depleter — after `ApplyBlinkLoop` had already run its post-loop sink pass. Not one drain fired.
+  The game was won two turns later by attacking.
+* **a `{T}` draw land.** `FlickerGoOffCount` had, since the day before, sized a loop to "draw the
+  library and find the finisher" off a draw land, and `g_etb_untap_priority`'s comment promised to
+  promote "draw/investigate sinks behind [the damage sinks]" — but **nothing ever activated one
+  inside the loop**. Over those same 60 games: 34 go-offs averaging ~46 blinks each, and **ten**
+  Mariposa draws in the entire run.
+
+#### What was built
+
+1. `SpendSurplusOnDrawSinks` (`MTG_EDF_LOOP_DRAW`) — a per-iteration `{T}` draw spend, plus the
+   matching promotion of draw lands into the untap-priority set. The pairing is the point: promoting
+   a sink the loop cannot cash was **measured as a loss** (+0.0437 avg turns, t +5.99, 8/8 seeds
+   worse) precisely because the untap slot it took would otherwise have gone to an Overgrowth'd land.
+   The rule the loop's own comment states — *do both, or neither* — is now honoured.
+2. `ComboFinishFromHand` (`MTG_EDF_COMBO_FINISH`) — after the loop, deploy the finisher: a
+   drain/exile creature in hand, or cast a Living Wish and fetch one. Then re-run the two `{T}`-less
+   spends, because the sink did not exist when they last ran.
+3. `ScanHandSinks` — the recognizer half, so `FlickerGoOffCount` and `ExtraLethalDamage` can SEE the
+   hand/wish route and size the loop to fund `wish + cast + activations` (`FlickerLoop::hand_setup_mv`).
+
+#### The gate that made the difference, and the measurement that found it
+
+Ungated, the draw sink **lost**: it fired 2,002,759 paid activations inside the rollouts of eight
+games, put one game at 96 s, and left the post-loop finisher short of mana on 315,046 of its calls —
+because a `keep_payable` of one blink cost lets it spend the bank down to a single activation's worth
+*every iteration*. It had inverted the user's own priority (*"The top priority is always keeping the
+combo going... Finding exact ways to finish the job is for after you have bountiful amounts of
+mana"*).
+
+The fix is `ComboFinisherReachable`: **draw only to FIND**. The draw is not a payoff, it is a search
+for one, so it stands down the moment a finisher is on the board, in hand, or one wish away. It is
+self-terminating — the draw that turns up a wish switches itself off.
+
+Only the counters (`MTG_EDF_FINISH_STATS`) could tell these apart: the averages moved by ~0.03 either
+way, and every failure mode looks identical in a game log (a big blink, then a slow win by attacking).
+
+#### Measured (seed 7001 x 60, paired, same shuffles)
+
+| | avg win turn | assembled | lag | same-turn kill |
+|---|---|---|---|---|
+| before | 6.3000 | 4.33 | 1.80 | 26/34 |
+| after | **6.0667** | 4.27 | **1.62** | **30/34** |
+
+17 games better, 3 worse, 40 unchanged; unwon games 2 -> 1. The pooled held-out A/B
+(`test/edf_finish_ab.sh`, 3 arms x 8 seeds x 100, one batch) separates the two levers.
+
+#### Measured and REJECTED in the same pass: raising the iteration ceiling
+
+`kFlickerMaxIterations` became `FlickerMaxIterations()` (`MTG_EDF_MAX_ITER`, default 60) so the number
+could be measured rather than argued about — it is a COST bound, not a rules one. At 150 the same 60
+games came out **worse and slower** (6.1333 vs 6.0667, 63.7 s vs 52.1 s wall). The ceiling stays at
+60; the knob stays as a diagnostic.
+
+#### What the remaining 1.62 turns is, and it is NOT all engine
+
+Tracing the lag-3 games says the loop often genuinely is not live:
+
+* gi=8 at T5 holds Cloud of Faeries, two Displacers, Emiel, a Shivan Gorge — and **five bare lands,
+  no auras**. Cloud untaps 2, a blink costs 3, so net = -1. There is no loop to fire.
+* gi=51 at T5 has a recognised loop but at **net 1-3** off three lands. Sixty iterations bank 60 mana;
+  the kill needs ~45 *after* paying `{5}` a card to draw into a wish. The search declines it, and it
+  is right to.
+
+Both boards are Cloud-of-Faeries boards. Peregrine Drake untaps five and is never thin — and it is
+**not in the sideboard**, so a Living Wish cannot fetch one; only the single Eladamri's Call can.
+That is a deckbuilding fact worth putting to the user, alongside the two artifacts this deck still
+does not have: **no keep table and no value leaf**.
+
+### 18. A LAND AURA CAST THIS TURN FUNDED NOTHING — four layers, one bug (2026-09-05)
+
+USER, saving `logs/play/rejections/EldraziDisplacerFlicker_cod_s2_gi1_t2.json` and then: *"There are
+multiple ways that line can reject. Casting living wish we get Legal - Not enumerated and Eladamri's
+call with the wild growth on Conservatory we get an error where it thinks it isn't possible. Both
+lines are valid and should be allowed."*
+
+Turn 2, one Conservatory ({G} or {W}) in play, hand holding Yavimaya Coast, Wild Growth, Living Wish
+and Eladamri's Call. Two rules-legal lines:
+
+* drop the Coast, pay `{G}` off the Conservatory, enchant the Coast, tap it for `{G}{G}`, cast **Living
+  Wish** `{1}{G}`;
+* drop the Coast, pay `{G}` off the **Coast**, enchant the **Conservatory**, tap it for `{W}` plus the
+  Aura's `{G}`, cast **Eladamri's Call** `{W}{G}`.
+
+Both were refused, and the two different verdicts were two different defects.
+
+#### The ERROR verdict: CheckLine guessed the host
+
+`TurnSolver::CheckLine`'s affordability retry modelled land Auras, but attached one to *the first
+untapped land it found*. Which land pays for the Aura and which land carries it are the same scarce
+resource, so guessing it the wrong way round strands the only white source and the line reads
+`Illegal — can't pay`. A `cast=` token carries no target, so the host cannot be read off the line;
+it now TRIES EACH untapped land, hiding the candidate host while the Aura pays for itself and
+retrying unreserved so a board where the host is the only payer still works. Verdict for the
+Eladamri's Call line: **Illegal -> legal_not_enumerated**.
+
+#### The NOT-ENUMERATED verdict: the credit was missing at four layers
+
+A land Aura is a same-turn mana PRODUCER, and unlike a ritual it makes mana that did not exist
+before. Four separate places had to learn that, and fixing any three of them changed nothing:
+
+| layer | what it does | was |
+|---|---|---|
+| `ManaPruneBound` | the odometer's scalar bound | no Aura term |
+| `BuildManaGateIndex` / `ManaGateWouldHelp` | the **selection-exact** gate that SUPERSEDES it (default ON) | no Aura term |
+| `exec_feas_rescues`' admission + scalar ceiling | which subsets reach the sequential walk | Auras not admitted |
+| `SubsetPayableSequential` / `SubsetPayableWithFilters` | the walk itself | never attached the Aura |
+
+The hunt went to the wrong layer twice, and what settled it was one instrument rather than more
+reasoning: **`MTG_DBG_MULTI=<turn>`** prints every multi-cast odometer position considered on a turn,
+at entry and at rejection. It showed 45 evaluations at turn 2 and **every one of them size 1** — so
+the subset was not being rejected by any gate, it was never being generated, which is a different
+layer entirely. (`MTG_EDF_GOFF_DEBUG_N` was raised the same way, for the same reason: 40 lines of a
+recognizer that runs millions of times are all from one early rollout and say nothing about the turn
+being asked about.)
+
+Both lines now come back **`choose`** — enumerated, with the human picking which host / which wish
+target, which is the correct answer for a line whose `cast=` token names no target.
+
+#### Cost: MEASURED, LARGE, AND NOT YET PAID FOR
+
+`MTG_EDF_SEQ_AURA` (default ON) is the admission lever. On 12 games at d5/20 ms it costs **~2.9x wall
+clock** (13.1 s -> 37.6 s) — the deck runs sixteen land Auras, so admitting `{Aura, spell}` pairs
+multiplies the plan set — and the same 12 games came out 6.00 vs 5.75, i.e. directionally WORSE on a
+sample far too small to mean anything.
+
+A tight aura-only ceiling was added for the walk (an Aura-only subset never needs the rescue; when
+the Aura is the only interaction, `pool + bonus` is an EXACT upper bound rather than the general
+ceiling's generic-forgiving one). It is quality-neutral and did not move the ratio — the cost is the
+wider plan set, not the walks.
+
+**Shipped ON because it is the behaviour the user asked for and a lever behind a default-off gate is
+dead code, and flagged here as UNMEASURED on quality.** The pooled A/B (`base` vs `aura`, 8 seeds x
+100, one batch) settles the default; if it comes back negative the lever flips off and the CheckLine
+verdict fix stands on its own, since that one has no search cost at all.
