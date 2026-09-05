@@ -582,8 +582,14 @@ phase_rows() {
     # on 14% of the rows and phase C started measuring that model as if it were real. Rows are
     # banked, so a failed batch costs nothing -- but a MARKED failed batch poisons every later
     # phase. On failure: no marker, loud log, and the next `run` re-queues only the missing games.
+    # MTG_VLQ_ROWS_THREADS (default 0 = all cores): phase-A-only concurrency lever, added for the
+    # 2026-09-05 Melira OOMs. The label path's UNBOUNDED search has a per-game transient (combo-turn
+    # enumeration) that spiked the batch 5 GB -> 23 GB in under 8 minutes on 32 workers -- a class
+    # no cache cap bounds, and per-game footprint is fine solo (a 98 s game peaks 64 MB). Peak
+    # transient scales with concurrent monster games, so fewer workers is the safe lever on a small
+    # box until the enumeration transient itself is bounded engine-side.
     MTG_DUMP_VALUE_ROWS="$ALL_ROWS" MTG_EVAL_ROWS_K="$ROW_K" MTG_EVAL_ROWS_ROLLOUT=0 \
-        ./build/Release/mtg --batch "$ALL_ROWS.manifest.json" --threads 0 \
+        ./build/Release/mtg --batch "$ALL_ROWS.manifest.json" --threads "${MTG_VLQ_ROWS_THREADS:-0}" \
         > "$VLQ/rows.batch.log" 2>&1 \
         || { local rc=$?
              log "PHASE A: batch FAILED (exit $rc -- 137=SIGKILL, think OOM). Rows on disk are"
