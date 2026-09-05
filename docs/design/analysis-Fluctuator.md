@@ -3,7 +3,9 @@
 **Deck:** `decks/Fluctuator/Fluctuator.cod` (60 cards: 42 lands, 18 spells)
 **Started:** 2026-09-04
 **Branch:** `phase-1-2-deck-analyzer`
-**Status:** play quality settled (§7.7, §7.8); deck IS NOW A REGRESSION CASE in all three tiers
+**Status:** REBASED onto origin 2026-09-05 (13 commits replayed; both tiers re-accepted under the
+rebased binary with **0 configs changed** for every other deck, incl. upstream's new Melira Pod).
+Play quality settled (§7.7, §7.8); deck IS NOW A REGRESSION CASE in all three tiers
 (O-4 perf gate met at the real gate budgets — the b200 tail was budget-driven, not structural).
 Current: **avg 3.8000** turn-to-win, zero unwon (100 games, seed 9001, d3/b200; held-out bases
 20001/30001/40001 gave 3.92/3.78/3.86 before §7.8, so the level is ~3.8 +/- 0.06, not a seed
@@ -605,13 +607,18 @@ Better on both axes at once. `MTG_FLUCT_STOP_ON_THREAT=0` restores always-dig.
    unimplemented (modelled as `[C]`), so it can never pay Drannith Stinger's {R}. This deck has 4
    copies and they are its only untapped colour source. O-2 is therefore not the harmless
    under-rating it was recorded as — it removes a line the deck's owner plays.
-3. **2HG: the Stinger trigger is hardcoded to ONE opponent.** *"stinger deals 2 per card in 2HG, so
-   that case is actually a bit easier."* `FireCycleWatchers` (SpellEffects.h) does
-   `const int opp = 1 - controller;` and damages only that player. Origin's `9062c552`
-   (feat(2hg): model multiple opponents) establishes the pattern — every "each opponent" effect
-   multiplies by `gamesetup::OpponentHeads()`. **This branch is 9 commits behind that commit**, so
-   the bug is latent now and becomes real on rebase. Fix `cycle_trigger_damage_each_opponent` the
-   same way when integrating.
+3. **2HG: the Stinger trigger fired once per OPPONENT, not per HEAD — FIXED 2026-09-05 (`bc9a66bd`).**
+   *"stinger deals 2 per card in 2HG, so that case is actually a bit easier."* `FireCycleWatchers`
+   did `const int opp = 1 - controller;` and dealt the damage exactly once, so "deals 1 damage to
+   EACH OPPONENT" paid one head under two. Now scaled by `gamesetup::OpponentHeads()`, matching
+   every other each-opponent effect wired by `9062c552`. The card was implemented on a branch that
+   did not yet contain 2HG, so the bug was latent until the rebase brought that commit in — and it
+   was found by the USER READING THE CARD, not by any gate. Verified (40 games, seed 9001, d3/b10):
+   1v1 3.7500; 2HG fixed 3.7500; 2HG with heads ignored (the bug) 4.2000 — the fix puts 2HG on par
+   with 1v1 (15 cycles into 30 team life vs 20 into 20, "a bit easier" exactly as stated) and the
+   bug was costing 0.45 turns. `heads == 1` unchanged by construction, so 1v1 is byte-identical.
+   The deck is now in the 2HG-RELEVANT case groups rather than the generic canary.
+
 4. **The third land can cost more than it gives.** *"often you don't even want to play the third
    land, because it costs a cycling card"* — though *"the Enlightened Tutor case is a real example
    where you need a third land. Playing two unearth to get double stinger could be another."*
