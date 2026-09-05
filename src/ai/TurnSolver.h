@@ -900,6 +900,21 @@ public:
     // executor's fallback breakpoint re-solve (AIEngine::resolve_draw_breakpoint) MUST use this,
     // never EnumerateMainPlans, or the realised play would drift from the searched one.
     static std::vector<Plan> EnumerateBreakpointPlans(const GameState& state, bool is_pre_combat);
+
+    // BREAKPOINT SITE 7 -- the Birthing Pod CHAIN (bit 7 of MTG_BP_SITES, default ON). A Pod
+    // activation's fetch is a mid-phase event that creates a NEW actionable object: the fetched
+    // creature is a legal sac victim for a SECOND untapped Pod (and outlet fodder) in the SAME
+    // phase, but every ActivatePod variant was enumerated against the pre-fetch battlefield, so
+    // "Pod #2 sacs Pod #1's fetch" was unreachable at any depth or budget (USER 2026-09-05:
+    // "still a relevant line. Maybe we should have a breakpoint in this case?"). The site opens
+    // in the trailing activation pass right after a successful PerformPodActivate with a REAL
+    // fetch, gated on PodChainAnotherActivatablePod -- with no second Pod there is no new
+    // decision, so the common one-Pod board pays nothing. Class accessor for the executor twin
+    // (AIEngine's ActivatePod branch), which cannot see the file-static BpSiteMask.
+    static bool PodBreakpointClassOn();
+    // The structural gate both worlds share: does the active player control an UNTAPPED second
+    // Pod-style source (pod_mv_delta != 0) that could act on the just-fetched creature?
+    static bool PodChainAnotherActivatablePod(const GameState& state);
     // #10 cast-order: canonical (executor clean-set) order of a plan's non-sac hand casts, for the
     // viewer to diff the human's queued order against (equal => don't emit --cast-order).
     static std::vector<std::string> CanonicalNonSacCastOrder(const GameState& state, const Plan& plan);

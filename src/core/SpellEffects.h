@@ -7714,9 +7714,11 @@ inline int DynamicBaseToughness(const CardDefinition& def, const GameState& stat
 
 // Ravenous Chupacabra ("When this creature enters, destroy target creature an opponent
 // controls"): the ETB analogue of the Terror pick -- largest opponent creature by effective
-// power (no colour/artifact filter; Chupacabra has none). Payoff is provably 0 in a deck whose
-// games never give the opponent a creature; implemented faithfully + reusable rather than
-// stubbed. Mirrors the Terror branch: graveyard push for a real card, token ceases.
+// power (no colour/artifact filter; Chupacabra has none). The goldfish opponent DOES control
+// creatures in 8 of every 10 game indices (GoldFishRunner::PopulateOpponentSpawns -- USER
+// correction 2026-09-05; an earlier note here claimed the trigger could never fire), so this
+// fires routinely; the PAYOFF is still ~0 because spawns never attack or block. Implemented
+// faithfully + reusable. Mirrors the Terror branch: graveyard push for a real card, token ceases.
 inline void DestroyLargestOppCreature(GameState& state, int controller)
 {
     int pick = -1, best_pw = -1;

@@ -1235,9 +1235,11 @@ struct CardParams
     int etb_damage_any = 0;
     // Ravenous Chupacabra: "When this creature enters, destroy target creature an opponent
     // controls." The ETB analogue of destroy_target_creature (Terror); pick = largest opponent
-    // creature via the shared DestroyLargestOppCreature helper. In Melira Pod the payoff is
-    // provably 0 (the opponent-creature spawn params all live in Creature Giving), so it carries
-    // no eval credit -- implemented faithfully + reusable rather than stubbed.
+    // creature via the shared DestroyLargestOppCreature helper. Fires in any game whose index
+    // draws a spawn pattern (GoldFishRunner::PopulateOpponentSpawns, 8 of every 10 -- USER
+    // correction 2026-09-05: an earlier note claimed it could never fire in Melira Pod); payoff
+    // stays ~0 because spawns never attack or block, so it carries no eval credit -- implemented
+    // faithfully + reusable rather than stubbed.
     bool etb_destroy_opp_creature = false;
     // ETB "each opponent" ping ("deals N damage to each opponent and each creature/planeswalker
     // they control" — Goblin Chainwhirler 1). N to the opponent face (race-relevant, via the

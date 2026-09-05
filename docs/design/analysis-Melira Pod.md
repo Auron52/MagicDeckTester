@@ -161,9 +161,13 @@ modelled — zero reachable trigger (no flashback/escape/etc. in deck, no engine
 cast-from-GY zone).
 
 ### ETB/GY utility quartet (draft received)
-Environment fact (proved): opponent creature count is ALWAYS 0 in this deck (only
-spawn sources are Forbidden Orchard / Hunted Phantasm / Varchild's, all Creature
-Giving-only). Opponent casts nothing, owns no artifacts/enchantments.
+Environment fact (~~proved~~ **RETRACTED 2026-09-05c**): the claim below missed the
+runner-level goldfish spawn table (`PopulateOpponentSpawns`, creatures in 8 of 10 game
+indices) — see SESSION 2026-09-05c for the corrected consequences (behaviour was already
+right; only the justifications change). Original text: opponent creature count is ALWAYS 0
+in this deck (only spawn sources are Forbidden Orchard / Hunted Phantasm / Varchild's, all
+Creature Giving-only). Opponent casts nothing, owns no artifacts/enchantments — the
+casts/artifacts half still holds.
 - **Ravenous Chupacabra — Tier 2**: `{2}{B}{B}` 2/2. NEW `etb_destroy_opp_creature`
   (ETB analogue of Terror's `destroy_target_creature`; factor
   `DestroyLargestOppCreature` helper out of Terror branch SpellEffects.h:4223,
@@ -1106,3 +1110,69 @@ The `better` chain restructure is provably identical when no candidate carries a
 other deck byte-identical by construction (smoke 68/68). Measured s5000x100: 4.96 vs 4.97 avg,
 inf 34 vs 33, inf turn 4.06 vs 4.09 -- directionally right on every axis, no drawback ->
 adopted per the clean-win rule.
+
+## SESSION 2026-09-05c — pod-chain breakpoint (site 7) + the spawn premise corrected
+
+### "Spawns" resolved: the goldfish opponent's scheduled creatures
+The surfaced question ("which spawn source did you mean?") is answered: the USER meant the
+goldfish opponent's SCHEDULED spawns — `GoldFishRunner::PopulateOpponentSpawns`'s 10-game
+pattern cycle, which materialises passive opponent creatures at fixed turns in **8 of every
+10 game indices** (patterns 2–9; only indices 0–1 are pure goldfish). The session-b
+re-derivation ("only in-sim route is Severance Priest's Spirit") searched card params and
+missed the runner-level table entirely. Consequences re-derived:
+- **Ravenous Chupacabra**: the "trigger provably never fires" claim was WRONG — spawns are
+  real battlefield Permanents (GameEngine upkeep materialisation) and
+  `DestroyLargestOppCreature` scans the battlefield, so the ETB fires and kills the largest
+  spawn in any spawn-pattern game. Behaviour was already correct (implemented faithfully,
+  never stubbed); only the justification changes: payoff stays ~0 because spawns never
+  attack or block. Stale comments fixed (SpellEffects.h helper header, CardDatabase.h param).
+- **Murderous Redcap collapse-to-face**: "no opponent permanent exists" was wrong, but face
+  remains STRICTLY optimal vs never-acting spawns (damage to face progresses the win; damage
+  to an inert body does nothing). Verdict stands on the corrected ground. Note the human
+  cannot aim Redcap at a spawn in the viewer — same class as the Chupacabra tie-pick; both
+  are ~0-payoff choices vs inert bodies, parity-gap-noted, not queued.
+- **Melira clause 3** (opponent creatures lose infect): spawns are plain P/T tokens with no
+  keywords — still inert, justification updated.
+- **Severance Priest decline-optimal**: unchanged (a gifted Spirit is as inert as a spawn).
+
+### Pod-chain BREAKPOINT (site 7) — "Pod #2 sacs Pod #1's fetch in the same phase"
+USER: "still a relevant line. Maybe we should have a breakpoint in this case?" Built exactly
+that: the fetch resolving is a mid-phase event that creates a new actionable (the fetched
+creature as a sac victim), i.e. the post-breakpoint-search class. **Site 7** (bit 7 of
+MTG_BP_SITES; default mask 0x77 -> 0xF7) opens in ApplyPlanDirect's trailing activation pass
+right after a successful PerformPodActivate with a REAL fetch, gated on
+`PodChainAnotherActivatablePod` (a second untapped pod_mv_delta source) — the common one-Pod
+board pays nothing. Continuation = searched (`bp_choice` indexing the shared
+EnumerateBreakpointPlans list, which re-collects at the post-fetch state where the fetch IS a
+victim) or greedy Solve fallback; unlike sites 0/1 the fallback plays NO static land (nothing
+was drawn). Both trailing activation passes (ApplyPlanDirect + the executor's) were
+lambda-ified (recursive std::function) so the continuation's ACTIVATIONS apply — that is the
+chain itself — and a continuation Pod activation re-enters the site (nesting via bp_at,
+bounded by pod taps). Executor twin in AIEngine's ActivatePod branch: same gates, same
+class-gated bp_seen counting (`TurnSolver::PodBreakpointClassOn` accessor), searched
+continuation from the SAME list, precasts + clean-order casts + recursive trailing apply.
+Wave-0 fan: `PlanOpensBreakpoint` marks plans holding a real-fetch ActivatePod when the
+pre-apply battlefield holds >= 2 activatable Pods.
+- **Ordering constraint (disclosed)**: the site counts between the inline cast sites and the
+  deferred classes in both worlds; consistent today because no deck mixes pod sources with
+  deferred-class cards (Melira plays no cantrip/trick/equipment/dig/staging card). Reconcile
+  before such a deck exists.
+- **Human play**: the auto-continuation is OFF under HumanPlayActive in both worlds — the
+  human owns the rest of the phase. The human-side same-phase chain remains the KNOWN parity
+  gap (one plan pick per phase, no re-poll after a pod activation); cross-phase chaining via
+  the second main still works for humans. Queued, unchanged.
+- **Proof scenario** `melira_pod_chain.json`: 3 Pods, lone Carrion Feeder, opponent at 2,
+  only damage in the position is Redcap's ETB 2 at the top of an MV 1->2->3->4 ladder — a
+  three-step climb that CANNOT split across two mains (the second same-phase step needs the
+  just-fetched victim). Default: PASS, realising the full triple chain in MAIN_1
+  (Feeder->Vizier, Vizier->Finks, Finks->Redcap, ETB lethal). MTG_BP_SITES=119 (site 7
+  masked; NOTE atoi cannot parse "0x77" — use decimal): FAIL, ladder caps at Finks. The
+  first scenario draft (2 Pods, 2-step ladder) passed WITHOUT the site via main1+main2 —
+  the cross-phase route really does cover every 2-step chain, which is why the site's value
+  is the >= 3-step turn and the main-2 chain (a fetch made IN main 2 was equally unreachable).
+- **Measured (s5000x100)**: ON 4.9500 avg / 35 infinite (conv 4.686) vs OFF 4.9600 / 34
+  (conv 4.677); CPU 12m05s vs 12m05s user (FLAT), wall 50.1s vs 54.4s, same five SLOW-GAMEs
+  either arm. MTG_BP_PROBE: site 7 hit 1,093,162 times / 100 games, 17.6% searched, 18,880
+  on committed lines (~189/game). Small quality gain at zero measured cost -> **ADOPTED
+  default-ON per the clean-win rule**; suite untouched by construction (no other deck has a
+  pod source; smoke 68/68 byte-identical, unit 64/64, scenarios 64/64 incl. the new one).

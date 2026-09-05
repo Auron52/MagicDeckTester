@@ -6786,14 +6786,35 @@ static int BpSiteMask()
     static const int m = []() -> int
     {
         const char* v = std::getenv("MTG_BP_SITES");
-        if (v == nullptr || *v == '\0') { return 0x77; }
-        return std::atoi(v) & 0x7F;
+        if (v == nullptr || *v == '\0') { return 0xF7; }   // 0x77 + site 7 (pod chain, default ON)
+        return std::atoi(v) & 0xFF;
     }();
     // OR'd, not overridden: an explicit MTG_BP_SITES stays authoritative for every other class, and
     // with the lever off this returns exactly the old value (byte-identical).
     // MTG_BP_NODE implies the class is open: the node arm is ONE flag, so a node run can never
     // land in the truncate-without-node shape a MTG_BP_NODE=1/MTG_BP_SITE3=0 split would be.
     return (BpPlainCantripSiteEnabled() || BpNodeEnabled()) ? (m | 0x08) : m;
+}
+
+// Site 7 (pod chain) class accessor for the executor twin -- see the header note. The executor
+// cannot read the file-static BpSiteMask, and counting a class the search does not count (or vice
+// versa) shifts every later bp_at index and silently changes play (the bp_searched_plan lesson).
+bool TurnSolver::PodBreakpointClassOn() { return ((BpSiteMask() >> 7) & 1) != 0; }
+
+// The shared structural gate for site 7: a SECOND untapped Pod-style source stands by, so the
+// just-resolved fetch created a genuinely new decision (its victim list now holds the fetch).
+// Untapped is the whole test -- affordability is the continuation's own business (gating on mana
+// here would be a quality prune), and a victim trivially exists (the fetch itself just entered).
+bool TurnSolver::PodChainAnotherActivatablePod(const GameState& state)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.pod_mv_delta != 0
+            && (!d->params.pod_taps || !p.tapped)) { return true; }
+    }
+    return false;
 }
 
 // A/B hatch for the NESTING axis alone (MTG_BP_NEST_DISCOVER=0). The wave walker learns how many
@@ -16581,7 +16602,7 @@ static std::string ForcedLandForTurn(int turn)
 // See docs/design/post-breakpoint-search.md.
 namespace
 {
-    constexpr int kBpSites = 7;
+    constexpr int kBpSites = 8;
     const char* const kBpSiteName[kBpSites] = {
         "stages_cards/EI  (Light Up the Stage, Expressive Iteration)",
         "DrawUntilNonland (Treasure Hunt)",
@@ -16590,6 +16611,7 @@ namespace
         "dig_through_lands(sac/cycle dig)",
         "trick_payload    (Gold Rush / Expedite deferred)",
         "equipment_etb_dr (Puresteel Paladin deferred)",
+        "pod_fetch        (Birthing Pod same-phase chain)",
     };
     struct BpProbe
     {
@@ -20792,7 +20814,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // left after the main casts (TapForCostDirect, the rollout pay path), then realise the effect.
     // If the cost can't be paid (mana stranded), the outlet is a no-op -- the leaf/executor share this
     // same apply, so the win projection matches realisation (no fd-diverge from a phantom outlet).
-    for (const Action& a : plan.actions)
+    //
+    // A LAMBDA (recursive, hence std::function) rather than a bare loop so the pod-chain
+    // breakpoint (site 7, inside the ActivatePod branch) can apply its continuation's OWN
+    // trailing activations -- that is the chain itself, and a continuation activation can open
+    // the next breakpoint (bounded: every activation taps a Pod). Called with plan.actions
+    // exactly where the loop stood -- byte-identical for every plan that opens no pod site.
+    std::function<void(const std::vector<Action>&)> apply_trailing_activations =
+        [&](const std::vector<Action>& trailing_acts)
+    {
+    for (const Action& a : trailing_acts)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
         {
@@ -20834,8 +20865,49 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 && TapForCostDirect(state, a.cost, /*for_creature=*/false))
             {
                 state.players[state.active_player_index].life -= a.phyrexian_life;
-                PerformPodActivate(state, state.active_player_index, a.sac_source_id,
-                                   a.sac_victim_id, a.tutor_target.str());
+                const bool pod_did =
+                    PerformPodActivate(state, state.active_player_index, a.sac_source_id,
+                                       a.sac_victim_id, a.tutor_target.str());
+                // BREAKPOINT SITE 7 -- the Birthing Pod same-phase CHAIN (header note at
+                // TurnSolver::PodBreakpointClassOn). The fetch that just entered is a new sac
+                // victim no pre-fetch ActivatePod variant could carry, so with a second Pod
+                // standing by the rest of the phase is re-decided here: searched (bp_choice
+                // targets this occurrence -> candidate k of EnumerateBreakpointPlans, which
+                // re-collects at the post-fetch state) or the greedy Solve fallback. Unlike
+                // sites 0/1 there is NO static land play in the fallback: nothing was drawn, so
+                // no deferred drop belongs to this site (the searched continuation still plays
+                // its own land via bp_play_searched_land). The continuation's activations are
+                // applied through apply_trailing_activations -- the chain itself -- and a
+                // continuation Pod activation re-enters this site (nesting via bp_at; bounded
+                // because every activation taps a Pod). Human play is excluded exactly as at
+                // site 1: the human owns the continuation. No sink push: the executor twin
+                // (AIEngine's ActivatePod branch) re-derives the same continuation from the
+                // SHARED EnumerateBreakpointPlans list, the non-full-depth contract everywhere.
+                //
+                // ORDERING CONSTRAINT (lockstep): this site fires in the TRAILING pass, i.e.
+                // after every inline cast site (0/1/2) and before the deferred classes (3/5/6),
+                // and the executor twin sits in ITS trailing loop, which runs after its cast
+                // loop but BEFORE its deferred resolve -- the two worlds count bp_seen in the
+                // same order only because no deck mixes pod sources with deferred-class cards
+                // (verified: Melira Pod plays no cantrip/trick/equipment/dig/staging card, and
+                // no other deck has a pod_mv_delta source). If such a deck ever appears, the
+                // deferred-vs-pod counting order must be reconciled first.
+                if (pod_did && a.tutor_target != kPodNoFetch && !s_human_play
+                    && TurnSolver::PodBreakpointClassOn()
+                    && TurnSolver::PodChainAnotherActivatablePod(state))
+                {
+                    TurnSolver::Plan extra;
+                    if (!bp_searched_plan(7, extra))
+                    {
+                        greedysite::Record(7);
+                        extra = TurnSolver::Solve(state, is_pre_combat);
+                        greedysite::RecordOutcome(7, !extra.actions.empty());
+                    }
+                    bp_play_searched_land(extra, nullptr);
+                    apply_continuation_precasts(extra);
+                    apply_plan_actions(extra.actions, extra.searched_order);
+                    apply_trailing_activations(extra.actions);
+                }
             }
         }
         else if (a.kind == Action::Kind::GraveyardExileGrow)
@@ -21079,6 +21151,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
         }
     }
+    };
+    apply_trailing_activations(plan.actions);
 
     // Play the deferred Karoo bounce land now -- after the main casts have tapped the lands we
     // needed, so BounceKarooLand returns a SPENT land at no tempo cost (see karoo_deferred
@@ -25042,8 +25116,27 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             }
         }
     }
+    // Site 7 pre-scan: the pod chain needs TWO activatable Pod-style sources on the pre-apply
+    // battlefield (the plan's activation taps one; the chain is the OTHER one saccing its fetch).
+    // Counted here once, like `watcher`; the action loop below marks any plan that actually
+    // activates with a real fetch. Conservative in the same safe direction as site 6: a marked
+    // plan whose activation ends up stranded at apply just yields duplicate variants, never a
+    // wrong answer.
+    int pod_srcs = 0;
+    for (const Permanent& perm : state.battlefield)
+    {
+        if (perm.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(perm.card);
+        if (d && d->params.pod_mv_delta != 0 && (!d->params.pod_taps || !perm.tapped))
+        { if (++pod_srcs >= 2) { break; } }
+    }
     for (const Action& a : p.actions)
     {
+        // Site 7: a Pod activation with a REAL fetch while a second Pod stands by -- the fetch
+        // is a new sac victim no pre-fetch enumeration could offer (see the header note at
+        // TurnSolver::PodBreakpointClassOn).
+        if (pod_srcs >= 2 && a.kind == Action::Kind::ActivatePod
+            && a.tutor_target != kPodNoFetch) { mask |= 1 << 7; }
         // Site 6 off a Stoneforge PUT (MTG_SF_PUT_BP; arming site in ApplyPlanDirect). A put IS an
         // Equipment entering, so a live watcher draws off it exactly as off a cast -- and this
         // predicate is what earns the plan its bp_choice variants, so without the clause the

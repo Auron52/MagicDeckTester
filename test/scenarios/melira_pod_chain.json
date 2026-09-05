@@ -1,0 +1,28 @@
+{
+    "_comment": "Guards BREAKPOINT SITE 7 -- the same-phase Birthing Pod CHAIN (user-directed 2026-09-05: 'Pod #2 sacs Pod #1's fetch in the same phase is still a relevant line'). The cross-phase two-step (Pod in main 1, Pod in main 2) always worked -- each main re-collects -- so a two-step ladder cannot force the site. This is a THREE-step ladder in one turn: board = THREE untapped Pods, a lone Carrion Feeder (MV 1), six Forests; hand empty; opponent at 2; this turn only. Library's pod-reachable creatures: Vizier of Remedies (MV 2, inert ETB), Kitchen Finks (MV 3), Murderous Redcap (MV 4). The only damage in the position is Redcap's ETB 2 (every fetch is summoning-sick; Feeder attacks for 1 and is the ladder's first victim anyway). Reaching Redcap needs MV 1 -> 2 -> 3 -> 4 = three activations, and with only two mains at least two of them must land in the SAME phase, the second saccing a creature fetched moments earlier -- exactly the victim no pre-fetch enumeration carries. PASS = win on the scenario turn, possible only through the site-7 continuation; with MTG_BP_SITES=119 (site 7 masked) this scenario must FAIL, the ladder capping at Finks.",
+    "deck": "decks/Melira Pod/Melira Pod.cod",
+    "turn": 6,
+    "on_the_play": true,
+    "active_life": 20,
+    "opponent_life": 2,
+    "battlefield": [
+        { "name": "Birthing Pod" },
+        { "name": "Birthing Pod" },
+        { "name": "Birthing Pod" },
+        { "name": "Carrion Feeder" },
+        { "name": "Forest" },
+        { "name": "Forest" },
+        { "name": "Forest" },
+        { "name": "Forest" },
+        { "name": "Forest" },
+        { "name": "Forest" }
+    ],
+    "hand": [],
+    "library": [ "Vizier of Remedies", "Kitchen Finks", "Murderous Redcap" ],
+    "library_filler": "Forest",
+    "library_size": 40,
+    "depth": 5,
+    "budget_ms": 200,
+    "max_turns": 6,
+    "expect_win_turn": 6
+}

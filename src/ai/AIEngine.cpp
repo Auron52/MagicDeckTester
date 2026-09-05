@@ -3707,7 +3707,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { if (p.card.m_number == num) { return p.card.m_name.str(); } }
         return "#" + std::to_string(num);
     };
-    for (const Action& a : plan.actions)
+    // A LAMBDA (recursive, hence std::function) rather than a bare loop, mirroring
+    // ApplyPlanDirect's apply_trailing_activations: the pod-chain breakpoint twin (site 7,
+    // inside the ActivatePod branch) applies its continuation's activations through this same
+    // dispatcher -- the chain itself -- and a continuation Pod activation re-enters the site
+    // (bounded: every activation taps a Pod). Called with plan.actions exactly where the loop
+    // stood -- byte-identical for every plan that opens no pod site.
+    std::function<void(const std::vector<Action>&)> exec_trailing_activations =
+        [&](const std::vector<Action>& trailing_acts)
+    {
+    for (const Action& a : trailing_acts)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
         {
@@ -3769,6 +3778,93 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
                                          "pod -> " + a.tutor_target.str()
                                              + (a.phyrexian_life > 0 ? " (paid 2 life)" : ""));
+                }
+                // BREAKPOINT SITE 7 executor twin (lockstep pair of ApplyPlanDirect's pod-chain
+                // site; header note at TurnSolver::PodBreakpointClassOn). Same gates, same
+                // counting: only an ENABLED class increments the shared index (mirrors
+                // bp_searched_plan's class_on counting), and the searched continuation indexes
+                // the SHARED EnumerateBreakpointPlans list -- re-solving greedily for a plan
+                // that scored a searched continuation would realise a turn the search never
+                // scored (fd-diverge). Human play never auto-continues: the human owns the rest
+                // of the phase (Pod #2 with the fetch as victim is on the next decision poll).
+                if (done && a.tutor_target != kPodNoFetch && !HumanPlayActive()
+                    && TurnSolver::PodBreakpointClassOn()
+                    && TurnSolver::PodChainAnotherActivatablePod(state))
+                {
+                    TurnSolver::Plan extra;
+                    bool pod_bp_searched = false;
+                    const int pod_bp_idx = (plan.bp_choice >= 0) ? bp_seen_exec++ : -1;
+                    if (pod_bp_idx == plan.bp_at)
+                    {
+                        const std::vector<TurnSolver::Plan> cands =
+                            TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
+                        if (plan.bp_choice < static_cast<int>(cands.size()))
+                        {
+                            extra           = cands[plan.bp_choice];
+                            pod_bp_searched = true;
+                            // The continuation's land is part of the searched decision
+                            // (mirrors bp_play_searched_land; no Karoo reservation can be live
+                            // this deep in the trailing pass -- it was consumed after the casts).
+                            if (extra.land_decided && !extra.land_to_play.empty())
+                            { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+                        }
+                    }
+                    if (!pod_bp_searched)
+                    { execgreedy::Record(-1, m_in_rollout); extra = TurnSolver::Solve(state, is_pre_combat_main); }
+                    // Precasts (SacForMana / Suspend / convoke taps) exactly as
+                    // resolve_draw_breakpoint's pre-pass, then the casts in the executor's clean
+                    // canonical order, then the continuation's ACTIVATIONS via this same trailing
+                    // dispatcher -- the chain itself. Scope note: pod continuations belong to the
+                    // one pod deck (Melira), which plays no Vial / opaque-order card -- extend
+                    // this applier before a pod deck that does ever exists.
+                    for (const Action& ca : extra.actions)
+                    {
+                        if (ca.kind == Action::Kind::SacForMana)
+                        { ApplySacForMana(state, state.active_player_index, ca.sac_source_id,
+                                          TurnSolver::SacFloatColorFor(state, extra.actions, ca),
+                                          ca.ritual_float, ca.sac_victim_id); }
+                        else if (ca.kind == Action::Kind::Suspend)
+                        { ApplySuspend(state, state.active_player_index, ca.card_name); }
+                        else if (ca.kind == Action::Kind::CastFromHand
+                                 && (ca.convoke_green > 0 || ca.convoke_other > 0))
+                        { ApplyConvokeTaps(state, state.active_player_index, ca.convoke_green, ca.convoke_other); }
+                    }
+                    std::vector<int> pod_cont_order;
+                    for (int ci = 0; ci < static_cast<int>(extra.actions.size()); ++ci)
+                    {
+                        const Action& ca = extra.actions[ci];
+                        if (ca.kind == Action::Kind::CastFromHand && !ca.sacrifice_land)
+                        { pod_cont_order.push_back(ci); }
+                    }
+                    if (!extra.searched_order && pod_cont_order.size() > 1)
+                    {
+                        std::stable_sort(pod_cont_order.begin(), pod_cont_order.end(),
+                            [&](int x, int y)
+                            { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
+                    }
+                    for (int ci : pod_cont_order)
+                    {
+                        const Action& ca = extra.actions[ci];
+                        cast_by_name(ca.card_name, ca.tutor_target, ca.chosen_x,
+                                     ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
+                                     ca.splice_count, ca.chosen_float_color, ca.enchant_target,
+                                     ca.free_cast, ca.bestow, ca.replicate_count, ca.convoke_green,
+                                     ca.convoke_other, ca.phyrexian_life, ca.evoke);
+                        resolve_now();
+                    }
+                    for (const Action& ca : extra.actions)
+                    {
+                        if (ca.kind == Action::Kind::CastFromHand && ca.sacrifice_land)
+                        {
+                            cast_by_name(ca.card_name, ca.tutor_target, ca.chosen_x,
+                                         ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
+                                         ca.splice_count, ca.chosen_float_color, ca.enchant_target,
+                                         ca.free_cast, ca.bestow, ca.replicate_count, ca.convoke_green,
+                                         ca.convoke_other, ca.phyrexian_life, ca.evoke);
+                            resolve_now();
+                        }
+                    }
+                    exec_trailing_activations(extra.actions);
                 }
             }
         }
@@ -4010,6 +4106,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
         }
     }
+    };
+    exec_trailing_activations(plan.actions);
 
     // Play the deferred Karoo bounce land now (mirror of ApplyPlanDirect): the main casts have
     // tapped the lands we needed, so BounceKarooLand returns a spent land at no tempo cost. Sits
