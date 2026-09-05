@@ -1,5 +1,19 @@
 # Greedy inside the search: what we found, and what it means
 
+**GOVERNING DOCTRINE (USER, 2026-09-05, verbatim):** *"The only exception to the no greedy rule
+will be things outside of the search window, combo go off heuristics that win this turn, mana
+allocation and attack decisions for non-dork creatures. Everything else should be
+search-with-heuristics."* Concretely, the ONLY permitted greedy components are:
+1. anything **beyond the search horizon** (the rollout leaf estimator lives here by design);
+2. **combo go-off heuristics that win THIS turn** (lethal-K persist/damage bursts, the
+   OpponentHasLost shortcut class);
+3. **mana allocation** (tap order / payment solving); and
+4. **attack decisions for non-dork creatures**.
+Everything else — every plan choice, second main, breakpoint continuation *inside* the searched
+window — must be search-with-heuristics. Any surviving in-window greedy (today: the
+bp-continuation fallbacks, `bp-greedy-continuation-deletion.md`) is DEBT against this doctrine,
+not an accepted class; measure and retire it rather than re-litigating the rule.
+
 **Status (updated 2026-09-05): the interior second main's greedy path is DELETED for every deck —
 the per-deck opt-in era is over.** USER directive (*"Can we delete that greedy interior? I don't
 want it to exist for any future decks"*): the branch site runs `SearchedSecondMainMemoized`

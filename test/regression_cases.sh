@@ -35,6 +35,7 @@ declare -A DECK_FILE=(
   [kitty]=decks/KittyEquipment/KittyEquipment.cod
   [dragons]=decks/Dragons/Dragons.cod
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
+  [melira]="decks/Melira Pod/Melira Pod.cod"
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -54,6 +55,7 @@ declare -A DECK_PROF=(
   [kitty]=decks/KittyEquipment/KittyEquipment.profile.json
   [dragons]=decks/Dragons/Dragons.profile.json
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
+  [melira]="decks/Melira Pod/Melira Pod.profile.json"
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -178,6 +180,13 @@ SMOKE_CASES=(
   "breaching 0 1001 1000 0"
   "breaching 3 1001  150 10"
   "breaching 5 1001   75 20"
+  # melira: EXPENSIVE per game (persist-combo search; probed 2026-09-05 at s1001:
+  # d3 b10 ~16 s/game CPU, d5 b20 ~23 s/game CPU, tail-heavy -- fivecolour-class).
+  # Small searched gates so smoke stays in budget; counts can rise once the value
+  # leaf is adopted (the O(1) leaf + H-cell ladder cut d5 by an order of magnitude).
+  "melira 0 1001 1000 0"
+  "melira 3 1001   50 10"
+  "melira 5 1001   25 20"
   # 2HG gate (user request 2026-09-04): "<deck>2hg" = the SAME deck/profile at starting_life 30
   # + opponent_heads 2 (regression.sh strips the suffix for file lookup and adds the job fields).
   # Small on purpose -- just enough that a change which obviously ignores 2HG (second-face
@@ -205,6 +214,7 @@ SMOKE_CASES=(
   "kitty2hg           3 1001 50 10"
   "dragons2hg         3 1001 50 10"
   "breaching2hg       3 1001 50 10"
+  "melira2hg          3 1001 25 10"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -316,6 +326,12 @@ REGRESSION_CASES=(
   "breaching 3 3003  300 10"
   "breaching 5 2002  250 20"
   "breaching 5 3003  250 20"
+  # melira: two-seed searched sweep at reduced counts (cost note in the SMOKE block).
+  "melira 0 2002 1000 0"
+  "melira 3 2002   75 10"
+  "melira 3 3003   75 10"
+  "melira 5 2002   40 20"
+  "melira 5 3003   40 20"
   # 2HG gate, second seed (see the SMOKE block for the design): the six 2HG-relevant decks at
   # d3, plus ONE d5 case (hinata2hg -- the value_play/deep-search path under two heads, covering
   # the Crackle declared-count search where the second face changes lethality). No canaries here
@@ -598,6 +614,20 @@ OVERNIGHT_CASES=(
   "breaching 5 5005  500 40"
   "breaching 5 6006  500 40"
   "breaching 5 7007  500 40"
+  # melira: four-seed sweep at counts sized to its per-game cost (~16/23 s CPU at d3/d5,
+  # see the SMOKE block): ~7.5 CPU-hours total, well inside the wall budget pooled.
+  "melira 0 4004 2000 0"
+  "melira 0 6006 2000 0"
+  "melira 0 8008 2000 0"
+  "melira 0 10010 2000 0"
+  "melira 3 4004  200 10"
+  "melira 3 5005  200 10"
+  "melira 3 6006  200 10"
+  "melira 3 7007  200 10"
+  "melira 5 4004  150 20"
+  "melira 5 5005  150 20"
+  "melira 5 6006  150 20"
+  "melira 5 7007  150 20"
   # 2HG gate, deep tier (user request 2026-09-04): the six 2HG-relevant decks at DEFAULT
   # SETTINGS -- depth-5 rows drop the depth key so each deck's value_play block owns the play
   # depth (fivecolour runs d6), at the SAME per-deck overnight d5 budget as the deck's own rows.
