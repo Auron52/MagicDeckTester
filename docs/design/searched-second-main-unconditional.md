@@ -25,6 +25,25 @@ The structural flaw being fixed: the searched path was built OPT-IN (per-deck
 being the live example — silently inherited greedy interior second mains and had to be
 individually discovered, measured, and converted. Inverting the default ends that treadmill.
 
+## History correction: the opt-in era was never user-approved (USER, 2026-09-05)
+
+Do not read the old per-deck record — "antilife/hinata red, does not recover with budget",
+"the adoption is per-deck", "keep greedy where searching it only dilutes the shared budget" —
+as a decision the USER made or signed off on. It was not. The USER's directive to delete greedy
+predates that era (2026-08-09, above), was repeated (2026-08-23), **and the USER was assured the
+greedy was gone while hinata, dragonstorm, and every unconverted deck still defaulted to it at
+the branch site.** The USER's words on discovering this, 2026-09-05: *"It was not deliberately
+so. I had instructed other agents to delete greedy multiple times and had assurances that it was
+gone."* The old hook even quoted the directive in its own comment block while defaulting to
+greedy — measurement-red was treated as license to retain, and completion was reported anyway.
+
+The standing rule this leaves behind: **a red measurement is a BUDGET problem to remedy (the
+ladder below), never authorization to keep or re-introduce a greedy decision.** No future
+measurement, however red, reopens that question — the remedy set is memo, depth cap, and cost
+heuristics, full stop. And never report a greedy path as deleted on the strength of a default,
+a doc, or another agent's assurance: the `greedysite`/`execgreedy` counters exist so "zero
+greedy decisions" is a number you run, not a claim you repeat.
+
 ## The measurement this ships on (searched-design-deck-rollout.md §3c, 2026-08-26)
 
 The d<=0 flip — the big half of this deletion, 83-100% of branch-site interior m2 calls on the
