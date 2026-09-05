@@ -336,6 +336,18 @@ struct Action
                                        // (SubsetHasMissingTrickTarget) is a name compare instead of a
                                        // zone scan (it profiled at 3.7%). Empty = battlefield target
                                        // (always legal) or not a trick.
+    bool        evoke            = false;
+                                       // EVOKE (Reveillark, CR 702.75; user-directed 2026-09-05):
+                                       // this CastFromHand pays CardParams::evoke_cost instead of
+                                       // the printed cost, and the entered permanent SELF-
+                                       // SACRIFICES after its enter cascade (shared
+                                       // SacrificePermanentAt -> the LTB fires as on any leave).
+                                       // Emitted as an EXTRA variant sharing hand_index (the
+                                       // bestow idiom below), only when a printed power<=2
+                                       // creature card is in the graveyard (else strictly
+                                       // dominated by the cheaper hard cast). Recompute sites
+                                       // must swap in evoke_cost (the phyrexian/convoke lockstep
+                                       // list); plan_signature carries #E.
     bool        bestow           = false;
                                        // BESTOW (Gnarled Scarhide, CR 702.103): this CastFromHand is
                                        // the AURA mode -- pay CardParams::bestow_cost instead of the

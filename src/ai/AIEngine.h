@@ -447,7 +447,9 @@ private:
                            int replicate_count = -1,
                            int convoke_green = 0,       // Chord of Calling: committed convoke taps
                            int convoke_other = 0,       // (reduce the recomputed cost -- lockstep)
-                           int phyrexian_life = 0);     // Phyrexian ({G/P}, Birthing Pod): life paid
+                           int phyrexian_life = 0,      // Phyrexian ({G/P}, Birthing Pod): life paid
+                           bool evoke = false);         // Evoke (Reveillark): alternate-cost cast;
+                                                        // EnterBattlefield self-sacs -> LTB fires
                                                         // in place of pips -- strip the recomputed
                                                         // cost + deduct after payment (lockstep)   // Replicate: extra token copies the PLAN pinned
                                                         // (-1 = not declared -> the greedy-max sink, the

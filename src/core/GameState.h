@@ -153,6 +153,10 @@ struct StackEntry
                                         // Stamped from Action::bestow at the cast site; the resolver then
                                         // enters the DB's synthesized "<name> (Bestowed)" aura face instead
                                         // of the creature. false => the ordinary creature cast.
+    bool                evoke          = false;     // EVOKE (Reveillark): this cast paid evoke_cost; after
+                                        // the enter cascade EnterBattlefield self-sacrifices the permanent
+                                        // through the shared cascade (the LTB fires as on any leave).
+                                        // Stamped from Action::evoke at the cast site.
     // ---- Real-stack trigger machinery (BreachingDragonstorm onboarding, 2026-09-03) ----
     // Cast/enter triggers are their own LIFO entries so nested chains (cascade -> free cast ->
     // cascade...) resolve in true stack order instead of ad-hoc inline special cases.

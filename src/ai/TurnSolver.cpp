@@ -3332,6 +3332,8 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
         {
             // Live cost -- the same recompute the rollout's apply_one performs at cast time.
             ManaCost ec = EffectiveCost(def, cp, a.splice_count + 1);
+            // Evoke (Reveillark): the alternate cost replaces the printed one (lockstep).
+            if (a.evoke && def.params.evoke_cost.has_value()) { ec = *def.params.evoke_cost; }
             ec.generic  = std::max(0, ec.generic
                             - SoulfireOwnTargetDiscount(def, cp, cp.active_player_index,
                                                         a.soulfire_own_targets));
@@ -7998,6 +8000,8 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                         const CardDefinition* pd =
                             pa.def ? pa.def : CardDatabase::Instance().Lookup(pa.card_name);
                         if (pd != nullptr) { ec = EffectiveCost(*pd, state); }
+                        if (pa.evoke && pd != nullptr && pd->params.evoke_cost.has_value())
+                        { ec = *pd->params.evoke_cost; }
                         if (ec.has_x && pa.chosen_x > 0)
                         { ec.generic += pa.chosen_x * std::max(1, static_cast<int>(ec.x_pips)); }
                         // Convoke: the committed taps reduce the cast's mana cost (lockstep with
@@ -9749,6 +9753,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.bestow         = true;
                     actions.push_back(std::move(a));
                 }
+            }
+        }
+
+        // EVOKE (Reveillark {4}{W}, evoke {5}{W} -- CR 702.75; user-directed 2026-09-05): an
+        // EXTRA variant sharing hand_index (the bestow idiom above -- no `continue`, the hard
+        // cast still emits below). Pays evoke_cost; the entered permanent self-sacrifices after
+        // its cascade, so the LTB (return two power<=2 creatures) fires with no outlet needed.
+        // Emitted only when a printed power<=2 creature card is ALREADY in the graveyard --
+        // with nothing to return the sac buys nothing and the dearer cast is strictly dominated.
+        // (With a free outlet out it is still dominated -- hard-cast + sac is cheaper -- but
+        // that is the search's judgement to make, not an emission gate: outlets can be spent.)
+        if (def.params.evoke_cost.has_value() && def.params.ltb_return_creatures > 0)
+        {
+            bool ltb_live = false;
+            for (const Card& gc : ap.graveyard)
+            {
+                const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+                const Card& gcard = gd ? gd->card : gc;
+                if (gcard.IsCreature()
+                    && gcard.m_power.value_or(0) <= def.params.ltb_return_max_power)
+                { ltb_live = true; break; }
+            }
+            if (ltb_live)
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = *def.params.evoke_cost;
+                a.eval           = EvalCard(def, state);
+                a.is_noncreature = false;
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.evoke          = true;
+                actions.push_back(std::move(a));
             }
         }
 
@@ -16984,6 +17022,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         if (SoulfireOwnTargetDiscount(*d, state, active, a.soulfire_own_targets) > 0) { return Pp(PP_SOULFIRE); }
         if (HinataGenericDiscount(*d, state, a.chosen_x) > 0) { return Pp(PP_HINATA); }
         ManaCost ec = EffectiveCost(*d, state);
+        // Evoke variant (Reveillark): the alternate cost IS the bill (lockstep with a.cost).
+        if (a.evoke && d->params.evoke_cost.has_value()) { ec = *d->params.evoke_cost; }
         // Phyrexian variant ({G/P} -- Birthing Pod): the life-paid pips come OFF the joint bill,
         // the same strip the enumeration emitted (the ApplyConvokeReduction idiom; the life half
         // is paid at the cast, not here). Without this the prepay overpays the {G} the variant
@@ -18483,12 +18523,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (act.free_cast && state.free_casts_available > 0)
         { cascade_free = true; --state.free_casts_available; }
     };
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int, int, int, int)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int, int, int, int, bool)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
                     int own_targets, int ponder_keep, int crackle_targets, int splice_count,
                     const std::string& chosen_float_color, int enchant_target, bool bestow,
-                    int replicate_count, int convoke_green, int convoke_other, int phyrexian_life)
+                    int replicate_count, int convoke_green, int convoke_other, int phyrexian_life,
+                    bool evoke)
     {
         // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
         // the continuation has already decided everything after it, so every remaining cast of this
@@ -18574,6 +18615,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // inside EffectiveCost). Matches the enum's a.cost = EffectiveCost(def,state,k+1) and the
         // executor's CastSpellFromHand -> lockstep. copies=1 for every non-spliced cast.
         ManaCost ec = EffectiveCost(def, state, splice_count + 1);
+        // EVOKE (Reveillark): the alternate cost replaces the printed one wholesale (CR 702.75;
+        // lockstep with the enumeration's a.cost and the executor's CastSpellFromHand).
+        if (evoke && def.params.evoke_cost.has_value()) { ec = *def.params.evoke_cost; }
         // Soulfire Eruption: extra Hinata discount from the searched own-creature targets (mirrors
         // the enumeration cost and the executor's CastSpellFromHand -> lockstep).
         ec.generic = std::max(0, ec.generic
@@ -18782,7 +18826,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ap.hand.push_back(std::move(found));
                 cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                 apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                          std::string{}, 0, false, -1, 0, 0, 0);
+                          std::string{}, 0, false, -1, 0, 0, 0, false);
             }
             else { state.exile.push_back(std::move(found)); }
         };
@@ -18873,7 +18917,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     ap.hand.push_back(std::move(hit));
                     cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                     apply_one(hname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                              std::string{}, 0, false, -1, 0, 0, 0);
+                              std::string{}, 0, false, -1, 0, 0, 0, false);
                 }
                 else { ap.library.push_back(std::move(hit)); }   // declined/forbidden: bottomed
             }
@@ -18937,7 +18981,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         state.players[pe.controller].hand.push_back(std::move(found));
                         cascade_free = true;
                         apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1,
-                                  0, std::string{}, 0, false, -1, 0, 0, 0);
+                                  0, std::string{}, 0, false, -1, 0, 0, 0, false);
                     }
                     else { state.players[pe.controller].hand.push_back(std::move(found)); }
                 }
@@ -19407,6 +19451,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 || def.params.enter_as_copy_of_entrant)
             {
                 EnforceLegendRule(state, state.active_player_index);
+            }
+
+            // EVOKE (Reveillark): the evoke-cost cast self-sacrifices once its enter cascade has
+            // fired -- through the SHARED cascade, so the LTB fires exactly as on any other
+            // leave. Re-find by m_number (the cascade may have moved the vector). Lockstep twin:
+            // EffectHandler::EnterBattlefield. Inert (flag false) for every other cast.
+            if (evoke)
+            {
+                for (int bi = static_cast<int>(state.battlefield.size()) - 1; bi >= 0; --bi)
+                {
+                    if (state.battlefield[bi].card.m_number == cast_number
+                        && state.battlefield[bi].controller_index == state.active_player_index)
+                    { SacrificePermanentAt(state, state.active_player_index, bi); break; }
+                }
             }
 
             // Replicate: if Hatchery Sliver (or the card itself) grants replicate,
@@ -20304,7 +20362,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
                     fire_unlock();
                 }
             }
@@ -20376,7 +20434,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                          < ResolveProvider(state).CastOrderRank(state, *dy);
                 });
                 for (int i : ena)
-                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); fire_unlock(); }
+                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock(); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -20400,7 +20458,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life);
+                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -20427,7 +20485,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
-                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); fire_unlock();
+                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock();
                 }
             }
             else
@@ -20455,7 +20513,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
                     fire_unlock();
                 }
             }
@@ -20467,14 +20525,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
                 prep_free(a);
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
             }
         }
 
@@ -20608,7 +20666,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1, 0, 0, 0);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1, 0, 0, 0, false);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
@@ -24422,7 +24480,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // are DISTINCT plans (the life payment frees a source; core invariant).
                         // Gated on the field, so no existing deck's signature moves.
                         + (act.phyrexian_life > 0
-                           ? ("#P" + std::to_string(act.phyrexian_life)) : "")); break;
+                           ? ("#P" + std::to_string(act.phyrexian_life)) : "")
+                        // Evoke (Reveillark): the evoke cast and the hard cast are two different
+                        // spells sharing a name (different cost, the body self-sacs) -- the
+                        // bestow lesson. Gated on the param, so no existing deck moves.
+                        + ((act.def && act.def->params.evoke_cost.has_value())
+                           ? (act.evoke ? "#E1" : "#E0") : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;

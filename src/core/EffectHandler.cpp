@@ -70,6 +70,26 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // Goblin Matron fetch target (empty -> the provider's pick).
     FireOwnEtbTriggers(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1,
                    entry.tutor_target, entry.chosen_x.value_or(-1));
+
+    // EVOKE (Reveillark, CR 702.75): the evoke-cost cast self-sacrifices once its enter cascade
+    // has fired -- through the SHARED cascade, so the LTB (return two power<=2 creatures) fires
+    // exactly as on any other leave. Re-find by m_number: the cascade above may have moved the
+    // vector. Lockstep twin: apply_one's creature-enter branch. Inert (flag false) elsewhere.
+    if (entry.evoke)
+    {
+        for (int bi = static_cast<int>(state.battlefield.size()) - 1; bi >= 0; --bi)
+        {
+            if (state.battlefield[bi].card.m_number == entry.source.m_number
+                && state.battlefield[bi].controller_index == entry.controller_index)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xF0\x9F\x95\xAF\xEF\xB8\x8F " + perm.card.m_name.str()
+                              + " evoked -- sacrificed on entry");
+                SacrificePermanentAt(state, entry.controller_index, bi);
+                break;
+            }
+        }
+    }
 }
 
 void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)

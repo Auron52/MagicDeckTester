@@ -1,0 +1,24 @@
+{
+    "_comment": "Guards the EVOKE cast mode (Reveillark, CR 702.75 -- user-directed 2026-09-05). Board: six lands ({5}{W} available), hand = lone Reveillark, NO sac outlet anywhere, graveyard holds Murderous Redcap (printed 2/2 -> a legal power<=2 LTB return). Opponent at 2. The HARD cast ({4}{W}) enters a summoning-sick 4/3 and deals nothing this turn; the EVOKE cast ({5}{W}) self-sacrifices on entry, the LTB returns Redcap, and Redcap's ETB (damage = live power = 2) is exactly lethal. PASS = win on the scenario turn, which only the evoke line reaches -- proving emission, the alternate-cost payment, the shared-cascade self-sac, and the LTB firing end to end.",
+    "deck": "decks/Melira Pod/Melira Pod.cod",
+    "turn": 6,
+    "on_the_play": true,
+    "active_life": 20,
+    "opponent_life": 2,
+    "battlefield": [
+        { "name": "Razorverge Thicket" },
+        { "name": "Forest" },
+        { "name": "Forest" },
+        { "name": "Forest" },
+        { "name": "Forest" },
+        { "name": "Forest" }
+    ],
+    "hand": [ "Reveillark" ],
+    "graveyard": [ "Murderous Redcap" ],
+    "library_filler": "Forest",
+    "library_size": 40,
+    "depth": 5,
+    "budget_ms": 100,
+    "max_turns": 6,
+    "expect_win_turn": 6
+}

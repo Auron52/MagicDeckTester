@@ -426,6 +426,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         // the pay-mana and pay-life variants of one action render identically (the blink lesson).
         if (a.phyrexian_life > 0)
         { tag += " (pay " + std::to_string(a.phyrexian_life) + " life)"; }
+        // Evoke variant (Reveillark): same lesson -- the evoke and hard casts share a name.
+        if (a.evoke) { tag += " (evoke)"; }
         if (a.discard_lands)  { tag += " +discard" + std::to_string(a.discard_lands); }
         casts.push_back(tag);
     }
@@ -1154,6 +1156,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // the choose dialog tell the pay-mana and pay-2-life variants of one cast/activation
             // apart (the bestow lesson above).
             if (ac.phyrexian_life > 0)            { os << ", \"phyrexian_life\": " << ac.phyrexian_life; }
+            // Evoke variant (Reveillark): same bestow lesson -- the two casts share a name.
+            if (ac.evoke)                         { os << ", \"evoke\": true"; }
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
