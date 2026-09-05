@@ -12389,11 +12389,28 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             const DecisionProvider::PutPolicy pod_pol =
                 pod_prov.PutTargetPolicy(state, state.active_player_index);
             const Player& pod_ap = state.players[state.active_player_index];
-            std::vector<std::string> seen_victims;
-            for (const Permanent& v : state.battlefield)
+            // Victims emit in EXPENDABILITY order (SacExpendabilityRank; index tiebreak), not
+            // battlefield order: equal-score Pod ties commit the FIRST-enumerated variant
+            // (first-verified-win / move-order), and battlefield order once fed MELIRA to a Pod
+            // while an equally-MV'd Ooze stood by. Ordering only -- every victim still emits
+            // (the fold below stays lossless), so this narrows nothing.
+            std::vector<int> pod_victim_idx;
+            for (int vi = 0; vi < static_cast<int>(state.battlefield.size()); ++vi)
             {
-                if (v.controller_index != state.active_player_index
-                    || !v.card.IsCreature()) { continue; }
+                const Permanent& v = state.battlefield[vi];
+                if (v.controller_index == state.active_player_index
+                    && v.card.IsCreature()) { pod_victim_idx.push_back(vi); }
+            }
+            std::stable_sort(pod_victim_idx.begin(), pod_victim_idx.end(),
+                [&](int a, int b)
+                {
+                    return SacExpendabilityRank(state.battlefield[a], /*source_id=*/-1)
+                         < SacExpendabilityRank(state.battlefield[b], /*source_id=*/-1);
+                });
+            std::vector<std::string> seen_victims;
+            for (const int pod_vi : pod_victim_idx)
+            {
+                const Permanent& v = state.battlefield[pod_vi];
                 std::string key = v.card.m_name.str();
                 key += "|" + std::to_string(v.card.m_mana_cost.ManaValue());
                 key += v.tapped ? "|t" : "|u";

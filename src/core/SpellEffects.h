@@ -5424,6 +5424,41 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
 // Sacrifice-a-creature outlet (Skirk Prospector -> {R}; Siege-Gang -> 2 face damage; Pashalik -> two
 // tokens). The mana cost is paid by the caller (subset math); here we SACRIFICE the chosen victim,
 // apply the outlet payload from the source's params, and fire the victim's death-watchers.
+// EXPENDABILITY rank for a sacrifice victim (LOWER = sacrifice first). THE single rank shared by
+// CanonicalSacVictim below and the Birthing Pod victim-emission ORDER in TurnSolver (equal-score
+// Pod ties commit the first-enumerated variant, so battlefield order once fed Melira to a Pod
+// while an equally-MV'd Ooze stood by -- ordering the emission by this rank makes ties keep the
+// combo pieces). Base metric is EFFECTIVE power (sac the weakest), adjusted so we:
+//   - sac TOKENS and SELF-REPLACING bodies FIRST (a token costs ~nothing; Mogg War Marshal
+//     refills its own body);
+//   - DEFER SCALING creatures (lords / Piledriver-class payoffs);
+//   - DEFER COMBO ENABLERS hardest (Melira Pod; found 2026-09-05 live: the power-based rank
+//     sacked MELIRA to a Feeder for a +1/+1 -- the 2/2 enabler out-ranked a 3/3 Ooze as fodder
+//     and the infinite-life engine died with her). A counter-prevention body (Melira/Vizier) or
+//     a Celes-class gy-enter watcher CLOSES the persist loop; fodder value can never be worth
+//     it. Above the lords' tier on purpose. Param-gated -> byte-identical elsewhere;
+//   - sac the SOURCE last.
+inline int SacExpendabilityRank(const Permanent& v, int source_id)
+{
+    int rank = v.EffectivePower();                 // base: sac the weakest first
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(v.card);
+    const bool self_replacing = d && d->params.dies_trigger_creates_tokens > 0
+                                  && !d->params.dies_token_subtypes.empty();     // Mogg War Marshal
+    const bool scaling = d && (
+          (!d->params.subtypes_affected.empty()
+           && (d->params.power_bonus > 0 || d->params.tough_bonus > 0
+               || !d->params.reduces_spell_subtype.empty()))                     // stat / tempo lord
+          || d->params.attack_pump_power_per_other_matching > 0);                // Piledriver-style payoff
+    const bool combo_enabler = d && (d->params.prevents_minus_counters
+                                  || d->params.reduces_minus_counters_by_one
+                                  || d->params.other_creature_gy_enter_team_counters > 0);
+    if (v.is_token || self_replacing) { rank -= 1000; }    // tokens & Mogg: most expendable
+    if (scaling)                      { rank += 1000; }    // lords / scaling payoffs: keep (defer)
+    if (combo_enabler)                { rank += 5000; }    // loop enablers: keep hardest
+    if (v.card.m_number == source_id) { rank += 100000; }  // sac the source last
+    return rank;
+}
+
 // Canonical (most-expendable) sacrifice victim for a creature-sac outlet: prefer a TOKEN, else the
 // lowest-power matching creature that is NOT the outlet source, else the source itself. Returns the
 // victim's card.m_number, or -1 if none. MIRRORS the enumeration's bounded victim pick in
@@ -5454,23 +5489,26 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
                            || (allow_enchantment && v.card.IsEnchantment());
         if (!eligible) { continue; }
         if (exclude_self && v.card.m_number == source_id) { continue; }   // "another ..."
+        // A SELF-DIRECTED payload outlet (Carrion Feeder's +1/+1-to-self, Bloodthrone's
+        // self-pump) sacrificing ITSELF nullifies its own payload -- the bonus lands on the
+        // body that just left. Found live 2026-09-05: T1 Feeder, alone on board, sacked itself
+        // in the second main (a flat-leaf value tie preferred the "busy" plan) and the deck
+        // lost its outlet for nothing. Never offer the source as its own victim for these
+        // outlets; external-payload self-sacs (Siege-Gang's damage) stay legal. Param-gated ->
+        // byte-identical for every deck without a self-payload outlet.
+        if (v.card.m_number == source_id)
+        {
+            const CardDefinition* srcd = CardDatabase::Instance().LookupCached(v.card);
+            if (srcd && (srcd->params.sac_outlet_add_counter_to_self > 0
+                         || srcd->params.sac_outlet_self_pump_power > 0
+                         || srcd->params.sac_outlet_self_pump_toughness > 0)) { continue; }
+        }
         // A subtype filter constrains only CREATURES; an enchantment admitted by
         // allow_enchantment is legal fodder on its type alone (the oracle says "or an
         // enchantment", not "or an enchantment of that type").
         if (!need_sub.empty() && v.card.IsCreature() && !CardHasSubtype(v.card, need_sub))
         { continue; }
-        int rank = v.EffectivePower();                 // base: sac the weakest first
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(v.card);
-        const bool self_replacing = d && d->params.dies_trigger_creates_tokens > 0
-                                      && !d->params.dies_token_subtypes.empty();     // Mogg War Marshal
-        const bool scaling = d && (
-              (!d->params.subtypes_affected.empty()
-               && (d->params.power_bonus > 0 || d->params.tough_bonus > 0
-                   || !d->params.reduces_spell_subtype.empty()))                     // stat / tempo lord
-              || d->params.attack_pump_power_per_other_matching > 0);                // Piledriver-style payoff
-        if (v.is_token || self_replacing) { rank -= 1000; }    // tokens & Mogg: most expendable
-        if (scaling)                      { rank += 1000; }    // lords / scaling payoffs: keep (defer)
-        if (v.card.m_number == source_id) { rank += 100000; }  // sac the source last
+        const int rank = SacExpendabilityRank(v, source_id);
         if (rank < victim_rank) { victim_rank = rank; victim_id = v.card.m_number; }
     }
     return victim_id;

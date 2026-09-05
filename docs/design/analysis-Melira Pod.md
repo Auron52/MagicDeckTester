@@ -381,6 +381,35 @@ MEASURED: s3100×20 5.55 → 5.45 (one game a turn faster with the Celes route
 available); s9200×16 unchanged (5.0000, same 7 loops). Smoke for other-deck
 byte-identity + CI recorded with the commit.
 
+### SLOW-GAME AUDIT (2026-09-05, USER: "issues if the win turn is above 5")
+Convoke verified WORKING end-to-end (g11 T5: Chord chosenX=2, manaPaid {1}{G}{G},
+Feeder+Finks tapped as the convoke bodies; 18 casts across 29 chord-holding
+games of 52 logged). The real >T5 leaks were expendability ties:
+1. FEEDER SELF-SAC FOR NOTHING (T1, alone on board): CanonicalSacVictim
+   returned the source, whose +1/+1-to-self payload lands on the body that
+   just died — a flat-leaf value tie preferred the "busy" plan. FIX: a
+   self-directed-payload outlet is never offered as its own victim
+   (param-gated; external-payload self-sacs like Siege-Gang stay legal).
+2. MELIRA AS FODDER: the power-based expendability rank sacked the 2/2
+   enabler over a 3/3 Ooze (Feeder fodder), and battlefield-order Pod
+   emission committed pod-away-Melira at an equal-score tie over the
+   same-MV Ooze. FIX: shared SacExpendabilityRank (factored from
+   CanonicalSacVictim) gains a combo-enabler defer tier (+5000, above
+   lords: prevents/reduces counters, Celes-class) and the Pod victim loop
+   emits in that rank order (ordering only — every victim still emitted,
+   folds stay lossless). NOTE (user): spawns don't block — creatures
+   "dying in combat" was never a thing; every disappearance was a sac.
+3. Chord held all game while missing 2 pieces (g8): user ruled this
+   acceptable ("you want to get the one you are missing"; clairvoyance
+   caveat acknowledged, not a concern). Chord→Celes noted as strong with a
+   junk-heavy hand when affordable — already whitelisted; her rummage digs.
+MEASURED after 1+2: s9200×16 5.0000 → 4.9375 (g15 T6→T5, no game worse);
+s3100×20 5.45 unchanged.
+OPEN (deferred, disclosed): the win-turn-tie inflife preference — between
+two lines that BOTH win on turn N, nothing prefers the one that also goes
+infinite (the tiebreak only grades no-win leaves); g15's old Pod#2-over-
+activation choice was this class before the ordering fix masked it.
+
 ### Chord of Calling — Tier 3 (draft received)
 `{X}{G}{G}{G}` Instant, Convoke. CRITICAL loader fact: `KeywordFromString`
 THROWS on unknown keywords — must add `Keyword::Convoke` (inert-tag idiom) or
