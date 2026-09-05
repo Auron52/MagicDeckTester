@@ -2114,7 +2114,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     && ResolveProvider(state).LandDropAfterHandLandTutor(
                            state, state.active_player_index))
                 { defer_land = true; m_tutor_deferred_drop = true; }
-                if (!defer_land) { TryPlayLand(state); }
+                // HoldFuelWhileComboing, greedy LAND-DROP site (its third site, own lever per
+                // the two-sites law). Once the chain is live, a drawn cycling land in hand is a
+                // PING (the dig loop below cycles it and chains through what it draws); played
+                // as the drop it is nothing (smoke d0 gi803: T6-T8 each played a cycler for a
+                // 2-power attack while a 40-card library of pings sat unreached -> loss vs GT's
+                // T7 win). A full SKIP, not a defer -- the second-main pass would just play it.
+                // The provider's guards (no Stinger deployed yet / no enabler / library cannot
+                // close) are exactly the user's exceptions, so the drop plays normally there.
+                if (!defer_land
+                    && !(GreedyHoldLandEnabled()
+                         && ResolveProvider(state).HoldFuelWhileComboing(
+                                state, state.active_player_index)))
+                { TryPlayLand(state); }
             }
             else
             {
@@ -2136,7 +2148,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // the old greedy behaviour for A/B (MTG_LEGACY_2ND_MAIN_LAND).
                 static const bool s_legacy_2nd_main_land =
                     EnvOn("MTG_LEGACY_2ND_MAIN_LAND");
-                if (m_lookahead_depth == 0 || s_legacy_2nd_main_land) { TryPlayLand(state); }
+                // Same hold-fuel land-drop gate as the first main: while the chain is live the
+                // land is next turn's ping, not a drop (the rule is unconditional -- "don't
+                // play any fuel once you are going off").
+                if ((m_lookahead_depth == 0 || s_legacy_2nd_main_land)
+                    && !(GreedyHoldLandEnabled()
+                         && ResolveProvider(state).HoldFuelWhileComboing(
+                                state, state.active_player_index)))
+                { TryPlayLand(state); }
             }
         }
 
@@ -4271,7 +4290,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // Reactive dig only on the non-committed paths (depth 0, or the develop-when-stuck
         // fallback that carries no recorded script); committed turns already replayed their
         // recorded digs above, so running it again would dig a second, off-line time.
-        if (!fd_plan_committed) { UseSurplusLandAbilities(state); }
+        if (!fd_plan_committed) { UseSurplusLandAbilities(state, resolve_stack); }
         ManaPool remaining = AvailableManaPool(state);
         AnimateLandsShared(state, &remaining);
         ActivateTapTokensShared(state, &remaining);
@@ -4401,7 +4420,8 @@ bool AIEngine::TryPlayLand(GameState& state)
 
 // ---- Surplus land card-draw abilities (cycling, sacrifice-to-draw) ----
 
-void AIEngine::UseSurplusLandAbilities(GameState& state)
+void AIEngine::UseSurplusLandAbilities(GameState& state,
+                                       const std::function<void(GameState&)>& resolve_stack)
 {
     Player& ap = state.ActivePlayer();
     if (!state.stack.empty()) { return; }   // let pending spells resolve first
@@ -4438,6 +4458,28 @@ void AIEngine::UseSurplusLandAbilities(GameState& state)
         const int  drawn_before = ap.cards_drawn_this_turn;
         const bool drew_land    = PerformDig(state, src, is_sac);
         if (ap.cards_drawn_this_turn == drawn_before) { break; }   // dig did not happen
+        // The rebuy deployment (Fluctuator: cycle Stinger -> Unearth). This reactive path runs
+        // AFTER the turn's cast loop, so a reanimation the dig just made live would otherwise sit
+        // uncast while the loop cycles the library away pingless -- at depth 0 that turned wins
+        // into deck-out losses the moment ShouldConsiderDig learned to keep the chain alive for
+        // this line (smoke 2026-09-05: three 5/6 -> loss games). Same provider gate as the
+        // rollout's land-draw re-solve, so the two worlds deploy at the same moment.
+        if (ResolveProvider(state).DigResolveEvenOnLand(state))
+        {
+            for (Card& c : ap.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (!d || d->params.reanimate_creature_max_mv <= 0) { continue; }
+                ManaPool avail = AvailableManaPool(state);
+                if (!avail.CanPay(d->card.m_mana_cost)) { continue; }
+                CastSpellFromHand(state, c, avail);
+                // CastSpellFromHand only PUSHES the spell; without draining the stack the
+                // reanimated Stinger arrives after this loop's remaining cycles -- every one
+                // of them pingless (smoke d0 gi773/852: the whole library burned for zero).
+                if (resolve_stack) { resolve_stack(state); }
+                break;   // the hand iterator is invalid after a cast; one deploy per dig anyway
+            }
+        }
         if (!drew_land && !dig_continue)              { break; }   // legacy: action found -> stop
     }
 }

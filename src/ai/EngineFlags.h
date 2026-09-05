@@ -415,6 +415,30 @@ inline bool NoRedundantReducerEnabled()
     return heurarm::Flag(heurarm::NO_REDUNDANT_REDUCER, v);
 }
 
+// MTG_DIG_HOLD_FUEL -- DEFAULT ON; =0 restores the fuel-casting re-solve for the isolating A/B.
+// The DIG-SITE half of HoldFuelWhileComboing ("don't play any fuel once you are going off; just
+// cycle everything", USER 2026-09-05): while the provider says the chain can close, the dig loop's
+// nested re-solve is skipped so the draw becomes a ping instead of a board object. Two sites read
+// the same provider rule (the plan-order comparator and this one) and per the two-sites-two-levers
+// law each carries its own gate; the rule itself stays inert on every deck whose provider returns
+// false, so this default changes nothing outside an opted-in provider.
+inline bool DigHoldFuelEnabled()
+{
+    static const bool v = EnvOn("MTG_DIG_HOLD_FUEL", true);
+    return heurarm::Flag(heurarm::DIG_HOLD_FUEL, v);
+}
+
+// MTG_GREEDY_HOLD_LAND -- DEFAULT ON; =0 restores the unconditional greedy drop for the A/B.
+// The LAND-DROP site of the same rule (its third site, own lever): at depth 0 the drop runs before
+// the dig loop, so playing a drawn cycling land removes the turn's only ping from hand. Skipping
+// the drop leaves it for the dig loop to cycle. Reads the same provider predicate, whose guards
+// (no Stinger deployed / no enabler / library cannot close) are the user's stated exceptions.
+inline bool GreedyHoldLandEnabled()
+{
+    static const bool v = EnvOn("MTG_GREEDY_HOLD_LAND", true);
+    return heurarm::Flag(heurarm::GREEDY_HOLD_LAND, v);
+}
+
 // MTG_TUTOR_AXIS_RESOLVE -- DEFAULT ON (adopted 2026-08-05); =0 restores the legacy name-bound
 // axis. Bind the searched tutor pick by INDEX resolved at the TRUE per-plan state instead of by
 // NAME ranked at the shared pre-land turn-start state (see the full note at TurnSolver's

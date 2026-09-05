@@ -11469,6 +11469,43 @@ bool FluctuatorProvider::DigContinueAfterResolve() const
     return s_on;
 }
 
+static bool FluctuatorCanPayNow(const GameState& s, const ManaCost& cost);   // defined below
+
+// The rebuy deployment is PENDING: a Stinger is in the graveyard, none is on the battlefield, and
+// a hand Unearth is payable from the untapped pool right now. In exactly that state the re-solve
+// must run whatever the last draw was (see DecisionProvider::DigResolveEvenOnLand) -- the cast we
+// are waiting on became legal when the STINGER left the hand, not when anything was drawn. Shares
+// MTG_FLUCT_REBUY with the stop-on-threat exception above: the two are one line (the exception
+// keeps the chain alive so the Stinger gets cycled; this hook lands the Unearth immediately after)
+// and neither does anything useful alone.
+bool FluctuatorProvider::DigResolveEvenOnLand(const GameState& s) const
+{
+    static const bool s_rebuy = EnvOn("MTG_FLUCT_REBUY", true);
+    if (!heurarm::Flag(heurarm::FLUCT_REBUY, s_rebuy)) { return false; }
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.cycle_trigger_damage_each_opponent > 0) { return false; }   // deployed
+    }
+    const Player& ap = s.ActivePlayer();
+    bool stinger_in_yard = false;
+    for (const Card& c : ap.graveyard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.cycle_trigger_damage_each_opponent > 0) { stinger_in_yard = true; break; }
+    }
+    if (!stinger_in_yard) { return false; }
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.reanimate_creature_max_mv > 0
+            && FluctuatorCanPayNow(s, d->card.m_mana_cost)) { return true; }
+    }
+    return false;
+}
+
 // FluctuatorCastRouteReachable -- can the lands we CONTROL ever pay `cost`? Deliberately ignores
 // tapped/untapped: the question is "will waiting a turn get there" (the user's "if you can't play
 // it this turn you should wait until you can"), not "can I pay right now". Being tapped out is a
@@ -11516,6 +11553,70 @@ static bool FluctuatorCastRouteReachable(const GameState& s, const ManaCost& cos
     return lands >= cost.ManaValue() + extra;
 }
 
+// FluctuatorCanPayNow -- can the lands we can tap RIGHT NOW (untapped only) pay `cost`? The
+// UNTAPPED restriction of FluctuatorCastRouteReachable above, same conversion-aware arithmetic.
+// Deliberately NOT ManaPool::CanPay: the pool's `wild` bucket lets ANY dual pay ANY coloured pip,
+// and that over-credit is exactly what made the first version of the rebuy fire on a board with
+// no black source at all (smoke d0 s1024/gi23: Sheltered Thicket + two Irrigated Farmlands
+// "paying" Unearth's {B}; the chain then cycled 15 cards pingless, could never deploy, and a T5
+// win became a deck-out loss). Floating mana is ignored -- conservative, and cycling in this deck
+// is free so the dig loop never floats anything.
+static bool FluctuatorCanPayNow(const GameState& s, const ManaCost& cost)
+{
+    const int me = s.active_player_index;
+    int lands = 0;
+    bool w=false,u=false,b=false,r=false,g=false;
+    bool cw=false,cu=false,cb=false,cr=false,cg=false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->card.IsLand()) { continue; }
+        ++lands;
+        const bool conv = IsManaConversionSource(d->params);
+        for (Color c : d->params.produces)
+        {
+            switch (c) { case Color::White: (conv?cw:w)=true; break;
+                         case Color::Blue:  (conv?cu:u)=true; break;
+                         case Color::Black: (conv?cb:b)=true; break;
+                         case Color::Red:   (conv?cr:r)=true; break;
+                         case Color::Green: (conv?cg:g)=true; break; default: break; }
+        }
+    }
+    int extra = 0;
+    if (cost.white && !w) { if (!cw) { return false; } ++extra; }
+    if (cost.blue  && !u) { if (!cu) { return false; } ++extra; }
+    if (cost.black && !b) { if (!cb) { return false; } ++extra; }
+    if (cost.red   && !r) { if (!cr) { return false; } ++extra; }
+    if (cost.green && !g) { if (!cg) { return false; } ++extra; }
+    return lands >= cost.ManaValue() + extra;
+}
+
+// FluctuatorImmediateRebuyExecutable -- is the cycle-Stinger -> Unearth deployment executable
+// RIGHT NOW, this turn? Both halves must be live: a Stinger in hand whose cycle is FREE (the
+// chain must not spend the mana the Unearth needs) and an Unearth in hand the UNTAPPED lands can
+// actually pay, colour-exactly. This is the discriminator between "wait a turn for {1}{R}" and
+// "deploy this turn for {B} plus a free cycle that also draws": on reference s10's T3 the
+// hardcast was NOT payable (one black source left after Fluctuator) while this line was, and
+// stop-on-threat's "wait" reading of the in-hand Stinger cost the kill a full turn.
+static bool FluctuatorImmediateRebuyExecutable(const GameState& s)
+{
+    const Player& ap = s.ActivePlayer();
+    bool free_stinger_cycle = false;
+    const CardDefinition* unearth = nullptr;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        if (d->params.cycle_trigger_damage_each_opponent > 0
+            && d->params.cycling_cost.has_value()
+            && EffectiveCyclingCostFor(s, *d).ManaValue() == 0) { free_stinger_cycle = true; }
+        if (d->params.reanimate_creature_max_mv > 0 && !unearth) { unearth = d; }
+    }
+    if (!free_stinger_cycle || !unearth) { return false; }
+    return FluctuatorCanPayNow(s, unearth->card.m_mana_cost);
+}
+
 // FluctuatorHoldsExecutableRoute -- do we already hold a route to a Drannith Stinger that our
 // LANDS can actually pay for? Two routes exist, and the difference between them is the whole
 // point (USER 2026-09-05: "that rule does not apply if you are still missing, but able to cast
@@ -11528,12 +11629,23 @@ static bool FluctuatorCastRouteReachable(const GameState& s, const ManaCost& cos
 static bool FluctuatorHoldsExecutableRoute(const GameState& s)
 {
     const Player& ap = s.ActivePlayer();
-    for (const Card& c : ap.hand)
+    // A Stinger in hand is a WAIT route ("if you can't play it this turn you should wait until
+    // you can") -- unless the cycle-it-then-Unearth deployment is executable THIS TURN, in which
+    // case there is nothing to wait for: keep digging, the chain cycles the Stinger (rank 2 in
+    // SelectDigSource) and the re-solve casts the Unearth. Gated MTG_FLUCT_REBUY (=0 restores
+    // the wait-only reading for the A/B).
+    static const bool s_rebuy = EnvOn("MTG_FLUCT_REBUY", true);
+    const bool rebuy_now = heurarm::Flag(heurarm::FLUCT_REBUY, s_rebuy)
+                        && FluctuatorImmediateRebuyExecutable(s);
+    if (!rebuy_now)
     {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (!d) { continue; }
-        if (d->params.cycle_trigger_damage_each_opponent > 0
-            && FluctuatorCastRouteReachable(s, d->card.m_mana_cost)) { return true; }
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d) { continue; }
+            if (d->params.cycle_trigger_damage_each_opponent > 0
+                && FluctuatorCastRouteReachable(s, d->card.m_mana_cost)) { return true; }
+        }
     }
     bool stinger_in_yard = false;
     for (const Card& c : ap.graveyard)
@@ -11658,7 +11770,7 @@ bool FluctuatorProvider::ShouldConsiderDig(const GameState& s) const
 // library inequality. In all three the hand is a RESOURCE again and deploying is right.
 bool FluctuatorProvider::HoldFuelWhileComboing(const GameState& s, int controller) const
 {
-    static const bool s_on = EnvOn("MTG_FLUCT_HOLD_FUEL");   // DEFAULT OFF -- measuring
+    static const bool s_on = EnvOn("MTG_FLUCT_HOLD_FUEL", true);   // DEFAULT ON; =0 for the A/B
     if (!heurarm::Flag(heurarm::FLUCT_HOLD_FUEL, s_on)) { return false; }
     if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return false; }
     int  sting = 0, swing = 0;
@@ -11837,7 +11949,10 @@ std::string FluctuatorProvider::SelectDigSource(const GameState& s, const ManaPo
             // Cycling the last Stinger is the deck's OWN line when an Unearth is held to rebuy it,
             // and throwing away the wincon when one is not.
             if (protect && hand_stinger <= 1 && hand_unearth == 0) { continue; }
-            rank = 2;   // with an Unearth in hand this is a play we WANT, so it goes early
+            // When the rebuy is executable THIS TURN, the Stinger goes FIRST, ahead of even the
+            // inert fodder: every cycle spent before it is one library card that draws without
+            // pinging, and post-deploy the very same stream position pings. Deploy, then spend.
+            rank = (protect && FluctuatorImmediateRebuyExecutable(s)) ? -1 : 2;
         }
         // Lands before pure fodder. MEASURED INERT: spending Hollow One first instead (so a land
         // survives for the next drop) changed 0 of 100 games -- with the fodder HOLD in place the

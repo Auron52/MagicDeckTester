@@ -22126,14 +22126,36 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // castable with the mana available, the re-solve provably cannot cast anything, so keep
             // cycling instead. Measured on Fluctuator: 20 of 40 games FASTER, 0 slower, -34% CPU.
             // See DecisionProvider::DigResolveOnlyWhenCastable for the soundness argument.
-            if (!drew_land
+            // A land draw normally skips the re-solve outright ("nothing was found to cast") --
+            // but the card that makes the re-solve wanted can be the one that just LEFT the hand,
+            // not the one drawn: cycling a Drannith Stinger into the graveyard turns a held
+            // Unearth live, and every further pingless draw before that Unearth resolves is a
+            // card the kill will not have. Provider-gated (base false, byte-identical elsewhere);
+            // see DecisionProvider::DigResolveEvenOnLand.
+            const bool resolve_now = !drew_land
+                                  || ResolveProvider(state).DigResolveEvenOnLand(state);
+            if (resolve_now
                 && ResolveProvider(state).DigResolveOnlyWhenCastable()
                 && !DecisionUnpruned(UnprunedGate::DigResolve)
                 && !AnyHandCastableNow(state))
             {
                 continue;   // cycle on; nothing this re-solve could have deployed
             }
-            if (!drew_land)
+            // "Don't play any fuel once you are going off. Just cycle everything." (USER,
+            // 2026-09-05.) The dig-site half of HoldFuelWhileComboing: while the chain can close,
+            // every cast the re-solve deploys is 1-for-0 against cycling's 1-for-1 -- reference
+            // s2's T4 chain died of hand exhaustion 6 pings short precisely because the re-solve
+            // cast a free Hollow One mid-kill. The rule's own guards carve out the deployments
+            // that must still resolve: it returns false with no Stinger on board (so the
+            // Unearth/Stinger deploy re-solves run) and false when the library cannot finish (so
+            // the second-threat deploys run). Site-gated by MTG_DIG_HOLD_FUEL for the isolating
+            // A/B; the provider method carries its own rule lever.
+            if (resolve_now && DigHoldFuelEnabled()
+                && ResolveProvider(state).HoldFuelWhileComboing(state, state.active_player_index))
+            {
+                continue;   // going off: convert the draw into a ping, not a board object
+            }
+            if (resolve_now)
             {
                 if (out_breakpoint) { sink_stack.push_back(my_bp_sink); }
                 TurnSolver::Plan extra;

@@ -269,6 +269,26 @@ public:
     // re-solve-always behaviour and is byte-identical.
     virtual bool        DigResolveOnlyWhenCastable() const { return false; }
 
+    // DigResolveEvenOnLand -- run the dig loop's nested re-solve after a LAND draw too, when the
+    // provider reports a DEPLOYMENT PENDING. The loop's `if (!drew_land)` gate is one more
+    // Treasure Hunt assumption: there the only reason to re-solve is "the dig just FOUND a
+    // nonland, cast it". Fluctuator's signature line breaks it: cycle a Drannith Stinger into the
+    // graveyard, then cast Unearth to put it onto the battlefield -- the card that made Unearth
+    // live is the one that LEFT the hand, not the one drawn, so what the next draw is has nothing
+    // to do with whether the re-solve is wanted. Every pingless draw between the Stinger hitting
+    // the yard and the Unearth resolving is a card the kill will not have (references s2/s10: the
+    // human's T3/T4 kills need nearly the whole remaining stream as pings).
+    //
+    // Returns true only while that rebuy is LIVE: threat in the graveyard, none on the
+    // battlefield yet, and the reanimation castable from the mana available right now. Base
+    // returns false -> every other deck keeps the land-draws-never-resolve behaviour,
+    // byte-identical.
+    virtual bool        DigResolveEvenOnLand(const GameState& s) const
+    {
+        (void)s;
+        return false;
+    }
+
     // MaxDigsPerTurn / DigContinueAfterResolve -- the two remaining TREASURE HUNT assumptions in
     // the dig loop, both of which CAP A COMBO TURN for a deck whose cycling IS the wincon.
     //

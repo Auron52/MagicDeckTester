@@ -152,6 +152,9 @@ enum Slot : int
     NO_REDUNDANT_REDUCER,     // MTG_NO_REDUNDANT_REDUCER  never cast a SATURATED cost-reducer copy
     BP_UNIFORM_DEV,           // MTG_BP_UNIFORM_DEV       take candidate k at EVERY breakpoint (Plan::bp_all)
     FLUCT_HOLD_FUEL,          // MTG_FLUCT_HOLD_FUEL      going off -> spend no fuel, just cycle (USER rule)
+    DIG_HOLD_FUEL,            // MTG_DIG_HOLD_FUEL        hold-fuel's DIG-SITE half: re-solve skips fuel casts
+    FLUCT_REBUY,              // MTG_FLUCT_REBUY          cycle-Stinger -> Unearth this-turn deployment line
+    GREEDY_HOLD_LAND,         // MTG_GREEDY_HOLD_LAND     hold-fuel's LAND-DROP site (d0 greedy): skip the drop, cycle the land
     COUNT
 };
 
@@ -281,6 +284,9 @@ inline const char* Name(int slot)
         "MTG_NO_REDUNDANT_REDUCER",
         "MTG_BP_UNIFORM_DEV",
         "MTG_FLUCT_HOLD_FUEL",
+        "MTG_DIG_HOLD_FUEL",
+        "MTG_FLUCT_REBUY",
+        "MTG_GREEDY_HOLD_LAND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

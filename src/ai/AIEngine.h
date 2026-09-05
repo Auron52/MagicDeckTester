@@ -415,7 +415,8 @@ private:
     // engine in hand, no retrace in yard, >=2 lands, Land's Edge not already lethal). Used
     // on the depth-0 / develop-when-stuck paths; full-depth committed turns instead replay
     // the search's recorded dig (PerformDig). Pre-combat only.
-    void UseSurplusLandAbilities(GameState& state);
+    void UseSurplusLandAbilities(GameState& state,
+                                 const std::function<void(GameState&)>& resolve_stack = {});
 
     // Mechanically perform one dig: cycle the named land from hand (is_sacrifice=false) or
     // {cost},{T},Sacrifice it from the battlefield (is_sacrifice=true), pay the cost, and

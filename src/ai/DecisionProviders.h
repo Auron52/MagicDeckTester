@@ -1141,6 +1141,10 @@ public:
     // MTG_FLUCT_DIG_RESOLVE=0 (or MTG_UNPRUNE=digresolve) restores the re-solve-always form for
     // the standing A/B. See DecisionProvider::DigResolveOnlyWhenCastable.
     bool        DigResolveOnlyWhenCastable() const override;
+    // The rebuy line (cycle Stinger -> Unearth) must re-solve the moment the Stinger hits the
+    // graveyard, whatever the next draw is -- every pingless draw before the Unearth resolves is
+    // a card the kill will not have. See DecisionProvider::DigResolveEvenOnLand.
+    bool        DigResolveEvenOnLand(const GameState& s) const override;
     // The combo turn is ONE long chain, so neither Treasure-Hunt stopping condition applies: the
     // 16-dig guard caps a single-Stinger kill at 16 damage vs 20 life (a T3 win is arithmetically
     // impossible under it), and the post-re-solve `break` ends the turn at the first payoff the
