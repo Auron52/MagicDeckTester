@@ -1,0 +1,373 @@
+{
+  "seed": 7, "game_index": 6, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 23, "name": "Chord of Calling" }, { "num": 8, "name": "Blooming Marsh" }, { "num": 55, "name": "Recruiter of the Guard" }, { "num": 30, "name": "Ignoble Hierarch" }, { "num": 38, "name": "Llanowar Wastes" }, { "num": 9, "name": "Blooming Marsh" }, { "num": 34, "name": "Kitchen Finks" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Reclamation Sage" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 8, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 9, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Chord of Calling", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 30, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Kitchen Finks", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Llanowar Wastes", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Blooming Marsh; cast: Ignoble Hierarch", "land": "Blooming Marsh", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 1, "summary": "land=Llanowar Wastes; cast: Ignoble Hierarch", "land": "Llanowar Wastes", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 2, "summary": "land=Blooming Marsh; cast: (nothing)", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Llanowar Wastes; cast: (nothing)", "land": "Llanowar Wastes", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "is_land": false }], "vial_counters": [], "hand": [{ "num": 9, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Chord of Calling", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 34, "name": "Kitchen Finks", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Llanowar Wastes", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "is_land": false }], "vial_counters": [], "hand": [{ "num": 9, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Chord of Calling", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 34, "name": "Kitchen Finks", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Llanowar Wastes", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Ignoble Hierarch" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "is_land": false }], "vial_counters": [], "hand": [{ "num": 9, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Chord of Calling", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Kitchen Finks", "cost": "{1}{G/W}{G/W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Llanowar Wastes", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Blooming Marsh; cast: Kitchen Finks", "land": "Blooming Marsh", "casts": ["Kitchen Finks"], "actions": [{ "card": "Kitchen Finks" }] },
+    { "index": 1, "summary": "land=Llanowar Wastes; cast: Kitchen Finks", "land": "Llanowar Wastes", "casts": ["Kitchen Finks"], "actions": [{ "card": "Kitchen Finks" }] },
+    { "index": 2, "summary": "land=Blooming Marsh; cast: Reclamation Sage", "land": "Blooming Marsh", "casts": ["Reclamation Sage"], "actions": [{ "card": "Reclamation Sage" }] },
+    { "index": 3, "summary": "land=Llanowar Wastes; cast: Reclamation Sage", "land": "Llanowar Wastes", "casts": ["Reclamation Sage"], "actions": [{ "card": "Reclamation Sage" }] },
+    { "index": 4, "summary": "land=Blooming Marsh; cast: Ignoble Hierarch", "land": "Blooming Marsh", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 5, "summary": "land=Llanowar Wastes; cast: Ignoble Hierarch", "land": "Llanowar Wastes", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 6, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 7, "summary": "land=Blooming Marsh; cast: (nothing)", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Llanowar Wastes; cast: (nothing)", "land": "Llanowar Wastes", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "tapped": true, "is_land": false }, { "name": "Kitchen Finks", "idx": 4, "num": 34, "is_land": false }], "vial_counters": [], "hand": [{ "num": 23, "name": "Chord of Calling", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Llanowar Wastes", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "tapped": true, "is_land": false }, { "name": "Kitchen Finks", "idx": 4, "num": 34, "is_land": false }], "vial_counters": [], "hand": [{ "num": 23, "name": "Chord of Calling", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Llanowar Wastes", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 11, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Ravenous Chupacabra" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "is_land": false }, { "name": "Kitchen Finks", "idx": 4, "num": 34, "is_land": false }], "vial_counters": [], "hand": [{ "num": 23, "name": "Chord of Calling", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 31, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Llanowar Wastes", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Ravenous Chupacabra", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Llanowar Wastes; cast: Ignoble Hierarch, Reclamation Sage", "land": "Llanowar Wastes", "casts": ["Ignoble Hierarch", "Reclamation Sage"], "cast_order_canonical": ["Ignoble Hierarch", "Reclamation Sage"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Reclamation Sage" }] },
+    { "index": 1, "summary": "land=Llanowar Wastes; cast: Reclamation Sage, Ignoble Hierarch", "land": "Llanowar Wastes", "casts": ["Reclamation Sage", "Ignoble Hierarch"], "cast_order_canonical": ["Reclamation Sage", "Ignoble Hierarch"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Ignoble Hierarch" }] },
+    { "index": 2, "summary": "land=Llanowar Wastes; cast: Reclamation Sage", "land": "Llanowar Wastes", "casts": ["Reclamation Sage"], "actions": [{ "card": "Reclamation Sage" }] },
+    { "index": 3, "summary": "land=Llanowar Wastes; cast: Ravenous Chupacabra", "land": "Llanowar Wastes", "casts": ["Ravenous Chupacabra"], "actions": [{ "card": "Ravenous Chupacabra" }] },
+    { "index": 4, "summary": "land=none; cast: Reclamation Sage", "land": null, "casts": ["Reclamation Sage"], "actions": [{ "card": "Reclamation Sage" }] },
+    { "index": 5, "summary": "land=Llanowar Wastes; cast: Chord of Calling → Carrion Feeder (X=1), Ignoble Hierarch", "land": "Llanowar Wastes", "casts": ["Chord of Calling", "Ignoble Hierarch"], "cast_order_canonical": ["Ignoble Hierarch", "Chord of Calling"], "actions": [{ "card": "Chord of Calling", "tutor_target": "Carrion Feeder", "x": 1 }, { "card": "Ignoble Hierarch" }] },
+    { "index": 6, "summary": "land=Llanowar Wastes; cast: Ignoble Hierarch, Chord of Calling → Carrion Feeder (X=1)", "land": "Llanowar Wastes", "casts": ["Ignoble Hierarch", "Chord of Calling"], "cast_order_canonical": ["Ignoble Hierarch", "Chord of Calling"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Chord of Calling", "tutor_target": "Carrion Feeder", "x": 1 }] },
+    { "index": 11, "summary": "land=Llanowar Wastes; cast: Ignoble Hierarch", "land": "Llanowar Wastes", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 12, "summary": "land=none; cast: Ignoble Hierarch", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 13, "summary": "land=Llanowar Wastes; cast: Chord of Calling → Bloodthrone Vampire (X=2)", "land": "Llanowar Wastes", "casts": ["Chord of Calling"], "actions": [{ "card": "Chord of Calling", "tutor_target": "Bloodthrone Vampire", "x": 2 }] },
+    { "index": 18, "summary": "land=Llanowar Wastes; cast: Chord of Calling → Carrion Feeder (X=1)", "land": "Llanowar Wastes", "casts": ["Chord of Calling"], "actions": [{ "card": "Chord of Calling", "tutor_target": "Carrion Feeder", "x": 1 }] },
+    { "index": 24, "summary": "land=none; cast: Chord of Calling → Carrion Feeder (X=1)", "land": null, "casts": ["Chord of Calling"], "actions": [{ "card": "Chord of Calling", "tutor_target": "Carrion Feeder", "x": 1 }] },
+    { "index": 27, "summary": "land=Llanowar Wastes; cast: (nothing)", "land": "Llanowar Wastes", "casts": [], "actions": [] },
+    { "index": 28, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 31, "is_land": false }, { "name": "Kitchen Finks", "idx": 4, "num": 34, "is_land": false }, { "name": "Llanowar Wastes", "idx": 5, "num": 38, "is_land": true }], "vial_counters": [], "hand": [{ "num": 23, "name": "Chord of Calling", "cost": "{X}{G}{G}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 49, "name": "Ravenous Chupacabra", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reclamation Sage", "land": null, "casts": ["Reclamation Sage"], "actions": [{ "card": "Reclamation Sage" }] },
+    { "index": 1, "summary": "land=none; cast: Chord of Calling → Bloodthrone Vampire (X=2)", "land": null, "casts": ["Chord of Calling"], "actions": [{ "card": "Chord of Calling", "tutor_target": "Bloodthrone Vampire", "x": 2 }] },
+    { "index": 6, "summary": "land=none; cast: Chord of Calling → Carrion Feeder (X=1)", "land": null, "casts": ["Chord of Calling"], "actions": [{ "card": "Chord of Calling", "tutor_target": "Carrion Feeder", "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Chord of Calling → Melira, Sylvok Outcast (X=2)", "land": null, "casts": ["Chord of Calling"], "actions": [{ "card": "Chord of Calling", "tutor_target": "Melira, Sylvok Outcast", "x": 2 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 9,
+  "type": "tutor_etb",
+  "source": "Chord of Calling",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "tapped": true, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 31, "tapped": true, "is_land": false }, { "name": "Kitchen Finks", "idx": 4, "num": 34, "tapped": true, "is_land": false }, { "name": "Llanowar Wastes", "idx": 5, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 49, "name": "Ravenous Chupacabra", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "heuristic_default": 5,
+  "candidates": [{ "index": 0, "name": "Carrion Feeder" }, { "index": 1, "name": "Bloodthrone Vampire" }, { "index": 2, "name": "Birds of Paradise" }, { "index": 3, "name": "Scavenging Ooze" }, { "index": 4, "name": "Ignoble Hierarch" }, { "index": 5, "name": "Melira, Sylvok Outcast" }, { "index": 6, "name": "Vizier of Remedies" }, { "index": 7, "name": "Voice of Resurgence" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "convoke", "text": "🙌 Convoke -- tapped 2 creature(s)" }, { "turn": 3, "kind": "tutor", "text": "🐉 Melira, Sylvok Outcast -- put onto the battlefield (Chord of Calling)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "tapped": true, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 31, "tapped": true, "is_land": false }, { "name": "Kitchen Finks", "idx": 4, "num": 34, "tapped": true, "is_land": false }, { "name": "Llanowar Wastes", "idx": 5, "num": 38, "tapped": true, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 7, "num": 42, "is_land": false }], "vial_counters": [], "hand": [{ "num": 49, "name": "Ravenous Chupacabra", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Chord of Calling"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "tapped": true, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 31, "tapped": true, "is_land": false }, { "name": "Kitchen Finks", "idx": 4, "num": 34, "tapped": true, "is_land": false }, { "name": "Llanowar Wastes", "idx": 5, "num": 38, "tapped": true, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 7, "num": 42, "is_land": false }], "vial_counters": [], "hand": [{ "num": 49, "name": "Ravenous Chupacabra", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Chord of Calling"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Carrion Feeder" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 31, "is_land": false }, { "name": "Kitchen Finks", "idx": 4, "num": 34, "is_land": false }, { "name": "Llanowar Wastes", "idx": 5, "num": 38, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 7, "num": 42, "is_land": false }], "vial_counters": [], "hand": [{ "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Ravenous Chupacabra", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Chord of Calling"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Carrion Feeder, Reclamation Sage", "land": null, "casts": ["Carrion Feeder", "Reclamation Sage"], "cast_order_canonical": ["Carrion Feeder", "Reclamation Sage"], "actions": [{ "card": "Carrion Feeder" }, { "card": "Reclamation Sage" }] },
+    { "index": 1, "summary": "land=none; cast: Reclamation Sage, Carrion Feeder", "land": null, "casts": ["Reclamation Sage", "Carrion Feeder"], "cast_order_canonical": ["Reclamation Sage", "Carrion Feeder"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Carrion Feeder" }] },
+    { "index": 2, "summary": "land=none; cast: Carrion Feeder, Ravenous Chupacabra", "land": null, "casts": ["Carrion Feeder", "Ravenous Chupacabra"], "cast_order_canonical": ["Carrion Feeder", "Ravenous Chupacabra"], "actions": [{ "card": "Carrion Feeder" }, { "card": "Ravenous Chupacabra" }] },
+    { "index": 3, "summary": "land=none; cast: Ravenous Chupacabra, Carrion Feeder", "land": null, "casts": ["Ravenous Chupacabra", "Carrion Feeder"], "cast_order_canonical": ["Ravenous Chupacabra", "Carrion Feeder"], "actions": [{ "card": "Ravenous Chupacabra" }, { "card": "Carrion Feeder" }] },
+    { "index": 4, "summary": "land=none; cast: Reclamation Sage", "land": null, "casts": ["Reclamation Sage"], "actions": [{ "card": "Reclamation Sage" }] },
+    { "index": 5, "summary": "land=none; cast: Ravenous Chupacabra", "land": null, "casts": ["Ravenous Chupacabra"], "actions": [{ "card": "Ravenous Chupacabra" }] },
+    { "index": 6, "summary": "land=none; cast: Carrion Feeder", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 16, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "is_land": true }, { "name": "Carrion Feeder", "idx": 8, "num": 17, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 31, "is_land": false }, { "name": "Kitchen Finks", "idx": 4, "num": 34, "is_land": false }, { "name": "Llanowar Wastes", "idx": 5, "num": 38, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 7, "num": 42, "is_land": false }], "vial_counters": [], "hand": [{ "num": 49, "name": "Ravenous Chupacabra", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Chord of Calling"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 4, "summary": "land=none; cast: Reclamation Sage, Carrion Feeder: loop Kitchen Finks x19 (persist)", "land": null, "casts": ["Reclamation Sage", "Carrion Feeder"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 19 }] },
+    { "index": 6, "summary": "land=none; cast: Ravenous Chupacabra, Carrion Feeder: loop Kitchen Finks x19 (persist)", "land": null, "casts": ["Ravenous Chupacabra", "Carrion Feeder"], "actions": [{ "card": "Ravenous Chupacabra" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 19 }] },
+    { "index": 8, "summary": "land=none; cast: Reclamation Sage, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Reclamation Sage", "Carrion Feeder"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Reclamation Sage, Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Reclamation Sage", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 10, "summary": "land=none; cast: Ravenous Chupacabra, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Ravenous Chupacabra", "Carrion Feeder"], "actions": [{ "card": "Ravenous Chupacabra" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 11, "summary": "land=none; cast: Ravenous Chupacabra, Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Ravenous Chupacabra", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Ravenous Chupacabra" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 12, "summary": "land=none; cast: Reclamation Sage", "land": null, "casts": ["Reclamation Sage"], "actions": [{ "card": "Reclamation Sage" }] },
+    { "index": 13, "summary": "land=none; cast: Reclamation Sage, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Reclamation Sage", "Carrion Feeder"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 14, "summary": "land=none; cast: Ravenous Chupacabra", "land": null, "casts": ["Ravenous Chupacabra"], "actions": [{ "card": "Ravenous Chupacabra" }] },
+    { "index": 15, "summary": "land=none; cast: Ravenous Chupacabra, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Ravenous Chupacabra", "Carrion Feeder"], "actions": [{ "card": "Ravenous Chupacabra" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 18, "summary": "land=none; cast: Carrion Feeder: loop Kitchen Finks x19 (persist)", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 19 }] },
+    { "index": 20, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 21, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 22, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 23, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 16, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: loop Kitchen Finks x19 (persist)", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 19 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 14,
+  "type": "sacrifice",
+  "source": "Carrion Feeder",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 21, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "is_land": true }, { "name": "Carrion Feeder", "idx": 8, "num": 17, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 31, "is_land": false }, { "name": "Kitchen Finks", "idx": 4, "num": 34, "is_land": false }, { "name": "Llanowar Wastes", "idx": 5, "num": 38, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 7, "num": 42, "is_land": false }], "vial_counters": [], "hand": [{ "num": 49, "name": "Ravenous Chupacabra", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Chord of Calling"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "perm_index": 2, "tapped": false, "name": "Ignoble Hierarch", "label": "Ignoble Hierarch" }, { "index": 1, "perm_index": 4, "tapped": false, "name": "Kitchen Finks", "label": "Kitchen Finks" }, { "index": 2, "perm_index": 6, "tapped": false, "name": "Ignoble Hierarch", "label": "Ignoble Hierarch" }, { "index": 3, "perm_index": 7, "tapped": false, "name": "Melira, Sylvok Outcast", "label": "Melira, Sylvok Outcast" }, { "index": 4, "perm_index": 8, "tapped": false, "name": "Carrion Feeder", "label": "Carrion Feeder" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "lifegain", "text": "♾️ INFINITE LIFE -- Kitchen Finks persist loop online (free outlet + counter prevention)" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }, { "turn": 4, "kind": "sacrifice", "text": "💀 Carrion Feeder: sacrificed Kitchen Finks (+1/+1 counter)" }, { "turn": 4, "kind": "return", "text": "♻️ Kitchen Finks -- returned to the battlefield (Persist)" }, { "turn": 4, "kind": "lifegain", "text": "❤️ Kitchen Finks -- gain 2 life" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 61, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "is_land": true }, { "name": "Carrion Feeder", "idx": 7, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 20 }] }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "is_land": false }, { "name": "Kitchen Finks", "idx": 8, "num": 34, "is_land": false }, { "name": "Llanowar Wastes", "idx": 4, "num": 38, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 6, "num": 42, "is_land": false }], "vial_counters": [], "hand": [{ "num": 49, "name": "Ravenous Chupacabra", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Chord of Calling"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reclamation Sage, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Reclamation Sage", "Carrion Feeder"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Reclamation Sage, Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Reclamation Sage", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Ravenous Chupacabra, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Ravenous Chupacabra", "Carrion Feeder"], "actions": [{ "card": "Ravenous Chupacabra" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Ravenous Chupacabra, Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Ravenous Chupacabra", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Ravenous Chupacabra" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Reclamation Sage", "land": null, "casts": ["Reclamation Sage"], "actions": [{ "card": "Reclamation Sage" }] },
+    { "index": 5, "summary": "land=none; cast: Reclamation Sage, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Reclamation Sage", "Carrion Feeder"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Ravenous Chupacabra", "land": null, "casts": ["Ravenous Chupacabra"], "actions": [{ "card": "Ravenous Chupacabra" }] },
+    { "index": 7, "summary": "land=none; cast: Ravenous Chupacabra, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Ravenous Chupacabra", "Carrion Feeder"], "actions": [{ "card": "Ravenous Chupacabra" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 8, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Melira, Sylvok Outcast (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 61, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "is_land": true }, { "name": "Carrion Feeder", "idx": 7, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 20 }] }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "tapped": true, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "tapped": true, "is_land": false }, { "name": "Kitchen Finks", "idx": 8, "num": 34, "is_land": false }, { "name": "Llanowar Wastes", "idx": 4, "num": 38, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 6, "num": 42, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 49, "name": "Ravenous Chupacabra", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Chord of Calling"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Birthing Pod" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 61, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 8, "is_land": true }, { "name": "Blooming Marsh", "idx": 3, "num": 9, "is_land": true }, { "name": "Carrion Feeder", "idx": 7, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 20 }] }, { "name": "Ignoble Hierarch", "idx": 2, "num": 30, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "is_land": false }, { "name": "Kitchen Finks", "idx": 8, "num": 34, "is_land": false }, { "name": "Llanowar Wastes", "idx": 4, "num": 38, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 6, "num": 42, "is_land": false }], "vial_counters": [], "hand": [{ "num": 4, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 49, "name": "Ravenous Chupacabra", "cost": "{2}{B}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Reclamation Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Recruiter of the Guard", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Chord of Calling"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Reclamation Sage, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Reclamation Sage", "Carrion Feeder"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Reclamation Sage, Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Reclamation Sage", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Ravenous Chupacabra, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Ravenous Chupacabra", "Carrion Feeder"], "actions": [{ "card": "Ravenous Chupacabra" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Ravenous Chupacabra, Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Ravenous Chupacabra", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Ravenous Chupacabra" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Reclamation Sage", "land": null, "casts": ["Reclamation Sage"], "actions": [{ "card": "Reclamation Sage" }] },
+    { "index": 5, "summary": "land=none; cast: Reclamation Sage, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Reclamation Sage", "Carrion Feeder"], "actions": [{ "card": "Reclamation Sage" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Ravenous Chupacabra", "land": null, "casts": ["Ravenous Chupacabra"], "actions": [{ "card": "Ravenous Chupacabra" }] },
+    { "index": 7, "summary": "land=none; cast: Ravenous Chupacabra, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Ravenous Chupacabra", "Carrion Feeder"], "actions": [{ "card": "Ravenous Chupacabra" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 8, "summary": "land=none; cast: Birthing Pod, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Birthing Pod", "Carrion Feeder"], "actions": [{ "card": "Birthing Pod" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Birthing Pod, Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Birthing Pod", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Birthing Pod" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 10, "summary": "land=none; cast: Birthing Pod (pay 2 life), Carrion Feeder: sac 1 creature", "land": null, "casts": ["Birthing Pod", "Carrion Feeder"], "actions": [{ "card": "Birthing Pod", "phyrexian_life": 2 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 11, "summary": "land=none; cast: Birthing Pod (pay 2 life), Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Birthing Pod", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Birthing Pod", "phyrexian_life": 2 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 12, "summary": "land=none; cast: Birthing Pod", "land": null, "casts": ["Birthing Pod"], "actions": [{ "card": "Birthing Pod" }] },
+    { "index": 13, "summary": "land=none; cast: Birthing Pod, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Birthing Pod", "Carrion Feeder"], "actions": [{ "card": "Birthing Pod" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 14, "summary": "land=none; cast: Birthing Pod (pay 2 life)", "land": null, "casts": ["Birthing Pod"], "actions": [{ "card": "Birthing Pod", "phyrexian_life": 2 }] },
+    { "index": 15, "summary": "land=none; cast: Birthing Pod (pay 2 life), Carrion Feeder: sac 1 creature", "land": null, "casts": ["Birthing Pod", "Carrion Feeder"], "actions": [{ "card": "Birthing Pod", "phyrexian_life": 2 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 16, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 17, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 18, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
