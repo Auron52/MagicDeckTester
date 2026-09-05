@@ -60,9 +60,11 @@ measured decks — was measured before it shipped:
   (gi=231 x5.3, gi=470 x1.7).
 
 The 2026-08-26 verdict ("NOT YET — cost alone") is superseded by the 2026-09-05 directive: the
-deletion ships now, and the cost work continues on top of it. **Open follow-up (budget
-heuristics, the allowed class): root-cause KittyEquipment gi=231 / gi=470's interior-m2 blowups**
-so the dilution goes to zero instead of merely being small.
+deletion ships now, and the cost work continues on top of it. **Follow-up CLOSED 2026-09-05:
+KittyEquipment gi=231 / gi=470's interior-m2 blowups are root-caused** — volume of distinct
+post-combat memo keys from equipment-attachment permutations the m2 plan cannot depend on;
+remedy (memo-key coarsening) designed and deferred in `kitty-interior-m2-tail.md`. The tail is
+generation-time only; at shipped d5/b20 both games are unremarkable and the memo never fills.
 
 ## The shipping sweep (2026-09-05, this change, both tiers)
 
