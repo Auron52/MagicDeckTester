@@ -1,0 +1,401 @@
+{
+  "seed": 6, "game_index": 5, "win_turn": 4, "won": true,
+  "mulligan": { "count": 2, "bottom": [54, 57] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 3, "name": "Birthing Pod" }, { "num": 38, "name": "Llanowar Wastes" }, { "num": 48, "name": "Ranger of Eos" }, { "num": 58, "name": "Severance Priest" }, { "num": 8, "name": "Blooming Marsh" }, { "num": 23, "name": "Chord of Calling" }, { "num": 4, "name": "Birthing Pod" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 26, "name": "Darkbore Pathway" }, { "num": 28, "name": "Felidar Guardian" }, { "num": 47, "name": "Orzhov Basilica" }, { "num": 38, "name": "Llanowar Wastes" }, { "num": 2, "name": "Birds of Paradise" }, { "num": 15, "name": "Branchloft Pathway" }, { "num": 21, "name": "Caves of Koilos" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 26, "name": "Darkbore Pathway" }, { "num": 57, "name": "Scavenging Ooze" }, { "num": 6, "name": "Birthing Pod" }, { "num": 46, "name": "Murderous Redcap" }, { "num": 32, "name": "Ignoble Hierarch" }, { "num": 42, "name": "Melira, Sylvok Outcast" }, { "num": 54, "name": "Reclamation Sage" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 26, "name": "Darkbore Pathway", "win_optimal": true }, { "num": 57, "name": "Scavenging Ooze", "win_optimal": true }, { "num": 6, "name": "Birthing Pod", "win_optimal": true }, { "num": 46, "name": "Murderous Redcap", "win_optimal": true }, { "num": 32, "name": "Ignoble Hierarch", "win_optimal": true }, { "num": 42, "name": "Melira, Sylvok Outcast", "win_optimal": true }, { "num": 54, "name": "Reclamation Sage", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 6, "name": "Birthing Pod" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 26, "name": "Darkbore Pathway", "win_optimal": true }, { "num": 57, "name": "Scavenging Ooze", "win_optimal": true }, { "num": 6, "name": "Birthing Pod", "win_optimal": true }, { "num": 46, "name": "Murderous Redcap", "win_optimal": true }, { "num": 32, "name": "Ignoble Hierarch", "win_optimal": true }, { "num": 42, "name": "Melira, Sylvok Outcast", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 6, "name": "Birthing Pod" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 26, "name": "Darkbore Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Melira, Sylvok Outcast", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Darkbore Pathway; cast: Ignoble Hierarch", "land": "Darkbore Pathway", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 1, "summary": "land=Darkbore Pathway; cast: (nothing)", "land": "Darkbore Pathway", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Darkbore Pathway; cast: (nothing)", "land": "Darkbore Pathway", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 2, "num": 32, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 42, "name": "Melira, Sylvok Outcast", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 2, "num": 32, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 42, "name": "Melira, Sylvok Outcast", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Carrion Feeder" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 2, "num": 32, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 42, "name": "Melira, Sylvok Outcast", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Melira, Sylvok Outcast", "land": null, "casts": ["Melira, Sylvok Outcast"], "actions": [{ "card": "Melira, Sylvok Outcast" }] },
+    { "index": 1, "summary": "land=none; cast: Carrion Feeder", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["Birds of Paradise", "Carrion Feeder"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Birds of Paradise" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 2, "num": 32, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Birds of Paradise, Carrion Feeder", "land": null, "casts": ["Birds of Paradise", "Carrion Feeder"], "cast_order_canonical": ["Birds of Paradise", "Carrion Feeder"], "actions": [{ "card": "Birds of Paradise" }, { "card": "Carrion Feeder" }] },
+    { "index": 1, "summary": "land=none; cast: Carrion Feeder, Birds of Paradise", "land": null, "casts": ["Carrion Feeder", "Birds of Paradise"], "cast_order_canonical": ["Carrion Feeder", "Birds of Paradise"], "actions": [{ "card": "Carrion Feeder" }, { "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=none; cast: Birds of Paradise", "land": null, "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 3, "summary": "land=none; cast: Carrion Feeder", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "is_land": false }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Melira, Sylvok Outcast (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "is_land": false }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "tapped": true, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Branchloft Pathway" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "is_land": false }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 12, "name": "Branchloft Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Branchloft Pathway; cast: Murderous Redcap", "land": "Branchloft Pathway", "casts": ["Murderous Redcap"], "actions": [{ "card": "Murderous Redcap" }] },
+    { "index": 1, "summary": "land=Branchloft Pathway; cast: Murderous Redcap, Carrion Feeder: sac 1 creature", "land": "Branchloft Pathway", "casts": ["Murderous Redcap", "Carrion Feeder"], "actions": [{ "card": "Murderous Redcap" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=Branchloft Pathway; cast: Murderous Redcap", "land": "Branchloft Pathway", "casts": ["Murderous Redcap"], "actions": [{ "card": "Murderous Redcap" }] },
+    { "index": 3, "summary": "land=Branchloft Pathway; cast: Murderous Redcap, Carrion Feeder: sac 1 creature", "land": "Branchloft Pathway", "casts": ["Murderous Redcap", "Carrion Feeder"], "actions": [{ "card": "Murderous Redcap" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 4, "summary": "land=Branchloft Pathway; cast: Birthing Pod", "land": "Branchloft Pathway", "casts": ["Birthing Pod"], "actions": [{ "card": "Birthing Pod" }] },
+    { "index": 5, "summary": "land=Branchloft Pathway; cast: Birthing Pod, Carrion Feeder: sac 1 creature", "land": "Branchloft Pathway", "casts": ["Birthing Pod", "Carrion Feeder"], "actions": [{ "card": "Birthing Pod" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=Branchloft Pathway; cast: Birthing Pod (pay 2 life)", "land": "Branchloft Pathway", "casts": ["Birthing Pod"], "actions": [{ "card": "Birthing Pod", "phyrexian_life": 2 }] },
+    { "index": 7, "summary": "land=Branchloft Pathway; cast: Birthing Pod (pay 2 life), Carrion Feeder: sac 1 creature", "land": "Branchloft Pathway", "casts": ["Birthing Pod", "Carrion Feeder"], "actions": [{ "card": "Birthing Pod", "phyrexian_life": 2 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 8, "summary": "land=Branchloft Pathway; cast: Birthing Pod", "land": "Branchloft Pathway", "casts": ["Birthing Pod"], "actions": [{ "card": "Birthing Pod" }] },
+    { "index": 9, "summary": "land=Branchloft Pathway; cast: Birthing Pod, Carrion Feeder: sac 1 creature", "land": "Branchloft Pathway", "casts": ["Birthing Pod", "Carrion Feeder"], "actions": [{ "card": "Birthing Pod" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 10, "summary": "land=Branchloft Pathway; cast: Birthing Pod (pay 2 life)", "land": "Branchloft Pathway", "casts": ["Birthing Pod"], "actions": [{ "card": "Birthing Pod", "phyrexian_life": 2 }] },
+    { "index": 11, "summary": "land=Branchloft Pathway; cast: Birthing Pod (pay 2 life), Carrion Feeder: sac 1 creature", "land": "Branchloft Pathway", "casts": ["Birthing Pod", "Carrion Feeder"], "actions": [{ "card": "Birthing Pod", "phyrexian_life": 2 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 12, "summary": "land=none; cast: Birthing Pod (pay 2 life)", "land": null, "casts": ["Birthing Pod"], "actions": [{ "card": "Birthing Pod", "phyrexian_life": 2 }] },
+    { "index": 13, "summary": "land=none; cast: Birthing Pod (pay 2 life), Carrion Feeder: sac 1 creature", "land": null, "casts": ["Birthing Pod", "Carrion Feeder"], "actions": [{ "card": "Birthing Pod", "phyrexian_life": 2 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 14, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=Branchloft Pathway; cast: Carrion Feeder: sac 1 creature", "land": "Branchloft Pathway", "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 16, "summary": "land=Branchloft Pathway; cast: (nothing)", "land": "Branchloft Pathway", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Branchloft Pathway; cast: Carrion Feeder: sac 1 creature", "land": "Branchloft Pathway", "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 18, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "damage", "text": "🔥 Murderous Redcap: 2 to opponent (17→15)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "tapped": true, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 6, "num": 12, "tapped": true, "is_land": true }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Murderous Redcap", "idx": 7, "num": 46, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Carrion Feeder: sac 1 creature → 2 damage, Carrion Feeder: loop Murderous Redcap x8 (persist) → 16 damage, Carrion Feeder: loop Murderous Redcap x14 (persist)", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 8 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 14 }] },
+    { "index": 1, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature → 2 damage, Carrion Feeder: loop Murderous Redcap x8 (persist) → 16 damage, Carrion Feeder: loop Murderous Redcap x14 (persist)", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 8 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 14 }] },
+    { "index": 2, "summary": "land=none; cast: Carrion Feeder: loop Murderous Redcap x8 (persist) → 16 damage, Carrion Feeder: loop Murderous Redcap x14 (persist)", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 8 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 14 }] },
+    { "index": 3, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: loop Murderous Redcap x8 (persist) → 16 damage, Carrion Feeder: loop Murderous Redcap x14 (persist)", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 8 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 14 }] },
+    { "index": 4, "summary": "land=none; cast: Carrion Feeder: sac 1 creature → 2 damage, Carrion Feeder: loop Murderous Redcap x8 (persist) → 16 damage", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 8 }] },
+    { "index": 5, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature → 2 damage, Carrion Feeder: loop Murderous Redcap x8 (persist) → 16 damage", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 8 }] },
+    { "index": 6, "summary": "land=none; cast: Carrion Feeder: loop Murderous Redcap x8 (persist) → 16 damage", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 8 }] },
+    { "index": 7, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: loop Murderous Redcap x8 (persist) → 16 damage", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 8 }] },
+    { "index": 8, "summary": "land=none; cast: Carrion Feeder: sac 1 creature → 2 damage, Carrion Feeder: loop Murderous Redcap x14 (persist)", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 14 }] },
+    { "index": 9, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature → 2 damage, Carrion Feeder: loop Murderous Redcap x14 (persist)", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 14 }] },
+    { "index": 10, "summary": "land=none; cast: Carrion Feeder: loop Murderous Redcap x14 (persist)", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 14 }] },
+    { "index": 11, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: loop Murderous Redcap x14 (persist)", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 14 }] },
+    { "index": 12, "summary": "land=none; cast: Carrion Feeder: sac 1 creature → 2 damage", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 13, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature → 2 damage", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 14, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 16,
+  "type": "sacrifice",
+  "source": "Carrion Feeder",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "tapped": true, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 6, "num": 12, "tapped": true, "is_land": true }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Murderous Redcap", "idx": 7, "num": 46, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "heuristic_default": 4,
+  "options": [{ "index": 0, "perm_index": 2, "tapped": true, "name": "Ignoble Hierarch", "label": "Ignoble Hierarch" }, { "index": 1, "perm_index": 3, "tapped": false, "name": "Melira, Sylvok Outcast", "label": "Melira, Sylvok Outcast" }, { "index": 2, "perm_index": 4, "tapped": true, "name": "Birds of Paradise", "label": "Birds of Paradise" }, { "index": 3, "perm_index": 5, "tapped": false, "name": "Carrion Feeder", "label": "Carrion Feeder" }, { "index": 4, "perm_index": 7, "tapped": false, "name": "Murderous Redcap", "label": "Murderous Redcap" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 17,
+  "type": "sacrifice",
+  "source": "Carrion Feeder",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "tapped": true, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 6, "num": 12, "tapped": true, "is_land": true }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Murderous Redcap", "idx": 7, "num": 46, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "heuristic_default": 4,
+  "options": [{ "index": 0, "perm_index": 2, "tapped": true, "name": "Ignoble Hierarch", "label": "Ignoble Hierarch" }, { "index": 1, "perm_index": 3, "tapped": false, "name": "Melira, Sylvok Outcast", "label": "Melira, Sylvok Outcast" }, { "index": 2, "perm_index": 4, "tapped": true, "name": "Birds of Paradise", "label": "Birds of Paradise" }, { "index": 3, "perm_index": 5, "tapped": false, "name": "Carrion Feeder", "label": "Carrion Feeder" }, { "index": 4, "perm_index": 7, "tapped": false, "name": "Murderous Redcap", "label": "Murderous Redcap" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 18,
+  "type": "sacrifice",
+  "source": "Carrion Feeder",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "tapped": true, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 6, "num": 12, "tapped": true, "is_land": true }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Murderous Redcap", "idx": 7, "num": 46, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "heuristic_default": 4,
+  "options": [{ "index": 0, "perm_index": 2, "tapped": true, "name": "Ignoble Hierarch", "label": "Ignoble Hierarch" }, { "index": 1, "perm_index": 3, "tapped": false, "name": "Melira, Sylvok Outcast", "label": "Melira, Sylvok Outcast" }, { "index": 2, "perm_index": 4, "tapped": true, "name": "Birds of Paradise", "label": "Birds of Paradise" }, { "index": 3, "perm_index": 5, "tapped": false, "name": "Carrion Feeder", "label": "Carrion Feeder" }, { "index": 4, "perm_index": 7, "tapped": false, "name": "Murderous Redcap", "label": "Murderous Redcap" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 19,
+  "type": "sacrifice",
+  "source": "Carrion Feeder",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "tapped": true, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 6, "num": 12, "tapped": true, "is_land": true }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Murderous Redcap", "idx": 7, "num": 46, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "heuristic_default": 4,
+  "options": [{ "index": 0, "perm_index": 2, "tapped": true, "name": "Ignoble Hierarch", "label": "Ignoble Hierarch" }, { "index": 1, "perm_index": 3, "tapped": false, "name": "Melira, Sylvok Outcast", "label": "Melira, Sylvok Outcast" }, { "index": 2, "perm_index": 4, "tapped": true, "name": "Birds of Paradise", "label": "Birds of Paradise" }, { "index": 3, "perm_index": 5, "tapped": false, "name": "Carrion Feeder", "label": "Carrion Feeder" }, { "index": 4, "perm_index": 7, "tapped": false, "name": "Murderous Redcap", "label": "Murderous Redcap" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 20,
+  "type": "sacrifice",
+  "source": "Carrion Feeder",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "tapped": true, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 6, "num": 12, "tapped": true, "is_land": true }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Murderous Redcap", "idx": 7, "num": 46, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "heuristic_default": 4,
+  "options": [{ "index": 0, "perm_index": 2, "tapped": true, "name": "Ignoble Hierarch", "label": "Ignoble Hierarch" }, { "index": 1, "perm_index": 3, "tapped": false, "name": "Melira, Sylvok Outcast", "label": "Melira, Sylvok Outcast" }, { "index": 2, "perm_index": 4, "tapped": true, "name": "Birds of Paradise", "label": "Birds of Paradise" }, { "index": 3, "perm_index": 5, "tapped": false, "name": "Carrion Feeder", "label": "Carrion Feeder" }, { "index": 4, "perm_index": 7, "tapped": false, "name": "Murderous Redcap", "label": "Murderous Redcap" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 21,
+  "type": "sacrifice",
+  "source": "Carrion Feeder",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "tapped": true, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 6, "num": 12, "tapped": true, "is_land": true }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 5 }] }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Murderous Redcap", "idx": 7, "num": 46, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "heuristic_default": 4,
+  "options": [{ "index": 0, "perm_index": 2, "tapped": true, "name": "Ignoble Hierarch", "label": "Ignoble Hierarch" }, { "index": 1, "perm_index": 3, "tapped": false, "name": "Melira, Sylvok Outcast", "label": "Melira, Sylvok Outcast" }, { "index": 2, "perm_index": 4, "tapped": true, "name": "Birds of Paradise", "label": "Birds of Paradise" }, { "index": 3, "perm_index": 5, "tapped": false, "name": "Carrion Feeder", "label": "Carrion Feeder" }, { "index": 4, "perm_index": 7, "tapped": false, "name": "Murderous Redcap", "label": "Murderous Redcap" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 22,
+  "type": "sacrifice",
+  "source": "Carrion Feeder",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "tapped": true, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 6, "num": 12, "tapped": true, "is_land": true }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 6 }] }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Murderous Redcap", "idx": 7, "num": 46, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "heuristic_default": 4,
+  "options": [{ "index": 0, "perm_index": 2, "tapped": true, "name": "Ignoble Hierarch", "label": "Ignoble Hierarch" }, { "index": 1, "perm_index": 3, "tapped": false, "name": "Melira, Sylvok Outcast", "label": "Melira, Sylvok Outcast" }, { "index": 2, "perm_index": 4, "tapped": true, "name": "Birds of Paradise", "label": "Birds of Paradise" }, { "index": 3, "perm_index": 5, "tapped": false, "name": "Carrion Feeder", "label": "Carrion Feeder" }, { "index": 4, "perm_index": 7, "tapped": false, "name": "Murderous Redcap", "label": "Murderous Redcap" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 23,
+  "type": "sacrifice",
+  "source": "Carrion Feeder",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 1, "tapped": true, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 6, "num": 12, "tapped": true, "is_land": true }, { "name": "Carrion Feeder", "idx": 5, "num": 17, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 7 }] }, { "name": "Ignoble Hierarch", "idx": 2, "num": 32, "tapped": true, "is_land": false }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 42, "is_land": false }, { "name": "Murderous Redcap", "idx": 7, "num": 46, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 1, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birthing Pod", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "heuristic_default": 4,
+  "options": [{ "index": 0, "perm_index": 2, "tapped": true, "name": "Ignoble Hierarch", "label": "Ignoble Hierarch" }, { "index": 1, "perm_index": 3, "tapped": false, "name": "Melira, Sylvok Outcast", "label": "Melira, Sylvok Outcast" }, { "index": 2, "perm_index": 4, "tapped": true, "name": "Birds of Paradise", "label": "Birds of Paradise" }, { "index": 3, "perm_index": 5, "tapped": false, "name": "Carrion Feeder", "label": "Carrion Feeder" }, { "index": 4, "perm_index": 7, "tapped": false, "name": "Murderous Redcap", "label": "Murderous Redcap" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+}
+  ]
+}
