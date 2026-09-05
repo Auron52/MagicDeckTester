@@ -5094,6 +5094,16 @@ static bool SubsetPhyrexianDominated(const GameState& state,
 {
     static const bool s_on = EnvOn("MTG_PHY_DOMPRUNE", true);
     if (!s_on) { return false; }
+    // HUMAN PLAY: never prune (USER 2026-09-05, seed 1 T4 rejection artifact). The dominance
+    // claim assumes every use of the freed mana lives in THIS enumeration -- but a human builds
+    // a phase as SEVERAL small lines (the pass-gated flow), so "activate the Pod paying life,
+    // keep the Forest, cast Chord in the NEXT line" is a real human plan whose second half this
+    // subset cannot see. The prune deleted the bare pay-life activation, CheckLine's {G/P}
+    // choose dimension collapsed to "pay mana" alone, the Forest paid the pip, and the user's
+    // Chord was one green short with no way to have chosen otherwise. This is a search COST
+    // prune; the human decision surface is not a cost problem (depth 0), so it keeps the full
+    // fan -- rollouts under claude-play stay pruned (HumanPlaySuppress makes this false there).
+    if (HumanPlayActive()) { return false; }
     bool any_phy = false;
     for (int j : sel) { if (cands[j].phyrexian_life > 0) { any_phy = true; break; } }
     if (!any_phy) { return false; }
@@ -34239,6 +34249,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         //                         prefers the no-sac plan (saving the one-shot source; see the pool sort).
         int planLE = 0, planSacs = 0;
         std::vector<std::string> orderNames, vialNames, retraceNames, sacOutNames;
+        // Outlet names that appear in this plan as a LOOP action (SacCreatureOutlet, sac_count
+        // >= 2) -- the flexible sacout fallback below only bends counts for these.
+        std::vector<std::string> sacLoopNames;
         std::vector<std::string> attachAllNames, sfPutNames, channelNames, suspendNames;
         // One entry per Equip action: (equipment name, equipment m_number, host m_number). Matched
         // against spec.equips by EquipsMatch below, which honours the 0 wildcards.
@@ -34263,6 +34276,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             {
                 const int reps = std::max(1, a.sac_count);
                 for (int r = 0; r < reps; ++r) { sacOutNames.push_back(a.card_name); }
+                if (a.kind == Action::Kind::SacCreatureOutlet && a.sac_count > 1)
+                { sacLoopNames.push_back(a.card_name.str()); }
                 continue;
             }
             if (a.kind == Action::Kind::SacForMana)         { ++planSacs; continue; }
@@ -34305,7 +34320,37 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         {
             std::vector<std::string> sortedSacNames = sacOutNames;
             std::sort(sortedSacNames.begin(), sortedSacNames.end());
-            if (sortedSacNames != sortedSacOut) { continue; }
+            if (sortedSacNames != sortedSacOut)
+            {
+                // LOOP-COUNT FOLD (USER 2026-09-05, Melira s6 t4 rejection): the human clicks a
+                // free outlet N times -- eleven `sacout=Carrion Feeder` -- but the engine
+                // enumerates repeat outlets as DEMAND-DRIVEN loop bursts (lethal-K damage,
+                // lethal-K growth), so the exact multiset match above can only ever hit the
+                // K's the demand computed, and the deck's PRIMARY kill bounced as
+                // "legal_not_enumerated" with the combo assembled and the x8 kill sitting in
+                // the plan list. When exact fails, match FLEXIBLY per outlet name: same name
+                // set, and every count mismatch is on a name this plan holds a LOOP action
+                // for, with both sides >= 2 ("repeated activations" on both sides -- how many
+                // is then an explicit choose dimension, the "loops xK" sub below, never a
+                // silent deviation from what the human typed). Single-activation counts stay
+                // exact, and a plan with no loop on the mismatched name still fails.
+                std::map<std::string, int> declared_n, plan_n;
+                for (const std::string& n : sortedSacOut)   { ++declared_n[n]; }
+                for (const std::string& n : sacOutNames)    { ++plan_n[n]; }
+                bool flex_ok = declared_n.size() == plan_n.size();
+                for (const auto& kv : declared_n)
+                {
+                    if (!flex_ok) { break; }
+                    auto it = plan_n.find(kv.first);
+                    if (it == plan_n.end()) { flex_ok = false; break; }
+                    if (it->second == kv.second) { continue; }
+                    const bool has_loop =
+                        std::find(sacLoopNames.begin(), sacLoopNames.end(), kv.first)
+                        != sacLoopNames.end();
+                    if (!has_loop || kv.second < 2 || it->second < 2) { flex_ok = false; }
+                }
+                if (!flex_ok) { continue; }
+            }
         }
         if (attachall_declared)
         {
@@ -34451,6 +34496,20 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     addSub(a.card_name + " sacrifices " + vn, a.card_name + " sacrifices",
                            vn, art, "sacrifice", a.sac_victim_id);
                 }
+            }
+            // Repeat-outlet LOOP COUNT (the sacout loop-count fold above): a plan's demand-driven
+            // burst (x8 lethal damage, x14 lethal growth) is a real decision once the declared
+            // count matched flexibly -- without this sub two loop plans differing only in K fold
+            // into one unlabelled variant and the dedup silently picks how many times the human
+            // sacrifices. Victim named in the choice (the x8 and x14 may eat different bodies).
+            if (a.kind == Action::Kind::SacCreatureOutlet && a.sac_count > 1)
+            {
+                std::string vict;
+                for (const Permanent& perm : state.battlefield)
+                { if (perm.card.m_number == a.sac_victim_id) { vict = " " + perm.card.m_name.str(); break; } }
+                const std::string times = "\xC3\x97" + std::to_string(a.sac_count) + vict;   // ×K victim
+                addSub(a.card_name + " loops " + times, a.card_name + " loops", times,
+                       a.card_name, "activations");
             }
             // Zada/Mirrorwing solo-target trick: the target rides enchant_target (the aura precedent),
             // but it is NOT a sub-decision the human makes HERE. ResolveSoloTargetTrick re-asks it at
@@ -35135,9 +35194,17 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         // the segment re-prompt instead (commit the Crop Rotation, the land enters, cast off it).
         if (mc.has_x)
         {
+            // HONEST DIAGNOSIS (USER 2026-09-05, the Melira s1 t4 rejection): stage 1 matches
+            // {X} lines fine (X and tutor-target become choose dimensions), so reaching THIS
+            // bail means no enumerated plan casts the spell here at all -- for Chord that read
+            // "v1 cannot validate {X}" when the truth was "one green short". Same misdirection
+            // class as the tutor bail retired above; keep the Unsupported verdict (the
+            // fallback genuinely cannot affordability-grade an {X} cost) but say what is known.
             out.verdict = V::Unsupported; out.failed_action = "cast=" + name;
-            out.reason = "'" + name + "' uses an action kind ({X}) the v1 "
-                         "line check cannot validate yet";
+            out.reason = "no enumerated plan casts '" + name + "' here -- with an {X} cost the "
+                         "fallback cannot grade affordability, but the usual cause is the mana "
+                         "really being short (check colours: earlier taps/payments this phase "
+                         "may have spent the pips it needs)";
             return out;
         }
         const bool alt_free = def->params.alt_lifegain_cost > 0

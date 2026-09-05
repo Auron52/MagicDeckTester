@@ -143,6 +143,11 @@ DECKS = {
     # time this row has been the same-day fix -- see the Dragons note above).
     "BreachingDragonstorm": ("decks/BreachingDragonstorm/BreachingDragonstorm.cod",
                              "decks/BreachingDragonstorm/BreachingDragonstorm.profile.json"),
+    # Added 2026-09-05: the user's first Melira Pod reference (s1 gi0, a T4 win -- one turn
+    # faster than the search's own seed-1 game). Reference dir uses an underscore; the deck
+    # folder has a SPACE (the Creature_Giving/Mirrorwing shape). Same-day row, fifth time.
+    "Melira_Pod":    ("decks/Melira Pod/Melira Pod.cod",
+                      "decks/Melira Pod/Melira Pod.profile.json"),
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)

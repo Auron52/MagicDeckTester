@@ -1210,3 +1210,39 @@ equal-win-turn judgment it now makes SIGHTED. NOT a clean win (avg +0.03 noise-b
 +2.6%, one tail game 2.2x): committed locally, PUSH HELD at user request ("Let's hold off on
 pushing for a bit") — the trade-off is the user's to accept. Suite: smoke 68/68
 byte-identical (fan gated on phyrexian_count / pod casts), unit 64/64, scenarios 64/64.
+
+### Live play-test round 2 (2026-09-05): reference #1 promoted; three human-surface fixes
+- **references/Melira_Pod/claude_s1_gi0.json PROMOTED + COMMITTED** (user: "can be marked as
+  an actual reference") -- a T4 win, one turn faster than the search's own seed-1 game.
+  Same-day viewer_protocol_check row added (fifth same-day-row incident; dir underscores vs
+  the deck folder's space, the Creature_Giving shape).
+- **"Not enough green for Chord" root-caused as THREE stacked defects**, from the user's saved
+  s1 t4 rejection (verdict said "{X} unsupported"; the truth was one green short):
+  1. `SubsetPhyrexianDominated` pruned the bare pay-life activation in HUMAN decision lists --
+     a human builds a phase as several lines, so "pay life now, Chord next line" is real and
+     invisible to the subset's dominance claim. CheckLine's {G/P} choose dimension collapsed
+     to "pay mana" alone; the human literally could not pick pay-life on the declared line.
+     FIX: the prune stands down under HumanPlayActive (rollouts keep it via HumanPlaySuppress).
+  2. Even paying life, the activation's generic {1} TAPPED THE FOREST with Boulderloft (W) and
+     Darkbore (B) idle -- all three tie at mono rank 10 and battlefield order decided. FIX:
+     human-play-only demand tiebreak in the scarcity greedy (MTG_HUMAN_TAP_DEMAND, default ON):
+     among EQUAL-rank sources paying a GENERIC pip, spend the highest hand-demand SURPLUS
+     (supply minus hand pips per colour; costs read via the DEFINITION -- zone Cards carry no
+     cost, the first build read all-zero demand). Coloured pips and the rank ladder untouched;
+     autonomous play and GT byte-identical.
+  3. The {X} stage-2 bail claimed "v1 cannot validate {X}" -- misleading (stage 1 matches {X}
+     lines fine, fanning X and tutor-target as choose dimensions; the bail only fires when NO
+     plan casts the spell). Reworded to the honest diagnosis (same misdirection class as the
+     retired tutor bail).
+  End-to-end verified on the user's exact line: pay-life activation (Darkbore pays the {1}),
+  Forest survives, `cast=Chord of Calling` returns a choose fan (X=3 Recruiter/Finks etc.).
+- **s6 gi5 t4 rejection ("11x sacout=Carrion Feeder" -- THE COMBO KILL) fixed**: repeat
+  outlets enumerate as demand-driven loop bursts (x8 lethal damage / x14 lethal growth), so
+  the human's click-count could only ever match the K's demand computed. FIX: loop-count fold
+  in CheckLine's sacout match (exact first; on mismatch, bend only counts on names the plan
+  loops, both sides >= 2) + a "loops xK <victim>" choose sub so K is an explicit pick, never
+  a silent deviation. Verified: the 11-sacout line resolves to x8-vs-x14, committing x8
+  realises the full persist loop (15 -> -1, Feeder swings for 9) -- win turn 4.
+- Battery at the final state: unit 69/69, scenarios 72/72, viewer_protocol_check --strict
+  0 play-drift / 0 contract-fail (284 refs incl. the new Melira one), smoke 68/68
+  byte-identical (all three fixes are human-surface-only by construction).

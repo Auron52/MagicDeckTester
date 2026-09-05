@@ -211,6 +211,53 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             const int bn = static_cast<int>(state.battlefield.size());
             int best_i = -1, best_rank = 1 << 30, best_kind = 0;  // 1 direct, 2 filter-colour, 3 filter-{C}
             int best_dep = -1;   // depletion tiebreak: more counters tap FIRST (DepletionTapOrderEnabled)
+            // HUMAN-PLAY DEMAND TIEBREAK (MTG_HUMAN_TAP_DEMAND, default ON; =0 restores the
+            // battlefield-order tie). USER 2026-09-05, Melira s1 T4: a pod activation's generic
+            // {1} tapped the FOREST while Boulderloft (W) and Darkbore (B) sat untapped -- all
+            // three mono lands tie on the flexibility rank, the tie fell to battlefield order,
+            // and the hand's Chord ({X}{G}{G}{G}) was one green short in the human's NEXT line.
+            // Among EQUAL-rank sources paying a GENERIC pip, spend the one whose colours the
+            // HAND demands least: surplus(c) = untapped supply of c minus hand pips of c; a
+            // source's spend-safety is its worst colour's surplus. Rank still decides first
+            // (the flexibility ladder is untouched), coloured pips are untouched (they must tap
+            // their colour), and it is HUMAN PLAY ONLY (the FilterCFirst precedent): a human
+            // builds a phase as several lines, so this payment cannot see the next line's cost
+            // the way the engine's whole-plan batch payment can. Rollouts (HumanPlaySuppress)
+            // and every autonomous game keep the historical tie -- GT byte-identical.
+            static const bool s_tap_demand = EnvOn("MTG_HUMAN_TAP_DEMAND", true);
+            const bool hp_demand_live = s_tap_demand && any && HumanPlayActive();
+            int hp_supply[5] = {0, 0, 0, 0, 0}, hp_demand[5] = {0, 0, 0, 0, 0};
+            int best_sur = -(1 << 30);
+            if (hp_demand_live)
+            {
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != active || q.tapped) { continue; }
+                    const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                    if (!qd) { continue; }
+                    if (!q.card.IsLand() && qd->tmpl != CardTemplate::ManaDork
+                        && !qd->params.mana_rock) { continue; }
+                    int seen = 0;
+                    for (Color c : EffectiveProduces(state, active, *qd))
+                    {
+                        const int ci = static_cast<int>(c);
+                        if (ci < 5 && !(seen & (1 << ci))) { seen |= 1 << ci; ++hp_supply[ci]; }
+                    }
+                }
+                for (const Card& hc : state.players[active].hand)
+                {
+                    // Cost via the DEFINITION: a zone Card carries the name, not the cost (the
+                    // hand's own m_mana_cost is empty for decklist-loaded copies).
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (hd == nullptr) { continue; }
+                    const ManaCost& m = hd->card.m_mana_cost;   // hybrid/phyrexian pips baked flat
+                    hp_demand[static_cast<int>(Color::White)] += m.white;
+                    hp_demand[static_cast<int>(Color::Blue)]  += m.blue;
+                    hp_demand[static_cast<int>(Color::Black)] += m.black;
+                    hp_demand[static_cast<int>(Color::Red)]   += m.red;
+                    hp_demand[static_cast<int>(Color::Green)] += m.green;
+                }
+            }
             int ff_i = -1, ff_rank = 1 << 30;   // best kind-2 filter candidate (FeedFilterFirstOn reroute)
             for (int i = 0; i < bn; ++i)
             {
@@ -297,8 +344,27 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 // Non-depletion sources all read 0, so equal-rank plain sources keep the historical
                 // first-in-battlefield-order winner (byte-identical for every depletion-less board).
                 const int dep = DepletionTapOrderEnabled() ? DepletionCountersOn(p) : 0;
-                if (rank < best_rank || (rank == best_rank && dep > best_dep))
-                { best_rank = rank; best_i = i; best_kind = kind; best_dep = dep; }
+                // Demand tiebreak (human play, generic pip -- see the header note above): higher
+                // surplus = safer to spend. Direct sources only; the filter/burst kinds keep
+                // their own tiers. Colourless-only reads maximally safe (its mana pays nothing
+                // but generic anyway; rank 5 means it rarely reaches a tie).
+                int sur = 0;
+                if (hp_demand_live && kind == 1)
+                {
+                    int worst = 1 << 20; bool has_col = false;
+                    for (Color c : pay_produces(*def))
+                    {
+                        const int ci = static_cast<int>(c);
+                        if (ci >= 5) { continue; }
+                        has_col = true;
+                        worst = std::min(worst, hp_supply[ci] - hp_demand[ci]);
+                    }
+                    sur = has_col ? worst : (1 << 20);
+                }
+                if (rank < best_rank
+                    || (rank == best_rank
+                        && (dep > best_dep || (dep == best_dep && sur > best_sur))))
+                { best_rank = rank; best_i = i; best_kind = kind; best_dep = dep; best_sur = sur; }
                 if (kind == 2 && FeedFilterFirstOn() && rank < ff_rank) { ff_rank = rank; ff_i = i; }
             }
             if (best_i < 0) { return false; }
