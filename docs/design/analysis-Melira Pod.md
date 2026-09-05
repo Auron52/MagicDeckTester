@@ -1549,3 +1549,19 @@ A/B hatch.
 Residual: none of the 10 references now shows an engine deficit. s9 (user 6, engine 6) and
 s2 (5/5) are matches, not wins — no action. The put whitelist (MTG_POD_PUT_NARROW) stays as
 shipped; the 5j-era suspicion against it is closed as a wrong-shuffle artifact.
+
+## SESSION 2026-09-05l — value-leaf phase A OOM, root-caused + fixed (e4da4b49 local)
+
+Phase A's batch was kernel-OOM-killed at ~27 GB anon (14:01:58 UTC; the VSCode disconnect was
+collateral). Root cause: `MTG_FSL_POOL` is entry-count accounting sized at a 1 KB/entry planning
+size calibrated on Mirrorwing-era games (~600 B measured); Melira's combo-turn SearchLines run
+~1.5–2 KB/entry (reconstructed from the kill's own accounting), so the nominal 12.3 GB pool was
+really ~19–25 GB. A compounding driver bug let the damage propagate: `phase_rows` never checked
+the batch exit status, marked A_rows done over the killed batch (375 of 2500 games, 362 with
+rows), and phases B/C ran against a model trained on 14% of the data. Fixed both (exit-status
+gates on phase A+E, planning size 1 KB → 3 KB), wiped the poisoned markers/staged model/matrix
+state, re-queued only the missing games (21 jobs, banked rows kept), relaunched 21:37 UTC.
+Note: extra RAM does not fix this class — the budget scales with MemTotal, so the undercount
+scales with the box. Full mulligan gen deliberately deferred past tonight: origin holds a
+play-affecting greedy closure (8bea89da), and a profile generated at ba5857fa would not survive
+integration; tonight ends at the `recommend` scout.
