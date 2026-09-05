@@ -3067,3 +3067,59 @@ exist — which is exactly the shape that would let scoring bury it.
 NEXT STEP: instrument the realised iteration count and damage (`ApplyBlinkLoop`'s `done`, and
 `SpendSurplusOnDamageSinks`' return) against the projected `n`, on this repro. That single number
 separates candidate 1 from candidate 2.
+
+## STATE OF PLAY, 2026-09-05 — handoff
+
+**Where the deck actually is: avg win turn 6.0903 +/- 0.0433**, measured on 600 games / 600 DISTINCT
+shuffle seeds [9000,9599] at the shipped profile, d5 / 20 ms, on this commit.
+
+| turn | t4 | t5 | t6 | t7 | t8 | unwon |
+|---|---|---|---|---|---|---|
+| count | 20 | 154 | 251 | 119 | 33 | 21 |
+| share | 3.3% | 25.8% | **42.0%** | 19.9% | 5.5% | 3.5% |
+
+The user's targets are *"the majority of games should combo"* and *"the final win turn closer to 4
+than 5 ... even before the profile is active."* The mode is t6 and only 29% kill by t5, so the deck
+is roughly **one to two turns short**. Three independent samples agree on ~6.1 (this run 6.09, the
+120-game trace 6.00, the aura A/B's two arms 6.11 / 6.07).
+
+**Do NOT compare that 6.09 against the kill-chain A/B's 6.33.** Those are different seed sets
+([4201,4307] vs [9000,9599]) and therefore different populations; the only valid statement about the
+kill chain is its PAIRED effect, +0.2410 turns (t=3.83).
+
+### The open issues, in the order the evidence ranks them
+
+1. **`no-sink` — 50% of the turns that fail to kill.** The loop is live with nothing to cash
+   unbounded mana into. Partly a DECKBUILDING fact and the cheapest thing to test: the finishers
+   (Essence Depleter, Dimensional Infiltrator) are sideboard-only through Living Wish, and
+   **Peregrine Drake is not in the sideboard at all**, so a Wish can never fetch the untapper. A
+   sideboard change is a `deck-screening.md` question, not an engine one, and it is untried.
+2. **`short-to-start` — 22%.** Live loop, reachable sink, cannot pay one iteration plus setup.
+3. **`no-loop` — 22%.** A piece missing or uncastable.
+4. **Declined kills — 5.3%, a REAL bug with a clean repro.** `--seed 7187 --game-index 7`: at t6 the
+   Gorge gate holds (`refund 8 > cost 1 + gorge 3`, `pool 8 >= 4` -> 60 projected damage vs 20 life),
+   the 46-iteration go-off IS on the menu (926/926 recognizer calls at t6 agree on
+   `ok=1 outlet=21 payload=42`), and the game wins on **t8**. Recognizer, count hook and projection
+   are all exonerated; it is scoring or execution. The one measurement that separates them: instrument
+   `ApplyBlinkLoop`'s realised `done` and `SpendSurplusOnDamageSinks`' returned damage against the
+   projected `n`, on that repro.
+5. **The go-off turn is an enumeration blowup.** Max 15.9x, and truncating the worst game with
+   `--max-turns` puts ALL of its 4722 s on the single turn the loop completes. `budget_ms` bounds the
+   search but not one node's enumeration. `TurnSolver` already has the right cut (emit only the
+   winning line, verified by `ApplyPlanDirect` + `OpponentHasLost`, skip the powerset) but it is gated
+   on `any_ritual`/`BuildStormGoffLine` — **Dragonstorm-only**. EDF has the identical shape and gets
+   none of it. Issues 4 and 5 live on the SAME turn and are probably worth fixing together.
+
+### A caveat that applies to this deck's whole measurement history
+
+`test/edf_{finish,aura,refloat}_ab.sh` all shipped with seeds spaced closer than `games`, so their
+"800 games x 8 seeds" was **107 distinct games replayed 7.5x**. Every t-statistic they produced was
+inflated by ~sqrt(7.5) = 2.7x and every "N/N seeds agree" tally was one game set read N times. The
+scripts are fixed and the kill-chain number is re-derived above, but **any other conclusion drawn
+from those three scripts before 2026-09-05 should be re-checked before it is relied on.**
+
+### Not yet started
+
+EDF has **no keep table and no value leaf**. Per the serial-stages rule those come last and in order
+(profile -> value leaf -> mulligan), on a frozen commit, and only once play is settled — which,
+given issues 4 and 5, it is not.
