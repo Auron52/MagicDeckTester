@@ -1207,6 +1207,17 @@ public:
                                               PermAbilityMode mode,
                                               int max_affordable) const override;
 
+    // {C}-CONSERVATION TAP ORDER (MTG_EDF_C_CONSERVE, default ON). A {C} pip is the deck's scarcest
+    // currency -- no coloured mana pays it (CR 107.4c) and the whole kill runs through {2}{C} blinks
+    // and {1}{C} sinks -- but the generic scarcity-first ladder ranks a mono-{C} land (Shivan Gorge)
+    // as LEAST flexible and therefore taps it FIRST for a plain generic pip. USER, seed 2 T4: the
+    // Dimensional Infiltrator cast's {1} tapped the Gorge while a Conservatory sat untapped, both
+    // {C} sources died, and neither the blink nor the exile could ever be activated again ("Can no
+    // longer activate"). Once any {C}-pip battlefield ability exists, every {C}-capable source is
+    // demoted to tap LAST: for a {C} pip the candidate set is all-demoted (no change), for anything
+    // else the payer now spends the colours first. Inert until such an ability is on the board.
+    int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
+
     // The go-off recognizer: with the loop assembled and a SINK to cash the mana on (Shivan Gorge
     // damage, an {X} draw, or either of the two {T}-less Eldrazi sinks), the kill is arithmetic,
     // not search. ProjectsAlternateWin is the Infiltrator's half -- a DECK-OUT, which is a

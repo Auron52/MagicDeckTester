@@ -10083,8 +10083,21 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
 // (The looser rule -- count the opponent's own draws and accept a deck-out that lands two turns
 // later -- is a real and possibly better policy, but it IS a policy, with a threshold that would
 // have to be measured on a route this deck reaches almost never. Left undone deliberately.)
+// `keep_payable` + `loop_iters_left` (both defaulted to the legacy no-loop values) are the
+// INSTALMENT route, added 2026-09-05 after the user drove the deck-out by hand and the engine
+// could not: the one-payment test below scales {1}{C} by the whole library, and a {C} pip is a
+// per-UNTAP resource -- this deck's boards realise at most two or three {C} at once, so a 46-card
+// exile could NEVER fire in one gulp even though the blink loop restores the {C} sources every
+// iteration and can trivially fund it in instalments. The all-or-nothing PRINCIPLE is kept, but
+// its unit is corrected from one payment to ONE LOOP: inside a live loop (loop_iters_left > 0)
+// the projection asks whether the remaining iterations' {C} capacity covers the whole library,
+// and only then spends greedily (keep_payable = the next blink's own cost, the drain's guard).
+// A wrong projection (the loop dies early) wastes float that phase-end would have discarded
+// anyway -- bounded, and the price of making win condition 2 exist at all.
 inline int SpendSurplusOnExile(GameState& state, int controller,
-                               const std::function<bool(const ManaCost&)>& pay)
+                               const std::function<bool(const ManaCost&)>& pay,
+                               const ManaCost& keep_payable = ManaCost{},
+                               int loop_iters_left = 0)
 {
     // Inert unless the opponent's library is modelled at all: a goldfish opponent with no library
     // cannot be decked, so every activation would buy exactly nothing (see opponentdeck).
@@ -10129,16 +10142,70 @@ inline int SpendSurplusOnExile(GameState& state, int controller,
     ManaCost all = best_cost;
     all.generic *= left; all.white *= left; all.blue  *= left; all.black *= left;
     all.red     *= left; all.green *= left; all.colorless *= left;
+    bool one_payment_plausible;
     {
         ManaPool have = AvailableManaPool(state, nullptr);
         have.AddPool(state.floating_mana);
-        if (have.Total() < left * best_cost.ManaValue()) { return 0; }
+        one_payment_plausible = have.Total() >= left * best_cost.ManaValue();
     }
-    if (!pay(all)) { return 0; }
+    if (one_payment_plausible && pay(all))
+    {
+        for (int i = 0; i < left; ++i)
+        { ApplyPermAbility(state, controller, best_id, PermAbilityMode::ExileTop); }
+        return left;
+    }
 
+    // INSTALMENT ROUTE (loop only -- see the header note). The one-payment gulp cannot express
+    // "the untap refills the {C} sources next iteration", so inside a live loop project the whole
+    // job over the remaining iterations and, if it completes, pay per activation like the drain.
+    if (loop_iters_left <= 0) { return 0; }
+    // BANKING-ROUTE PRIORITY. A loop whose float already holds {C}-CAPABLE mana (wild_c -- the
+    // REFLOAT_WILD_C harvest off a rainbow source) is accumulating toward the one-gulp payment
+    // above, and instalments firing mid-loop would spend that bank down and split the kill across
+    // turns (edf_blink_loop_cashes_deckout: t4 -> t5). The instalment regime is exactly the boards
+    // whose float is colour-locked ({G} off a Wild Growth bonus) and whose {C} exists only
+    // per-untap -- there the float NEVER becomes {C}-capable, this test stays false, and the
+    // instalments are the only route that exists.
+    if (best_cost.colorless > 0
+        && (state.floating_mana.wild_c > 0 || state.floating_mana.colorless > 0)) { return 0; }
+    {
+        // Per-iteration {C} capacity from SOURCES ONLY -- the untap renews these every iteration,
+        // which is the whole reason instalments are sound. The FLOAT is deliberately excluded from
+        // the projection: it is a one-off stock, not a flow, and counting it here is what made the
+        // instalments preempt the float-BANKING route (a REFLOAT_WILD_C loop banks {C}-capable
+        // float across every iteration and pays the library in ONE gulp at the end -- the
+        // edf_blink_loop_cashes_deckout fixture). On such a board the renewable capacity alone
+        // cannot cover the library (that is WHY the loop banks), so this projection fails and the
+        // one-payment route keeps the kill; on a board whose float is colour-locked (seed 2: pure
+        // {G} from a Wild Growth bonus) the renewable {C} per untap IS the capacity, the
+        // projection holds, and the instalments are the only route that exists.
+        // `keep_payable` nets out the colorless pips the NEXT blink itself needs. Only bind the
+        // projection to {C} when the sink actually costs one; a colourless-free sink is bounded by
+        // total mana, which the per-activation pay() below enforces on its own.
+        ManaPool srcs = AvailableManaPool(state, nullptr);
+        int cap = left;   // "no {C} bottleneck" default: let pay() be the limiter
+        if (best_cost.colorless > 0)
+        {
+            cap = (srcs.colorless + srcs.wild_c - keep_payable.colorless) / best_cost.colorless;
+            if (cap < 0) { cap = 0; }
+        }
+        if ((loop_iters_left + 1) * cap < left) { return 0; }   // the loop cannot finish the job
+    }
+    int exiled = 0;
     for (int i = 0; i < left; ++i)
-    { ApplyPermAbility(state, controller, best_id, PermAbilityMode::ExileTop); }
-    return left;
+    {
+        if (!PermAbilitySourceLive(state, controller, best_id, PermAbilityMode::ExileTop)) { break; }
+        // Projection first so a decline leaves no half-spent pool (the drain's discipline).
+        {
+            ManaPool have = AvailableManaPool(state, nullptr);
+            have.AddPool(state.floating_mana);
+            if (!have.CanPay(AddManaCosts(best_cost, keep_payable))) { break; }
+        }
+        if (!pay(best_cost)) { break; }
+        ApplyPermAbility(state, controller, best_id, PermAbilityMode::ExileTop);
+        ++exiled;
+    }
+    return exiled;
 }
 
 inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const ManaCost& keep_payable,
@@ -11232,11 +11299,12 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         if (cash_sinks)
         {
             SpendSurplusOnDrain(state, controller, c, pay);
-            // The library-exile sink rides the same position for the same reason. No keep_payable:
-            // it is all-or-nothing, so on the pass where it spends anything at all the game is over
-            // and there is no next iteration to protect -- a failed pay() below is then the correct
-            // outcome, not a starved loop.
-            SpendSurplusOnExile(state, controller, pay);
+            // The library-exile sink rides the same position for the same reason. It gets the loop
+            // context (`c` as keep_payable + the iterations still to run) because its all-or-nothing
+            // unit is the LOOP, not one payment: a {C} pip is per-untap supply, so the whole-library
+            // gulp could never fire on a real board and the deck-out is paid in instalments the
+            // remaining iterations are projected to cover -- see SpendSurplusOnExile's header.
+            SpendSurplusOnExile(state, controller, pay, c, iterations - k - 1);
         }
     }
     // One last damage-sink pass with nothing held back: the loop is over, so there is no next

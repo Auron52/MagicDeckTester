@@ -2003,7 +2003,20 @@ function renderChooseDialog(v, line){
 // board targeting; what is gone is the undifferentiated dump. renderChooseDialog's dimension walk
 // now handles every shape, including the mixed sub/no-sub variant sets that used to land here.)
 function applyAccepted(planIndex, label) {
-  S.history.push({ turn:S.decision.turn, label });
+  // DISPLAY-ONLY RELABEL (USER 2026-09-05, seed 2: fifty-seven blink activations each logged as
+  // "cast: Eldrazi Displacer"). The engine's summary uses one verb for the whole list, so a line
+  // made ONLY of board activations ("Outlet: blink …", "Land: investigate") still reads "cast:".
+  // Every activation item carries a "Source: …" colon; a real cast never does (it is "Name" or
+  // "Name → Target"). All-activation list -> say "activate:". History text only — matching,
+  // validation and references all use the engine's own summary untouched.
+  const hist = (() => {
+    const m = /^(.*?)cast: (.*)$/.exec(label);
+    if (!m) return label;
+    const items = m[2].split(' — ')[0].split(', ');
+    return items.length && items.every(it => it.includes(': '))
+      ? label.replace('cast: ', 'activate: ') : label;
+  })();
+  S.history.push({ turn:S.decision.turn, label: hist });
   // Remember which cards this line CAST, so the graveyard-add log can exclude them and surface only
   // the involuntary adds (Gamble's random discard, a mill, etc.) — #1: name the discarded card.
   S.lastCasts = new Set((S.plan||[]).filter(p=>p.kind!=='land'&&p.kind!=='le').map(p=>p.name));

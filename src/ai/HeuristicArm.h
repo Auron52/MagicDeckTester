@@ -147,6 +147,7 @@ enum Slot : int
     EDF_LOOP_DRAW,            // MTG_EDF_LOOP_DRAW       ...and the loop ACTIVATES it every iteration
     EDF_COMBO_FINISH,         // MTG_EDF_COMBO_FINISH    bank the mana, then deploy the finisher from hand
     EDF_SEQ_AURA,             // MTG_EDF_SEQ_AURA        a LAND AURA reaches the SEQUENCED payability walk
+    EDF_C_CONSERVE,           // MTG_EDF_C_CONSERVE      {C}-capable sources tap LAST once a {C}-pip ability is out
     COUNT
 };
 
@@ -271,6 +272,7 @@ inline const char* Name(int slot)
         "MTG_EDF_LOOP_DRAW",
         "MTG_EDF_COMBO_FINISH",
         "MTG_EDF_SEQ_AURA",
+        "MTG_EDF_C_CONSERVE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

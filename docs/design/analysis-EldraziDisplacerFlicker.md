@@ -3159,3 +3159,57 @@ carry the per-candidate enchant target and the reject label (the `_ct.label` set
 label assignment is free, the destructor still prints only when armed), a `[dbgmulti-push]` line
 marks subsets that survive to `plans.push_back`, and `MTG_DBG_ORDER_PROBE=<turn>` prints each
 cast-ordering probe's order + drops.
+
+## The deck-out kill exists now (2026-09-05, session 2 -- seed 2 play-test round)
+
+**USER, playing seed 2 in the viewer:** T4 assembled Displacer + Drake + Wild Growth->Conservatory,
+blinked 57 times one click at a time, wished Dimensional Infiltrator, exiled twice, then *"Can no
+longer activate"*, *"I don't understand what mana is being floated"*, *"I only seem to get one green
+per flicker, but it should be pay 3 to get 5 mana"*, *"I would like to be able to multi-activate the
+displacer"*, and the ask: *"make sure that the line I came up with + more activations wins T4"* and
+*"our search should also be able to reach it."*
+
+### What was actually broken (three engine defects, one rules-correct surprise)
+
+1. **`SpendSurplusOnExile` was all-or-nothing PER PAYMENT, and that made win condition 2
+   structurally unreachable.** It scales {1}{C} by the whole remaining library into ONE payment --
+   46 {C} pips at once on a board that realises at most two per untap. The blink loop restores the
+   {C} sources every iteration, so the kill is trivially fundable in instalments; the gulp test
+   could never see that. Fixed: the all-or-nothing UNIT is corrected from one payment to ONE LOOP --
+   inside a live loop the instalment route projects the job over the remaining iterations'
+   *renewable* (source-only) {C} capacity and pays per activation with the next blink held payable
+   (the drain's discipline). Two scoping rules keep the old behaviour where it was right: the float
+   is excluded from the projection (it is a stock, not a flow), and any {C}-capable float at all
+   defers to the banking route's end-of-loop gulp (`edf_blink_loop_cashes_deckout` regressed t4->t5
+   under both wrong versions of this discriminator before it landed).
+2. **The payment burned the last {C} source on a generic pip.** Scarcity-first ranks a mono-{C}
+   land LEAST flexible, so the Infiltrator cast's {1} tapped Shivan Gorge while a Conservatory sat
+   untapped -- both {C} producers died and neither the blink nor the exile could ever fire again
+   (the user's exact stall). Fixed with `MTG_EDF_C_CONSERVE` (EldraziFlickerProvider::ManaSourceRank,
+   HUMAN PLAY ONLY): once any {C}-pip battlefield ability exists, {C}-capable sources tap last.
+   The autonomous scope was tried and immediately refuted by two scenarios (the loop's tap-ahead
+   harvests by this same rank, so demoting {C} sources starved the float bank) -- the search's {C}
+   banking belongs to the refloat lever family.
+3. **No multi-activate before a sink was on the board.** `ScanHandSinks` is search-only (its
+   DEPLOY assumption, ComboFinishFromHand, stands down under human play), so the human's
+   BlinkActivationCounts never saw the wish-route and offered 1..kmax only -- 57 single clicks.
+   Fixed: the human path bypasses the gate for COUNT SIZING only (the human still deploys the
+   finisher themselves), so a live loop with a visible hand/wish finisher route offers the same
+   go-off count the search would use.
+4. **Not a bug:** Peregrine Drake coming back tapped is Eldrazi Displacer's card text ("return it
+   to the battlefield tapped"). And the mystery float is Wild Growth's bonus: paying {2}{C} taps
+   enchanted Conservatory for two, one pays a pip, the spare {G} floats -- +1 green per blink,
+   which pays generic but never {C} (CR 107.4c). "Pay 3 to get 5" is exactly what happens; the 5
+   comes back as untapped lands, not float.
+
+### Measured result
+
+**Human play, same seed-2 line: win turn 4 in four clicks** -- bank `blink x23` (offered now), wish
+-> Infiltrator, cast it, FINISH `blink x50` (the instalment exiles empty the library inside the
+loop; the opponent deck-outs on their draw). Verified through the stateless protocol end to end.
+
+**Autonomous on seed 2: still t7.** The search's failure there is UPSTREAM of all three fixes: it
+spent its only Living Wish on a land by t2 and never held a sink route again (turn trace: exile=0
+drain=0 gorge=0/0, wish=0 from t3). That is the handoff's no-sink 50% bucket -- a wish-holding /
+sink-awareness policy question, now the top open item. The 600-game re-measurement of these fixes
+is in `logs/edf_after/` (same manifest as the 6.0917 baseline in `logs/edf_now/`).

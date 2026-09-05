@@ -13451,9 +13451,15 @@ static void ScanBoardSinks(const GameState& s, int controller, FlickerLoop* best
 //
 // SEARCH ONLY, exactly like the draw-land route -- ComboFinishFromHand stands down under human play,
 // so offering a count here would propose a FINISH plan whose apply does nothing.
-static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best)
+static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
+                          bool for_human_count_sizing = false)
 {
-    if (HumanPlayActive()) { return; }
+    // The human gate protects the DEPLOY assumption (ComboFinishFromHand stands down under human
+    // play), not the arithmetic: BlinkActivationCounts bypasses it to SIZE a bank count for the
+    // human's own multi-blink (USER, 2026-09-05: "I would like to be able to multi-activate the
+    // displacer. There isn't much reason to have to do one at a time."). The human still deploys
+    // the wish/finisher themselves; only the offered iteration count reads the route.
+    if (HumanPlayActive() && !for_human_count_sizing) { return; }
     if (best->drain_amount > 0 || best->exile_cost_mv > 0) { return; }   // already on the board
     static const bool s_on = EnvOn("MTG_EDF_COMBO_FINISH", true);
     if (!heurarm::Flag(heurarm::EDF_COMBO_FINISH, s_on)) { return; }
@@ -14075,6 +14081,42 @@ std::vector<int> EldraziFlickerProvider::BlinkTargetCandidates(const GameState& 
 // loop pays per iteration and BREAKS the moment one cannot be paid, and the win is only ever
 // realised by damage actually dealt. So a mis-recognised loop costs a wasted branch, never a
 // phantom win.
+int EldraziFlickerProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    int r = GenericProvider::ManaSourceRank(s, def);
+    // See the header note. HUMAN PLAY ONLY (the FilterCFirst / MTG_HUMAN_TAP_DEMAND precedent): a
+    // human pays a phase as several separate lines, so this payment cannot see the next line's {C}
+    // need -- the demote is that foresight. The AUTONOMOUS loop must NOT get it: its tap-ahead
+    // harvests sources into the float by this same rank, and demoting {C}-capable sources there
+    // starves the float of the wild_c the one-payment deck-out spends (measured immediately:
+    // edf_blink_loop_cashes_deckout t4 -> t5, edf_depleter_drain paid an extra pain point). The
+    // search's {C} banking is the refloat lever family's job and already measured there.
+    static const bool s_on = EnvOn("MTG_EDF_C_CONSERVE", true);
+    if (!heurarm::Flag(heurarm::EDF_C_CONSERVE, s_on)) { return r; }
+    if (!HumanPlayActive()) { return r; }
+    bool c_ability = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& q = d->params;
+        if ((q.blink_cost.has_value() && q.blink_cost->colorless > 0)
+            || (q.drain_cost.has_value() && q.drain_cost->colorless > 0)
+            || (q.exile_opponent_top_cost.has_value()
+                && q.exile_opponent_top_cost->colorless > 0))
+        { c_ability = true; break; }
+    }
+    if (!c_ability) { return r; }
+    for (Color c : EffectiveProduces(s, s.active_player_index, def))
+    {
+        // +40 clears every band in the flexibility ladder without colliding with the dork/fuel
+        // constants: {C}-capable sources become the last resort for every pip a colour can pay.
+        if (c == Color::Colorless) { return r + 40; }
+    }
+    return r;
+}
+
 std::vector<int> EldraziFlickerProvider::BlinkActivationCounts(const GameState& s,
                                                                const Permanent& source,
                                                                const Permanent& target,
@@ -14117,6 +14159,18 @@ std::vector<int> EldraziFlickerProvider::BlinkActivationCounts(const GameState& 
     if (loop.outlet_id != source.card.m_number)  { return out; }
     if (loop.payload_id != target.card.m_number) { return out; }
     if (n > kmax) { out.push_back(n); }
+    // HUMAN BANK COUNT. With no sink on the board yet, n is 0 and the human was left clicking one
+    // blink at a time (seed 2 T4: 57 single blinks). When the LOOP is live and a finisher route is
+    // visible from hand (a drain/exile held, or one a Living Wish can still fetch), size the same
+    // go-off count the search would use and offer it as one option: the loop banks the float, the
+    // human deploys the finisher themselves, and the on-board FINISH count takes over from there.
+    if (n == 0 && HumanPlayActive() && loop.net > 0)
+    {
+        FlickerLoop sized = loop;
+        ScanHandSinks(s, source.controller_index, &sized, /*for_human_count_sizing=*/true);
+        const int n2 = FlickerGoOffCount(s, sized);
+        if (n2 > kmax) { out.push_back(n2); }
+    }
     return out;   // n == 0 (nothing to cash the mana on) falls through to the generic counts
 }
 
