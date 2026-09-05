@@ -9165,9 +9165,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // Provider fetch narrowing (PutTargetPolicy/PutTargetOk; narrow=false =
                 // unnarrowed) -- the same policy as the Birthing Pod site, so the two
                 // put-tutors cannot drift. Allocation-free by contract.
+                // SEARCH-ONLY (USER 2026-09-05, seed-7 play-test: "the rules about don't get
+                // creature x or y are only for the search. They should be offered to the
+                // user"): the whitelist prunes goldfish-dead toolbox bodies from the SEARCH's
+                // fan; a human must see every legal target. HumanPlayActive() is false in
+                // rollouts (HumanPlaySuppress), so the search under human play is unchanged.
                 const DecisionProvider& chord_prov = ResolveProvider(state);
-                const DecisionProvider::PutPolicy chord_pol =
+                DecisionProvider::PutPolicy chord_pol =
                     chord_prov.PutTargetPolicy(state, state.active_player_index);
+                if (HumanPlayActive()) { chord_pol.narrow = false; }
                 std::unordered_set<std::string> chord_seen;
                 for (const Card& lc : ap.library)
                 {
@@ -12742,9 +12748,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // fold above stays lossless. Applied to the FETCH axis only; victims and the
             // no-fetch sentinel are untouched. Allocation-free by contract (this loop runs at
             // every CollectActions).
+            // SEARCH-ONLY (USER 2026-09-05, same directive as the Chord site): a human sees
+            // every legal fetch; rollouts (HumanPlaySuppress) keep the narrowed search fan.
             const DecisionProvider& pod_prov = ResolveProvider(state);
-            const DecisionProvider::PutPolicy pod_pol =
+            DecisionProvider::PutPolicy pod_pol =
                 pod_prov.PutTargetPolicy(state, state.active_player_index);
+            if (HumanPlayActive()) { pod_pol.narrow = false; }
             const Player& pod_ap = state.players[state.active_player_index];
             // Victims emit in EXPENDABILITY order (SacExpendabilityRank; index tiebreak), not
             // battlefield order: equal-score Pod ties commit the FIRST-enumerated variant

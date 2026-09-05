@@ -273,6 +273,15 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 // The no-own-creature "cash the cantrip off their body" variant (kTrickOpponentTarget).
                 else if (a.enchant_target == kTrickOpponentTarget)
                 { tag += " \xE2\x86\x92 opponent's creature"; }
+                // Tutor-put cast (Chord of Calling): the baked FETCH and X are the whole
+                // difference between variants, and without them the menu held identical twins
+                // and the fetch was invisible (seed-7 play-test: the picked plan silently
+                // grabbed a 1-drop). Same lesson as the Pod/blink labels below.
+                else if (!a.tutor_target.empty())
+                {
+                    tag += " \xE2\x86\x92 " + a.tutor_target.str();
+                    if (a.chosen_x > 0) { tag += " (X=" + std::to_string(a.chosen_x) + ")"; }
+                }
                 break;
             case Action::Kind::CastFromGraveyard: tag = a.card_name + " (retrace)"; break;
             case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;
@@ -884,6 +893,76 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         return n <= 0 ? std::numeric_limits<size_t>::max() : static_cast<size_t>(n);
     }();
     const size_t n_emit = std::min(plans.size(), kMaxEmittedPlans);
+    // SAC-OUTLET BUNDLE FILTER (display only; seed-6 play-test). The demand-driven "loop xK"
+    // variants are ALTERNATIVE answers for one (outlet, victim) pair -- lethal-by-damage vs
+    // lethal-by-growth -- so a plan stacking two of them (or a loop plus the single sac) on ONE
+    // outlet declares sacs that can never all run (the loop breaks on lethal) and reads as
+    // nonsense in the menu ("sac 1 -> 2 damage, loop x8 -> 16 damage, loop x14" as one line).
+    // The plans stay ENUMERATED -- search scoring is untouched and a recorded reference replays
+    // by REAL engine index (the protocol checker runs uncapped, where this filter is off, and
+    // the chosen-extra emission below still records a picked bundle) -- they are just not shown.
+    std::vector<char> hide_bundle(plans.size(), 0);
+    if (kMaxEmittedPlans != std::numeric_limits<size_t>::max())
+    {
+        for (size_t i = 0; i < plans.size(); ++i)
+        {
+            const std::vector<Action>& acts = plans[i].actions;
+            for (size_t x = 0; x < acts.size() && !hide_bundle[i]; ++x)
+            {
+                if (acts[x].kind != Action::Kind::SacCreatureOutlet) { continue; }
+                for (size_t y = x + 1; y < acts.size(); ++y)
+                {
+                    if (acts[y].kind == Action::Kind::SacCreatureOutlet
+                        && acts[y].sac_source_id == acts[x].sac_source_id
+                        && (acts[x].sac_count > 1 || acts[y].sac_count > 1))
+                    { hide_bundle[i] = 1; break; }
+                }
+            }
+        }
+        // POD FAN DISPLAY COLLAPSE (USER 2026-09-05: victim on the board, fetch via picker).
+        // The (victim, fetch) axes of an ActivatePod are now chosen at RESOLUTION -- board-click
+        // sacrifice, then the tutor_etb picker, with this plan's baked values as the defaults --
+        // so showing every pair is pure menu noise (Melira T4: 689 plans, 574 of them the pod
+        // cross product). Collapse to the FIRST (= best-ranked) variant per (rest-of-plan, pod
+        // source, pay mode). Enumeration is untouched: the search scores the full fan, and a
+        // recorded reference replays its baked pick by REAL index (the checker runs uncapped,
+        // where this whole block is off).
+        std::unordered_set<std::string> pod_reps;
+        for (size_t i = 0; i < plans.size(); ++i)
+        {
+            if (hide_bundle[i]) { continue; }
+            bool has_collapse = false;
+            std::string key = plans[i].land_to_play + "|" + plans[i].land_face + "|"
+                            + std::to_string(plans[i].rad_mode) + "#";
+            for (const Action& a : plans[i].actions)
+            {
+                if (a.kind == Action::Kind::ActivatePod)
+                {
+                    has_collapse = true;
+                    key += "P" + std::to_string(a.sac_source_id)
+                         + (a.phyrexian_life > 0 ? "L" : "M") + ";";
+                    continue;
+                }
+                // Chord-class X-capped tutor cast: the TARGET is re-picked at resolution
+                // (tutor_etb, baked default), so its fan folds too. X stays in the key --
+                // it is a real payment difference the menu must keep distinct.
+                std::string tgt = a.tutor_target.str();
+                if (a.kind == Action::Kind::CastFromHand && !tgt.empty())
+                {
+                    const CardDefinition* cd = a.def ? a.def
+                                             : CardDatabase::Instance().Lookup(a.card_name);
+                    if (cd && cd->params.tutor_mv_max_is_x) { has_collapse = true; tgt.clear(); }
+                }
+                key += a.card_name.str() + "|" + std::to_string(static_cast<int>(a.kind))
+                     + "|" + std::to_string(a.chosen_x) + "|" + tgt
+                     + "|" + std::to_string(a.sac_victim_id)
+                     + "|" + std::to_string(a.sac_count)
+                     + "|" + std::to_string(a.phyrexian_life)
+                     + (a.evoke ? "|e" : "") + (a.free_cast ? "|f" : "") + ";";
+            }
+            if (has_collapse && !pod_reps.insert(key).second) { hide_bundle[i] = 1; }
+        }
+    }
     // DIVERSITY-AWARE display cap. With variant-heavy enumerations (tutor-target cross products)
     // the FIRST n_emit plans can all be variants of one cast set, hiding whole SPELLS from the
     // player (StompySurprise T3, 5d sweep: 480 Arbor+2xTutor combos capped at 200 starved Natural
@@ -899,6 +978,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         std::vector<char> taken(plans.size(), 0);
         for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
         {
+            if (hide_bundle[i]) { continue; }
             std::string key = plans[i].land_to_play + "|" + plans[i].land_face + "#";
             std::vector<std::string> nm;
             nm.reserve(plans[i].actions.size());
@@ -908,12 +988,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (seen_sets.insert(key).second) { emit_order.push_back(i); taken[i] = 1; }
         }
         for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
-        { if (!taken[i]) { emit_order.push_back(i); } }
+        { if (!taken[i] && !hide_bundle[i]) { emit_order.push_back(i); } }
         std::sort(emit_order.begin(), emit_order.end());
     }
     else
     {
-        for (size_t i = 0; i < n_emit; ++i) { emit_order.push_back(i); }
+        for (size_t i = 0; i < n_emit; ++i) { if (!hide_bundle[i]) { emit_order.push_back(i); } }
     }
     // When the caller already KNOWS the resolved choice (the --log-dir trace path), the chosen
     // plan is emitted even when it sits beyond the display cap: a saved reference must contain

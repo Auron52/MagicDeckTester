@@ -1312,3 +1312,51 @@ pick per phase" premise predated the 2026-09-04 segment-always adoption. Remaini
 queue after this: Rec Sage self-Pod + Severance exile human choosers (both decline-optimal
 deferrals awaiting sign-off), regression-suite membership + value-leaf/mulligan stages
 (user-initiated), optional re-save of repaired refs (user-owned).
+
+## SESSION 2026-09-05f — live play-test round 3: the persist-loop surface + the pod/chord resolution flow
+
+User reports, all fixed and verified this session:
+
+1. **Seed-6 "8x/14x Redcap" dialogs + messed-up history.** The committed plan was a BUNDLE --
+   "sac 1 -> 2 damage, loop Redcap x8 -> 16 damage, loop Redcap x14" in ONE line (the loop K's
+   are demand-computed ALTERNATIVES: lethal-by-damage vs lethal-by-growth) -- and each loop
+   iteration re-asked the victim through the sacrifice dialog (8 identical dialogs), while the
+   history showed only "returned (Persist) -> 2 damage" per iteration with NO sacrifice event.
+   FIXES: (a) ApplyPersistLoop nulls the sacrifice chooser for the loop (victim + K are already
+   explicit plan picks); (b) ApplySacCreatureOutlet emits a "sacrificed" event, so an iteration
+   reads sac -> return -> ping; (c) bundle plans are hidden from the DISPLAY (never from
+   enumeration -- the search's GT-measured plan space and recorded references, which replay by
+   REAL index through the uncapped checker, are untouched; the chosen-extra emission still
+   records a picked bundle).
+
+2. **Fetch whitelists are search-only (USER: "they should be offered to the user").** The
+   MTG_POD_PUT_NARROW whitelist now stands down under HumanPlayActive at both put-tutor sites
+   (Pod + Chord); rollouts (HumanPlaySuppress) keep the narrowed search fan. Humans see every
+   legal target (Scooze/Voice/Bloodthrone etc. reappeared in the fan and the pickers).
+
+3. **Pod resolution flow (USER: "sacrifice chosen on the board, then the picker").**
+   PerformPodActivate now runs the human flow at RESOLUTION: victim via the existing
+   `sacrifice` board-click (source = the Pod), then the fetch via the `tutor_etb` picker built
+   from the LIVE library at chosen-victim MV+1, unnarrowed, -1 = no fetch. DEFAULTS are the
+   plan's baked values, so all 6 references replay losslessly through the checker's
+   engine-default answers (verified: s1-s6 green, same outcomes). The menu display-collapses
+   the (victim, fetch) fan to one representative per (rest-of-plan, Pod, pay mode) --
+   Melira T4: 689 plans -> the pod cross-product gone; residue is real axes (cast order,
+   MDFC faces, pay modes).
+
+4. **Seed-7 Chord "forced a 1-drop, no picker" + summaries.** Three parts: (a) plan summaries
+   now SHOW the baked fetch and X ("Chord of Calling -> Melira, Sylvok Outcast (X=2)") -- the
+   invisible-fetch twins were the same summary-opacity class the checker hit; (b) Chord-class
+   X-capped tutors (tutor_mv_max_is_x) re-ask the fetch at resolution via tutor_etb (baked
+   default, -1 declines and STANDS); (c) the chord target axis display-collapses per X.
+   Verified end-to-end on the user's seed-7 T3 state: commit "Chord (X=2)" -> picker offers
+   all 8 MV<=2 creatures -> Melira enters T3.
+   **KNOWN REMAINING GAP (disclosed): the one-line "Ignoble + Chord X=2 convoking the new
+   Ignoble" is still not enumerated** -- convoke eligibility is computed against the pre-cast
+   board, so the combined plan caps at X=1. The two-step flow works TODAY (commit Ignoble,
+   re-prompt, Chord X=2 -> Melira -- verified), and X-at-resolution with live convoke recount
+   is the designed follow-up if the user wants the single-line version.
+
+All engine changes are human-surface-only by construction (choosers/event sink null in
+autonomous, search, and rollout play). Battery: unit SUCCESS, scenarios 72/72, all 6 Melira
+refs green; protocol + validate sweeps and smoke byte-identity recorded below on completion.

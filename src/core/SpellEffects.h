@@ -1660,6 +1660,39 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         }
     }
 
+    // Chord-class X-capped single put (tutor_mv_max_is_x; USER 2026-09-05, seed-7 play-test:
+    // "no picker"): re-ask the fetch at RESOLUTION off the live library through the tutor_etb
+    // picker, with the plan's baked target as the default -- the Birthing Pod flow's twin. X
+    // itself stays plan-baked (it was paid at cast time). Reply -1 declines ("search ... may
+    // fail to find"), and the decline STANDS (human_override skips the provider fill below).
+    // Null chooser (autonomous / search / rollout, RevealLogPause) -> byte-identical.
+    if (g_play_tutor_chooser && pp.tutor_mv_max_is_x && max_puts == 1 && !human_override)
+    {
+        std::vector<std::string> pick_names;
+        std::unordered_set<std::string> pick_seen;
+        for (const Card& c : ap.library)
+        {
+            if (matches_types(c) && pick_seen.insert(c.m_name.str()).second)
+            { pick_names.push_back(c.m_name.str()); }
+        }
+        if (!pick_names.empty())
+        {
+            int heur = -1;
+            if (!put_pref.empty())
+            {
+                for (int k = 0; k < static_cast<int>(pick_names.size()); ++k)
+                { if (pick_names[k] == put_pref.front()) { heur = k; break; } }
+            }
+            const std::string psrc = source_name.empty() ? std::string("Chord of Calling")
+                                                         : source_name;
+            const int chosen = (*g_play_tutor_chooser)(state, controller, psrc, pick_names, heur);
+            put_pref.clear();
+            if (chosen >= 0 && chosen < static_cast<int>(pick_names.size()))
+            { put_pref.push_back(pick_names[chosen]); }
+            human_override = true;
+        }
+    }
+
     // Remaining library copies per matching name (decremented as we commit puts).
     std::unordered_map<std::string, int> remaining;
     for (const Card& c : ap.library) { if (matches_types(c)) { ++remaining[c.m_name]; } }
@@ -6147,6 +6180,22 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     const int self_ctr = op->sac_outlet_add_counter_to_self;
     const int self_pp  = op->sac_outlet_self_pump_power, self_pt = op->sac_outlet_self_pump_toughness;
     const std::vector<std::string> tsub = op->sac_outlet_token_subtypes;
+    // History visibility (seed-6 play-test): without this the viewer showed only the persist
+    // RETURN and the ETB ping per loop iteration -- returns stacking up with no cause. Emit the
+    // sacrifice itself, BEFORE the death cascade, so an iteration reads sac -> return -> ping.
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        std::string ev = src_name + ": sacrificed " + victim.m_name.str();
+        if (dmg > 0)
+        {
+            const int before = state.players[1 - controller].life;
+            ev += " \xE2\x86\x92 " + std::to_string(dmg) + " to opponent ("
+                + std::to_string(before) + "\xE2\x86\x92" + std::to_string(before - dmg) + ")";
+        }
+        if (self_ctr > 0) { ev += " (+" + std::to_string(self_ctr) + "/+"
+                                + std::to_string(self_ctr) + " counter)"; }
+        EmitPlayEvent(state.turn_number, "sacrifice", "\xF0\x9F\x92\x80 " + ev);
+    }
     if (!mana_color.empty()) { AddChosenColorFloat(state, mana_color, mana_amt); }
     if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
     for (int k = 0; k < ntok; ++k) { CreateToken(state, controller, tp, tt, tsub); }
@@ -6249,6 +6298,14 @@ inline constexpr int kPersistLoopCap = 60;
 inline int ApplyPersistLoop(GameState& state, int controller, int source_id, int victim_id,
                             int iterations)
 {
+    // The victim is PINNED by the committed plan ("loop <victim> xK", with K itself an explicit
+    // human pick via the "loops xK" sub) -- so the per-iteration victim dialog inside
+    // ApplySacCreatureOutlet would re-ask an answered question, K times (seed-6 play-test:
+    // 8 identical "which creature to sacrifice" dialogs for one committed x8 loop). Null the
+    // chooser for the loop's duration; it is already null in autonomous/search/rollout play
+    // (RevealLogPause), so this is human-surface only and byte-identical everywhere else.
+    BounceChooser* saved_sac_chooser = g_play_sacrifice_chooser;
+    g_play_sacrifice_chooser = nullptr;
     int done = 0;
     for (int k = 0; k < iterations; ++k)
     {
@@ -6270,6 +6327,7 @@ inline int ApplyPersistLoop(GameState& state, int controller, int source_id, int
         ApplySacCreatureOutlet(state, controller, source_id, victim_id);
         ++done;
     }
+    g_play_sacrifice_chooser = saved_sac_chooser;
     return done;
 }
 
@@ -6402,6 +6460,34 @@ inline bool PerformPodActivate(GameState& state, int controller, int pod_id, int
         if (state.battlefield[pod_idx].tapped) { return false; }
         state.battlefield[pod_idx].tapped = true;
     }
+    // HUMAN-PLAY resolution choices (USER 2026-09-05: "the pod sacrifice should be chosen on
+    // the board (no dialog) before the picker to choose the new creature"). The plan menu
+    // display-collapses the (victim, fetch) fan to one representative per Pod, and the real
+    // decision happens HERE against the live board: the victim via the existing `sacrifice`
+    // board-click, then the fetch via the `tutor_etb` picker below. DEFAULTS are the plan's own
+    // baked values, so a reference that predates these frames replays losslessly through the
+    // checker's engine-default answers. Both choosers are null in autonomous / search / rollout
+    // play (RevealLogPause) -> byte-identical everywhere but the live viewer.
+    if (g_play_sacrifice_chooser)
+    {
+        std::vector<int> vcands;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index == controller && q.card.IsCreature()) { vcands.push_back(i); }
+        }
+        if (static_cast<int>(vcands.size()) > 1)
+        {
+            int def_opt = 0;
+            for (int k = 0; k < static_cast<int>(vcands.size()); ++k)
+            { if (state.battlefield[vcands[k]].card.m_number == victim_id) { def_opt = k; break; } }
+            const int chosen = (*g_play_sacrifice_chooser)(
+                state, controller, state.battlefield[pod_idx].card.m_name.str(), vcands, def_opt);
+            const int pick = (chosen >= 0 && chosen < static_cast<int>(vcands.size()))
+                           ? chosen : def_opt;
+            victim_id = state.battlefield[vcands[pick]].card.m_number;
+        }
+    }
     int vic_idx = -1;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
@@ -6418,11 +6504,45 @@ inline bool PerformPodActivate(GameState& state, int controller, int pod_id, int
                       + state.battlefield[vic_idx].card.m_name.str()
                       + " (MV " + std::to_string(vic_mv) + ")");
     }
+    // The pod's NAME, captured now: the sacrifice below erases a battlefield slot, so pod_idx
+    // is stale past this point (the victim can sit at a lower index than the Pod).
+    const std::string pod_name = state.battlefield[pod_idx].card.m_name.str();
     SacrificePermanentAt(state, controller, vic_idx);   // shared cascade: watchers + persist
-    if (target_name != kPodNoFetch)
+    // Fetch picker (second half of the resolution flow above): candidates are rebuilt from the
+    // LIVE library at the CHOSEN victim's MV -- so a different board-click changes the offered
+    // rung, and the list is UNNARROWED (the provider whitelist is search-only; USER 2026-09-05).
+    // heuristic_default = the plan's baked fetch (-1 when the plan baked "(no fetch)"), so
+    // predating references replay their recorded line through the checker's default answers.
+    // Reply -1 = sacrifice with no search (always a legal line -- the death can be the payoff).
+    std::string fetch = target_name;
+    if (g_play_tutor_chooser)
+    {
+        const int want_mv = vic_mv + pd->params.pod_mv_delta;
+        std::vector<std::string> fcands;
+        std::unordered_set<std::string> fseen;
+        for (const Card& lc : state.players[controller].library)
+        {
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+            const Card& lcard = ld ? ld->card : lc;
+            if (!lcard.IsCreature() || lcard.m_mana_cost.ManaValue() != want_mv) { continue; }
+            if (fseen.insert(lc.m_name.str()).second) { fcands.push_back(lc.m_name.str()); }
+        }
+        if (fcands.empty()) { fetch = kPodNoFetch; }
+        else
+        {
+            int heur = -1;   // -1 = decline (the baked pick was "(no fetch)" or is gone)
+            for (int k = 0; k < static_cast<int>(fcands.size()); ++k)
+            { if (fcands[k] == fetch) { heur = k; break; } }
+            const int chosen = (*g_play_tutor_chooser)(
+                state, controller, pod_name, fcands, heur);
+            fetch = (chosen >= 0 && chosen < static_cast<int>(fcands.size()))
+                  ? fcands[chosen] : std::string(kPodNoFetch);
+        }
+    }
+    if (fetch != kPodNoFetch)
     {
         std::vector<std::string> pref;
-        if (!target_name.empty()) { pref.push_back(target_name); }
+        if (!fetch.empty()) { pref.push_back(fetch); }
         PerformTutorToBattlefield(state, controller, pd->params, /*max_puts=*/1, pref,
                                   "Birthing Pod", vic_mv + pd->params.pod_mv_delta);
     }
