@@ -246,7 +246,8 @@ ABANDON_FLOOR_UNITS=40000000
 #     ONE Mirrorwing mass-draw decision was measured at ~28 GB uncapped (2026-08-11), and phase A
 #     with both caches unlimited on 32 workers OOM'd a 23 GB box 3.2 h in (2026-08-13).
 # Sizing: budget = MemTotal minus 5 GB (system + engine baseline), split per worker; TT takes 1/3 at
-# 64 B/entry, the line cache 2/3 at a MEASURED ~1 KB/entry. The first cut assumed 8 KB/entry out of
+# 64 B/entry, the line cache 2/5 in REAL KB (byte-accurate pool, see its own block below).
+# History of the old entry-count planning size: the first cut assumed 8 KB/entry out of
 # pessimism and that guess was the dominant cost of the whole phase: a three-cap probe on a heavy
 # label game (900011, 2026-08-13) measured ~600 B/entry from the RSS/entries slope and a 3-5x WALL
 # penalty from cap recompute (uncapped 58 s vs 295 s at cap 10K, peak RSS 125 MB), while the phase's
@@ -261,21 +262,21 @@ _budget_mb=$(( _mem_mb - 5120 )); [ "$_budget_mb" -lt 2048 ] && _budget_mb=2048
 _pw_kb=$(( _budget_mb * 1024 / _nw ))
 export MTG_TT_CAP=$((  _pw_kb * 1024 / 3 / 64   ))
 # The line-cache budget is a SHARED POOL, not a per-worker slice (MTG_FSL_POOL, engine-side global):
-# appetite is heavily skewed (typical game ~100 MB, monster ~900 MB at ~600 B/entry, measured
-# 2026-08-14), so a uniform slice strangled the monsters 3.3x while most of the budget idled. The
-# pool is the whole 2/3 share; MTG_FSL_CAP stays as a generous PER-DECISION
-# bound (2M entries ~ 1-2 GB) so one pathological decision (the ~28 GB analyzer case) cannot drain
+# appetite is heavily skewed (typical game ~100 MB, monster ~900 MB, measured 2026-08-14), so a
+# uniform slice strangled the monsters 3.3x while most of the budget idled. MTG_FSL_CAP stays as a
+# generous PER-DECISION bound so one pathological decision (the ~28 GB analyzer case) cannot drain
 # the pool for everyone else.
-# PLANNING SIZE is 3 KB/entry, not the measured-600B-era 1 KB (2026-09-05, Melira phase A OOM).
-# Entry size is DECK-DEPENDENT: the 600 B slope came from Mirrorwing-era games, but Melira's
-# combo-turn SearchLines (persist loops, pod chains -- plans of 60+ actions) measured ~1.5-2 KB/entry
-# reconstructed from the OOM kill itself (26.6 GB anon = pool 12.56M entries * ~1.5-2 KB + TT <=6.4 GB
-# + ~1 GB baseline on the 23 GB box; swap was fully consumed). At the 1 KB planning size the pool's
-# nominal 12.3 GB was really ~19-25 GB and the kernel shot the batch mid-phase-A. 3 KB bounds the
-# worst deck seen with headroom; the cost is only cap-recompute wall on monster games (the
-# result-neutral contract above), never a row. If a future deck strangles badly, MEASURE its
-# B/entry (cap-ladder RSS slope, see 2026-08-13 method) before growing this.
-export MTG_FSL_POOL=$(( _budget_mb * 1024 * 2 / 3 / 3 ))
+# THE POOL IS IN REAL KB since 2026-09-05 (byte-accurate accounting, ApproxFslKb in TurnSolver.cpp).
+# It used to be an ENTRY count converted from bytes at a planning size calibrated on one deck
+# (~600 B measured, 1 KB planned) -- but entry size is DECK-DEPENDENT, and Melira's combo-turn
+# SearchLines at ~3-4 KB/entry turned the nominal 12.3 GB pool into ~20 GB real: phase A OOM'd this
+# 23 GB box twice (2026-09-05, kernel kills at ~27 GB anon with swap exhausted; a solo monster game
+# peaks ~200 MB, so it was pure 32-worker aggregation). Byte accounting makes the number below a
+# bound that holds for ANY deck, so no planning-size guess remains to go stale.
+# Share: 2/5 of budget (not the old 2/3) -- the non-FSL floor (TT to ~6.4 GB + per-thread memos +
+# transient game state) was observed oscillating 3-9 GB on a 32-thread phase A, so FSL gets what
+# is left of the budget after that floor, with slack for the KB estimate erring low.
+export MTG_FSL_POOL=$(( _budget_mb * 1024 * 2 / 5 ))
 export MTG_FSL_CAP=2000000
 AB_GAMES=1000
 AB_SEEDS="600000 601000 602000 603000 604000 605000 606000 607000"

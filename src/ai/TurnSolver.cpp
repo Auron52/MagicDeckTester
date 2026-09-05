@@ -29006,9 +29006,10 @@ namespace domin
         return out;
     }
 }
-// GLOBAL entry pool shared by every live line cache in the process (MTG_FSL_POOL, entries;
+// GLOBAL byte pool shared by every live line cache in the process (MTG_FSL_POOL, in KB;
 // 0/unset = off = byte-identical). The per-cache cap (MTG_FSL_CAP) bounds ONE decision's cache;
-// this bounds their SUM. Rationale (Mirrorwing, 2026-08-14): line-cache appetite is heavily
+// this bounds their SUM -- in approximate real KB since 2026-09-05 (see ApproxFslKb below), so
+// the bound holds regardless of a deck's per-entry size. Rationale (Mirrorwing, 2026-08-14): line-cache appetite is heavily
 // skewed -- a typical game peaks ~100 MB, a monster ~900 MB at ~600 B/entry -- so slicing the
 // memory budget uniformly per worker strangles exactly the games that dominate wall-clock (a
 // uniform cap cost the 6.4 h monster 3.3x) while most of the budget sits unused. A shared pool
@@ -29026,26 +29027,85 @@ inline long long FslPool()
         return e ? static_cast<long long>(std::strtoll(e, nullptr, 10)) : 0LL; }();
     return v;
 }
-inline bool FslPoolAcquire()
+// BYTE-ACCURATE accounting (2026-09-05): the pool used to charge 1 UNIT PER ENTRY and the caller
+// (valueleaf.sh) converted its byte budget to entries at a planning size calibrated on one deck's
+// games (~600 B measured, 1 KB planned, Mirrorwing 2026-08-13). Entry size is DECK-DEPENDENT:
+// Melira's combo-turn SearchLines (persist loops -- plans of 60+ actions, nested breakpoint
+// vectors) run ~3-4 KB/entry, so a "12.3 GB" pool held ~20 GB real and phase A OOM'd the 23 GB
+// box twice (kernel kills at ~27 GB anon, swap exhausted). Now each entry is charged its
+// APPROXIMATE REAL FOOTPRINT in KB (vector capacities + string heap + node overhead, rounded up),
+// so MTG_FSL_POOL is a real KB bound that holds for any deck. Same result-neutral contract as
+// before: a refused insert just recomputes. Unset/0 = off = byte-identical, unchanged.
+inline std::size_t ApproxFslKb(const TurnSolver::SearchLine& line)
+{
+    // ~64 B covers the unordered_map node (key + hash links + bucket share) on top of the entry.
+    std::size_t b = sizeof(FSLineEntry) + 64;
+    b += line.phases.capacity() * sizeof(TurnSolver::PhasePlan);
+    for (const TurnSolver::PhasePlan& pp : line.phases)
+    {
+        const TurnSolver::Plan& p = pp.plan;
+        b += p.actions.capacity() * sizeof(Action);
+        for (const Action& a : p.actions)
+        {
+            b += a.breakpoint_casts.capacity() * sizeof(Action);
+            b += a.trick_hand_target.capacity();
+        }
+        b += p.breakpoint_actions.capacity() * sizeof(Action);
+        b += p.would_drop.capacity() * sizeof(std::string);
+        for (const std::string& s : p.would_drop) { b += s.capacity(); }
+        b += p.sac_pins.capacity() * sizeof(int);
+        b += p.land_to_play.capacity() + p.fetch_target.capacity() + p.land_face.capacity();
+    }
+    return (b >> 10) + 1;   // round up: every entry charges at least 1 KB
+}
+inline bool FslPoolAcquire(long long kb)
 {
     const long long pool = FslPool();
     if (pool <= 0) { return true; }   // pool off: only the per-cache cap applies
-    if (FslPoolUsed().fetch_add(1, std::memory_order_relaxed) < pool) { return true; }
-    FslPoolUsed().fetch_sub(1, std::memory_order_relaxed);
+    if (FslPoolUsed().fetch_add(kb, std::memory_order_relaxed) + kb <= pool) { return true; }
+    FslPoolUsed().fetch_sub(kb, std::memory_order_relaxed);
     return false;
+}
+// In-place UPDATES (win supersede / bound widen) never fail -- identical to the pre-pool
+// behaviour -- so their size delta adjusts the counter unconditionally. The transient overshoot
+// this allows is one entry's delta per updating worker: bounded and tiny against a GB-scale pool.
+inline void FslPoolAdjust(long long delta_kb)
+{
+    if (FslPool() > 0 && delta_kb != 0)
+    { FslPoolUsed().fetch_add(delta_kb, std::memory_order_relaxed); }
 }
 struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
                                         TranspositionTable::KeyHash>
 {
+    long long charged_kb = 0;   // KB acquired from the pool by THIS cache's live entries
     FSLineCache() = default;
     FSLineCache(const FSLineCache&) = delete;             // a copy's entries were never acquired;
-    FSLineCache& operator=(const FSLineCache&) = delete;  // moves are fine (source empties)
-    FSLineCache(FSLineCache&&) = default;
-    FSLineCache& operator=(FSLineCache&&) = default;
+    FSLineCache& operator=(const FSLineCache&) = delete;
+    // Moves hand-written (NOT defaulted): a defaulted move leaves the source's charged_kb behind,
+    // and its destructor would refund KB the destination now owns -- a double refund that lets the
+    // pool run past its bound. The map empties on move; charged_kb must move with the entries.
+    FSLineCache(FSLineCache&& o) noexcept
+        : std::unordered_map<TranspositionTable::Key, FSLineEntry,
+                             TranspositionTable::KeyHash>(std::move(o)),
+          charged_kb(o.charged_kb)
+    { o.charged_kb = 0; }
+    FSLineCache& operator=(FSLineCache&& o) noexcept
+    {
+        if (this != &o)
+        {
+            if (FslPool() > 0 && charged_kb != 0)
+            { FslPoolUsed().fetch_sub(charged_kb, std::memory_order_relaxed); }
+            std::unordered_map<TranspositionTable::Key, FSLineEntry,
+                               TranspositionTable::KeyHash>::operator=(std::move(o));
+            charged_kb = o.charged_kb;
+            o.charged_kb = 0;
+        }
+        return *this;
+    }
     ~FSLineCache()
     {
-        if (FslPool() > 0 && !empty())
-        { FslPoolUsed().fetch_sub(static_cast<long long>(size()), std::memory_order_relaxed); }
+        if (FslPool() > 0 && charged_kb != 0)
+        { FslPoolUsed().fetch_sub(charged_kb, std::memory_order_relaxed); }
     }
 };
 
@@ -29111,11 +29171,19 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
     if (it == lc->end())
     {
         if (FslCap() && lc->size() >= FslCap()) { return; }   // memo full: recompute instead
-        if (!FslPoolAcquire()) { return; }                    // shared pool drained: recompute
+        const long long kb = static_cast<long long>(ApproxFslKb(line));
+        if (!FslPoolAcquire(kb)) { return; }                  // shared pool drained: recompute
+        lc->charged_kb += kb;
         lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max(), sig });
     }
     else if (it->second.nowin_bound != std::numeric_limits<int>::max())
-    { it->second = FSLineEntry{ line, std::numeric_limits<int>::max(), sig }; }
+    {
+        const long long oldkb = static_cast<long long>(ApproxFslKb(it->second.line));
+        it->second = FSLineEntry{ line, std::numeric_limits<int>::max(), sig };
+        const long long delta = static_cast<long long>(ApproxFslKb(it->second.line)) - oldkb;
+        FslPoolAdjust(delta);
+        lc->charged_kb += delta;
+    }
 }
 
 // Store a NO-WIN proved under `bound`. A later, WIDER refutation of the same node supersedes a
@@ -29128,11 +29196,14 @@ inline void FSLineStoreNoWin(FSLineCache* lc, const TranspositionTable::Key& key
     if (it == lc->end())
     {
         if (FslCap() && lc->size() >= FslCap()) { return; }   // memo full: recompute instead
-        if (!FslPoolAcquire()) { return; }                    // shared pool drained: recompute
+        const long long kb = static_cast<long long>(ApproxFslKb(line));
+        if (!FslPoolAcquire(kb)) { return; }                  // shared pool drained: recompute
+        lc->charged_kb += kb;
         lc->emplace(key, FSLineEntry{ line, bound });
     }
     else if (it->second.nowin_bound != std::numeric_limits<int>::max()
              && it->second.nowin_bound < bound)                 { it->second.nowin_bound = bound; }
+    // (the widen branch mutates only an int -- no size change, no accounting)
 }
 
 // Hybrid value-leaf policy (MTG_VALUE_MIN_DEPTH, read at the caller): the learned value-leaf is
