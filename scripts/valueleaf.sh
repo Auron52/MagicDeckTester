@@ -259,7 +259,15 @@ ABANDON_FLOOR_UNITS=40000000
 _mem_mb=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)
 _nw=$(nproc)
 _budget_mb=$(( _mem_mb - 5120 )); [ "$_budget_mb" -lt 2048 ] && _budget_mb=2048
-_pw_kb=$(( _budget_mb * 1024 / _nw ))
+# COUNT EVERY CONSUMER (2026-09-05, third OOM of the day): TT+FSL used to take the WHOLE budget,
+# but a 32-thread phase A also holds ~200 MB/thread of consumers the formula never counted --
+# enummemo (8192 entries/thread of whole vector<Plan> results, measured ~3 GB total on Melira),
+# solvememo (16384 entries/thread, ~1.5 GB), and transient per-game search state (all-strangled
+# floor measured ~2.5 GB and flat). Their sum put the honest TT+FSL bounds over the box anyway
+# (2.5+3+1.5+6.4+7.7 ~ 21 GB on 23 GB). Reserve them per-thread first; TT+FSL split the REMAINDER.
+_reserve_mb=$(( _nw * 200 ))
+_cache_mb=$(( _budget_mb - _reserve_mb )); [ "$_cache_mb" -lt 2048 ] && _cache_mb=2048
+_pw_kb=$(( _cache_mb * 1024 / _nw ))
 export MTG_TT_CAP=$((  _pw_kb * 1024 / 3 / 64   ))
 # The line-cache budget is a SHARED POOL, not a per-worker slice (MTG_FSL_POOL, engine-side global):
 # appetite is heavily skewed (typical game ~100 MB, monster ~900 MB, measured 2026-08-14), so a
@@ -273,10 +281,10 @@ export MTG_TT_CAP=$((  _pw_kb * 1024 / 3 / 64   ))
 # 23 GB box twice (2026-09-05, kernel kills at ~27 GB anon with swap exhausted; a solo monster game
 # peaks ~200 MB, so it was pure 32-worker aggregation). Byte accounting makes the number below a
 # bound that holds for ANY deck, so no planning-size guess remains to go stale.
-# Share: 2/5 of budget (not the old 2/3) -- the non-FSL floor (TT to ~6.4 GB + per-thread memos +
-# transient game state) was observed oscillating 3-9 GB on a 32-thread phase A, so FSL gets what
-# is left of the budget after that floor, with slack for the KB estimate erring low.
-export MTG_FSL_POOL=$(( _budget_mb * 1024 * 2 / 5 ))
+# Share: 2/5 of the post-reserve cache budget (enummemo/solvememo/floor are reserved above),
+# with slack for the KB estimate erring low. On the 23 GB / 32-thread box this lands near
+# TT 4.1 GB + FSL 5.0 GB + reserve 6.4 GB ~ 15.5 GB engine worst case.
+export MTG_FSL_POOL=$(( _cache_mb * 1024 * 2 / 5 ))
 export MTG_FSL_CAP=2000000
 AB_GAMES=1000
 AB_SEEDS="600000 601000 602000 603000 604000 605000 606000 607000"
