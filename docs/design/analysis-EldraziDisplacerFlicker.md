@@ -3213,3 +3213,64 @@ spent its only Living Wish on a land by t2 and never held a sink route again (tu
 drain=0 gorge=0/0, wish=0 from t3). That is the handoff's no-sink 50% bucket -- a wish-holding /
 sink-awareness policy question, now the top open item. The 600-game re-measurement of these fixes
 is in `logs/edf_after/` (same manifest as the 6.0917 baseline in `logs/edf_now/`).
+
+## Session 3 (2026-09-05, afternoon): measurement round -- three verdicts and a cut
+
+**The execution-fix batch confirmed fleet-wide: 6.0917 -> 6.0183, paired -0.0733 (t -3.04)** on
+the full 600 games (94 improved / 51 regressed, unwon 21 -> 18, t4 kills 20 -> 24). Committed
+52c87958, CI green.
+
+**The searched-m2 deletion (44123f45) was a free further gain here: -0.0217 (t -1.86)** on the
+same 600 games paired across binaries (22 improved / 12 regressed) -- EDF's interior second mains
+carried real decisions the greedy was mispricing.
+
+### The post-fix bucket re-measurement (120-game trace, logs/edf_trace/)
+
+pieces->win lag mean **+0.62 turns** (51/106 games win the SAME turn the pieces land, 78/106
+within +1). Failing-turn buckets vs the handoff's 50/22.3/22.3/5.3:
+
+| bucket | share | movement |
+|---|---|---|
+| no-sink | 30.7% | halved from 50% (the kill chain + instalment fixes) |
+| no-loop | 30.7% | now co-dominant -- a board fact |
+| short-to-start | 25.3% | board fact |
+| SINK-DECLINED | 13.3% | **~90% PHANTOM -- see below** |
+
+### SINK-DECLINED is (mostly) a Gorge colour phantom, not lost kills
+
+Instrumented via the go-off cut's verify on the --seed 7187 --game-index 7 repro: at t7 the
+projection claims a k=16 Gorge lethal and the apply realises FOUR damage (opp 20 -> 16). The
+recognizer prices Shivan Gorge's {2}{R} by MANA VALUE, but this deck's only red is ONE Aether Hub
+energy -- the projected repeatable red does not exist. 9 of the trace's 10 SINK-DECLINED rows are
+Gorge-only (`drain=0/0 exile=0`); the honest engine-fault residue is ~1 row in 75 (~1%). The
+handoff's "scoring or execution" fork resolves as: NEITHER -- the projection over-claims.
+Candidate fix (measure-before-fix applies): red-realizability in the recognizer's Gorge branch.
+
+### The EDF go-off short-circuit (built, shipping with this round)
+
+The Dragonstorm verified-lethal cut extended to the flicker loop: a cands entry with
+`ActivateBlink, chosen_x > 3` (>3 == the recognizer proposed a go-off; generic counts stop at 3)
+is evaluated ALONE, and on a projected win is VERIFIED (ApplyPlanDirect + OpponentHasLost) before
+skipping the powerset; a failed verify restores byte-identically and falls through to search.
+This is the USER's sanctioned pattern verbatim (2026-09-05): *"a greedy combo go-off
+implementation ... strictly acceptable when they win this turn"* / *"if they fail to do so, they
+would fall back to search."* `MTG_NO_EDF_GOFF_CUT` off-switch; `MTG_EDF_GOFF_CUT_DEBUG` prints
+the per-attempt chain (found/projected/verified), which is also the SINK-DECLINED instrument.
+
+### Wish-holding A/B: NULL -- both arms rejected at 600 paired games each
+
+`MTG_EDF_WISH_SINK_FLOOR` (last wish keeps the sink tier live) **+0.0067, t +0.35**;
+`MTG_EDF_WISH_SINK_SCARCE` (only when the library holds <=1 more wish) **+0.0067, t +0.58**
+(logs/edf_wish/, 3 arms x 600 games, one pooled batch). The levers stay default-OFF as the
+measurement record. WHY it is null: the adopted width already spans the whole 8-card pool, so
+the ranking tiers only ORDER what the search simulates anyway -- the search takes the land on
+playout value because the kill is beyond its horizon. Moving this choice needs value-shaping or
+hard narrowing, and the evidence (no-sink halved by EXECUTION fixes, not policy) does not
+currently justify either.
+
+### Where the deck stands
+
+Post-everything: **~6.00 avg win turn** (base arm of the wish sweep). Remaining buckets are
+mostly board facts (no-loop 31%, short-to-start 25%). The untried cheap test remains the
+DECKBUILDING one: Peregrine Drake is not in the sideboard, so a Wish can never fetch the
+untapper -- a `deck-screening.md` question for the USER, not an engine one.

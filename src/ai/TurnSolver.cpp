@@ -1971,6 +1971,12 @@ inline void RecordWhy(int site, int w)
 inline std::atomic<unsigned long long> nohost_kind[8] = {};
 inline void RecordNoHost(int kind)
 { if (Enabled() && kind >= 0 && kind < 8) { nohost_kind[kind].fetch_add(1, std::memory_order_relaxed); } }
+// Apply-kind (ROOT|REC|RESUME bitmap) per unresolved WHY class -- the decision-vs-playout
+// attribution for the classes the nohost table never covered (nested / overrun / base).
+inline std::atomic<unsigned long long> why_kind[kWhyCount][8] = {};
+inline void RecordWhyKind(int w, int kind)
+{ if (Enabled() && w >= 0 && w < kWhyCount && kind >= 0 && kind < 8)
+  { why_kind[w][kind].fetch_add(1, std::memory_order_relaxed); } }
 // WHERE canon fires and what it pays, by the same ROOT|REC|RESUME kind bitmap (+8 = a capture was
 // present). fires = canon-eligible entries; copies = probe GameState deep-copies paid; enums =
 // EnumerateBreakpointPlans paid on ACT; scoped_out = entries the rollout scope declined. The wall
@@ -2027,6 +2033,27 @@ struct Dumper
                 std::fprintf(stderr, "  [%s%s%s]=%llu(%.1f%%)",
                              (k & 1) ? "root" : "rollout", (k & 2) ? "+rec" : "",
                              (k & 4) ? "+resume" : "", v, 100.0 * v / nh_tot);
+            }
+            std::fprintf(stderr, "\n");
+        }
+        // The decision-vs-playout attribution for EVERY unresolved class (2026-09-05): any
+        // nonzero [root...] bucket outside nohost is a greedy continuation firing inside the
+        // decision-side structure -- the number the "searched window is greedy-free" claim
+        // rests on.
+        for (int w = 0; w < kWhyCount; ++w)
+        {
+            if (w == kNoHost) { continue; }   // covered by its own table above
+            unsigned long long tot = 0;
+            for (int k = 0; k < 8; ++k) { tot += why_kind[w][k].load(); }
+            if (!tot) { continue; }
+            std::fprintf(stderr, "    %s by apply kind (total %llu):", WhyName(w), tot);
+            for (int k = 0; k < 8; ++k)
+            {
+                const unsigned long long v = why_kind[w][k].load();
+                if (!v) { continue; }
+                std::fprintf(stderr, "  [%s%s%s]=%llu(%.1f%%)",
+                             (k & 1) ? "root" : "rollout", (k & 2) ? "+rec" : "",
+                             (k & 4) ? "+resume" : "", v, 100.0 * v / tot);
             }
             std::fprintf(stderr, "\n");
         }
@@ -16404,6 +16431,82 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         }
     }
 
+    // ---- EDF blink go-off short-circuit (sibling of the storm cut above) ----------------------------
+    // The flicker go-off turn has the identical shape and, until now, got none of this: a live
+    // self-funding blink loop with a reachable sink is ARITHMETIC, not search (FlickerGoOffCount
+    // computes the count; ApplyBlinkLoop realises blinks, sink instalments and the hand/wish
+    // finisher deploy in one action), yet the full cast-subset powerset around that action is both
+    // this deck's SLOW-GAME tail (20-25 MINUTE games at a 20ms budget -- budget bounds the search
+    // loop, not one node's enumeration) and its SINK-DECLINED bug (--seed 7187 --game-index 7: the
+    // 46-iteration plan is ON the menu at t6, unanimously recognized, and scoring buries it under
+    // rollout branches where the kill does not exist -> the game wins t8). So evaluate the MAXIMAL
+    // blink line alone and, when its projected win VERIFIES, short-circuit: a this-turn win
+    // dominates every plan this turn. Same verify discipline as the storm cut -- the projection
+    // (ExtraLethalDamage / ProjectsAlternateWin) is optimistic by contract, so never trust it:
+    // re-simulate via ApplyPlanDirect and short-circuit only when the opponent has actually lost
+    // (the deck-out kill sets opponent_decked, which OpponentHasLost reads). Non-win -> restore
+    // `best`/`best_mask`, byte-identical fall-through.
+    //
+    // Inert for every other deck by construction: a chosen_x > 3 blink count exists only when the
+    // provider's recognizer proposed a go-off (generic counts stop at min(3, affordable) -- the
+    // same ">3 means recognized" rule the human FINISH plan rides). Top-level main only, same as
+    // the storm cut. Rides the shared toggles + its own MTG_NO_EDF_GOFF_CUT.
+    static const bool s_no_edf_goff_cut = EnvOn("MTG_NO_EDF_GOFF_CUT");
+    if (has_extra_lethal && state.spells_cast_this_turn == 0
+        && !s_no_edf_goff_cut && !s_no_goff_shortcircuit && !s_no_combo_line
+        && !DecisionUnpruned(UnprunedGate::ComboLine))
+    {
+        int blink_j = -1, blink_k = 0;
+        for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+        {
+            if (cands[j].kind == Action::Kind::ActivateBlink && cands[j].chosen_x > 3
+                && cands[j].chosen_x > blink_k)
+            { blink_j = j; blink_k = cands[j].chosen_x; }
+        }
+        // MTG_EDF_GOFF_CUT_DEBUG: one line per attempt -- which link of the chain broke. This is
+        // also the instrument the SINK-DECLINED handoff asked for ("separate scoring from
+        // execution"): projected-win + failed verify == the apply realises less than the
+        // projection, on exactly the state that matters.
+        static const bool s_goff_cut_dbg = EnvOn("MTG_EDF_GOFF_CUT_DEBUG");
+        if (blink_j >= 0)
+        {
+            const Plan saved_best = best;
+            const int  saved_mask = best_mask;
+            std::vector<int> goff{ blink_j };
+            consider(goff);
+            const bool projected = best.wins_this_turn;
+            bool verified = false;
+            if (projected)
+            {
+                GameState copy = state;
+                ApplyPlanDirect(copy, best, is_pre_combat);
+                verified = OpponentHasLost(copy);
+                if (s_goff_cut_dbg)
+                {
+                    std::fprintf(stderr,
+                                 "[edf-goff-cut] t%d k=%d projected=1 verified=%d opp_life=%d decked=%d\n",
+                                 state.turn_number, blink_k, verified ? 1 : 0,
+                                 copy.players[1 - state.active_player_index].life,
+                                 copy.opponent_decked ? 1 : 0);
+                }
+                if (verified) { return best; }   // verified lethal -> skip the powerset
+            }
+            else if (s_goff_cut_dbg)
+            {
+                std::fprintf(stderr, "[edf-goff-cut] t%d k=%d projected=0\n",
+                             state.turn_number, blink_k);
+            }
+            best      = saved_best;
+            best_mask = saved_mask;
+        }
+        else if (s_goff_cut_dbg && blink_k == 0)
+        {
+            static thread_local int s_dbg_nogoff = 0;
+            if (++s_dbg_nogoff <= 20)
+            { std::fprintf(stderr, "[edf-goff-cut] t%d no goff cand\n", state.turn_number); }
+        }
+    }
+
     // ---- Board-lethal short-circuit (sibling of the combo-line / go-off cuts) -----------------------
     // If the CURRENT board's attack-all damage already kills the opponent THIS turn (pending_atk >= opp
     // life), attacking with no casts wins now -- and a turn-winning plan dominates every other plan this
@@ -18853,12 +18956,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                           : seen_before != plan.bp_at ? greedysite::kNested
                                                       : greedysite::kOverrun;
             greedysite::RecordWhy(site, why);
-            if (why == greedysite::kNoHost)
-            {
-                greedysite::RecordNoHost((g_bp_root_enum ? 1 : 0)
-                                       | (out_breakpoint != nullptr ? 2 : 0)
-                                       | (bp_resume != nullptr ? 4 : 0));
-            }
+            const int apply_kind = (g_bp_root_enum ? 1 : 0)
+                                 | (out_breakpoint != nullptr ? 2 : 0)
+                                 | (bp_resume != nullptr ? 4 : 0);
+            if (why == greedysite::kNoHost) { greedysite::RecordNoHost(apply_kind); }
+            // ...and the SAME kind split for every OTHER unresolved class (2026-09-05). The
+            // nohost-only split answered "grow the host set"; this one answers the sharper
+            // question another agent raised -- do NESTED/OVERRUN/BASE greedy continuations fire
+            // inside the DECISION-side structure (ROOT bit set) or only in playout applies? The
+            // "searched window is greedy-free" claim rests on this number being zero, and it was
+            // previously asserted from the nohost table alone, which never covered these classes.
+            greedysite::RecordWhyKind(why, apply_kind);
         }
         BpHit(site, out_breakpoint != nullptr, resolved, nested_blocked, eligible);
         return resolved;

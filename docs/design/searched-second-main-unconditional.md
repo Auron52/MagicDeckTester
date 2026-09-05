@@ -129,12 +129,64 @@ remain on that surface, both defaulting conservative:
   policy by THIS file. `greedy-in-the-searched-window-status.md` and
   `searched-design-deck-rollout.md` §3b updated to point here.
 
+## The EXECUTOR half (2026-09-05, later the same day — found by another agent's report)
+
+The census tables above cover the search interior; the last greedy DECISION was not in the
+search at all. When a COMMITTED plan reached a breakpoint occurrence carrying no searched
+continuation (`bp_choice < 0` — a base plan that won the turn and then hit a breakpoint no
+variant targeted), the executor ran a greedy `Solve()` for the rest of the turn — real play,
+real decision, greedy. Deck-shape dependent: 8 of 50 Melira games, 0 of 50 hinata (which is why
+a hinata-only census missed it).
+
+**Fixed the same day:** both executor fallback sites (the main breakpoint applier and the pod
+trailing-pass twin) now run a full SEARCHED re-solve at deck settings (`SolveWithLookahead`,
+deck depth/budget, shared TT). Verified on Melira: `breakpoint-fallback=0 (base=8 ...
+searched-resolve=8)`. The rollout twins keep greedy (playout scoring, the tolerated scope), so
+realized-vs-scored can diverge on these continuations — in the conservative direction only (the
+realized continuation comes from a strictly stronger solver than the one that scored it).
+`MTG_EXEC_BP_SEARCHED=0` restores the greedy. The census's `why_kind` table (added with this
+change) attributes every unresolved continuation class by ROOT/REC/RESUME apply kind, so
+"zero greedy decisions" is a measured number for any future deck, not an assertion from the
+nohost table alone.
+
+## The ONE sanctioned greedy construction: a verified this-turn combo go-off
+
+USER, 2026-09-05: *"The only exception I can think of is perhaps that we might want a greedy combo
+go-off implementation for complex combos like EDF. However, those are strictly acceptable when
+they win this turn."* -- *"So, if they fail to do so, they would fall back to search."*
+
+That is the go-off short-circuit family (Dragonstorm's storm line; EDF's blink line), and its
+invariant is exactly the user's boundary:
+
+1. The combo line may be GREEDILY CONSTRUCTED (the recognizer's arithmetic, not a search).
+2. It is TAKEN only on a VERIFIED this-turn win: re-simulate via ApplyPlanDirect and
+   short-circuit only when OpponentHasLost holds on the resulting state -- never on the
+   projection alone (the EDF Gorge repro is why: the colour-blind projection claimed a k=16
+   lethal the apply realises as 4 damage).
+3. On a non-win it RESTORES best/best_mask byte-identically and falls through to the full
+   search; the greedy line's score is discarded, so no greedy judgment leaks into ranking on
+   building turns.
+
+A this-turn win is the objective's minimum, so everything the short-circuit skips is dominated --
+the greedy construction never decides anything that is not provably optimal.
+
 ## What remains greedy inside the search (measured, not assumed)
 
 The `greedysite` counters (`MTG_M2_YIELD_STATS`) count every remaining greedy `TurnSolver::Solve()`
-reached from inside the search. After this change the expected residue is: the rollout leaf
-estimator (by design, above), `SolveWithLookahead`'s `depth<=0` base case (site 90 — the playout
-policy itself), and the BREAKPOINT-CONTINUATION fallbacks (sites 0-7, where `bp_searched_plan`
-returns false). The bp continuations are the one remaining greedy DECISION class; converting them
-is tracked separately (see `bp-greedy-continuation-deletion.md`) and must clear the same bar:
-budget heuristics allowed, line deletion not.
+reached from inside the search. Census on THIS binary (hinata, the bp-heaviest deck, 50 games):
+
+```
+M2 SITE:  BRANCH searched 4988 / greedy 0 / d<=0 59151 (all SEARCHED)
+EXECUTOR: greedy Solve breakpoint-fallback=0 | REAL main-phase decisions: NONE
+bp-continuation nohost by apply kind: [rollout] + [rollout+rec] = 100%  (no ROOT kind)
+```
+
+**The searched window is greedy-free.** Every residual greedy fire is PLAYOUT-side: the rollout
+leaf estimator (above), `SolveWithLookahead`'s `depth<=0` base case (site 90 -- the playout policy
+itself), and the breakpoint-continuation fallbacks inside plain rollout applies -- whose
+DECISION-side half was already deleted by the 2026-09-02 TIGHT sound recipe
+(`bp-greedy-continuation-deletion.md`; canon covers root enum, node resume, captured applies).
+The playout scope is the USER's own ruling, twice: rollouts may stay greedy because budget
+recovers playout deficiencies, and only the searched structure cannot be budget-recovered.
+Re-opening the playout side = `MTG_BP_CANON_REC` (measured -0.007t hinata for +12% wall) or,
+cheaper, the incremental-key project.

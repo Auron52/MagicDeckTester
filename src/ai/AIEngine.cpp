@@ -232,6 +232,11 @@ inline std::atomic<unsigned long long> g_rollout{0}, g_bp{0};
 // not replay it: bp_seen counting drifted or bp_choice overran the re-enumerated list) is a
 // realized-vs-scored DIVERGENCE and must read zero.
 inline std::atomic<unsigned long long> g_bp_base{0}, g_bp_mismatch{0};
+// Executor breakpoint continuations REDIRECTED to the searched re-solve (MTG_EXEC_BP_SEARCHED,
+// 2026-09-05): these used to be the g_bp greedy fallbacks. g_bp now counts only fallbacks that
+// actually ran GREEDY (rollout twins, or the lever's =0 hatch) -- the number the user's
+// "no greedy decisions" bar reads, which must be zero in real play at defaults.
+inline std::atomic<unsigned long long> g_bp_searched{0};
 inline void Record(int depth, bool in_rollout)
 {
     if (!Enabled()) { return; }
@@ -250,9 +255,9 @@ struct Dumper
     {
         if (!Enabled()) { return; }
         std::fprintf(stderr, "=== EXECUTOR GREEDY Solve(): in-rollout=%llu breakpoint-fallback=%llu"
-                     " (base=%llu MISMATCH=%llu)"
+                     " (base=%llu MISMATCH=%llu searched-resolve=%llu)"
                      " | REAL main-phase decisions by depth:", g_rollout.load(), g_bp.load(),
-                     g_bp_base.load(), g_bp_mismatch.load());
+                     g_bp_base.load(), g_bp_mismatch.load(), g_bp_searched.load());
         bool any = false;
         for (int i = 0; i < 12; ++i)
         {
@@ -3112,9 +3117,38 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
             }
         }
-        if (!bp_searched_here) { execgreedy::Record(-1, m_in_rollout);
-                                 execgreedy::RecordBpCause(plan.bp_choice >= 0);
-                                 extra = TurnSolver::Solve(state, is_pre_combat_main); }
+        if (!bp_searched_here)
+        {
+            // A COMMITTED line's unsearched breakpoint continuation is a REAL DECISION, and it
+            // was the last greedy one left in real play (USER 2026-09-05, closing the executor
+            // half of the greedy deletion; census: 8 of 50 Melira games, base plans hitting a
+            // breakpoint no variant targeted). Re-solve it with the full searched engine at deck
+            // settings. The rollout twin keeps the greedy (playout scoring -- the user's
+            // tolerated scope), which means realized-vs-scored can now diverge on these 8-in-50
+            // continuations, in the conservative direction: the realized continuation is chosen
+            // by a strictly stronger solver than the one that scored it.
+            // MTG_EXEC_BP_SEARCHED=0 restores the old greedy fallback.
+            static const bool s_exec_bp_searched = EnvOn("MTG_EXEC_BP_SEARCHED", true);
+            execgreedy::RecordBpCause(plan.bp_choice >= 0);
+            // depth > 0 REQUIRED: at d0 there IS no search (the d0 runner is the greedy
+            // configuration by design), and SolveWithLookahead(d0) is not byte-equal to
+            // Solve() -- an unscoped first version moved a d0 GT cell (melira gi382).
+            if (s_exec_bp_searched && !m_in_rollout && m_lookahead_depth > 0)
+            {
+                if (execgreedy::Enabled())
+                { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }
+                SearchBudget bp_budget = SearchBudget::FromVirtualMs(m_budget_ms);
+                extra = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                                                       m_lookahead_depth, m_max_turns,
+                                                       &bp_budget, true,
+                                                       m_search_post_combat, m_shared_tt);
+            }
+            else
+            {
+                execgreedy::Record(-1, m_in_rollout);
+                extra = TurnSolver::Solve(state, is_pre_combat_main);
+            }
+        }
         // Lockstep trace (MTG_BP_TRACE): the EXECUTOR's breakpoint sequence, to be diffed against
         // ApplyPlanDirect's [bp-apply] lines for the same committed line. Diagnosis only.
         if (BpTraceEnabled())
@@ -3876,9 +3910,28 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         }
                     }
                     if (!pod_bp_searched)
-                    { execgreedy::Record(-1, m_in_rollout);
-                      execgreedy::RecordBpCause(plan.bp_choice >= 0);
-                      extra = TurnSolver::Solve(state, is_pre_combat_main); }
+                    {
+                        // Same searched re-solve as the main breakpoint site above (the pod
+                        // trailing-pass twin); see the comment there. =0 hatch shared.
+                        static const bool s_exec_bp_searched2 = EnvOn("MTG_EXEC_BP_SEARCHED", true);
+                        execgreedy::RecordBpCause(plan.bp_choice >= 0);
+                        // depth > 0 REQUIRED -- see the main site's note (d0 is greedy by design).
+                        if (s_exec_bp_searched2 && !m_in_rollout && m_lookahead_depth > 0)
+                        {
+                            if (execgreedy::Enabled())
+                            { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }
+                            SearchBudget bp_budget = SearchBudget::FromVirtualMs(m_budget_ms);
+                            extra = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
+                                                                   m_lookahead_depth, m_max_turns,
+                                                                   &bp_budget, true,
+                                                                   m_search_post_combat, m_shared_tt);
+                        }
+                        else
+                        {
+                            execgreedy::Record(-1, m_in_rollout);
+                            extra = TurnSolver::Solve(state, is_pre_combat_main);
+                        }
+                    }
                     // Precasts (SacForMana / Suspend / convoke taps) exactly as
                     // resolve_draw_breakpoint's pre-pass, then the casts in the executor's clean
                     // canonical order, then the continuation's ACTIVATIONS via this same trailing

@@ -14481,6 +14481,42 @@ EldraziFlickerProvider::TutorCandidates(const GameState& s, int controller,
     // rather than competing with a missing combo piece on a developed board.
     const int land_want = std::max(0, 6 - lands);
 
+    // WISH-HOLDING (the no-sink 50% bucket, 2026-09-05). Mode 2's gate is right about a sink's
+    // VALUE on a bare board -- but it prices the target, not the ACCESS. Both finishers live only
+    // in the sideboard, so a wish in hand IS the deck's sink route, and spending the LAST one on
+    // a land deletes the kill outright unless another wish is topdecked (~3 copies in ~50 cards).
+    // Seed 2 autonomous did exactly that at t2 and won t7 with the loop live from t4
+    // (turn trace: exile=0 drain=0, wish=0 from t3). Two arms, measured separately:
+    //   MTG_EDF_WISH_SINK_FLOOR  -- resolving the hand's LAST wish with no sink on board or in
+    //                               hand keeps the sink tier at full score (the assemblability
+    //                               gate stops decaying it). The Infiltrator at 2mv costs ~no
+    //                               tempo and keeps the route.
+    //   MTG_EDF_WISH_SINK_SCARCE -- the same floor, but only once the LIBRARY holds <=1 more
+    //                               wish (copy COUNT is deck knowledge a player has -- same rule
+    //                               as the tutor-census hooks; order is not). With 2+ still in
+    //                               the library the early land keeps its measured ramp value.
+    // Both default OFF -> byte-identical until the A/B decides.
+    int wishes_in_hand = 0, wishes_in_library = 0;
+    for (const Card& c : s.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.tutor_to_hand && d->params.wish_from_sideboard) { ++wishes_in_hand; }
+    }
+    for (const Card& c : s.players[controller].library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.tutor_to_hand && d->params.wish_from_sideboard) { ++wishes_in_library; }
+    }
+    // The wish being RESOLVED has already left the hand (it is on the stack), so "last access"
+    // is hand == 0. A second copy still in hand is real insurance either way.
+    static const bool s_floor_env  = EnvOn("MTG_EDF_WISH_SINK_FLOOR");
+    static const bool s_scarce_env = EnvOn("MTG_EDF_WISH_SINK_SCARCE");
+    const bool floor_on  = heurarm::Flag(heurarm::EDF_WISH_SINK_FLOOR, s_floor_env);
+    const bool scarce_on = heurarm::Flag(heurarm::EDF_WISH_SINK_SCARCE, s_scarce_env);
+    const bool last_access = (wishes_in_hand == 0) && !have_sink;
+    const bool sink_floor = last_access
+                         && (floor_on || (scarce_on && wishes_in_library <= 1));
+
     struct Ranked { int score; int mv; std::string name; };
     std::vector<Ranked> ranked;
     ranked.reserve(all.size());
@@ -14501,7 +14537,7 @@ EldraziFlickerProvider::TutorCandidates(const GameState& s, int controller,
             // pour into it, where the unranked engine took a karoo land that ramps immediately.
             // A sink is worth nothing until something can feed it, so on a bare board mode 2 lets
             // it fall to the "already have one" tier and the ramp/pieces outrank it.
-            const bool live = (s_rank < 2) || (have_outlet && have_payload);
+            const bool live = (s_rank < 2) || (have_outlet && have_payload) || sink_floor;
             score = (have_sink || !live) ? 25 : 100;
         }
         else if (q.blink_cost.has_value())        { score = have_outlet  ? 20 : 90; }

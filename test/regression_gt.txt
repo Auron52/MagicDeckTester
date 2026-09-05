@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a1680351  date 2026-09-05
+# Regression ground truth -- commit ad4f60f7  date 2026-09-05
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -56,8 +56,8 @@ breaching_smoke_d0_s1001=4.8460/8c8e7d2fb5fd0181
 breaching_smoke_d3_s1001=3.1000/03766483807acbd5
 breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
 melira_smoke_d0_s1001=6.4230/066c65909b8bcaca
-melira_smoke_d3_s1001=4.9800/ca1616ae2baf2716
-melira_smoke_d5_s1001=5.0000/72a9dedd16d32c1b
+melira_smoke_d3_s1001=4.9800/a428ea7cf49ca375
+melira_smoke_d5_s1001=5.0000/a1c26512afcf09b8
 hinata2hg_smoke_d3_s1001=5.6667/1227a1c696313b31
 antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
 minotaur2hg_smoke_d3_s1001=5.3500/d6096734765b010a
@@ -75,7 +75,7 @@ stompy2hg_smoke_d3_s1001=5.0000/73d0994752ca4e51
 kitty2hg_smoke_d3_s1001=4.9400/7bc28551a3faa869
 dragons2hg_smoke_d3_s1001=6.3000/43872dc33fccb094
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
-melira2hg_smoke_d3_s1001=5.2000/c15e27e03429d02c
+melira2hg_smoke_d3_s1001=5.2400/6b79fdb102b9a249
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6790/990aaa21c4bc567e
@@ -110,9 +110,9 @@ hinata_regression_d5_s2002=5.6600/bbb15cf6cc0658f1
 hinata_regression_d5_s3003=5.6500/8ffda70a06273312
 dragonstorm_regression_d0_s2002=5.4690/7201ed24da535e71
 dragonstorm_regression_d3_s2002=4.3533/b8460ddc3bfa963b
-dragonstorm_regression_d3_s3003=4.5267/c9665722d9a0a4a2
+dragonstorm_regression_d3_s3003=4.5267/f60ffdceef0c1838
 dragonstorm_regression_d5_s2002=4.3160/266e26d9449b1fd4
-dragonstorm_regression_d5_s3003=4.5240/80465b1c6b8ed661
+dragonstorm_regression_d5_s3003=4.5240/b8c05681e3844e0d
 auras_regression_d0_s2002=4.3620/c9d6a8e39383bd44
 auras_regression_d3_s2002=4.0980/8c78369633415168
 auras_regression_d3_s3003=4.1900/d16d957f634c359d
