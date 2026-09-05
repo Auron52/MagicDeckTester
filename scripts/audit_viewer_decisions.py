@@ -144,19 +144,22 @@ MANIFEST = {
     # main_phase plan actions, one per distinct graveyard name (Action::GraveyardExileGrow).
     "gy_exile_grow_cost":    ("main_phase",           truthy),
     # Felidar Guardian: WHICH permanent to flicker (+ decline) rides the CastFromHand chosen_x
-    # plan-variant axis on a cast; a PUT entry (Pod/Chord/Reveillark) resolves via the provider's
-    # FlickerTarget -- a disclosed 6a auto-resolution until a `flicker` chooser is wired.
-    "etb_blink_permanent":   ("main_phase",           truthy),
+    # plan-variant axis on a cast; a PUT entry (Pod/Chord/Reveillark) surfaces its own `flicker`
+    # board-pick chooser (g_play_flicker_chooser in FireOwnEtbTriggers' blink block, reply -1 =
+    # decline) wired 2026-09-05. Default = the provider's FlickerTarget pick.
+    "etb_blink_permanent":   ("flicker",              truthy),
     # Ranger of Eos: the up-to-two pick surfaces through the existing sac_tutor multi-pick
     # chooser at resolution (PerformEtbTutorToHandMulti), on the cast and the put path alike.
     "etb_tutor_hand_count":  ("sac_tutor",            positive),
-    # Reveillark: WHICH up-to-two power<=2 creatures return -- provider ReviveCandidates at
-    # resolution; a disclosed 6a auto-resolution until a `revive` chooser is wired (the trigger
-    # fires on planless paths: sac costs, flickers).
-    "ltb_return_creatures":  ("main_phase",           positive),
-    # Celes: the rummage N -- resolution heuristic (excess lands); a disclosed 6a auto-resolution
-    # until the `discard` any_number context is wired.
-    "etb_discard_any_number": ("main_phase",          truthy),
+    # Reveillark: WHICH up-to-two power<=2 creatures return -- its own `revive` multi-pick
+    # chooser (g_play_revive_chooser in PerformReturnFromGraveyardToBattlefield, the sac_tutor
+    # reply shape) wired 2026-09-05; fires on EVERY LTB path (sac costs, flickers, evoke).
+    # Default = the provider's ReviveCandidates pick (missing combo pieces first).
+    "ltb_return_creatures":  ("revive",               positive),
+    # Celes: WHICH cards to rummage away -- its own `rummage` multi-pick chooser
+    # (g_play_rummage_chooser at the etb_discard_any_number resolution, the sac_tutor reply
+    # shape over the whole hand; zero picks legal) wired 2026-09-05. Default = excess lands.
+    "etb_discard_any_number": ("rummage",             truthy),
     # "{cost}, {T}: <effect>" permanent abilities and the Clue's sacrifice-to-draw. Each is an
     # Action::ActivatePermAbility in the turn's plan list, so choosing to activate (and which
     # source) is a main_phase plan pick -- the same shape as Mutavault's animate and Sliver Hive's

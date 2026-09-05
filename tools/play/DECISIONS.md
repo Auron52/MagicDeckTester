@@ -64,6 +64,9 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `land_entry` | `g_play_land_entry_chooser` (`LandEntryChooser`) | `TurnSolver::PlayLandByName` (shared land drop) | `WriteLandEntryDecisionJson` | `landEntryPanelHtml` | modal |
 | `dragon` | `g_play_dragon_chooser` (`DragonChooser`) | `PerformTutorToBattlefield` (SpellEffects.h, shared executor+rollout) | `WriteDragonDecisionJson` | `dragonPanelHtml` | modal |
 | `sac_tutor` | `g_play_sac_tutor_chooser` (`SacTutorChooser`) | `PerformUpkeepSacTutor` (SpellEffects.h, shared executor+rollout) | `WriteSacTutorDecisionJson` | `sacTutorPanelHtml` | modal |
+| `revive` | `g_play_revive_chooser` (`ReviveChooser`) | `PerformReturnFromGraveyardToBattlefield` (SpellEffects.h, shared executor+rollout) | `WriteReviveDecisionJson` | `revivePanelHtml` | modal |
+| `flicker` | `g_play_flicker_chooser` (`BounceChooser`) | `FireOwnEtbTriggers` blink block (SpellEffects.h, shared executor+rollout) | `WriteFlickerDecisionJson` | `promptPanelHtml` (board prompt) | prompt |
+| `rummage` | `g_play_rummage_chooser` (`RummageChooser`) | `FireOwnEtbTriggers` rummage block (SpellEffects.h, shared executor+rollout) | `WriteRummageDecisionJson` | `rummagePanelHtml` | modal |
 | `lightpaws` | `g_play_lightpaws_chooser` (`LightPawsChooser`) | `PerformLightPawsAttach` (SpellEffects.h, shared executor+rollout) | `WriteLightPawsDecisionJson` | `lightPawsPanelHtml` | modal |
 | `vial_charge` | `AIEngine::SetExternalVialChooser` | Vial upkeep charge | `WriteVialDecisionJson` | `promptPanelHtml` | board |
 | `firebreathe` | `g_play_firebreathe_chooser` (`FirebreatheChooser`) | `AIEngine::Firebreathe` (combat, `GameEngine.cpp:361`) | `WriteFirebreatheDecisionJson` | `firebreathePanelHtml` | modal |
@@ -433,3 +436,25 @@ enumerated plans actually offering that land drop (`landPlayableNames`) so it is
 land//land MDFC (Branchloft Pathway) is unaffected — its front IS a land, so the ordinary land route
 reaches it and the `face` sub picks the side. **The general rule: whenever a card can be played more
 than one way, check that every way has a route in the palette — `kind` describes only one of them.**
+
+**Reveillark `revive` LTB return:** whenever Reveillark leaves the battlefield (sacrificed to
+Carrion Feeder / Birthing Pod, a Felidar flicker's exile half, or its own evoke self-sac), the
+human picks WHICH qualifying graveyard creature cards (printed power ≤ 2, up to two — "up to"
+is a real decline) return to the battlefield. Same reply shape as `sac_tutor`: one 0/1 flag per
+candidate, graveyard order. Default = the provider's `ReviveCandidates` pick (missing combo
+pieces first, then MV descending). The `ltb_return_creatures` param maps to `revive` in the
+auditor manifest.
+
+**Felidar Guardian `flicker` PUT-path target:** when Felidar ENTERS off a put (Birthing Pod /
+Chord / a Reveillark return — a hand cast instead carries the searched target on its plan
+variant), the human clicks WHICH own permanent is exiled and returned (it re-enters untapped and
+fresh; ETB/LTB triggers fire), or declines outright ("you may" — reply −1). Default = the
+provider's `FlickerTarget` pick (tapped Pod > spent persist body > Reveillark > tapped land >
+Finks > tutors > decline). The `etb_blink_permanent` param maps to `flicker` in the auditor
+manifest.
+
+**Celes, Rune Knight `rummage` ETB discard:** when Celes enters (cast or put), the human picks
+WHICH hand cards to discard — any number, zero included (the draw is discards + 1 either way).
+Same reply shape as `sac_tutor` over the whole hand: one 0/1 flag per hand card, hand order.
+Default = the excess-lands heuristic (lands beyond two). The `etb_discard_any_number` param maps
+to `rummage` in the auditor manifest.

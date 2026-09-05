@@ -1113,6 +1113,14 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 }
                 else if (ac.kind == Action::Kind::AnimateLand)    { os << ", \"verb\": \"animate\""; }
                 else if (ac.kind == Action::Kind::TapForTokenPay) { os << ", \"verb\": \"taptoken\""; }
+                // Birthing Pod: names the SOURCE artifact (never castable), carries the fetch on
+                // tutor_target (already serialised) + the victim id, so the GUI writes
+                // `pod=<fetch>#<victim>` instead of an ambiguous `cast=Birthing Pod`.
+                else if (ac.kind == Action::Kind::ActivatePod)
+                { os << ", \"verb\": \"pod\", \"pod_victim\": " << ac.sac_victim_id; }
+                // Scavenging Ooze: names the SOURCE; the exiled card rides tutor_target.
+                else if (ac.kind == Action::Kind::GraveyardExileGrow)
+                { os << ", \"verb\": \"ooze\""; }
                 // `activate_source` = the permanent the human CLICKS, when that is not `card`.
                 // PutFromHandAbility's card_name is the Equipment being PUT (it is in hand), so
                 // without this the viewer would look for a board thumb that isn't there.
@@ -1694,6 +1702,28 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
            + (sacrifice ? "sacrifice" : "return to your hand") + ". Default = the AI's pick.");
 }
 
+// Felidar flicker decision (PUT path only -- a cast variant carries the searched target): the
+// player picks WHICH own permanent Felidar exiles-and-returns, or declines ("you may"). Options
+// are the controller's other permanents; a tapped Birthing Pod / land returns UNTAPPED, a
+// persisted Finks returns clean, a flickered Reveillark fires its LTB on the exile half.
+static void WriteFlickerDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                     const std::vector<int>& legal, int heuristic_default,
+                                     int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("flicker").Source(source).Turn(s.turn_number)
+     .Board(s).HeuristicDefault(heuristic_default);
+    d.Array("options", legal.size(), [&](std::size_t i)
+    {
+        const Permanent& p = s.battlefield[legal[i]];
+        os << "{ \"index\": " << i << ", \"perm_index\": " << legal[i] << ", \"tapped\": "
+           << (p.tapped ? "true" : "false") << ", \"name\": "; JsonStr(os, p.card.m_name.str());
+        os << ", \"label\": "; JsonStr(os, p.card.m_name.str()); os << " }";
+    });
+    d.Note("reply an option index -- the permanent to exile and return (it re-enters untapped and "
+           "fresh; its ETB/LTB triggers fire), or -1 to decline the flicker. Default = the AI's pick.");
+}
+
 // ETB-dig decision (Acclaimed Contender): the player picks WHICH examined card enters hand (or
 // declines). Emits the examined cards as image options with a `legal` flag (only legal candidates
 // are takeable); the reply is the examined index to take, or -1 to take nothing.
@@ -1932,6 +1962,52 @@ static void WriteSacTutorDecisionJson(std::ostream& os, const GameState& s, cons
     });
     d.Note("reply one int per candidate (1 = put this creature onto the battlefield), up to "
            "max_puts total. They enter in ascending candidate order. Default = the AI's pick.");
+}
+
+// Reveillark revive decision: the player picks WHICH qualifying graveyard creature cards (printed
+// power <= 2; up to `max_puts`, possibly none -- "up to two") return to the battlefield when the
+// LTB resolves. Same payload + reply shape as the sac_tutor put override: candidates are graveyard
+// copies (image options, graveyard order), the reply is ONE int per candidate (1 = return this
+// copy), `ai_set` = the provider heuristic's default subset (pre-checked in the GUI).
+static void WriteReviveDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                    const std::vector<Card>& candidates, int max_puts,
+                                    const std::vector<int>& heuristic_subset, int decision_index)
+{
+    std::vector<bool> is_def(candidates.size(), false);
+    for (int di : heuristic_subset)
+    { if (di >= 0 && di < static_cast<int>(candidates.size())) { is_def[di] = true; } }
+    DecisionJson d(os, decision_index);
+    d.Type("revive").Source(source).Turn(s.turn_number).Board(s).Int("max_puts", max_puts);
+    d.Array("ai_set", heuristic_subset.size(), [&](std::size_t i) { os << heuristic_subset[i]; });
+    d.Array("candidates", candidates.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << i << ", \"def\": " << (is_def[i] ? "true" : "false")
+           << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
+    });
+    d.Note("reply one int per candidate (1 = return this creature card to the battlefield), up to "
+           "max_puts total. Default = the AI's pick (missing combo pieces first).");
+}
+
+// Celes rummage decision: the player picks WHICH hand cards to discard ("discard any number of
+// cards, then draw that many cards plus one" -- zero is legal and still draws the bonus).
+// Candidates = the whole hand in hand order; ai_set = the excess-lands heuristic's picks.
+static void WriteRummageDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                     const std::vector<Card>& candidates, int max_puts,
+                                     const std::vector<int>& heuristic_subset, int decision_index)
+{
+    std::vector<bool> is_def(candidates.size(), false);
+    for (int di : heuristic_subset)
+    { if (di >= 0 && di < static_cast<int>(candidates.size())) { is_def[di] = true; } }
+    DecisionJson d(os, decision_index);
+    d.Type("rummage").Source(source).Turn(s.turn_number).Board(s).Int("max_puts", max_puts);
+    d.Array("ai_set", heuristic_subset.size(), [&](std::size_t i) { os << heuristic_subset[i]; });
+    d.Array("candidates", candidates.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << i << ", \"def\": " << (is_def[i] ? "true" : "false")
+           << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
+    });
+    d.Note("reply one int per candidate (1 = discard this card). Any number is legal, including "
+           "none; you draw (discards + 1) either way. Default = the AI's pick (excess lands).");
 }
 
 // Cleanup-discard decision (#2): the player picks WHICH hand card to discard down to maximum hand
@@ -2228,6 +2304,17 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "suspend")   { ls.suspends.push_back(val); }      // from-hand Suspend (Lotus Bloom)
         else if (key == "animate")   { ls.animates.push_back(val); }      // Mutavault "{1}: 2/2"
         else if (key == "taptoken")  { ls.tap_tokens.push_back(val); }    // Sliver Hive "{5},{T}: token"
+        // "pod=<fetch>[#<victim num>]": Birthing Pod activation (fetch name + optional victim id).
+        else if (key == "pod")
+        {
+            TurnSolver::LineSpec::PodSpec ps;
+            const size_t hash = val.rfind('#');
+            if (hash != std::string::npos)
+            { ps.victim = std::atoi(val.c_str() + hash + 1); val = val.substr(0, hash); }
+            ps.fetch = val;
+            ls.pods.push_back(std::move(ps));
+        }
+        else if (key == "ooze")      { ls.ooze_exiles.push_back(val); }   // Scavenging Ooze exile
     }
     return ls;
 }
@@ -2375,6 +2462,9 @@ g_play_replicate_chooser = nullptr;
 g_play_land_entry_chooser = nullptr;
 g_play_dragon_chooser = nullptr;
 g_play_sac_tutor_chooser = nullptr;
+g_play_revive_chooser = nullptr;
+g_play_flicker_chooser = nullptr;
+g_play_rummage_chooser = nullptr;
 g_play_lackey_chooser = nullptr;
 g_play_free_cast_chooser = nullptr;
 g_play_demonstrate_chooser = nullptr;
@@ -2572,6 +2662,9 @@ struct ClaudePlayHarness
     TutorChooser          tutor_chooser;
     DragonChooser         dragon_chooser;
     SacTutorChooser       sac_tutor_chooser;
+    ReviveChooser         revive_chooser;
+    BounceChooser         flicker_chooser;
+    RummageChooser        rummage_chooser;
     DiscardChooser        discard_chooser;
     EIChooser             ei_chooser;
     RetraceDiscardChooser retrace_chooser;
@@ -3441,6 +3534,115 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_sac_tutor_chooser = &sac_tutor_chooser;
+
+    // Reveillark revive: the player picks WHICH qualifying graveyard creature cards return
+    // (up to max_puts). Same reply shape as sac_tutor: one 0/1 flag per candidate, read
+    // positionally from the --choices stream. Default = the provider's ReviveCandidates pick.
+    revive_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+            const std::vector<Card>& candidates, int max_puts,
+            const std::vector<int>& heuristic_subset) -> std::vector<int>
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            const int need = static_cast<int>(candidates.size());
+            if (cursor + need <= static_cast<int>(choices.size()))
+            {
+                std::vector<int> flags(need);
+                for (int i = 0; i < need; ++i) { flags[i] = choices[cursor++]; }
+                ++decisions_made;
+                std::vector<int> picked;
+                for (int i = 0; i < need; ++i)
+                { if (flags[i] > 0 && static_cast<int>(picked.size()) < max_puts) { picked.push_back(i); } }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": [";
+                    for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << flags[i]; }
+                    ss << "], \"decision\": ";
+                    WriteReviveDecisionJson(ss, s, source, candidates, max_puts, heuristic_subset, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return picked;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteReviveDecisionJson(std::cout, s, source, candidates, max_puts, heuristic_subset, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_revive_chooser = &revive_chooser;
+
+    // Felidar flicker (PUT path): the player picks which own permanent is exiled-and-returned,
+    // or -1 to decline. Shares the --choices stream; reply = option index or -1. Default = the
+    // provider's FlickerTarget pick.
+    flicker_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+            const std::vector<int>& legal, int heuristic_pick) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < -1 || chosen >= static_cast<int>(legal.size())) { chosen = heuristic_pick; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteFlickerDecisionJson(ss, s, source, legal, heuristic_pick, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteFlickerDecisionJson(std::cout, s, source, legal, heuristic_pick, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_flicker_chooser = &flicker_chooser;
+
+    // Celes rummage: the player picks which hand cards to discard (any number; the +1 draw is
+    // unconditional). Same reply shape as sac_tutor/revive: one 0/1 flag per candidate.
+    rummage_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+            const std::vector<Card>& candidates, int max_puts,
+            const std::vector<int>& heuristic_subset) -> std::vector<int>
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            const int need = static_cast<int>(candidates.size());
+            if (cursor + need <= static_cast<int>(choices.size()))
+            {
+                std::vector<int> flags(need);
+                for (int i = 0; i < need; ++i) { flags[i] = choices[cursor++]; }
+                ++decisions_made;
+                std::vector<int> picked;
+                for (int i = 0; i < need; ++i)
+                { if (flags[i] > 0 && static_cast<int>(picked.size()) < max_puts) { picked.push_back(i); } }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": [";
+                    for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << flags[i]; }
+                    ss << "], \"decision\": ";
+                    WriteRummageDecisionJson(ss, s, source, candidates, max_puts, heuristic_subset, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return picked;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteRummageDecisionJson(std::cout, s, source, candidates, max_puts, heuristic_subset, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_rummage_chooser = &rummage_chooser;
 
     // Cleanup discard (#2): the player picks which hand card to discard to max hand size. Shares the
     // --choices stream; the reply is a hand index. Default = the engine's heuristic pick.

@@ -33281,6 +33281,41 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         { return "'" + name + "' has no animate ability"; }
     }
 
+    // --- pod= : an untapped Birthing Pod must exist, plus another creature to feed it. The FETCH
+    // is NOT tested here (library legality is what the plan match reports honestly -- the
+    // soundness rule at the top of this function).
+    if (!spec.pods.empty())
+    {
+        bool any_pod = false, any_creature = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.pod_activation_cost.has_value() && !p.tapped) { any_pod = true; }
+            if (p.card.IsCreature()) { any_creature = true; }
+        }
+        if (!any_pod)
+        { return "you control no untapped Birthing Pod to activate"; }
+        if (!any_creature)
+        { return "you control no creature to sacrifice to the Pod"; }
+    }
+
+    // --- ooze= : a graveyard-exile-grow source must exist. WHICH card is exiled is matched
+    // against the enumerated plans (a missing target reads as legal_not_enumerated/illegal
+    // through the match, with the real graveyard visible).
+    if (!spec.ooze_exiles.empty())
+    {
+        bool any_src = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.gy_exile_grow_cost.has_value()) { any_src = true; break; }
+        }
+        if (!any_src)
+        { return "you control no permanent with a graveyard-exile-grow ability"; }
+    }
+
     // --- equip= : source presence + it actually being an Equipment. The declared HOST is NOT tested
     // here: an unenumerated-but-legal host is a reachability gap the caller must be free to report,
     // and a false Illegal would mask it (the soundness rule at the top of this function).
@@ -33438,6 +33473,36 @@ static bool EquipAssign(const std::vector<TurnSolver::LineSpec::EquipSpec>& want
     return false;
 }
 
+// Backtracking assignment for pod= (the EquipAssign shape): a spec entry's victim 0 is a
+// wildcard, so ordering must not let a wildcard eat the exact entry's only match.
+static bool PodAssign(const std::vector<TurnSolver::LineSpec::PodSpec>& want,
+                      const std::vector<TurnSolver::LineSpec::PodSpec>& have,
+                      std::vector<bool>& used, size_t i)
+{
+    if (i == want.size()) { return true; }
+    for (size_t j = 0; j < have.size(); ++j)
+    {
+        if (used[j] || have[j].fetch != want[i].fetch) { continue; }
+        if (want[i].victim != 0 && want[i].victim != have[j].victim) { continue; }
+        used[j] = true;
+        if (PodAssign(want, have, used, i + 1)) { return true; }
+        used[j] = false;
+    }
+    return false;
+}
+
+// Does a plan's set of ActivatePod actions perform exactly the activations the line DECLARED?
+// Both directions (a plan that pods when the line asked for none is a different play) -- the
+// EquipsMatch shape.
+static bool PodsMatch(const std::vector<TurnSolver::LineSpec::PodSpec>& want,
+                      const std::vector<TurnSolver::LineSpec::PodSpec>& have)
+{
+    if (want.size() != have.size()) { return false; }
+    if (want.empty()) { return true; }
+    std::vector<bool> used(have.size(), false);
+    return PodAssign(want, have, used, 0);
+}
+
 // Does a plan's set of Equip actions perform exactly the equips the line DECLARED? A spec entry's
 // 0 source/host is a wildcard, so an unstamped `equip=<name>` degenerates to the name-multiset
 // compare this used to be. Sizes must be equal in BOTH directions: a plan that equips when the line
@@ -33467,7 +33532,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                       spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.equips.empty() &&
                       spec.gy_exiles.empty() && spec.gy_returns.empty() && spec.channels.empty() &&
                       spec.suspends.empty() &&
-                      spec.animates.empty() && spec.tap_tokens.empty()))
+                      spec.animates.empty() && spec.tap_tokens.empty() &&
+                      spec.pods.empty() && spec.ooze_exiles.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -33527,6 +33593,13 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     std::vector<std::string> sortedTapTokens = spec.tap_tokens;
     std::sort(sortedTapTokens.begin(), sortedTapTokens.end());
     const bool taptoken_declared  = !spec.tap_tokens.empty();
+    // pod= / ooze= (Birthing Pod / Scavenging Ooze activations), the same declared-vs-legacy
+    // split every verb above uses -- an undeclared line keeps matching the action's card name in
+    // the ordinary cast multiset, so saved references are unaffected.
+    const bool pod_declared       = !spec.pods.empty();
+    const bool ooze_declared      = !spec.ooze_exiles.empty();
+    std::vector<std::string> sortedOoze = spec.ooze_exiles;
+    std::sort(sortedOoze.begin(), sortedOoze.end());
 
     // --- 1) Does the line match a plan (or several variants) the model would play? ----
     // A "match" is same land + same multiset of cast card names. Several enumerated plans can
@@ -33570,6 +33643,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         std::vector<LineSpec::EquipSpec> equipActs;
         std::vector<std::string> animateNames, tapTokenNames, gyReturnNames;
         std::vector<int> jitteModes, gyExileModes;
+        std::vector<TurnSolver::LineSpec::PodSpec> podActs;
+        std::vector<std::string> oozeNames;
         for (const Action& a : p.actions)
         {
             if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
@@ -33608,6 +33683,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             { animateNames.push_back(a.card_name); continue; }
             if (taptoken_declared && a.kind == Action::Kind::TapForTokenPay)
             { tapTokenNames.push_back(a.card_name); continue; }
+            if (pod_declared && a.kind == Action::Kind::ActivatePod)
+            { podActs.push_back({ a.tutor_target.str(), a.sac_victim_id }); continue; }
+            if (ooze_declared && a.kind == Action::Kind::GraveyardExileGrow)
+            { oozeNames.push_back(a.tutor_target); continue; }
             orderNames.push_back(a.card_name);
         }
         if (planLE != spec.lands_edge) { continue; }
@@ -33671,6 +33750,13 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             std::vector<std::string> v2 = tapTokenNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedTapTokens) { continue; }
+        }
+        if (pod_declared && !PodsMatch(spec.pods, podActs)) { continue; }
+        if (ooze_declared)
+        {
+            std::vector<std::string> v2 = oozeNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedOoze) { continue; }
         }
         std::vector<std::string> sortedNames = orderNames;
         std::sort(sortedNames.begin(), sortedNames.end());
@@ -33738,6 +33824,22 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                 }
             }
             if (!a.tutor_target.empty())   { addSub(a.card_name + " \xE2\x86\x92 " + a.tutor_target, a.card_name + " \xE2\x86\x92", a.tutor_target, a.tutor_target, "tutor"); }
+            // Birthing Pod: WHICH creature is sacrificed is the activation's other real axis (the
+            // fetch already rides the tutor sub above). Disambiguated (" #k") like the equip host:
+            // two same-named victims must not share a choice string or the dedup silently decides
+            // which one dies. Without this sub, victim variants of one (Pod, fetch) pair collapse.
+            if (a.kind == Action::Kind::ActivatePod && a.sac_victim_id != 0)
+            {
+                const std::string vn = SubChoiceHostLabel(state, a.sac_victim_id);
+                std::string art;
+                for (const Permanent& perm : state.battlefield)
+                { if (perm.card.m_number == a.sac_victim_id) { art = perm.card.m_name.str(); break; } }
+                if (!vn.empty())
+                {
+                    addSub(a.card_name + " sacrifices " + vn, a.card_name + " sacrifices",
+                           vn, art, "sacrifice", a.sac_victim_id);
+                }
+            }
             // Zada/Mirrorwing solo-target trick: the target rides enchant_target (the aura precedent),
             // but it is NOT a sub-decision the human makes HERE. ResolveSoloTargetTrick re-asks it at
             // RESOLUTION off the board, from the full rules-legal set (every own creature) -- so
@@ -33786,6 +33888,35 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     const std::string mode = a.bestow ? "bestowed (Aura)" : "as a creature";
                     addSub(a.card_name + " " + mode, a.card_name + " mode", mode,
                            a.card_name.str(), "bestow");
+                }
+                // EVOKE (Reveillark): the evoke and hard casts share a name -- exactly the bestow
+                // collapse. BOTH modes get the sub (a mixed sub/no-sub set falls into the flat
+                // fallback picker where the two render identically).
+                if (bd && bd->params.evoke_cost.has_value())
+                {
+                    const std::string mode = a.evoke ? "evoked (sacrificed on entry)" : "hard cast";
+                    addSub(a.card_name + " " + mode, a.card_name + " mode", mode,
+                           a.card_name.str(), "evoke");
+                }
+                // PHYREXIAN ({G/P} -- Birthing Pod's cast AND ActivatePod): pay-mana vs pay-2-life
+                // are distinct variants (#P) that would otherwise share every sub and collapse.
+                // Gated on the printed cost carrying a phyrexian pip, so both modes carry the sub.
+                {
+                    const CardDefinition* phd = CardDatabase::Instance().Lookup(a.card_name);
+                    const bool has_phy = phd &&
+                        ((a.kind == Action::Kind::CastFromHand
+                          && phd->card.m_mana_cost.phyrexian_count > 0)
+                         || (a.kind == Action::Kind::ActivatePod
+                             && phd->params.pod_activation_cost.has_value()
+                             && phd->params.pod_activation_cost->phyrexian_count > 0));
+                    if (has_phy)
+                    {
+                        const std::string mode = a.phyrexian_life > 0
+                            ? ("pay " + std::to_string(a.phyrexian_life) + " life")
+                            : "pay mana";
+                        addSub(a.card_name + " " + mode, a.card_name + " {G/P}", mode,
+                               a.card_name.str(), "phyrexian");
+                    }
                 }
             }
             // Aura enchant TARGET: which permanent this Aura attaches to. Emit a sub per legal target so
@@ -34361,6 +34492,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         // unaffected) and is an identity when no reducer is in play -> byte-identical for every
         // deck without one. CheckLine is viewer-only (sole caller --validate-line), so GT-neutral.
         pc.full_cost = EffectiveCost(*def, s);
+        // Phyrexian pips ({G/P} -- Birthing Pod): price them as PAID WITH LIFE (strip the colour),
+        // the optimistic side. The validator's job is catching clearly-illegal lines, and a false
+        // Illegal on a pay-2-life line the engine itself offers would be unsound; the exact
+        // payment mode is settled by the matched plan variant (#P), not here.
+        if (pc.full_cost.phyrexian_count > 0)
+        { pc.full_cost.StripPhyrexianForLife(pc.full_cost.phyrexian_count); }
         pc.has_spectacle = def->params.spectacle_cost.has_value();
         pc.spectacle_cost = def->params.spectacle_cost.value_or(mc);
         pc.alt_free = alt_free;

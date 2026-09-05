@@ -4167,12 +4167,42 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
             if ((hd ? hd->card : cp_.hand[hi]).IsLand()) { land_idx.push_back(hi); }
         }
         int n_disc = std::max(0, static_cast<int>(land_idx.size()) - 2);
+        // Human-play rummage override (--claude-play / viewer; bucket-B wiring 2026-09-05): the
+        // person picks WHICH cards to discard -- any number, zero included (the +1 bonus draw
+        // happens regardless). Candidates = the whole hand; the excess-lands heuristic set is
+        // the preselected default. Nulled by RevealLogPause in every search scope -> autonomous
+        // play and every rollout are byte-identical.
+        if (g_play_rummage_chooser != nullptr && !cp_.hand.empty())
+        {
+            std::vector<int> heur;
+            for (int k = 0; k < n_disc; ++k)
+            { heur.push_back(land_idx[land_idx.size() - 1 - k]); }
+            std::sort(heur.begin(), heur.end());
+            const std::vector<int> picked = (*g_play_rummage_chooser)(
+                state, controller, def->card.m_name.str(), cp_.hand,
+                static_cast<int>(cp_.hand.size()), heur);
+            std::vector<int> chosen;
+            for (int ci : picked)
+            { if (ci >= 0 && ci < static_cast<int>(cp_.hand.size())) { chosen.push_back(ci); } }
+            std::sort(chosen.begin(), chosen.end(), std::greater<int>());
+            chosen.erase(std::unique(chosen.begin(), chosen.end()), chosen.end());
+            for (int hi : chosen)
+            {
+                Card gone = cp_.hand[hi];
+                cp_.hand.erase(cp_.hand.begin() + hi);
+                cp_.graveyard.push_back(std::move(gone));
+            }
+            n_disc = static_cast<int>(chosen.size());
+        }
+        else
+        {
         for (int k = 0; k < n_disc; ++k)
         {
             const int hi = land_idx[land_idx.size() - 1 - k];   // erase from the back: stable idx
             Card gone = cp_.hand[hi];
             cp_.hand.erase(cp_.hand.begin() + hi);
             cp_.graveyard.push_back(std::move(gone));
+        }
         }
         const int n_draw = n_disc + p.etb_discard_any_draw_bonus;
         for (int k = 0; k < n_draw && !cp_.library.empty(); ++k)
@@ -4208,7 +4238,36 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         const int self_num = state.battlefield[entered_index].card.m_number;
         int tgt = etb_kx;
         if (tgt == kEtbKxHeuristic || tgt < 0)
-        { tgt = ResolveProvider(state).FlickerTarget(state, controller, self_num); }
+        {
+            tgt = ResolveProvider(state).FlickerTarget(state, controller, self_num);
+            // Human-play flicker override (--claude-play / viewer; bucket-B wiring 2026-09-05):
+            // on the PUT path only (a cast variant already carried the human's searched pick),
+            // the person chooses off the board -- or declines ("you may" is real). Reply = an
+            // option index into `legal`, -1 = decline. Nulled by RevealLogPause in every search
+            // scope -> autonomous play and every rollout are byte-identical.
+            if (g_play_flicker_chooser != nullptr)
+            {
+                std::vector<int> legal;
+                for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+                {
+                    const Permanent& bp = state.battlefield[bi];
+                    if (bp.controller_index != controller
+                        || bp.card.m_number == self_num) { continue; }
+                    legal.push_back(bi);
+                }
+                if (!legal.empty())
+                {
+                    int heur = -1;
+                    for (std::size_t li = 0; li < legal.size(); ++li)
+                    { if (state.battlefield[legal[li]].card.m_number == tgt) { heur = static_cast<int>(li); break; } }
+                    const int chosen = (*g_play_flicker_chooser)(
+                        state, controller, def->card.m_name.str(), legal, heur);
+                    if (chosen >= 0 && chosen < static_cast<int>(legal.size()))
+                    { tgt = state.battlefield[legal[chosen]].card.m_number; }
+                    else { tgt = 0; }   // -1 (or out of range with heur -1) = decline
+                }
+            }
+        }
         if (tgt > 0 && tgt != self_num)
         {
             ApplyBlink(state, controller, self_num, tgt,
@@ -4366,6 +4425,65 @@ inline void PerformReturnFromGraveyardToBattlefield(GameState& state, int contro
         std::sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b)
                   { if (a.mv != b.mv) { return a.mv > b.mv; } return a.nm < b.nm; });
         for (const Cand& c : cands) { order.push_back(c.nm); }
+    }
+    // Human-play revive override (--claude-play / viewer; bucket-B wiring 2026-09-05): the
+    // person picks WHICH qualifying graveyard cards come back (up to max_returns, possibly
+    // fewer -- "up to" is a real decline). Same multi-pick contract as the Defense of the
+    // Heart sac_tutor override. Candidates = qualifying gy cards in GRAVEYARD ORDER (one per
+    // copy); heuristic_subset = the first max_returns of the provider order above, mapped to
+    // candidate indices. Nulled by RevealLogPause in every search scope -> autonomous play and
+    // every rollout are byte-identical.
+    if (g_play_revive_chooser != nullptr)
+    {
+        std::vector<Card> gy_cands;
+        std::vector<int>  gy_idx;             // candidate -> graveyard index
+        for (int i = 0; i < static_cast<int>(ap.graveyard.size()); ++i)
+        {
+            const Card& gc = ap.graveyard[i];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(gc);
+            const Card& card = d ? d->card : gc;
+            if (!card.IsCreature() || card.m_power.value_or(0) > max_power) { continue; }
+            gy_cands.push_back(gc);
+            gy_idx.push_back(i);
+        }
+        if (!gy_cands.empty())
+        {
+            std::vector<int> heur;
+            {
+                std::vector<bool> taken(gy_cands.size(), false);
+                for (const std::string& nm : order)
+                {
+                    if (static_cast<int>(heur.size()) >= max_returns) { break; }
+                    for (std::size_t ci = 0; ci < gy_cands.size(); ++ci)
+                    {
+                        if (taken[ci] || gy_cands[ci].m_name.str() != nm) { continue; }
+                        taken[ci] = true; heur.push_back(static_cast<int>(ci)); break;
+                    }
+                }
+            }
+            const std::vector<int> picked =
+                (*g_play_revive_chooser)(state, controller, source_name, gy_cands,
+                                         max_returns, heur);
+            int hdone = 0;
+            GyEnterBatchScope one_event_h;   // both returns are ONE event (Celes's watcher)
+            // Descending gy-index order so earlier erases don't shift later ones.
+            std::vector<int> chosen_gy;
+            for (int ci : picked)
+            {
+                if (ci < 0 || ci >= static_cast<int>(gy_idx.size())) { continue; }
+                if (hdone >= max_returns) { break; }
+                chosen_gy.push_back(gy_idx[ci]); ++hdone;
+            }
+            std::sort(chosen_gy.begin(), chosen_gy.end(), std::greater<int>());
+            for (int gi : chosen_gy)
+            {
+                Card back = ap.graveyard[gi];
+                ap.graveyard.erase(ap.graveyard.begin() + gi);
+                GraveyardEnterScope from_gy;   // Celes's graveyard-enter watcher reads this
+                PutCardOntoBattlefield(state, controller, back, source_name);
+            }
+            return;
+        }
     }
     int done = 0;
     GyEnterBatchScope one_event;   // Reveillark's two returns are ONE event for Celes's watcher

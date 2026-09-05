@@ -1097,6 +1097,19 @@ public:
         // a line that does not mention them is unchanged.
         std::vector<std::string> animates;
         std::vector<std::string> tap_tokens;
+        // "pod=<fetch name>[#<victim m_number>]": a Birthing Pod activation, one entry per
+        // activation. Its own verb for the same reason `equip=` has one -- the action names the
+        // SOURCE artifact, so `cast=Birthing Pod` is ambiguous with hard-casting a copy from
+        // hand. Carries the FETCH (the real choice; "(no fetch)" = sac only) plus optionally the
+        // victim's m_number (0 = any victim -- an unstamped legacy line fans out as the existing
+        // sub-decision variants). EMPTY => legacy matching (the action's card name in the
+        // ordinary cast multiset), so no saved reference moves.
+        struct PodSpec { std::string fetch; int victim = 0; };
+        std::vector<PodSpec> pods;
+        // "ooze=<exiled card name>": a Scavenging Ooze activation, one entry per activation
+        // (repeatable -- no {T}). Names the EXILED graveyard card, the real choice (exiling own
+        // creatures strips Reveillark targets). EMPTY => legacy matching by source card name.
+        std::vector<std::string> ooze_exiles;
     };
     // One concrete plan variant the human's line matched -- when several enumerated plans
     // share the same land + cast names but differ in a per-spell sub-decision (tutor target,

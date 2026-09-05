@@ -892,7 +892,11 @@ function activatableSources(){
       // card being RETURNED -- one Haven with three distinct Dragons in the graveyard is three
       // different activations, so the target has to be both the option's name and part of the key
       // (otherwise they dedupe to one and the human can only ever rebuy whichever came first).
-      const payload = (a.verb==='gyreturn' && a.gyreturn_target) ? a.gyreturn_target : a.card;
+      // pod=/ooze= name their TARGET (the fetch / the exiled card, riding tutor_target),
+      // the gyreturn precedent -- the source artifact is never castable, the target IS the choice.
+      const payload = (a.verb==='gyreturn' && a.gyreturn_target) ? a.gyreturn_target
+                    : ((a.verb==='pod' || a.verb==='ooze') && a.tutor_target) ? a.tutor_target
+                    : a.card;
       const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload;
       (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload };
     }});
@@ -987,6 +991,8 @@ function queueActivation(src, opt){
     : opt.verb==='gyreturn' ? `${src}: tapping and sacrificing it to return ${opt.name} from your graveyard to your hand. Commit the phase to resolve it.`
     : opt.verb==='animate' ? `${src}: animating it — it becomes a creature and can attack this turn. Commit the phase to resolve it.`
     : opt.verb==='taptoken' ? `${src}: tapping it to create a token. Commit the phase to resolve it.`
+    : opt.verb==='pod' ? `${src}: tapping it and sacrificing a creature to fetch ${opt.name}. You pick the victim when committing.`
+    : opt.verb==='ooze' ? `${src}: paying {G} to exile ${opt.name} from a graveyard. Commit the phase to resolve it.`
     : `Activating ${src}’s ability${cap>1?` (${have+1}/${cap})`:''}. Commit the phase to resolve it.`);
   renderBoard();
 }
@@ -1140,7 +1146,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','attach_host','jitte'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','jitte'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -1149,7 +1155,7 @@ function renderBoard() {
   // clickable) underneath.
   const isMain = !S.over && d.type === 'main_phase';
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
-  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge' || dec==='attach_host';
+  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
   if (dec==='divide' && S._divFor !== d.decision_index) initDivAlloc(d);   // board-edit damage allocation
   // At game end, prefer the FINAL board carried on the result (permanents in play after the winning
@@ -2066,7 +2072,7 @@ function initBoardSel(d){
   if (d.type==='target'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||{targets:[]};
     (def.targets||[]).forEach(t=>S.boardSel.add(tgtKey(t)));
-  } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host'){
+  } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
   }
@@ -2074,7 +2080,7 @@ function initBoardSel(d){
 }
 function legalTargetKeys(d){
   if (d.type==='target') return new Set((d.legal_targets||[]).map(tgtKey));
-  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
+  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
   return new Set();
 }
 function toggleSel(d, key, max){
@@ -2086,9 +2092,9 @@ function toggleSel(d, key, max){
 // Add highlight classes + click handlers to the real board for an active target/bounce/vial decision.
 function wireDecisionBoard(d, dec){
   const board=$('board');
-  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='soulfire_targets' || dec==='attach_host'){
+  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker'){
     const legal=legalTargetKeys(d);
-    const max = (dec==='bounce'||dec==='sacrifice'||dec==='attach_host')?1:(dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
+    const max = (dec==='bounce'||dec==='sacrifice'||dec==='attach_host'||dec==='flicker')?1:(dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
     board.querySelectorAll('.thumb[data-idx]').forEach(t=>{
       const key='m:'+t.dataset.idx; if (!legal.has(key)) return;
       t.classList.add('selectable'); if (S.boardSel && S.boardSel.has(key)) t.classList.add('selected');
@@ -2167,7 +2173,7 @@ function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
-                || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor'
+                || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor' || dec==='revive' || dec==='rummage'
                 || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte'
                 || dec==='lackey_put' || dec==='free_cast' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
@@ -2183,6 +2189,8 @@ function renderDecisionPanel(d, dec){
                   : dec==='bottom' ? bottomPanelHtml(d)
                   : dec==='dragon' ? dragonPanelHtml(d)
                   : dec==='sac_tutor' ? sacTutorPanelHtml(d)
+                  : dec==='revive' ? revivePanelHtml(d)
+                  : dec==='rummage' ? rummagePanelHtml(d)
                   : dec==='lackey_put' ? lackeyPanelHtml(d)
                   : dec==='free_cast' ? freeCastPanelHtml(d)
                   : dec==='demonstrate' ? demonstratePanelHtml(d)
@@ -2730,6 +2738,15 @@ function promptPanelHtml(d, dec){
       `<span class="spacer"></span><button id="decnoattach" class="ghost">Leave unattached</button>`+
       `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
+  if (dec==='flicker'){
+    const sel=[...(S.boardSel||[])];
+    const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    return `<h3>${esc(d.source||'Felidar Guardian')} — flicker which permanent?</h3>`+
+      `<div class="sub">Click one of your other permanents to exile and return: it comes back untapped and fresh (a tapped Birthing Pod can activate again, a persisted Finks returns clean, a flickered Reveillark fires its return trigger) — or decline. The AI's pick is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">Flickering: <b>${opt?esc(opt.name):'(pick a permanent)'}</b></span>`+
+      `<span class="spacer"></span><button id="decnoattach" class="ghost">Decline</button>`+
+      `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
+  }
   const max=d.max_targets||1, n=(S.boardSel||new Set()).size;
   // Planeswalker LOYALTY ability target: d.loyalty says what happens to the chosen permanent
   // ("turned into a green 3/3 Elk with no abilities"), and d.source names the ability
@@ -2815,6 +2832,16 @@ function wireDecisionPanel(d, dec){
     const ai=panel.querySelector('#sactutai'); if (ai) ai.onclick=()=>{ S.sacTutorSel=new Set(aiDragonSet(d)); renderDecisionPanel(d,'sac_tutor'); };
     const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitSacTutorBatch(d);
   }
+  else if (dec==='revive'){
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>toggleRevive(d, +b.dataset.opt));
+    const ai=panel.querySelector('#reviveai'); if (ai) ai.onclick=()=>{ S.reviveSel=new Set(aiDragonSet(d)); renderDecisionPanel(d,'revive'); };
+    const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitReviveBatch(d);
+  }
+  else if (dec==='rummage'){
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>toggleRummage(d, +b.dataset.opt));
+    const ai=panel.querySelector('#rummageai'); if (ai) ai.onclick=()=>{ S.rummageSel=new Set(aiDragonSet(d)); renderDecisionPanel(d,'rummage'); };
+    const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitRummageBatch(d);
+  }
   else if (dec==='divide')
     { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDivide(d); }
   else if (dec==='expressive_iteration')
@@ -2841,8 +2868,10 @@ function wireDecisionPanel(d, dec){
   else {
     const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitBoardSel(d, dec);
     // attach_host: "Leave unattached" replies -1 (the equipment stays on the battlefield loose).
+    // flicker reuses the same button as its "Decline" (reply -1 = no flicker at all).
     const na=panel.querySelector('#decnoattach');
-    if (na) na.onclick=()=>pushChoice(d, -1, `${d.source}: leave unattached`);
+    if (na) na.onclick=()=>pushChoice(d, -1, dec==='flicker' ? `${d.source}: decline flicker`
+                                                             : `${d.source}: leave unattached`);
   }
 }
 function pushChoice(d, oi, lab){ pushChoices(d, [oi], lab); }
@@ -2975,6 +3004,76 @@ function commitSacTutorBatch(d){
   const names=(d.candidates||[]).filter(c=>sel.has(c.index)).map(c=>c.name);
   S._sacTutorFor=null; S.sacTutorSel=null;    // clear the per-decision selection guard
   pushChoices(d, flags, `${d.source||'Defense of the Heart'}: put ${names.length?names.join(', '):'nothing'}`);
+}
+// Reveillark revive: pick WHICH qualifying graveyard creature cards (power <= 2) return to the
+// battlefield when the LTB resolves. Same multi-pick shape as sac_tutor (one 0/1 flag per
+// candidate); "up to" is a real decline -- confirming with none selected is legal.
+function revivePanelHtml(d){
+  const cap=d.max_puts||0;
+  if (S._reviveFor !== d.decision_index){ S._reviveFor=d.decision_index; S.reviveSel=new Set(aiDragonSet(d)); }
+  const sel=S.reviveSel, aiSet=new Set(aiDragonSet(d));
+  let h=`<h3>${esc(d.source||'Reveillark')} — return which creatures?</h3>`;
+  h+=`<div class="sub">Return up to <b>${cap}</b> creature card${cap===1?'':'s'} with power 2 or less from your graveyard to the battlefield. The AI's picks (missing combo pieces first) are preselected; returning fewer — or none — is legal.</div>`;
+  h+=`<div class="tutgrid">`;
+  (d.candidates||[]).forEach(c=>{
+    const isSel=sel.has(c.index), isAI=aiSet.has(c.index);
+    h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (isAI?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div>`;
+  const n=sel.size, ok=(n<=cap);
+  h+=`<div class="pbtns"><span class="pcount">${n} / ${cap} selected</span>`+
+     `<button class="ghost" id="reviveai">Follow AI</button><span class="spacer"></span>`+
+     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Return ${n} creature${n===1?'':'s'}</button></div>`;
+  return h;
+}
+function toggleRevive(d, oi){
+  const cap=d.max_puts||0, sel=S.reviveSel||(S.reviveSel=new Set());
+  if (sel.has(oi)) { sel.delete(oi); }
+  else { if (sel.size>=cap){ flashHint(`Up to ${cap} — deselect one first.`); return; } sel.add(oi); }
+  renderDecisionPanel(d,'revive');
+}
+function commitReviveBatch(d){
+  const cap=d.max_puts||0, sel=S.reviveSel||new Set();
+  if (sel.size>cap){ flashHint(`Pick up to ${cap}.`); return; }
+  const flags=(d.candidates||[]).map(c=>sel.has(c.index)?1:0);
+  const names=(d.candidates||[]).filter(c=>sel.has(c.index)).map(c=>c.name);
+  S._reviveFor=null; S.reviveSel=null;    // clear the per-decision selection guard
+  pushChoices(d, flags, `${d.source||'Reveillark'}: return ${names.length?names.join(', '):'nothing'}`);
+}
+// Celes rummage: pick WHICH hand cards to discard ("any number... draw that many plus one").
+// Zero is legal -- the +1 bonus draw happens regardless -- so Confirm is never disabled.
+function rummagePanelHtml(d){
+  if (S._rummageFor !== d.decision_index){ S._rummageFor=d.decision_index; S.rummageSel=new Set(aiDragonSet(d)); }
+  const sel=S.rummageSel, aiSet=new Set(aiDragonSet(d));
+  let h=`<h3>${esc(d.source||'Celes, Rune Knight')} — discard which cards?</h3>`;
+  h+=`<div class="sub">Discard any number of cards, then draw that many <b>plus one</b> (discarding nothing still draws a card). The AI's picks (excess lands) are preselected.</div>`;
+  h+=`<div class="tutgrid">`;
+  (d.candidates||[]).forEach(c=>{
+    const isSel=sel.has(c.index), isAI=aiSet.has(c.index);
+    h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (isAI?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div>`;
+  const n=sel.size;
+  h+=`<div class="pbtns"><span class="pcount">${n} selected → draw ${n+1}</span>`+
+     `<button class="ghost" id="rummageai">Follow AI</button><span class="spacer"></span>`+
+     `<button id="decconfirm" class="primary">Discard ${n}, draw ${n+1}</button></div>`;
+  return h;
+}
+function toggleRummage(d, oi){
+  const sel=S.rummageSel||(S.rummageSel=new Set());
+  if (sel.has(oi)) { sel.delete(oi); } else { sel.add(oi); }
+  renderDecisionPanel(d,'rummage');
+}
+function commitRummageBatch(d){
+  const sel=S.rummageSel||new Set();
+  const flags=(d.candidates||[]).map(c=>sel.has(c.index)?1:0);
+  const names=(d.candidates||[]).filter(c=>sel.has(c.index)).map(c=>c.name);
+  S._rummageFor=null; S.rummageSel=null;    // clear the per-decision selection guard
+  pushChoices(d, flags, `${d.source||'Celes'}: discard ${names.length?names.join(', '):'nothing'} (draw ${names.length+1})`);
 }
 // Divide: send one integer per legal target (in legal order = the order the engine reads them).
 function commitDivide(d){
@@ -3120,6 +3219,9 @@ function commitBoardSel(d, dec){
   } else if (dec==='attach_host'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: attach to ${opt?opt.name:'creature'}`;
+  } else if (dec==='flicker'){
+    const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
+    oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: flicker ${opt?opt.name:'permanent'}`;
   } else if (dec==='soulfire_targets'){
     const want=sel.map(k=>+k.slice(2)).sort((a,b)=>a-b).join('|');
     const opt=(d.options||[]).find(o=>(o.perm_indices||[]).slice().sort((a,b)=>a-b).join('|')===want);

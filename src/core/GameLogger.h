@@ -325,6 +325,14 @@ extern thread_local BounceChooser* g_play_bounce_chooser;
 // graveyard and the viewer says "sacrifice" not "return". Nulled by RevealLogPause for search.
 extern thread_local BounceChooser* g_play_sacrifice_chooser;
 
+// ---- Human-play Felidar flicker chooser (which own permanent to exile-and-return) -----------
+// Felidar Guardian's ETB on a PUT path (Pod / Chord / a Reveillark return) has no cast variant
+// to carry the searched target, so the provider's FlickerTarget resolves it autonomously; under
+// --claude-play the human picks off the board (or declines -- "you may"). Same signature as the
+// bounce chooser (legal battlefield indices + a heuristic option pick), with reply -1 = decline
+// the flicker outright. Nulled by RevealLogPause for every search scope -> rollouts identical.
+extern thread_local BounceChooser* g_play_flicker_chooser;
+
 // ---- Human-play attach-host chooser (Armored Skyhunter's attack-dig attach) -----------------
 // The Skyhunter attack trigger may put an Equipment onto the battlefield and attach it to a
 // creature you control. WHICH card to put reuses the DIG chooser (examined cards + legal
@@ -597,6 +605,28 @@ using SacTutorChooser = std::function<std::vector<int>(const GameState& state, i
                                                        const std::vector<int>& heuristic_subset)>;
 extern thread_local SacTutorChooser* g_play_sac_tutor_chooser;
 
+// ---- Human-play Reveillark revive chooser (--claude-play / viewer) --------------------------
+// Reveillark's LTB: "return up to two target creature cards with power 2 or less from your
+// graveyard to the battlefield." WHICH (up to max_returns, possibly fewer -- "up to") is a real
+// human choice the engine resolves via MeliraPodProvider::ReviveCandidates autonomously. Same
+// contract as SacTutorChooser: `candidates` = the qualifying graveyard cards (one per copy, in
+// graveyard order), `heuristic_subset` = candidate indices the provider default would return;
+// the chooser returns chosen indices (returned in the provider's order semantics -- see
+// PerformReturnFromGraveyardToBattlefield). Nulled by RevealLogPause for every search scope, so
+// it fires only on the REAL resolution and autonomous play is byte-identical.
+using ReviveChooser = SacTutorChooser;
+extern thread_local ReviveChooser* g_play_revive_chooser;
+
+// ---- Human-play Celes rummage chooser (--claude-play / viewer) ------------------------------
+// Celes, Rune Knight's ETB: "discard any number of cards, then draw that many cards plus one."
+// WHICH cards (any number, zero is fine -- the bonus draw still happens) is a real human choice
+// the engine resolves with an excess-lands heuristic autonomously. Same contract as
+// SacTutorChooser: `candidates` = the whole hand (one entry per card, hand order),
+// `heuristic_subset` = the indices the excess-lands default would discard, max_puts = hand size
+// (no cap -- "any number"). Nulled by RevealLogPause for every search scope.
+using RummageChooser = SacTutorChooser;
+extern thread_local RummageChooser* g_play_rummage_chooser;
+
 // Goblin Lackey combat-cheat chooser (--claude-play / viewer). "Whenever Goblin Lackey deals combat
 // damage to a player, you MAY put a Goblin permanent card from your hand onto the battlefield." WHICH
 // card (or decline -- it is a "may") is a real human choice. `candidates` = the matching Goblin
@@ -779,6 +809,8 @@ inline bool AllPlayHooksNull()
         && g_play_land_entry_chooser == nullptr && g_play_land_rad_chooser == nullptr
         && g_play_dragon_chooser == nullptr
         && g_play_sac_tutor_chooser == nullptr && g_play_lackey_chooser == nullptr
+        && g_play_revive_chooser == nullptr && g_play_flicker_chooser == nullptr
+        && g_play_rummage_chooser == nullptr
         && g_play_free_cast_chooser == nullptr && g_play_lightpaws_chooser == nullptr
         && g_play_demonstrate_chooser == nullptr
         && g_play_firebreathe_chooser == nullptr && g_play_cast_order_chooser == nullptr
@@ -822,6 +854,9 @@ struct RevealLogPause
     LandRadChooser*   saved_lradchooser = nullptr;
     DragonChooser* saved_dragchooser;
     SacTutorChooser* saved_sacttchooser;
+    ReviveChooser* saved_revchooser;
+    BounceChooser* saved_flickchooser;
+    RummageChooser* saved_rumchooser;
     LackeyChooser* saved_lackeychooser;
     FreeCastChooser* saved_freecastchooser;
     DemonstrateChooser* saved_demochooser = nullptr;
@@ -867,6 +902,9 @@ struct RevealLogPause
         saved_repchooser = g_play_replicate_chooser; saved_lechooser = g_play_land_entry_chooser;
         saved_lradchooser = g_play_land_rad_chooser;
         saved_dragchooser = g_play_dragon_chooser; saved_sacttchooser = g_play_sac_tutor_chooser;
+        saved_revchooser = g_play_revive_chooser;
+        saved_flickchooser = g_play_flicker_chooser;
+        saved_rumchooser = g_play_rummage_chooser;
         saved_lackeychooser = g_play_lackey_chooser;
         saved_freecastchooser = g_play_free_cast_chooser;
         saved_demochooser = g_play_demonstrate_chooser;
@@ -887,7 +925,8 @@ struct RevealLogPause
         g_play_sacrifice_chooser = nullptr;
         g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr;
         g_play_land_rad_chooser = nullptr; g_play_dragon_chooser = nullptr;
-        g_play_sac_tutor_chooser = nullptr;
+        g_play_sac_tutor_chooser = nullptr; g_play_revive_chooser = nullptr;
+        g_play_flicker_chooser = nullptr; g_play_rummage_chooser = nullptr;
         g_play_lackey_chooser = nullptr; g_play_free_cast_chooser = nullptr;
         g_play_demonstrate_chooser = nullptr;
         g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
@@ -909,6 +948,9 @@ struct RevealLogPause
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
                         g_play_land_rad_chooser = saved_lradchooser;
                         g_play_dragon_chooser = saved_dragchooser; g_play_sac_tutor_chooser = saved_sacttchooser;
+                        g_play_revive_chooser = saved_revchooser;
+                        g_play_flicker_chooser = saved_flickchooser;
+                        g_play_rummage_chooser = saved_rumchooser;
                         g_play_lackey_chooser = saved_lackeychooser;
                         g_play_free_cast_chooser = saved_freecastchooser;
                         g_play_demonstrate_chooser = saved_demochooser;
