@@ -1158,9 +1158,21 @@ pre-apply battlefield holds >= 2 activatable Pods.
   deferred-class cards (Melira plays no cantrip/trick/equipment/dig/staging card). Reconcile
   before such a deck exists.
 - **Human play**: the auto-continuation is OFF under HumanPlayActive in both worlds — the
-  human owns the rest of the phase. The human-side same-phase chain remains the KNOWN parity
+  human owns the rest of the phase. ~~The human-side same-phase chain remains the KNOWN parity
   gap (one plan pick per phase, no re-poll after a pod activation); cross-phase chaining via
-  the second main still works for humans. Queued, unchanged.
+  the second main still works for humans. Queued, unchanged.~~ **RETRACTED 2026-09-05e —
+  measured EXPRESSIBLE.** The "one plan pick per phase" premise predates the always-prompt
+  segment loop (MTG_PLAY_SEGMENT_ALWAYS, adopted 2026-09-04): the main phase re-prompts with a
+  FRESH EnumerateMainPlans after every committed line, so all three shapes were verified live
+  on Melira s1/gi0 via the stateless protocol: (1) same-main activation of a just-cast Pod —
+  9 activation-only plans offered on the re-prompt right after the Pod cast (T3); (2) re-poll
+  after an activation — always happens; (3) THE chain, Pod #2 saccing Pod #1's same-phase
+  fetch — after committing "Pod: sac Finks → Redcap", the re-prompt offered 28 plans with
+  "Birthing Pod: sac Murderous Redcap → …" (T5, two-pod steer). Site-7 wave-0 fan plans also
+  put two-activation single lines in the human menu (victims snapshot pre-fetch there, so the
+  fetch-chained victim still needs the segment route). Every earlier "0 chain plans"
+  observation in the verification traced to mana genuinely being spent (all sources tapped /
+  the last dork summoning-sick or sacced as the pod victim) — enumeration was never the gap.
 - **Proof scenario** `melira_pod_chain.json`: 3 Pods, lone Carrion Feeder, opponent at 2,
   only damage in the position is Redcap's ETB 2 at the top of an MV 1->2->3->4 ladder — a
   three-step climb that CANNOT split across two mains (the second same-phase step needs the
@@ -1265,3 +1277,38 @@ and is a real draw divergence, not this class; candidate for its own investigati
 NOTE for future emission changes: a plan list that grows (the phyrexian twin widening pushed
 the recorded pick out of the 200-plan display window) is survivable ONLY because the checker
 runs uncapped (MTG_PLAY_PLANS_CAP=0) and now matches full payloads -- keep both.
+
+## SESSION 2026-09-05e — the last "shuffle-dead" ref, and the chain parity gap closed by measurement
+
+### FiveColour/claude_s1_gi0: NOT shuffle-dead either (the user's "no excuse" standard, vindicated again)
+The previous session flagged this as "hand genuinely differs -- Progenitus never drawn, a real
+draw divergence". Traced this session: **also wrong, and also a checker artifact.** The
+step-by-step replay shows every fetch matching the recording (Overgrown Tomb, Steam Vents,
+Godless Shrine) and Progenitus drawn on T3 exactly as recorded. The real story: Maelstrom
+Archangel's free-cast charge moved from a post-main #FREE plan variant to its own combat-time
+`free_cast` frame, which this Aug-13 reference predates. The walk answers that inserted frame
+from RECORDED INTENT (`free_cast_intent` reads the donor T4 post-main pick) and free-cast
+Progenitus early -- correct! -- but nothing marked the donor post-main frame as consumed, so
+on reaching it the plan was gone, the hand "differed" (the card is on the BATTLEFIELD, not
+undrawn), and the classifier mis-blamed a reshuffle. FIX (same shape as the replicate
+`honoured` set): `freecast_done` tracks what intent-driven free casts made per turn; a donor
+frame that is nothing but those casts (land=none) is satisfied-early -> passed, not declared
+dead. The ref now replays `repaired` to its exact recorded terminal (won=True, win_turn=5).
+**Suite: 13 ok / 266 repaired / 0 play-drift / 0 SHUFFLE-DEAD / 0 enum-gap / 5 mull-drift /
+0 contract-fail (284 refs).** Commit 63919bf1.
+
+- The 5 remaining mull-drift are ALL Mirrorwing_Dragon s1-s5: the DECKLIST changed under them
+  (3faf5c76 shipped the Anger-4/Oracle-3 list; the old list was archived as v2). Different 60
+  cards -> different numbering -> different shuffles; "the recorded game no longer occurs" is
+  literally true and neither the checker nor the engine is at fault. References are user-owned
+  and commit-only, so whether to archive them beside the v2 list is the USER's call (surfaced).
+
+### Human-side same-phase pod chain: RESOLVED-STALE (see the retraction in SESSION 2026-09-05c)
+Verified live on Melira s1/gi0 through the stateless protocol: the always-prompt segment loop
+already expresses (1) same-main activation of a just-cast Pod, (2) re-poll after an
+activation, and (3) Pod #2 saccing Pod #1's same-phase fetch (28 such plans offered on the
+re-prompt after committing "sac Finks -> Redcap"). No code change; the 2026-09-05c "one plan
+pick per phase" premise predated the 2026-09-04 segment-always adoption. Remaining Melira
+queue after this: Rec Sage self-Pod + Severance exile human choosers (both decline-optimal
+deferrals awaiting sign-off), regression-suite membership + value-leaf/mulligan stages
+(user-initiated), optional re-save of repaired refs (user-owned).
