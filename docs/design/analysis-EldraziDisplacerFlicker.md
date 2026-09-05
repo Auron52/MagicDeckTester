@@ -3070,13 +3070,16 @@ separates candidate 1 from candidate 2.
 
 ## STATE OF PLAY, 2026-09-05 — handoff
 
-**Where the deck actually is: avg win turn 6.0903 +/- 0.0433**, measured on 600 games / 600 DISTINCT
+**Where the deck actually is: avg win turn 6.0917 +/- 0.0433**, measured on 600 games / 600 DISTINCT
 shuffle seeds [9000,9599] at the shipped profile, d5 / 20 ms, on this commit.
 
 | turn | t4 | t5 | t6 | t7 | t8 | unwon |
 |---|---|---|---|---|---|---|
-| count | 20 | 154 | 251 | 119 | 33 | 21 |
-| share | 3.3% | 25.8% | **42.0%** | 19.9% | 5.5% | 3.5% |
+| count | 20 | 155 | 251 | 119 | 34 | 21 |
+| share | 3.3% | 25.8% | **41.8%** | 19.8% | 5.7% | 3.5% |
+
+(Cumulative: 29.2% by t5, 71.0% by t6, 90.8% by t7. The 21 unwon are scored 9 per the goldfish
+metric.)
 
 The user's targets are *"the majority of games should combo"* and *"the final win turn closer to 4
 than 5 ... even before the profile is active."* The mode is t6 and only 29% kill by t5, so the deck
