@@ -3,9 +3,11 @@
 **Deck:** `decks/Fluctuator/Fluctuator.cod` (60 cards: 42 lands, 18 spells)
 **Started:** 2026-09-04
 **Branch:** `phase-1-2-deck-analyzer`
-**Status:** IN PROGRESS — play quality settled (see §7.7); deck NOT yet in the regression suite
-(O-4 perf gate). Current: **avg 3.8600** turn-to-win, 41/100 games won on T3
-(100 games, seed 9001, d3/b200).
+**Status:** play quality settled (§7.7, §7.8); deck IS NOW A REGRESSION CASE in all three tiers
+(O-4 perf gate met at the real gate budgets — the b200 tail was budget-driven, not structural).
+Current: **avg 3.8000** turn-to-win, zero unwon (100 games, seed 9001, d3/b200; held-out bases
+20001/30001/40001 gave 3.92/3.78/3.86 before §7.8, so the level is ~3.8 +/- 0.06, not a seed
+artifact).
 
 This is the git-tracked per-deck ledger required by `.claude/skills/analyze-deck.md`
 ("Running this at scale"). It is the durable memory a resumed session or a second
@@ -511,6 +513,24 @@ games. Do not re-propose it without a metric that prices library depletion.
 and `SelectDigSource` already ranks it last of the real fodder (rank 4, behind lands) so it is not
 cycled away ahead of things that should go first.
 
+### (c-bis) The hold was RE-TESTED on top of §7.8 and still rejected (2026-09-05)
+
+The user asked the right question: *"why did we reject the Hollow One case if it had a lower
+average?"* The honest answer is that it WAS lower, and the first rejection rested on the user's
+ruling plus a library argument. Once §7.8 removed the pre-threat digging, that argument might have
+become obsolete — the decking could have been the DIGGING's fault rather than the hold's. So the
+hold was restored on top of §7.8 and re-measured. It is not obsolete:
+
+| | avg | library left | <=10 | **==0** |
+|---|---|---|---|---|
+| no hold + stop-on-threat (shipped) | 3.8000 | 25.8 | 1/40 | **0/40** |
+| hold + stop-on-threat | 3.6000 | 13.6 | 19/40 | **9/40** |
+
+The two effects are INDEPENDENT: the hold's library burn is identical with and without §7.8 (13.4 ->
+13.6 mean, 9/40 at zero either way), because it happens on the KILL turn, not while digging. So the
+0.20 turns the hold buys is still paid for by ending nearly a quarter of games with an empty
+library. The rejection now stands on its own evidence rather than on instruction alone.
+
 ### Two process notes worth keeping
 
 * **A single wall-clock number on a shared box is worthless.** The adopted config first measured
@@ -533,6 +553,70 @@ cycled away ahead of things that should go first.
   **open** rather than diagnosed.
 * **Not the mulligan.** Unchanged across all three steps here.
 
+
+## 7.8 Cards in the library are a RESOURCE (USER policy, 2026-09-05) - 3.86 -> 3.80
+
+The user's model of the deck, stated across several messages:
+
+> "you should stop cycling the moment you can play your threat" ... "if you can't play it this turn
+> you should wait until you can" ... "cards in the library are a RESOURCE. Sometimes you need to
+> cycle to find your missing threat or a way to play it, but otherwise you want to keep them" ...
+> "that rule does not apply if you are still missing, but able to cast unearth" ... "you also need
+> to keep cycling if you don't have unearth yet ... even with a stinger in hand"
+
+Cycling plays TWO roles and they need opposite policies. With a Stinger on the battlefield every
+cycle is a ping and the chain is the wincon. BEFORE that, cycling is pure DIGGING: no damage, and
+each card spent is a card the kill will not have. The engine was digging whenever a free cycle
+existed — **271 cycles over 40 games, 25% of all cycling, with 15 of 40 games burning >10 cards**
+that way.
+
+`FluctuatorProvider::ShouldConsiderDig` now stops as soon as the hand holds an EXECUTABLE route to
+a Stinger. Three details carry the user's exceptions:
+
+* **Reachability reads the lands we CONTROL, not untapped mana.** That is "wait until you can":
+  being tapped out is a reason to wait a turn, not to spend library.
+* **An Unearth with an empty graveyard is NOT a route** (no legal target, CR 601.2c). That state
+  keeps digging — it is the deck's signature line (cycle a Stinger into the yard, then Unearth it),
+  not an exception to the rule.
+* **A Stinger in hand with no reachable red source is NOT a route** either, so the deck keeps
+  digging for an Unearth or a red land ("even with a stinger in hand").
+
+| | avg | library left | <=10 | pre-threat cycles |
+|---|---|---|---|---|
+| always dig | 3.8600 | 24.0 | 2/40 | 271 (6.8/game) |
+| **stop on threat** | **3.8000** | **25.8** | **1/40** | **179 (4.5/game)** |
+
+Better on both axes at once. `MTG_FLUCT_STOP_ON_THREAT=0` restores always-dig.
+
+### Open follow-ups this policy exposed (NOT built)
+
+1. **The second-Stinger finish.** *"That is the second way to finish the job when the library is
+   getting low. You play 2 unearth for 2 stinger and deal 2 per card."* With two Stingers a kill
+   needs ~10 cycles instead of ~20, which is the right answer when the library is short — and it
+   ADDS damage per card, unlike holding Hollow One. The user's threshold: *"when there are
+   sufficient cards left in the library (over 20, after dropping stinger) there is no need to get a
+   second stinger or hold Hollow One... the purpose of the other lines is only to handle cases
+   where we don't have enough cards left."* Nothing in the engine currently prefers the second
+   Unearth when the library is short.
+2. **Capital City blocks a real line, and it is the O-2 deferral.** *"Capital City is playable, but
+   costs a card from the cycle engine... if all of the unearths are far down in the deck and you
+   have sufficient fuel in hand playing Capital City to play stinger could be okay."* The engine
+   **cannot express this at all**: Capital City's `{1},{T}: add one mana of any color` filter is
+   unimplemented (modelled as `[C]`), so it can never pay Drannith Stinger's {R}. This deck has 4
+   copies and they are its only untapped colour source. O-2 is therefore not the harmless
+   under-rating it was recorded as — it removes a line the deck's owner plays.
+3. **2HG: the Stinger trigger is hardcoded to ONE opponent.** *"stinger deals 2 per card in 2HG, so
+   that case is actually a bit easier."* `FireCycleWatchers` (SpellEffects.h) does
+   `const int opp = 1 - controller;` and damages only that player. Origin's `9062c552`
+   (feat(2hg): model multiple opponents) establishes the pattern — every "each opponent" effect
+   multiplies by `gamesetup::OpponentHeads()`. **This branch is 9 commits behind that commit**, so
+   the bug is latent now and becomes real on rebase. Fix `cycle_trigger_damage_each_opponent` the
+   same way when integrating.
+4. **The third land can cost more than it gives.** *"often you don't even want to play the third
+   land, because it costs a cycling card"* — though *"the Enlightened Tutor case is a real example
+   where you need a third land. Playing two unearth to get double stinger could be another."*
+   NOT a capability gap: the enumerator already emits the no-land plan (`add_for_land("", "")`,
+   TurnSolver.cpp), so the search can decline the drop and this is a valuation question.
 
 ## Claude-play sweep
 
