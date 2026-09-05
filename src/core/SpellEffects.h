@@ -6387,12 +6387,39 @@ inline constexpr int kPersistLoopCap = 60;
 inline int ApplyPersistLoop(GameState& state, int controller, int source_id, int victim_id,
                             int iterations)
 {
-    // The victim is PINNED by the committed plan ("loop <victim> xK", with K itself an explicit
-    // human pick via the "loops xK" sub) -- so the per-iteration victim dialog inside
-    // ApplySacCreatureOutlet would re-ask an answered question, K times (seed-6 play-test:
-    // 8 identical "which creature to sacrifice" dialogs for one committed x8 loop). Null the
-    // chooser for the loop's duration; it is already null in autonomous/search/rollout play
-    // (RevealLogPause), so this is human-surface only and byte-identical everywhere else.
+    // HUMAN PLAY: ask WHICH creature loops ONCE, on the board, before the first iteration --
+    // the Pod-victim pattern (USER 2026-09-05: the xK dialog removed as redundant, "allow the
+    // targeting to be collapsed in this case"). Default = the plan's baked victim, so a
+    // reference that predates this frame replays losslessly through the checker's
+    // engine-default answer. K stays the plan's (the loop already breaks at lethal / on an
+    // illegal iteration, and a free outlet's extra clean-return iterations cost nothing).
+    if (g_play_sacrifice_chooser)
+    {
+        std::string loop_src_name;
+        std::vector<int> vcands;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index != controller) { continue; }
+            if (q.card.m_number == source_id) { loop_src_name = q.card.m_name.str(); }
+            if (q.card.IsCreature()) { vcands.push_back(i); }
+        }
+        if (static_cast<int>(vcands.size()) > 1)
+        {
+            int def_opt = 0;
+            for (int k = 0; k < static_cast<int>(vcands.size()); ++k)
+            { if (state.battlefield[vcands[k]].card.m_number == victim_id) { def_opt = k; break; } }
+            const int chosen = (*g_play_sacrifice_chooser)(
+                state, controller, loop_src_name, vcands, def_opt);
+            const int pick = (chosen >= 0 && chosen < static_cast<int>(vcands.size()))
+                           ? chosen : def_opt;
+            victim_id = state.battlefield[vcands[pick]].card.m_number;
+        }
+    }
+    // Then null the chooser for the iterations themselves: the per-iteration dialog inside
+    // ApplySacCreatureOutlet would re-ask the answered question K times (seed-6 play-test: 8
+    // identical dialogs for one committed x8 loop). Already null in autonomous/search/rollout
+    // play (RevealLogPause) -> byte-identical everywhere but the live viewer.
     BounceChooser* saved_sac_chooser = g_play_sacrifice_chooser;
     g_play_sacrifice_chooser = nullptr;
     int done = 0;

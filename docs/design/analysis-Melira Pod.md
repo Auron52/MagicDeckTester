@@ -1421,3 +1421,27 @@ Conclusion: no greedy DECISION contaminates the searched structure for Melira Po
 survives only where the user's ruling accepts it (playouts) plus a provably-consistent base-arm
 executor residue. The probe's new (base vs MISMATCH) split is permanent apparatus -- if MISMATCH
 ever reads nonzero on a future audit, that is a real scored-vs-realized divergence to chase.
+
+## SESSION 2026-09-05i — the xK loop dialog removed; loop targeting collapsed to the board
+
+USER: "remove the weird x9/x17 Murderous Redcap dialog... doesn't make sense to the user and
+seems redundant" + "we could possibly allow the targeting to be collapsed in this case."
+It IS redundant: the demand-driven K's (lethal-by-damage vs lethal-by-growth) are the ENGINE's
+alternatives for one job, the loop breaks the moment the opponent is dead, and a free outlet's
+extra clean-return iterations cost nothing -- either K realizes the same game.
+
+Shipped (the Pod-victim pattern, third application):
+- The "loops xK <victim>" SubChoice is DELETED from the choose fan; loop variants of one outlet
+  share a sig and collapse (rank-best representative carries the defaults).
+- The menu display-collapses loop entries per outlet (key "S<source>loop"): seed-6 T4 now shows
+  ONE "Carrion Feeder: loop Murderous Redcap x8 (persist) -> 16 damage" entry (was: x8 twin +
+  x17 twin + bundles).
+- ApplyPersistLoop asks WHICH creature loops ONCE, on the board, before the first iteration
+  (default = the plan's baked victim -> predating references replay losslessly); the
+  per-iteration suppression stays. K stays the plan's bake, bounded by break-at-lethal and the
+  legality break.
+Verified end-to-end on seed-6 T4: commit the one loop entry -> one sacrifice board-click
+(default Redcap) -> loop runs to the kill (opp -12), history interleaved. All 10 references
+green (s8/s9/s10 committed this session -- user's new games); protocol sweep 0 drift / 0 gaps
+(287 refs), validate-line 0 REGRESSION, unit SUCCESS, scenarios 72/72, smoke 68/68
+byte-identical (enumeration untouched -- display + choose-fan + resolution only).

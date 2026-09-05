@@ -34568,20 +34568,15 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             // -- the board-click chooses it precisely by battlefield index, which supersedes the
             // old " #k" disambiguation concern (two same-named victims collapse harmlessly now:
             // whichever representative wins the dedup, the human re-picks the body on the board).
-            // Repeat-outlet LOOP COUNT (the sacout loop-count fold above): a plan's demand-driven
-            // burst (x8 lethal damage, x14 lethal growth) is a real decision once the declared
-            // count matched flexibly -- without this sub two loop plans differing only in K fold
-            // into one unlabelled variant and the dedup silently picks how many times the human
-            // sacrifices. Victim named in the choice (the x8 and x14 may eat different bodies).
-            if (a.kind == Action::Kind::SacCreatureOutlet && a.sac_count > 1)
-            {
-                std::string vict;
-                for (const Permanent& perm : state.battlefield)
-                { if (perm.card.m_number == a.sac_victim_id) { vict = " " + perm.card.m_name.str(); break; } }
-                const std::string times = "\xC3\x97" + std::to_string(a.sac_count) + vict;   // ×K victim
-                addSub(a.card_name + " loops " + times, a.card_name + " loops", times,
-                       a.card_name, "activations");
-            }
+            // Repeat-outlet LOOP: NO sub (USER 2026-09-05: "remove the weird x9/x17 dialog. It
+            // doesn't make sense to the user and seems redundant" -- and it is: the demand-driven
+            // K's are the ENGINE's alternatives for one job, the loop already breaks the moment
+            // the opponent is dead, and a free outlet's extra clean-return iterations cost
+            // nothing, so which K realizes the same game). The victim is resolution-picked too
+            // (the user's "allow the targeting to be collapsed in this case"): ApplyPersistLoop
+            // asks ONCE on the board before looping, with the plan's bake as the default -- the
+            // Pod-victim pattern. So loop variants of one outlet collapse to one, and the dedup's
+            // rank-best representative simply carries the defaults.
             // Zada/Mirrorwing solo-target trick: the target rides enchant_target (the aura precedent),
             // but it is NOT a sub-decision the human makes HERE. ResolveSoloTargetTrick re-asks it at
             // RESOLUTION off the board, from the full rules-legal set (every own creature) -- so

@@ -943,6 +943,16 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                          + (a.phyrexian_life > 0 ? "L" : "M") + ";";
                     continue;
                 }
+                // Repeat-outlet LOOP (persist xK): victim AND count are resolution/engine
+                // concerns now (victim via the one board-click, K bounded by break-at-lethal),
+                // so the xK / victim variants of one outlet fold to the rank-best entry
+                // (USER 2026-09-05: the x9/x17 distinction "doesn't make sense to the user").
+                if (a.kind == Action::Kind::SacCreatureOutlet && a.sac_count > 1)
+                {
+                    has_collapse = true;
+                    key += "S" + std::to_string(a.sac_source_id) + "loop;";
+                    continue;
+                }
                 // Chord-class X-capped tutor cast: the TARGET is re-picked at resolution
                 // (tutor_etb, baked default), so its fan folds too. X stays in the key --
                 // it is a real payment difference the menu must keep distinct.
