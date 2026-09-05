@@ -1281,13 +1281,24 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         //                  forced, and it costs nothing on any deck in the suite (no {C} pips).
         //   ramp_filter -- "feed 1, Add one of each `produces` colour": amt = |produces|, per_col = 1.
         //                  Exactly the domain shape.
-        if (def->params.is_filter || def->params.ramp_filter)
+        //   any_color_filter -- "feed 1, Add ONE of any colour" (Capital City), plus a free
+        //                  "{T}: Add {C}" mode. One tap yields at most one mana either way, so
+        //                  amt = per_col = 1 over its colours WITH Colorless joined for the free
+        //                  mode. This is the only conversion shape whose fed mode is mana-NEUTRAL,
+        //                  and ignoring the feed is what makes it look like a rainbow land here --
+        //                  sound for the same reason as the other two (over-supply cannot prune).
+        if (IsManaConversionSource(def->params))
         {
             std::uint8_t fbits = 0;
             for (Color c : def->params.produces)
             { fbits |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }
             if (fbits == 0) { continue; }   // no colours -> this filter makes nothing usable
-            if (def->params.is_filter)
+            if (def->params.any_color_filter)
+            {
+                fbits |= static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless));
+                srcs.push_back({ fbits, 1, 1, i });
+            }
+            else if (def->params.is_filter)
             {
                 fbits |= static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless));
                 srcs.push_back({ fbits, 2, 2, i });
@@ -2358,6 +2369,34 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 }
             }
         }
+        else if (def->params.any_color_filter)
+        {
+            // Capital City: "{T}: Add {C}" (free), or "{1},{T}: Add one mana of any color".
+            // The free mode first, so a board that only needs colourless never spends a feed.
+            { ManaPool f = floating; f.Add(Color::Colorless, 1); if (activate(f)) { return true; } }
+            if (floating.Total() >= 1 && !produces.empty())
+            {
+                // Branch over BOTH the feed unit and the output colour. The feed is GENERIC (any
+                // float pays it, as for ramp_filter), but unlike ramp_filter the output is a
+                // CHOICE, and net mana is zero -- so WHICH unit is eaten decides what the rest of
+                // the payment has left. ConsumeFloatingAny's single fixed pick would strand
+                // payments the deck really makes ({C}{C} + this land really does cast {1}{R}).
+                static const Color kFeeds[] = { Color::White, Color::Blue,  Color::Black,
+                                                Color::Red,   Color::Green, Color::Colorless };
+                for (int fi = 0; fi <= 6; ++fi)          // each concrete colour, then wild
+                {
+                    ManaPool base = floating;
+                    if (fi < 6) { if (!ConsumeFloating(base, kFeeds[fi])) { continue; } }
+                    else        { if (base.wild <= 0) { continue; } --base.wild; }
+                    for (Color out : produces)
+                    {
+                        ManaPool f = base;
+                        f.Add(out, 1);
+                        if (activate(f)) { return true; }
+                    }
+                }
+            }
+        }
         else
         {
             // Storage-counter land: burst only the PARTIAL shortfall (cost minus what this branch has
@@ -3127,8 +3166,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d || d->tmpl != CardTemplate::ManaDork) { continue; }
             const CardParams& dp = d->params;
-            if (dp.gy_land_exile_mana || dp.domain_mana || dp.storage_land || dp.is_filter
-                || dp.ramp_filter || !dp.mana_requires_land_subtype.empty()) { continue; }
+            if (dp.gy_land_exile_mana || dp.domain_mana || dp.storage_land
+                || IsManaConversionSource(dp) || !dp.mana_requires_land_subtype.empty()) { continue; }
             const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, *d);
             if (prod.size() != 1) { continue; }                // wild contributions are not traceable
             const int y = PermanentManaYield(state, p, *d);

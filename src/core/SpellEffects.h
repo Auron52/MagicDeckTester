@@ -11744,8 +11744,8 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         if (d == nullptr) { continue; }
         const CardParams& q = d->params;
         if (q.gy_land_exile_mana || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
-            || q.storage_land || q.domain_mana || q.colored_creature_only || q.is_filter
-            || q.ramp_filter) { continue; }
+            || q.storage_land || q.domain_mana || q.colored_creature_only
+            || IsManaConversionSource(q)) { continue; }
         bool depletion = false;
         for (const Counter& c : p.counters)
         { if (c.type == Counter::Type::Depletion) { depletion = true; break; } }
@@ -12810,7 +12810,7 @@ inline bool HasUntappedNonFilterSourceProducing(const GameState& state,
     {
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-        if (!def || def->params.is_filter || def->params.ramp_filter) { continue; }
+        if (!def || IsManaConversionSource(def->params)) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
                    || (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                    || def->params.mana_rock;
@@ -13147,6 +13147,8 @@ inline bool TapSpareCreaturesEnabled()
 // True if the controller has any untapped mana source that can pay a generic {1} WITHOUT
 // itself being a ramp filter -- i.e. a feeder for a ramp filter's activation cost. A
 // basic land / mana dork pays directly; a filter (Cascade Bluffs) pays via its {C} mode.
+// (An any_color_filter also pays via its free {C} mode, so it is NOT excluded here. Its own
+// self-feed problem is handled by the quota in AnyColorFilterFedSlots, not by an exclusion.)
 inline bool HasUntappedRampFeeder(const GameState& state)
 {
     int active = state.active_player_index;
@@ -13165,6 +13167,70 @@ inline bool HasUntappedRampFeeder(const GameState& state)
     return false;
 }
 
+// How many of the active player's untapped any_color_filters can run their FED mode at once, and
+// whether a given one of them gets one of those slots.
+//
+// The arithmetic, which is the whole point. F any-colour filters and S other untapped sources tap
+// for F + S mana between them; every fed activation EATS one of those mana (net zero -- this is
+// the only mana-neutral conversion shape), so if k of the filters convert, the board ends with
+// F + S - k mana of which k are coloured. Feasibility needs k <= F + S - k, hence
+//
+//     k_max = min(F, floor((F + S) / 2))
+//
+// which is exactly right at both ends: one Capital City with no other land converts NOTHING
+// (k = min(1, 0) = 0 -- it has only its free {C}), and four of them convert TWO (tap two to feed
+// the other two). The naive per-source "is there any feeder" test gives k = F and is a PHANTOM:
+// it reads two Capital Cities as two mana of any colour, i.e. as able to cast {1}{R}, which they
+// cannot -- converting once leaves them with one mana total.
+//
+// The slot is awarded in battlefield order so the answer is deterministic and executor/rollout
+// lockstep holds. Floating mana counts toward S under the same gate ramp_filter uses (the payer
+// really does feed a filter from the turn's reserve). `perm` nullptr -- a source not on the
+// battlefield -- keeps the permissive answer.
+inline int AnyColorFilterFedSlots(const GameState& state)
+{
+    const int active = state.active_player_index;
+    int filters = 0, others = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.any_color_filter) { ++filters; continue; }
+        if (d->params.ramp_filter)      { continue; }   // no free mode -> cannot feed anything
+        const bool is_src = (d->tmpl == CardTemplate::BasicLand)
+                         || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                         || d->params.mana_rock;
+        if (!is_src) { continue; }
+        if (!GraveyardFuelLive(state, active, *d)) { continue; }
+        ++others;
+    }
+    if (FloatFeedsRampFilterEnabled() && FloatLeftoverManaEnabled())
+    { others += state.floating_mana.Total(); }
+    return std::min(filters, (filters + others) / 2);
+}
+
+// True if `perm` (an any_color_filter) is inside AnyColorFilterFedSlots's quota.
+inline bool AnyColorFilterHasFedSlot(const GameState& state, const CardDefinition& def,
+                                     const Permanent* perm)
+{
+    if (!def.params.any_color_filter) { return false; }
+    const int slots = AnyColorFilterFedSlots(state);
+    if (slots <= 0)   { return false; }
+    if (perm == nullptr) { return true; }   // not on the battlefield: stay permissive
+    const int active = state.active_player_index;
+    int rank = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.any_color_filter) { continue; }
+        if (p.card.m_number == perm->card.m_number) { return rank < slots; }
+        ++rank;
+    }
+    return false;
+}
+
 // True if the active player controls an untapped filter / ramp-filter mana source (Cascade Bluffs
 // is_filter, Ferrous Lake ramp_filter) whose colour conversion the flat pool cannot model. Used to
 // gate the payment's floating-fed-filter retry (see TapForCostSharedOnce, ManaPayment.cpp)
@@ -13176,7 +13242,7 @@ inline bool AnyUntappedFilterSource(const GameState& state)
     {
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && (d->params.is_filter || d->params.ramp_filter)) { return true; }
+        if (d && IsManaConversionSource(d->params)) { return true; }
     }
     return false;
 }
@@ -13198,6 +13264,21 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     if (def.params.is_filter)
     {
         if (HasUntappedNonFilterSourceProducing(state, def.params.produces)) { ++pool.wild; }
+        else { pool.Add(Color::Colorless); }
+        return;
+    }
+    if (def.params.any_color_filter)
+    {
+        // {T}: Add {C}, or {1},{T}: Add one mana of any color. ONE unit per tap either way, so
+        // the AMOUNT is exact and only the COLOUR is optimistic -- but the optimism has to be
+        // CAPPED, because the fed mode is the only conversion shape that is mana-NEUTRAL and so
+        // the only one where the filters compete for each other's feed. See
+        // AnyColorFilterFedSlots: crediting every one of them a wild is what made two Capital
+        // Cities read as {any}{any} when they really make ONE coloured mana and nothing else.
+        // The capped credit is still permissive (it takes the max in each dimension: the full
+        // unit count AND the largest reachable coloured count), so it can offer a cast the payer
+        // then refuses, never hide one.
+        if (AnyColorFilterHasFedSlot(state, def, perm)) { ++pool.wild; }
         else { pool.Add(Color::Colorless); }
         return;
     }
@@ -14940,10 +15021,14 @@ inline bool FlowOrderEnabled()
 // yields less, but a looser bound only fails to prune, it never prunes a payable cost.
 //   - is_filter    : {T} -> {C} is +1 net; the "feed 1, add 2" branch is also +1 net. Max = 1.
 //   - ramp_filter  : "feed 1, add one of each colour" -> net |produces|-1 (Ferrous Lake, 2c -> +1).
+//   - any_color_filter : the free {T} -> {C} is +1 net; the fed branch is 1 in, 1 out = 0. Max = 1.
+//     (ManaProducedPerTap would also say 1, but state it so the bound does not silently ride on
+//     produces_amount defaulting for a source whose `produces` lists five colours.)
 //   - everything else (basic land / dork / rock / Reflecting Pool) : its per-tap output.
 inline int SourceMaxNet(const CardDefinition& def)
 {
-    if (def.params.is_filter)   { return 1; }
+    if (def.params.is_filter)        { return 1; }
+    if (def.params.any_color_filter) { return 1; }
     if (def.params.ramp_filter) { const int p = static_cast<int>(def.params.produces.size());
                                   return p > 0 ? p - 1 : 0; }
     return ManaProducedPerTap(def);

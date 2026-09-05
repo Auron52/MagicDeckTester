@@ -2001,7 +2001,7 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // "wasted a counter" case helps) -- but they DO get a +1 nudge past their plain-land tier at the
     // bottom of this function (DepletionTapOrderEnabled), so a plain land of the same colour count
     // pays first and the counter is only spent when the cost needs it.
-    if (def.params.is_filter || def.params.ramp_filter) { return 25; }
+    if (IsManaConversionSource(def.params)) { return 25; }
     const std::vector<Color>& prod = EffectiveProduces(s, active, def);
     const int amt = ManaProducedPerTap(def);
     // SOLE-COLOUR PROVIDER (MTG_SCARCE_COLOR_HOLD's rank half -- see ScarceColorHoldEnabled in
@@ -3484,7 +3484,7 @@ static bool ScryKeepOnTopLands(const GameState& s, const Card& top_card)
     bool plain_ur = false;
     auto note_plain = [&](const CardDefinition& d)
     {
-        if (d.params.is_filter || d.params.ramp_filter) { return; }
+        if (IsManaConversionSource(d.params)) { return; }
         for (Color c : d.params.produces)
         { if (c == Color::Blue || c == Color::Red) { plain_ur = true; return; } }
         for (Color c : d.params.mdfc_back_produces)
@@ -3930,7 +3930,7 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardFullRanking(
             for (int i : (variant >= ThDiscard::Islet ? ups2 : ups))
             {
                 const CardParams* p2 = par(i);
-                const bool filt = p2 != nullptr && (p2->is_filter || p2->ramp_filter);
+                const bool filt = p2 != nullptr && IsManaConversionSource(*p2);
                 if (filt && !took_filter)       { take(i); took_filter = true; ++untapped_kept; }
                 else if (!filt && !took_plain)  { take(i); took_plain  = true; ++untapped_kept; }
             }
@@ -5244,8 +5244,13 @@ std::vector<int> HinataProvider::CleanupDiscardCandidates(
         const auto& prod = d->params.produces;
         if (prod.empty() && !d->card.IsLand()) { return c; }
         c.amt = std::max(1, d->params.produces_amount);
+        // NOT IsManaConversionSource: this site has always excluded ramp_filter, and folding it
+        // in here would churn treasure_hunt / hinata hand scores for a change nothing measured.
+        // any_color_filter is added because it is the shape this classification is FOR -- a land
+        // whose colours cost a feed.
         c.quality = !d->card.IsLand()                              ? kSrcDork
-                  : (d->params.reflecting || d->params.is_filter)  ? kSrcConditional
+                  : (d->params.reflecting || d->params.is_filter
+                     || d->params.any_color_filter)                ? kSrcConditional
                   : d->params.enters_tapped                        ? kSrcTappedLand
                                                                    : kSrcUntappedLand;
         auto makes = [&](Color col)

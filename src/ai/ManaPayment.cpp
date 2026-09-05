@@ -284,6 +284,16 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     }
                 }
                 else if (def->params.ramp_filter) { continue; }
+                else if (def->params.any_color_filter)
+                {
+                    // Capital City. Its FREE "{T}: Add {C}" mode is the fast, common case and is
+                    // exactly a kind-3 filter tap. Its FED mode (spend {1}, take one of any
+                    // colour) is left to the backtracker, as ramp_filter's is: reaching a colour
+                    // costs a second source, which is a joint decision the per-pip greedy cannot
+                    // make. So the greedy pays generic pips from it and simply declines a coloured
+                    // one -- a failure that falls through to the complete solver, never a wrong tap.
+                    if (any || needed == Color::Colorless) { kind = 3; } else { continue; }
+                }
                 else
                 {
                     // Untap-land burst (Wirewood Lodge): with a TAPPED 2+ scaled Elf up and a feed
@@ -328,7 +338,11 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 // filter's CONVERSION for the turn's later casts, which the search exploits and a
                 // per-pip flexibility argument cannot see. Rollouts (HumanPlaySuppress) keep the
                 // measured order, so autonomous play and every GT stay byte-identical.
-                if (kind == 3 && FilterCFirstEnabled() && HumanPlayActive()) { rank = 6; }
+                // is_filter ONLY: for an any_color_filter the {C} mode is not "the least flexible
+                // mana on the board", it is the mode that DESTROYS the land's conversion, so it
+                // must keep the late rank-25 tier rather than spend first.
+                if (kind == 3 && !def->params.any_color_filter
+                    && FilterCFirstEnabled() && HumanPlayActive()) { rank = 6; }
                 // SAC-FODDER PAYS FIRST (MTG_SAC_FODDER_PAYS; see SacFodderPaysEnabled in
                 // SpellEffects.h for the st993 trace): the exact creature this payment's cast is
                 // about to sacrifice pays before everything -- its body is already spent, so its
@@ -390,7 +404,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                         const Permanent& s = state.battlefield[i];
                         if (s.controller_index != active || s.tapped) { continue; }
                         const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
-                        if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
+                        if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
                         bool m = false;
                         for (Color pc : EffectiveProduces(state, active, *sd))
                         { for (Color ic : fd->params.produces) { if (pc == ic) { m = true; break; } } if (m) { break; } }
@@ -412,7 +426,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                         const Permanent& g = state.battlefield[i];
                         if (g.controller_index != active || g.tapped) { continue; }
                         const CardDefinition* gd = CardDatabase::Instance().LookupCached(g.card);
-                        if (!gd || !(gd->params.is_filter || gd->params.ramp_filter) || !usable(g, *gd)) { continue; }
+                        if (!gd || !IsManaConversionSource(gd->params) || !usable(g, *gd)) { continue; }
                         bool makes_f = false;
                         for (Color gc : gd->params.produces)
                         { for (Color ic : fd->params.produces) { if (gc == ic) { makes_f = true; break; } } if (makes_f) { break; } }
@@ -427,7 +441,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                             const Permanent& t = state.battlefield[k];
                             if (t.controller_index != active || t.tapped) { continue; }
                             const CardDefinition* td = CardDatabase::Instance().LookupCached(t.card);
-                            if (!td || td->params.is_filter || td->params.ramp_filter || !usable(t, *td)) { continue; }
+                            if (!td || IsManaConversionSource(td->params) || !usable(t, *td)) { continue; }
                             if (gd->params.ramp_filter) { chain_feed = true; break; }
                             bool m = false;
                             for (Color pc : EffectiveProduces(state, active, *td))
@@ -486,7 +500,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     Permanent& s = state.battlefield[i];
                     if (s.controller_index != active || s.tapped) { continue; }
                     const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
-                    if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
+                    if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
                     bool m = false; Color match = Color::Colorless;
                     for (Color pc : EffectiveProduces(state, active, *sd))
                     { for (Color ic : bdef->params.produces) { if (pc == ic) { m = true; match = ic; break; } } if (m) { break; } }
@@ -515,7 +529,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         {
             if (p.controller_index != active || p.tapped) { continue; }
             const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-            if (!def || def->params.is_filter || def->params.ramp_filter || !usable(p, *def)) { continue; }
+            if (!def || IsManaConversionSource(def->params) || !usable(p, *def)) { continue; }
             // ProducesForPayment (RP-aware; identity for every non-colored_creature_only source).
             // NOTE: the pre-unification executor read EffectiveProduces here -- the unfixed twin of
             // the 6bb2791 coloured-pip fix, reachable only under MTG_TAP_LEGACY (see ManaPayment.h).
@@ -538,13 +552,15 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         }
 
         // 2) Filter land colourless mode ({T}: Add {C}) -- for a generic or {C} pip.
+        //    any_color_filter (Capital City) has the same free mode and belongs here too.
         if (any || needed == Color::Colorless)
         {
             for (Permanent& p : state.battlefield)
             {
                 if (p.controller_index != active || p.tapped) { continue; }
                 const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-                if (!def || !def->params.is_filter || !usable(p, *def)) { continue; }
+                if (!def || !(def->params.is_filter || def->params.any_color_filter)
+                    || !usable(p, *def)) { continue; }
                 p.tapped = true;
                 floating.Add(Color::Colorless, 1);
                 if (available)
@@ -591,7 +607,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     {
                         if (s.controller_index != active || s.tapped) { continue; }
                         const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
-                        if (!sd || sd->params.is_filter || sd->params.ramp_filter || !usable(s, *sd)) { continue; }
+                        if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
                         bool m = false;
                         for (Color c : EffectiveProduces(state, active, *sd)) { if (c == ic) { m = true; break; } }  // RP feeder
                         if (!m) { continue; }
@@ -633,6 +649,31 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 p.tapped = true;
                 for (Color c : def->params.produces) { floating.Add(c, 1); }
                 if (available && available->wild > 0) { --available->wild; }  // ramp filter counted as 1 wild
+                return true;
+            }
+        }
+
+        // 5) Any-colour filter fed mode (Capital City: {1},{T}: Add one mana of any color).
+        //    Same generic {1} feed as (4) and the same allow_ramp recursion guard, but it yields
+        //    ONE mana of the caller's colour -- net zero, so it is only ever worth reaching for a
+        //    COLOURED pip the board cannot make directly. The generic/{C} case was already served
+        //    by the free {C} mode in (2), which is strictly better (no feed), so skip `any` here.
+        if (allow_ramp && !any)
+        {
+            for (Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active || p.tapped) { continue; }
+                const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+                if (!def || !def->params.any_color_filter || !usable(p, *def)) { continue; }
+                bool match = false;
+                for (Color c : def->params.produces) { if (c == needed) { match = true; break; } }
+                if (!match) { continue; }
+                if (floating.Total() == 0 && !produce(Color::Colorless, true, false)) { continue; }
+                Color took;
+                if (!ConsumeFloatingAny(floating, took)) { continue; }
+                p.tapped = true;
+                floating.Add(needed, 1);
+                if (available && available->wild > 0) { --available->wild; }   // counted as 1 wild
                 return true;
             }
         }
@@ -1566,7 +1607,7 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
         // and charge nothing for the feed: strictly more supply than reality, hence permissive, hence
         // it can still only prune. This is what lets the gate run on hinata / treasure_hunt at all,
         // where standing down previously left every phantom in place.
-        if (def->params.is_filter || def->params.ramp_filter)
+        if (IsManaConversionSource(def->params))
         {
             const std::vector<Color>& cprod = EffectiveProduces(state, active, *def);
             int cmask = 0;
@@ -1575,7 +1616,13 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
                 const int ci = static_cast<int>(c);
                 if (ci >= 0 && ci < 5) { cmask |= (1 << ci); }
             }
-            if (def->params.is_filter)
+            if (def->params.any_color_filter)
+            {
+                // "{1},{T}: Add one mana of any color" -- ONE unit, free choice of its colours.
+                // (The free {C} mode adds nothing here: this gate only reasons about pips.)
+                add(cmask, 1);
+            }
+            else if (def->params.is_filter)
             {
                 // "Add {U}{U}, {U}{R}, or {R}{R}" -- genuinely two FREE choices from its colours.
                 add(cmask, 2);

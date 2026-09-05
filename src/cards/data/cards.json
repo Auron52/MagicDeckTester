@@ -7075,12 +7075,17 @@
     "Town"
    ],
    "keywords": [],
-   "oracle_text": "{T}: Add {C}.\n{1}, {T}: Add one mana of any color.\nCycling {2} ({2}, Discard this card: Draw a card.) [PARTIAL -- PROVISIONAL DEFERRAL (awaiting user sign-off). The free \"{T}: Add {C}\" mode and cycling are modelled. The second mode \"{1}, {T}: Add one mana of any color\" is NOT: it is a mana-NEUTRAL colour FILTER (pay one generic from another source, tap this, receive one coloured -- net 0 mana), and the engine's two filter models do not fit it (`is_filter` is fed a COLOURED pip and yields TWO; `ramp_filter` yields one of EACH `produces` colour). Expressing it needs a third variant threaded through the ~20 filter sites of the mana-payment backtracker. WHY DEFERRED RATHER THAN APPROXIMATED: this deck needs only three single coloured pips ({R} Drannith Stinger, {B} Unearth, {W} Enlightened Tutor) and already runs 14 sources of each of W/B/R across its other 34 lands, so the filter is near-redundant fixing here. Modelling it as [C] UNDER-rates the deck's fixing, which is the SAFE direction; modelling it as a free 5-colour land would OVER-rate it. Revisit if Stage 5 shows colour screw is a real limiter.]",
+   "oracle_text": "{T}: Add {C}.\n{1}, {T}: Add one mana of any color.\nCycling {2} ({2}, Discard this card: Draw a card.) [All three clauses modelled. The colour mode is `any_color_filter`, the third mana-CONVERSION shape (see CardParams): fed a GENERIC {1} like ramp_filter, but yielding exactly ONE mana of the controller's choice -- net ZERO, pure fixing -- where ramp_filter yields one of EACH `produces` colour and is_filter is fed a COLOURED pip and yields TWO. `produces` lists the FED mode's colours (WUBRG); the free \"{T}: Add {C}\" mode is implicit in every any_color_filter branch, exactly as it is for is_filter. Handled in the tap backtracker (the authoritative payer, which branches over BOTH the feed unit and the output colour), the max-flow and colour-feasibility oracles, the flat pool, and the land signature. WHY IT WAS WORTH BUILDING rather than left as the [C] under-approximation it was: 38 of this deck's 42 lands enter TAPPED, so Capital City's filter is the deck's ONLY untapped source of coloured mana -- with it unmodelled, a Drannith Stinger cast on the turn its enabling land arrives was not merely under-rated but INEXPRESSIBLE (USER, 2026-09-05: \"Capital City is playable, but costs a card from the cycle engine... if all of the unearths are far down in the deck and you have sufficient fuel in hand playing Capital City to play stinger could be okay\"). The pool credits it one WILD unit when a generic feeder exists, which over-credits COLOUR (the feed spends the other source's unit) but never AMOUNT -- the permissive direction, so it can offer a cast the payer refuses, never hide one.]",
    "template": "basic_land",
    "parameters": {
     "produces": [
-     "C"
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
     ],
+    "any_color_filter": true,
     "cycling_cost": "{2}"
    }
   },

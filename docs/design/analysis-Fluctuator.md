@@ -5,7 +5,10 @@
 **Branch:** `phase-1-2-deck-analyzer`
 **Status:** REBASED onto origin 2026-09-05 (13 commits replayed; both tiers re-accepted under the
 rebased binary with **0 configs changed** for every other deck, incl. upstream's new Melira Pod).
-Play quality settled (§7.7, §7.8); deck IS NOW A REGRESSION CASE in all three tiers
+Play quality settled (§7.7, §7.8); **G-2 / O-2 CLOSED 2026-09-05 (§7.9** — Capital City's any-colour
+filter built as `any_color_filter`, the third mana-conversion shape: d0 −0.69 to −0.80 turns,
+neutral at searched play settings, 11-17% faster, every non-fluctuator config byte-identical**)**.
+Deck IS A REGRESSION CASE in all three tiers
 (O-4 perf gate met at the real gate budgets — the b200 tail was budget-driven, not structural).
 Current: **avg 3.8000** turn-to-win, zero unwon (100 games, seed 9001, d3/b200; held-out bases
 20001/30001/40001 gave 3.92/3.78/3.86 before §7.8, so the level is ~3.8 +/- 0.06, not a seed
@@ -84,7 +87,7 @@ free and is the *primary* action. See §5 for the gap list.
 | # | gap | tier | status |
 |---|---|---|---|
 | G-1 | 11 plain cycling lands (`basic_land` + `produces` + `enters_tapped` + `cycling_cost`) | 1 | **DONE** |
-| G-2 | Capital City's `{1},{T}: Add one mana of any color` | 2 | **DEFERRED (provisional)** — see §6 |
+| G-2 | Capital City's `{1},{T}: Add one mana of any color` | 2 | **DONE 2026-09-05** (`any_color_filter`) — see §7.9 |
 | G-3 | **Fluctuator** — static cycling-cost reduction from a battlefield permanent | 3 | |
 | G-4 | **Drannith Stinger** — "whenever you cycle another card" trigger → 1 damage to each opponent | 3 | |
 | G-5 | **Hollow One** — cost reduction scaling with cards cycled/discarded this turn | 3 | |
@@ -188,7 +191,7 @@ it. It holds three hooks; see §8.
 | id | item | resolution |
 |---|---|---|
 | O-1 | Enlightened Tutor's `tutor_heuristic: enabler_then_wincon` names another deck's cards (Tainted Remedy / Aria). | **Resolved, no action.** `tutor_heuristic` is parsed (`CardDatabase.cpp:741`) but **read nowhere in the engine** — it is dead data. The actual pick comes from the provider's `TutorCandidates`, which Fluctuator inherits from Generic. No cross-deck contamination. |
-| O-2 | **Capital City's `{1},{T}: any colour` filter mode is unimplemented** (G-2). | Modelled as `produces: [C]`, which **under**-rates the deck's fixing (the safe direction). Needs user sign-off. |
+| O-2 | **Capital City's `{1},{T}: any colour` filter mode is unimplemented** (G-2). | **CLOSED — BUILT 2026-09-05 (§7.9).** No longer a deferral. The `[C]` approximation was not the harmless under-rating it was recorded as: 38 of the deck's 42 lands enter tapped, so this filter is the deck's ONLY untapped colour source and the approximation made a real line INEXPRESSIBLE. Now `any_color_filter`, the third mana-conversion shape. |
 | O-3 | **Hollow One's counter covers cycles but not discards.** | Provably exact for this deck (no discard outlet in the 60; the cleanup shed is post-main and zeroed at the next untap). Needs user sign-off. |
 | O-4 | **Performance:** ~16 s/game at d3/b200, worst game 95 s, against a suite budget of ~1 s. | **Partly fixed** — see §7.1. The dig loop's nested re-solve was the dominant cost *and* a play bug; fixing it took CPU down 34% and the average from 5.675 → 5.000. A heavy tail remains (6 of 40 games > 30 s), so the deck is **not yet suite-ready at the shared budget**. |
 
@@ -600,13 +603,14 @@ Better on both axes at once. `MTG_FLUCT_STOP_ON_THREAT=0` restores always-dig.
    second stinger or hold Hollow One... the purpose of the other lines is only to handle cases
    where we don't have enough cards left."* Nothing in the engine currently prefers the second
    Unearth when the library is short.
-2. **Capital City blocks a real line, and it is the O-2 deferral.** *"Capital City is playable, but
-   costs a card from the cycle engine... if all of the unearths are far down in the deck and you
-   have sufficient fuel in hand playing Capital City to play stinger could be okay."* The engine
-   **cannot express this at all**: Capital City's `{1},{T}: add one mana of any color` filter is
-   unimplemented (modelled as `[C]`), so it can never pay Drannith Stinger's {R}. This deck has 4
-   copies and they are its only untapped colour source. O-2 is therefore not the harmless
-   under-rating it was recorded as — it removes a line the deck's owner plays.
+2. **Capital City blocks a real line, and it is the O-2 deferral. — BUILT 2026-09-05, see §7.9.**
+   *"Capital City is playable, but costs a card from the cycle engine... if all of the unearths are
+   far down in the deck and you have sufficient fuel in hand playing Capital City to play stinger
+   could be okay."* The engine **could not express this at all**: Capital City's
+   `{1},{T}: add one mana of any color` filter was unimplemented (modelled as `[C]`), so it could
+   never pay Drannith Stinger's {R}. This deck has 4 copies and they are its only untapped colour
+   source. O-2 was therefore not the harmless under-rating it was recorded as — it removed a line
+   the deck's owner plays.
 3. **2HG: the Stinger trigger fired once per OPPONENT, not per HEAD — FIXED 2026-09-05 (`bc9a66bd`).**
    *"stinger deals 2 per card in 2HG, so that case is actually a bit easier."* `FireCycleWatchers`
    did `const int opp = 1 - controller;` and dealt the damage exactly once, so "deals 1 damage to
@@ -624,6 +628,92 @@ Better on both axes at once. `MTG_FLUCT_STOP_ON_THREAT=0` restores always-dig.
    where you need a third land. Playing two unearth to get double stinger could be another."*
    NOT a capability gap: the enumerator already emits the no-land plan (`add_for_land("", "")`,
    TurnSolver.cpp), so the search can decline the drop and this is a valuation question.
+
+## 7.9 Capital City's filter BUILT — the third mana-conversion shape (2026-09-05)
+
+§7.8's follow-up 2, and the O-2 deferral, are closed. `any_color_filter` is now a real
+`CardParams` flag: **feed a GENERIC {1}, tap, add exactly ONE mana of any colour — net ZERO.**
+It is the third conversion shape and neither existing one fits it (`is_filter` is fed a COLOURED
+pip and yields TWO; `ramp_filter` yields one of EACH `produces` colour). Like `is_filter` it also
+carries the free `{T}: Add {C}` mode, which stays implicit in the branches rather than sitting in
+`produces` (Capital City's `produces` is now the FED mode's WUBRG).
+
+### Why this was worth building rather than approximating
+
+**38 of the deck's 42 lands enter TAPPED.** The only untapped lands are 4 Blasted Landscape ({C})
+and 4 Capital City — so Capital City's filter is the deck's *only* untapped source of coloured
+mana. With it modelled as `[C]`, casting Drannith Stinger on the turn its enabling land arrives
+was not under-rated, it was **inexpressible**. That is the difference between a valuation gap and
+a capability gap, and it is the reason the [C] approximation ("the SAFE direction") was the wrong
+call: safe in the colour-screw sense, but it deleted a line.
+
+### What it measured
+
+| tier / cell | games | before | after | Δ |
+|---|---|---|---|---|
+| **d0**, 4 held-out seeds (9001/20001/30001/40001) | 800 | 6.2700 | **5.5775** | **−0.6925** |
+| **d0**, smoke s1001 | 1000 | 6.2790 | **5.4750** | **−0.8040** |
+| **d0**, regression s2002 | 1000 | 6.2160 | **5.4980** | **−0.7180** |
+| d3/b200, 4 held-out seeds | 400 | 3.7775 | 3.7825 | +0.0050 |
+| d5/b40, 4 held-out seeds | 240 | 3.8250 | 3.8209 | −0.0042 |
+| regression tier, all searched cells | 600 | — | — | **−0.010 net** |
+| smoke tier, all searched cells | 300 | — | — | +0.010 net |
+| 2HG d3 (smoke s1001 / regression s2002) | 175 | — | — | −0.013 / +0.030 |
+
+**Adopted as a MODELLING fix, not on the metric.** At searched play settings it is neutral —
+the search was already routing around the hole with slower lines. The case for it is that the
+line the deck's owner described is now expressible; the d0 column is what that gap was worth
+once the search is not there to paper over it, and the wall clock fell **11–17%** at every
+searched depth (8 of 8 jobs), which is the same fact from the other side.
+
+**68 of 72 smoke and 92 of 98 regression configs are BYTE-IDENTICAL.** Only the 4 + 6 fluctuator
+cells moved, so nothing else in the suite is touched — `any_color_filter` is on exactly one card.
+
+### The three traps this shape carries (all live, all handled)
+
+1. **`produces` becomes a lie for every unguarded read.** Cascade Bluffs listing `[U,R]` degrades
+   to "a dual" when a guard is missed; Capital City listing WUBRG degrades to **a free five-colour
+   rainbow land**, which is the over-rating the deferral note warned about. Every
+   `is_filter || ramp_filter` guard in the engine is therefore now
+   **`IsManaConversionSource(params)`** (one predicate, 14 sites), so a fourth shape cannot
+   silently miss one.
+2. **The pool phantom, and the arithmetic that kills it.** The obvious per-source rule ("credit a
+   wild if any feeder exists") reads *two* Capital Cities as **{any}{any}** — two mana, either
+   colour, i.e. able to cast {1}{R}. They cannot: converting once consumes the other's mana and
+   leaves ONE mana total. `AnyColorFilterFedSlots` caps the wild credits at
+   **k = min(F, ⌊(F+S)/2⌋)** for F untapped filters and S other untapped sources — exactly right
+   at both ends (one alone converts nothing; four convert two). *Measured inert on this deck*
+   (every fluctuator digest identical with and without the cap), so it is a correctness tightening
+   that costs nothing, not a tuning knob.
+3. **Capital City signed IDENTICALLY to Blasted Landscape.** Same `{T}: Add {C}`, same untapped,
+   same cycling {2} — so `land_sig` deduped them and the enumerator offered one representative for
+   all 8 cards. The `"acf"` append is load-bearing, not defensive: without it the deck's only
+   untapped colour source is unenumerable as a land play whenever the group's representative is
+   the other card.
+
+### What it exposed, and did NOT fix: the land-drop ORDER (open)
+
+11 games across the two tiers lose exactly one turn and **persist at 4x and 16x budget**, so they
+are not truncation churn. They share ONE cause, and it is not in the payment:
+
+> **The engine plays its UNTAPPED land too early.** Base `gi93`: T1 Polluted Mire, T2 Capital City
+> → two untapped sources on T2 → **Fluctuator on T2**. New: T1 Polluted Mire, T2 *Drifting Meadow*
+> (enters tapped) → one untapped source → **no Fluctuator until T3**. Same in `gi0` and `gi127`
+> with the T1 drop instead. A land that enters tapped costs nothing on a turn whose mana you
+> cannot spend; an untapped one played early wastes the only thing it has.
+
+This is a **pre-existing heuristic hole that the change made visible** (Capital City is now a
+distinct, differently-valued land), not one it introduced — old-code-with-new-data recovers two
+of the three probed games and loses the third, so neither half owns it. It is the deck owner's own
+idiom (*"often you don't even want to play the third land, because it costs a cycling card"*) and
+it is a `heuristic-optimization` candidate: **prefer the enters-tapped land when the drop's mana is
+not needed this turn.** Note the existing counter-evidence is for the OPPOSITE rule — a naive
+"untapped first" tie-break measured 0 better / 2 worse over 12000 games on Hinata
+(`DecisionProviders.cpp`) — so this direction is untested, not refuted.
+
+*(One d0 game, regression s2002 gi38, turns a T5 win into a loss: the greedy now casts Enlightened
+Tutor on T2 off two Capital Cities — the new capability firing — and then runs itself out of gas.
+That is d0 greedy quality inside a −0.72 d0 win, not a modelling error.)*
 
 ## Claude-play sweep
 
@@ -748,4 +838,6 @@ play settings decides.)
 
 ## Approved deferrals
 
-*(none yet — O-2 and O-3 are PROVISIONAL until the user signs them off)*
+*(none — **O-2 is CLOSED**, built 2026-09-05 (§7.9). O-3 (Hollow One's counter covers cycles but
+not discards) remains PROVISIONAL until the user signs it off; it is provably exact for this deck,
+which holds no discard outlet.)*

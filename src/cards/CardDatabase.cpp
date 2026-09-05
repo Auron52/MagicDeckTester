@@ -687,8 +687,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.produces_amount = params.value("produces_amount", 1);
     p.storage_land         = params.value("storage_land", false);
     p.storage_charge_mode  = params.value("storage_charge_mode", std::string());
-    p.is_filter       = params.value("is_filter", false);
-    p.ramp_filter     = params.value("ramp_filter", false);
+    p.is_filter        = params.value("is_filter", false);
+    p.ramp_filter      = params.value("ramp_filter", false);
+    p.any_color_filter = params.value("any_color_filter", false);
 
     // --- Knights tribal extensions ---
     p.affects_all_creatures        = params.value("affects_all_creatures", false);

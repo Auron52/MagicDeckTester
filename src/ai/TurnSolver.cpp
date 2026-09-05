@@ -3565,7 +3565,7 @@ static bool HasUntappedFilterSource(const GameState& state)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         // Three Tree City's scaled tap is a colour conversion (feed {2} -> N chosen colour) the flat
         // pool cannot fully express, so it too needs the real-payment affordability retry.
-        if (d && (d->params.is_filter || d->params.ramp_filter || IsScaledManaLand(*d))) { return true; }
+        if (d && (IsManaConversionSource(d->params) || IsScaledManaLand(*d))) { return true; }
     }
     return false;
 }
@@ -27245,6 +27245,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         if (pp.etb_surveil > 0)               { s += "sv" + std::to_string(pp.etb_surveil); }
         // Ferrous Lake: ramp filter (feed 1 -> one of each colour) -- different net mana to is_filter.
         if (pp.ramp_filter)                   { s += "rf"; }
+        // Capital City: any-colour filter (feed 1 -> ONE of any colour). This one is load-bearing
+        // rather than defensive: Capital City's other mode is "{T}: Add {C}" and it cycles for
+        // {2}, so WITHOUT this append it signs identically to Blasted Landscape -- and Fluctuator
+        // runs four of each. The dedupe would keep one representative and make the deck's only
+        // untapped COLOUR source unenumerable as a land play half the time it is drawn.
+        if (pp.any_color_filter)              { s += "acf"; }
         // Storage land: Dwarven Hold and Mercadian Bazaar differ only in their CHARGE MODE.
         if (pp.storage_land)                  { s += "st" + pp.storage_charge_mode; }
         // ---- the 17-param extension (recoverability audit, 2026-09-03) -------------------------

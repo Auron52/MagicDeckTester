@@ -379,6 +379,22 @@ struct CardParams
     // mana pool as +1 wild iff another untapped source can pay the {1}, else 0.
     bool ramp_filter = false;
 
+    // ANY-COLOUR filter (Capital City: "{T}: Add {C}. {1}, {T}: Add one mana of any color").
+    // The third conversion shape, and the only mana-NEUTRAL one -- neither of the two above
+    // fits it:
+    //   is_filter   feeds a COLOURED pip (one of its own `produces`) and yields TWO;
+    //   ramp_filter feeds a GENERIC {1} and yields one of EACH `produces` colour (net +1);
+    //   any_color_filter feeds a GENERIC {1} and yields exactly ONE mana, the controller's
+    //                    CHOICE from `produces` -- net ZERO. It is pure colour fixing.
+    // Like is_filter (and unlike ramp_filter) it also has the free "{T}: Add {C}" mode, which
+    // is implicit in every any_color_filter branch rather than listed in `produces`; `produces`
+    // is the FED mode's colour set (WUBRG for Capital City), exactly as it is for is_filter.
+    // Because a tap yields at most one mana either way, its pool contribution is one unit --
+    // wild when a feeder exists, {C} otherwise. That over-credits COLOUR (spending the feed is
+    // what buys the colour, so the two units are not both available), never AMOUNT, which is
+    // the permissive direction every other conversion source is credited in.
+    bool any_color_filter = false;
+
     // --- Knights tribal (white aggro) extensions ---
 
     // Anthem for ALL creatures you control (e.g. Benalish Marshal: "Other creatures you
@@ -1970,6 +1986,15 @@ struct CardParams
     // ability.
     std::optional<ManaCost> sac_draw_cost;
 };
+
+// A MANA CONVERSION source: one whose `produces` colours are NOT unconditionally available,
+// because reaching them costs a mana FEED from another source (is_filter / ramp_filter /
+// any_color_filter). Every guard that means "this is not a plain colour source" must ask this
+// rather than naming the flags: an unguarded `produces` read turns Cascade Bluffs into a dual
+// and Capital City into a five-colour rainbow land. Introduced with any_color_filter so that
+// adding a fourth shape can never again silently miss a guard.
+inline bool IsManaConversionSource(const CardParams& p)
+{ return p.is_filter || p.ramp_filter || p.any_color_filter; }
 
 // A fully resolved card definition: base Card data plus template + parameters.
 struct CardDefinition
