@@ -1445,3 +1445,30 @@ Verified end-to-end on seed-6 T4: commit the one loop entry -> one sacrifice boa
 green (s8/s9/s10 committed this session -- user's new games); protocol sweep 0 drift / 0 gaps
 (287 refs), validate-line 0 REGRESSION, unit SUCCESS, scenarios 72/72, smoke 68/68
 byte-identical (enumeration untouched -- display + choose-fan + resolution only).
+
+## SESSION 2026-09-05j — engine vs the user's 10 reference games (USER: "do we at least match?")
+
+Autonomous engine (production settings: profile-attached, d5/b20ms) on the SAME seed+game-index
+as each user-played reference (MTG_DUMP_WINS per-game):
+
+| seed/gi | user | engine | delta |
+|---------|------|--------|-------|
+| s1/g0   | 4    | 5      | engine 1 SLOWER |
+| s2/g1   | 5    | 4      | engine 1 faster |
+| s3/g2   | 5    | 4      | engine 1 faster |
+| s4/g3   | 5    | 5 (inf T4) | match |
+| s5/g4   | 4    | 6      | engine 2 SLOWER |
+| s6/g5   | 4    | 6      | engine 2 SLOWER |
+| s7/g6   | 5    | 5 (inf T5) | match |
+| s8/g7   | 3    | 5      | engine 2 SLOWER |
+| s9/g8   | 6    | 5      | engine 1 faster |
+| s10/g9  | 4    | 5 (inf T5) | engine 1 SLOWER |
+
+**Engine: 3 faster, 2 match, 5 SLOWER (three by 2 turns). Averages: user 4.5, engine 5.0.**
+The answer to "do we at least match" is NO on half the set. The big gaps (s5/s6/s8, +2 each)
+are the aggressive persist-combo kills -- s6 is the Feeder+Redcap loop kill the user executed
+T4, s8 a T3 kill. NOT YET INVESTIGATED (compaction requested): the standing route is
+per-game line comparison (explain_game / claude-play on the gap games) to classify each miss as
+search-depth/budget vs heuristic vs modelling, then the heuristic-optimization loop for
+anything systematic. Caveat: user games may include forced mulligans / side-channel steering
+the autonomous engine decides differently -- same shuffle, whole-game comparison.
