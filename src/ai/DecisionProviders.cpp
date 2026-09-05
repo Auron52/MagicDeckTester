@@ -13349,6 +13349,11 @@ struct FlickerLoop
     int  drain_cost_mv = 0;   // mana per drain activation (0 = no drain sink on board)
     int  drain_amount  = 0;   // life the opponent loses per drain activation
     int  exile_cost_mv = 0;   // mana per library-exile activation (0 = no exile sink on board)
+    // ONE-OFF mana to get a {T}-less sink onto the battlefield when the board has none: the wish's
+    // cost plus the finisher's, or just the finisher's when it is already in hand. 0 means the sink
+    // is already in play. Paired with ComboFinishFromHand, which is what actually deploys it -- the
+    // recognizer must not claim a route the apply cannot walk.
+    int  hand_setup_mv = 0;
     // Set when the loop is not running yet but is ASSEMBLED BY THE PLAN UNDER EVALUATION (a piece
     // cast from hand this turn). Consumers that require a live loop -- the activation-count hooks,
     // which can only fire an ability that is already on the battlefield -- must ignore these.
@@ -13435,6 +13440,63 @@ static void ScanBoardSinks(const GameState& s, int controller, FlickerLoop* best
     }
 }
 
+// THE HAND AND THE SIDEBOARD, when the BOARD has no {T}-less sink. The recognizer half of the kill
+// chain (ComboFinishFromHand does the deploying): a finisher held in hand, or one a Living Wish can
+// still fetch, is a real route to cashing the loop, and until now nothing could see it. That gap is
+// most of this deck's measured 1.8-turn lag between assembling the combo and winning with it.
+//
+// Priced as ONE-OFF SETUP MANA (hand_setup_mv) rather than folded into the per-activation cost,
+// because that is what it is: the wish and the creature are each cast once, and every activation
+// after that costs what a board sink's would. Consumers add it to the mana they must bank.
+//
+// SEARCH ONLY, exactly like the draw-land route -- ComboFinishFromHand stands down under human play,
+// so offering a count here would propose a FINISH plan whose apply does nothing.
+static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best)
+{
+    if (HumanPlayActive()) { return; }
+    if (best->drain_amount > 0 || best->exile_cost_mv > 0) { return; }   // already on the board
+    static const bool s_on = EnvOn("MTG_EDF_COMBO_FINISH", true);
+    if (!heurarm::Flag(heurarm::EDF_COMBO_FINISH, s_on)) { return; }
+
+    const Player& ap = s.players[controller];
+    // `setup` is the mana already committed on the way to this candidate: 0 from hand, the wish's
+    // own cost when it has to be fetched first.
+    const auto consider = [&](const CardDefinition* d, int setup)
+    {
+        if (d == nullptr || !d->card.IsCreature()) { return; }
+        const int cast_mv = setup + d->card.m_mana_cost.ManaValue();
+        if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
+        {
+            const int mv = d->params.drain_cost.value().ManaValue();
+            if (best->drain_amount == 0 || cast_mv < best->hand_setup_mv)
+            { best->drain_cost_mv = mv; best->drain_amount = d->params.drain_amount;
+              best->hand_setup_mv = cast_mv; }
+        }
+        else if (d->params.exile_opponent_top_cost.has_value())
+        {
+            // A deck-out is worth nothing without a modelled library to empty (SpendSurplusOnExile
+            // is all-or-nothing for the same reason), and the drain is the better route when both
+            // are reachable -- so never let the exile displace a drain already found.
+            if (!s.opponent_library_dealt || s.opponent_decked || best->drain_amount > 0) { return; }
+            const int mv = d->params.exile_opponent_top_cost.value().ManaValue();
+            if (best->exile_cost_mv == 0 || cast_mv < best->hand_setup_mv)
+            { best->exile_cost_mv = mv; best->hand_setup_mv = cast_mv; }
+        }
+    };
+    for (const Card& c : ap.hand) { consider(CardDatabase::Instance().LookupCached(c), 0); }
+    if (best->drain_amount > 0 || best->exile_cost_mv > 0) { return; }   // in hand beats a fetch
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(c);
+        if (wd == nullptr || !wd->params.tutor_to_hand || !wd->params.wish_from_sideboard) { continue; }
+        const int wish_mv = wd->card.m_mana_cost.ManaValue();
+        // The TYPE must come from the DEFINITION: a card outside the battlefield carries empty type
+        // masks, so a raw IsCreature() on the sideboard card is always false.
+        for (const Card& sb : ap.sideboard)
+        { consider(CardDatabase::Instance().LookupCached(sb), wish_mv); }
+    }
+}
+
 FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
 {
     FlickerLoop best;
@@ -13495,6 +13557,10 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
             best.untaps = n; best.cost_mv = cost_mv; best.refund = refund; best.net = net;
         }
     }
+    // The hand / wish route LAST, and only for a loop that exists. It is a hand + sideboard scan on a
+    // function called millions of times per game, and no consumer reads a sink field off a loop that
+    // is not `ok` -- so paying for it before the pair search would be pure cost.
+    if (best.ok) { ScanHandSinks(s, controller, &best); }
     return best;
 }
 
@@ -13623,6 +13689,9 @@ FlickerLoop RecogniseFlickerLoopProspective(const GameState& s, int controller,
             if (best.exile_cost_mv == 0 || mv < best.exile_cost_mv) { best.exile_cost_mv = mv; }
         }
     }
+    // ...and last the hand / wish route, which is only consulted when neither the board nor the plan
+    // supplies one (ScanHandSinks stands down otherwise).
+    ScanHandSinks(s, controller, &best);
     return best;
 }
 
@@ -13645,13 +13714,25 @@ FlickerLoop RecogniseFlickerLoopProspective(const GameState& s, int controller,
 // requirement genuinely exceeds 30, which is emptying a 53-card library at {1}{C} a card: 106 mana,
 // so ~36 iterations at net 3. A cap of 30 there does not play the deck badly, it makes the kill
 // unreachable, which is the same failure as a tutor width that cannot see the win condition.
-constexpr int kFlickerMaxIterations = 60;
+// MTG_EDF_MAX_ITER overrides it. The ceiling is a COST bound, not a rules one -- a net-positive loop
+// is unbounded -- so it is exactly the kind of number that should be measurable rather than argued
+// about: at net 1 (a Cloud-of-Faeries board with three lands) sixty iterations bank sixty mana, which
+// is short of the ~45 the kill needs AFTER paying to draw into a wish, so the whole line is declined.
+inline int FlickerMaxIterations()
+{
+    static const int n = []() {
+        const char* v = std::getenv("MTG_EDF_MAX_ITER");
+        const int   k = (v && *v) ? std::atoi(v) : 60;
+        return k > 0 ? k : 60;
+    }();
+    return n;
+}
 
 // Iterations needed to bank `want_mana` of surplus, given the loop's per-iteration net.
 static int FlickerIterationsForMana(int want_mana, int net)
 {
     if (net <= 0 || want_mana <= 0) { return 0; }
-    return std::clamp((want_mana + net - 1) / net, 1, kFlickerMaxIterations);
+    return std::clamp((want_mana + net - 1) / net, 1, FlickerMaxIterations());
 }
 
 // MTG_EDF_DRAWLAND_GOFF -- see the draw-land branch below. DEFAULT ON: it more than DOUBLES the
@@ -13683,7 +13764,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
     {
         // The loop must fund the sink as well as itself, or the damage never fires.
         if (loop.refund > loop.cost_mv + loop.gorge_cost_mv)
-        { return std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, kFlickerMaxIterations); }
+        { return std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, FlickerMaxIterations()); }
     }
 
     // THE TWO {T}-LESS SINKS. Sized by MANA rather than by iterations, which is the structural
@@ -13693,10 +13774,15 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
     // board holding either of them and no Gorge -- so BlinkActivationCounts never offers a go-off
     // count and the deck's kill is unreachable at every depth. The real decklist runs ONE Gorge and
     // no {X} draw at all, so that is the common case, not a corner.
+    // `hand_setup_mv` is the one-off cost of getting the sink onto the battlefield at all (0 when it
+    // is already there): the wish, the finisher, or both. It has to be banked BEFORE the first
+    // activation, so it is part of what the loop must fund -- omitting it would size a loop that
+    // reaches the deploy and then cannot pay for a single drain.
     if (loop.drain_amount > 0 && loop.drain_cost_mv >= 0)
     {
         const int activations = (life + loop.drain_amount - 1) / loop.drain_amount;
-        const int iters = FlickerIterationsForMana(activations * std::max(1, loop.drain_cost_mv),
+        const int iters = FlickerIterationsForMana(loop.hand_setup_mv
+                                                       + activations * std::max(1, loop.drain_cost_mv),
                                                    loop.net);
         if (iters > 0) { return iters; }
     }
@@ -13705,7 +13791,8 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         // One activation per card left in their library. Not their whole deck: the count shrinks as
         // the game goes on (they draw one at the end of each of our turns) and as we exile.
         const int cards = static_cast<int>(s.players[1 - s.active_player_index].library.size());
-        const int iters = FlickerIterationsForMana(cards * loop.exile_cost_mv, loop.net);
+        const int iters = FlickerIterationsForMana(loop.hand_setup_mv + cards * loop.exile_cost_mv,
+                                                   loop.net);
         if (iters > 0) { return iters; }
     }
 
@@ -13781,7 +13868,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
             if (cards <= 0) { continue; }
             const int by_mana = FlickerIterationsForMana(cards * std::max(1, cost), loop.net);
             if (by_mana <= 0) { continue; }
-            return std::clamp(std::max(cards, by_mana), 1, kFlickerMaxIterations);
+            return std::clamp(std::max(cards, by_mana), 1, FlickerMaxIterations());
         }
     }
 
@@ -13801,7 +13888,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         const int want_mana = static_cast<int>(s.players[s.active_player_index].library.size())
                             + d->card.m_mana_cost.ManaValue();
         const int iters = (want_mana + loop.net - 1) / loop.net;
-        return std::clamp(iters, 1, kFlickerMaxIterations);
+        return std::clamp(iters, 1, FlickerMaxIterations());
     }
     return 0;   // no way to cash the mana -> no go-off candidate
 }
@@ -13934,8 +14021,15 @@ std::vector<int> EldraziFlickerProvider::BlinkActivationCounts(const GameState& 
     // or n already inside kmax) and they are indistinguishable from the outside: every one of them
     // shows up in a log as a single blink and a slow win by attacking. Bounded output.
     static const bool s_dbg = EnvOn("MTG_EDF_GOFF_DEBUG");
+    // MTG_EDF_GOFF_DEBUG_N raises the print cap. 40 lines is enough to see a pattern and far too few
+    // to find a RARE one -- the recognizer runs millions of times, so the first 40 are all from the
+    // same early rollout and say nothing about the turn actually being asked about.
+    static const int s_dbg_cap = []() {
+        const char* v = std::getenv("MTG_EDF_GOFF_DEBUG_N");
+        return (v && *v) ? std::atoi(v) : 40;
+    }();
     static std::atomic<int> s_dbg_n{0};
-    const bool dbg = s_dbg && s_dbg_n.fetch_add(1, std::memory_order_relaxed) < 40;
+    const bool dbg = s_dbg && s_dbg_n.fetch_add(1, std::memory_order_relaxed) < s_dbg_cap;
     const int n = loop.ok ? FlickerGoOffCount(s, loop) : 0;
     if (dbg)
     {
@@ -14110,7 +14204,7 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
         if (loop.refund > loop.cost_mv + loop.gorge_cost_mv
             && startable(loop.cost_mv + loop.gorge_cost_mv))
         {
-            const long long dmg = static_cast<long long>(kFlickerMaxIterations) * loop.gorge_dmg;
+            const long long dmg = static_cast<long long>(FlickerMaxIterations()) * loop.gorge_dmg;
             return dmg > 1000000 ? 1000000 : static_cast<int>(dmg);
         }
     }
@@ -14123,11 +14217,16 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
     if (loop.drain_amount > 0)
     {
         const int per = std::max(1, loop.drain_cost_mv);
-        if (loop.net > 0 && startable(loop.cost_mv + per))
+        // `hand_setup_mv` (0 for a board sink) is the wish + finisher the loop must pay for before
+        // the first drain. It is charged BOTH to startability and to the banked total, so the
+        // projection never claims a kill the deploy would have eaten.
+        if (loop.net > 0 && startable(loop.cost_mv + per + loop.hand_setup_mv))
         {
-            const long long acts = (static_cast<long long>(kFlickerMaxIterations) * loop.net) / per;
+            const long long bank = static_cast<long long>(FlickerMaxIterations()) * loop.net
+                                 - loop.hand_setup_mv;
+            const long long acts = bank > 0 ? bank / per : 0;
             const long long dmg  = acts * loop.drain_amount;
-            return dmg > 1000000 ? 1000000 : static_cast<int>(dmg);
+            if (dmg > 0) { return dmg > 1000000 ? 1000000 : static_cast<int>(dmg); }
         }
     }
 
@@ -14171,13 +14270,16 @@ bool EldraziFlickerProvider::ProjectsAlternateWin(
         }
         if (payload_cast) { avail += loop.refund; }
     }
-    if (avail < static_cast<long long>(loop.cost_mv + loop.exile_cost_mv)) { return false; }
+    // `hand_setup_mv` charges the wish + finisher a hand route still has to deploy, on both tests --
+    // the same correction the damage projection makes, and for the same reason (the two must agree).
+    if (avail < static_cast<long long>(loop.cost_mv + loop.exile_cost_mv + loop.hand_setup_mv))
+    { return false; }
 
     // And the loop must actually be able to bank enough mana within the iteration ceiling to empty
     // the zone. Below that it is a clock, not a kill, and the ordinary search can price it.
     const long long cards = static_cast<long long>(s.players[1 - s.active_player_index].library.size());
-    const long long need  = cards * loop.exile_cost_mv;
-    return need <= static_cast<long long>(kFlickerMaxIterations) * loop.net;
+    const long long need  = cards * loop.exile_cost_mv + loop.hand_setup_mv;
+    return need <= static_cast<long long>(FlickerMaxIterations()) * loop.net;
 }
 
 // Deploy the combo before anything else: an outlet or a payload on the battlefield is what every

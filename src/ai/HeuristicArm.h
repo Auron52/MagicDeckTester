@@ -144,6 +144,9 @@ enum Slot : int
     REFLOAT_NEED,             // MTG_REFLOAT_NEED         tap-ahead colour commit: {C}+ability demand, coverage
     REFLOAT_COMBO,            // MTG_REFLOAT_COMBO        in-loop mana policy: {C}/B/R quota ladder
     EDF_DRAWLAND_GOFF,        // MTG_EDF_DRAWLAND_GOFF   a {T} DRAW LAND is a go-off route too
+    EDF_LOOP_DRAW,            // MTG_EDF_LOOP_DRAW       ...and the loop ACTIVATES it every iteration
+    EDF_COMBO_FINISH,         // MTG_EDF_COMBO_FINISH    bank the mana, then deploy the finisher from hand
+    EDF_SEQ_AURA,             // MTG_EDF_SEQ_AURA        a LAND AURA reaches the SEQUENCED payability walk
     COUNT
 };
 
@@ -265,6 +268,9 @@ inline const char* Name(int slot)
         "MTG_REFLOAT_NEED",
         "MTG_REFLOAT_COMBO",
         "MTG_EDF_DRAWLAND_GOFF",
+        "MTG_EDF_LOOP_DRAW",
+        "MTG_EDF_COMBO_FINISH",
+        "MTG_EDF_SEQ_AURA",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -9989,6 +9989,479 @@ inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const Man
     return dealt;
 }
 
+// MTG_EDF_FINISH_STATS -- why the kill chain did or did not fire. Five independent ways to end up
+// with an uncashed loop (no draw source untapped, the guard refused, the payment failed, no finisher
+// reachable, not enough mana banked for one) and they are indistinguishable from a game log: every
+// one of them shows up as a big blink and a slow win by attacking. Atomic counters, dumped once at
+// exit, so a whole batch can carry it.
+namespace finishstats
+{
+inline std::atomic<long long> g_draw_seen{0},   g_draw_guard{0}, g_draw_paid{0};
+inline std::atomic<long long> g_fin_call{0},    g_fin_hand{0},   g_fin_wish{0};
+inline std::atomic<long long> g_fin_nomana{0},  g_fin_none{0},   g_fin_paidfail{0};
+inline bool On()
+{
+    static const bool v = EnvOn("MTG_EDF_FINISH_STATS");
+    return v;
+}
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!On()) { return; }
+        std::fprintf(stderr,
+                     "[finish] draw seen=%lld guard-refused=%lld paid=%lld | "
+                     "finish calls=%lld hand=%lld wish=%lld no-mana=%lld none-found=%lld pay-fail=%lld\n",
+                     g_draw_seen.load(), g_draw_guard.load(), g_draw_paid.load(),
+                     g_fin_call.load(), g_fin_hand.load(), g_fin_wish.load(),
+                     g_fin_nomana.load(), g_fin_none.load(), g_fin_paidfail.load());
+    }
+};
+inline Dumper g_dumper;
+}
+
+// MTG_EDF_LOOP_DRAW (default ON) -- see SpendSurplusOnDrawSinks. Read through a heurarm slot so both
+// arms of its A/B ride ONE pooled batch (CLAUDE.md: no per-arm waves).
+inline bool LoopDrawSinkOn()
+{
+    // NOT IN HUMAN PLAY, and gated in ONE place so the untap-priority promotion and the spend can
+    // never disagree (promoting a sink nothing activates is the measured loss this pairing exists to
+    // avoid). Drawing your library is a bigger thing to do on a human's behalf than spending float
+    // they were about to lose anyway, the enumerator already declines to SIZE a loop for it under
+    // human play (DrawLandGoOffOn), and an engine change is not allowed to cost a saved reference --
+    // this deck's has been broken twice by exactly this class of gap. The search never sets
+    // HumanPlayActive, so the whole measured gain is kept.
+    if (HumanPlayActive()) { return false; }
+    static const bool env_on = EnvOn("MTG_EDF_LOOP_DRAW", true);
+    return heurarm::Flag(heurarm::EDF_LOOP_DRAW, env_on);
+}
+
+// Crack every Clue the controller has, while a draw is still SAFE (a card must be left in the
+// library) and the `keep_payable` guard still holds. Split out because both halves of the draw sink
+// below feed it: an Investigate makes a Clue, and the Clue is where the card actually comes from.
+// Terminates because SacDraw removes the token it cracked.
+inline int CrackCluesForCards(GameState& state, int controller, const ManaCost& keep_payable,
+                              const std::function<bool(const ManaCost&)>& pay)
+{
+    int drawn = 0;
+    for (int guard = 0; guard < 128; ++guard)
+    {
+        if (state.players[controller].library.size() <= 1) { break; }
+        int      id = -1;
+        ManaCost c;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d || !d->params.sac_draw_cost.has_value()) { continue; }
+            id = p.card.m_number;
+            c  = EffectiveActivationCost(state, controller, p.card, d->params.sac_draw_cost.value());
+            break;
+        }
+        if (id < 0) { break; }
+        {
+            ManaPool have = AvailableManaPool(state, nullptr);
+            have.AddPool(state.floating_mana);
+            if (!have.CanPay(AddManaCosts(c, keep_payable))) { break; }
+        }
+        if (!pay(c)) { break; }
+        ApplyPermAbility(state, controller, id, PermAbilityMode::SacDraw);
+        ++drawn;
+    }
+    return drawn;
+}
+
+// Spend surplus mana on every {T} DRAW source the controller has UNTAPPED -- Mariposa Military
+// Base's "{5},{T}: Draw a card" and the two Investigate lands' "{4},{T}: Investigate" (whose Clue
+// then costs {2} to crack). Returns the cards drawn.
+//
+// Structurally the DAMAGE sink's twin, not the drain's: {T} is in the cost, so it fires once per
+// untap and the blink loop's ETB is what buys it a second, third and fortieth activation. That is
+// why it is called per ITERATION and sized by iterations rather than by mana.
+//
+// THIS IS THE HALF THAT WAS MISSING, and its absence is the largest measured defect on this deck.
+// FlickerGoOffCount already sizes a loop to "draw the library and find the finisher" off a draw
+// land, and the untap-priority note below already promised to promote "draw/investigate sinks behind
+// [the damage sinks]" -- but nothing ever ACTIVATED one inside the loop. Measured over 60 logged
+// games before this existed: 34 go-offs averaging ~46 blinks each, and TEN Mariposa draws in the
+// entire run. The engine banked hundreds of mana per go-off and converted it into nothing.
+//
+// It also explains, and repairs, the earlier measurement that REJECTED promoting draw lands into the
+// untap order (+0.0437 avg win turns, t +5.99, 8 of 8 seeds worse). That result was real and its
+// mechanism was correctly diagnosed at the time: promoting a permanent the loop cannot cash converts
+// real loop mana into an ability no iteration ever activates. The rule stated there -- "adding a
+// class of sink here is only correct alongside a matching per-iteration SPEND for it -- do both, or
+// neither" -- is now honoured by doing BOTH, so the promotion is being re-measured on its merits
+// rather than re-litigated.
+//
+// NEVER DRAWS THE LAST CARD. Drawing from an empty library loses the game, so this stops with one
+// card left: an unbounded loop must never be able to propose its own death.
+// Is a {T}-less FINISHER already reachable -- on the battlefield, in hand, or one Living Wish away?
+// The predicate the draw sink is gated on, and the recognizer's ScanHandSinks answers the same
+// question on the search side; they must agree or the loop would be sized for a route it declines to
+// walk. `Drain` and `ExileTop` only; Shivan Gorge is excluded because reaching it needs the turn's
+// LAND DROP, which is the plan's to spend and not this routine's.
+inline bool ComboFinisherReachable(const GameState& state, int controller)
+{
+    const auto is_sink = [&](const CardDefinition* d) {
+        if (d == nullptr) { return false; }
+        if (d->params.drain_cost.has_value() && d->params.drain_amount > 0) { return true; }
+        return d->params.exile_opponent_top_cost.has_value()
+            && state.opponent_library_dealt && !state.opponent_decked;
+    };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (is_sink(CardDatabase::Instance().LookupCached(p.card))) { return true; }
+    }
+    const Player& ap = state.players[controller];
+    bool wish = false;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (is_sink(d)) { return true; }
+        if (d != nullptr && d->params.tutor_to_hand && d->params.wish_from_sideboard) { wish = true; }
+    }
+    if (!wish) { return false; }
+    for (const Card& c : ap.sideboard)
+    { if (is_sink(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    return false;
+}
+
+inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaCost& keep_payable,
+                                   const std::function<bool(const ManaCost&)>& pay)
+{
+    if (!LoopDrawSinkOn()) { return 0; }
+    // DRAW ONLY TO FIND. The draw is not a payoff, it is a SEARCH for one: the user's third
+    // category is "Living Wish, Draw land on board or shivan gorge", and the draw land is the entry
+    // that has to go looking. Once a finisher is reachable, every further card costs {5} (or {4}+{2})
+    // out of the pool the finisher itself needs, and mana is the one thing the loop was banking.
+    //
+    // Ungated it inverts the user's own priority -- "The top priority is always keeping the combo
+    // going... Finding exact ways to finish the job is for after you have bountiful amounts of mana."
+    // Measured ungated over 8 games: 2,002,759 paid draw activations inside the rollouts, one game at
+    // 96 s, and the post-loop finisher then found itself short of mana on 315,046 of its calls,
+    // because the draws had spent the bank down to one activation's worth every single iteration.
+    // The gate is self-terminating: the moment a draw turns up a wish, drawing stops on its own.
+    //
+    // The CALLER owns the check (ApplyBlinkLoop's `want_draw`), because this runs once per iteration
+    // of a loop that runs inside every rollout: re-scanning the battlefield, the hand and the
+    // sideboard sixty times a loop for an answer that can only change when we DRAW A CARD is pure
+    // cost. The caller re-evaluates exactly when this returns non-zero.
+    if (state.players[controller].library.size() <= 1)
+    { return CrackCluesForCards(state, controller, keep_payable, pay); }
+
+    // Collect ids FIRST, then re-find each by id before use: pay() can tap sources and remove
+    // permanents, so no index or reference survives a payment (SpendSurplusOnDamageSinks' hazard).
+    std::vector<int> ids;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped || !p.CanTap()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && (d->params.tap_draw_cost.has_value() || d->params.tap_investigate_cost.has_value()))
+        { ids.push_back(p.card.m_number); }
+    }
+    int drawn = 0;
+    for (int id : ids)
+    {
+        if (state.players[controller].library.size() <= 1) { break; }
+        int i = -1;
+        for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+        {
+            if (state.battlefield[bi].card.m_number == id
+                && state.battlefield[bi].controller_index == controller) { i = bi; break; }
+        }
+        if (i < 0 || state.battlefield[i].tapped) { continue; }
+        if (finishstats::On()) { finishstats::g_draw_seen.fetch_add(1, std::memory_order_relaxed); }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[i].card);
+        if (!d) { continue; }
+        PermAbilityMode mode = PermAbilityMode::None;
+        ManaCost        c;
+        if (d->params.tap_draw_cost.has_value())
+        {
+            mode = PermAbilityMode::TapDraw;
+            c    = EffectiveActivationCost(state, controller, state.battlefield[i].card,
+                                           d->params.tap_draw_cost.value());
+        }
+        else if (d->params.tap_investigate_cost.has_value())
+        {
+            mode = PermAbilityMode::TapInvestigate;
+            c    = EffectiveActivationCost(state, controller, state.battlefield[i].card,
+                                           d->params.tap_investigate_cost.value());
+        }
+        else { continue; }
+        // Never spend the loop's entry price -- the same projection guard the damage sink uses, and
+        // for the same reason: a draw that starves the next iteration ends the loop it was funded by.
+        {
+            ManaPool have = AvailableManaPool(state, nullptr);
+            have.AddPool(state.floating_mana);
+            if (!have.CanPay(AddManaCosts(c, keep_payable)))
+            {
+                if (finishstats::On())
+                { finishstats::g_draw_guard.fetch_add(1, std::memory_order_relaxed); }
+                continue;
+            }
+        }
+        // Pay the {T} half FIRST so the source cannot tap itself toward its own cost; restore on a
+        // failed payment (SetPermTapped, the SpendSurplusOnDamageSinks discipline).
+        state.battlefield[i].tapped = true;
+        if (!pay(c)) { SetPermTapped(state, controller, id, false); continue; }
+        if (finishstats::On()) { finishstats::g_draw_paid.fetch_add(1, std::memory_order_relaxed); }
+        ApplyPermAbility(state, controller, id, mode);
+        if (mode == PermAbilityMode::TapDraw) { ++drawn; }
+    }
+    // The Investigate half only made Clues; the CARD comes from cracking them.
+    drawn += CrackCluesForCards(state, controller, keep_payable, pay);
+    return drawn;
+}
+
+// MTG_EDF_COMBO_FINISH (default ON) -- see ComboFinishFromHand.
+inline bool ComboFinishOn()
+{
+    static const bool env_on = EnvOn("MTG_EDF_COMBO_FINISH", true);
+    return heurarm::Flag(heurarm::EDF_COMBO_FINISH, env_on);
+}
+
+// Put a creature from hand onto the battlefield through the full ETB cascade. The mana is the
+// caller's problem (it has already paid); this is the effect half, and it is the same shape as the
+// Vial deploy in TurnSolver and ApplyRevealTopDeploy above -- push the Permanent, then fire the
+// watchers and the creature's own ETB triggers.
+inline bool DeployCreatureFromHand(GameState& state, int controller, int hand_idx)
+{
+    Player& ap = state.players[controller];
+    if (hand_idx < 0 || hand_idx >= static_cast<int>(ap.hand.size())) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[hand_idx]);
+    if (d == nullptr) { return false; }
+    Permanent perm;
+    perm.card              = d->card;
+    perm.card.m_number     = ap.hand[hand_idx].m_number;   // per-copy ID, as the Vial deploy does
+    perm.controller_index  = controller;
+    perm.owner_index       = controller;
+    perm.entered_this_turn = true;
+    ap.hand.erase(ap.hand.begin() + static_cast<std::ptrdiff_t>(hand_idx));
+    state.battlefield.push_back(perm);
+    const int slot = static_cast<int>(state.battlefield.size()) - 1;
+    FireEtbWatchers(state, controller, slot);
+    FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
+    if (perm.card.HasSupertype(Supertype::Legendary)) { EnforceLegendRule(state, controller); }
+    return true;
+}
+
+// THE KILL CHAIN -- convert banked combo mana into the finisher the BOARD does not have yet.
+//
+// USER, 2026-09-04: "The top priority is always keeping the combo going", and "Finding exact ways to
+// finish the job is for after you have bountiful amounts of mana." This is the second half. Until
+// now the engine could only cash a loop into a sink ALREADY on the battlefield; a sink in hand, or
+// one sitting in the sideboard behind a Living Wish, was invisible to it. Measured over 60 logged
+// games: all three combo pieces were assembled by turn 4.33 on average and the game was won on turn
+// 6.30 -- a 1.8-turn lag, with 43 of 45 assembled games lagging by at least one full turn. The
+// mechanism was visible game by game: seed 7001 gi=34 cast Living Wish, fetched Essence Depleter,
+// blinked SIXTY times and then cast the Depleter -- after the loop had ended, so not one drain ever
+// fired and the game was won two turns later by attacking.
+//
+// THE THREE ROUTES, in the user's own terms ("Finish the opponent = Living Wish, Draw land on board
+// or shivan gorge"):
+//   1. a finisher CREATURE in hand (Essence Depleter, Dimensional Infiltrator) -> deploy it;
+//   2. a WISH in hand whose sideboard still holds one -> cast the wish, fetch it, then route 1;
+//   3. a draw land on the board -> SpendSurplusOnDrawSinks fills the hand, and routes 1 and 2 then
+//      fire on what it drew. That is why this runs AFTER the loop rather than before it.
+// Shivan Gorge in hand is deliberately NOT a route: it is a LAND, so it needs the turn's land drop,
+// which belongs to the plan and not to a resolution-time shortcut.
+//
+// WHY THIS IS A RESOLUTION HEURISTIC AND NOT A SEARCH DECISION. It runs inside ApplyBlinkLoop, the
+// ONE driver both the rollout and the executor call, so the realised line is the scored line by
+// construction -- the same lockstep argument the three surplus sinks already rely on. It cannot
+// fabricate a win: the deploy is paid through the caller's own payer, and the kill is realised by
+// SpendSurplusOnDrain/Exile actually paying for activations afterwards.
+//
+// GUARDED ON BOUNTIFUL MANA, which is the user's condition restated as arithmetic: the pool must
+// cover the cast AND enough activations for the finisher to matter. Below that bar the deploy is a
+// real decision with a real cost and the search should own it, so this stands down.
+//
+// NOT IN HUMAN PLAY. Spending a human's float on a sink they own is one thing (the deck runs the
+// combo for you); casting spells out of their hand without asking is another, and the human already
+// has every one of these plays available as an ordinary plan action.
+inline bool ComboFinishFromHand(GameState& state, int controller,
+                                const std::function<bool(const ManaCost&)>& pay)
+{
+    if (!ComboFinishOn() || HumanPlayActive()) { return false; }
+    if (state.players[1 - controller].life <= 0) { return false; }
+    if (finishstats::On()) { finishstats::g_fin_call.fetch_add(1, std::memory_order_relaxed); }
+
+    // A sink of this KIND already on the battlefield needs no second copy: the first one's activation
+    // count is bounded by mana, not by how many of it we control.
+    const auto kind_on_board = [&](bool drain) {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            if (drain ? (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
+                      : d->params.exile_opponent_top_cost.has_value()) { return true; }
+        }
+        return false;
+    };
+    // Is this definition a repeatable {T}-less finisher, and what does one activation cost?
+    const auto sink_act_mv = [&](const CardDefinition* d, bool* is_drain) -> int {
+        if (d == nullptr || !d->card.IsCreature()) { return 0; }
+        if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
+        {
+            if (kind_on_board(true)) { return 0; }
+            *is_drain = true;
+            return std::max(1, d->params.drain_cost.value().ManaValue());
+        }
+        if (d->params.exile_opponent_top_cost.has_value())
+        {
+            // A deck-out we cannot finish is worth nothing at all (SpendSurplusOnExile is
+            // all-or-nothing for exactly this reason), so do not fetch or deploy one into a game
+            // whose opponent library is not modelled.
+            if (!state.opponent_library_dealt || state.opponent_decked) { return 0; }
+            if (kind_on_board(false)) { return 0; }
+            *is_drain = false;
+            return std::max(1, d->params.exile_opponent_top_cost.value().ManaValue());
+        }
+        return 0;
+    };
+    // "Bountiful": the pool must cover the cast AND the activations that make the cast worth making.
+    // For a drain that is a real kill count; for the exile it is the whole remaining library, which
+    // is the only quantity that buys anything.
+    const auto affordable = [&](int cast_mv, int act_mv, bool is_drain, int drain_amount) {
+        ManaPool have = AvailableManaPool(state, nullptr);
+        have.AddPool(state.floating_mana);
+        const int acts = is_drain
+            ? (std::max(1, state.players[1 - controller].life) + std::max(1, drain_amount) - 1)
+                  / std::max(1, drain_amount)
+            : static_cast<int>(state.players[1 - controller].library.size());
+        const long long want = static_cast<long long>(cast_mv)
+                             + static_cast<long long>(acts) * act_mv;
+        return static_cast<long long>(have.Total()) >= want;
+    };
+
+    bool did = false;
+    // Bounded: fetch-then-deploy is two steps, and the sideboard holds two finishers. Four rounds
+    // covers both chains with room to spare and cannot spin.
+    for (int round = 0; round < 4; ++round)
+    {
+        if (state.players[1 - controller].life <= 0) { break; }
+        Player& ap = state.players[controller];
+
+        // ROUTE 1 -- a finisher creature already in hand.
+        {
+            int  best_i = -1;
+            bool best_drain = false;
+            for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[i]);
+                bool is_drain = false;
+                const int act = sink_act_mv(d, &is_drain);
+                if (act <= 0) { continue; }
+                // PRINTED cost, deliberately. The unified EffectiveSpellCost lives in the ai layer
+                // and this is core; over-paying is the conservative direction (a reducer we ignore
+                // can only make us DECLINE a castable finisher, never claim an uncastable one).
+                const int cast_mv = d->card.m_mana_cost.ManaValue();
+                const int amt     = is_drain ? d->params.drain_amount : 0;
+                if (!affordable(cast_mv, act, is_drain, amt))
+                {
+                    if (finishstats::On())
+                    { finishstats::g_fin_nomana.fetch_add(1, std::memory_order_relaxed); }
+                    continue;
+                }
+                // Prefer the DRAIN: life loss is direct progress, where an exile buys nothing until
+                // the library is empty.
+                if (best_i < 0 || (is_drain && !best_drain))
+                { best_i = i; best_drain = is_drain; }
+            }
+            if (best_i >= 0)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[best_i]);
+                const std::string name  = ap.hand[best_i].m_name.str();
+                // RE-CHECK THE INDEX AFTER THE PAYMENT. `pay` runs the whole payment machinery --
+                // it taps sources and can sacrifice permanents -- so a hand index taken before it is
+                // not automatically valid after it. Nothing in this deck moves a card out of hand
+                // during a payment, which is exactly why the day it does would be a silent MIS-CAST
+                // rather than a crash. Cheap, and it is the same discipline the surplus sinks use for
+                // battlefield ids.
+                if (d != nullptr && pay(d->card.m_mana_cost)
+                    && best_i < static_cast<int>(ap.hand.size())
+                    && ap.hand[best_i].m_name.str() == name)
+                {
+                    if (DeployCreatureFromHand(state, controller, best_i))
+                    {
+                        did = true;
+                        if (finishstats::On())
+                        { finishstats::g_fin_hand.fetch_add(1, std::memory_order_relaxed); }
+                        if (g_play_event_sink)
+                        {
+                            EmitPlayEvent(state.turn_number, "cast",
+                                          "\xE2\x9A\xA1 combo finish: " + name);
+                        }
+                        continue;   // deployed -- look again (a second kind may still be wanted)
+                    }
+                }
+            }
+        }
+
+        // ROUTE 2 -- a WISH in hand, with a finisher still in the sideboard for it to fetch.
+        {
+            int         wish_i = -1;
+            std::string want;
+            bool        want_drain = false;
+            for (int i = 0; i < static_cast<int>(ap.hand.size()) && wish_i < 0; ++i)
+            {
+                const CardDefinition* wd = CardDatabase::Instance().LookupCached(ap.hand[i]);
+                if (wd == nullptr || !wd->params.tutor_to_hand || !wd->params.wish_from_sideboard)
+                { continue; }
+                const int wish_mv = wd->card.m_mana_cost.ManaValue();
+                for (const Card& sb : ap.sideboard)
+                {
+                    // The TYPE comes from the definition: a card outside the battlefield carries
+                    // empty type masks, so a raw IsCreature() on the zone card is always false.
+                    const CardDefinition* sd = CardDatabase::Instance().LookupCached(sb);
+                    bool is_drain = false;
+                    const int act = sink_act_mv(sd, &is_drain);
+                    if (act <= 0) { continue; }
+                    const int cast_mv = sd->card.m_mana_cost.ManaValue();
+                    const int amt     = is_drain ? sd->params.drain_amount : 0;
+                    if (!affordable(wish_mv + cast_mv, act, is_drain, amt))
+                    {
+                        if (finishstats::On())
+                        { finishstats::g_fin_nomana.fetch_add(1, std::memory_order_relaxed); }
+                        continue;
+                    }
+                    if (want.empty() || (is_drain && !want_drain))
+                    { want = sd->card.m_name.str(); want_drain = is_drain; wish_i = i; }
+                }
+            }
+            if (wish_i >= 0)
+            {
+                const CardDefinition* wd = CardDatabase::Instance().LookupCached(ap.hand[wish_i]);
+                const std::string     wname = ap.hand[wish_i].m_name.str();
+                if (wd != nullptr && pay(wd->card.m_mana_cost)
+                    && wish_i < static_cast<int>(ap.hand.size())
+                    && ap.hand[wish_i].m_name.str() == wname)   // index re-check; see route 1
+                {
+                    const Card wish = ap.hand[wish_i];
+                    ap.hand.erase(ap.hand.begin() + static_cast<std::ptrdiff_t>(wish_i));
+                    // "Exile Living Wish" -- a self-exiling spell goes to EXILE, not the graveyard
+                    // (lockstep with EffectHandler::MoveToGraveyard and TurnSolver's cast path).
+                    if (wd->params.exiles_self_on_resolve) { state.exile.push_back(wish); }
+                    else { ap.graveyard.push_back(wish); }
+                    // Fetch BY NAME so the resolution-time ranking cannot substitute a mana piece for
+                    // the win condition this whole routine exists to find.
+                    PerformTutor(state, controller, wd->params, want, wd->card.m_name.str());
+                    did = true;
+                    if (finishstats::On())
+                    { finishstats::g_fin_wish.fetch_add(1, std::memory_order_relaxed); }
+                    continue;   // the fetched finisher is in hand now -- route 1 deploys it
+                }
+            }
+        }
+        if (finishstats::On()) { finishstats::g_fin_none.fetch_add(1, std::memory_order_relaxed); }
+        break;   // neither route fired this round
+    }
+    return did;
+}
+
 // Investigate (Conservatory / Kitchen): "Create a Clue token. It's an artifact with '{2},
 // Sacrifice this token: Draw a card.'" The ability lives on the "Clue Token" NAMED TOKEN DEF in
 // cards.json (sac_draw_cost) exactly as a Treasure's mana ability does -- the Treasure Token
@@ -10338,6 +10811,27 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         if (d && d->params.tap_damage_cost.has_value() && d->params.tap_damage_each_opponent > 0)
         { sinks.push_back(p.card.m_number); break; }
     }
+    // THE DRAW SINKS, BEHIND THE DAMAGE ONE -- the second entry the ordered-set comment above was
+    // written for. Same {T} structure as the Gorge (once per untap, so the loop's ETB is what makes
+    // it repeatable), one rank lower because a damage land ENDS the game where a draw land only
+    // finds the card that does. Every copy, not the first: nine of this deck's ten finisher lands
+    // are draw lands, and a loop drawing its library wants all of them untapped, not one.
+    //
+    // Gated on the matching SPEND existing. Promoting a sink the loop cannot cash is a measured LOSS
+    // (see SpendSurplusOnDrawSinks) -- the untap slot it takes would otherwise go to an Overgrowth'd
+    // land, so an unactivated draw land is a pure subtraction from the loop's own margin. The two go
+    // on and off together, always.
+    if (LoopDrawSinkOn())
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && (d->params.tap_draw_cost.has_value()
+                      || d->params.tap_investigate_cost.has_value()))
+            { sinks.push_back(p.card.m_number); }
+        }
+    }
     // BANK COLOURLESS for the library-exile sink, for the whole loop. It needs one {C} pip per card
     // left in the opponent's library and it needs them all at once (see SpendSurplusOnExile), which
     // no board of three colourless sources can produce in a single untap -- so the pips have to
@@ -10421,6 +10915,9 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     static const bool s_human_autocash = EnvOn("MTG_HUMAN_AUTOCASH");
     const bool combo_live = payload_untaps && have_sink;
     const bool cash_sinks = !HumanPlayActive() || iterations > 1 || combo_live || s_human_autocash;
+    // DRAW ONLY TO FIND -- see SpendSurplusOnDrawSinks. Evaluated once here and re-evaluated only
+    // after a draw actually lands, because nothing else in the loop can change the answer.
+    bool want_draw = LoopDrawSinkOn() && !ComboFinisherReachable(state, controller);
     int done = 0;
     for (int k = 0; k < iterations; ++k)
     {
@@ -10449,6 +10946,19 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // ActivatePermAbility action, so nothing becomes unreachable by hand -- it stops being
         // automatic. The search never sets HumanPlayActive, so every point of the measurement stands.
         if (cash_sinks) { SpendSurplusOnDamageSinks(state, controller, c, pay); }
+        // The DRAW sinks ride the same position, and for the identical reason: {T} is in their cost,
+        // so the tap-ahead would tap Mariposa for its one {C} and the draw ability would find its
+        // own source already tapped. Behind the damage sinks in the same pass, matching their rank in
+        // the untap-priority set. Guarded by `c` (this iteration's activation) so a draw can never
+        // starve the loop that funds it.
+        //
+        // `want_draw` is the DRAW-ONLY-TO-FIND gate, hoisted out of the per-iteration path: the
+        // answer can only change when a card is drawn, so it is re-evaluated exactly then.
+        if (cash_sinks && want_draw)
+        {
+            if (SpendSurplusOnDrawSinks(state, controller, c, pay) > 0)
+            { want_draw = !ComboFinisherReachable(state, controller); }
+        }
         if (untaps > 0) { EtbUntapTapAheadIntoFloat(state, controller, untaps); }
         if (!pay(c)) { break; }
         // Emiel's optional {G/W} counter trigger fires inside ApplyBlink's ETB cascade; hand it this
@@ -10527,8 +11037,19 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     if (done > 0 && cash_sinks)
     {
         SpendSurplusOnDamageSinks(state, controller, ManaCost{}, pay);
+        if (want_draw) { SpendSurplusOnDrawSinks(state, controller, ManaCost{}, pay); }
         SpendSurplusOnDrain(state, controller, ManaCost{}, pay);
         SpendSurplusOnExile(state, controller, pay);
+        // THE KILL CHAIN. Everything above can only cash into a sink the board ALREADY has; this is
+        // what reaches the one in hand, or the one a Living Wish can still fetch -- including a card
+        // the draw sinks just put there. Re-run the two {T}-less spends afterwards, because the sink
+        // it deployed did not exist when they ran. No-op (and byte-identical for every other deck)
+        // when nothing was deployed.
+        if (ComboFinishFromHand(state, controller, pay))
+        {
+            SpendSurplusOnDrain(state, controller, ManaCost{}, pay);
+            SpendSurplusOnExile(state, controller, pay);
+        }
     }
     return done;
 }
