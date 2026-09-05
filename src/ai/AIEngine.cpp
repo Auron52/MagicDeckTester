@@ -3096,7 +3096,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         TurnSolver::Plan extra;
         bool bp_searched_here = false;
         const int bp_idx = (plan.bp_choice >= 0) ? bp_seen_exec++ : -1;
-        if (bp_idx == plan.bp_at)
+        // bp_all -> candidate k at EVERY breakpoint (Plan::bp_all). The search scored the turn
+        // that way, so the executor must realise it that way or the committed line is not the
+        // line that was ranked -- the same divergence class the comment above guards against.
+        if (bp_idx >= 0 && (plan.bp_all || bp_idx == plan.bp_at))
         {
             const std::vector<TurnSolver::Plan> cands =
                 TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);

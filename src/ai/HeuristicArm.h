@@ -149,6 +149,9 @@ enum Slot : int
     EDF_WISH_SINK_FLOOR,      // MTG_EDF_WISH_SINK_FLOOR  the hand's LAST wish keeps the sink tier live
     EDF_WISH_SINK_SCARCE,     // MTG_EDF_WISH_SINK_SCARCE ...only when the library holds <=1 more wish
     LAND_IDLE_TAPPED_FIRST,   // MTG_LAND_IDLE_TAPPED_FIRST  first drop plays TAPPED when the mana is idle
+    HOLD_FUEL_LAND,           // MTG_HOLD_FUEL_LAND        hold a CYCLING land the turn buys nothing with
+    NO_REDUNDANT_REDUCER,     // MTG_NO_REDUNDANT_REDUCER  never cast a SATURATED cost-reducer copy
+    BP_UNIFORM_DEV,           // MTG_BP_UNIFORM_DEV       take candidate k at EVERY breakpoint (Plan::bp_all)
     COUNT
 };
 
@@ -275,6 +278,9 @@ inline const char* Name(int slot)
         "MTG_EDF_WISH_SINK_FLOOR",
         "MTG_EDF_WISH_SINK_SCARCE",
         "MTG_LAND_IDLE_TAPPED_FIRST",
+        "MTG_HOLD_FUEL_LAND",
+        "MTG_NO_REDUNDANT_REDUCER",
+        "MTG_BP_UNIFORM_DEV",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

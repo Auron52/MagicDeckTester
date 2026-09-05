@@ -13712,6 +13712,46 @@ inline ManaCost EffectiveCyclingCostFor(const GameState& state, const CardDefini
     return EffectiveCyclingCost(state, state.active_player_index, def.params.cycling_cost.value());
 }
 
+// A SATURATED cost-reducer: casting `def` would not reduce any cycling cost the controller can
+// currently use, because a copy already in play has floored them all. Casting it then spends a card
+// AND its mana for literally no change in the game state.
+//
+// In a deck whose cycling IS the wincon that is not merely wasteful, it is lethal to the turn, and
+// both halves cost a kill in the reference games: the card is a ping that never happens (cycling is
+// 1-for-1 -- it draws a replacement -- while a cast is 1-for-0, so every cast permanently shortens
+// the chain), and the mana is the threat that never resolves (in reference s6/gi5 the redundant
+// {2} was exactly the {1}{R} the Drannith Stinger needed, and the chain stalled at 8 pings with the
+// opponent still on 20). Fluctuator and Enlightened Tutor are the only 2 of that deck's 60 cards
+// with no cycling ability, so a drawn spare Fluctuator is a permanently dead slot that TERMINATES
+// the chain rather than fuelling it.
+//
+// WHY "ADDS NOTHING RIGHT NOW" IS A SAFE TEST AND NOT A BET ABOUT THE FUTURE: declining to cast is
+// REVERSIBLE. The card stays in hand and can be cast on any later turn, so if a pricier cycler ever
+// does turn up the reduction is still available then. That is what lets this look only at the
+// present board and the present hand instead of reasoning about the library.
+inline bool IsSaturatedCyclingReducer(const GameState& state, int controller,
+                                      const CardDefinition& def)
+{
+    if (def.params.reduces_cycling_activation <= 0) { return false; }
+    bool already_out = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.reduces_cycling_activation > 0) { already_out = true; break; }
+    }
+    if (!already_out) { return false; }
+    // Anything still costing mana to cycle means a second reducer would genuinely help.
+    for (const Card& c : state.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || !d->params.cycling_cost.has_value()) { continue; }
+        if (EffectiveCyclingCost(state, controller, d->params.cycling_cost.value()).ManaValue() > 0)
+        { return false; }
+    }
+    return true;
+}
+
 // Drannith Stinger: "Whenever you cycle another card, this creature deals 1 damage to each
 // opponent." The FireSacrificeWatchers shape -- a player-ACTION watcher scanned off the
 // controller's battlefield. Called from ALL THREE cycle sites (executor PerformDig, the rollout

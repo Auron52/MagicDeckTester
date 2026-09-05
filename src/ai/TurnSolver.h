@@ -702,6 +702,27 @@ public:
         // (see MTG_BP_DEPTH). Ignored when bp_choice < 0.
         int bp_at = 0;
 
+        // ...and bp_all is the THIRD axis that buys back the most important slice of that trade.
+        // "Take candidate bp_choice at EVERY breakpoint of this apply", instead of only at bp_at.
+        //
+        // WHY A UNIFORM POLICY RATHER THAN THE FULL CROSS PRODUCT. The lines the (L*W, not W^L)
+        // trade was losing are overwhelmingly not arbitrary combinations -- they are ONE DECISION
+        // REPEATED. A Fluctuator kill turn is "at every mid-chain breakpoint, keep cycling and cast
+        // nothing"; the engine instead casts a free Hollow One at three separate breakpoints, and
+        // each cast is 1-for-0 where a cycle is 1-for-1, so each one permanently shortens the chain.
+        // Expressing that needs three simultaneous deviations, which no single (bp_at, bp_choice)
+        // pair can carry -- MEASURED unreachable at d0-d8, budget b20..b8000 AND unlimited, and at
+        // MTG_BP_DEPTH 1/8/24 crossed with MTG_BP_SEARCH 2/4/8 (reference s6/gi5).
+        //
+        // Cost is L*W + W, not W^L: one extra variant per candidate per base plan. So it restores a
+        // whole class of lines for an additive cost, which is why it comes before any attempt at
+        // iterative deepening over genuine combinations.
+        //
+        // Ignored when bp_choice < 0. The EXECUTOR honours it too (AIEngine's breakpoint replay):
+        // the search scored a turn in which candidate k was taken at every breakpoint, so the
+        // executor must realise that same turn or the committed line diverges from the scored one.
+        bool bp_all = false;
+
         // Did WAVE 0 (AppendBreakpointVariants) fan this BASE plan out? Set on the base plan, never
         // on a variant. MTG_BP_MAXBASE caps how many breakpoint-opening plans get variants at all,
         // and that cap -- like the width W -- is a RANK gate, so on its own it makes a whole plan's

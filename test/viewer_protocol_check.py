@@ -109,12 +109,25 @@ def capped(args):
 #
 # A dir that still cannot be resolved is a LOUD contract-fail at the game (see below), not a silent
 # skip -- the automation removes the chore, not the alarm.
-_DECK_OVERRIDES = {
-    # The only row derivation cannot reach: this deck's list lives in a per-VARIANT subfolder, so
-    # there is no decks/<name>/<name>.cod to find. A genuine exception, not a forgotten chore.
-    "Mirrorwing_Dragon": ("decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.cod",
-                          "decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.profile.json"),
-}
+# NO OVERRIDES, and the one that used to live here was WRONG -- it cost five references.
+#
+# It bound references/Mirrorwing_Dragon/ to decks/Mirrorwing Dragon/v1-twinflame-anger/, claiming
+# "this deck's list lives in a per-VARIANT subfolder, so there is no decks/<name>/<name>.cod to
+# find". That is simply false: decks/Mirrorwing Dragon/Mirrorwing Dragon.cod exists and is the
+# SHIPPING list. The five games in the reference folder's root were played on the shipping list, so
+# replaying them against the archived v1 list opened a different hand every time and all five
+# reported as mull-drift ("the recorded game no longer occurs") -- five hand-played, user-owned
+# games silently not being checked by anything.
+#
+# This is the SAME defect scripts/ref_bench.py documents and already fixed on its own side: "when a
+# deck's shipping list is replaced, its folder keeps accumulating references for the NEW list beside
+# the old ones, and no single folder->deck binding can describe a mixture." The variant games live
+# in references/Mirrorwing_Dragon/<variant>/ and are out of scope here anyway -- the glob below is
+# deliberately ONE LEVEL, covering references/<deck>/claude_*.json only.
+#
+# The lesson is not "check this row" but "a hand-written override outlived the fact it described".
+# Derivation cannot go stale that way, so there is nothing here to maintain.
+_DECK_OVERRIDES = {}
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

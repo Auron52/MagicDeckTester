@@ -885,6 +885,100 @@ back in `0932e091` at **−0.0013 suite / −0.0009**, hinata −0.0138 (t=−2.
 deck on either block**, and was nonetheless left default OFF as "measuring". It is an unadopted
 candidate, and it is the same defect this section fixes seen from the leaf-estimator side.
 
+## 7.12 The reference bench, and the 1-DEVIATION NEIGHBOURHOOD it exposed (2026-09-05)
+
+`scripts/ref_bench.py --deck fluctuator` replays the shipped search on each of the user's 10
+hand-played games with the reference's own mulligan forced (so it isolates PLAY). Result at d5/b100
+— **deeper and more generous than the shipped d5/b20**:
+
+```
+claude_s10_gi9   human 3   search 4   SHORTFALL +1
+claude_s2_gi1    human 4   search 5   SHORTFALL +1
+claude_s6_gi5    human 4   search 5   SHORTFALL +1
+AVG              human 3.500  search 3.800    3/10 short, 0 faster than human
+```
+
+That is the worst shortfall rate in the fleet (every other deck reads 0 except dragonstorm 1/39 and
+mirrorwing 1/5), and the only deck where the search is materially worse than the user.
+
+### One mechanism behind all three
+
+The dig loop's nested re-solve **spends cyclable cards on casts mid-chain**. Cycling is 1-for-1 (it
+draws a replacement *and* pings); casting is 1-for-0. Every mid-chain cast therefore permanently
+shortens the kill chain: s10 casts 2 free Hollow Ones (3 pings instead of 20); s2 casts Hollow One
+#36, its last cyclable card (chain dies at opp 14); s6 casts Hollow One x2 plus a redundant second
+Fluctuator (stalls at 8 pings, opponent still on 20).
+
+### ROOT CAUSE: the plan representation, not the budget
+
+`Plan::bp_choice` / `Plan::bp_at` carry exactly **one** deviation from the greedy line, and
+`bp_searched_plan` resolves `out = cands[plan.bp_choice]` reading the *enclosing* plan's field. So
+the search explores a **1-deviation neighbourhood**: deviate at one breakpoint, greedy at every
+deeper one in the same turn. `TurnSolver.h` documents this as intended — *"a line needing TWO
+simultaneous non-greedy choices is not [reachable], which is the deliberate cost/coverage trade"*.
+
+The kill needs the right call at three separate mid-chain decisions, so it is **inexpressible**:
+
+| knob | swept | result |
+|---|---|---|
+| depth | d0 → d8 | T5 everywhere |
+| budget | b20 → b8000, **unlimited** | T5 everywhere |
+| `MTG_BP_DEPTH` | 1, 8, **24** | T5 everywhere |
+| `MTG_BP_SEARCH` | 2, 4, **8** | T5 everywhere |
+
+Invariance to budget **and** to every breadth knob is the signature of representability. The
+neighbouring note *"no rank is unreachable at an unbounded budget"* is true and not in conflict — it
+is about RANKS within one breakpoint. **Rank-completeness is not line-completeness.**
+
+**USER ruling, 2026-09-05:** *"Anything that stops search should be eliminated. The only cases where
+this should be able to happen is when you are budget starved… I'm fine with needing to address
+budget problems with heuristics. I'm not fine with greedy deleting those options."* (Greedy in
+ROLLOUTS is explicitly fine — *"In the rollouts this is fine"* — and rollouts are ~80% of the
+site-4 fallbacks here; the binding ~20% is the decision space.)
+
+### A FAILED FIX worth recording
+
+Opening the re-entrancy guard so continuation lists fan out (`MTG_BP_NEST_FANOUT`) **cannot work**,
+and the measurement says so: s4 greedy 7936 → 7919, nested 1477 → 1513, nohost 6376 → 6376
+unchanged, win turn 5 → 5. Only `overrun` moved (83 → 30), i.e. a longer candidate list. The nested
+variants differ only in a field nothing consults. The limit is the REPRESENTATION, not the
+enumeration — recorded at the guard so the next attempt does not repeat it.
+
+### THE FIX (first slice): `Plan::bp_all`, a uniform-policy deviation
+
+The lines the trade was losing are overwhelmingly not arbitrary combinations — they are **one
+decision repeated**. So a third axis: *"take candidate k at EVERY breakpoint of this apply"*.
+Cost is **L*W + W, not W^L**.
+
+```
+game   human   OFF    MTG_BP_UNIFORM_DEV=1
+s6       4     5.00   4.00   <- recovered
+s2       4     5.00   5.00
+s10      3     4.00   4.00
+```
+
+Wired through all five sites that assumed a single varied breakpoint, including the **executor's**
+replay — the search scores a turn in which candidate k is taken at every breakpoint, so the executor
+must realise that same turn or the committed line is not the line that was ranked. Byte-identical at
+its default (72/72 smoke, 0 configs changed).
+
+**Still open:** s2 and s10 need genuinely *different* choices at different breakpoints (neither
+recovers under uniform-dev combined with `MTG_HOLD_FUEL_LAND`, `MTG_FLUCT_STOP_ON_THREAT=0`, or
+width 8). That is iterative deepening over deviation COUNT — 1 deviation, then 2, then 3 — with
+budget governing the frontier, which is what keeps every combination reachable at unbounded budget
+rather than capped.
+
+### Two levers built, measured, NOT adopted
+
+* `MTG_HOLD_FUEL_LAND` — rank "play no land" ahead of playing a CYCLING land when both plans cast
+  the same spells (the drop buys nothing and the land is a card). Closes a real hole: the engine's
+  own `land_good_early_tapped` returns false for a cycling land (*"hold to cycle for a card"*) but
+  is consulted only when comparing two LAND plans, so it can never demote one below "play no land".
+  Fires correctly on s2's T3 — and does not recover the game.
+* `MTG_NO_REDUNDANT_REDUCER` — never cast a cost-reducer a copy in play has SATURATED (one
+  Fluctuator already floors cycling at {0}; in s6 the wasted `{2}` was exactly the `{1}{R}` the
+  Stinger needed). Declining is reversible, which is what makes "adds nothing right now" safe.
+
 ## Claude-play sweep
 
 - commit: `71e547d8` (+ the `ReanimateTargetIndex` fix this sweep produced)

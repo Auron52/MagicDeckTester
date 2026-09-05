@@ -3822,6 +3822,12 @@ static bool AnyHandCastableNow(const GameState& state)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || d->card.IsLand())   { continue; }   // a land drop is not what the re-solve is for
         if (d->params.goldfish_inert) { continue; }   // can never be cast at all
+        // A saturated cost-reducer is castable but changes NOTHING, and this probe feeds
+        // DigResolveOnlyWhenCastable -- so counting it as "castable" is what drags the dig loop
+        // into a re-solve whose only move is to spend a card and its mana for no effect. Skipping
+        // it here is what lets the chain keep cycling instead (reference s6/gi5).
+        if (NoRedundantReducerEnabled()
+            && IsSaturatedCyclingReducer(state, state.active_player_index, *d)) { continue; }
         // A spell whose only mode needs a target it does not have is not castable (CR 601.2c).
         if (d->params.reanimate_creature_max_mv > 0
             && !HasReanimateTarget(state, state.active_player_index,
@@ -6767,7 +6773,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.vial_charge_choice == -1 && !p.searched_order && p.atk_dork_release == -1
-        && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_wave0;
+        && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0;
 }
 // Companion channel (filled by the k=0 apply's in-scope enumeration, node site 3 only): the
 // cands list contains an apply-empty entry, so the host's explicit EMPTY arm (kBpEmptyChoice)
@@ -7184,6 +7190,75 @@ static int BpWaveSiteMask()
 // Re-entrancy guard: the breakpoint's OWN enumeration must not emit further bp_choice variants.
 // Only the first breakpoint of an apply is searched (deeper ones stay greedy), so nested variants
 // would be pure duplicates burning nodes. Thread-local -- the search is single-threaded per game.
+//
+// "PURE DUPLICATES" IS FALSE FOR A CHAIN TURN, and that is a truncation, not an optimisation.
+// Plan::bp_choice/bp_at carry exactly ONE deviation from the greedy line, so with this guard the
+// search explores a 1-DEVIATION NEIGHBOURHOOD: deviate at one breakpoint, greedy at every deeper
+// one in the same turn. When a turn's payoff needs the right call at SEVERAL consecutive
+// breakpoints, no combination of them is expressible and no budget can reach it.
+//
+// MEASURED (reference s6/gi5, the deck's own kill turn): T5 at every one of
+// depth d0-d8 x budget b20..b8000 AND unlimited, and at MTG_BP_DEPTH = 1 / 8 / 24 crossed with
+// MTG_BP_SEARCH = 2 / 4 / 8. Hosting 24 breakpoint indices at width 8 does not recover the line,
+// because the human's T4 kill holds fodder at three separate mid-chain decisions. Invariance to
+// budget AND to every breadth knob is the signature of representability, not starvation.
+//
+// The neighbouring design note "no rank is unreachable at an unbounded budget" (AppendBreakpointVariants)
+// is true and not in conflict: it is a statement about RANKS within one breakpoint. Rank
+// completeness is not LINE completeness.
+//
+// WHERE THE LIMIT ACTUALLY LIVES -- the REPRESENTATION, not this guard. Read this before attempting
+// a fix, because the obvious attempt is measurably insufficient and it cost a build to find out.
+//
+// `bp_searched_plan` resolves a continuation as `out = cands[plan.bp_choice]` and then applies its
+// ACTION LIST; the `plan` whose bp_choice/bp_at it reads is always the ENCLOSING plan of that apply.
+// A continuation's own bp_choice field is therefore never consulted by anything. So emitting nested
+// variants into `cands` cannot express a second simultaneous deviation -- the variants differ only
+// in a field that is then ignored, and they apply identically.
+//
+// MEASURED, opening this guard alone (MTG_BP_NEST_FANOUT=2 vs 0, s6/gi5): s4 greedy 7936 -> 7919,
+// nested 1477 -> 1513, nohost 6376 -> 6376 (unchanged), win turn 5 -> 5. The only real movement is
+// overrun 83 -> 30, i.e. a longer cands list, which is exactly what "the extra variants are inert"
+// predicts.
+//
+// A REAL fix has to make multiple deviations expressible: either Plan carries a SEQUENCE of
+// (bp_at, bp_choice) deviations instead of one pair, or a continuation's apply itself hosts
+// searched breakpoints recursively. Then budget and ordering decide which combinations are explored
+// FIRST, and none is unreachable -- which is the USER's standing bar, restated 2026-09-05: "I'm
+// fine with needing to address budget problems with heuristics. I'm not fine with greedy deleting
+// those options", and 2026-08-19: "the re-ordering of when we visit nodes can be workable, but
+// skipping them entirely without being certain they don't hold an earliest win is not."
+//
+// MTG_BP_NEST_FANOUT=<n> opens the ENUMERATION axis only, and is kept as the A/B hatch for that
+// half once the representation half exists. 0 = today's shape (byte-identical).
+static int BpNestFanoutDepth()
+{
+    static const int d = []() -> int
+    {
+        const char* v = std::getenv("MTG_BP_NEST_FANOUT");
+        if (v == nullptr || *v == '\0') { return 0; }   // OFF -> the single-deviation shape
+        const int n = std::atoi(v);
+        return n < 0 ? 0 : n;
+    }();
+    return d;
+}
+// MTG_BP_UNIFORM_DEV -- emit the Plan::bp_all variants. DEFAULT ON, adopted 2026-09-05; =0
+// restores the 1-deviation neighbourhood. See Plan::bp_all: "take candidate k at EVERY breakpoint
+// of this apply", the additive-cost slice of the cross product the (L*W, not W^L) trade was losing.
+//
+// ADOPTED because it restores COVERAGE the engine had silently traded away, which is the USER's
+// standing bar ("Anything that stops search should be eliminated. The only cases where this should
+// be able to happen is when you are budget starved"), and it measures free:
+//   fluctuator d3  -0.0160 train / -0.0280 hold      d5  -0.0200 / -0.0220
+//   suite d3 mean  -0.0008 / -0.0009,  14-16 of the other 17 decks EXACTLY 0.0000 on both blocks
+//   cost           0.991x total core-ms over 18 decks / 57,200 games in ONE pooled batch
+// The four small positives (dragonstorm, hinata, mirrorwing, th; +0.0025..+0.0075) each appear on
+// ONE block only and read 0.0000 on the other -- budget churn, not a reproduced regression.
+static bool BpUniformDevEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_UNIFORM_DEV", true);
+    return heurarm::Flag(heurarm::BP_UNIFORM_DEV, on);   // per-job overridable: one pooled A/B queue
+}
 static thread_local int g_bp_enum_depth = 0;
 
 // Breakpoint-continuation marker for MTG_CONDEMN_M1_BP -- see TurnSolver::BpContinuationScope in the
@@ -8891,6 +8966,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // offered as an action -> they sit in hand as faithful dead draws. Gated off for
         // every existing deck.
         if (def.params.goldfish_inert) { continue; }
+        // Same shape one step further: a cost-reducer whose reduction a copy already in play has
+        // SATURATED is castable and legal, but resolves to no change at all -- it spends the card
+        // and its mana for nothing. Never offered as an action, so it stays in hand as fodder (and
+        // remains castable on a later turn if a pricier cycler ever makes it matter again).
+        if (NoRedundantReducerEnabled()
+            && IsSaturatedCyclingReducer(state, state.active_player_index, def)) { continue; }
         // Unearth: "Return TARGET creature card with mana value 3 or less from your graveyard..."
         // A spell whose only mode requires a target cannot be cast with no legal target (CR 601.2c),
         // so an Unearth with no small creature in the graveyard is not an action -- it stays in hand
@@ -18767,7 +18848,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // global value that the executor's replay reads as well.
         const bool class_on    = (BpSiteMask() & (1 << site)) != 0;
         const int  seen_before = (plan.bp_choice >= 0 && class_on) ? bp_seen++ : -1;
-        const bool eligible    = plan.bp_choice >= 0 && class_on && seen_before == plan.bp_at;
+        // bp_all: the deviation is a POLICY for the whole apply, so every breakpoint is eligible,
+        // not just the one at bp_at. See Plan::bp_all for why a uniform repeat is the slice of the
+        // cross product worth buying back.
+        const bool eligible    = plan.bp_choice >= 0 && class_on
+                              && (plan.bp_all || seen_before == plan.bp_at);
         // Report the running count so the wave walker can open a slot for each nested breakpoint it
         // discovers (see g_bp_seen_last). Written per breakpoint rather than once at the end so it
         // survives every early exit out of this apply.
@@ -21800,7 +21885,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // bp_seen equals plan.bp_at and the class is enabled), so the state RIGHT HERE -- every
         // main cast applied, Karoo played, pre-continuation -- is the shared prefix of every rank
         // of this (base, at) slot. Snapshot it once; the wave loop resumes the later ranks from it.
-        if (bp_capture != nullptr && plan.bp_choice >= 0 && bp_seen == plan.bp_at
+        // !bp_all: the prefix-resume snapshot is defined by a SINGLE varied breakpoint (every
+        // rank of one (base, at) slot shares the prefix before it). A uniform-policy plan
+        // varies at all of them, so no such shared prefix exists and the slot is not captured.
+        if (bp_capture != nullptr && plan.bp_choice >= 0 && !plan.bp_all && bp_seen == plan.bp_at
             && ((BpSiteMask() >> deferred_site_index()) & 1) != 0)
         {
             bp_capture->valid        = true;
@@ -26021,7 +26109,11 @@ static bool BpDigFanoutPending(const GameState& state, int sites)
 static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSolver::Plan>& plans)
 {
     const int w = BpSearchWidth();
-    if (w <= 0 || g_bp_enum_depth != 0 || plans.empty()) { return; }
+    // g_bp_enum_depth > 0 means we are BUILDING a continuation list. Fanning out there is what
+    // makes a SECOND simultaneous deviation expressible; see BpNestFanoutDepth for why the old
+    // unconditional bail is a truncation rather than a duplicate-suppressor. Default 0 keeps the
+    // exact previous test (`!= 0`), so every deck is byte-identical.
+    if (w <= 0 || g_bp_enum_depth > BpNestFanoutDepth() || plans.empty()) { return; }
     if (!g_bp_root_enum && !BpSearchInRollouts()) { return; }   // committed decision only
     const int  s_max_base = BpMaxBase();
     const int  sites  = BpWave0SiteMask();   // wave-0 SELECTION only; the wave phase uses the full mask
@@ -26048,6 +26140,21 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
                 v.bp_choice = k;
                 v.bp_at     = at;
                 v.bp_wave0  = false;   // the marker belongs to the base plan only
+                variants.push_back(std::move(v));
+            }
+        }
+        // ...plus ONE uniform-policy variant per candidate: take k at EVERY breakpoint rather than
+        // at a single index. Additive (+W per base plan), and it is the only shape in which a turn
+        // whose payoff needs the SAME decision repeated down a chain becomes expressible at all.
+        if (BpUniformDevEnabled())
+        {
+            for (int k = 0; k < w; ++k)
+            {
+                TurnSolver::Plan v = p;
+                v.bp_choice = k;
+                v.bp_at     = 0;
+                v.bp_all    = true;
+                v.bp_wave0  = false;
                 variants.push_back(std::move(v));
             }
         }
@@ -27853,6 +27960,53 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                     {
                         const TurnSolver::Plan& noland = a_has ? b : a;
                         if (noland.actions.empty()) { return a_has < b_has; }
+                    }
+                    // (1b) HOLD A FUEL LAND -- MTG_HOLD_FUEL_LAND, default OFF (measuring).
+                    //
+                    // A land with a cycling cost is not only a land: it is a CARD, and in a deck
+                    // whose wincon is the cycle chain it is one more link (with Fluctuator out the
+                    // cycle is free, so in hand it is a draw plus a ping). The engine already knows
+                    // this -- `land_good_early_tapped` returns false for any land carrying a
+                    // cycling_cost, commented "hold to cycle for a card" -- but that predicate is
+                    // only consulted in clause (2), which compares two LAND plans. It can demote a
+                    // cycling land against another land; it can NEVER demote it below "play no
+                    // land". That is the hole this closes.
+                    //
+                    // WHY THIS DOES NOT RE-OPEN THE 2026-08-16 REFUTATION. The USER's ruling then
+                    // was "deferring it when you have main 1 plays is probably not a good idea",
+                    // and the first cut -- defer whenever two plans tie on wins AND value -- was
+                    // measured one-sided against (22 games worse to 9 better in the 4->5 bucket)
+                    // because "tied on value is NOT tied on TEMPO, so an equal-value plan could
+                    // still strand the mana". This clause cannot strand mana: it fires only when
+                    // the no-land plan casts EXACTLY THE SAME SPELLS, so the drop demonstrably
+                    // bought nothing this turn. That is strictly narrower than the refuted cut and
+                    // strictly wider than `defer_drop`'s "casts nothing at all" -- which could not
+                    // reach the motivating game, where the held plan casts Fluctuator.
+                    //
+                    // Motivating game (reference s2/gi1, HUMAN T4 vs SEARCH T5): on turn 3 both
+                    // plans cast Fluctuator and tie at val=100; the tiebreak develops Scattered
+                    // Groves, and that one card is 3 pings of the turn-4 chain (20 -> 17). Holding
+                    // the drop was traced NECESSARY AND SUFFICIENT on both deployment routes.
+                    //
+                    // Independent of `defer_drop` on purpose: that path is gated on
+                    // uses_second_main && Main2DropEnabled(), which is why MTG_MAIN2_DROP=1 does
+                    // not recover the game. Decks with no cycling land are byte-identical.
+                    if (HoldFuelLandEnabled())
+                    {
+                        const TurnSolver::Plan& noland   = a_has ? b : a;
+                        const TurnSolver::Plan& withland = a_has ? a : b;
+                        const CardDefinition* ld =
+                            CardDatabase::Instance().Lookup(withland.land_to_play);
+                        if (ld != nullptr && ld->params.cycling_cost.has_value())
+                        {
+                            // Same SPELLS, order-insensitive: what matters is that the turn casts
+                            // the same things either way, not the sequence it casts them in.
+                            std::vector<std::string> with_n = PlanCastNames(withland.actions);
+                            std::vector<std::string> no_n   = PlanCastNames(noland.actions);
+                            std::sort(with_n.begin(), with_n.end());
+                            std::sort(no_n.begin(), no_n.end());
+                            if (with_n == no_n) { return a_has < b_has; }
+                        }
                     }
                     return a_has > b_has;
                 }

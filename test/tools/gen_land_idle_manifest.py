@@ -50,7 +50,10 @@ def _decks():
     return {k: tuple(v) for k, v in out.items()}
 
 
-ARMS = {"base": {}, "idle": {"MTG_LAND_IDLE_TAPPED_FIRST": True}}
+# The lever under test is argv[2] (default: the land-idle rule this file was written for), so the
+# same pooled-queue shape serves every land/plan-ordering lever instead of being copied per arc.
+LEVER = sys.argv[2] if len(sys.argv) > 2 else "MTG_LAND_IDLE_TAPPED_FIRST"
+ARMS = {"base": {}, "idle": {LEVER: True}}
 
 # Two disjoint blocks so the winner is confirmed on seeds it was not chosen on, and both are
 # disjoint from the suite's own seeds (smoke 1001, regression 2002/3003, overnight 4004-7007).
