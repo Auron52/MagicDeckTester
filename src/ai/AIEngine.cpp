@@ -2656,7 +2656,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             int replicate_count = -1,    // Replicate: the count the PLAN pinned
                                                          // (-1 = greedy-max sink, the autonomous default)
                             int convoke_green = 0,       // Chord of Calling: committed convoke taps
-                            int convoke_other = 0)
+                            int convoke_other = 0,
+                            int phyrexian_life = 0)      // Phyrexian ({G/P}): life paid for pips
     {
         Player& ap = state.ActivePlayer();
         // PRE-CAST hand snapshot for the breakpoint drawn-card exemption (lockstep twin of
@@ -2689,7 +2690,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         ManaPool available = AvailableManaPool(state);
         CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
                           crackle_targets, splice_count, chosen_float_color, enchant_target, free_cast,
-                          bestow, replicate_count, convoke_green, convoke_other);
+                          bestow, replicate_count, convoke_green, convoke_other, phyrexian_life);
     };
 
     // Cast a spell from hand via its alternative cost (Invigorate / Skyshroud Cutter /
@@ -2947,7 +2948,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::CastFromHand)
             { if (a.convoke_green > 0 || a.convoke_other > 0)
               { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
-              if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); } resolve_now(); }
+              if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); } resolve_now(); }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
             else if (a.kind == Action::Kind::SacForMana)
@@ -3143,7 +3144,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             const Action& a = extra.actions[ci];
             {
-                cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); resolve_now();
+                cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); resolve_now();
                 if (is_draw_engine(a.card_name))
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
@@ -3163,7 +3164,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-            { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); resolve_now(); }
+            { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); resolve_now(); }
         }
         for (const Action& a : extra.actions)
         {
@@ -3363,7 +3364,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -3429,7 +3430,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (int i : ena)
         {
             const Action& a = plan.actions[i];
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
         }
     }
     // Spectacle hoist (mirror of ApplyPlanDirect): a sac-land damage source (Shard Volley) would
@@ -3451,7 +3452,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
             spec_hoisted_sac.insert(ai);
         }
     }
@@ -3508,7 +3509,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
                  && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -3578,7 +3579,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             continue;
         }
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-        cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
+        cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
         // SITE 6 (MTG_EQUIP_DRAW_BP_INLINE) is the first breakpoint class that can appear in a
         // CLEAN set: the branch comment above ("No draw engine here, so no breakpoint handling is
         // needed") held only because every other class carries an OrderingOpaque param and an
@@ -3620,7 +3621,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); note_draw_engine(a.card_name); resolve_now(); fire_unlock(); }
+        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); note_draw_engine(a.card_name); resolve_now(); fire_unlock(); }
     }
     for (const Action& a : plan.actions)
     {
@@ -3751,16 +3752,22 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::ActivatePod)
         {
             // Birthing Pod (executor mirror): the SAME PerformPodActivate the rollout ran.
+            // Phyrexian variant: life gate first (no mutation), deduct once the mana commits --
+            // lockstep twin of the rollout's trailing-pass site.
             ManaPool avail = AvailableManaPool(state);
-            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            if ((a.phyrexian_life == 0
+                 || state.players[state.active_player_index].life > a.phyrexian_life)
+                && TapForCost(state, a.cost, avail, /*for_creature=*/false))
             {
+                state.players[state.active_player_index].life -= a.phyrexian_life;
                 const bool done = PerformPodActivate(state, state.active_player_index,
                                                      a.sac_source_id, a.sac_victim_id,
                                                      a.tutor_target.str());
                 if (m_logger && done)
                 {
                     m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
-                                         "pod -> " + a.tutor_target.str());
+                                         "pod -> " + a.tutor_target.str()
+                                             + (a.phyrexian_life > 0 ? " (paid 2 life)" : ""));
                 }
             }
         }
@@ -4336,7 +4343,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                                  int crackle_targets, int splice_count,
                                  const std::string& chosen_float_color, int enchant_target,
                                  bool free_cast, bool bestow, int replicate_count,
-                                 int convoke_green, int convoke_other)
+                                 int convoke_green, int convoke_other, int phyrexian_life)
 {
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached(hand_card);
@@ -4552,6 +4559,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // a mana-legal convoke cast after its bodies were already tapped).
     if (def->params.convoke && (convoke_green > 0 || convoke_other > 0))
     { ApplyConvokeReduction(effective, convoke_green, convoke_other); }
+    // Phyrexian ({G/P} -- Birthing Pod's cast): the variant's life-paid pips come OFF the
+    // recomputed cost, the SAME strip the enumeration and rollout applied (lockstep); the life
+    // itself is deducted after TapForCost succeeds, below.
+    if (phyrexian_life > 0) { effective.StripPhyrexianForLife(phyrexian_life / 2); }
     // Scaled divided-damage spell (Magma Opus): recompute the committed-face cost from the archetype's
     // model on the CURRENT board, matching the enumeration/rollout (which price the same committed face
     // the same way) -> lockstep. Only a scaled Magma variant sets crackle_targets >= 0 on a
@@ -4609,6 +4620,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // publish -- the additional-cost victim (own_targets) pays before any other source.
         PaySacVictimScope _psv(
             !def->params.sac_additional_creature_color.empty() ? own_targets : 0);
+        // Phyrexian life gate (before the tap, which mutates): the payment must leave us alive.
+        // Mirrors the rollout apply's gate exactly -- an unpayable life half drops the cast.
+        if (phyrexian_life > 0
+            && state.players[state.active_player_index].life <= phyrexian_life)
+        {
+            return;
+        }
         if (!TapForCost(state, effective, available, def->card.IsCreature()))
         {
             if (BpTraceEnabled() && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
@@ -4654,6 +4672,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             }
             return;
         }
+        // ...and the life half of a phyrexian payment, now that the mana half is committed
+        // (CR 601.2h; lockstep twin of the rollout apply's deduction).
+        if (phyrexian_life > 0)
+        { state.players[state.active_player_index].life -= phyrexian_life; }
         // Paid, so the line no longer owes it -- the executor half of ApplyPlanDirect's identical
         // decrement, keeping the mid-line replicate gate below in lockstep with the rollout's.
         SubManaCost(g_line_unpaid_cost, effective);

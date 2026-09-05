@@ -136,9 +136,23 @@ struct ManaCost
     // PayFromPool) try assignments in bits order -- bits==0 IS the old flat cost, so behaviour
     // changes only where the old collapse could not pay at all. Each entry packs the two colours
     // as (first << 4) | second in printed order; > 4 hybrid pips unsupported (no such card).
-    // {2/W} / Phyrexian remain unsupported.
+    // {2/W} remains unsupported.
     uint8_t hybrid_count   = 0;
     uint8_t hybrid_pair[4] = {0, 0, 0, 0};
+
+    // PHYREXIAN pips ({G/P}: pay {G} OR 2 life -- CR 107.4f; Birthing Pod, user-directed
+    // 2026-09-05 after the green-only collapse cost the T3 cast+activate line). REPRESENTATION
+    // mirrors hybrid: the pip's COLOUR is baked into the flat ints above (so ManaValue, colour
+    // demand, equality and every flat reader are byte-identical to the old collapse), and the
+    // metadata below only ADDS payable assignments. It is deliberately NOT in hybrid_pair: the
+    // life side is not a colour, and no payment site may treat it as one. The choice mana-vs-life
+    // is a SEARCH branch, not a payment preference (paying life frees a source for the rest of
+    // the turn), so the expansion happens at ACTION ENUMERATION (CollectActions' phyrexian
+    // post-pass emits one variant per life-paid pip count, cost pre-stripped via
+    // StripPhyrexianForLife + Action::phyrexian_life carrying the life charge) -- the shared
+    // payment machinery never sees a phyrexian pip. 2 slots: no card carries more than 2.
+    uint8_t phyrexian_count    = 0;
+    uint8_t phyrexian_color[2] = {0, 0};   // Color of each pip's mana side, printed order
 
     // X counts as 0 outside the stack (CR 202.3). Hybrid pips are already counted in their
     // first colour's flat int.
@@ -172,6 +186,29 @@ struct ManaCost
             }
         }
         return c;
+    }
+
+    // Pay `pips` of the phyrexian pips with 2 life each (CR 107.4f): each paid pip's colour
+    // comes OFF the flat count it was baked into, and its metadata slot retires (highest slot
+    // first -- deterministic; with at most 2 identical-colour slots per card the order is
+    // unobservable). The LIFE half is the caller's: enumeration stamps Action::phyrexian_life
+    // = 2*pips and the apply/executor deduct it after the mana payment succeeds.
+    void StripPhyrexianForLife(int pips)
+    {
+        for (int k = 0; k < pips && phyrexian_count > 0; ++k)
+        {
+            const uint8_t col = phyrexian_color[--phyrexian_count];
+            phyrexian_color[phyrexian_count] = 0;
+            switch (static_cast<Color>(col))
+            {
+                case Color::White:     if (white     > 0) { --white;     } break;
+                case Color::Blue:      if (blue      > 0) { --blue;      } break;
+                case Color::Black:     if (black     > 0) { --black;     } break;
+                case Color::Red:       if (red       > 0) { --red;       } break;
+                case Color::Green:     if (green     > 0) { --green;     } break;
+                case Color::Colorless: if (colorless > 0) { --colorless; } break;
+            }
+        }
     }
 
     // Canonical MTG notation: {X}{N}{W}{U}{B}{R}{G}{C}

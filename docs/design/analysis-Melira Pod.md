@@ -1020,3 +1020,67 @@ _none_ -- every blocking gate is green or already signed off.
 - claude_sweep recorded at commit 8f712107 (HEAD e293a8135755); re-run if play changed since (NOTE: Melira Pod is NOT a regression case, so NO digest tracks its play -- nothing will tell you when this record goes stale. Re-run the sweep on judgement, or add the deck to the suite).
 
 <!-- verify_deck:end -->
+
+## SESSION 2026-09-05b — viewer play-testing feedback round 1
+
+### Phyrexian mana IMPLEMENTED (user REJECTED the {G/P} green-only deferral)
+User, from viewer seed 1: "I am not given the option to use phyrexian mana to play pod and
+activate it T3. That is a key way to use pod." / "Ah, we can't defer that for sure." / "the
+only major one here seems to be the phyrexian mana one." The green-only collapse was never
+signed off (PROVISIONAL, collected overnight) and real play refuted its premise: the point of
+{G/P} is not affording the pip, it is that 2 life FREES A SOURCE (T3: cast Pod {3}+2 life AND
+activate {1}+2 life off 4 sources — impossible green-only).
+
+Design (the convoke idiom, end to end):
+- `ManaCost::phyrexian_count/phyrexian_color[2]` (Card.h): colour baked flat (MV/readers
+  byte-identical), metadata only ADDS variants. Deliberately NOT in hybrid_pair — the life side
+  is not a colour. `StripPhyrexianForLife(k)` removes k pips. Parser: `{C/P}` in
+  ManaCostFromString (CardDatabase.cpp); `MTG_NO_PHYREXIAN=1` = old collapse (A/B hatch).
+- Mana-vs-life is a SEARCH BRANCH, not a payment preference: CollectActions' phyrexian
+  post-pass (runs LAST, after all filters) emits one variant per life-paid pip count for
+  CastFromHand + ActivatePod, cost pre-stripped + `Action::phyrexian_life` (=2/pip), life-gated
+  at emission AND apply (never pays to 0; > not >=). Variants share the base's group keys ->
+  mutually exclusive; `plan_signature` gets gated `#P<life>` tags on both kinds (the bestow
+  lesson).
+- Recompute sites all strip in lockstep: rollout apply_one, executor CastSpellFromHand
+  (threaded through cast_by_name, 9 sites), BatchPrepayMainCasts, the condemn stamper,
+  SubsetPayableSequential. Life deducted after the mana half commits (CR 601.2h; nothing
+  triggers on life payment here). Rollout + executor ActivatePod pay sites gate life first
+  (no mutation), then deduct.
+- Viewer: plan-list tag suffix "(pay N life)" + `phyrexian_life` key in the plan JSON.
+  DISCLOSED GAP: CheckLine (--validate-line) prices full mana — a hand-built pay-life line
+  reads unpayable; fix queued with the viewer items.
+- DISCLOSED: the greedy (d0/leaf fallback) path never pays life — phyrexian is a searched
+  feature; a greedy Pod cast pays {G} when affordable, is uncastable when only life would work.
+
+Perf: seed 1 (the deck's slow game, 10s baseline) went 70s — the un-pruned fan tripled
+solve-memo misses. Added `SubsetPhyrexianDominated` (MTG_PHY_DOMPRUNE, default ON): reject a
+life-paid subset whose full-mana bill the PLAIN pool covers (weak dominance, exact vs this
+apparatus — the mana twin has more leftover mana and more life). 70s -> 43s; s5000x100 A/B
+in flight at time of writing (quality + aggregate cost).
+
+Verified: unit tests 64/64; seed-1 log shows T3 `Birthing Pod manaPaid={3}` (+2 life) AND a
+second Hierarch the freed pip paid for, Pod->Redcap T4, Pod->Celes T5, win T5.
+
+### Deferral review round 1 (user, live)
+- {G/P} green-only: REJECTED -> implemented (above).
+- Chord opponent-turn/end-step window: "I don't think Chord end-step matters" -> deferral
+  ACCEPTED (stands, disclosed).
+- Multi-Pod: user "if we have multiple pods out we should allow their activation". VERIFIED
+  allowed today: exclusivity is per sac_source_id (the {T}), two Pods = two families, both
+  activate in one phase; Felidar untap re-enables a spent Pod. The only gap is the same-phase
+  CHAIN (Pod#2 saccing Pod#1's fetch — victim lists snapshot pre-fetch); cross-phase chains
+  work via the second main. Chain stays deferred (needs measured need).
+- Reveillark EVOKE: user — "should be modelled for cases where we have sacrificed low-mana
+  critters in the past... should be available." -> QUEUED to implement.
+- Reveillark which-two: user — "should be default searched, but overriding with a provider is
+  fine. You want to focus on having the combo first." -> QUEUED: searched axis, provider order
+  as the rollout/fallback pick.
+- "Opponent creature count provably 0": user challenged ("they can have spawns"). Re-derived:
+  the only in-sim route is Severance Priest's Spirit, gated behind the OPTIONAL ETB exile we
+  always decline — so the claim holds autonomously, but a human cannot take the exile in the
+  viewer (parity gap, queued). Question surfaced to user: which spawn source did they mean?
+- Darkbore front-face colour eval: user — "suspect, but I guess it will be overridden by the
+  proper mulligan profile." Stands as-is.
+- QUEUE after gameplay items (user): viewer bucket-B choosers (revive, flicker, Severance
+  exile, Rec Sage self-Pod, CheckLine #P/verbs), then the equal-win-turn inf-life preference.

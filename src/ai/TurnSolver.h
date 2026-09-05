@@ -272,6 +272,22 @@ struct Action
                                        // SLOT id -1000-slot so two free casts never share a slot).
                                        // Emitted by CollectActions' free-variant post-pass only when
                                        // the counter is > 0 (the post-combat main).
+    int         phyrexian_life = 0;    // PHYREXIAN pips ({G/P} -- Birthing Pod's cast AND its
+                                       // ActivatePod activation): the LIFE this variant pays in
+                                       // place of mana (2 per pip, CR 107.4f). The variant's
+                                       // `cost` is emitted ALREADY STRIPPED of the life-paid pips
+                                       // (ManaCost::StripPhyrexianForLife -- the convoke idiom:
+                                       // payment machinery untouched), so every recompute site
+                                       // (apply_one, CastSpellFromHand, BatchPrepayMainCasts, the
+                                       // condemn stamper) must re-apply the same strip, and the
+                                       // apply/executor deduct the life AFTER the mana payment
+                                       // succeeds (never below 1 life -- emission + apply both
+                                       // gate on life > phyrexian_life). Mana-vs-life is a REAL
+                                       // search branch (paying life frees a source for the rest
+                                       // of the turn -- the T3 cast-Pod-and-activate line), so
+                                       // CollectActions' phyrexian post-pass emits one extra
+                                       // variant per life-paid pip count, sharing the base's
+                                       // group key (mutually exclusive). 0 = pay full mana.
     int         convoke_green = 0;     // Chord of Calling (CastFromHand + params.convoke): how many
     int         convoke_other = 0;     // GREEN / non-green creatures this cast taps for convoke.
                                        // The action's `cost` is emitted ALREADY REDUCED by their

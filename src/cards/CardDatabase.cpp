@@ -411,10 +411,34 @@ static ManaCost ManaCostFromString(const std::string& cost_str)
             // affordability sites expand the concrete assignments; bits==0 keeps the historical
             // first-listed-colour preference (Slippery Bogle stays byte-identical -- its deck has
             // no blue source, so either-colour == green-only there). A number/colour hybrid
-            // ({2/W}) or Phyrexian ({G/P}) is still unsupported (no card uses one): falls back to
-            // the first recognised colour side.
+            // ({2/W}) is still unsupported (no card uses one): falls back to the first recognised
+            // colour side.
             std::string first  = sym.substr(0, sym.find('/'));
             std::string second = sym.substr(sym.find('/') + 1);
+            // PHYREXIAN pip ({G/P}: pay {G} OR 2 life -- CR 107.4f; Birthing Pod, user-directed
+            // 2026-09-05, replacing the green-only PROVISIONAL collapse). Bake the colour into
+            // the flat pips (byte-identical MV + every flat reader) and record the metadata so
+            // CollectActions' phyrexian post-pass can emit the pay-2-life cast/activation
+            // variants (see ManaCost::phyrexian_count). MTG_NO_PHYREXIAN=1 drops the metadata --
+            // the historical colour-only collapse, the A/B lever mirroring MTG_NO_HYBRID.
+            static const bool s_no_phyrexian = EnvOn("MTG_NO_PHYREXIAN");
+            if (second == "P" && !s_no_phyrexian)
+            {
+                const Color pc = ColorFromString(first);
+                switch (pc)
+                {
+                    case Color::White:     ++cost.white;     break;
+                    case Color::Blue:      ++cost.blue;      break;
+                    case Color::Black:     ++cost.black;     break;
+                    case Color::Red:       ++cost.red;       break;
+                    case Color::Green:     ++cost.green;     break;
+                    case Color::Colorless: ++cost.colorless; break;
+                }
+                if (cost.phyrexian_count < 2)
+                { cost.phyrexian_color[cost.phyrexian_count++] = static_cast<uint8_t>(pc); }
+                s = s.substr(end + 1);
+                continue;
+            }
             auto col_of = [](const std::string& t) -> int
             {
                 if (t == "W") { return static_cast<int>(Color::White); }

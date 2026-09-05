@@ -3361,6 +3361,10 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
                 ApplyConvokeReduction(ec, a.convoke_green, a.convoke_other);
                 ApplyConvokeTaps(cp, cp.active_player_index, a.convoke_green, a.convoke_other);
             }
+            // Phyrexian ({G/P}): the life-paid pips come off this priced cost too (lockstep with
+            // enumeration/apply/executor); the sim copy's life is not tracked here -- the apply
+            // gates the life half itself, and this function only answers mana sequencing.
+            if (a.phyrexian_life > 0) { ec.StripPhyrexianForLife(a.phyrexian_life / 2); }
             if (def.params.damage_divided && a.crackle_targets >= 0)
             {
                 for (const ScaledCastVariant& v : prov.ScaledCastVariants(cp, def))
@@ -4903,6 +4907,61 @@ static bool SubsetWastesCreatureSacMana(const GameState& state,
             || d->params.dies_trigger_impulse_exile) { return false; }
     }
     return true;
+}
+
+// Reject a subset that pays LIFE for a phyrexian pip the pool could have paid with MANA
+// (MTG_PHY_DOMPRUNE, default ON; =0 restores the full fan for A/Bs). WEAK DOMINANCE, exact in
+// this apparatus: the base (mana-paying) twin of every life variant sits in the same enumeration
+// group, casts the same spells in the same order for the same effects, and differs only by
+// MORE leftover mana (never worse -- trailing sinks can only do more) and MORE life (never
+// worse -- nothing here profits from low life). So a life-paid subset is worth exploring ONLY
+// when the full-mana bill is NOT jointly payable -- exactly the tight-pool case the phyrexian
+// branch exists for (paying 2 life to FREE a pip something else needs). The test is the
+// PLAIN pre-cast pool + floating vs the subset's costs with the life-paid pips restored:
+// deliberately the strongest payability read (no credits/reserves), so it only prunes when the
+// twin is unambiguously affordable. Measured on the seed-1 slow game: the un-pruned fan
+// tripled solve-memo misses (470k vs 153k) for the same T5 win. Gated on a selected
+// phyrexian_life -> one int compare per selected action for every other deck (byte-identical).
+static bool SubsetPhyrexianDominated(const GameState& state,
+                                     const std::vector<Action>& cands,
+                                     const std::vector<int>& sel)
+{
+    static const bool s_on = EnvOn("MTG_PHY_DOMPRUNE", true);
+    if (!s_on) { return false; }
+    bool any_phy = false;
+    for (int j : sel) { if (cands[j].phyrexian_life > 0) { any_phy = true; break; } }
+    if (!any_phy) { return false; }
+    ManaCost combined;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.free_cast || a.alt_cost) { continue; }
+        AddManaCost(combined, a.cost);
+        if (a.phyrexian_life > 0 && a.def != nullptr)
+        {
+            // Restore the life-paid pips from the printed cost's metadata (the strip removed
+            // them highest-slot-first; the colours are what matter, not the slots).
+            const ManaCost& mc =
+                (a.kind == Action::Kind::ActivatePod && a.def->params.pod_activation_cost)
+                    ? *a.def->params.pod_activation_cost : a.def->card.m_mana_cost;
+            int k = a.phyrexian_life / 2;
+            for (int pi = mc.phyrexian_count; pi-- > 0 && k > 0; --k)
+            {
+                switch (static_cast<Color>(mc.phyrexian_color[pi]))
+                {
+                    case Color::White:     ++combined.white;     break;
+                    case Color::Blue:      ++combined.blue;      break;
+                    case Color::Black:     ++combined.black;     break;
+                    case Color::Red:       ++combined.red;       break;
+                    case Color::Green:     ++combined.green;     break;
+                    case Color::Colorless: ++combined.colorless; break;
+                }
+            }
+        }
+    }
+    ManaPool pool = AvailableManaPool(state);
+    pool.AddPool(state.floating_mana);
+    return pool.CanPay(combined);
 }
 
 // Reject a subset that over-splices Desperate Ritual (splice_onto_arcane). Splicing k copies onto a
@@ -7402,7 +7461,10 @@ static bool CantripOrderBans(const CardDefinition& site, const CardDefinition& c
     if (ts < 0 || tc < 0) { return false; }
     const ManaCost& b = site.card.m_mana_cost;
     const ManaCost& a = cand.card.m_mana_cost;
-    if (a.has_x || b.has_x || a.hybrid_count > 0 || b.hybrid_count > 0) { return false; }
+    // Phyrexian pips join the hybrid guard: the pip's payment flexibility (mana OR 2 life)
+    // breaks the flat MV-compare premise the canonical order rests on -- stand down (lossless).
+    if (a.has_x || b.has_x || a.hybrid_count > 0 || b.hybrid_count > 0
+        || a.phyrexian_count > 0 || b.phyrexian_count > 0) { return false; }
     const int mva = a.ManaValue();
     const int mvb = b.ManaValue();
     // Canonical strictly-before test on (mana value, tier, name).
@@ -7942,6 +8004,9 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                         // the enumeration's reduced emission -- shared ApplyConvokeReduction).
                         if (pd != nullptr && pd->params.convoke)
                         { ApplyConvokeReduction(ec, pa.convoke_green, pa.convoke_other); }
+                        // Phyrexian: a life-paid pip is not part of the plan's MANA bill.
+                        if (pa.phyrexian_life > 0)
+                        { ec.StripPhyrexianForLife(pa.phyrexian_life / 2); }
                     }
                     planned.generic += ec.generic; planned.white += ec.white;
                     planned.blue += ec.blue; planned.black += ec.black;
@@ -12769,6 +12834,49 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }), actions.end());
     }
 
+    // PHYREXIAN post-pass ({G/P}: pay the pip with 2 life instead -- CR 107.4f; Birthing Pod,
+    // user-directed 2026-09-05). Mana-vs-life is a REAL search branch, not a payment preference:
+    // paying 2 life FREES A SOURCE for the rest of the turn (the seed-1 T3 line: {3}+2 life to
+    // cast Pod leaves the 4th source to activate it with {1}+2 life -- impossible if the {G} is
+    // paid). So for every action whose cost carries phyrexian pips, emit one extra variant per
+    // life-paid pip count with the cost pre-stripped (StripPhyrexianForLife) and the life charge
+    // on Action::phyrexian_life; the copy keeps the base's group keys (hand_index /
+    // sac_source_id), so base and variants stay mutually exclusive, and plan_signature's #P tag
+    // keeps the dedup from folding them. Runs LAST so filtered/condemned bases spawn no orphans.
+    // Life-gated at emission (must survive the payment; == leaves us dead to the SBA) and
+    // re-gated at apply. free/alt-cost casts pay no mana at all -- nothing to convert. Gated on
+    // phyrexian_count -> byte-identical for every deck without a phyrexian card.
+    //
+    // DECISION-SPACE ONLY (the condemnation precedent above): the fan compounds ~1.5x per
+    // PROJECTED turn when every rollout-leaf enumeration also branches it (measured: seed 1
+    // 10s -> 43s even with the dominance prune; the 100-game arm ran 14+ min vs ~2). A rollout
+    // leaf is ESTIMATING, not deciding -- withholding the life twin there makes the estimate
+    // mildly pessimistic about tight-pool continuations, symmetrically across candidates,
+    // while the SEARCHED collect and the EXECUTOR (which includes human play, so the viewer
+    // always shows the option) keep the full branch. A committed plan realises its life
+    // variant via Action::phyrexian_life regardless of what later leaves enumerate.
+    if (g_search_candidate_enum || g_condemn_root_turn < 0)
+    {
+        const int life_now = state.players[state.active_player_index].life;
+        const std::size_t phy_n = actions.size();
+        for (std::size_t i = 0; i < phy_n; ++i)
+        {
+            if (actions[i].cost.phyrexian_count == 0
+                || actions[i].free_cast || actions[i].alt_cost) { continue; }
+            if (actions[i].kind != Action::Kind::CastFromHand
+                && actions[i].kind != Action::Kind::ActivatePod) { continue; }
+            const int pips = actions[i].cost.phyrexian_count;
+            for (int k = 1; k <= pips; ++k)
+            {
+                if (life_now <= 2 * k) { break; }
+                Action v = actions[i];           // copy BEFORE push_back (reallocation)
+                v.cost.StripPhyrexianForLife(k);
+                v.phyrexian_life = 2 * k;
+                actions.push_back(std::move(v));
+            }
+        }
+    }
+
     return actions;
 }
 
@@ -15191,6 +15299,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // the filter fallback, and keeps the rule identical on both sides. Inert without a creature
         // mana outlet -> byte-identical.
         if (SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
+        // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
+        // dominance -- see the helper). Inert without a phyrexian card -> byte-identical.
+        if (SubsetPhyrexianDominated(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice (a spliced copy must still be in
         // hand). Inert without a splice base selected -> byte-identical.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
@@ -16873,6 +16984,11 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         if (SoulfireOwnTargetDiscount(*d, state, active, a.soulfire_own_targets) > 0) { return Pp(PP_SOULFIRE); }
         if (HinataGenericDiscount(*d, state, a.chosen_x) > 0) { return Pp(PP_HINATA); }
         ManaCost ec = EffectiveCost(*d, state);
+        // Phyrexian variant ({G/P} -- Birthing Pod): the life-paid pips come OFF the joint bill,
+        // the same strip the enumeration emitted (the ApplyConvokeReduction idiom; the life half
+        // is paid at the cast, not here). Without this the prepay overpays the {G} the variant
+        // exists to free.
+        if (a.phyrexian_life > 0) { ec.StripPhyrexianForLife(a.phyrexian_life / 2); }
         combined.generic += ec.generic; combined.white += ec.white; combined.blue += ec.blue;
         combined.black += ec.black; combined.red += ec.red; combined.green += ec.green;
         combined.colorless += ec.colorless;
@@ -18367,12 +18483,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (act.free_cast && state.free_casts_available > 0)
         { cascade_free = true; --state.free_casts_available; }
     };
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int, int, int)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int, int, int, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
                     int own_targets, int ponder_keep, int crackle_targets, int splice_count,
                     const std::string& chosen_float_color, int enchant_target, bool bestow,
-                    int replicate_count, int convoke_green, int convoke_other)
+                    int replicate_count, int convoke_green, int convoke_other, int phyrexian_life)
     {
         // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
         // the continuation has already decided everything after it, so every remaining cast of this
@@ -18492,6 +18608,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // mana-legal cast after its bodies were already tapped).
         if (def.params.convoke && (convoke_green > 0 || convoke_other > 0))
         { ApplyConvokeReduction(ec, convoke_green, convoke_other); }
+        // Phyrexian ({G/P} -- Birthing Pod's cast): the variant's life-paid pips come OFF the
+        // recomputed cost, the SAME strip the enumeration emitted (the convoke idiom above);
+        // the life itself is deducted after the payment succeeds, below.
+        if (phyrexian_life > 0) { ec.StripPhyrexianForLife(phyrexian_life / 2); }
         // Scaled divided-damage spell (Magma Opus): the committed face (carried on crackle_targets)
         // fixes the cost via the archetype's model, recomputed on the CURRENT board so the rollout, the
         // executor (CastSpellFromHand), and CanPay price the same committed face identically -> lockstep
@@ -18527,6 +18647,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             { EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands); }
             PaySacVictimScope _psv(
                 !def.params.sac_additional_creature_color.empty() ? own_targets : 0);
+            // Phyrexian life gate (before the tap, which mutates): the payment must leave us
+            // ALIVE (paying to 0 loses to the SBA). Emission gated on the same test, but life
+            // can have moved since (a shockland, an earlier phyrexian payment) -- treat a
+            // now-unpayable life half exactly like unpayable mana: drop the cast.
+            if (phyrexian_life > 0
+                && state.players[state.active_player_index].life <= phyrexian_life)
+            {
+                if (sink_stack.empty() && g_play_dropped_cast_sink) { g_play_dropped_cast_sink->push_back(name); }
+                return;
+            }
             if (!TapForCostDirect(state, ec, is_creature))
             {
                 if (g_bp_trace_arm) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
@@ -18539,6 +18669,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (sink_stack.empty() && g_play_dropped_cast_sink) { g_play_dropped_cast_sink->push_back(name); }
                 return;
             }
+            // ...and the life half of a phyrexian payment, now that the mana half is committed
+            // (CR 601.2h: both are costs, paid together; the order inside the payment step is
+            // unobservable -- nothing in this engine triggers on life PAYMENT).
+            if (phyrexian_life > 0)
+            { state.players[state.active_player_index].life -= phyrexian_life; }
             // This cast is paid, so the line no longer owes it: a mid-line greedy sink (replicate)
             // downstream may now spend it. Clamped at zero per field (see SubManaCost) -- the hold is
             // an upper bound built from the plan's costs, and an alt-cost / free cast owes less.
@@ -18647,7 +18782,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ap.hand.push_back(std::move(found));
                 cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                 apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                          std::string{}, 0, false, -1, 0, 0);
+                          std::string{}, 0, false, -1, 0, 0, 0);
             }
             else { state.exile.push_back(std::move(found)); }
         };
@@ -18738,7 +18873,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     ap.hand.push_back(std::move(hit));
                     cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                     apply_one(hname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                              std::string{}, 0, false, -1, 0, 0);
+                              std::string{}, 0, false, -1, 0, 0, 0);
                 }
                 else { ap.library.push_back(std::move(hit)); }   // declined/forbidden: bottomed
             }
@@ -18802,7 +18937,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         state.players[pe.controller].hand.push_back(std::move(found));
                         cascade_free = true;
                         apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1,
-                                  0, std::string{}, 0, false, -1, 0, 0);
+                                  0, std::string{}, 0, false, -1, 0, 0, 0);
                     }
                     else { state.players[pe.controller].hand.push_back(std::move(found)); }
                 }
@@ -20169,7 +20304,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life);
                     fire_unlock();
                 }
             }
@@ -20241,7 +20376,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                          < ResolveProvider(state).CastOrderRank(state, *dy);
                 });
                 for (int i : ena)
-                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); fire_unlock(); }
+                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); fire_unlock(); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -20265,7 +20400,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other);
+                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -20292,7 +20427,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
-                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other); fire_unlock();
+                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life); fire_unlock();
                 }
             }
             else
@@ -20320,7 +20455,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life);
                     fire_unlock();
                 }
             }
@@ -20332,14 +20467,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
                 prep_free(a);
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life);
             }
         }
 
@@ -20473,7 +20608,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1, 0, 0);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1, 0, 0, 0);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
@@ -20615,9 +20750,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             // Birthing Pod: pay the mana half here (the ordinary trailing-pass pay path); the tap,
             // the sacrifice cascade and the MV-filtered put live in the shared PerformPodActivate
-            // (executor mirror calls the identical function -> lockstep).
-            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            // (executor mirror calls the identical function -> lockstep). A phyrexian variant
+            // ({1}{G/P} with the pip life-paid) carries a pre-stripped a.cost; its life half is
+            // gated FIRST (no mutation) and deducted once the mana half commits -- an unpayable
+            // life half no-ops the activation exactly like stranded mana.
+            if ((a.phyrexian_life == 0
+                 || state.players[state.active_player_index].life > a.phyrexian_life)
+                && TapForCostDirect(state, a.cost, /*for_creature=*/false))
             {
+                state.players[state.active_player_index].life -= a.phyrexian_life;
                 PerformPodActivate(state, state.active_player_index, a.sac_source_id,
                                    a.sac_victim_id, a.tutor_target.str());
             }
@@ -22908,6 +23049,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // above, declining an in-play outlet keeps BOTH the outlet and the body, so there is no
         // "hold it for a later turn" trade for the search to arbitrate. See the helper.
         if (SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
+        // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
+        // dominance -- lockstep twin of Solve::consider's call; see the helper).
+        if (SubsetPhyrexianDominated(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
@@ -24273,7 +24417,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // Felidar Guardian: distinct flicker targets (and the decline) are
                         // DISTINCT plans (core invariant); gated on the param.
                         + ((act.def && act.def->params.etb_blink_permanent)
-                           ? ("#F" + std::to_string(act.chosen_x)) : "")); break;
+                           ? ("#F" + std::to_string(act.chosen_x)) : "")
+                        // Phyrexian ({G/P} -- Birthing Pod): paying the pip with mana vs 2 life
+                        // are DISTINCT plans (the life payment frees a source; core invariant).
+                        // Gated on the field, so no existing deck's signature moves.
+                        + (act.phyrexian_life > 0
+                           ? ("#P" + std::to_string(act.phyrexian_life)) : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
@@ -24298,9 +24447,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // (the Gamble tutor-dedup lesson: drop the target and every Pod variant collapses
                 // to the first-enumerated fetch).
                 case Action::Kind::ActivatePod:
+                    // ...and the phyrexian payment mode ({1}{G/P}: mana vs 2 life) -- the life
+                    // payment frees a source, so the two are distinct plans (#P, gated on the
+                    // field like the CastFromHand tag above).
                     msf.push_back("POD#" + std::to_string(act.sac_source_id)
                                   + ">" + std::to_string(act.sac_victim_id)
-                                  + ":" + act.tutor_target.str()); break;
+                                  + ":" + act.tutor_target.str()
+                                  + (act.phyrexian_life > 0
+                                     ? ("#P" + std::to_string(act.phyrexian_life)) : "")); break;
                 // Scavenging Ooze: WHICH graveyard card is exiled is a searched choice.
                 case Action::Kind::GraveyardExileGrow:
                     msf.push_back("OOZE#" + std::to_string(act.sac_source_id)
