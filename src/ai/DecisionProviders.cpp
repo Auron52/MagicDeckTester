@@ -13654,6 +13654,26 @@ static int FlickerIterationsForMana(int want_mana, int net)
     return std::clamp((want_mana + net - 1) / net, 1, kFlickerMaxIterations);
 }
 
+// MTG_EDF_DRAWLAND_GOFF -- see the draw-land branch below. DEFAULT ON: it more than DOUBLES the
+// go-off rate (27% -> 58% of games reach a >=9 blink loop; total blinks 423 -> 1769 over 60 games),
+// which is the behaviour the user asked for -- "the majority of games should combo". The win-turn
+// gain is small by comparison (6.5333 -> 6.4333) and that gap is itself the finding: going off twice
+// as often barely wins faster, because the loop FIRES on turn 5.66 while the engine is assembled by
+// turn 4.19. The remaining work is that ~1.5-turn lag, not this route.
+static bool DrawLandGoOffOn()
+{
+    // NOT IN HUMAN PLAY. This route exists to let the SEARCH propose a loop it would otherwise never
+    // consider; a human picks their own line and needs no proposal. Leaving it on changed the
+    // human-play menu (the FINISH plan carries this count, so the menu went 84 -> 64 plans) and that
+    // broke the user's saved turn-3 reference outright -- `repaired` at turn 3 became `shuffle-dead`.
+    // A reference is user work that only re-playing by hand can restore, so an engine change is not
+    // allowed to cost one. Scoping here keeps the whole measured gain (the search never sets
+    // HumanPlayActive) and leaves the recorded line reproducing exactly.
+    if (HumanPlayActive()) { return false; }
+    static const bool env_on = EnvOn("MTG_EDF_DRAWLAND_GOFF", true);
+    return heurarm::Flag(heurarm::EDF_DRAWLAND_GOFF, env_on);
+}
+
 int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
 {
     if (!loop.ok) { return 0; }
@@ -13700,6 +13720,70 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
     // is not a win condition, and sizing a go-off around it asked for iterations that buy nothing.
     // (ApplyBlink was always right -- it builds a fresh Permanent. Only this heuristic and the
     // cards.json note were wrong.)
+
+    // THE DRAW *LAND* ROUTE -- a {T} draw ON THE BATTLEFIELD, which the loop untaps every iteration.
+    //
+    // USER, 2026-09-05, listing the deck's three requirements: "Finish the opponent = Living Wish,
+    // Draw land on board or shivan gorge", and earlier: "Finding exact ways to finish the job is for
+    // after you have bountiful amounts of mana." Both say the same thing -- the loop is worth running
+    // to FIND the kill, not only when the kill is already sitting on the battlefield.
+    //
+    // THE OMISSION WAS AN INCONSISTENCY, not a judgement. Shivan Gorge is a {T} DAMAGE land and the
+    // branch at the top of this function accepts it precisely because "each iteration untaps the
+    // Gorge, so damage is bounded only by the mana the loop makes". Mariposa Military Base is a {T}
+    // DRAW land with identical structure, and it was rejected by the DrawX branch below on the
+    // grounds that a fixed-size draw "is capped by the number of sources". That is true OUTSIDE a
+    // loop and false inside one, for the same reason it is false for the Gorge: the untap is what
+    // lifts the cap. So the engine could not plan "loop -> draw the library -> find the finisher",
+    // and on a board with an engine and a Mariposa and no sink it returned 0, capping the blink at
+    // the generic 1..3 and never generating the mana that would have found the kill.
+    //
+    // Measured cost of that gap: over 60 logged games, 18 assembled an engine and never looped, and
+    // SEVEN of those had a draw land on the battlefield at the time.
+    //
+    // Sized to draw the library DOWN TO ONE CARD, never through it -- drawing from an empty library
+    // loses the game, so this must never propose its own death. One activation per untap means one
+    // per ITERATION, so the count is at least `cards`; it must also be affordable, hence the max
+    // against the mana-sized figure. Over-claiming is safe by the same contract the rest of this
+    // function relies on: ApplyBlinkLoop re-prices every activation and stops at the first it cannot
+    // pay, so a too-large count costs a mis-ranked plan, never a phantom win.
+    if (DrawLandGoOffOn())
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            // BOTH kinds of {T} draw land, because the deck runs NINE of them and only three are the
+            // direct sort. USER, 2026-09-05: "Mariposa is only one of the draw lands. Kitchen and
+            // Conservatory also count. So there are 9 and 1 Shivan gorge. That makes it pretty easy
+            // to have one out." Checking tap_draw_cost alone saw 3 of the 9 and missed the whole
+            // Investigate half -- Conservatory x4 and Kitchen x2, both "{4},{T}: Investigate".
+            //   direct draw  ({5},{T})      -> one card, one activation
+            //   investigate  ({4},{T})      -> a Clue, which then costs {2} to sacrifice for the card
+            // so the per-card price of the Investigate route is the activation PLUS the crack.
+            int cost = 0;
+            if (d->params.tap_draw_cost.has_value())
+            {
+                cost = EffectiveActivationCost(s, s.active_player_index, p.card,
+                                               d->params.tap_draw_cost.value()).ManaValue();
+            }
+            else if (d->params.tap_investigate_cost.has_value())
+            {
+                cost = EffectiveActivationCost(s, s.active_player_index, p.card,
+                                               d->params.tap_investigate_cost.value()).ManaValue();
+                const CardDefinition* clue = CardDatabase::Instance().Lookup("Clue Token");
+                cost += (clue && clue->params.sac_draw_cost.has_value())
+                      ? clue->params.sac_draw_cost.value().ManaValue() : 2;
+            }
+            else { continue; }
+            const int cards = static_cast<int>(s.players[s.active_player_index].library.size()) - 1;
+            if (cards <= 0) { continue; }
+            const int by_mana = FlickerIterationsForMana(cards * std::max(1, cost), loop.net);
+            if (by_mana <= 0) { continue; }
+            return std::clamp(std::max(cards, by_mana), 1, kFlickerMaxIterations);
+        }
+    }
 
     // THE DRAW SINK (user, 2026-09-01: "once you have the infinite mana combo on board and a draw
     // source the route to end the game is quite straightforward"). An {X} draw held in hand turns
