@@ -3274,3 +3274,15 @@ Post-everything: **~6.00 avg win turn** (base arm of the wish sweep). Remaining 
 mostly board facts (no-loop 31%, short-to-start 25%). The untried cheap test remains the
 DECKBUILDING one: Peregrine Drake is not in the sideboard, so a Wish can never fetch the
 untapper -- a `deck-screening.md` question for the USER, not an engine one.
+
+**CORRECTION (USER, 2026-09-05): the claim above -- repeated three times in this doc -- is
+WRONG.** *"Cloud of Faeries is an untapper as well. It just needs enchantments concentrated on
+2 lands."* Cloud of Faeries IS in the sideboard (`etb_untap_lands: 2`), so Living Wish CAN
+fetch an untapper: with auras concentrated (one Overgrowth'd land yields 3, +1 more clears the
+Displacer's cost 3), a Faeries loop is self-funding. Engine capability check: the recognizer
+prices `untaps=2` loops generically (top-2 land yields), the wish ranking scores a missing
+payload at tier 80, and the aura-host chooser CONCENTRATES emergently (score =
+PermanentManaYield x 4, so an enchanted land wins the next aura too). A wish is in hand on
+~40% of the trace's raw no-loop rows, so the route is frequently available -- whether the
+search actually converts it (wish -> Faeries -> concentrated loop) is the open empirical
+question for the no-loop bucket, and it is an ENGINE question, not deckbuilding.

@@ -501,6 +501,15 @@ heuristics, bad mana-tap rules) are budget-recoverable while deficiencies in the
 structure are not -- which is exactly why greedy is banned from the searched part and tolerated
 in rollouts. Do not adopt a budget point off this table without the USER asking.
 
+**[ATTRIBUTION CLOSED 2026-09-05: the wall cost is REAL.** Clean quiet-box triple on the
+current binary (post interior-m2 deletion + executor re-solve; `logs/wall_probe_ds/`,
+wall_probe.sh protocol): off 24.01/25.02/23.50s vs tightrecipe 27.59/28.05/27.22s -- **+14.2%
+raw, ~+15% cal-subtracted**, quality 4.2800 -> 4.2750. Reproduces the original +12.9%; the
+"disappearance" was the contended-window artifact, not the cost. Dragonstorm remains the ONE
+deck over the USER's 10% bar, and the incremental-key project keeps its dragonstorm-only case
+(the ~187k BuildBreakpointKey walks per 200 games). Hinata is NOT a co-beneficiary on current
+evidence -- its perf profile puts the whole m2/key apparatus at ~1.25% of wall.]
+
 **Dragonstorm attribution remains OPEN and now DOUBLY so:** a re-triple on the current binary
 read off==noderoot==tight (~10.0/9.9/9.9s -- the +12.9% GONE), but the box re-contended in that
 window (load 13-21 from another container; the same window inflated a hinata tight rep to
