@@ -406,16 +406,6 @@ inline bool LandIdleTappedFirstEnabled()
     return heurarm::Flag(heurarm::LAND_IDLE_TAPPED_FIRST, v);
 }
 
-// MTG_HOLD_FUEL_LAND -- DEFAULT OFF (measuring). Rank "play no land" ahead of "play a CYCLING land"
-// when the two plans cast exactly the same spells, i.e. the drop buys nothing this turn and the
-// land is worth more in hand as a card. See the plan-ordering comparator in TurnSolver.cpp for the
-// full argument and the measurement that bounds it.
-inline bool HoldFuelLandEnabled()
-{
-    static const bool v = EnvOn("MTG_HOLD_FUEL_LAND");
-    return heurarm::Flag(heurarm::HOLD_FUEL_LAND, v);
-}
-
 // MTG_NO_REDUNDANT_REDUCER -- DEFAULT OFF (measuring). Do not offer a cast whose cost-reduction a
 // copy already in play has saturated: it spends a card and its mana for no change at all. See
 // IsSaturatedCyclingReducer (SpellEffects.h) for the argument and the reference game it costs.

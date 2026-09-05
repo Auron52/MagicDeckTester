@@ -27930,11 +27930,42 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     const bool defer_drop = is_pre_combat && state.uses_second_main && Main2DropEnabled()
                          && !s_no_defer_drop;
     const bool provider_hold = ResolveProvider(state).PreferHoldLandDrop(state, state.active_player_index);
+    // "Don't play any fuel once you are going off. Just cycle everything." (USER 2026-09-05.)
+    // Provider-owned; see DecisionProvider::HoldFuelWhileComboing. Resolved ONCE per enumeration
+    // rather than inside the comparator: it reads only the pre-plan state, and a std::stable_sort
+    // predicate must be a strict weak ordering -- recomputing per comparison would be both wasteful
+    // and a correctness hazard if it ever became state-dependent.
+    const bool hold_fuel =
+        ResolveProvider(state).HoldFuelWhileComboing(state, state.active_player_index);
     const bool hold_land = defer_drop || provider_hold;
     std::stable_sort(all.begin(), all.end(),
         [&](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
             if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn > b.wins_this_turn; }
+            // While the combo is live every card is AMMUNITION: cycling is 1-for-1 (draws a
+            // replacement AND pings) where a cast or a land drop is 1-for-0, so either one
+            // permanently shortens the chain by a ping. Rank the plans that spend nothing FIRST.
+            //
+            // Placed BELOW wins_this_turn but ABOVE value, and the placement is the whole rule.
+            // Below wins_this_turn: a plan that actually wins THIS turn still dominates, always.
+            // Above value: MEASURED, siting it under `value` made the rule INERT (0.0000 on every
+            // deck and cell bar one, -0.0010) because it could then only break exact ties -- and
+            // "cast the free Hollow One" never ties with "cast nothing", it scores HIGHER (a 4/4
+            // is board value). The user's ruling is not a tiebreak, it is a policy that outranks
+            // the board-value score: while the combo is live a 4/4 that cannot attack this turn is
+            // worth less than the ping the card would have been.
+            // Still a REORDERING, not a prune: the deploying plans keep their place lower in the
+            // list and stay fully reachable.
+            //
+            // CYCLING IS NOT A CAST, and that is the point: PlanCastNames covers CastFromHand /
+            // CastFromGraveyard only, so a plan whose actions are all DigDraw reads as "spends
+            // nothing" and sorts to the front. That is exactly the line the user described.
+            if (hold_fuel)
+            {
+                const bool a_idle = PlanCastNames(a.actions).empty() && a.land_to_play.empty();
+                const bool b_idle = PlanCastNames(b.actions).empty() && b.land_to_play.empty();
+                if (a_idle != b_idle) { return a_idle > b_idle; }
+            }
             if (a.value != b.value) { return a.value > b.value; }
             if (s_develop_tiebreak)
             {
@@ -27960,53 +27991,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                     {
                         const TurnSolver::Plan& noland = a_has ? b : a;
                         if (noland.actions.empty()) { return a_has < b_has; }
-                    }
-                    // (1b) HOLD A FUEL LAND -- MTG_HOLD_FUEL_LAND, default OFF (measuring).
-                    //
-                    // A land with a cycling cost is not only a land: it is a CARD, and in a deck
-                    // whose wincon is the cycle chain it is one more link (with Fluctuator out the
-                    // cycle is free, so in hand it is a draw plus a ping). The engine already knows
-                    // this -- `land_good_early_tapped` returns false for any land carrying a
-                    // cycling_cost, commented "hold to cycle for a card" -- but that predicate is
-                    // only consulted in clause (2), which compares two LAND plans. It can demote a
-                    // cycling land against another land; it can NEVER demote it below "play no
-                    // land". That is the hole this closes.
-                    //
-                    // WHY THIS DOES NOT RE-OPEN THE 2026-08-16 REFUTATION. The USER's ruling then
-                    // was "deferring it when you have main 1 plays is probably not a good idea",
-                    // and the first cut -- defer whenever two plans tie on wins AND value -- was
-                    // measured one-sided against (22 games worse to 9 better in the 4->5 bucket)
-                    // because "tied on value is NOT tied on TEMPO, so an equal-value plan could
-                    // still strand the mana". This clause cannot strand mana: it fires only when
-                    // the no-land plan casts EXACTLY THE SAME SPELLS, so the drop demonstrably
-                    // bought nothing this turn. That is strictly narrower than the refuted cut and
-                    // strictly wider than `defer_drop`'s "casts nothing at all" -- which could not
-                    // reach the motivating game, where the held plan casts Fluctuator.
-                    //
-                    // Motivating game (reference s2/gi1, HUMAN T4 vs SEARCH T5): on turn 3 both
-                    // plans cast Fluctuator and tie at val=100; the tiebreak develops Scattered
-                    // Groves, and that one card is 3 pings of the turn-4 chain (20 -> 17). Holding
-                    // the drop was traced NECESSARY AND SUFFICIENT on both deployment routes.
-                    //
-                    // Independent of `defer_drop` on purpose: that path is gated on
-                    // uses_second_main && Main2DropEnabled(), which is why MTG_MAIN2_DROP=1 does
-                    // not recover the game. Decks with no cycling land are byte-identical.
-                    if (HoldFuelLandEnabled())
-                    {
-                        const TurnSolver::Plan& noland   = a_has ? b : a;
-                        const TurnSolver::Plan& withland = a_has ? a : b;
-                        const CardDefinition* ld =
-                            CardDatabase::Instance().Lookup(withland.land_to_play);
-                        if (ld != nullptr && ld->params.cycling_cost.has_value())
-                        {
-                            // Same SPELLS, order-insensitive: what matters is that the turn casts
-                            // the same things either way, not the sequence it casts them in.
-                            std::vector<std::string> with_n = PlanCastNames(withland.actions);
-                            std::vector<std::string> no_n   = PlanCastNames(noland.actions);
-                            std::sort(with_n.begin(), with_n.end());
-                            std::sort(no_n.begin(), no_n.end());
-                            if (with_n == no_n) { return a_has < b_has; }
-                        }
                     }
                     return a_has > b_has;
                 }

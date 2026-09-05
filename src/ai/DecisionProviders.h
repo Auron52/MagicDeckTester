@@ -1151,6 +1151,10 @@ public:
     // Fluctuator and Enlightened Tutor fill ONE role (the enabler): the Tutor's only job in this
     // deck is to find Fluctuator, so holding either is "on plan" and the second is redundant.
     const std::vector<std::string>* InterchangeableRequiredGroup(const std::string&) const override;
+    // "Don't play any fuel once you are going off. Just cycle everything." (USER, 2026-09-05.)
+    // See DecisionProvider::HoldFuelWhileComboing for the argument; the exceptions the user named
+    // -- library too short to finish, or no Stinger on board yet -- are exactly when this is false.
+    bool        HoldFuelWhileComboing(const GameState& s, int controller) const override;
 };
 
 // Mono-red Dragons ramp. Exists to hold ONE measured hook: the cleanup-discard bucket policy.

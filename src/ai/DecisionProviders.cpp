@@ -11641,6 +11641,61 @@ bool FluctuatorProvider::ShouldConsiderDig(const GameState& s) const
 // lethal. Measured: the uncounted version fired on 2 of 200 games and both were false positives --
 // each won that very turn on cycles PLUS attacks -- and holding the Unearth in them cost a turn
 // (T4 -> T5, 0 games better). So the chain only has to cover what combat does not.
+// HoldFuelWhileComboing -- "Don't play any fuel once you are going off. Just cycle everything. The
+// only exception should be if you don't have enough cards left in the library or don't have stinger
+// on board, yet" (USER, 2026-09-05).
+//
+// This is the exact COMPLEMENT of FluctuatorWantsSecondThreat below, and deliberately shares its
+// arithmetic: that rule fires when the library CANNOT close (so a second threat is worth a card),
+// this one when it CAN (so every card is ammunition and spending one costs a ping). Reusing the same
+// expression means the two can never disagree about whether the chain closes -- and it inherits the
+// two corrections that expression already carries: combat is subtracted (a board of free 4/4 Hollow
+// Ones is usually swinging by the kill turn, and ignoring it fires on already-lethal boards), and
+// 2HG is handled by heads rather than a flat 20.
+//
+// The user's stated exceptions map onto the three guards exactly: no Stinger yet -> sting == 0; no
+// enabler out, so the chain cannot actually be cheap -> !enabler; not enough cards left -> the
+// library inequality. In all three the hand is a RESOURCE again and deploying is right.
+bool FluctuatorProvider::HoldFuelWhileComboing(const GameState& s, int controller) const
+{
+    static const bool s_on = EnvOn("MTG_FLUCT_HOLD_FUEL");   // DEFAULT OFF -- measuring
+    if (!heurarm::Flag(heurarm::FLUCT_HOLD_FUEL, s_on)) { return false; }
+    if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return false; }
+    int  sting = 0, swing = 0;
+    bool enabler = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.cycle_trigger_damage_each_opponent > 0) { ++sting; }
+        if (d->params.reduces_cycling_activation > 0)         { enabler = true; }
+        if (p.card.IsCreature() && CanAttackFull(p, s.battlefield, controller))
+        { swing += std::max(0, p.EffectivePower()); }
+    }
+    if (sting == 0 || !enabler) { return false; }
+    const long long lib   = static_cast<long long>(s.players[controller].library.size());
+    const long long heads = gamesetup::OpponentHeads();
+    const bool going_off = lib * sting * heads >= s.players[1 - controller].life - swing;
+    // MTG_FLUCT_HF_TRACE (diagnosis only, default off): how often the rule actually FIRES. "The
+    // lever never fires" and "the lever fires and the search already agreed" are different findings
+    // and only the counter tells them apart -- the same discipline MTG_FLUCT_ST_TRACE exists for.
+    {
+        static const bool s_trace = EnvOn("MTG_FLUCT_HF_TRACE");
+        if (s_trace && going_off)
+        {
+            static std::atomic<unsigned long long> fires{0};
+            const unsigned long long n = fires.fetch_add(1, std::memory_order_relaxed) + 1;
+            if ((n & (n - 1)) == 0)   // powers of two only: this is on a hot path
+            {
+                std::fprintf(stderr, "[hf] fire#%llu T%d lib=%lld sting=%d swing=%d opp=%d\n",
+                             n, s.turn_number, lib, sting, swing, s.players[1 - controller].life);
+            }
+        }
+    }
+    return going_off;
+}
+
 static bool FluctuatorWantsSecondThreat(const GameState& s)
 {
     static const bool s_on = EnvOn("MTG_FLUCT_SECOND_THREAT", true);

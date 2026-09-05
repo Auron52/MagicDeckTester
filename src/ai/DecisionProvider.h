@@ -897,6 +897,35 @@ public:
     // BurnProvider opts in, gated on lands-in-play.
     virtual bool PreferHoldLandDrop(const GameState& s, int controller) const { return false; }
 
+    // HoldFuelWhileComboing -- "once you are going off, don't play any fuel; just cycle everything"
+    // (USER, 2026-09-05, on Fluctuator). While the combo is live, every card in hand is AMMUNITION,
+    // not a resource: cycling is 1-for-1 (it draws a replacement AND pings), a cast is 1-for-0, and
+    // a land drop is 1-for-0 too. So spending either permanently shortens the kill chain by exactly
+    // one ping, which is the difference between winning this turn and next.
+    //
+    // Returns true only while the deck is ACTUALLY going off -- the user's own exceptions are the
+    // negation: not yet enough cards in the library to finish, or the threat is not on the
+    // battlefield yet. In those states deploying is allowed again, because the chain cannot close
+    // and the hand IS a resource.
+    //
+    // This is a REORDERING, not a prune, and deliberately so (USER's standing bar: "I'm fine with
+    // needing to address budget problems with heuristics. I'm not fine with greedy deleting those
+    // options"). It only reorders plans ALREADY TIED on wins_this_turn and value, so a plan whose
+    // cast or land actually wins the turn scores strictly higher and still wins on value. Nothing is
+    // made unreachable; the deploy plans stay in the list at a lower rank.
+    //
+    // Why it matters where it does: continuation lists at a dig breakpoint are HEURISTICALLY RANKED
+    // and bp_choice indexes rank k, with W=2 taking the top two -- measured mean 6.35 / max 36 per
+    // breakpoint, 72.3% of continuations unreachable at that width. So the rank of "cast nothing,
+    // keep cycling" decides whether the winning line is reachable within budget at all.
+    //
+    // DEFAULT false -> every other deck byte-identical.
+    virtual bool HoldFuelWhileComboing(const GameState& s, int controller) const
+    {
+        (void)s; (void)controller;
+        return false;
+    }
+
     // ForcedEarlyLandName -- collapse the EARLY land-choice branch to one named land. Returns the land
     // NAME to play unconditionally this turn (when it is in hand), or "" to let the search fan out over
     // every distinct land as usual.
