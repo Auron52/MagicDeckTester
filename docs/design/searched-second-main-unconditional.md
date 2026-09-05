@@ -131,9 +131,12 @@ apparatus check):
   5.6544. At 2x the searched interior is BETTER than the greedy era ever measured, every cell
   equal-or-better than old within one game; 4x adds only −0.015 (diminishing — 2x is the knee).
   So the deletion's quality story on hinata ends as: nothing was lost, the interior spend just
-  needs covering. Adoption candidate: hinata `value_play.budget_ms` 20 → 40 (the suite's gate
-  cells pin their own budgets, so GT does not move); held-out confirm on the overnight seeds
-  (4004–7007, d5 + 2hg-d5, 1600 games/arm) in logs/hinata_heldout.
+  needs covering. **ADOPTED 2026-09-05: hinata `value_play.budget_ms` 20 → 40.** Held-out confirm
+  (overnight seeds 4004–7007, d5 + 2hg-d5, 1600 paired games/arm, logs/hinata_heldout): 6 of 8
+  cells better, 2 exactly equal, none worse, −0.0156/game. GT is untouched — the suite's gate
+  cells pin cli budgets, verified byte-identical post-adoption on all four smoke cells (digests
+  match GT exactly, incl. the value_play-driven d5 cell). Cost: ~2x search wall on hinata's
+  real-play games only — the accepted trade.
 
 ## What stays a provider decision
 
