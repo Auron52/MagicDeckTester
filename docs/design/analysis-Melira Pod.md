@@ -1472,3 +1472,80 @@ per-game line comparison (explain_game / claude-play on the gap games) to classi
 search-depth/budget vs heuristic vs modelling, then the heuristic-optimization loop for
 anything systematic. Caveat: user games may include forced mulligans / side-channel steering
 the autonomous engine decides differently -- same shuffle, whole-game comparison.
+
+## SESSION 2026-09-05k — the "loses 5 of 10" table was WRONG; the two real gaps diagnosed and FIXED
+
+**CORRECTION to 5j: the comparison above measured the WRONG physical games.** A viewer
+reference saved at (seed s, game-index g) replays as `--seed s --game-index g --games 1`;
+the 5j run used the BATCH repro shape (`--seed s --games g+1`, grep gi=g), whose per-game
+shuffle seed is base+gi — a DIFFERENT shuffle for every g>0. Only the s1/g0 row compared
+like with like. The two repro schemes are both real; they index different worlds:
+
+* batch-run game gi  ->  `--seed base+gi --games 1`   (the batch-game-repro-seed rule)
+* viewer reference   ->  `--seed s --game-index g --games 1`   (exactly as saved)
+
+Re-measured on the correct games (opening hands verified identical to each ref's attempt-0
+hand), PRE-fix engine vs user: **1 faster (s3), 7 match, 2 slower by 1 turn (s1, s10)** —
+user avg 4.5, engine 4.6. Not 5-of-10-with-+2s; the +2 rows were shuffle artifacts.
+
+### The two real gaps: one blindness, two faces
+
+Both misses were the same enumeration hole — **an action whose enabler arrives mid-plan is
+invisible at CollectActions**, which scans the battlefield:
+
+* **s1 (user T4, engine was T5):** the user's T3 is "cast Pod {3}+2 life, hold the 4th
+  source, activate {1}+2 life the same main" (sac Finks -> Celes). ActivatePod was only ever
+  emitted for battlefield Pods, so cast-and-activate could not be ONE plan; it survived only
+  as the fragile hold-a-source + main-2 route (the 5d tight-pool twin), which the root never
+  ranked first. Probes: budget/depth up to d7/b2000 never found T4; MTG_POD_PUT_NARROW=0
+  found T4 on this shuffle only by dodging the pairing (Pod landed T2) — the whitelist was a
+  red herring, left untouched.
+* **s10 (user T4, engine was T5):** the user's T4 is "cast Melira #2 AND grow-loop Kitchen
+  Finks x17 (Feeder -> ~20 power), then attack". The loop variants were gated on the closer
+  being active AT COLLECT, and the loop cannot defer to main 2 because the lethal attack
+  sits between the mains — the plan was unenumerable at any depth/budget (verified). Engine
+  played the identical parts a turn late (closer cast M1, loop M2, kill T5).
+
+### The fix: cast-and-activate / cast-and-loop pairing (MTG_POD_HAND_PAIR, default ON)
+
+All in the candidate space — no breakpoint, no bp_seen accounting, no executor drift:
+
+1. **Hand-Pod ActivatePod emission** (TurnSolver CollectActions): the pod emission body is
+   shared by a lambda; battlefield sources unchanged, plus one emission per distinct hand
+   Pod NAME, gated on the pool covering cast+activation with every phyrexian pip life-paid
+   (the true mana floor). The cast lands in the cast pass, the activation in the TRAILING
+   pass, which runs after it in both worlds — pairing in one subset is sound by ordering.
+2. **Closer-castable loop emission**: the persist-loop gate becomes closer ACTIVE or closer
+   CLASS card in hand (Melira/Vizier/Celes params, matching NotePodRoles).
+3. **Two subset rules** (SubsetHasStrandedPodActivation / SubsetHasUnclosedPersistLoop, the
+   SubsetHasStrandedEquip pattern, lockstep in both walkers): a hand-Pod activation without
+   its co-cast, or a persist loop with no closer active-or-cast, is rejected — no stranded
+   pay-then-no-op ever reaches scoring or a human menu.
+4. **ResolvePodSourceId** (SpellEffects.h, shared): the cast applies BY NAME, so the copy
+   that materialises may differ from the hand copy the action named; both trailing apply
+   sites (rollout/leaf + executor twin) re-resolve the source by name identically.
+
+### Results (all at production defaults d5/b20)
+
+| game | user | engine BEFORE | engine AFTER |
+|------|------|---------------|--------------|
+| s1   | 4    | 5             | **4** |
+| s10  | 4    | 5             | **4** |
+| s3   | 5    | 4             | 4 (still faster) |
+| other 7 | — | match         | match (unchanged) |
+
+**Engine now matches or beats the user on all 10 references** (1 faster, 9 match; engine
+avg 4.4 vs user 4.5). The viewer offers the user's exact T3 line as one plan
+("cast: Birthing Pod (pay 2 life), Birthing Pod: sac Melira -> Kitchen Finks (pay 2 life)").
+
+Validation: unit SUCCESS; scenarios 72/72; protocol sweep 0 play-drift / 0 shuffle-dead /
+0 enum-gap (289 refs; 5 known Mirrorwing mull-drift); validate-line 0 REGRESSION; smoke
+68/68 byte-identical (the pairing is param-gated — no other deck has pod_mv_delta or
+closer/persist params). Benchmark s5000x100: **avg 4.83 vs 4.98 OFF (-0.15t), inf 37 vs 36,
+CPU 920s vs 818s user (+12.5%, Melira-only; wall flat at ~1:25 on 32 threads)**. Adopted
+default-ON per the user's direct request to fix these losses; `MTG_POD_HAND_PAIR=0` is the
+A/B hatch.
+
+Residual: none of the 10 references now shows an engine deficit. s9 (user 6, engine 6) and
+s2 (5/5) are matches, not wins — no action. The put whitelist (MTG_POD_PUT_NARROW) stays as
+shipped; the 5j-era suspicion against it is closed as a wrong-shuffle artifact.

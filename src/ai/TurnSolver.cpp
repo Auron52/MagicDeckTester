@@ -4457,6 +4457,90 @@ static bool SubsetHasStrandedEquip(const GameState& state,
     return bad;
 }
 
+// Cast-and-activate / cast-and-loop pairing (USER references s1/s10, 2026-09-05): CollectActions
+// emits ActivatePod for a Pod still in HAND and persist-loop variants when the loop-closer is
+// merely CASTABLE, with subset rules requiring the enabling cast in the same plan. Default ON;
+// MTG_POD_HAND_PAIR=0 is the A/B hatch back to the battlefield-only enumeration.
+static bool PodHandPairEnabled()
+{
+    static const bool on = EnvOn("MTG_POD_HAND_PAIR", true);
+    return on;
+}
+
+// Reject a HAND-Pod activation whose Pod this subset does not cast (the SubsetHasStrandedEquip
+// pattern). CollectActions emits ActivatePod for a Pod still in hand so "cast Pod + activate it
+// this same main" is one scoreable plan (USER references s1/s10 T3); an activation of a source
+// that is neither on the battlefield nor cast here would strand (pay, then no-op) -- reject the
+// subset instead. Matched BY NAME: the cast applies by card name, so the physical copy that
+// materialises may differ from the hand copy the activation named; the apply sites re-resolve
+// the source by name for the same reason. Inert without an ActivatePod candidate (every deck
+// without a pod_mv_delta card) -> byte-identical.
+static bool SubsetHasStrandedPodActivation(const GameState& state,
+                                           const std::vector<Action>& cands,
+                                           const std::vector<int>& sel)
+{
+    const int active = state.active_player_index;
+    for (int idx : sel)
+    {
+        const Action& c = cands[idx];
+        if (c.kind != Action::Kind::ActivatePod) { continue; }
+        bool on_bf = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == active
+                && p.card.m_number == c.sac_source_id) { on_bf = true; break; }
+        }
+        if (on_bf) { continue; }
+        bool cast_here = false;
+        for (int jdx : sel)
+        {
+            const Action& d = cands[jdx];
+            if (d.kind == Action::Kind::CastFromHand
+                && d.card_name == c.card_name) { cast_here = true; break; }
+        }
+        if (!cast_here) { return true; }
+    }
+    return false;
+}
+
+// Reject a persist-LOOP action (SacCreatureOutlet, sac_count > 1, pinned victim) in a subset that
+// neither has a loop-closer active on the battlefield nor casts one. CollectActions emits the loop
+// variants when a closer CLASS card merely sits in hand (USER reference s10 T4: "cast Melira #2 +
+// grow-loop Kitchen Finks + attack" must be ONE pre-combat plan -- the attack sits between the
+// mains), and this rule is what keeps a closer-less loop from ever reaching scoring: without a
+// closer the body returns with its -1/-1 counter after one iteration and the projected K clean
+// returns are a lie. Closer classes match NotePodRoles: counter-prevention/reduction (Melira /
+// Vizier) or a gy-enter team-counter watcher (Celes, CR 704.5r). Cheap-first ordering: the kind
+// scan runs on every subset, the battlefield closer check only when a loop is actually selected.
+// Inert without a persist-loop candidate -> byte-identical for every other deck.
+static bool SubsetHasUnclosedPersistLoop(const GameState& state,
+                                         const std::vector<Action>& cands,
+                                         const std::vector<int>& sel)
+{
+    bool has_loop = false;
+    for (int idx : sel)
+    {
+        const Action& c = cands[idx];
+        if (c.kind == Action::Kind::SacCreatureOutlet
+            && c.sac_count > 1 && c.sac_victim_id != 0) { has_loop = true; break; }
+    }
+    if (!has_loop) { return false; }
+    const int active = state.active_player_index;
+    if (MinusCounterReplacement(state, active, 1) == 0
+        || GyEnterCleanerActive(state, active, /*victim_number=*/-1)) { return false; }
+    for (int jdx : sel)
+    {
+        const Action& d = cands[jdx];
+        if (d.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* dd = d.def != nullptr
+            ? d.def : CardDatabase::Instance().Lookup(d.card_name);
+        if (dd && (dd->params.prevents_minus_counters
+                   || dd->params.reduces_minus_counters_by_one
+                   || dd->params.other_creature_gy_enter_team_counters > 0)) { return false; }
+    }
+    return true;
+}
+
 // RULES twin of the equip enumeration's shroud check (user doctrine 2026-08-14): equipping onto a
 // host that currently carries a shroud-granting equipment (Lightning Greaves) is only legal when
 // the plan ALSO moves that equipment off the host first -- shroud blocks the equip TARGET
@@ -12570,7 +12654,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             {
                 const int me  = state.active_player_index;
                 const int mcr = MinusCounterReplacement(state, me, 1);
-                if (mcr == 0 || GyEnterCleanerActive(state, me, /*victim_number=*/-1))
+                const bool closer_active = (mcr == 0
+                                            || GyEnterCleanerActive(state, me, /*victim_number=*/-1));
+                // CLOSER CASTABLE FROM HAND (USER reference s10, T4): the kill line "cast
+                // Melira #2 AND grow-loop Kitchen Finks x17, then attack" must live in ONE
+                // pre-combat plan -- the loop cannot wait for main 2 because the lethal attack
+                // sits between the mains, and the closer cannot wait because the loop's clean
+                // returns need it. Gating emission on the closer being active AT COLLECT made
+                // that plan unenumerable at any depth or budget (the same hand-vs-battlefield
+                // blindness as the hand-Pod activation below). So the loop variants also emit
+                // when a closer CLASS card sits in hand; SubsetHasUnclosedPersistLoop then
+                // rejects any subset that takes such a loop without actually casting a closer,
+                // so no closer-less loop ever reaches scoring or a human menu.
+                bool closer_castable = false;
+                if (!closer_active && PodHandPairEnabled())
+                {
+                    for (const Card& hc2 : state.players[me].hand)
+                    {
+                        const CardDefinition* hd2 = CardDatabase::Instance().LookupCached(hc2);
+                        if (hd2 && (hd2->params.prevents_minus_counters
+                                    || hd2->params.reduces_minus_counters_by_one
+                                    || hd2->params.other_creature_gy_enter_team_counters > 0))
+                        { closer_castable = true; break; }
+                    }
+                }
+                if (closer_active || closer_castable)
                 {
                     for (const Permanent& v : state.battlefield)
                     {
@@ -12583,7 +12691,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         // The Celes-class closer must survive the victim leaving (she is "other"
                         // by rule); re-check excluding THIS victim in case the sole watcher is
                         // the body being looped (impossible in the current pool, cheap to ask).
-                        if (mcr != 0 && !GyEnterCleanerActive(state, me, v.card.m_number))
+                        // Skipped on the castable-from-hand path: the closer is arriving fresh
+                        // via this plan's own cast, so it cannot be the body being looped.
+                        if (closer_active && mcr != 0
+                            && !GyEnterCleanerActive(state, me, v.card.m_number))
                         { continue; }
                         // Explicit K=1 sac of the persist body itself. Distinct from the canonical
                         // single-sac action above, whose victim heuristic ranks EXPENDABILITY and
@@ -12672,12 +12783,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // library names fold to one; the no-fetch sentinel variant is always emitted (saccing with
         // nothing to get is legal, and the death itself can be the payoff). Every variant of one
         // Pod shares an option group (the {T} bounds it to one activation per Pod per plan).
-        for (const Permanent& src : state.battlefield)
+        //
+        // TWO source classes share one emission body:
+        //   * a Pod ON THE BATTLEFIELD (untapped) -- the ordinary case; and
+        //   * a Pod IN HAND (USER references s1/s10, T3): "cast Pod {3}+2 life, hold the 4th
+        //     source, activate {1}+2 life the SAME main" is a real kill-tempo line that was
+        //     inexpressible as one plan, because this loop only ever scanned the battlefield
+        //     (the hole is even documented at the phyrexian subset-prune exception). The cast
+        //     lands in the plan's cast pass and the activation applies in the TRAILING pass,
+        //     which runs after it in both worlds -- so pairing them in one subset is sound.
+        //     SubsetHasStrandedPodActivation rejects any subset taking a hand-Pod activation
+        //     without co-casting that Pod (the SubsetHasStrandedEquip pattern), and the apply
+        //     sites re-resolve the source BY NAME (the cast may materialise a different physical
+        //     copy than the hand copy the action named).
+        auto emit_pod_source = [&](const Card& pod_card, const CardDefinition* sd)
         {
-            if (src.controller_index != state.active_player_index) { continue; }
-            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
-            if (!sd || sd->params.pod_mv_delta == 0) { continue; }
-            if (sd->params.pod_taps && src.tapped) { continue; }
             // Provider fetch narrowing (PutTargetPolicy/PutTargetOk; narrow=false = unnarrowed).
             // A PROVIDER heuristic, the one place the core invariant allows a narrowing -- the
             // fold above stays lossless. Applied to the FETCH axis only; victims and the
@@ -12728,10 +12848,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 {
                     Action a;
                     a.kind           = Action::Kind::ActivatePod;
-                    a.card_name      = src.card.m_name;
+                    a.card_name      = pod_card.m_name;
                     a.def            = sd;
                     a.hand_index     = -1;
-                    a.sac_source_id  = src.card.m_number;
+                    a.sac_source_id  = pod_card.m_number;
                     a.sac_victim_id  = v.card.m_number;
                     a.tutor_target   = target;
                     a.cost           = sd->params.pod_activation_cost.value_or(ManaCost{});
@@ -12752,6 +12872,39 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     emit_pod(lc.m_name.str(), want_mv);
                 }
                 emit_pod(kPodNoFetch, 0);
+            }
+        };
+        for (const Permanent& src : state.battlefield)
+        {
+            if (src.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || sd->params.pod_mv_delta == 0) { continue; }
+            if (sd->params.pod_taps && src.tapped) { continue; }
+            emit_pod_source(src.card, sd);
+        }
+        {
+            // Hand Pods (cast-and-activate pairing -- see the header comment above). One
+            // emission per distinct NAME (duplicate hand copies fold: the cast applies by name,
+            // so a second copy's variants would be the same plans), gated on the pool plausibly
+            // covering cast + activation with every phyrexian pip life-paid (the true mana
+            // floor; the subset walk's own mana math arbitrates the real payment). Untapped by
+            // construction (it has not entered yet), so no pod_taps check.
+            std::unordered_set<std::string> hand_pods_seen;
+            for (const Card& hc : state.ActivePlayer().hand)
+            {
+                if (!PodHandPairEnabled()) { break; }
+                const CardDefinition* sd = CardDatabase::Instance().LookupCached(hc);
+                if (!sd || sd->params.pod_mv_delta == 0
+                    || !sd->params.pod_activation_cost.has_value()) { continue; }
+                if (!hand_pods_seen.insert(hc.m_name.str()).second) { continue; }
+                const ManaCost& cc = sd->card.m_mana_cost;
+                const ManaCost& ac = *sd->params.pod_activation_cost;
+                const int mana_floor = (cc.ManaValue() - cc.phyrexian_count)
+                                     + (ac.ManaValue() - ac.phyrexian_count);
+                ManaPool hp_pool = AvailableManaPool(state);
+                hp_pool.AddPool(state.floating_mana);
+                if (hp_pool.Total() < mana_floor) { continue; }
+                emit_pod_source(hc, sd);
             }
         }
 
@@ -15575,6 +15728,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
         if (SubsetHasStrandedEquip(state, cands, sel)) { return; }
+        // Reject a hand-Pod activation without its cast, and a persist loop with no closer active
+        // or cast (the cast-and-activate / cast-and-loop pairings). Lockstep twins below.
+        if (SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
+        if (SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
         // CR 702.18b; shroud fix 2026-08-14). Lockstep twin in eval_and_push.
         if (SubsetHasShroudBlockedEquip(state, cands, sel)) { return; }
@@ -21110,7 +21267,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 state.players[state.active_player_index].life -= a.phyrexian_life;
                 const bool pod_did =
-                    PerformPodActivate(state, state.active_player_index, a.sac_source_id,
+                    PerformPodActivate(state, state.active_player_index,
+                                       ResolvePodSourceId(state, state.active_player_index,
+                                                          a.sac_source_id, a.card_name),
                                        a.sac_victim_id, a.tutor_target.str());
                 // BREAKPOINT SITE 7 -- the Birthing Pod same-phase CHAIN (header note at
                 // TurnSolver::PodBreakpointClassOn). The fetch that just entered is a new sac
@@ -23473,6 +23632,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
         if (SubsetHasStrandedEquip(state, cands, sel)) { return; }
+        // Reject a hand-Pod activation without its cast, and a persist loop with no closer active
+        // or cast -- lockstep twins of Solve::consider's calls (see the helpers).
+        if (SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
+        if (SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
         // CR 702.18b; shroud fix 2026-08-14). Lockstep twin in Solve::consider.
         if (SubsetHasShroudBlockedEquip(state, cands, sel)) { return; }

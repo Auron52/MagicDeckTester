@@ -6532,6 +6532,30 @@ inline const char* const kPodNoFetch = "(no fetch)";
 // (PerformTutorToBattlefield's require_mv), then shuffle. A missing Pod / already-tapped Pod /
 // missing REAL victim no-ops (the stale-plan-premise rule). Shared verbatim by rollout
 // (apply_one) and executor (AIEngine) -> lockstep.
+// Resolve a Pod ACTION's source id against the live battlefield. A hand-Pod activation (the
+// cast-and-activate pairing: CollectActions emits ActivatePod for a Pod still in hand, and the
+// subset walk requires its cast in the same plan) carries the HAND copy's m_number, but the cast
+// applies BY NAME, so the physical copy that entered may differ. If pod_id is not on the
+// battlefield, fall back to the controller's untapped pod-class permanent of the same NAME.
+// Shared by the two trailing apply sites (rollout/leaf and executor) so both worlds resolve
+// identically; returns pod_id unchanged whenever it is live (every pre-existing plan).
+inline int ResolvePodSourceId(const GameState& state, int controller, int pod_id,
+                              const InternedName& pod_name)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == pod_id) { return pod_id; }
+    }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_name != pod_name) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.pod_mv_delta != 0
+            && (!d->params.pod_taps || !p.tapped)) { return p.card.m_number; }
+    }
+    return pod_id;
+}
+
 inline bool PerformPodActivate(GameState& state, int controller, int pod_id, int victim_id,
                                const std::string& target_name)
 {

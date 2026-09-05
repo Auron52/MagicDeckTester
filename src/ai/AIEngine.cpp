@@ -3835,8 +3835,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 state.players[state.active_player_index].life -= a.phyrexian_life;
                 const bool done = PerformPodActivate(state, state.active_player_index,
-                                                     a.sac_source_id, a.sac_victim_id,
-                                                     a.tutor_target.str());
+                                                     ResolvePodSourceId(
+                                                         state, state.active_player_index,
+                                                         a.sac_source_id, a.card_name),
+                                                     a.sac_victim_id, a.tutor_target.str());
                 if (m_logger && done)
                 {
                     m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
