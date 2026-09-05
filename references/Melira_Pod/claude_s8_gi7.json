@@ -1,0 +1,226 @@
+{
+  "seed": 8, "game_index": 7, "win_turn": 3, "won": true,
+  "mulligan": { "count": 1, "bottom": [43] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 12, "name": "Branchloft Pathway" }, { "num": 56, "name": "Reveillark" }, { "num": 30, "name": "Ignoble Hierarch" }, { "num": 49, "name": "Ravenous Chupacabra" }, { "num": 23, "name": "Chord of Calling" }, { "num": 24, "name": "Chord of Calling" }, { "num": 31, "name": "Ignoble Hierarch" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 43, "name": "Melira, Sylvok Outcast" }, { "num": 39, "name": "Llanowar Wastes" }, { "num": 16, "name": "Carrion Feeder" }, { "num": 17, "name": "Carrion Feeder" }, { "num": 44, "name": "Melira, Sylvok Outcast" }, { "num": 27, "name": "Darkbore Pathway" }, { "num": 32, "name": "Ignoble Hierarch" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 43, "name": "Melira, Sylvok Outcast", "win_optimal": true }, { "num": 39, "name": "Llanowar Wastes", "win_optimal": true }, { "num": 16, "name": "Carrion Feeder", "win_optimal": true }, { "num": 17, "name": "Carrion Feeder", "win_optimal": true }, { "num": 44, "name": "Melira, Sylvok Outcast", "win_optimal": true }, { "num": 27, "name": "Darkbore Pathway", "win_optimal": true }, { "num": 32, "name": "Ignoble Hierarch", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 16, "name": "Carrion Feeder" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 16, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Darkbore Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Llanowar Wastes", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Melira, Sylvok Outcast", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Llanowar Wastes; cast: Carrion Feeder", "land": "Llanowar Wastes", "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }] },
+    { "index": 1, "summary": "land=Llanowar Wastes; cast: Ignoble Hierarch", "land": "Llanowar Wastes", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 2, "summary": "land=Darkbore Pathway; cast: Carrion Feeder", "land": "Darkbore Pathway", "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }] },
+    { "index": 3, "summary": "land=Darkbore Pathway; cast: Ignoble Hierarch", "land": "Darkbore Pathway", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 4, "summary": "land=Llanowar Wastes; cast: (nothing)", "land": "Llanowar Wastes", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Darkbore Pathway; cast: (nothing)", "land": "Darkbore Pathway", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Darkbore Pathway; cast: (nothing)", "land": "Darkbore Pathway", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 1, "num": 32, "is_land": false }, { "name": "Llanowar Wastes", "idx": 0, "num": 39, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Darkbore Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Melira, Sylvok Outcast", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 1, "num": 32, "is_land": false }, { "name": "Llanowar Wastes", "idx": 0, "num": 39, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Darkbore Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Melira, Sylvok Outcast", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 3, "cast_order": ["Melira, Sylvok Outcast", "Carrion Feeder"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Murderous Redcap" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 1, "num": 32, "is_land": false }, { "name": "Llanowar Wastes", "idx": 0, "num": 39, "is_land": true }], "vial_counters": [], "hand": [{ "num": 16, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Darkbore Pathway", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Melira, Sylvok Outcast", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Darkbore Pathway; cast: Carrion Feeder, Melira, Sylvok Outcast", "land": "Darkbore Pathway", "casts": ["Carrion Feeder", "Melira, Sylvok Outcast"], "cast_order_canonical": ["Carrion Feeder", "Melira, Sylvok Outcast"], "actions": [{ "card": "Carrion Feeder" }, { "card": "Melira, Sylvok Outcast" }] },
+    { "index": 1, "summary": "land=Darkbore Pathway; cast: Melira, Sylvok Outcast, Carrion Feeder", "land": "Darkbore Pathway", "casts": ["Melira, Sylvok Outcast", "Carrion Feeder"], "cast_order_canonical": ["Melira, Sylvok Outcast", "Carrion Feeder"], "actions": [{ "card": "Melira, Sylvok Outcast" }, { "card": "Carrion Feeder" }] },
+    { "index": 2, "summary": "land=Darkbore Pathway; cast: Carrion Feeder, Melira, Sylvok Outcast", "land": "Darkbore Pathway", "casts": ["Carrion Feeder", "Melira, Sylvok Outcast"], "cast_order_canonical": ["Carrion Feeder", "Melira, Sylvok Outcast"], "actions": [{ "card": "Carrion Feeder" }, { "card": "Melira, Sylvok Outcast" }] },
+    { "index": 3, "summary": "land=Darkbore Pathway; cast: Melira, Sylvok Outcast, Carrion Feeder", "land": "Darkbore Pathway", "casts": ["Melira, Sylvok Outcast", "Carrion Feeder"], "cast_order_canonical": ["Melira, Sylvok Outcast", "Carrion Feeder"], "actions": [{ "card": "Melira, Sylvok Outcast" }, { "card": "Carrion Feeder" }] },
+    { "index": 4, "summary": "land=Darkbore Pathway; cast: Carrion Feeder, Carrion Feeder", "land": "Darkbore Pathway", "casts": ["Carrion Feeder", "Carrion Feeder"], "cast_order_canonical": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }, { "card": "Carrion Feeder" }] },
+    { "index": 5, "summary": "land=Darkbore Pathway; cast: Melira, Sylvok Outcast", "land": "Darkbore Pathway", "casts": ["Melira, Sylvok Outcast"], "actions": [{ "card": "Melira, Sylvok Outcast" }] },
+    { "index": 6, "summary": "land=Darkbore Pathway; cast: Carrion Feeder, Carrion Feeder", "land": "Darkbore Pathway", "casts": ["Carrion Feeder", "Carrion Feeder"], "cast_order_canonical": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }, { "card": "Carrion Feeder" }] },
+    { "index": 7, "summary": "land=Darkbore Pathway; cast: Melira, Sylvok Outcast", "land": "Darkbore Pathway", "casts": ["Melira, Sylvok Outcast"], "actions": [{ "card": "Melira, Sylvok Outcast" }] },
+    { "index": 8, "summary": "land=none; cast: Carrion Feeder, Carrion Feeder", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "cast_order_canonical": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }, { "card": "Carrion Feeder" }] },
+    { "index": 9, "summary": "land=none; cast: Melira, Sylvok Outcast", "land": null, "casts": ["Melira, Sylvok Outcast"], "actions": [{ "card": "Melira, Sylvok Outcast" }] },
+    { "index": 10, "summary": "land=Darkbore Pathway; cast: Carrion Feeder", "land": "Darkbore Pathway", "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }] },
+    { "index": 11, "summary": "land=Darkbore Pathway; cast: Carrion Feeder", "land": "Darkbore Pathway", "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }] },
+    { "index": 12, "summary": "land=none; cast: Carrion Feeder", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }] },
+    { "index": 13, "summary": "land=Darkbore Pathway; cast: (nothing)", "land": "Darkbore Pathway", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=Darkbore Pathway; cast: (nothing)", "land": "Darkbore Pathway", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Carrion Feeder", "idx": 4, "num": 16, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 1, "num": 32, "tapped": true, "is_land": false }, { "name": "Llanowar Wastes", "idx": 0, "num": 39, "tapped": true, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 44, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 2, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Carrion Feeder", "idx": 4, "num": 16, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 1, "num": 32, "tapped": true, "is_land": false }, { "name": "Llanowar Wastes", "idx": 0, "num": 39, "tapped": true, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 44, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 2, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Razorverge Thicket" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 18, "battlefield": [{ "name": "Carrion Feeder", "idx": 4, "num": 16, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 1, "num": 32, "is_land": false }, { "name": "Llanowar Wastes", "idx": 0, "num": 39, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 44, "is_land": false }, { "name": "Slitherbore Pathway", "idx": 2, "num": 27, "is_land": true }], "vial_counters": [], "hand": [{ "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Murderous Redcap", "cost": "{2}{B/R}{B/R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Razorverge Thicket", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Razorverge Thicket; cast: Murderous Redcap", "land": "Razorverge Thicket", "casts": ["Murderous Redcap"], "actions": [{ "card": "Murderous Redcap" }] },
+    { "index": 1, "summary": "land=Razorverge Thicket; cast: Murderous Redcap, Carrion Feeder: sac 1 creature", "land": "Razorverge Thicket", "casts": ["Murderous Redcap", "Carrion Feeder"], "actions": [{ "card": "Murderous Redcap" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=Razorverge Thicket; cast: Carrion Feeder", "land": "Razorverge Thicket", "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }] },
+    { "index": 3, "summary": "land=Razorverge Thicket; cast: Carrion Feeder, Carrion Feeder: sac 1 creature", "land": "Razorverge Thicket", "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Carrion Feeder", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }] },
+    { "index": 5, "summary": "land=none; cast: Carrion Feeder, Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder" }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=Razorverge Thicket; cast: (nothing)", "land": "Razorverge Thicket", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Razorverge Thicket; cast: Carrion Feeder: sac 1 creature", "land": "Razorverge Thicket", "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 8, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "damage", "text": "🔥 Murderous Redcap: 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "Carrion Feeder", "idx": 4, "num": 16, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 1, "num": 32, "tapped": true, "is_land": false }, { "name": "Llanowar Wastes", "idx": 0, "num": 39, "tapped": true, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 44, "is_land": false }, { "name": "Murderous Redcap", "idx": 7, "num": 46, "is_land": false }, { "name": "Razorverge Thicket", "idx": 6, "num": 50, "tapped": true, "is_land": true }, { "name": "Slitherbore Pathway", "idx": 2, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 6, "summary": "land=none; cast: Carrion Feeder: loop Murderous Redcap x9 (persist) → 18 damage", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 9 }] },
+    { "index": 10, "summary": "land=none; cast: Carrion Feeder: loop Murderous Redcap x17 (persist)", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 17 }] },
+    { "index": 12, "summary": "land=none; cast: Carrion Feeder: sac 1 creature → 2 damage", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 13, "summary": "land=none; cast: Carrion Feeder: sac 1 creature, Carrion Feeder: sac 1 creature → 2 damage", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 14, "summary": "land=none; cast: Carrion Feeder: sac 1 creature", "land": null, "casts": ["Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 8, "summary": "land=none; cast: Carrion Feeder: sac 1 creature → 2 damage, Carrion Feeder: loop Murderous Redcap x17 (persist)", "land": null, "casts": ["Carrion Feeder", "Carrion Feeder"], "actions": [{ "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 1 }, { "card": "Carrion Feeder", "activate": true, "sacout": true, "sac_count": 17 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 11,
+  "type": "sacrifice",
+  "source": "Carrion Feeder",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 17, "battlefield": [{ "name": "Carrion Feeder", "idx": 4, "num": 16, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 1, "num": 32, "tapped": true, "is_land": false }, { "name": "Llanowar Wastes", "idx": 0, "num": 39, "tapped": true, "is_land": true }, { "name": "Melira, Sylvok Outcast", "idx": 3, "num": 44, "is_land": false }, { "name": "Murderous Redcap", "idx": 7, "num": 46, "is_land": false }, { "name": "Razorverge Thicket", "idx": 6, "num": 50, "tapped": true, "is_land": true }, { "name": "Slitherbore Pathway", "idx": 2, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 17, "name": "Carrion Feeder", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "heuristic_default": 3,
+  "options": [{ "index": 0, "perm_index": 1, "tapped": true, "name": "Ignoble Hierarch", "label": "Ignoble Hierarch" }, { "index": 1, "perm_index": 3, "tapped": false, "name": "Melira, Sylvok Outcast", "label": "Melira, Sylvok Outcast" }, { "index": 2, "perm_index": 4, "tapped": false, "name": "Carrion Feeder", "label": "Carrion Feeder" }, { "index": 3, "perm_index": 7, "tapped": false, "name": "Murderous Redcap", "label": "Murderous Redcap" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+}
+  ]
+}
