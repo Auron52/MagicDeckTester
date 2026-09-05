@@ -975,6 +975,11 @@ def check_reference(path, collect=None):
                             and plan_casts == sorted(done)):
                         vanished.append(f"{frame_ident(rd)}(casts made early by the free_cast "
                                         f"intent: {', '.join(plan_casts)})")
+                        # Mark this frame's alignment entry so viewer_validate_check.js does not
+                        # rebuild the recorded line here -- the cast already happened upstream,
+                        # so validating it against THIS state is meaningless, not a regression.
+                        if frames and frames[-1].get("ri") == ri:
+                            frames[-1]["satisfied_early"] = True
                         resolved.append(-1)
                         ri += 1
                         continue

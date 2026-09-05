@@ -223,6 +223,11 @@ function main() {
         unaligned++;
         continue;
       }
+      // A frame whose recorded casts were already made by an upstream inserted free_cast frame
+      // (the walk's satisfied-early skip, see freecast_done in viewer_protocol_check.py): the
+      // line happened, just earlier -- rebuilding it against THIS state would validate a cast of
+      // a card that is already on the battlefield and mis-read as a CheckLine regression.
+      if (fr.satisfied_early) { tally.skipped++; continue; }
       const ch = fr.recorded_index;
       if (!(typeof ch === 'number' && ch >= 0 && ch < (d.plans || []).length)) { continue; }  // a pass
       const plan = d.plans[ch];
