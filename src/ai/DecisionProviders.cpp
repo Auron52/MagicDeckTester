@@ -79,7 +79,6 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"replicate",  UnprunedGate::Replicate},
     {"digresolve", UnprunedGate::DigResolve},
     {"digchain",   UnprunedGate::DigChain},
-    {"cyclefodder", UnprunedGate::CycleFodder},
 };
 
 const char* GateName(UnprunedGate g)
@@ -11439,67 +11438,6 @@ bool FluctuatorProvider::DigContinueAfterResolve() const
 {
     static const bool s_on = EnvOn("MTG_FLUCT_DIG_CHAIN", true);    // DEFAULT ON; =0 restores break
     return s_on;
-}
-
-// HoldsCastAsCycleFodder -- Hollow One is a TRAP mid-combo, and the trap is that it looks free.
-//
-// It is a {0} 4/4 after three cycles, so the plan enumerator sees a free body and takes it. But it
-// has NO HASTE: casting it deals 0 damage the turn it lands, while CYCLING it deals 1 immediately
-// off every Drannith Stinger. That alone is a wash. What settles it is the chain buffer: a cycle is
-// 1-for-1 (discard one, draw one) so the chain runs until the hand holds no cyclable card, and this
-// deck's only non-cyclable cards are 4 Fluctuator + 1 Enlightened Tutor. Casting a cycler removes
-// it from hand WITHOUT drawing a replacement -- it spends a buffer slot worth ~12 further cycles.
-// So the 4/4 costs about 12 damage to gain 4, and the search cannot see that: the loss is spread
-// over the tail of the chain, not attached to the cast.
-//
-// SCOPE. Only a card that is PURE FODDER -- it cycles, and its cast adds nothing to the chain --
-// and only while the chain is genuinely live and can still finish. Drannith Stinger cycles too but
-// its cast IS the wincon; Fluctuator's cast is the engine; both fail the fodder test below.
-//
-// THE ESCAPE VALVE IS THE POINT. Held unconditionally (the goldfish_inert probe) this measured
-// avg 3.6700 vs 3.8600 -- but two games went 5 -> 6, the ones where the chain could not finish and
-// the 4/4 was the only clock left. So the hold lapses once the library can no longer supply the
-// remaining damage, which is exactly when a body beats a card.
-bool FluctuatorProvider::HoldsCastAsCycleFodder(const GameState& s, const CardDefinition& def) const
-{
-    static const bool s_on = EnvOn("MTG_FLUCT_FODDER", true);   // DEFAULT ON; =0 restores the cast
-    if (!s_on) { return false; }
-
-    const CardParams& p = def.params;
-    // Pure fodder only: it must cycle, and casting it must contribute nothing to the chain.
-    if (!p.cycling_cost.has_value())                      { return false; }
-    if (p.reduces_cycling_activation > 0)                 { return false; }   // Fluctuator: engine
-    if (p.cycle_trigger_damage_each_opponent > 0)         { return false; }   // Stinger: wincon
-    if (p.reanimate_creature_max_mv > 0)                  { return false; }   // Unearth: rebuys it
-
-    const int me = s.active_player_index;
-    int bf_fluctuator = 0, bf_stinger = 0;
-    for (const Permanent& perm : s.battlefield)
-    {
-        if (perm.controller_index != me) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(perm.card);
-        if (!d) { continue; }
-        if (d->params.reduces_cycling_activation > 0)         { ++bf_fluctuator; }
-        if (d->params.cycle_trigger_damage_each_opponent > 0) { ++bf_stinger; }
-    }
-    // Cycling must be FREE for a hand card to be worth more as a cycle than as a permanent.
-    if (bf_fluctuator == 0) { return false; }
-    // Demanding a Stinger ALREADY OUT measured worse (3.78 vs 3.65): the buffer matters for the
-    // chain that is COMING, not just the one running -- a Hollow One cast the turn before the
-    // Stinger lands costs the kill turn a cycle just the same. So the hold applies from the moment
-    // cycling is free, not from the moment it starts dealing damage.
-
-    // Escape valve: if the library can no longer supply the damage still needed, the chain cannot
-    // win and the 4/4 is the better clock. One cycle deals bf_stinger damage, and the chain can
-    // draw at most the whole library, so library * stingers bounds what cycling has left in it.
-    // Deliberately OPTIMISTIC on both factors -- a Stinger not yet out is counted as one, since the
-    // deck's whole plan is to get one there -- so the hold lapses only when the chain PROVABLY
-    // cannot get there, not merely when it looks unlikely.
-    const int opp_life = s.players[1 - me].life;
-    const int stingers = std::max(bf_stinger, 1);
-    const int ceiling  = static_cast<int>(s.ActivePlayer().library.size()) * stingers;
-    if (ceiling < opp_life) { return false; }
-    return true;
 }
 
 bool FluctuatorProvider::ShouldConsiderDig(const GameState& s) const

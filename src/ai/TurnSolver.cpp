@@ -3822,10 +3822,6 @@ static bool AnyHandCastableNow(const GameState& state)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || d->card.IsLand())   { continue; }   // a land drop is not what the re-solve is for
         if (d->params.goldfish_inert) { continue; }   // can never be cast at all
-        // Held as chain fodder -> the re-solve could not deploy it either, so it must not be the
-        // thing that makes this probe say "castable" (that would re-solve for nothing every cycle).
-        if (ResolveProvider(state).HoldsCastAsCycleFodder(state, *d)
-            && !DecisionUnpruned(UnprunedGate::CycleFodder)) { continue; }
         // A spell whose only mode needs a target it does not have is not castable (CR 601.2c).
         if (d->params.reanimate_creature_max_mv > 0
             && !HasReanimateTarget(state, state.active_player_index,
@@ -8895,10 +8891,6 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // offered as an action -> they sit in hand as faithful dead draws. Gated off for
         // every existing deck.
         if (def.params.goldfish_inert) { continue; }
-        // Worth more as fodder for a live cycling chain than as the body it would become
-        // (Fluctuator's Hollow One). Provider-owned narrowing, base false -> byte-identical.
-        if (ResolveProvider(state).HoldsCastAsCycleFodder(state, def)
-            && !DecisionUnpruned(UnprunedGate::CycleFodder)) { continue; }
         // Unearth: "Return TARGET creature card with mana value 3 or less from your graveyard..."
         // A spell whose only mode requires a target cannot be cast with no legal target (CR 601.2c),
         // so an Unearth with no small creature in the graveyard is not an action -- it stays in hand

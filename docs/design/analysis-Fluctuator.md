@@ -4,7 +4,7 @@
 **Started:** 2026-09-04
 **Branch:** `phase-1-2-deck-analyzer`
 **Status:** IN PROGRESS — play quality settled (see §7.7); deck NOT yet in the regression suite
-(O-4 perf gate). Current: **avg 3.6500** turn-to-win, 57/100 games won on T3
+(O-4 perf gate). Current: **avg 3.8600** turn-to-win, 41/100 games won on T3
 (100 games, seed 9001, d3/b200).
 
 This is the git-tracked per-deck ledger required by `.claude/skills/analyze-deck.md`
@@ -418,7 +418,7 @@ remaining perf work. **Verify the branching claim above with a driver-card-level
 building anything**, since it rests on an empty stats table rather than a positive test.
 
 
-## 7.7 The missing turn, found (2026-09-04) - 4.52 -> 3.65, T3 wins 10 -> 57
+## 7.7 The missing turn, found (2026-09-04) - 4.52 -> 3.86, T3 wins 10 -> 41
 
 **User report:** *"I think your win turn is still a bit high. This deck normally wins T3, so I
 would expect it to be under or very close to 4."*
@@ -463,56 +463,53 @@ distinction to continue safely - `PerformDig` returns false for BOTH "drew a non
 not perform", which mean opposite things only once you stop breaking on the first. It now tests
 `cards_drawn_this_turn`, so a failed dig still breaks unconditionally and cannot spin.
 
-### (c) Casting Hollow One is a trap, and the search cannot see why
+### (c) REJECTED — holding Hollow One as cycle fodder (USER RULING, 2026-09-05)
 
-With the cap lifted, the binding constraint became **hand starvation**, which the traces show
-directly. A cycle is 1-for-1 (discard one, draw one), so the chain runs until the hand holds no
-cyclable card. This deck's only non-cyclable cards are 4 Fluctuator + 1 Enlightened Tutor, so
-with ~55 of 60 cards cyclable, **one buffer slot is worth ~12 further cycles in expectation**.
+**This was built, measured as a large gain, and then REVERTED on the user's ruling. The user was
+right and the measurement was an artifact.** Kept here because the artifact is the lesson.
 
-Casting a cycler removes it from hand *without* drawing a replacement. So a {0} 4/4 Hollow One -
-which, having no haste, deals **0 damage the turn it lands** - costs about 12 damage to gain 4.
-The search cannot price this because the loss is spread over the tail of the chain rather than
-attached to the cast.
+The reasoning that produced it: a cycle is 1-for-1, so the chain runs until the hand holds no
+cyclable card; casting a cycler removes it *without* drawing a replacement, spending a buffer slot
+worth ~12 further cycles. Hollow One has no haste, so it deals 0 the turn it lands. On that
+arithmetic a {0} 4/4 costs ~12 damage to gain 4. Holding it measured **3.8600 -> 3.6500**, T3 wins
+41 -> 57, 22 games better and 1 worse.
 
-Full worked trace (seed 9001 gi=9, T3), which is what made the mechanism visible:
+**The user's correction:** *"hollow one should not be held the vast majority of the time. The only
+time I would consider keeping it is if we are literally going to deck ourselves. In that case
+dropping a hollow one or two to end the chain could be correct."*
 
-| point | hand | opp life |
-|---|---|---|
-| chain start (after Fluctuator, cycle Stinger, Unearth it back) | 3 cyclable | 20 |
-| cycle 9 - **casts Hollow One** | 3 -> **2** | 11 |
-| cycle 11 - draws Enlightened Tutor (non-cyclable) | 2 -> 1 | 9 |
-| cycle 12 - draws Fluctuator (non-cyclable) | 1 -> **0** | 8 |
-| chain dead, library still full | - | **8** |
+**What the measurement was actually buying.** End-of-game library size, 40 games, same seeds:
 
-Wired as `DecisionProvider::HoldsCastAsCycleFodder` (base false; `MTG_UNPRUNE=cyclefodder`),
-scoped to PURE fodder - the card must cycle and its cast must add nothing to the chain, so
-Fluctuator, Drannith Stinger and Unearth are excluded by construction.
-
-**Both conditions were measured, and both cut against the obvious guess:**
-
-| condition | avg | note |
-|---|---|---|
-| no hold | 3.8600 | |
-| hold only while a Stinger is already OUT | 3.7800 | **worse** - the buffer matters for the chain that is COMING |
-| hold unconditionally | 3.6700 | **worse** - 2 games 5 -> 6 where the 4/4 was the only clock left |
-| **hold from when cycling is free, + library ceiling escape** | **3.6500** | adopted |
-
-The escape valve is `library * stingers < opponent life`, optimistic on both factors (a Stinger
-not yet out counts as one) so the hold lapses only when the chain **provably** cannot get there.
-
-### Result
-
-| | avg | T3 wins | wall (100g, 24t) | games > 30s |
+| | mean library left | <= 10 cards | min | exactly 0 |
 |---|---|---|---|---|
-| before (session start) | 4.5200 | 10 | 124s | 21 |
-| + dig chain (a)+(b) | 3.8600 | 41 | 95s | 17 |
-| + fodder hold (c) | **3.6500** | **57** | **87s** | **13** |
+| hold (rejected) | **12.2** | **21/40** | **0** | **7 games** |
+| cast (shipped) | 22.8 | 2/40 | 9 | 0 |
 
-Distribution `3:10 4:51 5:25 6:8 7:3 8:3` -> `3:57 4:32 5:4 6:5 8:2`. Paired: dig chain 60
-better / 0 worse; fodder hold a further 22 better / 1 worse (gi=73, 5->6). **Quality and cost
-both improved** - this was never a speed/quality trade. Smoke 51 passed with **0 configs
-changed** after each step, so every other deck is byte-identical.
+The hold wins **by decking itself**. Seven of forty games finish with the library at exactly zero:
+they survive only because the kill lands on the same turn the deck runs out. One point of life
+short — one extra blocker, one lifegain, one miscount — and each of those is a LOSS on the next
+draw step instead of a win.
+
+**Why the score did not catch it.** The engine models deck-out correctly (`player_lost_on_draw`,
+set in `GameEngine::DrawStep`; the rollout's `SimulateEndAndStartNextTurn` returns false on it), and
+the dig loop stops on an empty library rather than decking mid-chain. So the metric charges nothing
+for finishing at zero cards **as long as you win that turn** — turn-to-win has no term for how
+close the line ran to killing you. Every game in the sample won, so the risk was invisible in the
+aggregate and showed up only when library size was measured directly.
+
+**The general lesson, which is not deck-specific:** *avg turn-to-win prices only the turn you win
+on, so it will happily buy speed with resources that have no scoreboard cost — library, life, cards
+in hand.* A heuristic that measures better while consuming one of those is suspect until the
+resource itself is measured. That belongs in the metric's own caveats, not just this deck's ledger.
+
+The lever was **deleted, not disabled** (hook, both callsites, `UnprunedGate::CycleFodder`, the
+provider impl and `MTG_FLUCT_FODDER`); the revert is byte-identical to the pre-hold arm on all 100
+games. Do not re-propose it without a metric that prices library depletion.
+
+**What the user's rule needs from the engine: nothing.** Casting Hollow One already ends the chain
+(it leaves hand without drawing a replacement), which is exactly the deck-out escape they describe,
+and `SelectDigSource` already ranks it last of the real fodder (rank 4, behind lands) so it is not
+cycled away ahead of things that should go first.
 
 ### Two process notes worth keeping
 

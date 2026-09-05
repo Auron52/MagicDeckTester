@@ -110,9 +110,6 @@ enum class UnprunedGate
                   // 5f PERFORMANCE gate, not a quality one -- see the hook's comment for the
                   // soundness argument. Default (pruned) is the cheap form for the one deck that
                   // opts in; every other deck never queries it.
-    CycleFodder,  // the "hold this cast, it is worth more as cycle fodder" narrowing disabled: keep
-                  // the plans that cast a body the live chain would rather discard
-                  // (DecisionProvider::HoldsCastAsCycleFodder / FluctuatorProvider's Hollow One)
     DigChain,     // the dig loop's two TREASURE HUNT stopping conditions lifted: the hard 16-dig
                   // per-turn guard (DecisionProvider::MaxDigsPerTurn) and the `break` taken right
                   // after the nested re-solve deploys the card just drawn
@@ -1151,11 +1148,6 @@ public:
     // See DecisionProvider::MaxDigsPerTurn / DigContinueAfterResolve.
     int         MaxDigsPerTurn() const override;
     bool        DigContinueAfterResolve() const override;
-    // Hollow One is a {0} 4/4 mid-combo and casting it is a TRAP: no haste, so it deals 0 the turn
-    // it lands, while cycling it deals 1 now and -- the real cost -- keeps a chain buffer slot that
-    // is worth ~12 more cycles. Held only while the chain is actually live and can still get there.
-    // MTG_FLUCT_FODDER=0 (or MTG_UNPRUNE=cyclefodder) restores the cast for the standing A/B.
-    bool        HoldsCastAsCycleFodder(const GameState& s, const CardDefinition& def) const override;
     // Fluctuator and Enlightened Tutor fill ONE role (the enabler): the Tutor's only job in this
     // deck is to find Fluctuator, so holding either is "on plan" and the second is redundant.
     const std::vector<std::string>* InterchangeableRequiredGroup(const std::string&) const override;
