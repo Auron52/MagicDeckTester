@@ -156,6 +156,33 @@ apparatus check):
   adopts on its own evidence. Anything that TRADES one axis for the other is not adoptable on the
   winning axis alone: count both sides and put the trade to the USER.
 
+### "Why is greedy so much less starved?" (USER question, 2026-09-06) — measured, and deck-split
+
+Structurally: greedy CONSTRUCTED one m2 plan for ~zero budget; searched pays enumeration x leaf
+rollout per DISTINCT memo key, from the same pool the outer deepening drinks. So the searched
+interior's cost is governed by how many states count as distinct. But the magnitude splits by
+deck and regime (logs/hinata_cost):
+
+* **hinata, shipped b20: greedy was NOT much less starved.** The whole searched-interior family
+  is **1.9% of units** (81.7k of 4.36M per 100 games, ~1.4 units per executed solve), and
+  skipping it (`MTG_NO_M2_SOLVE=1`) makes play WORSE (+0.010/100g) — it earns its 2%. Hinata's
+  starvation is `fs_main2` **49.5%** + `fs_pre` **32.6%** — FullSearchLine's own plan loops,
+  identical in both eras. The deletion-era churn was a 2% budget perturbation flipping ties, not
+  a large new tax.
+* **Kitty, unbudgeted generation: greedy really was much less starved** — 79.6% of gi=231's
+  units, from SPURIOUS key distinctness (`kitty-interior-m2-tail.md`). That regime is where the
+  question's premise holds.
+* **Memo capacity is nobody's problem at shipped budgets** — measured null from both directions:
+  hinata b20 with 262k caps kills ALL clears (enum 20→0, solve 16→0) for +0.3% hit rate, ZERO
+  unit change, digests 4/4 identical; Kitty b20 byte-identical under `MTG_BIG_SOLVE_MEMO`. The
+  thrashed entries were never re-hit. Hit rates are KEY-DISTINCTNESS-limited in every memo.
+
+De-starvation work, ranked by that evidence: (1) memo-key coarsening (the no-budget remedy;
+hinata's m2 memo runs 52.9% vs healthy ~80-90%, and it unlocks Kitty generation); (2) attribute
+INSIDE `fs_main2` — half of hinata's entire budget, untouched by the deletion, unowned; (3) big
+memo caps only as a generation-time CPU lever (byte-identity check per deck first — generation
+artifacts fingerprint play); (4) the b40 raise stays a priced trade, worth re-pricing after (1).
+
 ## What stays a provider decision
 
 Per the USER (2026-09-05): skipping a main is acceptable only as an explicit opt-in, and that is a
