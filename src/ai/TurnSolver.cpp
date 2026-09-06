@@ -918,6 +918,34 @@ static bool HasteDorkCreditEnabled() { return !g_no_haste_dork_credit; }
 // MTG_CONSIDER_STATS context tags (diagnosis only -- see namespace considerstats below the
 // groupwave block). Declared here because the two functions that bump them are defined early.
 static thread_local int g_cs_m2solve_nest = 0;   // inside SolveSecondMainInSearch (either path)
+
+// GREEDY-WALK BUDGET CHARGING (MTG_SOLVE_CHARGE, default OFF = byte-identical everywhere).
+// SearchBudget counts one unit per simulated turn-step, but the greedy subset walk inside
+// SolveUncached charged NOTHING -- so a "20 ms" rollout could legally burn minutes inside one
+// combo-board enumeration (Melira keepgen discovery measured 35-152 s rollouts against 20 ms
+// budgets; suite game gi32/s1033 spent 289 s deciding a t5 win). One subset visit costs ~1-2 us,
+// one budget unit is calibrated at ~1.1 us (900/virtual-ms), so the honest exchange rate is 1:1:
+// each consider() visit consumes one unit from the ACTIVE budget, and when that budget exhausts
+// the walk stops and keeps best-so-far (the combo/persist-loop cuts pre-seed lethal lines first,
+// so kills stay found). Deterministic: unit-counted, no wall clock. Installed by every budget-
+// holding host (SimulateToEndImpl, FSLineWin/FSLineTail, SolveSecondMainInSearch,
+// SolveWithLookahead) via GreedyChargeGuard; nulled by default -> zero-cost null check. Off by
+// default because when the budget binds, rollout-leaf picks change and search scores move with
+// them -- enable per-run (generation drivers; Melira probes) and flip the default only with a
+// rebaseline.
+static thread_local SearchBudget* g_greedy_charge_budget = nullptr;
+static bool GreedyChargeEnabled()
+{
+    static const bool v = EnvOn("MTG_SOLVE_CHARGE");
+    return v;
+}
+struct GreedyChargeGuard
+{
+    SearchBudget* prev;
+    explicit GreedyChargeGuard(SearchBudget* b) : prev(g_greedy_charge_budget)
+    { if (GreedyChargeEnabled()) { g_greedy_charge_budget = b; } }
+    ~GreedyChargeGuard() { g_greedy_charge_budget = prev; }
+};
 static thread_local int g_cs_solver_nest  = 0;   // inside any SolveWithLookahead frame
 
 // Decision epoch: bumped at each committed-decision driver entry (SolveWithLookahead
@@ -2395,6 +2423,7 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
                                                 TranspositionTable* tt, bool in_rollout)
 {
     struct M2Guard { M2Guard() { ++g_cs_m2solve_nest; } ~M2Guard() { --g_cs_m2solve_nest; } } _m2g;
+    GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     // MTG_NO_M2_SOLVE=1 -- TEMPORARY MEASUREMENT LEVER (default off). Return an empty plan instead
     // of solving the post-combat main at all. This is the UPPER BOUND for "skip the search where it
     // is unproductive" (USER 2026-08-19): whatever this arm loses per game is the most any
@@ -16135,6 +16164,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     std::vector<int> best_sel;
     int    best_fill_j = -1;
     Action best_fill_action;
+    bool   walk_exhausted = false;   // greedy-walk budget spent -> remaining subsets are no-ops
     auto materialize_best = [&]() -> Plan& {
         best.actions.clear();
         for (int j : best_sel)
@@ -16204,6 +16234,24 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // return the byte-identical plan despite visiting subsets in a different order.
     auto consider = [&](std::vector<int> sel)
     {
+        // Greedy-walk budget charge (MTG_SOLVE_CHARGE; see GreedyChargeGuard above the function):
+        // one unit per subset visit, walk stops (keeping best-so-far) when the rollout budget is
+        // spent. g_greedy_charge_budget is null unless the flag is on AND a budgeted rollout host
+        // is on the stack -> zero-cost null check by default.
+        if (walk_exhausted) { return; }
+        if (g_greedy_charge_budget != nullptr)
+        {
+            g_greedy_charge_budget->Consume(1);
+            if (g_greedy_charge_budget->Exhausted() || g_greedy_charge_budget->Overrun())
+            { walk_exhausted = true; return; }
+        }
+        else if (decisionwork::Armed())
+        {
+            // No budget object on this host (the search's plan-scoring rollouts run unbudgeted
+            // by design) -- bill the armed per-decision meter directly so those walks count too.
+            decisionwork::Add(1);
+            if (decisionwork::Exceeded()) { walk_exhausted = true; return; }
+        }
         std::sort(sel.begin(), sel.end());          // ascending -> matches the powerset's bit order
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
@@ -29676,6 +29724,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                                           return (e && *e) ? std::atoi(e) : -1; }();
     const int roll_start = state.turn_number;
     RolloutNestGuard _rollout_nest;   // see g_rollout_nest: this rollout re-enters SolveWithLookahead
+    GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks inside this rollout bill here
     if (s_rollout_stats) { g_rollout_calls.fetch_add(1, std::memory_order_relaxed); }   // deterministic telemetry
     while (state.turn_number <= max_turns)
     {
@@ -29735,6 +29784,14 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         if (s_rollout_stats) { g_rollout_steps.fetch_add(1, std::memory_order_relaxed); }   // one simulated turn-step
         if (budget && budget->Overrun())
         { ++g_fs_trunc_events; leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
+        // Per-decision ceiling for the UNBUDGETED rollouts (the search's plan-scoring samples
+        // pass budget=nullptr by design, so ConsumeAt above bills nothing for them): when the
+        // decision meter is armed (MTG_DECISION_WORK_X), bill the step here and stop past the
+        // ceiling -- every later rollout of this decision then returns no-win instantly, which
+        // deterministically scores the un-rolled remainder as losses. Disarmed -> byte-identical.
+        if (!budget && decisionwork::Armed()) { decisionwork::Add(1); }
+        if (decisionwork::Exceeded())
+        { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
 
         // Expire staged (Light Up the Stage) cards whose play window has passed,
         // mirroring AIEngine::TakeTurn's expiry check (CR 406). Without this the
@@ -30594,6 +30651,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
 {
     // Mid-pass overrun guard (see FSLineWin): abort the runaway pass.
     if (budget && budget->Overrun()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
+    GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     if (second_main)
     {
         // With the main-2 land drop open (Main2DropEnabled, EngineFlags.h) the second main's
@@ -31330,6 +31388,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 {
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { return { max_turns + 1, {} }; }  // can't beat incumbent
+    GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
 #ifdef MTG_PROFILE
     if (state.turn_number >= 0 && state.turn_number < 12) { PROF_INC(fsw_by_turn[state.turn_number]); }
     if (depth >= 0 && depth < 12)                         { PROF_INC(fsw_by_depth[depth]); }
@@ -34252,6 +34311,25 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         ~SolverNestGuard() { --g_cs_solver_nest; }
     } _cs_nest;
     if (enforce_budget) { ++g_decision_epoch; }
+    GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
+    // Per-decision TOTAL work ceiling (MTG_DECISION_WORK_X, default 0 = off; DecisionWorkMeter.h):
+    // limit = base budget x multiplier, armed ONLY at the outermost real budgeted decision --
+    // rollout / line-walk / measurement re-entries bill the root's meter, they never re-arm it.
+    static const long long s_decision_work_x = EnvInt("MTG_DECISION_WORK_X", 0);
+    const bool decision_root = enforce_budget && budget && !budget->Unlimited()
+                            && g_cs_solver_nest == 1 && g_rollout_nest == 0 && g_fsline_nest == 0;
+    decisionwork::Scope _dws((decision_root && s_decision_work_x > 0)
+                             ? budget->Limit() * s_decision_work_x : 0);
+    static const bool s_dw_debug = EnvOn("MTG_DECISION_WORK_DEBUG");
+    struct DwDbg
+    {
+        bool on; int turn;
+        DwDbg(bool o, int t) : on(o), turn(t) {}
+        ~DwDbg()
+        { if (on) { std::fprintf(stderr, "[dw] t%d armed=%lld used=%lld exceeded=%d\n", turn,
+                                 decisionwork::t_limit, decisionwork::t_used,
+                                 decisionwork::Exceeded() ? 1 : 0); } }
+    } _dwdbg(s_dw_debug && decision_root, state.turn_number);
 
     if (depth <= 0)
     {

@@ -1,6 +1,7 @@
 #pragma once
 #include <climits>
 #include "GameWorkMeter.h"
+#include "DecisionWorkMeter.h"
 
 // Deterministic replacement for the wall-clock search deadline.
 //
@@ -46,7 +47,7 @@ public:
     // for its probe passes), so no single SearchBudget can bound a game. Counting here counts each
     // simulated turn-step exactly once regardless of how many budget objects wrap it, because the
     // recursion consumes from ONE budget per node. See ai/GameWorkMeter.h.
-    void      Consume(long long n = 1) { m_used += n; gamework::Add(n); }
+    void      Consume(long long n = 1) { m_used += n; gamework::Add(n); decisionwork::Add(n); }
     long long Used() const { return m_used; }
     long long Limit() const { return m_limit; }
 
@@ -69,7 +70,11 @@ public:
     // such, an abandonment means no result should be reported at all.
     bool Overrun() const
     {
-        return (m_overrun_limit > 0 && m_used >= m_overrun_limit) || gamework::Abandoned();
+        // decisionwork::Exceeded is the per-DECISION total ceiling (see DecisionWorkMeter.h):
+        // tripping it makes every running pass bail through this existing rollback path and
+        // iterative deepening commits the deepest COMPLETED pass. Disarmed by default.
+        return (m_overrun_limit > 0 && m_used >= m_overrun_limit) || gamework::Abandoned()
+            || decisionwork::Exceeded();
     }
 
     // Units left before exhaustion, clamped to >= 0 (LLONG_MAX if unlimited).
