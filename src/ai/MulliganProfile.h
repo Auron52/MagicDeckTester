@@ -122,6 +122,21 @@ struct MulliganProfile
     // Priority order when scoring excess lands for bottoming. See BottomOrder enum above.
     BottomOrder bottom_order = BottomOrder::CountFirst;
 
+    // Per-deck BOTTOMING-EVAL policy (the two-stage clairvoyant bottoming rollouts in
+    // HandleMulligan). Unset (-1/-1/0) => rollouts inherit the deck's real play settings --
+    // byte-identical legacy behaviour. When bottom_eval_depth/budget are set, stage-1 rollouts
+    // run CHEAP at those settings and bottom_eval_topk re-rolls the K cheap-best removal
+    // subsets/candidates at the real play settings (see MTG_BOTTOM_EVAL_TOPK in AIEngine).
+    // WHY per-deck: on a combo deck whose searched game is expensive (Melira: full-settings
+    // bottoming was ~55% of d3 suite cost; gi32 alone 21 subset playouts = 130 s), depth-0
+    // stage 1 + topk 5 measured WIN-TURN-IDENTICAL over the 50-game d3 set at 1.5x -- while
+    // the same settings forced fleet-wide moved 6 smoke cases (fluctuator), so this must not
+    // be a global default. Env twins MTG_BOTTOM_EVAL_DEPTH/_BUDGET/_TOPK override these when
+    // EXPLICITLY set (A/B hatch).
+    int bottom_eval_depth     = -1;   // -1 = unset (rollouts at real play depth)
+    int bottom_eval_budget_ms = -1;   // -1 = unset (rollouts at real play budget)
+    int bottom_eval_topk      = 0;    //  0 = no refine stage
+
     // Curve requirement for the opening hand. See CurveCheck enum above.
     // None and TwoDrop are the most common; OneDrop and OneAndTwo exist for decks
     // whose analysis requires distinguishing T1 presence from T1+T2 coverage.

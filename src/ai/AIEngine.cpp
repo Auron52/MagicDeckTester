@@ -1322,16 +1322,27 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     // not exact win turns). Scoped strictly around the rollout loops, AFTER the gates: the
     // LookaheadBottoming() gates read the REAL play depth, so depth 0 here still means
     // "roll out, played greedily", not "rollouts off".
-    static const int s_beval_depth  = EnvInt("MTG_BOTTOM_EVAL_DEPTH", -1);
-    static const int s_beval_budget = EnvInt("MTG_BOTTOM_EVAL_BUDGET", -1);
+    static const int  s_beval_depth      = EnvInt("MTG_BOTTOM_EVAL_DEPTH", -1);
+    static const int  s_beval_budget     = EnvInt("MTG_BOTTOM_EVAL_BUDGET", -1);
+    static const int  s_beval_topk_env   = EnvInt("MTG_BOTTOM_EVAL_TOPK", 0);
+    // Per-deck policy (profile `bottom_eval_*`, see MulliganProfile) with the env as an
+    // EXPLICIT-set override (A/B hatch): an env var that is set -- even to the "off" value --
+    // wins over the profile, so an arm can force the legacy behaviour on a deck that ships a
+    // policy. Unset env + unset profile => -1/-1/0 => byte-identical legacy rollouts.
+    static const bool s_beval_depth_set  = EnvSet("MTG_BOTTOM_EVAL_DEPTH");
+    static const bool s_beval_budget_set = EnvSet("MTG_BOTTOM_EVAL_BUDGET");
+    static const bool s_beval_topk_set   = EnvSet("MTG_BOTTOM_EVAL_TOPK");
+    const int eff_beval_depth  = s_beval_depth_set  ? s_beval_depth    : m_profile.bottom_eval_depth;
+    const int eff_beval_budget = s_beval_budget_set ? s_beval_budget   : m_profile.bottom_eval_budget_ms;
+    const int eff_beval_topk   = s_beval_topk_set   ? s_beval_topk_env : m_profile.bottom_eval_topk;
     struct BottomEvalScope
     {
         AIEngine& eng; int save_d; int save_b;
-        explicit BottomEvalScope(AIEngine& e)
+        BottomEvalScope(AIEngine& e, int d, int b)
             : eng(e), save_d(e.m_lookahead_depth), save_b(e.m_budget_ms)
         {
-            if (s_beval_depth  >= 0) { e.m_lookahead_depth = s_beval_depth; }
-            if (s_beval_budget >= 0) { e.m_budget_ms = s_beval_budget; }
+            if (d >= 0) { e.m_lookahead_depth = d; }
+            if (b >= 0) { e.m_budget_ms = b; }
         }
         ~BottomEvalScope() { eng.m_lookahead_depth = save_d; eng.m_budget_ms = save_b; }
     };
@@ -1387,7 +1398,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                 return RolloutWinTurn(std::move(trial), max_turns);
             };
             {
-                BottomEvalScope _beval(*this);   // cheap-eval override, subset rollouts only
+                BottomEvalScope _beval(*this, eff_beval_depth, eff_beval_budget);   // cheap-eval override, subset rollouts only
                 for (std::uint32_t m = 0; m < (1u << h0); ++m)
                 {
                     if (popcnt(m) != count) { continue; }
@@ -1402,8 +1413,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             // choosing among the refined subsets -- which is the intent: full-fidelity comparison
             // where it matters, greedy triage everywhere else. Deterministic: stable sort on
             // (win, ascending mask).
-            static const int s_beval_topk = EnvInt("MTG_BOTTOM_EVAL_TOPK", 0);
-            if (s_beval_topk > 0 && (s_beval_depth >= 0 || s_beval_budget >= 0))
+            if (eff_beval_topk > 0 && (eff_beval_depth >= 0 || eff_beval_budget >= 0))
             {
                 std::vector<std::uint32_t> order;
                 for (std::uint32_t m = 0; m < static_cast<std::uint32_t>(subset_win.size()); ++m)
@@ -1411,8 +1421,8 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                 std::stable_sort(order.begin(), order.end(),
                                  [&](std::uint32_t x, std::uint32_t y)
                                  { return subset_win[x] < subset_win[y]; });
-                if (static_cast<int>(order.size()) > s_beval_topk)
-                { order.resize(static_cast<std::size_t>(s_beval_topk)); }
+                if (static_cast<int>(order.size()) > eff_beval_topk)
+                { order.resize(static_cast<std::size_t>(eff_beval_topk)); }
                 for (std::uint32_t m : order) { subset_win[m] = roll_mask(m); }
             }
             subset_table = true;
@@ -1460,7 +1470,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             std::vector<int> win_turn(hand_size, 0);
             int best_win = std::numeric_limits<int>::max();
             {
-            BottomEvalScope _beval_pc(*this);   // covers the per-candidate and blind-K rollouts
+            BottomEvalScope _beval_pc(*this, eff_beval_depth, eff_beval_budget);   // covers the per-candidate and blind-K rollouts
             for (int j = 0; j < hand_size; ++j)
             {
                 if (subset_table)
@@ -1519,16 +1529,15 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             // subset-table path re-rolled its own entries, so this fires only when the table
             // is absent (count==1 / oversized hands) and the trials above were clairvoyant
             // singles, not blind-K averages (the blind path is its own policy; leave it whole).
-            static const int s_beval_topk_pc = EnvInt("MTG_BOTTOM_EVAL_TOPK", 0);
-            if (!subset_table && !s_blind_bottom && s_beval_topk_pc > 0
-                && (s_beval_depth >= 0 || s_beval_budget >= 0))
+            if (!subset_table && !s_blind_bottom && eff_beval_topk > 0
+                && (eff_beval_depth >= 0 || eff_beval_budget >= 0))
             {
                 std::vector<int> order(static_cast<std::size_t>(hand_size));
                 for (int j = 0; j < hand_size; ++j) { order[static_cast<std::size_t>(j)] = j; }
                 std::stable_sort(order.begin(), order.end(),
                                  [&](int x, int y) { return win_turn[x] < win_turn[y]; });
-                if (static_cast<int>(order.size()) > s_beval_topk_pc)
-                { order.resize(static_cast<std::size_t>(s_beval_topk_pc)); }
+                if (static_cast<int>(order.size()) > eff_beval_topk)
+                { order.resize(static_cast<std::size_t>(eff_beval_topk)); }
                 for (int j : order)
                 {
                     GameState trial = state;

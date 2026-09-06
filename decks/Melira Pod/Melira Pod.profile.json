@@ -101,7 +101,9 @@
     "min_lands": 1,
     "min_playable": 0,
     "required_pieces": [],
-    "stop_at": 4
+    "stop_at": 4,
+    "bottom_eval_depth": 0,
+    "bottom_eval_topk": 5
   },
   "version": 1
 }

@@ -323,6 +323,11 @@ inline nlohmann::json MulliganProfileToJsonObj(const MulliganProfile& profile)
     m["stop_at"]      = profile.stop_at;
     m["curve_check"]  = CurveCheckToString(profile.curve_check);
     m["bottom_order"] = BottomOrderToString(profile.bottom_order);
+    // Bottoming-eval policy: emitted only when set, so decks without one round-trip unchanged
+    // (and a regeneration of a deck that HAS one preserves it rather than dropping the keys).
+    if (profile.bottom_eval_depth     >= 0) { m["bottom_eval_depth"]     = profile.bottom_eval_depth; }
+    if (profile.bottom_eval_budget_ms >= 0) { m["bottom_eval_budget_ms"] = profile.bottom_eval_budget_ms; }
+    if (profile.bottom_eval_topk      >  0) { m["bottom_eval_topk"]      = profile.bottom_eval_topk; }
 
     json pieces = json::array();
     for (const std::string& s : profile.required_pieces) { pieces.push_back(s); }
@@ -544,6 +549,11 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
     {
         profile.bottom_order = BottomOrderFromString(m["bottom_order"].get<std::string>());
     }
+
+    // Per-deck bottoming-eval policy (see MulliganProfile). Absent => -1/-1/0 => byte-identical.
+    if (m.contains("bottom_eval_depth"))     { profile.bottom_eval_depth     = m["bottom_eval_depth"].get<int>(); }
+    if (m.contains("bottom_eval_budget_ms")) { profile.bottom_eval_budget_ms = m["bottom_eval_budget_ms"].get<int>(); }
+    if (m.contains("bottom_eval_topk"))      { profile.bottom_eval_topk      = m["bottom_eval_topk"].get<int>(); }
 
     if (m.contains("required_pieces"))
     {
