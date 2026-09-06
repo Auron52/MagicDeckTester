@@ -1580,3 +1580,38 @@ enumeration wall fix (docs/design/pod-pair-enumeration-explosion.md) plus a fres
 The wall itself remains THE open Melira problem: burst-family (f66f2949) + plan-space cap bound
 memory (bucket scout peaked ~2.5 GB where it OOMed at 23 GB before), but discovery rollouts
 still hit 35–94 s against a 20 ms budget.
+
+## SESSION 2026-09-06b — the perf sprint (user: "focus on fixing things so Melira can be in the suite")
+
+Profiled g88 (perf/dwarf on the Profile build): **92% of the game inside SolveUncached's
+per-subset walk** — the greedy path, called at every rollout leaf. Fixes landed (1ef95821, local,
+push paused): fill-probe precompute (~17% pure Action-copy waste, byte-identical), deferred best
+materialization (byte-identical), **MTG_SOLVE_SPACE_CAP=16384** (greedy-only product bound; g88
+262144→13.2s, 16384→3.5s, same t4 win), persist-loop go-off cut (storm/EDF-cut sibling;
+guarantees the lethal loop line under the tight cap). Validation: smoke 72/72 configs-changed 0
+(twice), 299-ref gate 0 play-drift / 0 enum-gap, all 10 Melira refs reproduce. g88: 18.7 → 3.5 s.
+
+Search-side cap curve at d3 b10 (50 games, seed 1001, 8 threads): 262144→306s, 65536→304s,
+16384→301s (avg 4.96/4.96/4.94) — **flat: the residual d3 cost is NOT wave-0 breadth**. Per-game
+scan + slow-game profile in flight; suspicion is a small monster-game tail.
+
+Side finding, surfaced to user: `Fluctuator/claude_s10_gi9` reports **"shuffle-dead" falsely** —
+the classifier's board-differs branch (added 2026-08-25 for the StompySurprise Lodge case) reuses
+the shuffle-dead label for what is really an upstream play divergence; Fluctuator has no shuffle
+effects at all. Reproduces with ALL of today's levers disabled (MTG_PLAN_SPACE_CAP=0
+MTG_SOLVE_SPACE_CAP=0 MTG_NO_PERSIST_LOOP_CUT=1) → predates today's work. FOLLOW-UP (user views
+the category as illegitimate): rename/split the class to name play-divergence honestly, decide
+whether it should gate strict, and bisect which commit diverged this ref.
+
+## SESSION 2026-09-06c — where the tail hides (pre-bed state, commits local/unpushed)
+
+d3 s/game 31 → ~1.7 median, but the TAIL owns the cost: seed-1033/gi32 = 289 s of a 613 s
+50-game set (t5 win). Two opt-in levers landed (30ecffa9, default OFF, smoke 72/72 unchanged):
+MTG_SOLVE_CHARGE (greedy walk bills the budget; gi32 289→151 s) and MTG_DECISION_WORK_X (per-
+decision total ceiling via the existing Overrun rollback). **The decisive debug finding:**
+armed roots bill only 10–19K units each and never trip — gi32's remaining 151 s runs OUTSIDE
+SolveWithLookahead-rooted decisions, under the EXECUTOR's breakpoint/FSLine search hosts, which
+never arm the meter. NEXT: arm decisionwork at those roots (FullSearchLine / breakpoint
+re-search entries), re-measure gi32, then sweep X for quality (refs + d3 avg 4.96 is the bar),
+then a melira keepgen `recommend` re-probe with both levers on — that is the gate for mulligan
+generation becoming feasible.
