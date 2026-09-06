@@ -4768,7 +4768,7 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
 // SimulateCombat reads) and hand it to the shared ApplyFirebreathing so the executor pumps
 // exactly as the rollout projected. The pool is only READ (real sources are not tapped -- goldfish
 // combat is the last mana use for firebreathing decks), so both worlds see the same leftover mana.
-void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_indices)
+void AIEngine::Firebreathe(GameState& state, std::vector<int>& attacker_indices)
 {
     g_fb_activations_this_turn = 0;   // MTG_FB_TRACE diagnostic; reset every combat
     if (attacker_indices.empty()) { return; }
@@ -4789,7 +4789,10 @@ void AIEngine::Firebreathe(GameState& state, const std::vector<int>& attacker_in
     if (g_play_firebreathe_chooser)
     {
         GameState probe = state;
-        int max_k = ApplyFirebreathing(probe, state.active_player_index, attacker_indices, pool,
+        // The probe runs on a COPY of the state, so any index repair ApplyFirebreathing does must
+        // land on a copy of the indices too -- the real state's battlefield never shifted.
+        std::vector<int> probe_idx = attacker_indices;
+        int max_k = ApplyFirebreathing(probe, state.active_player_index, probe_idx, pool,
                                        std::numeric_limits<int>::max(), payer);
         if (max_k > 0)
         {

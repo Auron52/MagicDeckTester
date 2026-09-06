@@ -7535,8 +7535,13 @@ inline bool ControlsFirebreathingSource(const GameState& state, int controller)
 // is dragon-SPELLS-only; the flat pool let it fund {R} pumps, the real payment refuses).
 using FbPayer = bool (*)(GameState&, const ManaCost&);
 
+// `attacker_indices` is taken by MUTABLE reference because a payer's successful payment can ERASE
+// battlefield entries (a tapped pay-sac Treasure is sacrificed by CommitPaySacSacrifices at the end
+// of TapForCostShared -- the same hazard SpendSurplusOnDamageSinks documents), which shifts every
+// battlefield index. When that happens the indices are re-derived by per-copy id (Card::m_number)
+// IN PLACE, so the caller's post-pump uses (FireAttackDigAttach, ResolveCombatDamage) stay correct.
 inline int ApplyFirebreathing(GameState& state, int controller,
-                              const std::vector<int>& attacker_indices, ManaPool pool,
+                              std::vector<int>& attacker_indices, ManaPool pool,
                               int max_activations = std::numeric_limits<int>::max(),
                               FbPayer payer = nullptr)
 {
@@ -7614,11 +7619,47 @@ inline int ApplyFirebreathing(GameState& state, int controller,
         // nothing was pumped and (payment is atomic) nothing was tapped.
         if (payer != nullptr)
         {
+            const int pay_idx = best_kind == 1 ? best_self_idx : best_src_idx;
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(
-                state.battlefield[best_kind == 1 ? best_self_idx : best_src_idx].card);
+                state.battlefield[pay_idx].card);
             const ManaCost& pc = best_kind == 1 ? pd->params.firebreathing_cost.value()
                                                 : pd->params.team_pump_cost.value();
-            if (!(*payer)(state, pc))
+            // No index survives a successful payment: CommitPaySacSacrifices can erase a cracked
+            // pay-sac source (Treasure / Eldrazi Spawn) from the battlefield, shifting everything
+            // above it. Snapshot per-copy ids (m_number is unique: deck cards numbered at setup,
+            // tokens get a fresh next_token_number) and re-find by id if the battlefield shrank.
+            // Without this, the post-payment lookups below read the WRONG permanent -- at best a
+            // silent mis-pump, at worst a bad_optional_access on a def with no firebreathing cost
+            // (dragons overnight crash, 2026-09-06: Atsushi Treasures + Scourge pumps).
+            const int best_id = state.battlefield[pay_idx].card.m_number;
+            std::vector<int> atk_ids;
+            atk_ids.reserve(attacker_indices.size());
+            for (int idx : attacker_indices)
+            { atk_ids.push_back(state.battlefield[idx].card.m_number); }
+            const std::size_t bf_pre = state.battlefield.size();
+            const bool paid = (*payer)(state, pc);
+            if (state.battlefield.size() != bf_pre)
+            {
+                auto find_by_id = [&state](int id) {
+                    for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+                    { if (state.battlefield[bi].card.m_number == id) { return bi; } }
+                    return -1;
+                };
+                attacker_indices.clear();
+                for (int id : atk_ids)
+                { const int bi = find_by_id(id); if (bi >= 0) { attacker_indices.push_back(bi); } }
+                const int nb = find_by_id(best_id);
+                if (best_kind == 1) { best_self_idx = nb; } else { best_src_idx = nb; }
+                if (nb < 0)
+                {
+                    // The chosen source itself left the battlefield (unreachable today: no fb/team
+                    // source is a pay-sac token) -- retire the kind rather than index with -1.
+                    if (best_kind == 1) { self_dead = true; } else { team_dead = true; }
+                    if (self_dead && team_dead) { break; }
+                    continue;
+                }
+            }
+            if (!paid)
             {
                 if (best_kind == 1) { self_dead = true; } else { team_dead = true; }
                 if (self_dead && team_dead) { break; }

@@ -121,7 +121,9 @@ public:
     // Builds the leftover pool via the shared AvailableManaPool (ManaPayment.cpp -- the same pool
     // the rollout uses) and applies the shared ApplyFirebreathing so both pump identically.
     // Inert (no attacker carries a firebreathing param) for every non-Dragonstorm deck.
-    void Firebreathe(GameState& state, const std::vector<int>& attacker_indices);
+    // attacker_indices is mutable: a pay-sac erase during an MTG_FB_TAP payment shifts battlefield
+    // indices, and the shared ApplyFirebreathing repairs the vector in place (see its comment).
+    void Firebreathe(GameState& state, std::vector<int>& attacker_indices);
 
     // Returns a pointer to a card in the active player's hand to discard.
     Card* ChooseDiscard(GameState& state);
