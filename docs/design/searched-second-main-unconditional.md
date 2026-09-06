@@ -219,11 +219,32 @@ What the game diffs actually show (three exemplars, logs/hinata_dig):
 3. **gi=22 (4→5): the Soulfire reveal line goes missing in m2.** Base casts Soulfire Eruption
    pre-combat T4 for the kill; the split's T4 m2, with the same mana, never produces the line.
 
-Open root-cause (next step): WHICH chooser resolves the scripted top/reveal decisions in search
-applies, and why its answer depends on the phase it is called from. That — not enumeration
-breadth — is where the split's quality lives. Fixing it is required before the no-first-main
-doctrine can be re-measured, and it may ALSO be a live (if small) defect in base play, since
-base m2 casts of these same cards resolve through the same weaker path.
+**ROOT CAUSE FOUND (2026-09-06, the trace dig): the post-dedup searched sub-decision AXES are
+m1-HOST-ONLY.** A temporary trace in `HeuristicTopDisposition` on gi=88's T3 Ponder showed the
+m1 arm exploring `ponder_keep = 0/1` pinned variants (the searched keep-vs-shuffle; it chose
+SHUFFLE and won T5) while the m2 arm ran `keep_decision = -1` — the resolution heuristic — on
+every single arrival (it kept, and never won). The emitter is the post-dedup axis fan-out in
+`EnumeratePlansWithLand` (`MTG_PONDER_AXIS` default-ON at src/ai/TurnSolver.cpp:27481, plus the
+tutor / etb-dig / scry / lackey axes appended in the same host); `EnumeratePlansM2Memoized`'s
+own host-namespace comment states its body is plain `EnumeratePlans` — "no land axis / no
+appended breakpoint variants" — and NO axis fan-out. So every searched sub-decision the
+2026-08-01 "post-dedup axis" architecture created exists ONLY in the pre-combat main.
+
+Consequences, in order of importance:
+
+1. **This is a live asymmetry in BASE play, not just the split**: any Ponder / tutor / dig /
+   scry cast in a second main — which base play does routinely — resolves by heuristic while
+   the identical cast in main 1 is searched. It is exactly the "searched at every level"
+   directive class, phase-scoped instead of deck-scoped.
+2. It explains the split's systematic loss (the split routes ~every cantrip through the
+   axis-less host) and why every breadth mechanism measured null: the missing lines were never
+   in the plan list to begin with — no wave, node, or ordering change can score a variant that
+   is not emitted.
+3. **The fix is the lossless class**: append the same post-dedup axis fan-out in the m2
+   enumeration hosts (FSLineTail's `EnumeratePlansM2Memoized` / `EnumeratePlansWithLand(m2)`
+   route, and the interior-m2 enumeration if it is likewise bare). Cost multiplies m2 plans, so
+   it ships through the usual measurement loop — but unlike the waves, this one targets the
+   measured mechanism. Re-measure `HINATA_ALL_MAIN2` only after it lands.
 
 ## What stays a provider decision
 
