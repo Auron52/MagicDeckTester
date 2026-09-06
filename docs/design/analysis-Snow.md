@@ -80,6 +80,10 @@ legend rule across 175 d0 games); DECISIONS.md ✓; snow-mana model ✓ (section
 the value leaf.** Also open: Snow is NOT in the regression suite yet — its slow games
 (worst ~5-15 min single games at d3/d5 b200 pre-value-leaf, horizon-rollout volume s90, NOT
 site 8) make adding it a shared-budget sizing decision for the user.
+**5i discard analysis (analyze_deck's evidence stage, 400 games d3/b10): STATUS_QUO_OK** —
+"the current ranking is at or near the searched optimum on this deck." Per-card regret 0.0
+everywhere except Ice-Fang Coatl 0.091 and Abominable Treefolk 0.154 (both tiny). No bucket
+policy work needed.
 **5e/5f status**: Snow rides the GENERIC provider — no deck narrowing heuristics exist, so 5e
 has nothing to verify (and the 16/16 claude-play ties say the un-narrowed search already plays
 optimally). The 5f PERF GATE is NOT yet cleared for mulligan-gen feasibility: the deck's cost
