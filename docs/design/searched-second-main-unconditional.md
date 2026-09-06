@@ -483,6 +483,12 @@ DECIDING number is the SHIPPED config (d5/b20), 1000 distinct paired games: **5 
 15 decks never fire the class, burn and kitty fire it thousands of times and convert
 nothing (the clearest opt-OUTs: they would pay the most CPU for zero gain). GT accepted
 for hinata's cells both tiers; every other deck byte-identical. Global default stays OFF.
+The burn/kitty opt-out was then POWERED to the same standard as hinata's opt-in (the
+USER's underpowered-cell challenge cuts both ways): 1000 distinct paired games each at
+their own configs (burn d3/b10, kitty shipped d5/b20) — **0/0/1000 on both**, identical
+play in every game, at exactly the n that surfaced hinata's 6 movers. The sweep's per-deck
+d3 quality column is CPU/activity evidence only — 150–300-game cells cannot resolve a
+1-in-200 event, which is also why hinata's own d3 sweep cell read 0.
 
 **HELD-OUT (regression tier, disjoint seeds s2002/s3003, melira excluded per USER):** both
 modes net POSITIVE and all movement is hinata's — mode 1: −5 game-turns (d0 −0.003, d3
