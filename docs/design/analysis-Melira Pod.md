@@ -1615,3 +1615,52 @@ never arm the meter. NEXT: arm decisionwork at those roots (FullSearchLine / bre
 re-search entries), re-measure gi32, then sweep X for quality (refs + d3 avg 4.96 is the bar),
 then a melira keepgen `recommend` re-probe with both levers on — that is the gate for mulligan
 generation becoming feasible.
+
+## Session 2026-09-06d — the tail was the BOTTOMING ROLLOUTS; per-deck bottom_eval policy ADOPTED
+
+**The resume lead resolved, and it wasn't what the ledger guessed.** Arming the decision meter at
+the executor's true root (`FullSearchLineHybrid` — it bypasses `SolveWithLookahead` entirely;
+commit 286b3948) plus `MTG_DECISION_WORK_DEBUG` showed gi32's ~140 s residual was **~21 whole-game
+t1→t7 playout sequences inside one game**: the clairvoyant bottoming rollouts
+(`MTG_BOTTOM_LEGAL` rolls out every C(7,2)=21 removal subset of a mull-2 keep as a FULL game at
+play settings, and `m_in_rollout` playouts never touch `g_rollout_nest`, so each armed as its own
+root). Real play was ~4M units (~seconds); bottoming owned the rest. This is the same anatomy the
+BottomEvalScope comment records for FiveColour (90.4%) and Fluctuator (~92%).
+
+**Ceilings measured DEAD on the real-game residual before that diagnosis** (worth keeping):
+- `MTG_DECISION_WORK_X` on gi32: X=10 → 40 s but t5→t6; X=30 → 76 s, still t6; X=100 → 134 s, t5
+  back but nothing saved. The heavy decisions legitimately need their units; capping either loses
+  the win or saves nothing. The ceiling machinery stays (default-off, correct arming) for
+  attribution and generation-side use, not as a play lever.
+- `MTG_SOLVE_CHARGE` on the 50-set: 613→~370 s-equivalent but avg 4.96→**5.24** (−0.28t). Rejected
+  for play; remains opt-in.
+
+**The fix that shipped (commits 286b3948 + 8d113e92):**
+1. `MTG_BOTTOM_EVAL_DEPTH=0` alone (greedy stage-1 trials): 50-set 613→245 s serial but avg
+   4.96→5.02 (3 games +1t: g4, g27, g37 — all mull-2, bottoming choices moved).
+2. **Two-stage refine `MTG_BOTTOM_EVAL_TOPK=K`**: greedy-score all subsets/candidates, re-roll the
+   K cheap-best at REAL play settings. K=3: one diff left. **K=5: ZERO per-game diffs — all 50 win
+   turns identical to full-fidelity baseline — at 405 s serial (1.5x)**. gi32: 289→~15 s.
+3. **Per-deck profile carrier** `mulligan.bottom_eval_{depth,budget_ms,topk}` (parse+save
+   round-trip; env twins override only when EXPLICITLY set). Melira Pod ships depth0/topk5 in its
+   profile.json, so suite/generation/viewer/user play all pick it up with no env to remember.
+
+**Validation:** smoke 72/72 configs-changed 0 (×3 builds, defaults byte-identical); profile-driven
+50-set avg 4.9600 with zero win-turn diffs vs baseline; 299-ref gate profile-driven: 0 play-drift,
+0 enum-gap, 0 mull-drift (1 known pre-existing fluctuator shuffle-dead). Fleet-wide default flip
+was A/B'd and **REJECTED**: env forced on all decks moves 6 smoke cases (fluctuator play changes,
+12 slower) — this must stay per-deck.
+
+**Fleet follow-up (recorded, not actioned):** Fluctuator/FiveColour would likely get their own
+large wins from a deck-specific `bottom_eval` policy + TOPK — but each needs its own quality
+A/B and GT rebaseline; melira was the priority.
+
+**State at freeze:** d3 50-game set 405 s serial (~8.1 s/game; was ~31 s/game pre-sprint, 12.3
+post-sprint), avg 4.9600 exact. Under-billing note: gi32 bills only ~4.5M units vs ~15 s wall —
+enumeration/plan-apply overhead outside Consume sites; the value leaf (H-cell ladder guard,
+1.35–84.8x) is the intended next cut, so no further hand-optimization before generation.
+
+**NEXT (launched this session): `bash scripts/valueleaf.sh run "decks/Melira Pod"`** on the frozen
+commit; prior queue logs/vlq_melira_pod had banked 2130/2500 phase-A rows — the driver's play-digest
+chunk banking decides what survives today's play change (bottoming policy + sprint = play moved).
+Then mulligan `recommend` once the value leaf's final stage writes value_play.
