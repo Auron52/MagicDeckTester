@@ -27756,6 +27756,56 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
 //     and stores the call's OWN contribution; hit and miss alike then max-merge it into the
 //     caller's accumulator -- byte-equivalent to the unmemoized max-accumulation.
 // MTG_ENUM_MEMO_VERIFY=1: on every hit recompute uncached and compare plan-by-plan.
+// Approximate heap footprint of one Plan (vector capacities + string heap). Shared by every
+// byte-accounted plan cache: the enummemo/bp-enum budget below and the FSL pool's ApproxFslKb.
+// An underestimate only loosens a result-neutral bound, so this counts the known-heavy members
+// rather than chasing exactness.
+inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p)
+{
+    std::size_t b = sizeof(TurnSolver::Plan);
+    b += p.actions.capacity() * sizeof(Action);
+    for (const Action& a : p.actions)
+    {
+        b += a.breakpoint_casts.capacity() * sizeof(Action);
+        b += a.trick_hand_target.capacity();
+    }
+    b += p.breakpoint_actions.capacity() * sizeof(Action);
+    b += p.would_drop.capacity() * sizeof(std::string);
+    for (const std::string& s : p.would_drop) { b += s.capacity(); }
+    b += p.sac_pins.capacity() * sizeof(int);
+    b += p.land_to_play.capacity() + p.fetch_target.capacity() + p.land_face.capacity();
+    return b;
+}
+// Shared per-THREAD byte budget for the two whole-plan-vector caches (MTG_PLAN_CACHE_KB;
+// 0/unset = off = byte-identical). Both caches are count-capped (8192 entries) but their entries
+// are ENTIRE vector<Plan> enumeration results, so the count bounds nothing in bytes: one Melira
+// combo-turn decision promoting such entries spiked a 12-worker phase A from 5 GB to 23 GB in
+// ~2 minutes and the kernel shot it (2026-09-06; the fifth OOM of that generation). The same
+// deck ran flat at 2.6-3.8 GB with the memo off, which is what convicted it. A refused store
+// just recomputes -- the same result-neutral contract as MTG_TT_CAP / MTG_FSL_POOL / the FSL
+// byte pool -- so play is identical at ANY budget; only wall clock may move.
+namespace plancache
+{
+    inline long long BudgetBytes()
+    {
+        static const long long v =
+            static_cast<long long>(EnvInt("MTG_PLAN_CACHE_KB", 0)) * 1024LL;
+        return v;
+    }
+    inline thread_local long long t_enum_bytes = 0;   // enummemo::t_cache promoted plan vectors
+    inline thread_local long long t_bp_bytes   = 0;   // BpEnumEntryFor's continuation cache
+    inline bool Fits(long long add)
+    {
+        const long long b = BudgetBytes();
+        return b <= 0 || t_enum_bytes + t_bp_bytes + add <= b;
+    }
+    inline std::size_t ApproxPlansBytes(const std::vector<TurnSolver::Plan>& plans)
+    {
+        std::size_t b = plans.capacity() * sizeof(TurnSolver::Plan);
+        for (const TurnSolver::Plan& p : plans) { b += ApproxPlanBytes(p) - sizeof(TurnSolver::Plan); }
+        return b;
+    }
+}
 namespace enummemo
 {
     // ADOPTED default-on 2026-08-21 (MTG_ENUM_MEMO=0 hatch) under the user's standing no-regression
@@ -27896,7 +27946,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
 
     auto& cache = enummemo::t_cache;
     if (enummemo::t_epoch_seen != g_decision_epoch)
-    { cache.clear(); enummemo::t_epoch_seen = g_decision_epoch; }
+    { cache.clear(); plancache::t_enum_bytes = 0; enummemo::t_epoch_seen = g_decision_epoch; }
     TranspositionTable::Key k = BuildBreakpointKey(state, is_pre_combat);
     // ENUMERATION-OBSERVABLE GLOBALS the key does not fold (audit §6.4 class, same hatch as the
     // m2 host tag): (a) g_fresh_axis_enum -- only FSLineWin's enumeration emits freshmode
@@ -27970,13 +28020,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     groupwave::g_state.max_dropped = std::max(saved_md, own_md);
     if (second_visit)
     {
-        // Second visit this decision: the state provably recurs -- promote to full storage.
-        it->second.has_plans     = true;
-        it->second.max_dropped   = own_md;
-        it->second.plans         = plans;
-        it->second.condemn_drops = own_drops;
-        it->second.trunc_delta   = own_trunc;
-        if (enummemo::VerifyOn()) { it->second.dbg = enummemo::Fingerprint(state); }
+        // Second visit this decision: the state provably recurs -- promote to full storage,
+        // IF the plan-cache byte budget has room (over budget: stay a marker, recompute).
+        const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans));
+        if (plancache::Fits(psz))
+        {
+            plancache::t_enum_bytes += psz;
+            it->second.has_plans     = true;
+            it->second.max_dropped   = own_md;
+            it->second.plans         = plans;
+            it->second.condemn_drops = own_drops;
+            it->second.trunc_delta   = own_trunc;
+            if (enummemo::VerifyOn()) { it->second.dbg = enummemo::Fingerprint(state); }
+        }
     }
     else
     {
@@ -27984,6 +28040,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         if (cache.size() >= enummemo::Cap())
         {
             cache.clear();
+            plancache::t_enum_bytes = 0;
             enummemo::g_clears.fetch_add(1, std::memory_order_relaxed);
         }
         cache[k] = enummemo::Entry{ g_decision_epoch, own_md, false, {}, {},
@@ -28012,7 +28069,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
 
     auto& cache = enummemo::t_cache;
     if (enummemo::t_epoch_seen != g_decision_epoch)
-    { cache.clear(); enummemo::t_epoch_seen = g_decision_epoch; }
+    { cache.clear(); plancache::t_enum_bytes = 0; enummemo::t_epoch_seen = g_decision_epoch; }
     TranspositionTable::Key k = BuildBreakpointKey(state, false);
     // HOST NAMESPACE (audit §6.4): this host's body (EnumeratePlans, no land axis / no appended
     // breakpoint variants) differs from EnumeratePlansWithLand's at the same (state, m2) key, and
@@ -28079,18 +28136,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     groupwave::g_state.max_dropped = std::max(saved_md, own_md);
     if (second_visit)
     {
-        it->second.has_plans     = true;
-        it->second.max_dropped   = own_md;
-        it->second.plans         = plans;
-        it->second.condemn_drops = own_drops;
-        it->second.trunc_delta   = own_trunc;
-        if (enummemo::VerifyOn()) { it->second.dbg = enummemo::Fingerprint(state); }
+        // Same byte-budget gate as the m1 host above (over budget: stay a marker, recompute).
+        const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans));
+        if (plancache::Fits(psz))
+        {
+            plancache::t_enum_bytes += psz;
+            it->second.has_plans     = true;
+            it->second.max_dropped   = own_md;
+            it->second.plans         = plans;
+            it->second.condemn_drops = own_drops;
+            it->second.trunc_delta   = own_trunc;
+            if (enummemo::VerifyOn()) { it->second.dbg = enummemo::Fingerprint(state); }
+        }
     }
     else
     {
         if (cache.size() >= enummemo::Cap())
         {
             cache.clear();
+            plancache::t_enum_bytes = 0;
             enummemo::g_clears.fetch_add(1, std::memory_order_relaxed);
         }
         cache[k] = enummemo::Entry{ g_decision_epoch, own_md, false, {}, {},
@@ -28107,6 +28171,7 @@ void TurnSolver::ClearPerGameCaches()
     solvememo::t_cache.clear();
     solvememo::t_m2cache.clear();
     enummemo::t_cache.clear();
+    plancache::t_enum_bytes = 0;
 }
 
 
@@ -29041,23 +29106,11 @@ inline long long FslPool()
 inline std::size_t ApproxFslKb(const TurnSolver::SearchLine& line)
 {
     // ~64 B covers the unordered_map node (key + hash links + bucket share) on top of the entry.
+    // Per-plan heap via the shared ApproxPlanBytes (defined with the plancache budget above).
     std::size_t b = sizeof(FSLineEntry) + 64;
     b += line.phases.capacity() * sizeof(TurnSolver::PhasePlan);
     for (const TurnSolver::PhasePlan& pp : line.phases)
-    {
-        const TurnSolver::Plan& p = pp.plan;
-        b += p.actions.capacity() * sizeof(Action);
-        for (const Action& a : p.actions)
-        {
-            b += a.breakpoint_casts.capacity() * sizeof(Action);
-            b += a.trick_hand_target.capacity();
-        }
-        b += p.breakpoint_actions.capacity() * sizeof(Action);
-        b += p.would_drop.capacity() * sizeof(std::string);
-        for (const std::string& s : p.would_drop) { b += s.capacity(); }
-        b += p.sac_pins.capacity() * sizeof(int);
-        b += p.land_to_play.capacity() + p.fetch_target.capacity() + p.land_face.capacity();
-    }
+    { b += ApproxPlanBytes(pp.plan) - sizeof(TurnSolver::Plan); }
     return (b >> 10) + 1;   // round up: every entry charges at least 1 KB
 }
 inline bool FslPoolAcquire(long long kb)
@@ -34084,14 +34137,24 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             if (g_bp_enum_depth > 0)
             { g_bp_enum_probe.nested_misses.fetch_add(1, std::memory_order_relaxed); }
         }
-        if (cache.size() >= s_bp_enum_cap)
+        // Byte-budget gate (plancache, 2026-09-06): this cache is count-capped but its entries are
+        // whole vector<Plan> results and it is never epoch- or game-cleared, so it was byte-unbounded.
+        // Over budget => clear (same reclaim as clear-on-full, so the cache stays useful); an entry
+        // that alone exceeds the whole budget is served uncached via the scratch path below.
+        const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans));
+        if (cache.size() >= s_bp_enum_cap || !plancache::Fits(psz))
         {
             if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }
             cache.clear();
+            plancache::t_bp_bytes = 0;
         }
-        BpEnumEntry ent;
-        ent.plans = std::move(plans);
-        return &cache.emplace(key, std::move(ent)).first->second;
+        if (plancache::Fits(psz))
+        {
+            plancache::t_bp_bytes += psz;
+            BpEnumEntry ent;
+            ent.plans = std::move(plans);
+            return &cache.emplace(key, std::move(ent)).first->second;
+        }
     }
     // Cache disabled: hand back a thread_local scratch entry (fresh verdict slots each fill, so
     // nothing is reused across calls -- the no-cache world stays a true re-probe-every-time A/B).

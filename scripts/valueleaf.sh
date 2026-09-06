@@ -265,8 +265,15 @@ _budget_mb=$(( _mem_mb - 5120 )); [ "$_budget_mb" -lt 2048 ] && _budget_mb=2048
 # solvememo (16384 entries/thread, ~1.5 GB), and transient per-game search state (all-strangled
 # floor measured ~2.5 GB and flat). Their sum put the honest TT+FSL bounds over the box anyway
 # (2.5+3+1.5+6.4+7.7 ~ 21 GB on 23 GB). Reserve them per-thread first; TT+FSL split the REMAINDER.
-_reserve_mb=$(( _nw * 200 ))
+_reserve_mb=$(( _nw * 250 ))
 _cache_mb=$(( _budget_mb - _reserve_mb )); [ "$_cache_mb" -lt 2048 ] && _cache_mb=2048
+# The plan caches (enummemo promotions + the bp-enum continuation cache) get an explicit
+# per-THREAD byte budget INSIDE the reserve (MTG_PLAN_CACHE_KB, engine-side, 2026-09-06): their
+# 8192-ENTRY caps bound nothing in bytes when one entry is a whole combo-turn vector<Plan> --
+# that unbounded promotion is what spiked phase A 5 GB -> 23 GB in ~2 min and OOM'd the box five
+# times on 2026-09-05/06. 100 MB/thread keeps the memos' measured wall win (they were adopted
+# for perf) with an honest bound; a refused store just recomputes (result-neutral).
+export MTG_PLAN_CACHE_KB=102400
 _pw_kb=$(( _cache_mb * 1024 / _nw ))
 export MTG_TT_CAP=$((  _pw_kb * 1024 / 3 / 64   ))
 # The line-cache budget is a SHARED POOL, not a per-worker slice (MTG_FSL_POOL, engine-side global):
