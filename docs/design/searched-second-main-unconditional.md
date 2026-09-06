@@ -246,6 +246,90 @@ Consequences, in order of importance:
    it ships through the usual measurement loop — but unlike the waves, this one targets the
    measured mechanism. Re-measure `HINATA_ALL_MAIN2` only after it lands.
 
+### The fix, BUILT and MEASURED (2026-09-06, same day): `MTG_M2_AXES`
+
+The whole 670-line axis block was factored VERBATIM out of `EnumeratePlansWithLandUncached`'s
+tail into `AppendSubdecisionAxes(state, is_pre_combat, all)` — the m1 caller calls it at the
+same point, and 200/200 base+split per-game digests match the pre-refactor binary, so the
+refactor is byte-identical. The two bare m2 hosts now call it behind `MTG_M2_AXES` (DEFAULT
+OFF, heurarm slot `M2_AXES` for per-job pooling):
+
+* `EnumeratePlansM2Memoized`, via a shared `EnumerateM2PlansBody` used at ALL THREE of its call
+  points (memo-off fallback, verify recompute, cache miss) — one body, so the memo verify can
+  never diverge from the cached list merely because the lever is on;
+* the no-drop EARLY RETURN in `EnumeratePlansWithLandUncached` — which is where the interior-m2
+  route (`SearchedSecondMainMemoized` → `SolveWithLookahead(m2)`) was going bare: it arrives at
+  m2 with the drop consumed and used to return before the fan-out. m1 no-drop re-solves stay
+  bare (outside the measured defect); both new call sites gate on `g_bp_enum_depth == 0`, so a
+  breakpoint continuation list never fans (BpEnumEntryFor's rule).
+
+Known inert-duplicate: `Plan::dig_choice` is consumed on the `is_pre_combat` apply path only,
+so the cycle/sac-draw dig axis's m2 variants tie-break away (Auras is the only opt-in). The
+condemned-tranche enumeration (FSLineTail's rescue path) deliberately stays bare.
+
+**Measured (hinata, 100 per-game train games at b20, one pooled 400-job batch;
+`logs/hinata_m2axes/`):**
+
+| arm | avg | vs base | pairwise | units/100g | vs base |
+|---|---|---|---|---|---|
+| base | 5.6900 | — | — | 4.36M | — |
+| base + M2_AXES | 5.7000 | +0.0100 | 1 better / 2 worse / 97 tie | 4.61M | **+5.9%** |
+| split (`HINATA_ALL_MAIN2`) | 5.9800 | +0.2900 | 4 / 28 / 68 | 2.52M | −42% |
+| split + M2_AXES | 5.8400 | +0.1500 | 4 / 18 / 78 | 3.06M | **−30%** |
+
+* **The mechanism is confirmed**: gi=88 (the traced Ponder keep-vs-shuffle game) recovers 9→5
+  under split+axes — the base win turn exactly — and gi=0 recovers 6→5. split+axes vs split is
+  15 better / 6 worse, −0.14/game: **the axes buy back half the split's red** for +21% of the
+  split's units, landing still 30% cheaper than base. The added spend sits where it should:
+  `fs_main2` 1.12M → 1.66M (+48%), the axis variants being scored.
+* **The default stays OFF**: on base classification the axes are +5.9% units for +0.01 (noise,
+  97 ties) — not a strict improvement, so flipping the default is a trade that belongs to the
+  user. On base play the key cantrips route through the already-searched m1 host, so the m2
+  axes rarely bind.
+* **The split doctrine is half-rescued, not settled**: 18 games still lose vs base under
+  split+axes (gi=22's missing Soulfire-class line among them — a different mechanism from the
+  axis bareness). The residual is the next dig if the all-main2 doctrine is to go green.
+
+### The residual mechanism, characterized (2026-09-06, same day): the split forfeits the FREE INTER-MAIN RE-SOLVE
+
+Game-log diffs on three residual reds (gi=22/51/66, `logs/hinata_m2axes/g*_{base,splitax}`) all
+show one structural motif. gi=66 T5 is the clean exemplar: BOTH arms cast the identical
+Preordain → Gamble → Reality Spasm (untap) → Expressive Iteration chain, and EI draws Crackle
+with Power mid-chain, with the opponent at 8.
+
+* **base** runs the chain in m1, then gets a **fresh full-width m2 solve** on the post-chain
+  state — which sees the drawn Crackle and casts it for the T5 kill. The m1→m2 phase boundary
+  is acting as a free extra search node: a whole second decision at deck width, at zero
+  marginal enumeration cost, every turn.
+* **splitax** runs the same chain as its ONE committed m2 plan; the drawn Crackle can only be
+  reached by a breakpoint continuation of that plan, and no m2 mechanism reaches a TRAILING
+  continuation. The turn ends with **six untapped sources and lethal in hand** (log-verified),
+  and the win slips to T6.
+
+What it is NOT, each excluded by measurement on gi=66:
+
+* Not budget: b40/b80/b160 all still lose the turn (win T6 at every budget).
+* Not the wave walker: `MTG_M2_WAVES=1` (with axes, both budgets) unchanged.
+* Not an executor divergence: `MTG_M2_YIELD_STATS` shows breakpoint-fallback=0,
+  searched-resolve=0, every nohost is `[rollout+rec]` — the SEARCH never scored the T5 line,
+  so the executor faithfully played the committed T6 line.
+* Not the sub-decision axes (they are what `MTG_M2_AXES` just fixed): the missing cast is a
+  freshly-DRAWN card, which no pre-draw plan subset can contain.
+
+A second m1-only capability surfaced in the same dig: `AppendBreakpointVariants` is also absent
+from `EnumerateM2PlansBody` — m2 plans carry no `bp_choice` variants at all, so even NON-trailing
+continuations of an m2 plan are searched only where BP_NODE hosting covers them.
+
+**Fix sketch (not built):** give the second main a FIXPOINT RE-SOLVE — after an m2 plan that
+fired a draw-breakpoint resolves, re-solve m2 on the resulting state (loop until the solve
+returns no action). That is legal MTG (still the same main phase), and it is exactly the second
+decision base play gets from the phase boundary for free. It must land on BOTH sides in
+lockstep: the search's m2 scoring (FSLineTail's loop currently goes plan →
+SimulateEndAndStartNextTurn directly) and the executor's m2 execution, else realized and scored
+turns diverge. gi=22 additionally shows the phase-ORDER half (Soulfire cast m1 gets two phases
+plus a combat for its revealed free casts; m2 gets one), which no re-solve can restore — that
+part is inherent to the classification and bounds how green the doctrine can ever go.
+
 ## What stays a provider decision
 
 Per the USER (2026-09-05): skipping a main is acceptable only as an explicit opt-in, and that is a

@@ -61,6 +61,7 @@ enum Slot : int
     AL_SSM_ROLLOUT,           // MTG_AL_SSM_ROLLOUT        AL also searches the ROLLOUT's per-turn m2
     M2_CAP1,                  // MTG_M2_CAP1               cap the interior m2 solve to depth 1
     M2_WAVES,                 // MTG_M2_WAVES              FSLineTail m2 loop runs the deferred wave phase
+    M2_AXES,                  // MTG_M2_AXES               m2 enumeration hosts append the sub-decision axes
     STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-reviewed StompySurprise cast order
     SCALED_LAND_RANK,         // MTG_SCALED_LAND_RANK      reserve a live board-scaled LAND (Three Tree City)
     TOP_RESOLVE,              // MTG_TOP_RESOLVE           tutor-to-top reset (the order's LOOP half)
@@ -185,6 +186,7 @@ inline const char* Name(int slot)
         "MTG_AL_SSM_ROLLOUT",
         "MTG_M2_CAP1",
         "MTG_M2_WAVES",
+        "MTG_M2_AXES",
         "MTG_STOMPY_ORDER",
         "MTG_SCALED_LAND_RANK",
         "MTG_TOP_RESOLVE",

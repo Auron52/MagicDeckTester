@@ -355,10 +355,23 @@ public:
     // PHASE (its group-cap comment: dropped groups are "unreachable at ANY budget"), so
     // classifying this cantrip deck's whole hand into Main2 moves every draw-continuation chain
     // into the one loop that cannot wave-walk it. The USER's doctrine is not refuted; the m2
-    // loop is weaker than the m1 loop. The fix path is LOSSLESS: give FSLineTail the wave
-    // walker FSLineWin has, then re-measure this lever -- green would buy the doctrine AND
-    // return ~42% of the deck's budget. The blanket-drop variant stays out regardless (it
+    // loop is weaker than the m1 loop. The blanket-drop variant stays out regardless (it
     // re-bloats to 5.96M units for no quality gain).
+    //
+    // HALF-RESCUED 2026-09-06 (logs/hinata_m2axes): the wave walker was built (MTG_M2_WAVES)
+    // and measured NULL -- the missing lines were never EMITTED, because the searched
+    // sub-decision AXES (ponder keep-vs-shuffle, tutor, etb-dig...) were M1-HOST-ONLY
+    // (AppendSubdecisionAxes in TurnSolver.cpp, the ROOT CAUSE FOUND section of
+    // searched-second-main-unconditional.md). With MTG_M2_AXES giving the m2 hosts the same
+    // fan-out, this split goes +0.29 -> +0.15/game vs base (15 recovered / 6 new-worse; the
+    // traced gi=88 Ponder game recovers its base win turn exactly) at 3.06M units -- still 30%
+    // cheaper than base. The residual 18-game red is characterized (gi=66: six untapped
+    // sources and lethal in hand at end of m2, at ANY budget): the split FORFEITS THE FREE
+    // INTER-MAIN RE-SOLVE -- base's m2 solve is a second full-width decision that catches
+    // cards drawn by an m1 chain, and the one committed m2 plan has no mechanism reaching a
+    // trailing draw-breakpoint continuation. Fix sketch (m2 fixpoint re-solve, search+executor
+    // in lockstep) in searched-second-main-unconditional.md; this lever stays a two-flag arm
+    // (with MTG_M2_AXES) until that lands.
     //
     // DEFAULT OFF -> byte-identical.
     bool ClassifiesMainPhases() const override;
