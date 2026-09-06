@@ -1374,10 +1374,8 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             subset_win.assign(std::size_t{1} << h0, 0);
             nums0.reserve(h0);
             for (const Card& c : ap.hand) { nums0.push_back(c.m_number); }
-            BottomEvalScope _beval(*this);   // cheap-eval override, subset rollouts only
-            for (std::uint32_t m = 0; m < (1u << h0); ++m)
+            auto roll_mask = [&](std::uint32_t m)
             {
-                if (popcnt(m) != count) { continue; }
                 GameState trial = state;
                 Player& tp = trial.ActivePlayer();
                 // Bottom the masked cards in ascending hand order (the order the step greedy
@@ -1386,7 +1384,36 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                 { if (m & (1u << idx)) { tp.library.push_back(tp.hand[idx]); } }
                 for (int idx = h0 - 1; idx >= 0; --idx)
                 { if (m & (1u << idx)) { tp.hand.erase(tp.hand.begin() + idx); } }
-                subset_win[m] = RolloutWinTurn(std::move(trial), max_turns);
+                return RolloutWinTurn(std::move(trial), max_turns);
+            };
+            {
+                BottomEvalScope _beval(*this);   // cheap-eval override, subset rollouts only
+                for (std::uint32_t m = 0; m < (1u << h0); ++m)
+                {
+                    if (popcnt(m) != count) { continue; }
+                    subset_win[m] = roll_mask(m);
+                }
+            }
+            // TWO-STAGE REFINE (MTG_BOTTOM_EVAL_TOPK=K, default 0 = off). Only meaningful when
+            // MTG_BOTTOM_EVAL_DEPTH/_BUDGET made stage 1 cheap: re-roll the K cheap-best legal
+            // subsets at the deck's REAL play settings (the scope above has closed), overwriting
+            // their table entries. Cheap scores rank; searched scores decide. A searched score is
+            // systematically earlier than a cheap one, so the step greedy below is effectively
+            // choosing among the refined subsets -- which is the intent: full-fidelity comparison
+            // where it matters, greedy triage everywhere else. Deterministic: stable sort on
+            // (win, ascending mask).
+            static const int s_beval_topk = EnvInt("MTG_BOTTOM_EVAL_TOPK", 0);
+            if (s_beval_topk > 0 && (s_beval_depth >= 0 || s_beval_budget >= 0))
+            {
+                std::vector<std::uint32_t> order;
+                for (std::uint32_t m = 0; m < static_cast<std::uint32_t>(subset_win.size()); ++m)
+                { if (subset_win[m] != 0) { order.push_back(m); } }
+                std::stable_sort(order.begin(), order.end(),
+                                 [&](std::uint32_t x, std::uint32_t y)
+                                 { return subset_win[x] < subset_win[y]; });
+                if (static_cast<int>(order.size()) > s_beval_topk)
+                { order.resize(static_cast<std::size_t>(s_beval_topk)); }
+                for (std::uint32_t m : order) { subset_win[m] = roll_mask(m); }
             }
             subset_table = true;
         }
@@ -1432,7 +1459,8 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                                                    return (e && *e) ? std::max(1, std::atoi(e)) : 4; }();
             std::vector<int> win_turn(hand_size, 0);
             int best_win = std::numeric_limits<int>::max();
-            BottomEvalScope _beval(*this);   // covers the per-candidate and blind-K rollouts
+            {
+            BottomEvalScope _beval_pc(*this);   // covers the per-candidate and blind-K rollouts
             for (int j = 0; j < hand_size; ++j)
             {
                 if (subset_table)
@@ -1484,6 +1512,34 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                     win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
                 }
                 if (win_turn[j] < best_win) { best_win = win_turn[j]; }
+            }
+            }   // closes _beval_pc -- the refine below runs at REAL play settings
+            // TWO-STAGE REFINE, per-candidate twin of the subset-table refine above
+            // (MTG_BOTTOM_EVAL_TOPK=K, default 0 = off; stage-1-cheap gate identical). The
+            // subset-table path re-rolled its own entries, so this fires only when the table
+            // is absent (count==1 / oversized hands) and the trials above were clairvoyant
+            // singles, not blind-K averages (the blind path is its own policy; leave it whole).
+            static const int s_beval_topk_pc = EnvInt("MTG_BOTTOM_EVAL_TOPK", 0);
+            if (!subset_table && !s_blind_bottom && s_beval_topk_pc > 0
+                && (s_beval_depth >= 0 || s_beval_budget >= 0))
+            {
+                std::vector<int> order(static_cast<std::size_t>(hand_size));
+                for (int j = 0; j < hand_size; ++j) { order[static_cast<std::size_t>(j)] = j; }
+                std::stable_sort(order.begin(), order.end(),
+                                 [&](int x, int y) { return win_turn[x] < win_turn[y]; });
+                if (static_cast<int>(order.size()) > s_beval_topk_pc)
+                { order.resize(static_cast<std::size_t>(s_beval_topk_pc)); }
+                for (int j : order)
+                {
+                    GameState trial = state;
+                    Player& trial_ap = trial.ActivePlayer();
+                    trial_ap.library.push_back(trial_ap.hand[j]);
+                    trial_ap.hand.erase(trial_ap.hand.begin() + j);
+                    win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
+                }
+                best_win = std::numeric_limits<int>::max();
+                for (int j = 0; j < hand_size; ++j)
+                { if (win_turn[j] < best_win) { best_win = win_turn[j]; } }
             }
             for (int j = 0; j < hand_size; ++j)
             {

@@ -33031,6 +33031,32 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // decision-level guard must live here too. First-entry-wins; the nested FullSearchLine
     // guard then no-ops.
     CondemnRootTurnGuard _crt(state.turn_number);
+    // Per-decision TOTAL work ceiling (MTG_DECISION_WORK_X; see SolveWithLookahead's twin and
+    // DecisionWorkMeter.h). This host is the OTHER real-play decision root -- the full-depth
+    // commit-the-line path calls it straight from TakeTurn, bypassing SolveWithLookahead
+    // entirely, so without arming here the executor's main decisions had no total ceiling at
+    // all (measured on melira s1033: 24 armed SolveWithLookahead roots billed 0.2 s while the
+    // unarmed hybrid decisions owned the remaining ~140 s). Root condition: outermost frame
+    // only -- any enclosing solver / rollout / line-walk owns the meter already and interior
+    // re-entries must bill it, never re-arm it. On a trip every running pass bails through
+    // SearchBudget::Overrun and the ladder commits the deepest COMPLETED pass (soft stop).
+    static const long long s_dw_x_fs = EnvInt("MTG_DECISION_WORK_X", 0);
+    const bool fs_decision_root = budget != nullptr && !budget->Unlimited()
+                               && g_cs_solver_nest == 0 && g_rollout_nest == 0
+                               && g_fsline_nest == 0;
+    decisionwork::Scope _dws_fs((fs_decision_root && s_dw_x_fs > 0)
+                                ? budget->Limit() * s_dw_x_fs : 0);
+    static const bool s_dw_debug_fs = EnvOn("MTG_DECISION_WORK_DEBUG");
+    struct DwDbgFs
+    {
+        bool on; int turn;
+        DwDbgFs(bool o, int t) : on(o), turn(t) {}
+        ~DwDbgFs()
+        { if (on) { std::fprintf(stderr, "[dw] t%d(fs) armed=%lld used=%lld exceeded=%d\n", turn,
+                                 decisionwork::t_limit, decisionwork::t_used,
+                                 decisionwork::Exceeded() ? 1 : 0); } }
+    } _dwdbg_fs(s_dw_debug_fs && fs_decision_root, state.turn_number);
+    GreedyChargeGuard _gcg_fs(budget);   // MTG_SOLVE_CHARGE: root-level greedy walks bill here
     static const double s_esc_split   = []{ const char* e = std::getenv("MTG_ESC_SPLIT");
                                             return (e && *e) ? std::atof(e) : -1.0; }();
     SearchBudget  probe_cap_budget;
