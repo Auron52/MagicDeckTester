@@ -1310,6 +1310,32 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
         }
     }
 
+    // BOTTOMING-EVAL SETTINGS OVERRIDE (MTG_BOTTOM_EVAL_DEPTH / MTG_BOTTOM_EVAL_BUDGET, ints,
+    // unset = off => byte-identical). When set, the clairvoyant bottoming rollouts below run at
+    // this lookahead depth / virtual-ms budget instead of inheriting the game's play settings.
+    // WHY: with no exhaustive bottom table this block is the deck's dominant cost -- 90.4% of
+    // FiveColour's runtime (callgrind, 2026-08-10) and ~92% of Fluctuator's (units A/B,
+    // 2026-09-06: 9.1 -> 0.69 s/game at d3 b20 with rollouts off) -- because every candidate
+    // pays a FULL game at play settings. The rollouts also EARN their keep (-0.08 turns on
+    // Fluctuator vs the blind heuristic), so what this lever measures is how much of that
+    // quality survives CHEAPER rollouts (the removal choice needs relative ranking of hands,
+    // not exact win turns). Scoped strictly around the rollout loops, AFTER the gates: the
+    // LookaheadBottoming() gates read the REAL play depth, so depth 0 here still means
+    // "roll out, played greedily", not "rollouts off".
+    static const int s_beval_depth  = EnvInt("MTG_BOTTOM_EVAL_DEPTH", -1);
+    static const int s_beval_budget = EnvInt("MTG_BOTTOM_EVAL_BUDGET", -1);
+    struct BottomEvalScope
+    {
+        AIEngine& eng; int save_d; int save_b;
+        explicit BottomEvalScope(AIEngine& e)
+            : eng(e), save_d(e.m_lookahead_depth), save_b(e.m_budget_ms)
+        {
+            if (s_beval_depth  >= 0) { e.m_lookahead_depth = s_beval_depth; }
+            if (s_beval_budget >= 0) { e.m_budget_ms = s_beval_budget; }
+        }
+        ~BottomEvalScope() { eng.m_lookahead_depth = save_d; eng.m_budget_ms = save_b; }
+    };
+
     // One transposition table shared across every candidate rollout of this whole
     // bottoming pass: each RolloutWinTurn plays a full lookahead game over the same
     // fixed library, so later turns/candidates reuse memoised exact win turns rather
@@ -1348,6 +1374,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             subset_win.assign(std::size_t{1} << h0, 0);
             nums0.reserve(h0);
             for (const Card& c : ap.hand) { nums0.push_back(c.m_number); }
+            BottomEvalScope _beval(*this);   // cheap-eval override, subset rollouts only
             for (std::uint32_t m = 0; m < (1u << h0); ++m)
             {
                 if (popcnt(m) != count) { continue; }
@@ -1405,6 +1432,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                                                    return (e && *e) ? std::max(1, std::atoi(e)) : 4; }();
             std::vector<int> win_turn(hand_size, 0);
             int best_win = std::numeric_limits<int>::max();
+            BottomEvalScope _beval(*this);   // covers the per-candidate and blind-K rollouts
             for (int j = 0; j < hand_size; ++j)
             {
                 if (subset_table)
