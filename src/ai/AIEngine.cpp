@@ -4244,8 +4244,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                      a.ability_mode);
                     if (m_logger)
                     {
+                        // Gated look (Scrying Sheets / Frost Augur): the find is a PUT-IN-HAND,
+                        // not a draw (USER reveal!=draw convention, 2026-09-06) -- the generic
+                        // TapDraw label would log "draw a card" and misrepresent it. Param-keyed,
+                        // so every real tap-draw keeps its exact label (digest-stable elsewhere).
                         m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
-                                             PermAbilityLabel(a.ability_mode));
+                                             snow_look ? "look at top; put a snow card into hand"
+                                                       : PermAbilityLabel(a.ability_mode));
                     }
                     // LOCKSTEP with the rollout's repeat loop (TurnSolver apply_one). A repeatable
                     // {T}-less sink's plan carries K activations with only the FIRST on the subset's

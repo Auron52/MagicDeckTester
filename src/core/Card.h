@@ -154,6 +154,20 @@ struct ManaCost
     uint8_t phyrexian_count    = 0;
     uint8_t phyrexian_color[2] = {0, 0};   // Color of each pip's mana side, printed order
 
+    // SNOW pips ({S}: pay with one mana from a snow SOURCE, any type -- CR 106.4b; Arcum's
+    // Astrolabe / Frost Augur / Scrying Sheets / Rimefeather Owl, user-directed 2026-09-06
+    // "handled in a forward-looking manner that will handle cases with mixed manabases").
+    // REPRESENTATION mirrors hybrid/phyrexian: each {S} pip is baked into `generic` (so
+    // ManaValue, colour demand, equality and every flat reader are byte-identical to the old
+    // {S}-as-generic collapse), and this count only CONSTRAINS payment: the payer settles
+    // snow_pips of the generic pips from actual snow sources (ManaPayment's snow-restricted
+    // generic loop), and the enumerator pool's CanPayFlat requires snow_pips <= snow_units.
+    // On an all-snow manabase every check degenerates to the flat one (byte-identical); on a
+    // mixed base a non-snow source can no longer pay an {S} pip. Floating/ritual mana is
+    // conservatively treated as NON-snow (it cannot pay {S}; disclosed, no current deck mixes
+    // rituals with snow costs).
+    uint8_t snow_pips = 0;
+
     // X counts as 0 outside the stack (CR 202.3). Hybrid pips are already counted in their
     // first colour's flat int.
     int ManaValue() const { return generic + white + blue + black + red + green + colorless; }

@@ -83,7 +83,12 @@
 // exactly one site, the viewer's JsonBattlefield ("printed" field); the copy's game behaviour is
 // fully determined by the copied card + m_number, both already folded. A field no game-logic path
 // reads cannot make two states evolve differently, so it is deliberately NOT folded into Build().
-static_assert(sizeof(Permanent) == 264,
+// 264 -> 272 (2026-09-06): ManaCost (embedded in Card, embedded in Permanent) gained `snow_pips`
+// ({S} pip count -- see Card.h). Classification: a CARD CONSTANT -- it is a static property of the
+// printed cost, fully determined by the card identity (m_number, already folded), identical for
+// the same card in any two states Build() could compare. Nothing to fold (the copy_printed_name
+// argument verbatim).
+static_assert(sizeof(Permanent) == 272,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // 160 -> 184 (2026-09-02): Player gained `sideboard`, the OUTSIDE-THE-GAME zone a wish searches
@@ -116,7 +121,12 @@ static_assert(sizeof(Player) == 192,
 // fold would shift every key for every deck). deck_reads_mv_cast itself is a DECK CONSTANT
 // (stamped once at SetupGame), identical across every pair of states Build() could ever
 // compare -- nothing to fold, exactly like deck_feeds_combat above it.
-static_assert(sizeof(GameState) == 768,
+// 768 -> 776 (2026-09-06): ManaPool gained `wild_phantom` (the fed no-free-filter amount-phantom
+// subset; Arcum's Astrolabe), and GameState embeds one as floating_mana. Same classification as
+// wild_c above verbatim: a SUBSET COUNT of ManaPool::wild, so wild_phantom > 0 implies wild > 0
+// implies floating_mana.Total() > 0, which the mid-turn boundary assertion below already stands
+// the whole comparator down on. Nothing to fold.
+static_assert(sizeof(GameState) == 776,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

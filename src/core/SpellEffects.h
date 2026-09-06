@@ -829,6 +829,13 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost,
 // the drain, which therefore keeps the payment order its measurement was taken under.
 inline thread_local bool g_hold_colorless_for_pips = false;
 
+// STRICT SNOW PAYMENT is in effect for the current payment: the cost carries {S} pips AND the
+// paying player's manabase is MIXED (some mana source is not snow), so snow pips must tap real
+// snow sources and floating (no provenance) may not pay them. Set RAII-scoped by
+// TapForCostSharedOnce; false everywhere else -- including the whole Snow deck, whose all-snow
+// board makes every restriction a no-op by construction (byte-identity). See ManaCost::snow_pips.
+inline thread_local bool g_snow_pay_strict = false;
+
 struct HoldColorlessScope
 {
     bool prev;
@@ -13721,6 +13728,17 @@ inline bool AnyUntappedFilterSource(const GameState& state)
 inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDefinition& def,
                             int yield_override, const Permanent* perm)
 {
+    // SNOW provenance choke point (see ManaPool::snow_units): every unit this source adds is
+    // tagged snow iff the DEFINITION's card is snow -- def.card carries real supertype masks
+    // even when `perm` is null (a pending rock projected from hand, where the ZoneCard
+    // placeholder-mask trap would misread). Measured as a Total() delta on scope exit so every
+    // early-return branch below (filters, karoos, storage) is covered without touching it.
+    struct SnowTag
+    {
+        ManaPool& p; bool snow; int before;
+        SnowTag(ManaPool& pool_, bool s) : p(pool_), snow(s), before(pool_.Total()) {}
+        ~SnowTag() { if (snow) { p.snow_units += p.Total() - before; } }
+    } _snow_tag(pool, def.card.HasSupertype(Supertype::Snow));
     // A land Aura's "additional mana" is the AURA's, in the AURA's colour -- so credit it up front,
     // independently of whichever mode the enchanted land itself is in, and then remove it from a
     // caller-supplied yield_override below. PermanentManaYield deliberately FOLDS the aura into the
@@ -13746,7 +13764,16 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
         // The capped credit is still permissive (it takes the max in each dimension: the full
         // unit count AND the largest reachable coloured count), so it can offer a cast the payer
         // then refuses, never hide one.
-        if (AnyColorFilterHasFedSlot(state, def, perm)) { ++pool.wild; }
+        if (AnyColorFilterHasFedSlot(state, def, perm))
+        {
+            ++pool.wild;
+            // A fed NO-FREE filter's unit is a colour CONVERSION of a feeder unit the pool already
+            // counts, not new supply -- "ONE unit per tap" above is only true when a free {C} mode
+            // exists (Capital City). Tag it so CanPayFlat's amount precheck stops the
+            // +1-per-Astrolabe phantom offers (4 sweep agents confirmed mv-7 plans off 6 real
+            // sources) while the wild still covers colour deficits (the conversion is real).
+            if (def.params.filter_no_free_colorless) { ++pool.wild_phantom; }
+        }
         // Arcum's Astrolabe: outside its fed quota it contributes NOTHING (no free {C} mode) --
         // crediting the {C} here is the +4-phantom-mana over-credit its param exists to prevent.
         else if (!def.params.filter_no_free_colorless) { pool.Add(Color::Colorless); }
@@ -13876,6 +13903,20 @@ inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
 // mana is realised identically in both (lockstep). See GameState::floating_mana.
 inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep_flexible)
 {
+    // SNOW pips ride in `generic` (baked -- see ManaCost::snow_pips), and the reserve carries no
+    // snow provenance, so under STRICT snow payment (g_snow_pay_strict: the paying player's
+    // manabase is MIXED -- see TapForCostSharedOnce's scan) hold snow_pips of the generic back
+    // from every drain below: those pips must reach the payer's snow-restricted tap loop. On an
+    // all-snow board the flag is off (every floated unit IS snow-produced, so refusing it would
+    // change taps for nothing -- the gi9 divergence) and this is byte-identical to the flat
+    // drain, as it is for every {S}-free cost. RAII so both early returns restore.
+    struct SnowHold
+    {
+        ManaCost& c; int held;
+        ~SnowHold() { c.generic += held; }
+    } _snow_hold{cost, g_snow_pay_strict ? std::min<int>(cost.snow_pips, cost.generic) : 0};
+    cost.generic -= _snow_hold.held;
+
     if (reserve.Total() == 0) { return; }
     auto drain = [](int& pip, int& pool) { while (pip > 0 && pool > 0) { --pip; --pool; } };
     // 1) Exact colour matches.

@@ -25,6 +25,23 @@ struct ManaPool
     // below is provably byte-identical for every other deck. Clamped to `wild` at the one read site,
     // so the sites that decrement `wild` without maintaining this need no changes.
     int wild_c    = 0;
+    // A SUBSET COUNT of `wild` (like `wild_c`): how many wild units are AMOUNT-PHANTOM -- credited
+    // by a fed any-colour filter with NO free mode (Arcum's Astrolabe, `filter_no_free_colorless`),
+    // whose fed mode is 1-in/1-out. Such a unit is a COLOUR CONVERSION of a feeder unit already
+    // counted in this pool, not new supply -- so it may satisfy a colour deficit (the conversion is
+    // real) but must not raise the pool's payable AMOUNT. Counting it fully made 4 Astrolabes read
+    // as +4 mana and the enumerator offered mv-7 casts off 6 real sources on every main-phase
+    // re-solve (4 claude-play sweep agents confirmed independently, 2026-09-06). CanPayFlat's
+    // amount precheck below subtracts it; with no such filter on the battlefield it is 0 and the
+    // precheck is implied by the existing deficit checks, so every other deck is byte-identical.
+    int wild_phantom = 0;
+    // A SUBSET COUNT of Total() (the wild_c pattern): how many of this pool's units were produced
+    // by SNOW sources (battlefield permanents with Supertype::Snow -- real masks there). An {S}
+    // pip is payable only from such a unit (CR 106.4b; see ManaCost::snow_pips), so CanPayFlat
+    // requires snow_pips <= snow_units. Maintained at the pool-build choke point (the
+    // AddSourceToPool wrapper measures each source's unit delta) and additive under AddPool.
+    // 0 for every deck with no snow supertypes and no {S} costs -> the check is inert there.
+    int snow_units = 0;
 
     int Total() const { return white + blue + black + red + green + colorless + wild; }
 
@@ -41,7 +58,8 @@ struct ManaPool
         }
     }
 
-    void Clear() { white = blue = black = red = green = colorless = wild = wild_c = 0; }
+    void Clear()
+    { white = blue = black = red = green = colorless = wild = wild_c = wild_phantom = snow_units = 0; }
 
     // Merge another pool into this one, colour for colour (used to retain leftover
     // mana from a payment into the turn-scoped reserve, state.floating_mana).
@@ -49,6 +67,7 @@ struct ManaPool
     {
         white += o.white; blue += o.blue; black += o.black; red += o.red;
         green += o.green; colorless += o.colorless; wild += o.wild; wild_c += o.wild_c;
+        wild_phantom += o.wild_phantom; snow_units += o.snow_units;
     }
 
     // Returns true if this pool can pay the given cost. Two-colour hybrid pips are handled by
@@ -69,6 +88,19 @@ struct ManaPool
     // wild covers any shortfall. Assumes no hybrid or Phyrexian mana.
     bool CanPayFlat(const ManaCost& cost) const
     {
+        // AMOUNT precheck: phantom wilds (see `wild_phantom`) are colour conversions of units this
+        // pool already counts, so they cover colour deficits below but add no payable amount. Any
+        // really-payable cost needs ManaValue() distinct real units, so subtracting the phantom
+        // here can never hide a legal cast -- it only stops the +1-per-fed-Astrolabe offers the
+        // payer then refuses. Clamped to `wild` for the same reason `wild_c` is.
+        if (cost.ManaValue() > Total() - std::min(wild_phantom, wild)) { return false; }
+
+        // SNOW precheck (necessary, not sufficient -- the payer is the exact gate, per the
+        // enumerate-optimistic doctrine): {S} pips need units from snow sources. snow_pips = 0
+        // everywhere but snow decks, and an all-snow manabase has snow_units == Total(), so both
+        // the inert and the degenerate case are the flat check verbatim.
+        if (static_cast<int>(cost.snow_pips) > std::min(snow_units, Total())) { return false; }
+
         // {C} pips first, and they are the ONE deficit `wild` alone cannot cover: only a source that
         // can actually produce colourless pays them (see `wild_c`). Clamped here so the many sites
         // that adjust `wild` without maintaining the subset can never make it exceed its superset.

@@ -7295,13 +7295,13 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}: Add {C}.\n{1}{S}, {T}: Look at the top card of your library. If that card is snow, you may reveal it and put it into your hand. ({S} can be paid with one mana from a snow source.) [Both clauses modelled. The mana ability is produces C. The look ability rides tap_draw_cost \"{2}\" + tap_draw_requires_top_supertype Snow: the shared TapDraw resolution looks the top card's DEFINITION up (placeholder masks are empty) and on a snow match moves it to hand DIRECTLY -- reveal-and-put-into-hand is NOT a draw (USER 2026-09-06): no cards_drawn_this_turn, no draw watchers. A non-snow top stays ON TOP (mana/tap spent -- the real whiff; the clairvoyant search declines it; 56 of this deck's 60 cards are snow, the 4 Skred being plain Instants). The found card IS castable/playable the SAME turn (USER 2026-09-06): the activation opens breakpoint site 8, whose re-solve runs in both worlds. The 'you may' decline is the human's via the shared dig chooser; autonomous default is take (weakly dominant). PARTIAL: {S} modelled as generic {1}; exact in this deck -- every mana source is snow; a real forward-looking snow-mana model is the queued follow-up (USER 2026-09-06, done last).]",
+   "oracle_text": "{T}: Add {C}.\n{1}{S}, {T}: Look at the top card of your library. If that card is snow, you may reveal it and put it into your hand. ({S} can be paid with one mana from a snow source.) [Both clauses modelled. The mana ability is produces C. The look ability rides tap_draw_cost \"{1}{S}\" + tap_draw_requires_top_supertype Snow: the shared TapDraw resolution looks the top card's DEFINITION up (placeholder masks are empty) and on a snow match moves it to hand DIRECTLY -- reveal-and-put-into-hand is NOT a draw (USER 2026-09-06): no cards_drawn_this_turn, no draw watchers. A non-snow top stays ON TOP (mana/tap spent -- the real whiff; the clairvoyant search declines it; 56 of this deck's 60 cards are snow, the 4 Skred being plain Instants). The found card IS castable/playable the SAME turn (USER 2026-09-06): the activation opens breakpoint site 8, whose re-solve runs in both worlds. The 'you may' decline is the human's via the shared dig chooser; autonomous default is take (weakly dominant). RESOLVED 2026-09-06: {S} is now a REAL snow pip (ManaCost::snow_pips; payable only from a snow source, mixed-manabase-correct).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
      "C"
     ],
-    "tap_draw_cost": "{2}",
+    "tap_draw_cost": "{1}{S}",
     "tap_draw_requires_top_supertype": "Snow"
    }
   },
@@ -7396,7 +7396,7 @@
   },
   {
    "name": "Arcum's Astrolabe",
-   "mana_cost": "{1}",
+   "mana_cost": "{S}",
    "types": [
     "Artifact"
    ],
@@ -7405,7 +7405,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "({S} can be paid with one mana from a snow source.)\nWhen this artifact enters, draw a card.\n{1}, {T}: Add one mana of any color. [PARTIAL: printed cost {S} modelled as generic {1} -- exact in this deck (every mana source is snow) and mana value stays 1 = printed cmc; the forward-looking snow-mana model is the queued follow-up (USER 2026-09-06, done last). ETB draw = etb_self_draw (a REAL draw), fired from FireOwnEtbTriggers so executor and rollout stay lockstep. The mana ability is any_color_filter + filter_no_free_colorless: Capital City's flag bakes in a free \"{T}: Add {C}\" mode this card LACKS -- the no-free variant gates every free-mode credit site (an AMOUNT over-credit of up to +4 mana/turn on 4 copies otherwise). mana_rock is required for an artifact to be a payment source at all. Colour on the fed activation is auto-resolved in payment (the pip forces it).]",
+   "oracle_text": "({S} can be paid with one mana from a snow source.)\nWhen this artifact enters, draw a card.\n{1}, {T}: Add one mana of any color. [Cost is the REAL {S} as of 2026-09-06 (ManaCost::snow_pips: baked into generic for every flat reader, payable only from a snow source -- mixed-manabase-correct; mana value stays 1 = printed cmc). ETB draw = etb_self_draw (a REAL draw), fired from FireOwnEtbTriggers so executor and rollout stay lockstep. The mana ability is any_color_filter + filter_no_free_colorless: Capital City's flag bakes in a free \"{T}: Add {C}\" mode this card LACKS -- the no-free variant gates every free-mode credit site (an AMOUNT over-credit of up to +4 mana/turn on 4 copies otherwise). mana_rock is required for an artifact to be a payment source at all. Colour on the fed activation is auto-resolved in payment (the pip forces it).]",
    "template": "custom",
    "parameters": {
     "mana_rock": true,
@@ -7437,10 +7437,10 @@
    "keywords": [],
    "power": 1,
    "toughness": 2,
-   "oracle_text": "{S}, {T}: Look at the top card of your library. If it's a snow card, you may reveal it and put it into your hand. ({S} can be paid with one mana from a snow source.) [SHARED mechanism with Scrying Sheets: tap_draw_cost \"{1}\" + tap_draw_requires_top_supertype Snow (see that entry for the full model: non-snow top stays on top; put-into-hand is NOT a draw; breakpoint site 8 makes the find playable the SAME turn; dig-chooser decline). The {T} on a CREATURE is summoning-sickness gated (CanTap in the shared enumeration), so a fresh Augur cannot activate the turn it lands, and activating forfeits its attack. PARTIAL: {S} modelled as generic {1}; exact in this deck -- every mana source is snow; forward-looking snow-mana model queued last (USER 2026-09-06).]",
+   "oracle_text": "{S}, {T}: Look at the top card of your library. If it's a snow card, you may reveal it and put it into your hand. ({S} can be paid with one mana from a snow source.) [SHARED mechanism with Scrying Sheets: tap_draw_cost \"{S}\" + tap_draw_requires_top_supertype Snow (see that entry for the full model: non-snow top stays on top; put-into-hand is NOT a draw; breakpoint site 8 makes the find playable the SAME turn; dig-chooser decline). The {T} on a CREATURE is summoning-sickness gated (CanTap in the shared enumeration), so a fresh Augur cannot activate the turn it lands, and activating forfeits its attack. RESOLVED 2026-09-06: {S} is now a REAL snow pip (see Scrying Sheets).]",
    "template": "custom",
    "parameters": {
-    "tap_draw_cost": "{1}",
+    "tap_draw_cost": "{S}",
     "tap_draw_requires_top_supertype": "Snow"
    }
   },
@@ -7536,11 +7536,11 @@
    ],
    "power": 0,
    "toughness": 0,
-   "oracle_text": "Flying\nRimefeather Owl's power and toughness are each equal to the number of snow permanents on the battlefield.\n{1}{S}: Put an ice counter on target permanent.\nPermanents with ice counters on them are snow. [Printed */* = pt_equals_snow_permanents_on_battlefield: base 0/0 + the GLOBAL count on BOTH axes (unlike Abominable Treefolk's you-control variant -- load-bearing because the ice ability can make an OPPONENT permanent snow). The Owl is itself snow, so it is never a 0/0 on the battlefield. 'Permanents with ice counters are snow' = ice_counters_are_snow, a LAYER-4 static evaluated LIVE (never baked into the target's mask -- the grant ends when the Owl leaves, CR 706.2). The activation = ice_counter_cost \"{2}\" (PARTIAL: {1}{S} with the snow pip generic; exact in this deck -- every mana source is snow; forward-looking model queued last, USER 2026-09-06), PermAbilityMode::IceCounter: no {T}, repeatable, K capped by the NON-snow battlefield count (every permanent this deck plays is already snow -- the live targets are opponent spawns and a Marit Lage token). SHIPS AS A PAIR with Rimescale Dragon's ice_counters_dont_untap static (the only real cost of icing our own Marit Lage). Human target pick rides the shared dig chooser; autonomous pick prefers a non-snow opponent creature and skips own permanents while a don't-untap source is out. PARTIAL: Flying inert -- no blocking is modelled.]",
+   "oracle_text": "Flying\nRimefeather Owl's power and toughness are each equal to the number of snow permanents on the battlefield.\n{1}{S}: Put an ice counter on target permanent.\nPermanents with ice counters on them are snow. [Printed */* = pt_equals_snow_permanents_on_battlefield: base 0/0 + the GLOBAL count on BOTH axes (unlike Abominable Treefolk's you-control variant -- load-bearing because the ice ability can make an OPPONENT permanent snow). The Owl is itself snow, so it is never a 0/0 on the battlefield. 'Permanents with ice counters are snow' = ice_counters_are_snow, a LAYER-4 static evaluated LIVE (never baked into the target's mask -- the grant ends when the Owl leaves, CR 706.2). The activation = ice_counter_cost \"{1}{S}\" (the snow pip is REAL as of 2026-09-06 -- ManaCost::snow_pips), PermAbilityMode::IceCounter: no {T}, repeatable, K capped by the NON-snow battlefield count (every permanent this deck plays is already snow -- the live targets are opponent spawns and a Marit Lage token). SHIPS AS A PAIR with Rimescale Dragon's ice_counters_dont_untap static (the only real cost of icing our own Marit Lage). Human target pick rides the shared dig chooser; autonomous pick prefers a non-snow opponent creature and skips own permanents while a don't-untap source is out. PARTIAL: Flying inert -- no blocking is modelled.]",
    "template": "vanilla_creature",
    "parameters": {
     "pt_equals_snow_permanents_on_battlefield": true,
-    "ice_counter_cost": "{2}",
+    "ice_counter_cost": "{1}{S}",
     "ice_counters_are_snow": true
    }
   },

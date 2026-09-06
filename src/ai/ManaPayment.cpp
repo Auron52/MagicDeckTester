@@ -37,6 +37,34 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         return ProducesForPayment(state, active, d, for_creature);
     };
 
+    // STRICT SNOW PAYMENT scope (see g_snow_pay_strict): only when the cost carries {S} pips AND
+    // some mana source the payer controls is NOT snow. On an all-snow board (the Snow deck,
+    // always) strict stays off and every snow branch below is a no-op -- byte-identity by
+    // construction. The scan covers TAPPED sources too: turn-scoped floating is leftover tap
+    // output, and it counts as snow only if everything that could have produced it is snow.
+    // (Ritual float on a snow board is unattributable and assumed snow -- no current deck mixes
+    // rituals with {S} costs; disclosed in the Snow ledger.)
+    bool snow_strict = false;
+    if (cost_in.snow_pips > 0)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d) { continue; }
+            const bool sourcey = d->card.IsLand() || d->tmpl == CardTemplate::ManaDork
+                              || d->params.mana_rock || d->params.is_filter
+                              || d->params.any_color_filter || d->params.ramp_filter;
+            if (sourcey && !d->card.HasSupertype(Supertype::Snow)) { snow_strict = true; break; }
+        }
+    }
+    struct SnowStrictScope
+    {
+        bool prev;
+        explicit SnowStrictScope(bool on) : prev(g_snow_pay_strict) { g_snow_pay_strict = on; }
+        ~SnowStrictScope() { g_snow_pay_strict = prev; }
+    } _snow_strict_scope(snow_strict);
+
     // Spend any turn-scoped RESERVE mana (a ritual's floating output) before tapping. No-op when
     // empty -> byte-identical for non-ritual decks. Restored if the whole payment fails below.
     const ManaPool reserve_pre = state.floating_mana;
@@ -46,8 +74,16 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // tier -- see PayNeedScope in SpellEffects.h. RAII: dead again the instant this payment ends.
     PayNeedScope _pns(cost.white, cost.blue, cost.black, cost.red, cost.green);
 
+    // SNOW-pip restriction (see ManaCost::snow_pips): while the greedy loop is settling an {S}
+    // pip this flag narrows every candidate to SNOW producers -- the one choke point (usable)
+    // covers the scarcity path, the legacy 4-step path and the filter branches alike. The
+    // producing PERMANENT's snow-ness is what CR 106.4b cares about (a fed snow filter's output
+    // is snow mana regardless of the feeder). false for every non-{S} pip -> byte-identical.
+    bool paying_snow = false;
+
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
+        if (paying_snow && !def.card.HasSupertype(Supertype::Snow)) { return false; }
         if (reserved_mask)   // reservation audit: a held source is not tappable this attempt
         {
             const std::size_t idx = static_cast<std::size_t>(&p - state.battlefield.data());
@@ -198,6 +234,11 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // unmodelled ramp->ramp chain is inert unless 2+ ramp filters are the ONLY sources).
     std::function<bool(Color,bool,bool)> produce = [&](Color needed, bool any, bool allow_ramp) -> bool
     {
+        // Snow pips skip the floating shortcut: mid-payment floating carries no snow provenance
+        // (conservatively non-snow), so an {S} pip must tap a fresh snow source. Fungibility keeps
+        // this sound when floating is non-empty -- the snow-produced unit enters the float and any
+        // unit is consumed; a valid pip<->unit reassignment always exists.
+        if (!paying_snow)
         { ManaPool probe = floating;
           if (any ? (floating.Total() > 0) : ConsumeFloating(probe, needed)) { return true; } }
 
@@ -729,7 +770,18 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         for (int i = 0; i < cost.red;       ++i) { if (!pay(Color::Red,       false)) return false; }
         for (int i = 0; i < cost.green;     ++i) { if (!pay(Color::Green,     false)) return false; }
         for (int i = 0; i < cost.colorless; ++i) { if (!pay(Color::Colorless, false)) return false; }
-        for (int i = 0; i < cost.generic;   ++i) { if (!pay(Color::Colorless, true )) return false; }
+        // {S} pips are baked into `generic` (ManaCost::snow_pips); under STRICT snow payment
+        // (mixed manabase -- see the scope above) settle them FIRST among the generic pips,
+        // restricted to snow producers, so an unrestricted pip cannot strand one. On an all-snow
+        // board strict is off, n_snow = 0, and this loop is the historical plain-generic loop
+        // verbatim -- byte-identical for the Snow deck.
+        const int n_snow  = snow_strict ? std::min<int>(cost.snow_pips, cost.generic) : 0;
+        paying_snow = true;
+        for (int i = 0; i < n_snow; ++i)
+        { if (!pay(Color::Colorless, true)) { paying_snow = false; return false; } }
+        paying_snow = false;
+        for (int i = 0; i < cost.generic - n_snow; ++i)
+        { if (!pay(Color::Colorless, true )) return false; }
         return true;
     };
     // §2a: a Treasure that paid is SACRIFICED, not left tapped. Deferred to here because erasing
@@ -746,10 +798,17 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     state.players[active].graveyard = gy_pre;
     state.players[1 - active].life     = opp_pre;
     state.opponent_lost_life_this_turn = oll_pre;
+    // SNOW guard for the backtracking fallbacks: the backtracker is snow-BLIND (it assigns any
+    // source to any pip), which is exact when every untapped source is snow (the Snow deck --
+    // its complete fallback is preserved) and could construct an illegal {S} assignment on a
+    // MIXED manabase -- there it is skipped (pessimistic-safe: a payable cast the greedy missed
+    // fails instead of resolving illegally; disclosed in the ledger). Inert for snow_pips == 0.
+    auto snow_backtrack_ok = [&]() -> bool { return !snow_strict; };
     ManaPool bt_leftover;
     if (tapstats::Enabled()) { tapstats::g_site_percast.fetch_add(1, std::memory_order_relaxed); }
-    if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
-                            /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
+    if (snow_backtrack_ok()
+        && TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
+                               /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
     { commit_leftover(bt_leftover); CommitPaySacSacrifices(state, active); return true; }
     // Floating-fed filter retry: a filter / ramp-filter land (Ferrous Lake {1},{T}: Add {U}{R}) can be
     // FED by turn-scoped floating (a ritual's output, a depletion over-tap). SpendFloatingTowardCost
@@ -759,7 +818,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // feed-vs-spend. Guarded by a non-empty reserve AND an untapped filter/ramp source, so it is only
     // reached in exactly that stranded-feeder case: a non-floating or filter-less board never enters it
     // (byte-identical), and any cast the greedy/first backtracker already paid never reaches a fallback.
-    if (reserve_pre.Total() > 0 && AnyUntappedFilterSource(state))
+    if (reserve_pre.Total() > 0 && AnyUntappedFilterSource(state) && snow_backtrack_ok())
     {
         state.battlefield          = bf_pre;
         state.players[active].life  = life_pre;

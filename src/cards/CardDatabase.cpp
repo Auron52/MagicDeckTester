@@ -404,6 +404,12 @@ static ManaCost ManaCostFromString(const std::string& cost_str)
         else if (sym == "G") { ++cost.green; }
         else if (sym == "C") { ++cost.colorless; }
         else if (sym == "X") { cost.has_x = true; ++cost.x_pips; }
+        // SNOW pip ({S}: one mana from a snow source, any type -- CR 106.4b). Baked into
+        // `generic` (every flat reader byte-identical to the old collapse); the metadata makes
+        // the payer settle it from an actual snow source (see ManaCost::snow_pips). Before this
+        // parse existed {S} silently counted as NOTHING -- the trap that forced the Snow deck's
+        // costs to be transcribed as generic totals.
+        else if (sym == "S") { ++cost.generic; if (cost.snow_pips < 255) { ++cost.snow_pips; } }
         else if (sym.find('/') != std::string::npos)
         {
             // Two-colour hybrid pip ({B/G}, {G/U}, ...): REAL either-colour representation

@@ -1,0 +1,80 @@
+{
+  "card_scores": {
+    "Abominable Treefolk": [
+      0.8187467154563324,
+      0.0618431171494489
+    ],
+    "Arcum's Astrolabe": [
+      0.24019857933362143,
+      -0.03480589022757741
+    ],
+    "Boreal Druid": [
+      0.14198550596379444,
+      0.12442660550458662
+    ],
+    "Coldsteel Heart": [
+      0.2249413893801666,
+      0.03794037940379358
+    ],
+    "Frost Augur": [
+      0.0550952361937469,
+      0.2184835959700333
+    ],
+    "Highland Weald": [
+      -0.04933646949501913
+    ],
+    "Ice-Fang Coatl": [
+      -0.04342603668261624,
+      -0.4406249999999998
+    ],
+    "Kaldring, the Rimestaff": [
+      -0.19976032448377534
+    ],
+    "Marit Lage's Slumber": [
+      -0.15507499635940025,
+      -0.4100043687199646
+    ],
+    "Rimefeather Owl": [
+      -0.31273313546590487
+    ],
+    "Rimescale Dragon": [
+      -0.26270599639939096
+    ],
+    "Rimewood Falls": [
+      -0.023051717421690654
+    ],
+    "Scrying Sheets": [
+      -0.07990583021742115,
+      -0.1727518593644355
+    ],
+    "Skred": [
+      -0.23601144884302183,
+      -0.18561565017261206
+    ],
+    "Snow-Covered Forest": [
+      0.22700254115567287,
+      -0.21004874390701112
+    ],
+    "Snow-Covered Island": [
+      0.09386551663439491,
+      0.008081752604862658,
+      -0.42674203968620184
+    ],
+    "Snow-Covered Mountain": [
+      -0.14135789248233088,
+      -0.32589285714285676
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

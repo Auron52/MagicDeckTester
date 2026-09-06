@@ -390,7 +390,13 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 break;
             }
             case Action::Kind::ActivatePermAbility:
-                tag = a.card_name + ": " + PermAbilityLabel(a.ability_mode);
+                // Gated look (tap_draw_requires_top_supertype): a put-in-hand, not a draw (USER
+                // reveal!=draw convention) -- mirror the executor's LogAbility special case.
+                tag = a.card_name + ": "
+                    + ((a.def != nullptr && a.ability_mode == Action::AbilityMode::TapDraw
+                        && !a.def->params.tap_draw_requires_top_supertype.empty())
+                           ? "look at top; put a snow card into hand"
+                           : PermAbilityLabel(a.ability_mode));
                 break;
             // Birthing Pod: the VICTIM and the FETCH are the whole decision (the blink lesson
             // above) -- without both, every Pod variant renders identically.

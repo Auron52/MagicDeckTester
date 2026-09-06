@@ -199,6 +199,93 @@ All 17 mainboard cards `missing` (fresh deck). Sideboard `reachable: false` (cor
 
 (none yet — all deferrals PROVISIONAL until user signs off)
 
+## Claude-play sweep
+- commit: `2c98725b` (the Snow implementation commit; the one flag's fix landed immediately after)
+- seeds: 9000 games: 16 (game-indices 0–15, disjoint from suite seeds 1001/2002/3003/4004–7007)
+- flags: 0 unresolved
+- Result: **16/16 ties** — claude_win = ai_win = 5 in every game; zero misplay candidates.
+- One unique CONFIRMED bug, independently found by 6 of 16 agents (gi 0, 2, 4, 10, 11, 14):
+  the enumerator pool credited a FED Arcum's Astrolabe (`filter_no_free_colorless`) a full
+  `++pool.wild` — but its fed mode is 1-in/1-out, so the feeder's unit was double-counted
+  (+1 per fed copy, scaling to the +4 the param's own note warns about). Symptom: unpayable
+  plans offered (mv-7 casts off 6 real sources) and re-offered after each `dropped_casts`
+  no-op; nothing illegal ever resolved (payment is atomic). FIXED same day: `wild_phantom`
+  subset on ManaPool (the `wild_c` pattern) + an amount precheck in `CanPayFlat` that
+  subtracts phantom units from the payable amount while keeping the wild for colour
+  deficits — provably one-directional (can refuse phantom offers, can never hide a legal
+  cast), and provably byte-identical for every deck with no such filter (phantom=0 makes
+  the precheck implied by the existing deficit checks). Verified: unit 70/70 + scenarios
+  72/72 + smoke/regression suites on the fixed binary.
+- Repeated verified-clean observations across the 16 games: snow-enter scry fired on all
+  three wiring paths (own enter / FireEtbWatchers / LandPlay tail); Treefolk CDA exact at
+  every combat; upkeep threshold correctly silent below 10; ETB draws, enters-tapped,
+  summoning sickness, legality of every offered plan (modulo the fixed flag) all exact.
+- Coverage gaps the sweep could NOT reach (T5 Treefolk beatdown always ends the game
+  first): the Slumber upkeep sacrifice → Marit Lage token (+ legend rule), Scrying
+  Sheets / Frost Augur gated look (site 8), Rimefeather Owl ice counters, Kaldring
+  graveyard-play. Covered instead by the d0/d3/d5 depth-sweep game logs (slower wins
+  reach the upkeep) + targeted repros — see the depth-sweep section.
+
+## Snow-mana model — IMPLEMENTED 2026-09-06 (was the "design" below; kept for rationale)
+
+Shipped exactly as designed, with one correction found by measurement:
+- `ManaCost::snow_pips` (baked into generic — every flat reader unchanged), parsed from `{S}`
+  (which previously parsed to NOTHING); cards.json now carries the REAL costs (Astrolabe `{S}`,
+  Augur `{S}`, Sheets `{1}{S}`, Owl ice `{1}{S}`) — the Scryfall hard mismatch is cleared.
+- `ManaPool::snow_units` subset (wild_c pattern) maintained at the AddSourceToPool choke point
+  (def-card masks, so pending-rock projections avoid the placeholder-mask trap); `CanPayFlat`
+  requires `snow_pips <= snow_units` (necessary-condition, enumerate-optimistic doctrine).
+- Payer (`TapForCostSharedOnce`): **strict snow payment is scoped to MIXED manabases only**
+  (`g_snow_pay_strict`: cost has {S} pips AND some source the payer controls is not snow).
+  Under strict: {S} pips settle first among generic pips restricted to snow producers (the
+  `usable()` choke point covers scarcity/legacy/filter paths; a fed snow filter's output is
+  snow per CR 106.4b regardless of feeder), floating may not pay them (no provenance), and the
+  snow-blind backtracker fallbacks are skipped (pessimistic-safe). On an all-snow board every
+  restriction stands down — **byte-identity by construction**, which the first cut got wrong
+  (a blanket floating-hold moved seed-42 gi9 from wt 6 to 7; the strict scope fixed it).
+- **Evidence**: same binary, old-vs-new cards.json, Snow 10 games d3/b200 seed 42 —
+  win-turn IDENTICAL (avg 6.0000 both). Unit 70/70, scenarios 72/72. Mixed-manabase probe
+  (Snow.cod with 8 Island + 3 Mountain swapped in): Astrolabe off a lone plain Island is
+  REFUSED by the payer (`dropped_casts`, board untouched) and RESOLVES off a snow Forest;
+  the mixed deck functions at d0 (7.36) and d3 (6.17) — slower than pure snow, as losing
+  11 snow permanents should be.
+- **Disclosures**: (1) the ENUMERATOR may still offer an {S} cast a mixed board cannot pay
+  (an amount-only afford gate upstream of ManaPool::CanPay) — doctrine-compliant (never hides,
+  payer exact, refusal disclosed via dropped_casts), same class as pre-existing colour optimism.
+  (2) On an all-snow board, ritual/spell-produced floating would be assumed snow (no current
+  deck mixes rituals with {S} costs). (3) A generic cost REDUCER cannot distinguish the baked
+  {S} from real generic (no current deck combines them). (4) Under strict, the skipped
+  backtracker can fail a filter-chain payment a cleverer assignment could make (pessimistic,
+  never illegal).
+
+## Snow-mana model design (USER directive 3 — implement LAST)
+
+Forward-looking {S}: payable only by mana from snow SOURCES, correct for mixed manabases.
+Follows the repo's hybrid/phyrexian/wild_c precedent — flat readers byte-identical, metadata
+only CONSTRAINS payment:
+
+- **ManaCost**: each {S} pip bakes into `generic` (ManaValue and every flat reader unchanged)
+  and increments a new `uint8_t snow_pips`. Parse in ManaCostFromString ({S} currently parses
+  to NOTHING — the silent-zero trap).
+- **ManaPool**: per-bucket snow SUBSET counts (`snow_white … snow_colorless, snow_wild`),
+  maintained where pools are built (BuildAvailableMana: source is snow iff the battlefield
+  permanent's card `HasSupertype(Supertype::Snow)` — real masks on battlefield) and carried
+  through AddPool/floating retention. Subsets, not new supply — every existing reader sees
+  identical values (the wild_c argument).
+- **Affordability/payment**: a single greedy `snow_pips <= snow_any` check is WRONG (cost
+  {W}{S} vs pool {snow W, non-snow G} — the one snow unit cannot pay both pips). Exact and
+  cheap instead: enumerate the supplying BUCKET per {S} pip (<= 7 choices per pip; every real
+  snow card has exactly one {S}, support 2 like phyrexian), decrement that bucket + its snow
+  subset, flat-check the remainder. Sites: ManaPool::CanPay, TapForCostShared/Direct (must
+  TAP an actual snow source for the pip; prefer non-snow sources for non-snow pips), greedy
+  ManaPayment, the SpellEffects.cpp flow oracle.
+- **cards.json**: restore real costs — Astrolabe cast `{S}`, Augur activation `{S}`, Sheets
+  `{1}{S}`, Owl ice `{1}{S}`, Rimescale ice `{2}{S}` — clearing the one Scryfall hard mismatch.
+- **Verification**: this deck's manabase is 100% snow, so `snow_any == Total()` always and
+  every check degenerates to the flat one — byte-identity EXPECTED for Snow, and `snow_pips=0`
+  everywhere else makes other decks provably untouched. Prove both: Snow 10-game digest match
+  + smoke suite.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. `{S}` modelled as generic `{1}` (see above) — PROVISIONAL.
