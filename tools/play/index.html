@@ -3746,7 +3746,12 @@ function showBetaNote(){
   el.title=(d.tier==='alpha'
       ? 'This deck is playable but part of its apparatus is MISSING, so its numbers may be wrong:'
       : 'This deck is complete but not yet proven, so its numbers are not fully established:')
-    +'\n  · '+reasons.join('\n  · ');
+    +'\n  · '+reasons.join('\n  · ')
+    // Not a tier reason and never demotes: a rejected value leaf (.value.DISABLED.json) is this
+    // deck's measured-best configuration, stated here so its absence reads as a decision.
+    +(d.valueLeafDisabled
+        ? '\n  · value leaf: DISABLED BY DESIGN (adoption A/B measured no benefit for this deck)'
+        : '');
 }
 async function loadDecks() {
   const j=await (await fetch('/api/decks')).json();

@@ -344,7 +344,10 @@ function safeStem(s) { return String(s).replace(/[^A-Za-z0-9_-]+/g, '_'); }
 //     the repo -- the bound the AI's win turn is judged against, and the thing that surfaces engine
 //     bugs autonomous play cannot (every viewer bug-bash in docs/design/ started as a reference).
 //     A deck with three of them has not been looked at.
-//   * NO VALUE-LEAF (`<stem>.value.json`, the path AttachValueSidecar resolves).
+//   * NO VALUE-LEAF (`<stem>.value.json`, the path AttachValueSidecar resolves) -- UNLESS the deck
+//     holds a `<stem>.value.DISABLED.json`: that is a model the adoption A/B measured and REJECTED
+//     for play (the value-leaf skill's rejected-model shipping form), so leaf-less play is the
+//     decided configuration, not a gap. Surfaced as a by-design note, never as alpha.
 //   * NO COMPLETED MULLIGAN PROFILE. "Completed" means the COMPILED table exists, not that
 //     generation was started: FiveColour holds a `.raw.json.journal` and no compiled profile, which
 //     is a paused run, not a model. The extension list mirrors MulliganProfileIO.h:967 exactly, in
@@ -543,7 +546,7 @@ function benchState(key) {
 
 // PURE, so the policy is testable without a filesystem (test/viewer_deck_beta_check.js).
 // -> { tier: 'unplayable' | 'alpha' | 'beta' | 'stable', tierReasons: [...] }
-function tierFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchivedList, bench }) {
+function tierFrom({ hasProfile, refs, hasValueLeaf, valueLeafDisabled, hasKeepModel, refsOnArchivedList, bench }) {
   if (!hasProfile) return { tier: 'unplayable', tierReasons: [] };
 
   // ALPHA -- a piece of the apparatus is missing outright.
@@ -552,7 +555,12 @@ function tierFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchived
     missing.push(`${refs}/${MIN_OPTIMAL_REFS} optimal reference games`
       + (refsOnArchivedList ? ` (the ${refsOnArchivedList} saved games were played on an archived list)` : ''));
   }
-  if (!hasValueLeaf) missing.push('no value-leaf model');
+  // A `<stem>.value.DISABLED.json` is a DECIDED absence, not a missing piece: the value-leaf skill
+  // ships a model there when the phase-E adoption A/B measured it as no-benefit for this deck
+  // (fluctuator 2026-09-06: quality delta -0.00012 at 1.06x cost). Running without a live sidecar
+  // is that deck's measured-best configuration, so it satisfies the apparatus check; the client
+  // shows the by-design state in the maturity tooltip instead of an alpha demotion.
+  if (!hasValueLeaf && !valueLeafDisabled) missing.push('no value-leaf model');
   if (!hasKeepModel) missing.push('no completed mulligan profile');
   if (missing.length) return { tier: 'alpha', tierReasons: missing };
 
@@ -607,6 +615,10 @@ function deckMaturity(dir, name, hasProfile, version) {
   const refsOnArchivedList = owner === key ? 0 : saved;
   const refs = owner === key ? saved : 0;
   const hasValueLeaf = fs.existsSync(path.join(dir, name + '.value.json'));
+  // Rejected-for-play model shipped inert by the value-leaf skill -- see tierFrom for why this
+  // counts as a decided apparatus rather than a missing one.
+  const valueLeafDisabled = !hasValueLeaf
+    && fs.existsSync(path.join(dir, name + '.value.DISABLED.json'));
   const hasKeepModel = KEEPMODEL_EXTS.some(ext => fs.existsSync(path.join(dir, name + ext)));
   // ref_bench.py keys its results by the deck the references were PLAYED on. So a deck whose folder
   // belongs to an archived list must NOT read that entry: the bench under `owner` describes the
@@ -620,8 +632,8 @@ function deckMaturity(dir, name, hasProfile, version) {
   // refs >= STABLE_REFS -- past the last count requirement there is no fraction to show.
   const refGoal = refs < MIN_OPTIMAL_REFS ? MIN_OPTIMAL_REFS
                 : refs < STABLE_REFS      ? STABLE_REFS : null;
-  return Object.assign({ refs, refGoal, hasValueLeaf, hasKeepModel, refsOnArchivedList, bench },
-                       tierFrom({ hasProfile, refs, hasValueLeaf, hasKeepModel, refsOnArchivedList, bench }));
+  return Object.assign({ refs, refGoal, hasValueLeaf, valueLeafDisabled, hasKeepModel, refsOnArchivedList, bench },
+                       tierFrom({ hasProfile, refs, hasValueLeaf, valueLeafDisabled, hasKeepModel, refsOnArchivedList, bench }));
 }
 
 // ---- routes ----------------------------------------------------------------------
