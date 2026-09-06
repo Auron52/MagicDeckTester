@@ -1,7 +1,8 @@
 # Kitty's interior-m2 tail: root-caused, remedy designed, deferred
 
 **Status: DIAGNOSED 2026-09-05 (deletion follow-up #2, searched-second-main-unconditional.md);
-the remedy is designed but NOT built.** Raw data: `logs/kitty_m2tail/`. Everything here is from
+remedy BUILT 2026-09-06 as `MTG_M2_KEY_COARSE` and CLOSED the same day — mode 1 refuted by
+the verify gate, mode 2 sound but merges zero states (see the remedy section).** Raw data: `logs/kitty_m2tail/`. Everything here is from
 unbudgeted (b0, unit-counted, load-independent) runs at the §3c config: KittyEquipment d5,
 max_turns=8, seed 400001+gi with `--game-index gi`.
 
@@ -29,16 +30,39 @@ budget-bound — this tail is a generation-time/unbudgeted problem, not a shippe
   The outer loop permutes attachment/tap detail the m2 answer cannot depend on, and each
   permutation keys distinctly under `BuildBreakpointKey`.
 
-## The remedy (allowed class — deletes no line), when someone builds it
+## The remedy — BUILT 2026-09-06 (`MTG_M2_KEY_COARSE`), mode 1 REFUTED by its own gate
 
 **Coarsen `SearchedSecondMainMemoized`'s key to the m2 plan's real dependency set** (today:
-whole-state `BuildBreakpointKey` + depth). An interior m2 plan can depend on untapped mana, hand,
-the cast-relevant battlefield multiset (incl. artifact count for metalcraft), and lethal-relevant
-life — NOT on which creature each equipment is attached to, attacker tap state, or damage dealt.
-Every searched m2 still enumerates its full candidate set; equivalent states just stop
-re-searching. Expected ~3.7x cut on gi=231's extra (63.5% → ~90% hit rate). **Soundness gate:
-the existing `solvememo::SamePlan` / `MTG_SOLVE_MEMO_VERIFY` harness — a missed dependency means
-wrong plan reuse, so the verify run is mandatory, not optional.**
+whole-state `BuildBreakpointKey` + depth). Built as an int-mode lever (`g_simkey_m2coarse`
+consumed inside `BuildSimKey`'s battlefield loop; `BuildM2CoarseKey` folds the mode into a
+distinct key namespace; an m2-specific verify pass added to `SearchedSecondMainMemoized` under
+`MTG_SOLVE_MEMO_VERIFY` recomputes the solve on every coarse hit and `SamePlan`-compares).
+
+* **Mode 1 (drop attachment wiring + marked damage + temp pump): UNSOUND — refuted.** Units
+  win was real (gi=231 −7.6%, gi=470 −21.7%, same win turns), but the verify arm printed
+  repeated `[m2-search-memo] MISMATCH t7 d1: cached 6 actions vs fresh 5` on gi=231. The
+  diagnosis above was wrong on one axis: attachment wiring IS a dependency for d≥1 interior
+  m2 solves, because their lookahead rolls into COMBAT and who holds the equipment decides
+  it. The verify gate did exactly the job it was declared for.
+* **Mode 2 (keep attachments; drop only marked damage + temp pump): SOUND but WORTHLESS.**
+  Verify clean — 839,490 coarse m2 hits recomputed, 0 mismatches (plus 0 over 10.2M general
+  solve-memo hits in the same run). But on BOTH tail games mode 2 is identical to the off
+  arm to the last digit: same hits (839,490 / 5,451,190), same misses, same clears, same
+  `units_total` (29,063,027 / 49,371,580). Dropping damage + temp pump merges ZERO states —
+  no two m2-solve states ever differ only on those axes (damage co-varies with the attack
+  line, which already keys differently elsewhere). The distinct-key volume was entirely the
+  attachment permutations, i.e. the one axis mode 1 proved is a real dependency.
+
+**Verdict: the coarse-key remedy is CLOSED.** The only coarsening with value is unsound; the
+sound coarsening has no value. The lever stays OFF (the tail is generation-time only, and the
+bar was "free win or nothing" — this is nothing). The `MTG_BIG_SOLVE_MEMO` finding below
+remains the only real mitigation for unbudgeted kitty work; a future attack on this tail must
+key on something smarter than field-dropping (e.g. canonicalizing WHICH creature holds which
+equipment when the holders are combat-equivalent), which is a different, harder project.
+
+**Soundness gate (unchanged): the `solvememo::SamePlan` / `MTG_SOLVE_MEMO_VERIFY` harness — a
+missed dependency means wrong plan reuse, so the verify run is mandatory, not optional.** It
+has now rejected one mode; that is the system working.
 
 Cheaper adjacent findings, recorded so they are not rediscovered:
 

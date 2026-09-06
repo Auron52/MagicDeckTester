@@ -330,6 +330,111 @@ turns diverge. gi=22 additionally shows the phase-ORDER half (Soulfire cast m1 g
 plus a combat for its revealed free casts; m2 gets one), which no re-solve can restore — that
 part is inherent to the classification and bounds how green the doctrine can ever go.
 
+### BUILT (2026-09-06, "build any and everything" directive): `MTG_M2_FIXPOINT`, kill-scan
+
+THREE designs were built and measured the same day; the first two are the cautionary half of
+the record — each rejected by a different instrument, which is why both instruments exist.
+
+* **v1 — Unconditional re-solve (REJECTED by the per-game battery).** The literal fix
+  sketch — after a breakpoint-firing m2 plan, re-solve and play whatever the fresh solve
+  says, on all three hosts (FSLineTail recursion, the interior `SolveSecondMainInSearch`
+  apply sites, executor re-entry). It recovered gi=66 (9→5 class) but measured NET-RED on
+  the 100-game battery: split+axes+fix vs split+axes 6 better / 10 worse (+0.08/game).
+  Mechanism: the executor's extra NON-LETHAL casts realize a future the outer scored line
+  never priced — playing more cards is not free when the next turn's solve wanted them.
+* **v2 — Lethal-only via NESTED SOLVE (REJECTED by the suite A/B).** Only commit the
+  re-solve's line if it kills. Quality clean on the battery (6/0), but the smoke suite
+  showed **478 games slower** and a hinata d0 cell flipped a win to a LOSS: (a) a full
+  `SolveSecondMainInSearch` per draw-firing rollout m2 is a budget tax paid by every deck on
+  every rollout; (b) the executor's lethal gate sat on the searched branch that d0 play
+  never reaches, so d0 re-entries played ungated extra casts (the v1 harm, resurrected on
+  one depth). One-deck train evidence cannot see either failure — the suite can. (Caveat
+  added after the misattribution below was found: v2's suite-red magnitude is confounded by
+  the same MainPhase loop bug if it was in the tree for that run; the d0 flip and the
+  per-rollout nested-solve tax are the load-bearing rejections, and they stand on their own
+  mechanisms.)
+* **v3 — KILL-SCAN, projection-filtered (CURRENT, default OFF).** No nested solve anywhere.
+  At each host, ENUMERATE the post-draw m2 plans, probe-apply ONLY those whose enumeration
+  entry projects `wins_this_turn`, and commit solely on a verified `OpponentHasLost` —
+  otherwise change nothing. `wins_this_turn` is the OPTIMISTIC lethal projection, so it
+  over-counts and every real kill passes the filter. Cost of the filter: 2 of the 6
+  split-arm rescues have kills whose projection does not fire; they stay stranded. All
+  three hosts apply the same rule: the FSLineTail m2 loop (gated on `g_bp_fired_last`,
+  adopts a consecutive-m2 two-`PhasePlan` win; the executor replays it via the
+  `HasCommittedPhasePlan` loop in `GameEngine::MainPhase`), the interior
+  `ApplySecondMainInSearch` helper (wraps all five interior apply sites), and the executor's
+  `AIEngine::TrySecondMainStrandedKill` (probes under `RevealLogPause`, real
+  `TurnSolver::ApplyPlan` only on the kill). Executor draw signal = `cards_drawn_this_turn`
+  delta stamped by an exit guard on `TakeTurn` (`m_m2_exec_drew`), since a non-committed
+  plan's cantrip draws never touch the breakpoint machinery — the first gate attempt,
+  `g_bp_seen_last`, is only written for plans carrying a `bp_choice` and read 0 on the exact
+  plan the lever was built for. The re-entry is depth-independent (no flag-threading through
+  the search), which is what fixes v2's d0 hole.
+
+**The suite-red MISATTRIBUTION (2026-09-06, caught by an off-arm control).** Every suite A/B
+of this lever showed combo decks devastated (dragonstorm +1.8/game, breaching +1.5), and it
+was twice attributed to the scan (first "probe everything", then "the filter should fix it").
+Both attributions were WRONG: the filtered and unfiltered binaries produced BYTE-IDENTICAL
+red suites (net +1120.0 both times), and a single-process control with the LEVER OFF
+reproduced dragonstorm's 6.30 exactly. The regression was a lever-independent bug in the new
+`GameEngine::MainPhase` re-entry loop: `HasCommittedPhasePlan` matched on PHASE alone, but a
+committed verified-win `SearchLine` spans MULTIPLE turns — for an m1-only deck the deque
+holds adjacent pre-combat entries (`[T4 m1, T5 m1, ...]`), so the ungated loop replayed the
+whole committed line in one main phase. Storm decks commit verified lines constantly, hence
+the deck pattern (dragonstorm/breaching worst, th/mirrorwing next, hinata d0 untouched — d0
+never commits). Fixed by gating the loop on the LEVER and on `!is_pre_combat` (consecutive
+m2 entries can only be a same-turn fixpoint pair, because every turn's phases begin with a
+pre-combat entry). File-level bisect against HEAD found it; the off-arm control is the
+lesson — a red A/B where BOTH arms are red is not measuring the lever. Post-fix: dragonstorm
+d3 sits at GT (4.5533) with the lever off AND on; the g16 executor rescue survives (6→5).
+Consequence: the projection filter's original justification is void — whether the
+UNFILTERED scan (which rescues 2 more split games) is affordable is an open A/B, to be run
+with the loop fixed.
+
+**Measured (100 per-game train games, `logs/hinata_m2axes/pergame6d.out`, cost 4×25 in
+`cost_*.err`):**
+
+| arm | avg | pairwise vs its base | units |
+|---|---|---|---|
+| base | 5.6900 | — | 4.36M |
+| base + FIX | 5.6800 | **1 better / 0 worse / 99 tie** (g16: 6→5) | −0.8% |
+| split+axes | 5.8400 | — | 3.06M |
+| split+axes+FIX | 5.8000 | **4 better / 0 worse / 96 tie** (g19 8→7, g57 7→6, g66 6→5, g79 6→5) | ~flat |
+| split+axes+FIX+BPVARS | 5.8000 | 0 better / 0 worse vs +FIX (byte-tie) | — |
+
+* gi=66 recovers its base win turn in the split arm; gi=16 recovers a turn in BASE play (base
+  m2 plans strand kills too — the lever is not split-specific). base+FIX's avg 5.68 equals
+  the pre-deletion greedy-era GT number: on train evidence the hinata deletion regression is
+  recovered.
+* The split's gap vs base is now **+0.11/game** (from +0.29 bare, +0.15 with axes) at −30%
+  units. The residual worse games are the phase-order class plus the 2 projection-filtered
+  kills.
+* `MTG_M2_BPVARS` measured inert-to-slightly-negative on this battery; stays OFF, kept as a
+  recorded lever.
+**The cross-deck verdict (post-loop-fix smoke A/B + pergame7 battery, 2026-09-06):**
+
+* Smoke, `MTG_M2_FIXPOINT=1` vs GT: **2 of 72 cells changed, BOTH improvements** — hinata
+  d0 −0.0120/1000g (the executor scan firing at depth 0, where no search-side rescue can
+  exist) and melira2hg d3 −0.0400/25g. Net −13 game-turns, zero cells worse; combo decks
+  sit exactly at GT.
+* pergame7 (fixed code, 6 arms × 100): fix vs base **1/0/99** (g16), unfiltered ≡ filtered
+  on base play (0/0/100). Split arms: safix vs sa 4/0/96; **safixunf vs sa 6/0/94** — the
+  unfiltered scan recovers both filtered-out rescues (g5, g16), split gap vs base +0.09.
+* Cost: hinata 25-game units base 1.119M → fix 1.069M (**−4.5%**, rescued games end
+  sooner); fixunf 1.073M units but **+15% wall** on base play in the pooled battery (probe
+  copies are wall the unit counter barely sees) for zero base-play quality — so UNFILTERED
+  stays a split-doctrine lever only. Cross-deck wall, per-cell sum of the off/on smoke
+  runs: **+5.25%** with the lever on (67 of 72 cells play byte-identical games, so most of
+  that is pure scan overhead; the concentrated cells: melira2hg +19% — the cell that also
+  improved — burn d3 +30% on a 26s cell, hinata d3 +15%).
+
+**Default: OFF, by the adoption bar.** Quality is strictly non-worse everywhere measured
+and better in three places, but +5.25% suite wall makes this a quality-vs-perf TRADE, which
+is the USER's call, not an auto-adoption (strict improvement requires no perf drawback).
+Both sides are counted above. A per-deck middle path exists: for hinata the lever is a
+strict improvement ON ITS OWN TERMS (quality better AND units cheaper), so a provider-level
+opt-in would adopt it where it pays without taxing the suite.
+
 ## What stays a provider decision
 
 Per the USER (2026-09-05): skipping a main is acceptable only as an explicit opt-in, and that is a

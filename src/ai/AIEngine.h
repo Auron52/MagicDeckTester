@@ -86,6 +86,31 @@ public:
     bool TakeTurn(GameState& state, bool is_pre_combat_main,
                   const std::function<void(GameState&)>& resolve_stack = {});
 
+    // M2 FIXPOINT executor half (MTG_M2_FIXPOINT; see TurnSolver's M2FixpointEnabled): the
+    // search can commit CONSECUTIVE second-main PhasePlans (a plan that fired a draw
+    // breakpoint, then the re-solve's plan on the post-draw state). GameEngine::MainPhase
+    // loops TakeTurn while this holds so every committed plan of the phase is replayed in
+    // order -- realized == scored by the same replay contract as any other committed phase.
+    // Without the lever the search never emits consecutive same-phase plans, so this is
+    // false at every legacy call point (byte-identical off).
+    bool HasCommittedPhasePlan(bool is_pre_combat) const
+    {
+        return !m_committed_line.empty()
+            && m_committed_line.front().is_pre_combat == is_pre_combat;
+    }
+
+    // M2 FIXPOINT, non-committed half (MTG_M2_FIXPOINT; EngineFlags.h): true when the LAST
+    // TakeTurn call executed a plan that fired a breakpoint (cards may have entered hand
+    // mid-plan) and the lever wants a fresh second-main re-solve on the post-draw state.
+    // GameEngine::MainPhase runs one kill-only scan on it. Always false with the lever off
+    // (byte-identical). Defined in AIEngine.cpp (needs HumanPlayActive + the shared reader).
+    bool WantsSecondMainReentry() const;
+
+    // M2 FIXPOINT kill-only executor pass: enumerate the realized post-draw m2 plans, probe
+    // each on a copy, execute ONLY an outright kill (definition comment in AIEngine.cpp).
+    // Returns true when a kill was taken. Called by GameEngine::MainPhase's fixpoint loop.
+    bool TrySecondMainStrandedKill(GameState& state);
+
     // Returns pointers to battlefield permanents that will attack this turn.
     std::vector<Permanent*> DeclareAttackers(GameState& state);
 
@@ -294,6 +319,11 @@ private:
     // and saved/restored around rollouts in RolloutWinTurn (the rollout PlayOut shares
     // this AIEngine by reference, so its play must not consume the real game's line).
     std::deque<TurnSolver::PhasePlan> m_committed_line;
+
+    // M2 FIXPOINT execution stamp: did the LAST TakeTurn call's execution draw cards in a
+    // second main? Stamped by an exit guard in TakeTurn (cards_drawn_this_turn delta); read by
+    // WantsSecondMainReentry after the call returns.
+    bool m_m2_exec_drew = false;
 
     // MTG_REFUTED_FOLLOW: this game is PROVEN unwinnable -- a top-level search covered the full
     // remaining horizon (turn + searched_depth - 1 >= max_turns) with ZERO truncation events and

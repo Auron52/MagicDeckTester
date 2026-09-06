@@ -62,6 +62,10 @@ enum Slot : int
     M2_CAP1,                  // MTG_M2_CAP1               cap the interior m2 solve to depth 1
     M2_WAVES,                 // MTG_M2_WAVES              FSLineTail m2 loop runs the deferred wave phase
     M2_AXES,                  // MTG_M2_AXES               m2 enumeration hosts append the sub-decision axes
+    M2_BPVARS,                // MTG_M2_BPVARS             m2 memoized host appends bp_choice variants (wave 0)
+    M2_FIXPOINT,              // MTG_M2_FIXPOINT           re-solve m2 after a plan that fired a draw breakpoint
+    M2_KEY_COARSE,            // MTG_M2_KEY_COARSE         interior-m2 solve memo keys on the m2 dependency set
+    M2_FIX_UNFILTERED,        // MTG_M2_FIX_UNFILTERED     fixpoint kill-scan probes ALL plans, not just projected-lethal
     STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-reviewed StompySurprise cast order
     SCALED_LAND_RANK,         // MTG_SCALED_LAND_RANK      reserve a live board-scaled LAND (Three Tree City)
     TOP_RESOLVE,              // MTG_TOP_RESOLVE           tutor-to-top reset (the order's LOOP half)
@@ -194,6 +198,10 @@ inline const char* Name(int slot)
         "MTG_M2_CAP1",
         "MTG_M2_WAVES",
         "MTG_M2_AXES",
+        "MTG_M2_BPVARS",
+        "MTG_M2_FIXPOINT",
+        "MTG_M2_KEY_COARSE",
+        "MTG_M2_FIX_UNFILTERED",
         "MTG_STOMPY_ORDER",
         "MTG_SCALED_LAND_RANK",
         "MTG_TOP_RESOLVE",

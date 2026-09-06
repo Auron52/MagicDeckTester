@@ -4,6 +4,7 @@
 #include "SpellEffects.h"
 #include "../ai/AIEngine.h"
 #include "../ai/Combat.h"
+#include "../ai/EngineFlags.h"   // M2FixpointEnabled (the second-main fixpoint re-entry loop)
 #include "../ai/TurnSolver.h"   // EquipmentEtbDrawFires (the log's draw reporter, below)
 #include "../ai/GameWorkMeter.h"
 #include "../cards/CardDatabase.h"
@@ -443,6 +444,40 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     {
         m_ai.TakeTurn(state, is_pre_combat, resolver);
         ResolveStack(state);
+    }
+
+    // M2 FIXPOINT (MTG_M2_FIXPOINT; see AIEngine::HasCommittedPhasePlan and
+    // AIEngine::WantsSecondMainReentry). Two re-entry conditions, one loop:
+    //   * a COMMITTED line carrying consecutive plans for this phase (a plan that fired a draw
+    //     breakpoint, then the search's re-solve on the post-draw state) -- replay them in
+    //     order so realized == scored;
+    //   * a NON-committed second main whose executed plan fired a breakpoint -- re-solve fresh
+    //     on the realized post-draw state (the executor twin of ApplySecondMainInSearch).
+    // SECOND MAIN ONLY, and gated on the LEVER: a committed SearchLine spans MULTIPLE turns
+    // ([T4 m1, T5 m1, ...] for an m1-only deck), so "front matches this phase" is TRUE for
+    // NEXT TURN's plan whenever two pre-combat entries are adjacent -- an ungated loop here
+    // replayed dragonstorm's whole verified line in one main phase (+1.8/game, lever OFF; the
+    // 2026-09-06 smoke incident). Consecutive m2 entries, by contrast, can only be a fixpoint
+    // continuation pair for THIS turn: every turn's phases begin with a pre-combat entry, so
+    // two adjacent is_pre_combat=false plans never straddle a turn boundary. Bounded: a
+    // re-entry that finds nothing castable fires no breakpoint, and the hard cap backstops an
+    // adversarial draw chain.
+    for (int fp = 0; !is_pre_combat && M2FixpointEnabled() && fp < 8; ++fp)
+    {
+        if (OpponentHasLost(state)) { break; }
+        if (m_ai.HasCommittedPhasePlan(false))
+        {
+            // A committed same-turn m2 continuation (search-scored) -- replay in order.
+            m_ai.TakeTurn(state, is_pre_combat, resolver);
+            ResolveStack(state);
+            continue;
+        }
+        // Non-committed second main whose execution DREW: one kill-only scan on the realized
+        // post-draw state (the executor twin of the search's kill-scan). A scan either takes
+        // an outright kill or changes nothing, so one pass suffices.
+        if (!m_ai.WantsSecondMainReentry()) { break; }
+        if (m_ai.TrySecondMainStrandedKill(state)) { ResolveStack(state); }
+        break;
     }
 
     if (s_fb_trace && !is_pre_combat && g_fb_activations_this_turn > 0)

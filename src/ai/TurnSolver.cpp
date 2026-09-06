@@ -6460,6 +6460,59 @@ static bool M2AxesEnabled()
     return heurarm::Flag(heurarm::M2_AXES, env_on);
 }
 
+// MTG_M2_BPVARS (DEFAULT OFF -> byte-identical; heurarm slot): EnumerateM2PlansBody also appends
+// the wave-0 searched-breakpoint variants (Plan::bp_choice) the m1 host has always had. The
+// second m1-only capability the 2026-09-06 residual dig surfaced: EnumeratePlansM2Memoized's
+// plans carry no bp_choice at all, so a NON-trailing continuation of an m2 plan is searched only
+// where BP_NODE hosting covers it. Note the m2-with-drop-live route and the no-drop early return
+// both already call AppendBreakpointVariants -- only the memoized host was bare.
+static bool M2BpVarsEnabled()
+{
+    static const bool env_on = EnvOn("MTG_M2_BPVARS");
+    return heurarm::Flag(heurarm::M2_BPVARS, env_on);
+}
+
+// MTG_M2_FIXPOINT: reader shared with the executor -- see EngineFlags.h (the lockstep rule).
+// The search-side hosts are FSLineTail's m2 loop (recursion; committed lines then carry
+// consecutive m2 PhasePlans the executor replays in order) and the interior
+// SolveSecondMainInSearch apply sites (solve-apply loop). Nest counter shared by both.
+static thread_local int g_m2fix_nest = 0;
+
+// MTG_M2_KEY_COARSE (DEFAULT OFF -> byte-identical; heurarm slot): SearchedSecondMainMemoized
+// keys on the m2 plan's REAL dependency set (BuildM2CoarseKey) instead of the whole-state
+// BuildBreakpointKey. The remedy kitty-interior-m2-tail.md designed: the interior-m2 volume on
+// Kitty's tail games is 366k irreducibly distinct keys that differ only in attachment pairing
+// and combat leftovers -- state the m2 answer cannot read -- so equivalent states re-search.
+// Coarsening drops EXACTLY the convicted noise (aura/equip attachment maps, marked damage,
+// cleanup-reset temp state); everything castability- or activation-relevant stays folded.
+// SOUNDNESS GATE: MTG_SOLVE_MEMO_VERIFY recompute-and-compare on every m2 hit ([m2-search-memo]
+// MISMATCHES) is mandatory before any adoption -- a missed dependency reuses a wrong plan.
+//
+// MODES (the gate already earned its keep): =1 drops all three convicted folds -- and the
+// verify run REFUTED it on kitty gi=231 ("cached 6 actions vs fresh 5" at t7 d1): at d>=1 the
+// interior solve rolls out a COMBAT, where attachment wiring is exactly what decides damage, so
+// "the m2 answer cannot depend on attachments" was wrong for any solve deeper than d0. =2 keeps
+// the attachment wiring folded and drops only the cleanup-reset combat leftovers (marked
+// damage + until-EOT pump), which no post-combat solve at any depth reads forward.
+static int M2KeyCoarseMode()
+{
+    static const int env_mode = EnvInt("MTG_M2_KEY_COARSE", 0);
+    if (!heurarm::Flag(heurarm::M2_KEY_COARSE, env_mode != 0)) { return 0; }
+    return env_mode > 0 ? env_mode : 1;
+}
+
+// MTG_M2_FIX_UNFILTERED (A/B lever, default OFF = filtered): drop the kill-scan's
+// wins_this_turn projection filter, probing EVERY enumerated post-draw m2 plan. The filter
+// was built against a smoke red later shown to be the MainPhase committed-replay bug (a
+// misattribution -- see ApplySecondMainInSearch's note), and it costs 2 of 6 split-arm
+// rescues whose kills don't project. Whether the unfiltered probe cost is affordable with
+// that bug fixed is this lever's A/B. Only meaningful under MTG_M2_FIXPOINT=1.
+static bool M2FixUnfiltered()
+{
+    static const bool env_on = EnvOn("MTG_M2_FIX_UNFILTERED");
+    return heurarm::Flag(heurarm::M2_FIX_UNFILTERED, env_on);
+}
+
 // How many matching permanents a cheat trigger could choose among RIGHT NOW, and whether a source
 // that can attack is even on the board. Used only to SIZE the axis at enumeration time; the real
 // list is rebuilt at resolution and the pin clamps if this over-counts.
@@ -7295,6 +7348,14 @@ static thread_local int g_bp_cands_last = 0;
 //
 // Counts breakpoints of an ENABLED class only, matching the indexing `bp_at` uses.
 static thread_local int g_bp_seen_last = 0;
+
+// How many breakpoints FIRED in the last apply, of ANY class, for ANY plan -- unlike
+// g_bp_seen_last above, which counts only searchable-class occurrences of a plan that carries a
+// bp_choice (base plans never write it; that gap made the first MTG_M2_FIXPOINT gate read 0 on
+// the exact plan it was built for). Bumped unconditionally at the top of bp_searched_plan, which
+// every breakpoint site routes through; reset by the caller before the apply, same
+// one-apply-measures-the-list convention.
+static thread_local int g_bp_fired_last = 0;
 
 // Lockstep trace arming flag (MTG_BP_TRACE, diagnosis only). ApplyPlanDirect runs millions of times
 // inside rollouts, so an unconditional print is useless; this is set ONLY around the fd-trace's
@@ -15596,6 +15657,10 @@ namespace solvememo
     inline std::atomic<uint64_t> g_hits{0}, g_misses{0}, g_clears{0};
     inline std::atomic<uint64_t> g_verified{0}, g_mismatches{0};
     inline std::atomic<uint64_t> g_m2_hits{0}, g_m2_misses{0}, g_m2_clears{0};
+    // Verify pass over the M2 memo's hits (shares MTG_SOLVE_MEMO_VERIFY). Mandatory soundness
+    // gate for MTG_M2_KEY_COARSE (kitty-interior-m2-tail.md): a coarse key that misses a real
+    // dependency reuses a WRONG plan, and only recompute-and-compare can prove it does not.
+    inline std::atomic<uint64_t> g_m2_verified{0}, g_m2_mismatches{0};
 
     inline bool SamePlan(const TurnSolver::Plan& a, const TurnSolver::Plan& b)
     {
@@ -15649,10 +15714,17 @@ namespace solvememo
             std::fprintf(stderr, "\n");
             if (g_m2_hits.load() + g_m2_misses.load() > 0)
             {
-                std::fprintf(stderr, "[m2-search-memo] hits=%llu misses=%llu clears=%llu\n",
+                std::fprintf(stderr, "[m2-search-memo] hits=%llu misses=%llu clears=%llu",
                              (unsigned long long)g_m2_hits.load(),
                              (unsigned long long)g_m2_misses.load(),
                              (unsigned long long)g_m2_clears.load());
+                if (VerifyOn())
+                {
+                    std::fprintf(stderr, " verified=%llu MISMATCHES=%llu",
+                                 (unsigned long long)g_m2_verified.load(),
+                                 (unsigned long long)g_m2_mismatches.load());
+                }
+                std::fprintf(stderr, "\n");
             }
         }
     };
@@ -18846,6 +18918,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // choice -- exactly the original short-circuit. Counting disabled-class breakpoints too
         // would shift every later index and silently change play, which is why BpSiteMask is one
         // global value that the executor's replay reads as well.
+        ++g_bp_fired_last;   // any occurrence, any class, any plan (see the declaration)
         const bool class_on    = (BpSiteMask() & (1 << site)) != 0;
         const int  seen_before = (plan.bp_choice >= 0 && class_on) ? bp_seen++ : -1;
         // bp_all: the deviation is a POLICY for the whole apply, so every breakpoint is eligible,
@@ -27243,6 +27316,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
 static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state)
 {
     std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, false);
+    // Wave-0 bp_choice variants (MTG_M2_BPVARS) BEFORE the axes, mirroring the m1 host's order
+    // (AppendBreakpointVariants first, axes second -- the axes' base-plan filters skip
+    // bp_choice >= 0, which is what keeps the two additive rather than a cross product).
+    // AppendBreakpointVariants self-gates on g_bp_enum_depth != 0.
+    if (M2BpVarsEnabled())
+    { AppendBreakpointVariants(state, plans); }
     if (M2AxesEnabled() && g_bp_enum_depth == 0)
     { AppendSubdecisionAxes(state, /*is_pre_combat=*/false, plans); }
     return plans;
@@ -28569,6 +28648,16 @@ inline std::uint64_t FsOrderSig(const GameState& state)
     return h | 1ull;   // never 0 (0 = unset)
 }
 
+// M2 COARSE-KEY MODE (MTG_M2_KEY_COARSE; set ONLY inside BuildM2CoarseKey): drop the three
+// per-permanent folds kitty-interior-m2-tail.md convicted as interior-m2 noise -- attachment
+// wiring, until-EOT pump bonuses, marked damage -- and NOTHING else. Implemented as a mode on
+// the exact key builder (not a parallel builder) so every other fold, including future
+// additions, stays in the coarse key by default; a missed dependency can then only come from
+// these named drops, which is what the MTG_SOLVE_MEMO_VERIFY gate checks. 0 = exact key;
+// 1 = drop attachments + damage + temp pump (REFUTED by the verify gate -- see M2KeyCoarseMode);
+// 2 = drop damage + temp pump only.
+static thread_local int g_simkey_m2coarse = 0;
+
 static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
                                            bool second_main)
 {
@@ -28894,15 +28983,21 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             Fold(tk, perm.storage_hold_this_turn ? 1u : 0u);
         }
         // Attachment wiring (see the board scan above): stable ids + links, only on wired boards.
-        if (bf_has_attachment)
+        // g_simkey_m2coarse drops it -- the FIRST of the three convicted interior-m2 noise folds
+        // (which creature carries which Equipment is combat state the m2 answer cannot read).
+        if (bf_has_attachment && g_simkey_m2coarse != 1)
         {
             Fold(tk, 0xA77A);
             Fold(tk, static_cast<uint64_t>(perm.card.m_number));
             Fold(tk, static_cast<uint64_t>(perm.aura_attached_to));
             Fold(tk, static_cast<uint64_t>(perm.equipped_to));
         }
-        Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
-        Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
+        // Until-EOT pump bonuses: coarse drop #2 (combat leftovers; cleanup-reset).
+        if (g_simkey_m2coarse == 0)
+        {
+            Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
+            Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
+        }
         // Until-EOT haste (Expedite) / exile-at-end (Twinflame token): future-determining (attack
         // eligibility; the token vanishes at end step). Folded ONLY when set, so every deck that
         // never sets them keeps the EXACT prior key (byte-identical).
@@ -28921,7 +29016,10 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.loyalty)));
             Fold(tk, perm.loyalty_activated_this_turn ? 1u : 0u);
         }
-        Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.damage)));
+        // Marked damage: coarse drop #3 (combat leftovers; state-based actions already ran, so
+        // by the time an m2 solve sees the board the survivors' damage is history, not future).
+        if (g_simkey_m2coarse == 0)
+        { Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.damage))); }
         for (const Counter& ctr : perm.counters)
         {
             Fold(tk, static_cast<uint64_t>(ctr.type));
@@ -28948,6 +29046,57 @@ inline bool TTNoWinCacheOn()
 {
     static const bool v = EnvOn("MTG_TT_NOWIN_CACHE");
     return v;
+}
+
+// Solve-and-apply the interior second main, then -- under MTG_M2_FIXPOINT (EngineFlags.h) --
+// RE-solve while the applied plan fired a breakpoint (cards may have entered hand mid-plan),
+// iteration-capped. Pass 0 is the plain solve+apply, so the lever off is byte-identical by
+// construction. Returns true when the opponent lost during any pass; the caller keeps its own
+// site-specific win handling. This is the interior twin of FSLineTail's fixpoint recursion --
+// rollouts must price turns the way the executor (GameEngine::MainPhase re-entry) will play
+// them, or scored and realized turns diverge on exactly the games the lever exists to win.
+static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turns,
+                                    SearchBudget* budget, bool second_main,
+                                    TranspositionTable* tt, bool in_rollout)
+{
+    const bool fix = M2FixpointEnabled();
+    TurnSolver::Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
+                                                    second_main, tt, in_rollout);
+    if (fix) { g_bp_fired_last = 0; }
+    ApplyPlanDirect(copy, post, false);
+    if (OpponentHasLost(copy)) { return true; }
+    if (!fix || g_bp_fired_last <= 0) { return false; }
+    // LETHAL-ONLY KILL-SCAN, probed on COPIES and committed only on a kill. Two rejected forms
+    // preceded this one, both by measurement: an unconditional re-solve-and-play was net-red on
+    // the hinata battery (extra non-lethal casts deviate the future from everything the outer
+    // line priced), and a lethal-only NESTED SOLVE re-pass taxed the whole suite's budget (478
+    // searched games slower -- a full SolveSecondMainInSearch per draw-firing rollout m2). The
+    // scan is enumeration + probe applies only: exactly enough to find the stranded-kill class
+    // the lever exists for (gi=66, lethal in hand behind untapped mana), at enumeration cost.
+    // The executor takes the same kill the same way (AIEngine::TrySecondMainStrandedKill).
+    std::vector<TurnSolver::Plan> fx = M2DropLive(copy)
+        ? EnumeratePlansWithLand(copy, false) : EnumeratePlansM2Memoized(copy);
+    for (const TurnSolver::Plan& e : fx)
+    {
+        // Probe ONLY plans that PROJECT lethal (wins_this_turn: pending damage >= opp life).
+        // The projection is OPTIMISTIC (it can over-count what the apply realises -- the m2
+        // loop's own note), so every real kill is covered; what it prunes is the probe cost on
+        // plans that provably cannot kill. NOTE the filter's original justification was a
+        // MISATTRIBUTION: the combo-deck smoke red it was built to fix was actually the
+        // GameEngine::MainPhase committed-replay bug (lever-independent; see the design doc's
+        // misattribution section). Whether the unfiltered scan (which rescues 2 more split
+        // games on the hinata battery) is affordable is MTG_M2_FIX_UNFILTERED's A/B.
+        if (!e.wins_this_turn && !M2FixUnfiltered()) { continue; }
+        if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+        { ++g_fs_trunc_events; break; }
+        ConsumeAt(budget, unitsite::kFsMain2);
+        PROF_INC(gamestate_copies);
+        GameState probe = copy;
+        ApplyPlanDirect(probe, e, false);
+        if (probe.ActivePlayer().life <= 0) { continue; }
+        if (OpponentHasLost(probe)) { copy = std::move(probe); return true; }
+    }
+    return false;
 }
 
 static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
@@ -29114,8 +29263,16 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                 post_plan = SolveSecondMainInSearch(state, depth, max_turns, budget, second_main, tt,
                                                     /*in_rollout=*/true);
             }
+            if (M2FixpointEnabled()) { g_bp_fired_last = 0; }
             ApplyPlanDirect(state, post_plan, false);
             if (OpponentHasLost(state))
+            { leafeval::Publish(leafeval::kInvalid); leafeval::t_inf = state.inf_life_turn;
+              return state.turn_number; }
+            // M2 FIXPOINT re-passes (interior twin; see ApplySecondMainInSearch): the apply above
+            // fired a breakpoint, so freshly drawn cards may sit castable behind untapped mana.
+            if (M2FixpointEnabled() && g_bp_fired_last > 0
+                && ApplySecondMainInSearch(state, depth, max_turns, budget, second_main, tt,
+                                           /*in_rollout=*/true))
             { leafeval::Publish(leafeval::kInvalid); leafeval::t_inf = state.inf_life_turn;
               return state.turn_number; }
         }
@@ -29817,6 +29974,39 @@ static bool PlanHasCondemnedCast(const GameState& state, const TurnSolver::Plan&
 // transition for a pre-combat sibling happens one frame down, in here, so the archive has to be
 // threaded rather than owned locally -- see the dominance section above. nullptr (every other
 // caller) disables the check entirely.
+// fs_main2 DECOMPOSITION (MTG_ROLLOUT_STATS only; the "unowned instrumentation project" of
+// kitty-interior-m2-tail.md -- fs_main2 is ~50% of hinata's and 50-67% of Kitty's shipped
+// units, and until now one opaque number). Counters bumped in FSLineTail's m2 branch: how many
+// m2 DECISIONS run, how many plans they enumerate vs actually scan, where the scans sit by
+// remaining depth, and -- once MTG_M2_FIXPOINT exists -- how much of it is fixpoint re-entry.
+namespace m2stats
+{
+    inline std::atomic<uint64_t> g_decisions{0}, g_plans_enum{0}, g_scanned{0};
+    inline std::atomic<uint64_t> g_scanned_at[8] = {};
+    inline std::atomic<uint64_t> g_fix_decisions{0}, g_fix_scanned{0};
+    inline std::atomic<uint64_t> g_rollout_scanned{0};
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!s_rollout_stats || g_decisions.load() == 0) { return; }
+            std::cerr << "[rollout-stats] fs_main2 decomp: decisions=" << g_decisions.load()
+                      << " plans_enum=" << g_plans_enum.load()
+                      << " scanned=" << g_scanned.load()
+                      << " in_rollout=" << g_rollout_scanned.load()
+                      << " fixpoint(decisions=" << g_fix_decisions.load()
+                      << ",scanned=" << g_fix_scanned.load() << ") by_depth=";
+            for (int i = 0; i < 8; ++i)
+            {
+                const uint64_t v = g_scanned_at[i].load();
+                if (v > 0) { std::cerr << "d" << i << ":" << v << " "; }
+            }
+            std::cerr << "\n";
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 // MTG_M2_WAVES (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): the m2 plan
 // loop below runs the deferred wave phase FSLineWin's pre loop has always had. Without it, a
 // second-main plan's breakpoint continuations are searched only where the NODE hosts them
@@ -29872,6 +30062,13 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // land-execution path never greedy-plays a land the enumeration did not choose.
         post.push_back(TurnSolver::Plan{});
         post.back().land_decided = M2DropLive(state);
+        if (s_rollout_stats)
+        {
+            m2stats::g_decisions.fetch_add(1, std::memory_order_relaxed);
+            m2stats::g_plans_enum.fetch_add(post.size(), std::memory_order_relaxed);
+            if (g_m2fix_nest > 0)
+            { m2stats::g_fix_decisions.fetch_add(1, std::memory_order_relaxed); }
+        }
         MoveOrderPlans(post);   // lethal-looking / higher-value second mains first -> earlier cutoff
         // NOTE: we do NOT shortcut on the projected `wins_this_turn` flag here. That
         // projection (pending_atk + direct_dmg >= opp life) can over-count what the
@@ -29946,10 +30143,23 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only)
             ++m2_scanned;
             ConsumeAt(budget, unitsite::kFsMain2);   // one interior node (plan applied)
+            if (s_rollout_stats)
+            {
+                m2stats::g_scanned.fetch_add(1, std::memory_order_relaxed);
+                m2stats::g_scanned_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+                if (g_m2fix_nest > 0)
+                { m2stats::g_fix_scanned.fetch_add(1, std::memory_order_relaxed); }
+                if (g_rollout_nest > 0)
+                { m2stats::g_rollout_scanned.fetch_add(1, std::memory_order_relaxed); }
+            }
             LoadPlanState(s2_buf, state, reuse_s2);
             GameState& s2 = s2_buf;
             std::vector<Action> bp;
             BpPrefixSnap node_snap;
+            // M2 FIXPOINT gate input: g_bp_fired_last follows the one-apply-measures-the-list
+            // convention (see its declaration) -- reset before the apply so the read below is
+            // THIS plan's breakpoint count, not a stale one. Write-only unless the lever is on.
+            if (M2FixpointEnabled()) { g_bp_fired_last = 0; }
             ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
             if (node_snap.pending)
             {
@@ -30168,6 +30378,50 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 TurnSolver::Plan q_rec = q;
                 q_rec.breakpoint_actions = std::move(bp);
                 return { state.turn_number, { { false, std::move(q_rec) } } };
+            }
+            // ---- M2 FIXPOINT KILL-SCAN (MTG_M2_FIXPOINT; see EngineFlags.h) ------------------
+            // This plan's apply fired a breakpoint, so cards may have entered hand mid-plan
+            // (hinata gi=66: EI draws Crackle, six sources untapped, turn ends). LETHAL-ONLY,
+            // like the interior twin (ApplySecondMainInSearch) and the executor re-entry: scan
+            // the post-draw m2 plan set for an IMMEDIATE kill and adopt it as a second m2
+            // PhasePlan (the executor replays consecutive m2 phases in order); a non-kill scan
+            // falls through to the plain EOT tail unchanged. An unconditional re-solve here was
+            // the measured net-red form -- extra non-lethal casts deviate the future from
+            // everything the outer line priced.
+            if (M2FixpointEnabled() && g_bp_fired_last > 0 && g_m2fix_nest < 1)
+            {
+                ++g_m2fix_nest;   // the scan's applies must not re-enter the scan
+                std::vector<TurnSolver::Plan> fx = M2DropLive(s2)
+                    ? EnumeratePlansWithLand(s2, false) : EnumeratePlansM2Memoized(s2);
+                for (const TurnSolver::Plan& e : fx)
+                {
+                    // Projected-lethal plans only -- see ApplySecondMainInSearch's filter note
+                    // (the filter's justification is open; MTG_M2_FIX_UNFILTERED is the A/B).
+                    if (!e.wins_this_turn && !M2FixUnfiltered()) { continue; }
+                    if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                    { ++g_fs_trunc_events; break; }
+                    ConsumeAt(budget, unitsite::kFsMain2);
+                    PROF_INC(gamestate_copies);
+                    GameState probe = s2;
+                    std::vector<Action> bp2;
+                    ApplyPlanDirect(probe, e, false, &bp2);
+                    if (probe.ActivePlayer().life <= 0) { continue; }
+                    if (OpponentHasLost(probe))
+                    {
+                        if (m2t_here)
+                        { std::fprintf(stderr, "[m2t] T%d d%d q=%s FIXPOINT-KILL e=%s\n",
+                                       state.turn_number, depth, m2t_sum(q).c_str(),
+                                       m2t_sum(e).c_str()); }
+                        --g_m2fix_nest;
+                        TurnSolver::Plan q_rec = q;
+                        q_rec.breakpoint_actions = std::move(bp);
+                        TurnSolver::Plan e_rec = e;
+                        e_rec.breakpoint_actions = std::move(bp2);
+                        return { state.turn_number,
+                                 { { false, std::move(q_rec) }, { false, std::move(e_rec) } } };
+                    }
+                }
+                --g_m2fix_nest;
             }
             if (!SimulateEndAndStartNextTurn(s2)) { continue; }
             ExpireStagedCards(s2);
@@ -33629,10 +33883,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // passing. See SolveSecondMainInSearch.
                 if (second_main)
                 {
-                    Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
-                                                        second_main, tt, /*in_rollout=*/false);
-                    ApplyPlanDirect(copy, post, false);
-                    if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
+                    if (ApplySecondMainInSearch(copy, sub_depth, max_turns, budget,
+                                                second_main, tt, /*in_rollout=*/false))
+                    { report(state.turn_number, depth - 1); return plan; }
                 }
             }
             else
@@ -33800,10 +34053,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         {
                             // Searched, exactly as in the main candidate loop above -- a deferred
                             // wave's variants must be scored on the same footing as wave 0's.
-                            Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
-                                                                second_main, tt, /*in_rollout=*/false);
-                            ApplyPlanDirect(copy, post, false);
-                            if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
+                            if (ApplySecondMainInSearch(copy, sub_depth, max_turns, budget,
+                                                        second_main, tt, /*in_rollout=*/false))
+                            { report(state.turn_number, depth - 1); return v; }
                         }
                     }
                     else
@@ -33905,10 +34157,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (OpponentHasLost(copy)) { won_out = true; return true; }
                     if (second_main)
                     {
-                        Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
-                                                            second_main, tt, /*in_rollout=*/false);
-                        ApplyPlanDirect(copy, post, false);
-                        if (OpponentHasLost(copy)) { won_out = true; return true; }
+                        if (ApplySecondMainInSearch(copy, sub_depth, max_turns, budget,
+                                                    second_main, tt, /*in_rollout=*/false))
+                        { won_out = true; return true; }
                     }
                 }
                 else
@@ -34039,11 +34290,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (OpponentHasLost(copy)) { return state.turn_number; }
                     if (second_main)
                     {
-                        Plan post = SolveSecondMainInSearch(copy, committed_sub_depth, max_turns,
-                                                            budget, second_main, &esc_tt,
-                                                            /*in_rollout=*/false);
-                        ApplyPlanDirect(copy, post, false);
-                        if (OpponentHasLost(copy)) { return state.turn_number; }
+                        if (ApplySecondMainInSearch(copy, committed_sub_depth, max_turns,
+                                                    budget, second_main, &esc_tt,
+                                                    /*in_rollout=*/false))
+                        { return state.turn_number; }
                     }
                 }
                 else
@@ -34183,6 +34433,20 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     return k;
 }
 
+// The coarse interior-m2 key (MTG_M2_KEY_COARSE; see M2KeyCoarseEnabled): the EXACT key with the
+// three convicted noise folds dropped (g_simkey_m2coarse inside BuildSimKey's battlefield loop),
+// plus a namespace tag so a coarse entry can never be read by an exact-key world or vice versa.
+static TranspositionTable::Key BuildM2CoarseKey(const GameState& state)
+{
+    const int mode = M2KeyCoarseMode();
+    g_simkey_m2coarse = mode;
+    TranspositionTable::Key k = BuildBreakpointKey(state, /*is_pre_combat=*/false);
+    g_simkey_m2coarse = 0;
+    Fold(k, 0xC0A5);   // coarse-key namespace
+    Fold(k, static_cast<uint64_t>(mode));
+    return k;
+}
+
 // Memoized SEARCHED second main -- the single-consideration architecture (USER 2026-08-15: "I
 // don't want greedy solve within the search"; "the purpose of ... exactly one place to search
 // each spell is to avoid that"). Since 2026-09-05 this is the UNCONDITIONAL branch-site route
@@ -34214,7 +34478,9 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
                                               budget, /*enforce_budget=*/false, second_main, tt);
     }
 
-    TranspositionTable::Key k = BuildBreakpointKey(state, /*is_pre_combat=*/false);
+    TranspositionTable::Key k = (M2KeyCoarseMode() != 0)
+                                    ? BuildM2CoarseKey(state)
+                                    : BuildBreakpointKey(state, /*is_pre_combat=*/false);
     Fold(k, 0x5E2C);                                // searched-m2 key namespace
     Fold(k, static_cast<uint64_t>(depth));          // fidelity is part of what is reused
     // Filtered/honest split (audit §6.4 class; see the enum memo hosts): the condemnation
@@ -34227,6 +34493,28 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     if (it != cache.end() && it->second.epoch == g_decision_epoch)
     {
         solvememo::g_m2_hits.fetch_add(1, std::memory_order_relaxed);
+        // Verify pass (MTG_SOLVE_MEMO_VERIFY; the coarse key's mandatory soundness gate): every
+        // hit ALSO recomputes uncached and compares. A mismatch under MTG_M2_KEY_COARSE means a
+        // coarse-dropped fold was a REAL dependency -- wrong plan reuse, not noise.
+        if (solvememo::VerifyOn())
+        {
+            const TurnSolver::Plan fresh = TurnSolver::SolveWithLookahead(
+                state, /*is_pre_combat=*/false, depth, max_turns, budget,
+                /*enforce_budget=*/false, second_main, tt);
+            solvememo::g_m2_verified.fetch_add(1, std::memory_order_relaxed);
+            if (!solvememo::SamePlan(fresh, it->second.plan))
+            {
+                const uint64_t n =
+                    solvememo::g_m2_mismatches.fetch_add(1, std::memory_order_relaxed);
+                if (n < 5)
+                {
+                    std::fprintf(stderr,
+                                 "[m2-search-memo] MISMATCH t%d d%d: cached %zu actions vs fresh %zu\n",
+                                 state.turn_number, depth, it->second.plan.actions.size(),
+                                 fresh.actions.size());
+                }
+            }
+        }
         // Replay the memoized solve's side-counter contributions (audit §6.1): the unmemoized
         // engine would re-run the solve and re-bump both counters, so a hit that stays silent
         // hides a condemnation drop AND any budget truncation from the caller's watermark --

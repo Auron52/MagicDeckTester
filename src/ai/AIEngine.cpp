@@ -1640,6 +1640,47 @@ bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial)
     return heuristic;
 }
 
+// M2 FIXPOINT re-entry predicate (declaration comment in AIEngine.h). Reads the counter the
+// last TakeTurn call left: any executed breakpoint means cards may have entered hand mid-plan,
+// and the lever wants a fresh second-main solve on the realized post-draw state. Never in
+// rollouts (their scoring twin is ApplySecondMainInSearch) and never under human play (the
+// human owns the rest of the phase).
+bool AIEngine::WantsSecondMainReentry() const
+{
+    return M2FixpointEnabled() && !m_in_rollout && !HumanPlayActive() && m_m2_exec_drew;
+}
+
+// M2 FIXPOINT executor half, KILL-ONLY (see EngineFlags.h M2FixpointEnabled and the
+// GameEngine::MainPhase loop). Enumerate the realized post-draw m2 plan set, probe each on a
+// copy, and execute ONLY a plan that wins outright. No solve, no depth dependence (d0 and d5
+// behave identically), no flag threading through TakeTurn -- two earlier forms failed exactly
+// there: an unconditional re-entry TakeTurn played non-lethal extra casts the scored line never
+// priced (net-red on the per-game battery, and 8->loss on d0 where the lethal gate's branch was
+// never reached). Probes run under RevealLogPause so no reveal/draw events leak into the game
+// log; the real apply logs normally.
+bool AIEngine::TrySecondMainStrandedKill(GameState& state)
+{
+    std::vector<TurnSolver::Plan> cands =
+        TurnSolver::EnumerateMainPlans(state, /*is_pre_combat=*/false);
+    for (const TurnSolver::Plan& p : cands)
+    {
+        if (p.actions.empty()) { continue; }
+        bool lethal = false;
+        {
+            RevealLogPause _rlp;
+            GameState probe = state;
+            TurnSolver::ApplyPlan(probe, p, /*is_pre_combat=*/false);
+            lethal = probe.ActivePlayer().life > 0 && OpponentHasLost(probe);
+        }
+        if (lethal)
+        {
+            TurnSolver::ApplyPlan(state, p, /*is_pre_combat=*/false);
+            return true;
+        }
+    }
+    return false;
+}
+
 bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const std::function<void(GameState&)>& resolve_stack)
 {
@@ -1654,6 +1695,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (resolve_stack && !state.stack.empty()) { resolve_stack(state); }
     };
     bool cast_draw_engine = false;
+    // M2 FIXPOINT exit stamp (see WantsSecondMainReentry): did THIS call's execution DRAW cards?
+    // The executor's plain-cantrip/EI draws resolve inline (no breakpoint-machinery hook fires
+    // for a non-committed plan), so the honest signal is the per-turn draw counter the engine
+    // already keeps for Fists-of-Flame -- delta over this call, stamped on every exit path.
+    struct M2FixExitStamp
+    {
+        AIEngine&  eng; const GameState& st; int drawn0; bool pre;
+        ~M2FixExitStamp()
+        { eng.m_m2_exec_drew = !pre && st.ActivePlayer().cards_drawn_this_turn > drawn0; }
+    } _m2fx{ *this, state, state.ActivePlayer().cards_drawn_this_turn, is_pre_combat_main };
     // Merge any unexpired staged cards into hand so the solver and casting logic
     // can treat them as playable. They are marked m_is_staged = true so we can
     // identify and restore unplayed ones afterward. The expiry is preserved in

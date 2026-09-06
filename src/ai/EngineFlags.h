@@ -6,6 +6,7 @@
 // environment is read once per process, same as before.
 #include "../core/EnvFlags.h"
 #include "HeuristicArm.h"
+#include <algorithm>
 #include <cstdlib>
 #include <string>
 
@@ -25,6 +26,32 @@ inline bool Main2DropEnabled()
     // that must not have it. -1 = unset => the env static => byte-identical off the batch path.
     static const bool env_on = EnvOn("MTG_MAIN2_DROP");
     return heurarm::Flag(heurarm::MAIN2_DROP, env_on);
+}
+
+// MTG_M2_FIXPOINT (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): restore the
+// FREE INTER-MAIN RE-SOLVE the second main never had -- after an m2 plan whose apply/execution
+// FIRED a breakpoint (cards may have entered hand mid-plan), solve m2 AGAIN on the post-draw
+// state, loop-capped. Read by BOTH sides, which is why it lives here (lockstep rule):
+//   * search scoring -- FSLineTail's m2 loop recursion, and the interior
+//     SolveSecondMainInSearch apply sites (SolveWithLookahead / SimulateToEnd), so rollouts
+//     price turns the way real play will play them;
+//   * the executor -- GameEngine::MainPhase re-enters TakeTurn on the same condition
+//     (AIEngine::WantsSecondMainReentry), so the realized turn matches the scored shape.
+// Measured motivation: hinata gi=66 ends its second main with six untapped sources and lethal
+// in hand at ANY budget (searched-second-main-unconditional.md, "the split forfeits the free
+// inter-main re-solve"); base play only ever gets this re-solve at the m1->m2 boundary.
+inline bool M2FixpointEnabled()
+{
+    static const bool env_on = EnvOn("MTG_M2_FIXPOINT");
+    return heurarm::Flag(heurarm::M2_FIXPOINT, env_on);
+}
+// Nesting/iteration cap for the fixpoint (a chain of draw-firing plans re-enters once per pass).
+// Budget bounds the search-side work regardless; the cap exists so an adversarial draw chain
+// cannot recurse or re-enter without bound on an unbudgeted run.
+inline int M2FixpointCap()
+{
+    static const int cap = std::max(1, EnvInt("MTG_M2_FIXPOINT_CAP", 2));
+    return cap;
 }
 
 // MTG_M2_RECONSIDER -- ADOPTED DEFAULT-ON 2026-08-29 (USER: "okay iff it is a strict
