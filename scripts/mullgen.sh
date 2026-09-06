@@ -55,6 +55,12 @@ OUT=logs/${STEM}_mullgen; mkdir -p "$OUT"
 REPORT=$OUT/VALIDATION.txt
 BIN=build/Release/mtg-analyze
 
+# Memory caps (2026-09-06): this driver previously exported NO caps, so every long mulligan
+# generation ran with the search caches UNBOUNDED -- the configuration that OOM'd the 23 GB box
+# six times during the Melira value-leaf generation of 2026-09-05/06. All bounds are result-
+# neutral memo caps (refused store = recompute); see scripts/lib/membudget.sh for the derivation.
+. "$(dirname "${BASH_SOURCE[0]}")/lib/membudget.sh"
+
 # SEEDS, allocated in per-round blocks. Every check draws from its own base so no two checks -- and
 # no two ROUNDS of a check -- ever share a seed: pooling rounds is only valid over disjoint games,
 # and re-reading a decision off seeds it was already made on is how a tie gets confirmed by its own
