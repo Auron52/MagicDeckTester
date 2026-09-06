@@ -182,13 +182,15 @@ SMOKE_CASES=(
   "breaching 0 1001 1000 0"
   "breaching 3 1001  150 10"
   "breaching 5 1001   75 20"
-  # melira: EXPENSIVE per game (persist-combo search; probed 2026-09-05 at s1001:
-  # d3 b10 ~16 s/game CPU, d5 b20 ~23 s/game CPU, tail-heavy -- fivecolour-class).
-  # Small searched gates so smoke stays in budget; counts can rise once the value
-  # leaf is adopted (the O(1) leaf + H-cell ladder cut d5 by an order of magnitude).
+  # melira: SEARCHED CASES PULLED FROM EVERY TIER (user, 2026-09-06) until per-game cost is
+  # guaranteed. Measured in the tiers themselves: smoke d3 31 s/game, d5 26 s/game -- 72% of the
+  # whole smoke tier's core-time and 52% of regression's, from one deck. The cost is the
+  # combo-board enumeration wall (docs/design/pod-pair-enumeration-explosion.md); the burst-family
+  # fix (f66f2949) and plan-space cap bound MEMORY but not this wall. Only the free d0 canary
+  # stays (sub-3 s per 1000 games) so a play change still moves a committed digest. Restore the
+  # searched counts from git history once the wall is fixed AND a re-probe shows s/game in the
+  # ordinary-deck range.
   "melira 0 1001 1000 0"
-  "melira 3 1001   50 10"
-  "melira 5 1001   25 20"
   # 2HG gate (user request 2026-09-04): "<deck>2hg" = the SAME deck/profile at starting_life 30
   # + opponent_heads 2 (regression.sh strips the suffix for file lookup and adds the job fields).
   # Small on purpose -- just enough that a change which obviously ignores 2HG (second-face
@@ -219,7 +221,7 @@ SMOKE_CASES=(
   "kitty2hg           3 1001 50 10"
   "dragons2hg         3 1001 50 10"
   "breaching2hg       3 1001 50 10"
-  "melira2hg          3 1001 25 10"
+  # melira2hg pulled with the other melira searched cases (2026-09-06, see the melira block).
   # fluctuator: free-cycling combo (Fluctuator makes every cycler {0}; Drannith Stinger turns each
   # cycle into a ping). Measured single-thread at the GATE budgets 2026-09-05: d0 0.0001 s/game,
   # d3 b10 1.34 s/game, d5 b20 2.81 s/game, with NO game over 30 s at any of them -- the heavy tail
@@ -339,12 +341,8 @@ REGRESSION_CASES=(
   "breaching 3 3003  300 10"
   "breaching 5 2002  250 20"
   "breaching 5 3003  250 20"
-  # melira: two-seed searched sweep at reduced counts (cost note in the SMOKE block).
+  # melira: searched cases pulled 2026-09-06 (see the SMOKE block); d0 canary only.
   "melira 0 2002 1000 0"
-  "melira 3 2002   75 10"
-  "melira 3 3003   75 10"
-  "melira 5 2002   40 20"
-  "melira 5 3003   40 20"
   # 2HG gate, second seed (see the SMOKE block for the design): the seven 2HG-relevant decks at
   # d3, plus ONE d5 case (hinata2hg -- the value_play/deep-search path under two heads, covering
   # the Crackle declared-count search where the second face changes lethality). No canaries here
@@ -634,20 +632,12 @@ OVERNIGHT_CASES=(
   "breaching 5 5005  500 40"
   "breaching 5 6006  500 40"
   "breaching 5 7007  500 40"
-  # melira: four-seed sweep at counts sized to its per-game cost (~16/23 s CPU at d3/d5,
-  # see the SMOKE block): ~7.5 CPU-hours total, well inside the wall budget pooled.
+  # melira: searched cases pulled 2026-09-06 (see the SMOKE block) -- the four-seed d3/d5 sweep
+  # was ~7.5 CPU-hours from one deck. d0 canaries only until the enumeration wall is fixed.
   "melira 0 4004 2000 0"
   "melira 0 6006 2000 0"
   "melira 0 8008 2000 0"
   "melira 0 10010 2000 0"
-  "melira 3 4004  200 10"
-  "melira 3 5005  200 10"
-  "melira 3 6006  200 10"
-  "melira 3 7007  200 10"
-  "melira 5 4004  150 20"
-  "melira 5 5005  150 20"
-  "melira 5 6006  150 20"
-  "melira 5 7007  150 20"
   # 2HG gate, deep tier (user request 2026-09-04): the six 2HG-relevant decks at DEFAULT
   # SETTINGS -- depth-5 rows drop the depth key so each deck's value_play block owns the play
   # depth (fivecolour runs d6), at the SAME per-deck overnight d5 budget as the deck's own rows.

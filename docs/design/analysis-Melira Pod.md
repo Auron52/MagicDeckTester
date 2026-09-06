@@ -1565,3 +1565,18 @@ Note: extra RAM does not fix this class — the budget scales with MemTotal, so 
 scales with the box. Full mulligan gen deliberately deferred past tonight: origin holds a
 play-affecting greedy closure (8bea89da), and a profile generated at ba5857fa would not survive
 integration; tonight ends at the `recommend` scout.
+
+## SESSION 2026-09-06 — searched cases PULLED from the suite; bucket scout run
+
+The measured suite cost made the case: melira searched cases were **72% of smoke's core-time**
+(2779 of 3871 s; d3 31 s/game, d5 26 s/game, 2hg 23 s/game) and **52% of regression's** (4014 of
+7656 s) — one deck, over half the harness. User 2026-09-06: *"we can't have it taking that long
+and holding up other testing"*, *"drop Melira from these tests entirely until we can guarantee
+the performance."* Pulled every searched melira/melira2hg case from smoke, regression AND
+overnight (the overnight d3/d5 four-seed sweep had never been measured — no GT keys existed, so
+nothing was lost); kept the free d0 canaries (≤3 s per 1000 games) so a play change still moves
+a committed digest. Restore path: git history of `test/regression_cases.sh`, gated on the
+enumeration wall fix (docs/design/pod-pair-enumeration-explosion.md) plus a fresh s/game probe.
+The wall itself remains THE open Melira problem: burst-family (f66f2949) + plan-space cap bound
+memory (bucket scout peaked ~2.5 GB where it OOMed at 23 GB before), but discovery rollouts
+still hit 35–94 s against a 20 ms budget.

@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 0a7cacb7  date 2026-09-06
+# Regression ground truth -- commit 08cd4120  date 2026-09-06
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -55,9 +55,7 @@ dragons_smoke_d5_s1001=5.5867/b7981a8bf9dbc75a
 breaching_smoke_d0_s1001=4.8460/8c8e7d2fb5fd0181
 breaching_smoke_d3_s1001=3.1000/03766483807acbd5
 breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
-melira_smoke_d0_s1001=6.4230/5efc611d520c5061
-melira_smoke_d3_s1001=4.9600/2e09e1b83c398514
-melira_smoke_d5_s1001=5.0000/4467d5161617a928
+melira_smoke_d0_s1001=6.4270/bd63c7a105a85b7a
 hinata2hg_smoke_d3_s1001=5.6667/1a9f41bd97bea19d
 antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
 minotaur2hg_smoke_d3_s1001=5.3500/d6096734765b010a
@@ -76,7 +74,6 @@ stompy2hg_smoke_d3_s1001=5.0000/73d0994752ca4e51
 kitty2hg_smoke_d3_s1001=4.9400/7bc28551a3faa869
 dragons2hg_smoke_d3_s1001=6.3000/43872dc33fccb094
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
-melira2hg_smoke_d3_s1001=5.2000/106e7e26dd3bf0f5
 fluctuator_smoke_d0_s1001=5.0930/93b3170f143542e3
 fluctuator_smoke_d3_s1001=3.6133/51e2e09c3b083528
 fluctuator_smoke_d5_s1001=3.6000/e7f095b94f5c58c5
@@ -167,11 +164,7 @@ breaching_regression_d3_s2002=3.0933/754d6fb14d56c14f
 breaching_regression_d3_s3003=3.0833/8d3103f293ae7026
 breaching_regression_d5_s2002=3.1000/a253d99d6bb10df1
 breaching_regression_d5_s3003=3.0760/f1ed83ebe4cb9869
-melira_regression_d0_s2002=6.3960/af5c852f431a6934
-melira_regression_d3_s2002=4.8267/f44e295d725fe795
-melira_regression_d3_s3003=4.8533/73a5908d7b7b9f16
-melira_regression_d5_s2002=4.7500/685694c2122d2c0a
-melira_regression_d5_s3003=4.7500/02952e2e521ad5de
+melira_regression_d0_s2002=6.3970/86a2eb2c2cd7ae8a
 hinata2hg_regression_d3_s2002=5.5700/a0d1eeabd223ffb3
 hinata2hg_regression_d5_s2002=5.5200/3b50ae042b766a7b
 antilife2hg_regression_d3_s2002=4.3133/88cdae0a53b9a7f6

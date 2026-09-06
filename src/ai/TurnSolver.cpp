@@ -13878,6 +13878,21 @@ static int EffectiveGroupCap(const GameState& state)
     return o >= 0 ? o : ResolveProvider(state).EnumGroupCap();
 }
 
+// PLAN-SPACE cap (MTG_PLAN_SPACE_CAP, positions; 0 = off): normal-mode bound on the odometer's
+// position product. The group-COUNT cap alone cannot stop a few very wide digits from multiplying
+// into a GB-scale walk (Melira 2026-09-06: 745K-3.08M positions per enumeration under the count
+// cap). Default 262144 (2^18): every legitimate enumeration profiled to date sits well under it
+// (rich pre-explosion combo states measured 28K-65K), while the monster class is trimmed to its
+// top-ranked groups -- and group waves re-walk the dropped ranks at unbounded budget, so coverage
+// follows the same defer-don't-cap doctrine as the count cap. =0 restores the count-only engine.
+static double PlanSpaceCap()
+{
+    static const double v = []{
+        const char* e = std::getenv("MTG_PLAN_SPACE_CAP");
+        return e ? std::strtod(e, nullptr) : 262144.0; }();
+    return v;
+}
+
 static void CapGroupsBySituationalRank(const GameState& state, const std::vector<Action>& cands,
                                        std::vector<std::vector<int>>& groups,
                                        std::vector<int>& group_hand_index,
@@ -13887,7 +13902,23 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     if (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap)) { return; }
     const int cap = EffectiveGroupCap(state);
     const int R   = groupwave::g_state.tranche_rank;   // -1 = normal (capped) mode
-    if (R < 0 && static_cast<int>(groups.size()) <= cap) { return; }
+    if (R < 0 && static_cast<int>(groups.size()) <= cap)
+    {
+        // Group COUNT is under the cap -- but a few very WIDE digits can still multiply to an
+        // enormous walk (2026-09-06, Melira: 10-14 groups whose widths x 2^independent reached
+        // 745K-3.08M positions per enumeration, GBs of transient plans, and stacked-worker OOMs
+        // the byte budgets cannot bound because the walk's working set is not a cache). The
+        // PLAN-SPACE cap below bounds the PRODUCT with the same defer-don't-cap contract as the
+        // count cap: dropped groups are recorded for the group-waves tranches, so no rank is
+        // unreachable at an unbounded budget.
+        const double pcap = PlanSpaceCap();
+        if (pcap <= 0.0) { return; }
+        double b = std::ldexp(1.0, std::min(num_independent, 60));
+        for (const std::vector<int>& g : groups)
+        { b *= 1.0 + static_cast<double>(g.size()); }
+        if (b <= pcap) { return; }
+        // fall through: rank groups and shrink until the product fits
+    }
     if (R >= 0 && static_cast<int>(groups.size()) <= R)  { return; }   // tranche absent here -> emit nothing
 
     const DecisionProvider& prov = ResolveProvider(state);
@@ -13908,8 +13939,24 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     std::stable_sort(ranked.begin(), ranked.end(),
         [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first > b.first; });
 
-    // How many ranked groups this call keeps: the cap (normal) or the tranche's R+1.
-    const int keep_n = (R < 0) ? cap : (R + 1);
+    // How many ranked groups this call keeps: the cap (normal) or the tranche's R+1. In normal
+    // mode the PLAN-SPACE cap can shrink it further: keep ranked groups while the running product
+    // (x 2^independent) stays under the cap -- always at least one group, so the top-ranked line
+    // class survives any bound.
+    int keep_n = (R < 0) ? std::min(cap, static_cast<int>(groups.size())) : (R + 1);
+    if (R < 0 && PlanSpaceCap() > 0.0)
+    {
+        const double pcap = PlanSpaceCap();
+        double run = std::ldexp(1.0, std::min(num_independent, 60));
+        int fit = 0;
+        while (fit < keep_n)
+        {
+            run *= 1.0 + static_cast<double>(groups[ranked[fit].second].size());
+            if (run > pcap && fit > 0) { break; }
+            ++fit;
+        }
+        keep_n = std::max(1, std::min(keep_n, fit));
+    }
     if (R >= 0)
     {
         // Enumeration-bound gate for a BUDGETED wave host: the tranche's odometer walk is paid
@@ -13937,7 +13984,8 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         // Record the drop so a wave host knows tranches exist for this node. Max over the
         // enumeration's inner (per-land) calls; the host resets before enumerating and captures
         // immediately after, so nested scoring-time enumerations never leak into the capture.
-        const int dropped = static_cast<int>(groups.size()) - cap;
+        // keep_n, not cap: the plan-space cap's extra drops are tranche-recoverable identically.
+        const int dropped = static_cast<int>(groups.size()) - keep_n;
         if (dropped > groupwave::g_state.max_dropped) { groupwave::g_state.max_dropped = dropped; }
     }
 
