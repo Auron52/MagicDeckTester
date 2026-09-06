@@ -324,6 +324,10 @@ private:
     // second main? Stamped by an exit guard in TakeTurn (cards_drawn_this_turn delta); read by
     // WantsSecondMainReentry after the call returns.
     bool m_m2_exec_drew = false;
+    // Mode 2 only (M2FixpointMode >= 2): the NAMES drawn by that execution (hand multiset
+    // delta across the call), for the executor's new-information condemnation gate -- a
+    // re-solve is condemned unless some enumerated post-draw plan uses one of these.
+    std::vector<InternedName> m_m2_drawn;
 
     // MTG_REFUTED_FOLLOW: this game is PROVEN unwinnable -- a top-level search covered the full
     // remaining horizon (turn + searched_depth - 1 >= max_turns) with ZERO truncation events and

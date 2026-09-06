@@ -472,12 +472,14 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
             ResolveStack(state);
             continue;
         }
-        // Non-committed second main whose execution DREW: one kill-only scan on the realized
-        // post-draw state (the executor twin of the search's kill-scan). A scan either takes
-        // an outright kill or changes nothing, so one pass suffices.
+        // Non-committed second main whose execution DREW: the kill-only scan (mode 1) or the
+        // gated re-solve (mode 2) on the realized post-draw state -- the executor twin of the
+        // search's fixpoint. Mode 1 either takes an outright kill or changes nothing; mode 2's
+        // re-solve re-stamps the draw signal, so a draw chain iterates (bounded by fp's cap
+        // and by the signal going false when nothing actionable remains).
         if (!m_ai.WantsSecondMainReentry()) { break; }
-        if (m_ai.TrySecondMainStrandedKill(state)) { ResolveStack(state); }
-        break;
+        if (!m_ai.TrySecondMainStrandedKill(state)) { break; }
+        ResolveStack(state);
     }
 
     if (s_fb_trace && !is_pre_combat && g_fb_activations_this_turn > 0)

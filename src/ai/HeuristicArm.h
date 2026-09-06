@@ -66,6 +66,7 @@ enum Slot : int
     M2_FIXPOINT,              // MTG_M2_FIXPOINT           re-solve m2 after a plan that fired a draw breakpoint
     M2_KEY_COARSE,            // MTG_M2_KEY_COARSE         interior-m2 solve memo keys on the m2 dependency set
     M2_FIX_UNFILTERED,        // MTG_M2_FIX_UNFILTERED     fixpoint kill-scan probes ALL plans, not just projected-lethal
+    M2_FIX_RESOLVE,           // MTG_M2_FIXPOINT=2         fixpoint mode 2: gated full re-solve on actionable draws
     STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-reviewed StompySurprise cast order
     SCALED_LAND_RANK,         // MTG_SCALED_LAND_RANK      reserve a live board-scaled LAND (Three Tree City)
     TOP_RESOLVE,              // MTG_TOP_RESOLVE           tutor-to-top reset (the order's LOOP half)
@@ -202,6 +203,7 @@ inline const char* Name(int slot)
         "MTG_M2_FIXPOINT",
         "MTG_M2_KEY_COARSE",
         "MTG_M2_FIX_UNFILTERED",
+        "MTG_M2_FIX_RESOLVE",
         "MTG_STOMPY_ORDER",
         "MTG_SCALED_LAND_RANK",
         "MTG_TOP_RESOLVE",

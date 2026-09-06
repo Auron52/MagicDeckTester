@@ -1678,6 +1678,61 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
             return true;
         }
     }
+    // ---- MODE 2 (M2FixpointMode >= 2): gated full RE-SOLVE at deck settings. -----------------
+    // No stranded kill; if a card DRAWN by the last execution (m_m2_drawn, the exit stamp's
+    // multiset delta) is actionable -- appears in some enumerated post-draw plan -- run the
+    // same searched re-solve the committed-fallback precedent uses (SolveWithLookahead at deck
+    // depth/budget, shared TT) and play its line. NON-COMMITTED play ONLY: a live committed
+    // line was scored WITH the search's mode-2 recursion, so its post-draw continuations are
+    // already IN the line the executor replays -- a re-solve here is redundant and, worse,
+    // deviates from the line without invalidating it (cards the line allocated to future turns
+    // get cast now; the stale line then replays into nothing -- hinata g14 went 7->9 exactly
+    // this way, bare attacks from T6 on). The kill-scan above stays unconditional: a verified
+    // kill is sound off-line too. Re-stamps the draw signal across its own apply so the
+    // MainPhase loop can iterate a chain (capped there).
+    if (M2FixpointMode() >= 2 && !m_m2_drawn.empty() && m_committed_line.empty())
+    {
+        bool actionable = false;
+        for (const TurnSolver::Plan& p : cands)
+        {
+            for (const InternedName& d : m_m2_drawn)
+            {
+                if (!p.land_to_play.empty() && d == p.land_to_play) { actionable = true; break; }
+                for (const Action& a : p.actions)
+                { if (a.card_name == d) { actionable = true; break; } }
+                if (actionable) { break; }
+            }
+            if (actionable) { break; }
+        }
+        if (actionable)
+        {
+            SearchBudget resolve_budget = SearchBudget::FromVirtualMs(m_budget_ms);
+            TurnSolver::Plan p2 = TurnSolver::SolveWithLookahead(
+                state, /*is_pre_combat=*/false, m_lookahead_depth, m_max_turns,
+                &resolve_budget, true, m_search_post_combat, m_shared_tt);
+            if (!p2.actions.empty() || !p2.land_to_play.empty())
+            {
+                const int drawn0 = state.ActivePlayer().cards_drawn_this_turn;
+                std::vector<InternedName> hand0;
+                hand0.reserve(state.ActivePlayer().hand.size());
+                for (const Card& c : state.ActivePlayer().hand) { hand0.push_back(c.m_name); }
+                TurnSolver::ApplyPlan(state, p2, /*is_pre_combat=*/false);
+                m_m2_exec_drew = state.ActivePlayer().cards_drawn_this_turn > drawn0;
+                m_m2_drawn.clear();
+                if (m_m2_exec_drew)
+                {
+                    for (const Card& c : state.ActivePlayer().hand)
+                    {
+                        auto it = std::find(hand0.begin(), hand0.end(), c.m_name);
+                        if (it != hand0.end()) { *it = hand0.back(); hand0.pop_back(); }
+                        else                   { m_m2_drawn.push_back(c.m_name); }
+                    }
+                }
+                return true;
+            }
+        }
+        m_m2_exec_drew = false;   // nothing actionable (or the solve passed): end the chain
+    }
     return false;
 }
 
@@ -1702,9 +1757,32 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     struct M2FixExitStamp
     {
         AIEngine&  eng; const GameState& st; int drawn0; bool pre;
+        // Mode 2 (M2FixpointMode >= 2) additionally records WHICH names were drawn (hand
+        // multiset delta), for the executor re-solve's new-information condemnation gate.
+        std::vector<InternedName> hand0;
         ~M2FixExitStamp()
-        { eng.m_m2_exec_drew = !pre && st.ActivePlayer().cards_drawn_this_turn > drawn0; }
+        {
+            eng.m_m2_exec_drew = !pre && st.ActivePlayer().cards_drawn_this_turn > drawn0;
+            if (!hand0.empty() || (eng.m_m2_exec_drew && M2FixpointMode() >= 2))
+            {
+                eng.m_m2_drawn.clear();
+                if (eng.m_m2_exec_drew)
+                {
+                    for (const Card& c : st.ActivePlayer().hand)
+                    {
+                        auto it = std::find(hand0.begin(), hand0.end(), c.m_name);
+                        if (it != hand0.end()) { *it = hand0.back(); hand0.pop_back(); }
+                        else                   { eng.m_m2_drawn.push_back(c.m_name); }
+                    }
+                }
+            }
+        }
     } _m2fx{ *this, state, state.ActivePlayer().cards_drawn_this_turn, is_pre_combat_main };
+    if (!is_pre_combat_main && !m_in_rollout && M2FixpointMode() >= 2)
+    {
+        _m2fx.hand0.reserve(state.ActivePlayer().hand.size());
+        for (const Card& c : state.ActivePlayer().hand) { _m2fx.hand0.push_back(c.m_name); }
+    }
     // Merge any unexpired staged cards into hand so the solver and casting logic
     // can treat them as playable. They are marked m_is_staged = true so we can
     // identify and restore unplayed ones afterward. The expiry is preserved in

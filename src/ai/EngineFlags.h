@@ -43,7 +43,26 @@ inline bool Main2DropEnabled()
 inline bool M2FixpointEnabled()
 {
     static const bool env_on = EnvOn("MTG_M2_FIXPOINT");
-    return heurarm::Flag(heurarm::M2_FIXPOINT, env_on);
+    return heurarm::Flag(heurarm::M2_FIXPOINT, env_on)
+        || heurarm::Flag(heurarm::M2_FIX_RESOLVE, false);
+}
+// Fixpoint MODE (USER direction 2026-09-06: "we need to re-evaluate" at the post-draw points;
+// condemnation prunes WHAT gets re-evaluated, not WHETHER):
+//   1 = KILL-SCAN only (probe projected-lethal post-draw plans, commit on a verified win).
+//   2 = kill-scan PLUS a gated full RE-SOLVE: when a card drawn during the plan's execution is
+//       ACTIONABLE (some enumerated post-draw plan uses it), re-solve the remainder of the
+//       second main and play/score that line. The gate is NEW-INFORMATION CONDEMNATION -- the
+//       pre-draw solve already adjudicated the old hand, so a re-solve is condemned unless a
+//       drawn card appears in some plan. This is v2's consistent re-evaluation with the two
+//       rejections addressed: cost (v2 re-solved on EVERY draw-firing rollout m2; mode 2 only
+//       on actionable draws) and the d0 hole (the executor path is depth-independent now).
+// MTG_M2_FIXPOINT=2 selects mode 2 (EnvInt; =1 or the heurarm M2_FIXPOINT flag = mode 1;
+// heurarm M2_FIX_RESOLVE = mode 2 for pooled per-job sweeps).
+inline int M2FixpointMode()
+{
+    static const int env_mode = EnvInt("MTG_M2_FIXPOINT", 0);
+    if (heurarm::Flag(heurarm::M2_FIX_RESOLVE, env_mode >= 2)) { return 2; }
+    return M2FixpointEnabled() ? 1 : 0;
 }
 // Nesting/iteration cap for the fixpoint (a chain of draw-firing plans re-enters once per pass).
 // Budget bounds the search-side work regardless; the cap exists so an adversarial draw chain

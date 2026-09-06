@@ -29112,6 +29112,53 @@ inline bool TTNoWinCacheOn()
     return v;
 }
 
+// M2 FIXPOINT mode-2 helpers (M2FixpointMode() == 2; EngineFlags.h). The re-solve's gate is
+// NEW-INFORMATION CONDEMNATION (USER direction 2026-09-06): the pre-draw solve already
+// adjudicated the old hand, so a post-draw re-solve is condemned unless a card DRAWN during
+// the plan's execution is ACTIONABLE -- i.e. appears in some enumerated post-draw plan. The
+// caveat is measured, not assumed: a drawn card can occasionally change the best use of OLD
+// cards (mana timing), so this is a pruning heuristic adjudicated by the A/B, not a proof.
+static std::vector<InternedName> M2FixHandNames(const GameState& s)
+{
+    std::vector<InternedName> v;
+    v.reserve(s.ActivePlayer().hand.size());
+    for (const Card& c : s.ActivePlayer().hand) { v.push_back(c.m_name); }
+    return v;
+}
+// Multiset difference: hand names in `after` not accounted for by the `before` snapshot -- the
+// cards drawn during the apply between the two (casts only REMOVE names, so a surplus is new).
+static std::vector<InternedName> M2FixDrawnDelta(std::vector<InternedName> before,
+                                                 const GameState& after)
+{
+    std::vector<InternedName> drawn;
+    for (const Card& c : after.ActivePlayer().hand)
+    {
+        auto it = std::find(before.begin(), before.end(), c.m_name);
+        if (it != before.end()) { *it = before.back(); before.pop_back(); }
+        else                    { drawn.push_back(c.m_name); }
+    }
+    return drawn;
+}
+static bool M2FixActionable(const std::vector<TurnSolver::Plan>& plans,
+                            const std::vector<InternedName>& drawn)
+{
+    if (drawn.empty()) { return false; }
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (!p.land_to_play.empty())
+        {
+            for (const InternedName& d : drawn)
+            { if (d == p.land_to_play) { return true; } }
+        }
+        for (const Action& a : p.actions)
+        {
+            for (const InternedName& d : drawn)
+            { if (a.card_name == d) { return true; } }
+        }
+    }
+    return false;
+}
+
 // Solve-and-apply the interior second main, then -- under MTG_M2_FIXPOINT (EngineFlags.h) --
 // RE-solve while the applied plan fired a breakpoint (cards may have entered hand mid-plan),
 // iteration-capped. Pass 0 is the plain solve+apply, so the lever off is byte-identical by
@@ -29124,6 +29171,9 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
                                     TranspositionTable* tt, bool in_rollout)
 {
     const bool fix = M2FixpointEnabled();
+    const int  fmode = fix ? M2FixpointMode() : 0;
+    std::vector<InternedName> hand0;
+    if (fmode >= 2 && g_m2fix_nest < 1) { hand0 = M2FixHandNames(copy); }
     TurnSolver::Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
                                                     second_main, tt, in_rollout);
     if (fix) { g_bp_fired_last = 0; }
@@ -29159,6 +29209,27 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
         ApplyPlanDirect(probe, e, false);
         if (probe.ActivePlayer().life <= 0) { continue; }
         if (OpponentHasLost(probe)) { copy = std::move(probe); return true; }
+    }
+    // ---- MODE 2: gated full RE-SOLVE (M2FixpointMode; see the mode-2 helpers above) --------
+    // No kill was found; if a card drawn during the plan's execution is ACTIONABLE (appears in
+    // some enumerated post-draw plan), re-solve the remainder of the second main and play that
+    // line. The nest guard bounds this to one re-solve per apply chain (an inner re-solve that
+    // draws again is covered by ITS host's own pass, not recursion here).
+    if (fmode >= 2 && g_m2fix_nest < 1)
+    {
+        const std::vector<InternedName> drawn = M2FixDrawnDelta(std::move(hand0), copy);
+        if (M2FixActionable(fx, drawn))
+        {
+            if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+            { ++g_fs_trunc_events; return false; }
+            ++g_m2fix_nest;
+            TurnSolver::Plan post2 = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
+                                                             second_main, tt, in_rollout);
+            --g_m2fix_nest;
+            g_bp_fired_last = 0;
+            ApplyPlanDirect(copy, post2, false);
+            if (OpponentHasLost(copy)) { return true; }
+        }
     }
     return false;
 }
@@ -30201,6 +30272,10 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // starts from a fresh copy of the pend snapshot; the copy was a fresh GameState per child,
         // and the child fan-out is the node's dominant wall cost (2.1x wall at 1.35x units).
         GameState  s3_buf;
+        // MODE-2 fixpoint (M2FixpointMode; see the mode-2 helpers): the pre-apply hand is loop-
+        // invariant (every q applies from `state`), so snapshot it once for the drawn-card delta.
+        std::vector<InternedName> m2fix_hand0;
+        if (M2FixpointMode() >= 2 && g_m2fix_nest < 1) { m2fix_hand0 = M2FixHandNames(state); }
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
@@ -30486,6 +30561,42 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     }
                 }
                 --g_m2fix_nest;
+                // ---- MODE 2: the gated RE-SOLVE is a RE-ENTRY of this very decision on the
+                // post-draw state (M2FixpointMode; new-information condemnation, see the mode-2
+                // helpers). The recursion enumerates the post-draw plans INCLUDING the empty
+                // plan -- whose tail is exactly the plain EOT tail below -- so when the gate
+                // fires it REPLACES the plain tail: a strict generalization, no double scoring.
+                // The nest guard keeps the recursion single-level; a continuation that draws
+                // again is covered by the recursion's own node/wave hosting, not more nesting.
+                if (M2FixpointMode() >= 2)
+                {
+                    const std::vector<InternedName> drawn = M2FixDrawnDelta(m2fix_hand0, s2);
+                    if (M2FixActionable(fx, drawn)
+                        && !(budget != nullptr && !budget->Unlimited() && budget->Exhausted()))
+                    {
+                        ++g_m2fix_nest;
+                        TurnSolver::SearchLine cont =
+                            FSLineTail(s2, depth, max_turns, std::min(cutoff, best.win_turn),
+                                       second_main, tt, lc, budget);
+                        --g_m2fix_nest;
+                        if (m2t_here)
+                        { std::fprintf(stderr, "[m2t] T%d d%d q=%s FIXPOINT-RESOLVE cont=%d best=%d\n",
+                                       state.turn_number, depth, m2t_sum(q).c_str(),
+                                       cont.win_turn, best.win_turn); }
+                        if (cont.win_turn < best.win_turn)
+                        {
+                            best.win_turn = cont.win_turn;
+                            best.phases.clear();
+                            TurnSolver::Plan q_rec = q;
+                            q_rec.breakpoint_actions = std::move(bp);
+                            best.phases.push_back({ false, std::move(q_rec) });
+                            best.phases.insert(best.phases.end(),
+                                               cont.phases.begin(), cont.phases.end());
+                            if (cont.win_turn <= state.turn_number + depth) { return best; }
+                        }
+                        continue;   // the recursion scored the empty continuation == the plain tail
+                    }
+                }
             }
             if (!SimulateEndAndStartNextTurn(s2)) { continue; }
             ExpireStagedCards(s2);

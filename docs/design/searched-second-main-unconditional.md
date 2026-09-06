@@ -433,7 +433,47 @@ and better in three places, but +5.25% suite wall makes this a quality-vs-perf T
 is the USER's call, not an auto-adoption (strict improvement requires no perf drawback).
 Both sides are counted above. A per-deck middle path exists: for hinata the lever is a
 strict improvement ON ITS OWN TERMS (quality better AND units cheaper), so a provider-level
-opt-in would adopt it where it pays without taxing the suite.
+opt-in would adopt it where it pays without taxing the suite. (The wall figure needs a
+re-measure on a quiet box -- another container shared the machine during these runs; the
+per-cell ms comparison is scheduling-contaminated, proven by ±13% swings on byte-identical
+cells. Quality/units/digest verdicts are deterministic and unaffected.)
+
+### MODE 2 (USER direction 2026-09-06): the gated FULL RE-SOLVE — "we need to re-evaluate"
+
+The USER's ruling on the kill-only design: *"I don't see how we can have a correct solution
+without re-evaluating at those points. We can use some of the techniques discussed before
+like condemnation to reduce what we re-evaluate, but we need to re-evaluate."* Mode 2
+(`MTG_M2_FIXPOINT=2`, heurarm `M2_FIX_RESOLVE`) is that design: a REAL re-solve at the
+post-draw points, priced by **new-information condemnation** — the pre-draw solve already
+adjudicated the old hand, so the re-solve is condemned unless a card DRAWN during the plan's
+execution is ACTIONABLE (appears in some enumerated post-draw plan; `M2FixDrawnDelta` /
+`M2FixActionable`, hand-multiset deltas over the apply). Kill-scan stays as the always-on
+floor beneath it.
+
+* **Scored line**: `FSLineTail`'s fixpoint block RE-ENTERS ITSELF on the post-draw state.
+  The recursion enumerates the post-draw plans INCLUDING the empty plan — whose tail is
+  exactly the plain EOT tail — so when the gate fires it REPLACES the plain tail: a strict
+  generalization, no double scoring. Continuation phases land in the returned line as
+  consecutive m2 `PhasePlan`s; the executor replays them via the `MainPhase` loop.
+* **Interior/rollouts**: `ApplySecondMainInSearch` adds a gated `SolveSecondMainInSearch`
+  re-solve after a no-kill scan (nest-capped).
+* **Executor**: `TrySecondMainStrandedKill` falls through to a full `SolveWithLookahead`
+  re-solve at deck settings — **NON-COMMITTED play only**. The first build fired it on
+  committed lines too and re-learned v1's lesson in one game: the re-solve cast cards the
+  committed line had allocated to FUTURE turns, the stale line then replayed into nothing
+  (hinata g63 split, 7→8, bare attacks from T6). A live committed line was scored WITH the
+  mode-2 recursion — its post-draw continuations are already IN the line — so an executor
+  re-solve there is redundant and line-invalidating. Gated on `m_committed_line.empty()`;
+  g63 recovered to mode-1 parity.
+
+**Measured (pergame8/8b, hinata train, 100 games/arm):** base doctrine: mode 2 ≡ mode 1
+EXACTLY (0/0/100; both 1/0/99 vs base; units +0.3% — the condemnation gate holds). Split
+doctrine: **safixr vs sa 6/1/93** — the six rescues include g5 and g50, the two kills whose
+projection never fires (mode 1's filter can't see them); the one loss is g14 (7→9), a
+pre-verification GRADING flip: at T1 a turn-7 win is beyond the horizon (1+depth5=6<7), so
+no verified win existed and mode 2's re-scored interior legitimately shuffled the graded
+pick — honest variance, not unsoundness (no [nonconv] event; persists at 4x budget, so not
+dilution either). Split avg ties mode 1 at 5.80.
 
 ## What stays a provider decision
 
