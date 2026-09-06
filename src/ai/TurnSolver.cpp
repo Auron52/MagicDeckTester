@@ -14010,10 +14010,30 @@ static double PlanSpaceCap()
     return v;
 }
 
+// GREEDY plan-space cap (MTG_SOLVE_SPACE_CAP, positions; 0 = fall back to MTG_PLAN_SPACE_CAP):
+// the tighter product bound for SolveUncached ONLY -- the d0 decision and EVERY rollout leaf.
+// The search's own enumeration (EnumeratePlans) keeps the wide cap: its drops are group-wave-
+// recoverable and budget-gated, so breadth there buys real coverage. The greedy walk has no
+// waves and no budget, and profiling (g88, 2026-09-06) put 92% of a Melira combo game inside it;
+// walking 262144 positions to make a rollout-leaf pick is breadth nothing reads. Measured on the
+// g88 monster: 262144 -> 13.2 s, 16384 -> 3.7 s, 4096 -> 2.6 s, all the same t4 win. Default
+// 16384: ~4x off the monster class while >= 5x above the richest legitimate greedy walks
+// profiled on suite decks (whose smoke stays byte-identical -- the bound only binds where the
+// product exceeds it).
+static double SolveSpaceCap()
+{
+    static const double v = []{
+        const char* e = std::getenv("MTG_SOLVE_SPACE_CAP");
+        const double x = e ? std::strtod(e, nullptr) : 16384.0;
+        return x > 0.0 ? x : 0.0; }();
+    return v > 0.0 ? v : PlanSpaceCap();
+}
+
 static void CapGroupsBySituationalRank(const GameState& state, const std::vector<Action>& cands,
                                        std::vector<std::vector<int>>& groups,
                                        std::vector<int>& group_hand_index,
-                                       int num_independent)
+                                       int num_independent,
+                                       bool greedy = false)
 {
     groupwave::g_state.call_active = false;   // set true below iff this call has a rank-R group
     if (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap)) { return; }
@@ -14028,7 +14048,7 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         // PLAN-SPACE cap below bounds the PRODUCT with the same defer-don't-cap contract as the
         // count cap: dropped groups are recorded for the group-waves tranches, so no rank is
         // unreachable at an unbounded budget.
-        const double pcap = PlanSpaceCap();
+        const double pcap = greedy ? SolveSpaceCap() : PlanSpaceCap();
         if (pcap <= 0.0) { return; }
         double b = std::ldexp(1.0, std::min(num_independent, 60));
         for (const std::vector<int>& g : groups)
@@ -14061,9 +14081,9 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     // (x 2^independent) stays under the cap -- always at least one group, so the top-ranked line
     // class survives any bound.
     int keep_n = (R < 0) ? std::min(cap, static_cast<int>(groups.size())) : (R + 1);
-    if (R < 0 && PlanSpaceCap() > 0.0)
+    if (R < 0 && (greedy ? SolveSpaceCap() : PlanSpaceCap()) > 0.0)
     {
-        const double pcap = PlanSpaceCap();
+        const double pcap = greedy ? SolveSpaceCap() : PlanSpaceCap();
         double run = std::ldexp(1.0, std::min(num_independent, 60));
         int fit = 0;
         while (fit < keep_n)
@@ -16106,6 +16126,46 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     int m = static_cast<int>(cands.size());
     Plan best;
     int  best_mask = 0;     // action mask of `best` (0 = the do-nothing default); ties keep min mask
+    // DEFERRED best materialization (perf, 2026-09-06): the walk records the winning SELECTION
+    // (indices + the rare surplus-fill substitution), never the Action vector -- profiling a Melira
+    // combo game (g88) showed 12-17% of the WHOLE game inside Action copy-ctors from rebuilding
+    // best.actions on every improvement of a multi-million-subset walk. materialize_best() rebuilds
+    // best.actions from cands exactly as the old in-place copy did (same substitution, same
+    // ApplyCantripFirstOrder), so every plan this function returns is byte-identical.
+    std::vector<int> best_sel;
+    int    best_fill_j = -1;
+    Action best_fill_action;
+    auto materialize_best = [&]() -> Plan& {
+        best.actions.clear();
+        for (int j : best_sel)
+        { best.actions.push_back(j == best_fill_j ? best_fill_action : cands[j]); }
+        ApplyCantripFirstOrder(best.actions);   // no-op unless MTG_CANTRIP_FIRST
+        return best;
+    };
+    // Per-candidate FILL eligibility + draw flag, computed ONCE (perf, 2026-09-06): the surplus-
+    // FILL probe inside consider() runs on nearly every subset with leftover mana and used to COPY
+    // each selected Action -- strings included -- just for FillScaledCastFace/FillScaledXTrick to
+    // return 0 on their const preconditions (g88 profiling: ~17% of a Melira combo game in those
+    // copies; the deck has no scalable X spell, so every copy was waste). These flags test the
+    // exact preconditions the two fills check BEFORE any mutation, and the lambda's draw scan's
+    // lookup, so skipping on a 0 flag is byte-identical.
+    std::vector<unsigned char> fill_face_ok(cands.size(), 0), fill_x_ok(cands.size(), 0),
+                               cand_draws(cands.size(), 0);
+    for (int j = 0; j < m; ++j)
+    {
+        const Action& fa = cands[j];
+        const CardDefinition* fd = (fa.kind == Action::Kind::CastFromHand)
+                                 ? (fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name))
+                                 : nullptr;
+        if (fd && fa.def && fd->params.damage_divided && fa.crackle_targets >= 0)
+        { fill_face_ok[j] = 1; }   // FillScaledCastFace requires a.def itself
+        if (fd && fd->params.solo_target_trick && fd->params.pump_per_x_power > 0
+            && fd->card.m_mana_cost.has_x)
+        { fill_x_ok[j] = 1; }
+        const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name);
+        if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
+        { cand_draws[j] = 1; }
+    }
 
     bool have_colors[5];    // untapped-source colors -- state-only, computed once for all subsets
     ComputeAvailableColors(state, have_colors);
@@ -16565,6 +16625,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         {
             for (int j : sel)
             {
+                if (!fill_face_ok[j]) { continue; }   // precondition pre-tested -> the call would return 0
                 Action ca = cands[j];
                 int extra = FillScaledCastFace(state, ca, fill_surplus);
                 if (extra > 0) { direct_dmg += extra; total_eval += extra * 100; fill_j = j; fill_action = ca; break; }
@@ -16583,16 +16644,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // this decision needs.
             bool plan_draws = false;
             for (int j : sel)
-            {
-                const CardDefinition* dd = cands[j].def ? cands[j].def
-                                         : CardDatabase::Instance().Lookup(cands[j].card_name);
-                if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
-                { plan_draws = true; break; }
-            }
+            { if (cand_draws[j]) { plan_draws = true; break; } }
             if (fill_j < 0 && !plan_draws)
             {
                 for (int j : sel)
                 {
+                    if (!fill_x_ok[j]) { continue; }   // precondition pre-tested -> the call would return 0
                     Action ca = cands[j];
                     const int ev = FillScaledXTrick(state, ca, fill_surplus);
                     if (ev > 0) { total_eval += ev; fill_j = j; fill_action = ca; break; }
@@ -16736,9 +16793,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         else                               { better = mask < best_mask; }        // tie -> smallest mask
         if (!better) { return; }
 
-        best.actions.clear();
-        for (int j : sel) { best.actions.push_back(j == fill_j ? fill_action : cands[j]); }
-        ApplyCantripFirstOrder(best.actions);   // no-op unless MTG_CANTRIP_FIRST
+        best_sel    = sel;                      // indices only -- Actions materialize at return
+        best_fill_j = fill_j;
+        if (fill_j >= 0) { best_fill_action = fill_action; }
         best.value          = rank_value;
         best.wins_this_turn = wins;
         best_mask           = mask;
@@ -16790,7 +16847,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             std::vector<int> combo = rituals;   // all rituals -> max mana to fund the finisher's X
             combo.push_back(finisher);
             consider(combo);
-            if (best.wins_this_turn) { return best; }   // lethal combo found -> skip the powerset
+            if (best.wins_this_turn) { return materialize_best(); }   // lethal combo found -> skip the powerset
             // Not lethal/affordable: fall through; `best` is pre-seeded (harmless move-ordering).
         }
     }
@@ -16828,17 +16885,23 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // (ApplyPlanDirect on a copy) and only short-circuit when the opponent is truly dead. Snapshot
             // `best`/`best_mask` and restore on any non-verified outcome so the fall-through is byte-identical
             // to the full search. Cost: one plan application, trivially cheap versus the powerset it skips.
-            const Plan saved_best = best;
+            const Plan saved_best = best;                 // actions deliberately unmaterialized -> cheap copy
             const int  saved_mask = best_mask;
+            const std::vector<int> saved_sel = best_sel;
+            const int    saved_fj = best_fill_j;
+            const Action saved_fa = best_fill_action;
             consider(goff);
             if (best.wins_this_turn)
             {
                 GameState copy = state;
-                ApplyPlanDirect(copy, best, is_pre_combat);
-                if (OpponentHasLost(copy)) { return best; }   // verified lethal -> skip the powerset
+                ApplyPlanDirect(copy, materialize_best(), is_pre_combat);
+                if (OpponentHasLost(copy)) { return best; }   // verified lethal -> skip the powerset (materialized above)
             }
             best      = saved_best;
             best_mask = saved_mask;
+            best_sel  = saved_sel;
+            best_fill_j = saved_fj;
+            best_fill_action = saved_fa;
         }
     }
 
@@ -16881,8 +16944,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         static const bool s_goff_cut_dbg = EnvOn("MTG_EDF_GOFF_CUT_DEBUG");
         if (blink_j >= 0)
         {
-            const Plan saved_best = best;
+            const Plan saved_best = best;                 // actions deliberately unmaterialized -> cheap copy
             const int  saved_mask = best_mask;
+            const std::vector<int> saved_sel = best_sel;
+            const int    saved_fj = best_fill_j;
+            const Action saved_fa = best_fill_action;
             std::vector<int> goff{ blink_j };
             consider(goff);
             const bool projected = best.wins_this_turn;
@@ -16890,7 +16956,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             if (projected)
             {
                 GameState copy = state;
-                ApplyPlanDirect(copy, best, is_pre_combat);
+                ApplyPlanDirect(copy, materialize_best(), is_pre_combat);
                 verified = OpponentHasLost(copy);
                 if (s_goff_cut_dbg)
                 {
@@ -16900,7 +16966,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                  copy.players[1 - state.active_player_index].life,
                                  copy.opponent_decked ? 1 : 0);
                 }
-                if (verified) { return best; }   // verified lethal -> skip the powerset
+                if (verified) { return best; }   // verified lethal -> skip the powerset (materialized above)
             }
             else if (s_goff_cut_dbg)
             {
@@ -16909,12 +16975,80 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             }
             best      = saved_best;
             best_mask = saved_mask;
+            best_sel  = saved_sel;
+            best_fill_j = saved_fj;
+            best_fill_action = saved_fa;
         }
         else if (s_goff_cut_dbg && blink_k == 0)
         {
             static thread_local int s_dbg_nogoff = 0;
             if (++s_dbg_nogoff <= 20)
             { std::fprintf(stderr, "[edf-goff-cut] t%d no goff cand\n", state.turn_number); }
+        }
+    }
+
+    // ---- Persist-loop go-off short-circuit (Melira Pod; sibling of the storm/EDF cuts) --------------
+    // A lethal persist LOOP turn is structurally fixed: activate the demand-sized Redcap loop burst
+    // (SacCreatureOutlet, sac_count >= 2, pinned victim, direct_damage pre-scaled to >= opp life),
+    // co-casting a closer-class card when no closer is live (the cast-and-loop pairing). The full
+    // powerset around that one action is Melira's monster-game tail -- the same shape as the EDF
+    // blink cut: 92% of a profiled combo game (g88) inside this powerset, whose winner IS the loop
+    // line. So evaluate JUST the loop line(s) via the same consider() -- which enforces closer
+    // presence (SubsetHasUnclosedPersistLoop), affordability and the exact win projection -- and
+    // short-circuit ONLY on an ApplyPlanDirect-verified kill (the storm cut's discipline: never
+    // trust the projection). A this-turn win dominates every plan this turn, so nothing is lost;
+    // any non-verified outcome restores best and falls through byte-identically. Inert for every
+    // deck that never emits a pinned-victim loop burst (the scan finds nothing). Top-level main
+    // only, same as the storm cut. Toggles: MTG_NO_PERSIST_LOOP_CUT + the shared combo-line gates.
+    static const bool s_no_persist_loop_cut = EnvOn("MTG_NO_PERSIST_LOOP_CUT");
+    if (!s_no_persist_loop_cut && !s_no_combo_line && state.spells_cast_this_turn == 0
+        && !DecisionUnpruned(UnprunedGate::ComboLine))
+    {
+        const int opp_life = state.Opponent().life;
+        int loop_j = -1, loop_dmg = 0;
+        for (int j = 0; j < m; ++j)
+        {
+            const Action& a = cands[j];
+            if (a.kind == Action::Kind::SacCreatureOutlet && a.sac_count > 1
+                && a.sac_victim_id != 0 && a.direct_damage >= opp_life
+                && a.direct_damage > loop_dmg)
+            { loop_j = j; loop_dmg = a.direct_damage; }
+        }
+        if (loop_j >= 0)
+        {
+            const Plan saved_best = best;                 // actions deliberately unmaterialized -> cheap copy
+            const int  saved_mask = best_mask;
+            const std::vector<int> saved_sel = best_sel;
+            const int    saved_fj = best_fill_j;
+            const Action saved_fa = best_fill_action;
+            // Line 1: the loop alone (a closer is already live). consider() rejects it outright
+            // when no closer is active OR cast -- that is SubsetHasUnclosedPersistLoop's job.
+            consider(std::vector<int>{ loop_j });
+            if (!best.wins_this_turn)
+            {
+                // Line 2: loop + one castable closer-class card (the s10 cast-and-loop pairing).
+                // Few candidates qualify; consider() settles affordability per line.
+                for (int j = 0; j < m && !best.wins_this_turn; ++j)
+                {
+                    const Action& a = cands[j];
+                    if (a.kind != Action::Kind::CastFromHand || !a.def) { continue; }
+                    if (a.def->params.prevents_minus_counters
+                        || a.def->params.reduces_minus_counters_by_one
+                        || a.def->params.other_creature_gy_enter_team_counters > 0)
+                    { consider(std::vector<int>{ j, loop_j }); }
+                }
+            }
+            if (best.wins_this_turn)
+            {
+                GameState copy = state;
+                ApplyPlanDirect(copy, materialize_best(), is_pre_combat);
+                if (OpponentHasLost(copy)) { return best; }   // verified lethal -> skip the powerset (materialized above)
+            }
+            best      = saved_best;
+            best_mask = saved_mask;
+            best_sel  = saved_sel;
+            best_fill_j = saved_fj;
+            best_fill_action = saved_fa;
         }
     }
 
@@ -16934,7 +17068,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         && pending_atk >= state.Opponent().life)
     {
         consider(std::vector<int>{});                   // the empty (attack-only) subset
-        if (best.wins_this_turn) { return best; }       // board already lethal -> skip the powerset
+        if (best.wins_this_turn) { return materialize_best(); }   // board already lethal -> skip the powerset
         // consider()'s exact projection did not confirm the win (should not happen given the guard) ->
         // fall through; `best` is merely pre-seeded (harmless move-ordering).
     }
@@ -16978,7 +17112,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             for (int j = 0; j < m; ++j) { if (mask & (1 << j)) { sel.push_back(j); } }
             consider(sel);
         }
-        return best;
+        return materialize_best();
     }
 
     // --- Default: odometer over per-hand-card choices x powerset of independent actions ---
@@ -17066,9 +17200,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // short-circuit above, so a non-lethal turn -- the only kind that reaches here -- never drops a
     // win). Shared with EnumeratePlans; see CapGroupsBySituationalRank. Solve is the greedy
     // rollout leaf -- it has no budgeted candidate loop, so no group-wave phase runs here (the
-    // deferred tranches belong to the SEARCH hosts; see groupwave above).
+    // deferred tranches belong to the SEARCH hosts; see groupwave above). greedy=true selects the
+    // tighter MTG_SOLVE_SPACE_CAP product bound (see SolveSpaceCap for the g88 curve).
     CapGroupsBySituationalRank(state, cands, groups, group_hand_index,
-                               static_cast<int>(independent.size()));
+                               static_cast<int>(independent.size()), /*greedy=*/true);
 
     // Feasible-aware early ritual-drop: when no payoff is reachable this turn, remove the ritual groups
     // before the odometer enumerates their powerset (byte-identical; see DropRitualGroupsIfNoPayoff).
@@ -17334,7 +17469,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                has_ind_accel, copy_class, equip_deps, vial_ok, consider);
     }
 
-    return best;
+    return materialize_best();
 }
 
 // ============================================================
@@ -24297,6 +24432,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     const ColorFeasibility colour_feas    = BuildColorFeasibility(state);
     const ColorFeasibility colour_feas_nc = BuildColorFeasibility(state, /*noncreature=*/true);
 
+    // Per-candidate FILL eligibility + draw flag, computed ONCE -- the lockstep twin of the
+    // SolveUncached precompute (see that site for the g88 profile evidence): the surplus-FILL
+    // probe used to copy every selected Action per subset just for the fill calls to return 0 on
+    // their const preconditions. Byte-identical skip.
+    std::vector<unsigned char> fill_face_ok(cands.size(), 0), fill_x_ok(cands.size(), 0),
+                               cand_draws(cands.size(), 0);
+    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+    {
+        const Action& fa = cands[j];
+        const CardDefinition* fd = (fa.kind == Action::Kind::CastFromHand)
+                                 ? (fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name))
+                                 : nullptr;
+        if (fd && fa.def && fd->params.damage_divided && fa.crackle_targets >= 0)
+        { fill_face_ok[j] = 1; }   // FillScaledCastFace requires a.def itself
+        if (fd && fd->params.solo_target_trick && fd->params.pump_per_x_power > 0
+            && fd->card.m_mana_cost.has_x)
+        { fill_x_ok[j] = 1; }
+        const CardDefinition* dd = fa.def ? fa.def : CardDatabase::Instance().Lookup(fa.card_name);
+        if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
+        { cand_draws[j] = 1; }
+    }
+
     // Evaluate one selected combination (a list of candidate indices) and, if
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     auto eval_and_push = [&](const std::vector<int>& sel)
@@ -25149,6 +25306,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         {
             for (int j : sel)
             {
+                if (!fill_face_ok[j]) { continue; }   // precondition pre-tested -> the call would return 0
                 Action ca = cands[j];
                 int extra = FillScaledCastFace(state, ca, fill_surplus);
                 if (extra > 0) { direct_dmg += extra; total_eval += extra * 100; fill_j = j; fill_action = ca; break; }
@@ -25167,16 +25325,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // this decision needs.
             bool plan_draws = false;
             for (int j : sel)
-            {
-                const CardDefinition* dd = cands[j].def ? cands[j].def
-                                         : CardDatabase::Instance().Lookup(cands[j].card_name);
-                if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
-                { plan_draws = true; break; }
-            }
+            { if (cand_draws[j]) { plan_draws = true; break; } }
             if (fill_j < 0 && !plan_draws)
             {
                 for (int j : sel)
                 {
+                    if (!fill_x_ok[j]) { continue; }   // precondition pre-tested -> the call would return 0
                     Action ca = cands[j];
                     const int ev = FillScaledXTrick(state, ca, fill_surplus);
                     if (ev > 0) { total_eval += ev; fill_j = j; fill_action = ca; break; }
