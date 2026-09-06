@@ -60,6 +60,7 @@ enum Slot : int
     LEAF_NOWIN_FORCE,         // MTG_LEAF_NOWIN_FORCE      force the tie-break past a provider opt-out
     AL_SSM_ROLLOUT,           // MTG_AL_SSM_ROLLOUT        AL also searches the ROLLOUT's per-turn m2
     M2_CAP1,                  // MTG_M2_CAP1               cap the interior m2 solve to depth 1
+    M2_WAVES,                 // MTG_M2_WAVES              FSLineTail m2 loop runs the deferred wave phase
     STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-reviewed StompySurprise cast order
     SCALED_LAND_RANK,         // MTG_SCALED_LAND_RANK      reserve a live board-scaled LAND (Three Tree City)
     TOP_RESOLVE,              // MTG_TOP_RESOLVE           tutor-to-top reset (the order's LOOP half)
@@ -183,6 +184,7 @@ inline const char* Name(int slot)
         "MTG_LEAF_NOWIN_FORCE",
         "MTG_AL_SSM_ROLLOUT",
         "MTG_M2_CAP1",
+        "MTG_M2_WAVES",
         "MTG_STOMPY_ORDER",
         "MTG_SCALED_LAND_RANK",
         "MTG_TOP_RESOLVE",

@@ -224,11 +224,13 @@ enum Site
     kLookaheadGroupWave,   // SolveWithLookahead: group-wave scorer
     kEscEval,              // SolveWithLookahead: condemnation escalation re-evaluation
     kFsBpNode,             // FullSearchLine: breakpoint-NODE continuation children (MTG_BP_NODE)
+    kFsM2Wave,             // FSLineTail m2 loop: deferred wave variants (MTG_M2_WAVES)
     kSiteCount
 };
 static const char* kNames[kSiteCount] = {
     "rollout_step", "fs_main2", "fs_tranche", "fs_pre", "fs_bp_wave", "fs_group_wave",
-    "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node"
+    "greedy_fallback", "la_cand", "la_bp_wave", "la_group_wave", "esc_eval", "fs_bp_node",
+    "fs_m2_wave"
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
@@ -29396,6 +29398,21 @@ static bool PlanHasCondemnedCast(const GameState& state, const TurnSolver::Plan&
 // transition for a pre-combat sibling happens one frame down, in here, so the archive has to be
 // threaded rather than owned locally -- see the dominance section above. nullptr (every other
 // caller) disables the check entirely.
+// MTG_M2_WAVES (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): the m2 plan
+// loop below runs the deferred wave phase FSLineWin's pre loop has always had. Without it, a
+// second-main plan's breakpoint continuations are searched only where the NODE hosts them
+// (site 3, root turn by default) and NESTED continuations (bp_at >= 1) are reachable by NOTHING
+// -- the walker's nesting discovery is the one mechanism that opens those slots. Measured
+// motivation (logs/hinata_cost, 2026-09-06): hinata's own all-Main2 doctrine is 42% cheaper and
+// +0.29 WORSE, and full node hosting (MTG_BP_NODE_ROOTTURN=0, +65% units) does not close the
+// gap -- the loss is in the chains only the wave walker can reach. Lossless by construction:
+// strictly ADDS scored lines, deletes none.
+static bool M2WavesEnabled()
+{
+    static const bool env_on = EnvOn("MTG_M2_WAVES");
+    return heurarm::Flag(heurarm::M2_WAVES, env_on);
+}
+
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
                                          FSLineCache* lc, SearchBudget* budget,
@@ -29447,6 +29464,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         TurnSolver::SearchLine best;
         best.win_turn = max_turns + 1;
         int _beam_i = 0;
+        std::size_t m2_scanned = 0;   // plans the loop actually looked at (the walker's `limit`)
         bool w0_trunc = false;   // wave 0 left plans unexplored (beam) -- a rescue-trace feature
         const bool beam_here = (g_esc_beam_width > 0 && depth <= g_esc_beam_leafdepth);
         // DIG INSTRUMENT (MTG_M2T_TRACE, default off): dump this m2 branch's plans + tail win
@@ -29507,6 +29525,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
             if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only)
+            ++m2_scanned;
             ConsumeAt(budget, unitsite::kFsMain2);   // one interior node (plan applied)
             LoadPlanState(s2_buf, state, reuse_s2);
             GameState& s2 = s2_buf;
@@ -29766,6 +29785,78 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 if (sub.win_turn <= state.turn_number + depth)
                 {
                     return best;
+                }
+            }
+        }
+
+        // ---- M2 DEFERRED CONTINUATION WAVES (MTG_M2_WAVES; see M2WavesEnabled above) -----------
+        // The m1 host's walker, re-hosted with THIS loop's scoring tail (post-combat apply, no
+        // SimulateCombat, FSLineWin recursion at the same depth). Same anytime contract, same
+        // prefix-resume cache, same walker `limit` semantics (the beam's carve-out is respected:
+        // waves stay inside whatever the loop scanned). Dedup shares node_child_seen, so a wave
+        // variant is checked against every node child and every recorded base plan.
+        if (M2WavesEnabled() && BpWavesHere(budget))
+        {
+            BpWaveWalker walker(state, post, m2_scanned);
+            if (!walker.Empty())
+            {
+                TurnSolver::Plan v;
+                static const bool s_m2w_prefix_cache = !EnvOn("MTG_NO_BP_PREFIX_CACHE");
+                std::unordered_map<uint64_t, BpPrefixSnap> prefix_cache;
+                while (walker.Next(post, v))
+                {
+                    // Anytime: a variant only ever wins on a STRICTLY better win turn, so
+                    // stopping here keeps `best` exactly as the loop left it.
+                    if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                    { ++g_fs_trunc_events; break; }
+                    ConsumeAt(budget, unitsite::kFsM2Wave);   // one interior node (plan applied)
+                    if (s_rollout_stats)
+                    { g_interior_nodes.fetch_add(1, std::memory_order_relaxed); }
+                    const uint64_t ck = (static_cast<uint64_t>(walker.LastBase()) << 8)
+                                      | static_cast<uint64_t>(walker.LastAt() & 0xFF);
+                    auto hit = s_m2w_prefix_cache ? prefix_cache.find(ck) : prefix_cache.end();
+                    GameState s = (hit != prefix_cache.end()) ? hit->second.state : state;
+                    std::vector<Action> bp;
+                    g_bp_cands_last = 0;          // 0 == this apply reached no eligible breakpoint
+                    g_bp_seen_last  = 0;          // ... and reached no nested one either
+                    if (hit != prefix_cache.end())
+                    { ApplyPlanDirect(s, v, false, &bp, nullptr, &hit->second); }
+                    else if (s_m2w_prefix_cache && prefix_cache.size() < 256)
+                    {
+                        BpPrefixSnap snap;
+                        ApplyPlanDirect(s, v, false, &bp, &snap, nullptr);
+                        if (snap.valid) { prefix_cache.emplace(ck, std::move(snap)); }
+                    }
+                    else { ApplyPlanDirect(s, v, false, &bp); }
+                    // Past the end of the list: the continuation fell back to greedy -- a copy of
+                    // its own base plan (already scored); the slot retires. The apply's counts are
+                    // reported alongside so nested indices open their own slots.
+                    if (walker.Report(post, g_bp_cands_last, g_bp_seen_last)) { continue; }
+                    const TranspositionTable::Key wk = BuildDedupKey(s);
+                    if (!node_child_seen.insert(wk).second) { continue; }
+                    if (s.ActivePlayer().life <= 0) { continue; }   // self-lethal guard, as above
+                    if (OpponentHasLost(s))
+                    {
+                        TurnSolver::Plan q_rec = v;
+                        q_rec.breakpoint_actions = std::move(bp);
+                        return { state.turn_number, { { false, std::move(q_rec) } } };
+                    }
+                    if (!SimulateEndAndStartNextTurn(s)) { continue; }
+                    ExpireStagedCards(s);
+                    TurnSolver::SearchLine sub =
+                        FSLineWin(s, depth, max_turns, std::min(cutoff, best.win_turn),
+                                  second_main, tt, lc, budget);
+                    if (sub.win_turn < best.win_turn)
+                    {
+                        best.win_turn = sub.win_turn;
+                        best.phases.clear();
+                        TurnSolver::Plan q_rec = v;
+                        q_rec.breakpoint_actions = std::move(bp);
+                        best.phases.push_back({ false, std::move(q_rec) });
+                        best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
+                        // Same horizon edge as the base loop's first-verified-win shortcut.
+                        if (sub.win_turn <= state.turn_number + depth) { return best; }
+                    }
                 }
             }
         }

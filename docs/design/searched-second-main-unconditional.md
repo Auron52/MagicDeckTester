@@ -188,6 +188,43 @@ INSIDE `fs_main2` — half of hinata's entire budget, untouched by the deletion,
 memo caps only as a generation-time CPU lever (byte-identity check per deck first — generation
 artifacts fingerprint play); (4) the b40 raise stays a priced trade, worth re-pricing after (1).
 
+### The no-first-main dig (USER: "we shouldn't need the first main for Hinata", 2026-09-06)
+
+Per-game paired evidence (100 games, seeds 4004+gi, b20, logs/hinata_cost/pergame*): the split is
+**systematically** worse — 28 games lose a turn (mostly +1, one 5→unwon), 4 gain, 68 identical.
+Systematic rules out tie-flip variance; the dig then EXCLUDED, by measurement, every capability
+mechanism proposed so far:
+
+* Spend (the split is 42% cheaper); full node hosting (`ROOTTURN=0`, +65% units, −0.01);
+* **the m2 deferred wave phase — BUILT this session (`MTG_M2_WAVES`, heurarm-pooled, default
+  OFF, byte-identical off 4/4 chunks)** and measured NULL: it fires (58k/141k units at
+  `fs_m2_wave`) and moves neither base (5.6900 exact) nor split (5.99 vs 5.98). It stays in the
+  tree as lossless infrastructure with its null recorded — do not rebuild it, and do not adopt
+  it without a deck that measures;
+* `MoveOrderPlans` (`MTG_NO_MOVE_ORDER` on the split: identical 28/4) — so the m2's candidate
+  order comes from EMISSION, not the sort;
+* the m2 land drop (split+blanket-drop recovers only ~0.06 of the ~0.29).
+
+What the game diffs actually show (three exemplars, logs/hinata_dig):
+
+1. **gi=0 (5→6): a rank-7 PEER tie broken differently.** T1, identical hands, both cantrips
+   score sub=6 with empty continuations (M2T/FSW traces): m1's emission order casts Ponder,
+   m2's casts Preordain, and first-verified-win keeps each. The peers are tied BY DESIGN
+   (the interleave-reachability ruling), so neither loop is "wrong" — they just disagree, and
+   m1's accident plays better.
+2. **gi=88 (5→UNWON): same casts, different RESOLUTION.** Base and split cast the identical
+   Ponder/Preordain/Ponder sequence T1–T3, yet the T4 draws diverge — **the Ponder top-3
+   reorder resolved differently inside the m2 apply than the m1 apply**. The scripted-choice
+   chooser is phase-context-sensitive, and the m2 answer is worse.
+3. **gi=22 (4→5): the Soulfire reveal line goes missing in m2.** Base casts Soulfire Eruption
+   pre-combat T4 for the kill; the split's T4 m2, with the same mana, never produces the line.
+
+Open root-cause (next step): WHICH chooser resolves the scripted top/reveal decisions in search
+applies, and why its answer depends on the phase it is called from. That — not enumeration
+breadth — is where the split's quality lives. Fixing it is required before the no-first-main
+doctrine can be re-measured, and it may ALSO be a live (if small) defect in base play, since
+base m2 casts of these same cards resolve through the same weaker path.
+
 ## What stays a provider decision
 
 Per the USER (2026-09-05): skipping a main is acceptable only as an explicit opt-in, and that is a
