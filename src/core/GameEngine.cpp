@@ -5,6 +5,7 @@
 #include "../ai/AIEngine.h"
 #include "../ai/Combat.h"
 #include "../ai/EngineFlags.h"   // M2FixpointEnabled (the second-main fixpoint re-entry loop)
+#include "../ai/DecisionProviders.h"   // M2FixModeFor -- the per-deck fixpoint resolver
 #include "../ai/TurnSolver.h"   // EquipmentEtbDrawFires (the log's draw reporter, below)
 #include "../ai/GameWorkMeter.h"
 #include "../cards/CardDatabase.h"
@@ -462,7 +463,7 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     // two adjacent is_pre_combat=false plans never straddle a turn boundary. Bounded: a
     // re-entry that finds nothing castable fires no breakpoint, and the hard cap backstops an
     // adversarial draw chain.
-    for (int fp = 0; !is_pre_combat && M2FixpointEnabled() && fp < 8; ++fp)
+    for (int fp = 0; !is_pre_combat && M2FixModeFor(state) != 0 && fp < 8; ++fp)
     {
         if (OpponentHasLost(state)) { break; }
         if (m_ai.HasCommittedPhasePlan(false))
@@ -477,7 +478,7 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
         // search's fixpoint. Mode 1 either takes an outright kill or changes nothing; mode 2's
         // re-solve re-stamps the draw signal, so a draw chain iterates (bounded by fp's cap
         // and by the signal going false when nothing actionable remains).
-        if (!m_ai.WantsSecondMainReentry()) { break; }
+        if (!m_ai.WantsSecondMainReentry(state)) { break; }
         if (!m_ai.TrySecondMainStrandedKill(state)) { break; }
         ResolveStack(state);
     }

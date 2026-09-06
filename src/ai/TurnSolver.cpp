@@ -29170,8 +29170,8 @@ static bool ApplySecondMainInSearch(GameState& copy, int sub_depth, int max_turn
                                     SearchBudget* budget, bool second_main,
                                     TranspositionTable* tt, bool in_rollout)
 {
-    const bool fix = M2FixpointEnabled();
-    const int  fmode = fix ? M2FixpointMode() : 0;
+    const int  fmode = M2FixModeFor(copy);   // per-deck resolver (DecisionProviders.h)
+    const bool fix = fmode != 0;
     std::vector<InternedName> hand0;
     if (fmode >= 2 && g_m2fix_nest < 1) { hand0 = M2FixHandNames(copy); }
     TurnSolver::Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
@@ -29398,14 +29398,15 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                 post_plan = SolveSecondMainInSearch(state, depth, max_turns, budget, second_main, tt,
                                                     /*in_rollout=*/true);
             }
-            if (M2FixpointEnabled()) { g_bp_fired_last = 0; }
+            const bool m2fix_here = M2FixModeFor(state) != 0;   // per-deck (DecisionProviders.h)
+            if (m2fix_here) { g_bp_fired_last = 0; }
             ApplyPlanDirect(state, post_plan, false);
             if (OpponentHasLost(state))
             { leafeval::Publish(leafeval::kInvalid); leafeval::t_inf = state.inf_life_turn;
               return state.turn_number; }
             // M2 FIXPOINT re-passes (interior twin; see ApplySecondMainInSearch): the apply above
             // fired a breakpoint, so freshly drawn cards may sit castable behind untapped mana.
-            if (M2FixpointEnabled() && g_bp_fired_last > 0
+            if (m2fix_here && g_bp_fired_last > 0
                 && ApplySecondMainInSearch(state, depth, max_turns, budget, second_main, tt,
                                            /*in_rollout=*/true))
             { leafeval::Publish(leafeval::kInvalid); leafeval::t_inf = state.inf_life_turn;
@@ -30272,10 +30273,11 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // starts from a fresh copy of the pend snapshot; the copy was a fresh GameState per child,
         // and the child fan-out is the node's dominant wall cost (2.1x wall at 1.35x units).
         GameState  s3_buf;
-        // MODE-2 fixpoint (M2FixpointMode; see the mode-2 helpers): the pre-apply hand is loop-
-        // invariant (every q applies from `state`), so snapshot it once for the drawn-card delta.
+        // MODE-2 fixpoint (M2FixModeFor -- per-deck; see the mode-2 helpers): the pre-apply hand
+        // is loop-invariant (every q applies from `state`), so snapshot once, resolve mode once.
+        const int m2fmode = M2FixModeFor(state);
         std::vector<InternedName> m2fix_hand0;
-        if (M2FixpointMode() >= 2 && g_m2fix_nest < 1) { m2fix_hand0 = M2FixHandNames(state); }
+        if (m2fmode >= 2 && g_m2fix_nest < 1) { m2fix_hand0 = M2FixHandNames(state); }
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
@@ -30298,7 +30300,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // M2 FIXPOINT gate input: g_bp_fired_last follows the one-apply-measures-the-list
             // convention (see its declaration) -- reset before the apply so the read below is
             // THIS plan's breakpoint count, not a stale one. Write-only unless the lever is on.
-            if (M2FixpointEnabled()) { g_bp_fired_last = 0; }
+            if (m2fmode != 0) { g_bp_fired_last = 0; }
             ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
             if (node_snap.pending)
             {
@@ -30527,7 +30529,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // falls through to the plain EOT tail unchanged. An unconditional re-solve here was
             // the measured net-red form -- extra non-lethal casts deviate the future from
             // everything the outer line priced.
-            if (M2FixpointEnabled() && g_bp_fired_last > 0 && g_m2fix_nest < 1)
+            if (m2fmode != 0 && g_bp_fired_last > 0 && g_m2fix_nest < 1)
             {
                 ++g_m2fix_nest;   // the scan's applies must not re-enter the scan
                 std::vector<TurnSolver::Plan> fx = M2DropLive(s2)
@@ -30568,7 +30570,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 // fires it REPLACES the plain tail: a strict generalization, no double scoring.
                 // The nest guard keeps the recursion single-level; a continuation that draws
                 // again is covered by the recursion's own node/wave hosting, not more nesting.
-                if (M2FixpointMode() >= 2)
+                if (m2fmode >= 2)
                 {
                     const std::vector<InternedName> drawn = M2FixDrawnDelta(m2fix_hand0, s2);
                     if (M2FixActionable(fx, drawn)

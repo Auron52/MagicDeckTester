@@ -1645,9 +1645,9 @@ bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial)
 // and the lever wants a fresh second-main solve on the realized post-draw state. Never in
 // rollouts (their scoring twin is ApplySecondMainInSearch) and never under human play (the
 // human owns the rest of the phase).
-bool AIEngine::WantsSecondMainReentry() const
+bool AIEngine::WantsSecondMainReentry(const GameState& state) const
 {
-    return M2FixpointEnabled() && !m_in_rollout && !HumanPlayActive() && m_m2_exec_drew;
+    return M2FixModeFor(state) != 0 && !m_in_rollout && !HumanPlayActive() && m_m2_exec_drew;
 }
 
 // M2 FIXPOINT executor half, KILL-ONLY (see EngineFlags.h M2FixpointEnabled and the
@@ -1690,7 +1690,7 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
     // this way, bare attacks from T6 on). The kill-scan above stays unconditional: a verified
     // kill is sound off-line too. Re-stamps the draw signal across its own apply so the
     // MainPhase loop can iterate a chain (capped there).
-    if (M2FixpointMode() >= 2 && !m_m2_drawn.empty() && m_committed_line.empty())
+    if (M2FixModeFor(state) >= 2 && !m_m2_drawn.empty() && m_committed_line.empty())
     {
         bool actionable = false;
         for (const TurnSolver::Plan& p : cands)
@@ -1763,7 +1763,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         ~M2FixExitStamp()
         {
             eng.m_m2_exec_drew = !pre && st.ActivePlayer().cards_drawn_this_turn > drawn0;
-            if (!hand0.empty() || (eng.m_m2_exec_drew && M2FixpointMode() >= 2))
+            if (!hand0.empty() || (eng.m_m2_exec_drew && M2FixModeFor(st) >= 2))
             {
                 eng.m_m2_drawn.clear();
                 if (eng.m_m2_exec_drew)
@@ -1778,7 +1778,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
         }
     } _m2fx{ *this, state, state.ActivePlayer().cards_drawn_this_turn, is_pre_combat_main };
-    if (!is_pre_combat_main && !m_in_rollout && M2FixpointMode() >= 2)
+    if (!is_pre_combat_main && !m_in_rollout && M2FixModeFor(state) >= 2)
     {
         _m2fx.hand0.reserve(state.ActivePlayer().hand.size());
         for (const Card& c : state.ActivePlayer().hand) { _m2fx.hand0.push_back(c.m_name); }

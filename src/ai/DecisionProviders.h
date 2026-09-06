@@ -335,6 +335,14 @@ class HinataProvider : public GenericProvider
 public:
     const char* Name() const override { return "Hinata"; }
     bool OpponentPlaysLands() const override { return true; }
+    // M2 FIXPOINT OPT-IN, mode 2 (ADOPTED 2026-09-06; USER approved the per-deck opt-in and
+    // the 18-deck sweep found hinata the only converter). Evidence, both tiers + quiet box:
+    // train smoke d0 -0.012/1000g; held-out regression net -12 game-turns (d0 -0.010, d3/d5
+    // s3003 -0.01 each, one grading-variance counter-game); battery fix vs base 1/0/99 at
+    // -4.5% units; CPU ~+1-8% on this deck only. Mode 2 over mode 1: same base-play behaviour
+    // (0/0/100), strictly ahead on held-out (-12 vs -5) and rescues non-projecting kills in
+    // the split doctrine. docs/design/searched-second-main-unconditional.md is the record.
+    int M2FixpointOptIn() const override { return 2; }
     // EVERYTHING IS A SECOND-MAIN CAST (USER, 2026-08-29: "Everything can be classified as 2nd
     // main in Hinata. This is because the only attacker is Hinata itself and there are no pumps
     // [or haste or anything else of that type]"). The classification question is "does this help
@@ -1421,6 +1429,21 @@ private:
 inline const DecisionProvider& ResolveProvider(const GameState& s)
 {
     return s.m_provider ? *s.m_provider : DefaultProvider();
+}
+
+// M2 fixpoint mode for THIS deck (the one reader every host shares -- executor, scored line,
+// rollouts; see DecisionProvider::M2FixpointOptIn). Precedence: a per-job heurarm flag wins
+// (pooled sweeps), then an EXPLICITLY SET env value (nonzero = that mode, "0" = hard off --
+// the =0-means-off convention, and the A/B control over an opt-in), then the provider's
+// adopted opt-in. Env unset + no heurarm + no opt-in = 0, byte-identical off.
+inline int M2FixModeFor(const GameState& s)
+{
+    if (heurarm::Flag(heurarm::M2_FIX_RESOLVE, false)) { return 2; }
+    if (heurarm::Flag(heurarm::M2_FIXPOINT, false))    { return 1; }
+    static const char* e = std::getenv("MTG_M2_FIXPOINT");
+    static const int env_mode = (e != nullptr && *e != '\0') ? std::atoi(e) : -1;   // -1 unset
+    if (env_mode >= 0) { return env_mode; }
+    return ResolveProvider(s).M2FixpointOptIn();
 }
 
 // Searched dork attack/hold contested test (MTG_DORK_ATK_SEARCH; DecisionProviders.cpp).

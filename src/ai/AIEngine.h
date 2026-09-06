@@ -103,8 +103,9 @@ public:
     // TakeTurn call executed a plan that fired a breakpoint (cards may have entered hand
     // mid-plan) and the lever wants a fresh second-main re-solve on the post-draw state.
     // GameEngine::MainPhase runs one kill-only scan on it. Always false with the lever off
-    // (byte-identical). Defined in AIEngine.cpp (needs HumanPlayActive + the shared reader).
-    bool WantsSecondMainReentry() const;
+    // AND no provider opt-in (byte-identical). Takes the state because the mode is per-deck
+    // (M2FixModeFor). Defined in AIEngine.cpp (needs HumanPlayActive + the shared reader).
+    bool WantsSecondMainReentry(const GameState& state) const;
 
     // M2 FIXPOINT kill-only executor pass: enumerate the realized post-draw m2 plans, probe
     // each on a copy, execute ONLY an outright kill (definition comment in AIEngine.cpp).

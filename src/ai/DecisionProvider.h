@@ -647,6 +647,17 @@ public:
     // the solve with no decrementing bound.
     virtual bool SearchesRolloutSecondMain() const { return false; }
 
+    // M2FixpointOptIn -- the per-deck ADOPTION hook for the second-main fixpoint
+    // (MTG_M2_FIXPOINT; EngineFlags.h M2FixpointMode and the M2FixModeFor resolver in
+    // DecisionProviders.h). 0 = no opt-in (the default; the env/heurarm lever alone decides).
+    // 1 = kill-scan only, 2 = kill-scan + the gated full re-solve. Adopted per deck through
+    // the standard loop; the 2026-09-06 18-deck sweep found exactly ONE deck whose second
+    // mains draw AND convert rescues (hinata; burn and kitty fire the class thousands of
+    // times and convert nothing -- they are the priciest places to leave it off). The env
+    // lever stays the experiment control: MTG_M2_FIXPOINT set nonzero overrides the hook up,
+    // MTG_M2_FIXPOINT=0 (explicitly set) hard-disables an opt-in for A/B.
+    virtual int M2FixpointOptIn() const { return 0; }
+
     // GradesNoWinLeaf -- DEFAULT ON. When the rollout reaches the horizon with no win, publish the
     // resulting position's OPPONENT LIFE as the tie-break instead of letting every hopeless line
     // score the identical `max_turns + 1` and fall through to `plan.value`. See
