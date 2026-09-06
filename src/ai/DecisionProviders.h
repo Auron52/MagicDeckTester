@@ -1213,6 +1213,21 @@ public:
         const GameState&, const std::vector<std::string>*) const override;
 };
 
+// Snow (Marit Lage's Slumber / Abominable Treefolk snow-count midrange). ONE measured hook, no
+// narrowing: the horizon-honest no-win tie-break OPT OUT (5c2, 2026-09-06 -- 24,000 games at play
+// settings, the lever RAISES this deck's average on both halves, +8 net turns / 12,000 paired,
+// 0.950% binding; docs/design/horizon-honest-leaf.md). The named failure mode fits exactly:
+// opponent life at the horizon is a damage-race proxy, and this deck's value is STORED (snow
+// permanents accumulated toward the Treefolk CDA and the Slumber threshold) -- enablers lower
+// nobody's life on the turn they land, so the tie-break prices the build-up at zero. Every other
+// decision inherits Generic untouched.
+class SnowProvider : public GenericProvider
+{
+public:
+    const char* Name() const override { return "Snow"; }
+    bool GradesNoWinLeaf() const override { return false; }
+};
+
 // Rakdos Minotaur tribal aggro. Like DragonsProvider it exists to hold ONE measured hook, the
 // cleanup-discard bucket policy; everything else inherits Generic. The deck routed to
 // GenericProvider from the 2026-08-21 misroute fix (Slaughter-Priest's sac_creature_outlet had it

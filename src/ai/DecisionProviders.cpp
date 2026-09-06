@@ -9262,6 +9262,7 @@ namespace
     const StompyProvider         g_stompy;
     const MinotaurProvider       g_minotaur;
     const DragonsProvider        g_dragons;
+    const SnowProvider           g_snow;
     const FluctuatorProvider     g_fluctuator;
     const AurasProvider          g_auras;
     const EldraziFlickerProvider g_eldrazi_flicker;
@@ -9293,6 +9294,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // auras) so no single deckbuilding swap can silently lose the signature, and every one of them
     // is new + gated (0/false/nullopt inert), so no existing deck can set it.
     bool eldrazi = false;
+    bool snow = false;   // Snow midrange -- SnowProvider (Generic + the 5c2 tie-break opt-out)
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -9492,6 +9494,18 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         }
         if (p.upkeep_adds_charge) { vial = true; }
 
+        // Snow midrange. Signature = Snow-only gated params, OR'd across FOUR different cards
+        // (Abominable Treefolk's CDA, Marit Lage's Slumber's threshold, Rimefeather Owl's
+        // grants-snow static, Scrying Sheets / Frost Augur's gated look) so a deckbuilding swap
+        // that cuts one card cannot silently lose the routing -- the deck-screening lesson. All
+        // are new + gated (false/0/empty inert), and deliberately NOT keyed on Supertype::Snow
+        // itself: snow-covered basics are the colourless-staple class any deck might splash.
+        if (p.pt_equals_snow_permanents_you_control || p.upkeep_snow_threshold > 0
+            || p.ice_counters_are_snow || !p.tap_draw_requires_top_supertype.empty())
+        {
+            snow = true;
+        }
+
         // Creature Giving (gift-the-opponent drain): any of its gated params marks the deck. Its
         // Sylvan Scrying (tutor_to_hand) + fetchlands would otherwise trip the anti-lifegain
         // signature below and misroute the whole deck to AntiLifegainProvider (whose tutor
@@ -9572,6 +9586,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // deck carries aura_cast_tutor_attach, so exclusivity is preserved; the deck trips no other
     // signature (verified: it routed to Generic before this provider existed).
     if (aura) { return g_auras; }
+    // Snow: SnowProvider (Generic + the measured 5c2 horizon tie-break opt-out; every other hook
+    // inherits Generic). Trips no other signature (verified: it detected to Generic before this
+    // provider existed), so placement here is for tidiness only.
+    if (snow) { return g_snow; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     if (vial) { return g_vial; }

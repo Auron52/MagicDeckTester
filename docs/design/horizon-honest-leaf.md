@@ -371,3 +371,25 @@ appeared in any suite tier. That is a performance question in its own right.
 5. **A prune's value is not all reachable from the search.** Anything acting at EMISSION also
    constrains d0/greedy, which no tie-break inside `SolveWithLookahead` can ever reach -- so a
    search-side fix cannot subsume it by construction.
+
+## 4c. Snow opts out (2026-09-06 — the second opt-out, textbook instance of the stored-value class)
+
+`scripts/leaf_tiebreak_check.py decks/Snow/Snow.cod` at the deck's PLAY settings, both arms in one
+pooled batch, 24,000 games (12,000 paired):
+
+| split | paired | net turns | worse | better |
+|---|---|---|---|---|
+| half A | 6,000 | **+5** | 31 | 27 |
+| half B | 6,000 | **+3** | 30 | 26 |
+| **ALL** | **12,000** | **+8** | **61** | **53** |
+
+114 changed games of 12,000 paired (0.950% binding — well above the 20-changed-games floor).
+The sign agrees on both halves; the tie-break RAISES this deck's average, and THE METRIC IS THE
+BAR. Opted out via `SnowProvider::GradesNoWinLeaf() -> false` (the deck's first and only provider
+hook — it otherwise inherits Generic wholesale).
+
+The known failure mode fits exactly: Snow's value is STORED as board accumulation — every snow
+permanent advances the Abominable Treefolk CDA and the Marit Lage's Slumber threshold, but
+enablers (Astrolabe, Coldsteel Heart, the look engines) lower nobody's life on the turn they
+land, so opponent-life-at-horizon prices the build-up at zero. Same class as Dragonstorm
+(ritual/storm build-up), expressed through permanents instead of a spell chain.

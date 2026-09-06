@@ -80,6 +80,14 @@ legend rule across 175 d0 games); DECISIONS.md ✓; snow-mana model ✓ (section
 the value leaf.** Also open: Snow is NOT in the regression suite yet — its slow games
 (worst ~5-15 min single games at d3/d5 b200 pre-value-leaf, horizon-rollout volume s90, NOT
 site 8) make adding it a shared-budget sizing decision for the user.
+**5c2 leaf tie-break check (24,000 games / 12,000 paired at play settings): OPT OUT** — the
+horizon tie-break RAISES Snow's average on both halves (+5/+3, net +8 turns; 114 binding games,
+0.950%). The stored-value failure mode fits exactly (snow-permanent build-up prices at zero on
+an opponent-life proxy). Adopted: **SnowProvider** (Generic + `GradesNoWinLeaf() -> false`, the
+deck's first measured hook), routed on an OR of four cards' snow-only params (Treefolk CDA /
+Slumber threshold / Owl grants-snow / gated look) — deliberately NOT on Supertype::Snow itself
+(snow basics are the splashable-staple class). provider_audit: Snow -> Snow, intended. Full
+record in docs/design/horizon-honest-leaf.md §4c.
 **5i discard analysis (analyze_deck's evidence stage, 400 games d3/b10): STATUS_QUO_OK** —
 "the current ranking is at or near the searched optimum on this deck." Per-card regret 0.0
 everywhere except Ice-Fang Coatl 0.091 and Abominable Treefolk 0.154 (both tiny). No bucket
