@@ -76,9 +76,16 @@ Cheaper adjacent findings, recorded so they are not rediscovered:
   skip them but is a skip-the-solve gate — the DISALLOWED class, not a budget cut. Do not reach
   for it as a "remedy" here.
 
-## The bigger shipped-quality lead (open, surfaced 2026-09-05)
+## The bigger shipped-quality lead (open; MEASURED 2026-09-06, not yet owned)
 
 At shipped budget, 50–67% of a Kitty decision's units go to `units.fs_main2` —
-`FullSearchLine`'s OWN second-main loop, a different cost centre the deletion never touched. If
-the goal is shipped avg-win-turn (rather than generation tractability), that is probably the
-larger target. Unowned; measure before building.
+`FullSearchLine`'s OWN second-main loop, a different cost centre the deletion never touched.
+The `m2stats` decomposition (built 2026-09-06, `MTG_ROLLOUT_STATS`) now characterizes it:
+kitty d5/b20, 25 games — **129,268 m2 decisions, 295,893 plans scanned, 96.8% at
+remaining-depth 0** (the horizon edge of scored lines), `in_rollout=0` (all of it is
+line-tail SCORING, not rollouts), enumeration only ~2.3 plans/decision wide (the escalation
+beam pruned 7 of 296k — width is not the driver). The mass is VOLUME of scored line tails
+(~5,170 m2 decisions/game), each individually cheap. So the remedy class is NOT m2-specific:
+it is fewer or cheaper line tails — EOT dominance coverage, tail caching, line-count
+reduction — and any m2-local trick is aimed at the wrong denominator. (Hinata's decomp shows
+the same shape: ~89% of scans at remaining-depth 0.)
