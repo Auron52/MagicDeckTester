@@ -125,20 +125,36 @@ apparatus check):
   rejection is recorded at the lever (DecisionProviders.h). It amplifies the very spend it was
   hoped to restructure.
 * Rung 1 (the memo) already runs at 47.4% on hinata vs FiveColour's 80%; with the d<=0 calls all
-  keying at depth 1, the misses are genuinely distinct states per decision epoch, not the
-  depth-fold — there is no cheap key fix hiding there.
-* **The remaining rung is budget itself, and it CLOSES the case** — the cost the USER already
-  accepted ("the change is even expected to lose on performance"). The 2x/4x curve on the same
-  900 games (logs/hinata_budget): total old-GT 5.6800 / current-1x 5.7011 / **2x 5.6689** / 4x
-  5.6544. At 2x the searched interior is BETTER than the greedy era ever measured, every cell
-  equal-or-better than old within one game; 4x adds only −0.015 (diminishing — 2x is the knee).
-  So the deletion's quality story on hinata ends as: nothing was lost, the interior spend just
-  needs covering. **ADOPTED 2026-09-05: hinata `value_play.budget_ms` 20 → 40.** Held-out confirm
-  (overnight seeds 4004–7007, d5 + 2hg-d5, 1600 paired games/arm, logs/hinata_heldout): 6 of 8
-  cells better, 2 exactly equal, none worse, −0.0156/game. GT is untouched — the suite's gate
-  cells pin cli budgets, verified byte-identical post-adoption on all four smoke cells (digests
-  match GT exactly, incl. the value_play-driven d5 cell). Cost: ~2x search wall on hinata's
-  real-play games only — the accepted trade.
+  keying at depth 1 and `clears=0` (the cache never fills), the misses are KEY-DISTINCTNESS, not
+  the depth-fold and not capacity. Whether that distinctness is real or SPURIOUS is an open
+  question this doc originally got wrong ("genuinely distinct ... no cheap key fix hiding
+  there" was inference, not measurement) — the Kitty root-cause (`kitty-interior-m2-tail.md`)
+  then showed exactly this signature caused by whole-state keying over detail the m2 plan cannot
+  depend on. **The memo-key coarsening designed there is the candidate no-budget remedy for
+  hinata's dilution too**, and measuring hinata's hit rate under it is part of that project.
+* **Budget is NOT a remedy for the dilution — recorded after a wrong adoption.** The 2x/4x curve
+  (logs/hinata_budget): total old-GT 5.6800 / current-1x 5.7011 / 2x 5.6689 / 4x 5.6544; held-out
+  8/8 cells non-worse at 2x, −0.0156/game (logs/hinata_heldout). On that evidence hinata
+  `value_play.budget_ms` 20→40 was ADOPTED 2026-09-05 — **and REVERTED 2026-09-06 on USER
+  review**, because the claim "2x beats the greedy era" compared **searched@40 vs greedy@20**, an
+  unfair comparator (greedy at 2x would presumably also improve — hinata is likely starved under
+  ANY interior policy), and the ~2x per-game search cost was never counted against the gain. The
+  USER's bar, verbatim: *"we can hardly say that is an improvement, when we didn't count the
+  performance hit this inevitably brings."* Budget buys PAST the dilution; the interior spend is
+  still paid inside the bigger budget. The measured curve stays useful as the price sheet — a
+  starvation-motivated budget raise may still be proposed, but only with the cost counted — it
+  now is: **b40 costs +39.7% units/game (43.6k → 60.9k, logs/hinata_cost) for the −0.0156 t/game
+  held-out gain** — and AFTER the real dilution remedy (memo-key coarsening, above) is measured,
+  so the two effects are not conflated again. The same probe's site partition generalizes the
+  Kitty lead: hinata spends **49.5% of ALL units in `fs_main2`** (fs_pre 32.6%; the entire
+  interior-m2 fallback family ~9%) — FullSearchLine's own second-main loop, not the interior m2,
+  is where the budget goes on both decks.
+
+  **The adoption bar this fixes in place (USER, 2026-09-06):** *"having no drawbacks in quality
+  or performance would also be automatically adoptable, but this doesn't meet that bar."* A
+  STRICT improvement — no quality loss, no performance loss (cf. M2_RECONSIDER's adoption) —
+  adopts on its own evidence. Anything that TRADES one axis for the other is not adoptable on the
+  winning axis alone: count both sides and put the trade to the USER.
 
 ## What stays a provider decision
 
