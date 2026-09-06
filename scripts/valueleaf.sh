@@ -441,12 +441,59 @@ check_decks() {
 # the smoke matrix does not exercise would not show up here. So this is only ever used to ACCEPT a
 # src move that the suite says is play-neutral -- never to reject one, and never to skip the src check
 # when the fingerprint is missing. Failing that way round means the worst case is the old behaviour.
+# Per-QUEUE-DECK play probe, folded into the fingerprint below (2026-09-06). The smoke fold's
+# coverage is the SUITE -- and the deck a generation queue holds is exactly the deck most likely
+# NOT to be in it (melira was pulled from the suite for cost 2026-09-06; its bottoming policy then
+# changed its play and the smoke fold could not see it, so a resume would have kept 2500 games of
+# rows dumped under play we no longer ship). Probe: 24 deterministic d3/b10 games per queue deck at
+# the deck's own row seed base, content-hashed from their logs (runId stripped; log content is
+# deterministic per seed and thread-invariant). d3/b10 is a FIXED probe config, not the dump
+# config: its job is sensitivity at bounded cost, and it catches the mulligan/bottoming class
+# (manifests at every depth) plus ordinary play movement. A change confined to depths/paths the
+# probe does not walk can still slip past -- same "accept only, sample not proof" stance as the
+# smoke fold this extends.
+#
+# KNOWN LIMIT (recorded, not yet built): on PLAY CHANGED the chunk banking repairs the MATRIX, but
+# phase A's game-level resume keeps every game that already banked a row -- rows cannot be
+# partially re-derived, so a real row fix means moving rows/all.rows aside and re-dumping the
+# affected deck. Do that by hand when this fingerprint (or any other evidence) says the queue
+# deck's own play moved; auto-purge is withheld because on a FLEET queue it would nuke every
+# deck's rows for one deck's change.
+deck_play_probe() {
+    local row key dir stem mkey base games tmp out
+    tmp=$(mktemp -d) || return 1
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        mkdir -p "$tmp/$key"
+        ./build/Release/mtg "$(deck_file "$dir" "$stem")" --profile "$dir/$stem.profile.json" \
+            --ignore-play-profile --depth 3 --budget-ms 10 \
+            --games 24 --seed "$base" --threads 0 --log-dir "$tmp/$key" \
+            >/dev/null 2>&1 || { rm -rf "$tmp"; return 1; }
+        out=$(python3 - "$tmp/$key" <<'PY'
+import json, glob, hashlib, sys
+h = hashlib.sha256()
+files = sorted(glob.glob(sys.argv[1] + "/*_game_*.json"))
+if not files: sys.exit(1)
+for f in files:
+    g = json.load(open(f)); g.pop("runId", None)
+    h.update(json.dumps(g, sort_keys=True).encode())
+print(h.hexdigest())
+PY
+        ) || { rm -rf "$tmp"; return 1; }
+        printf '%s %s\n' "$key" "$out"
+    done
+    rm -rf "$tmp"
+}
 play_fingerprint() {
     bash test/regression.sh --smoke >/dev/null 2>&1 || true   # digests are recorded even on FAIL
     [ -f test/results/smoke.env ] || return 1
+    local probe
+    probe=$(deck_play_probe) || return 1
     # <key>=<avg>/<digest> -- keep the digest half only, so a pure timing/avg difference cannot move
-    # this and a digest difference always does. Sorted so the fold is order-independent.
-    sed -n 's/.*=\([0-9.]*\)\/\([0-9a-f]*\)$/\2/p' test/results/smoke.env | sort | sha256sum | cut -d' ' -f1
+    # this and a digest difference always does. Sorted so the fold is order-independent. The queue
+    # decks' own probe hashes fold in after (see deck_play_probe).
+    { sed -n 's/.*=\([0-9.]*\)\/\([0-9a-f]*\)$/\2/p' test/results/smoke.env | sort
+      printf '%s\n' "$probe"; } | sha256sum | cut -d' ' -f1
 }
 
 check_freeze() {
