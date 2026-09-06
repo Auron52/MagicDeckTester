@@ -475,6 +475,17 @@ no verified win existed and mode 2's re-scored interior legitimately shuffled th
 pick — honest variance, not unsoundness (no [nonconv] event; persists at 4x budget, so not
 dilution either). Split avg ties mode 1 at 5.80.
 
+**HELD-OUT (regression tier, disjoint seeds s2002/s3003, melira excluded per USER):** both
+modes net POSITIVE and all movement is hinata's — mode 1: −5 game-turns (d0 −0.003, d3
+s3003 −0.01, d5 s3003 −0.01, d5 s2002 +0.01 = ONE game the grading-variance way); mode 2:
+**−12 game-turns** (same cells, d0 −0.010/1000g). Every other deck sits exactly at GT on
+both tiers. Combined with the train evidence and the quiet-box CPU table (hinata ~+8%,
+burn ~+5%, stompy ~+2%, ~0 elsewhere; mode 2 = mode 1 + 1–2 points), the package for the
+USER's default/opt-in decision is complete: quality is net-better on train AND held-out in
+both modes (mode 2 strictly ahead of mode 1 on both), the cost is a few percent CPU
+concentrated in draw-heavy decks, and the one residual harm class is pre-verification
+grading variance (~1 game/100 on the affected deck).
+
 ## What stays a provider decision
 
 Per the USER (2026-09-05): skipping a main is acceptable only as an explicit opt-in, and that is a
