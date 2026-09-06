@@ -34,6 +34,34 @@ from pathlib import Path
 
 REPO_ROOT    = Path(__file__).parent.parent.resolve()
 CARDS_JSON   = REPO_ROOT / "src" / "cards" / "data" / "cards.json"
+
+# Memory caps for every engine invocation this driver makes (2026-09-06): the raw
+# mtg-analyze path had NO caps, and a Melira `--gen-mulligan recommend` OOM-killed the
+# 23 GB box at 23.3 GB anon. Same derivation as the shell drivers (scripts/lib/membudget.sh,
+# sourced by valueleaf.sh and mullgen.sh); all bounds are result-neutral memo caps
+# (refused store = recompute), so this changes wall clock on cache-hungry tails, never play.
+# setdefault: an explicit caller env (an A/B arm, a probe) always wins.
+def _ApplyMemBudgetDefaults() -> None:
+    try:
+        mem_kb = 0
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemTotal"):
+                    mem_kb = int(line.split()[1]); break
+    except OSError:
+        return   # non-Linux (Windows dev box): caps stay caller-controlled
+    if mem_kb <= 0:
+        return
+    nw = os.cpu_count() or 1
+    budget_mb = max(2048, mem_kb // 1024 - 5120)
+    cache_mb  = max(2048, budget_mb - nw * 250)
+    pw_kb     = cache_mb * 1024 // nw
+    os.environ.setdefault("MTG_TT_CAP",        str(pw_kb * 1024 // 3 // 64))
+    os.environ.setdefault("MTG_FSL_POOL",      str(cache_mb * 1024 * 2 // 5))
+    os.environ.setdefault("MTG_FSL_CAP",       "2000000")
+    os.environ.setdefault("MTG_PLAN_CACHE_KB", "102400")
+
+_ApplyMemBudgetDefaults()
 CUSTOM_DIR   = REPO_ROOT / "src" / "cards" / "custom"
 BUILD_DIR    = REPO_ROOT / "build"
 # Multi-config CMake generators (Visual Studio on Windows, Ninja Multi-Config in

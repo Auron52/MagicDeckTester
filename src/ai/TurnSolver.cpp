@@ -13049,6 +13049,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     return SacExpendabilityRank(state.battlefield[a], /*source_id=*/-1)
                          < SacExpendabilityRank(state.battlefield[b], /*source_id=*/-1);
                 });
+            // MTG_POD_VICTIM_TOP (staged 2026-09-06, default 0 = off = every victim class): keep
+            // only the N most-expendable victim CLASSES per pod -- persist bodies always emit
+            // (they are combo-critical victims, the climb's rungs). The victims axis is what
+            // keeps the pod family digit ~30-40 wide post fetch-narrowing (8-10 fine-grained
+            // classes x 3-4 whitelisted fetches x two pod sources under MTG_POD_HAND_PAIR), and
+            // digit width multiplies across every other digit at every combo node. Same doctrine
+            // as the user's fetch cut ("narrow them down to just the useful options");
+            // heuristic-optimization loop decides adoption.
+            static const int s_victim_top = EnvInt("MTG_POD_VICTIM_TOP", 0);
+            int nonpersist_classes = 0;
             std::vector<std::string> seen_victims;
             for (const int pod_vi : pod_victim_idx)
             {
@@ -13064,6 +13074,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (std::find(seen_victims.begin(), seen_victims.end(), key)
                     != seen_victims.end()) { continue; }
                 seen_victims.push_back(std::move(key));
+                if (s_victim_top > 0)
+                {
+                    const CardDefinition* vd2 = CardDatabase::Instance().LookupCached(v.card);
+                    const bool persist_body = (vd2 != nullptr && vd2->params.persist);
+                    if (!persist_body && ++nonpersist_classes > s_victim_top) { continue; }
+                }
                 const int want_mv = v.card.m_mana_cost.ManaValue() + sd->params.pod_mv_delta;
                 auto emit_pod = [&](const std::string& target, int eval)
                 {
