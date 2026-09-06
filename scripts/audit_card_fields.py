@@ -128,13 +128,18 @@ def do_update(cards, throttle):
         # entry models the FRONT face (the back is synthesized from mdfc_back_* params), so
         # snapshot the front face's fields; type_line keeps the combined "A // B" form only when
         # the top level provides nothing face-specific.
-        face = (sf.get("card_faces") or [{}])[0]
+        # Select the face whose NAME matches the local entry: a deck may model the BACK face
+        # (Kaldring, the Rimestaff is the back of Jorn, God of Winter), and hardcoding
+        # card_faces[0] would snapshot Jorn's cost/types/PT under Kaldring's name. Face 0 stays
+        # the fallback for split/aftermath cards named by the full "A // B".
+        faces = sf.get("card_faces") or [{}]
+        face = next((f for f in faces if f.get("name") == name), faces[0])
         ref[name] = {
             "mana_cost": sf.get("mana_cost") or face.get("mana_cost", ""),
             "cmc": sf.get("cmc"),
             "power": sf.get("power") or face.get("power"),
             "toughness": sf.get("toughness") or face.get("toughness"),
-            "type_line": sf.get("type_line", ""),
+            "type_line": face.get("type_line") or sf.get("type_line", ""),
             "keywords": sorted(sf.get("keywords", [])),
             "oracle_text": sf.get("oracle_text") or face.get("oracle_text", ""),
         }

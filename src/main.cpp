@@ -312,6 +312,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 // One plan variant per legal target, so the label must name WHICH card comes back.
                 tag = a.card_name + ": sacrifice \xE2\x86\x92 return " + a.tutor_target + " to hand";
                 break;
+            case Action::Kind::GraveyardPlayAbility:
+                // One plan variant per legal target: the label names WHICH card is played.
+                tag = a.card_name + ": play " + a.tutor_target + " from graveyard (tapped)";
+                break;
             case Action::Kind::AttachAllEquipment:
                 tag = a.card_name + ": attach all Equipment"; break;
             case Action::Kind::PutFromHandAbility:
@@ -1058,6 +1062,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             return k == Action::Kind::GarthActivate || k == Action::Kind::ActivateLoyalty
                 || k == Action::Kind::Equip         || k == Action::Kind::GraveyardExileAbility
                 || k == Action::Kind::GraveyardReturnAbility
+                || k == Action::Kind::GraveyardPlayAbility
                 || k == Action::Kind::AnimateLand   || k == Action::Kind::TapForTokenPay;
         };
         {
@@ -1186,6 +1191,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
              || ac.kind == Action::Kind::PutFromHandAbility
              || ac.kind == Action::Kind::GraveyardExileAbility
              || ac.kind == Action::Kind::GraveyardReturnAbility
+             || ac.kind == Action::Kind::GraveyardPlayAbility
              || ac.kind == Action::Kind::AnimateLand
              || ac.kind == Action::Kind::TapForTokenPay
              || ac.kind == Action::Kind::JitteModeAbility
@@ -1229,6 +1235,13 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else if (ac.kind == Action::Kind::GraveyardReturnAbility)
                 {
                     os << ", \"verb\": \"gyreturn\", \"gyreturn_target\": ";
+                    JsonStr(os, ac.tutor_target);
+                }
+                // Kaldring: names the SOURCE artifact, carries the PLAYED card -- same shape as
+                // gyreturn, or two gy-play variants of one Kaldring would be indistinguishable.
+                else if (ac.kind == Action::Kind::GraveyardPlayAbility)
+                {
+                    os << ", \"verb\": \"gyplay\", \"gyplay_target\": ";
                     JsonStr(os, ac.tutor_target);
                 }
                 else if (ac.kind == Action::Kind::AnimateLand)    { os << ", \"verb\": \"animate\""; }
@@ -2429,6 +2442,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         }
         else if (key == "gyexile")   { ls.gy_exiles.push_back(std::atoi(val.c_str())); }  // Deathrite mode
         else if (key == "gyreturn")  { ls.gy_returns.push_back(val); }    // Haven rebuy (returned card)
+        else if (key == "gyplay")    { ls.gy_plays.push_back(val); }      // Kaldring gy-play (played card)
         else if (key == "channel")   { ls.channels.push_back(val); }      // from-hand channel ability
         else if (key == "suspend")   { ls.suspends.push_back(val); }      // from-hand Suspend (Lotus Bloom)
         else if (key == "animate")   { ls.animates.push_back(val); }      // Mutavault "{1}: 2/2"

@@ -76,9 +76,14 @@ def main():
             not_found.append((name, sf["_error"]))
             continue
         sf_cost = sf.get("mana_cost", "")
-        # Double-faced / split cards: mana_cost lives on card_faces[0].
+        # Double-faced / split cards: mana_cost lives on the faces. Select the face whose NAME
+        # matches the cards.json entry -- a deck may model the BACK face (Kaldring, the Rimestaff
+        # is the back of Jorn, God of Winter), and hardcoding card_faces[0] diffed Kaldring
+        # against Jorn's cost. Fall back to face 0 for split cards named by the full "A // B".
         if not sf_cost and "card_faces" in sf:
-            sf_cost = sf["card_faces"][0].get("mana_cost", "")
+            face = next((f for f in sf["card_faces"] if f.get("name") == name),
+                        sf["card_faces"][0])
+            sf_cost = face.get("mana_cost", "")
         if norm_cost(sf_cost) != norm_cost(local_cost):
             mismatches.append((name, local_cost, sf_cost, sf.get("cmc")))
             continue

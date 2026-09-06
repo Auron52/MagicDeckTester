@@ -394,6 +394,15 @@ struct CardParams
     // what buys the colour, so the two units are not both available), never AMOUNT, which is
     // the permissive direction every other conversion source is credited in.
     bool any_color_filter = false;
+    // Arcum's Astrolabe ("{1}, {T}: Add one mana of any color" -- and NOTHING else): an
+    // any_color_filter WITHOUT the free "{T}: Add {C}" mode Capital City has. Every site that
+    // credits the free mode (UnconditionalProduces, AddSourceToPool's colorless fallback,
+    // AnyColorFilterFedSlots' filters-feed-each-other arithmetic, HasUntappedRampFeeder,
+    // SourceMaxNet, ManaSourceRank's early-tap tier, ManaPayment's free-{C} steps, the flow
+    // oracle's Colorless join) must gate on this flag: crediting Astrolabe the free mode is an
+    // AMOUNT over-credit (up to +4 mana/turn on 4 copies), not the colour-only optimism the
+    // any_color_filter comment above justifies. A no-free filter can never FEED another filter.
+    bool filter_no_free_colorless = false;
 
     // --- Knights tribal (white aggro) extensions ---
 
@@ -422,6 +431,86 @@ struct CardParams
     // DynamicBaseToughness at every DynamicBasePower call site + the SBA toughness checks (a CDA
     // 0/0 token with zero other creatures is 0/0 and dies to SBA -- rules-correct).
     bool toughness_equals_creature_count = false;
+
+    // --- Snow (the Snow deck, 2026-09-06: first engine readers of Supertype::Snow) ------------
+    // Snow-ness is decided by the shared IsSnowPermanent/SnowPermanentCount helpers in
+    // SpellEffects.h: a permanent is snow if its card carries Supertype::Snow OR (Rimefeather
+    // Owl's layer-4 type-changing static, ice_counters_are_snow) it has an ice counter while an
+    // Owl is on the battlefield. The grant is evaluated LIVE at every read -- never baked into
+    // the card's supertype mask, because it ends when the Owl leaves and a mutated mask would
+    // corrupt copiable values (CR 706.2). NOTE for cost strings deck-wide: ManaCostFromString
+    // has no {S} pip (it would silently parse to zero) -- {S} costs are written as their generic
+    // total, exact for this deck because every mana source it runs is itself snow.
+
+    // Abominable Treefolk (printed */*): P/T each = number of snow permanents YOU CONTROL.
+    // Sets BOTH axes via DynamicBasePower/DynamicBaseToughness (the Adeline / Voice-token CDA
+    // pattern; JSON power/toughness are 0). Counts itself, so on the battlefield it is never a
+    // 0/0 and never dies to the toughness SBA.
+    bool pt_equals_snow_permanents_you_control = false;
+    // Rimefeather Owl (printed */*): as above but counting snow permanents ON THE BATTLEFIELD,
+    // both players' -- global because the Owl's ice ability can make an OPPONENT permanent snow.
+    bool pt_equals_snow_permanents_on_battlefield = false;
+
+    // Skred (direct_damage rider): damage = number of snow permanents you control, computed on
+    // RESOLUTION (CR 608.2b) as a live battlefield scan, never baked at cast. JSON `damage` is 0.
+    bool damage_equals_snow_permanents = false;
+
+    // Rimefeather Owl: "{1}{S}: Put an ice counter on target permanent." Non-tap, repeatable
+    // (bounded only by mana); rides PermAbilityMode::IceCounter with the K count capped by the
+    // number of NON-snow permanents on the battlefield (icing an already-snow permanent changes
+    // nothing -- every permanent this deck plays is snow, so the live targets are opponent
+    // spawns and a Marit Lage token). Cost written as generic "{2}" per the {S} note above.
+    std::optional<ManaCost> ice_counter_cost;
+    // Rimefeather Owl's static: "Permanents with ice counters on them are snow." Read by
+    // IsSnowPermanent (live scan for a source with this flag, two-pass with an early-out on
+    // "no permanent has an ice counter" so P/T reads stay O(battlefield)).
+    bool ice_counters_are_snow = false;
+    // Rimescale Dragon's static: "Creatures with ice counters on them don't untap during their
+    // controllers' untap steps." Ships as a PAIR with ice_counter_cost (never one alone): it is
+    // the only cost of icing one of our own creatures (e.g. the Marit Lage token for the snow
+    // count), so omitting it would hand the search a free pump the real card punishes. Gates
+    // the untap in GameEngine::UntapStep and the rollout's untap mirror. The Dragon's OWN
+    // {2}{S} tap-target activation stays unmodelled (opponent tapped state is unobservable).
+    bool ice_counters_dont_untap = false;
+
+    // Marit Lage's Slumber clause 1: "Whenever this or another snow permanent you control
+    // enters, scry N." A WATCHER on the enter cascade, fired once per copy per entering snow
+    // permanent, from BOTH FireEtbWatchers (nonland enters) and the tail of LandPlay's ETB
+    // block (land drops do NOT route through FireEtbWatchers; ~21 of this deck's snow
+    // permanents are lands). Routes through the shared ScryTop so the human scry chooser
+    // surfaces it unchanged.
+    int snow_enter_scry = 0;
+    // Marit Lage's Slumber clause 2: "At the beginning of your upkeep, if you control ten or
+    // more snow permanents, sacrifice this. If you do, create <the token below>." The
+    // intervening-if threshold is upkeep_snow_threshold (0 = no such trigger); MANDATORY (no
+    // "may"). Modelled as PerformUpkeepSlumber, a clone of Defense of the Heart's
+    // PerformUpkeepSacTutor: re-scan after each resolution (sacrificing one Slumber drops the
+    // snow count, so chaining two in one upkeep needs 11+ -- CR-correct). The token spec uses
+    // its own upkeep_sac_token_* prefix (repo convention: distinct prefix per mechanism;
+    // upkeep_token_* already has two disjoint consumers). upkeep_sac_token_legendary sets
+    // Supertype::Legendary on the token and the creation site calls EnforceLegendRule -- with
+    // 4 Slumbers a second Marit Lage is genuinely reachable and keeping both 20/20s would be
+    // an over-count.
+    int                      upkeep_snow_threshold = 0;
+    bool                     upkeep_sac_creates_token = false;
+    int                      upkeep_sac_token_power = 0;
+    int                      upkeep_sac_token_toughness = 0;
+    std::vector<std::string> upkeep_sac_token_subtypes;
+    std::vector<std::string> upkeep_sac_token_keywords;
+    bool                     upkeep_sac_token_legendary = false;
+
+    // Kaldring, the Rimestaff: "{T}: You may play target snow permanent card from your
+    // graveyard this turn. If you do, it enters tapped." Cost is {T} only (gy_play_cost {0} --
+    // the played card's OWN cost is still paid: a NONLAND target is cast for EffectiveCost, a
+    // LAND target consumes the turn's land drop via the plan's land slot). The "this turn"
+    // permission window is collapsed into one atomic action (single main phase, no instant
+    // speed, activating without playing is strictly dominated). The enters-tapped rider is a
+    // one-shot scoped pin (the ScriptedEtbDig RAII shape), NOT the static enters_tapped flag.
+    // Graveyard predicates MUST route ZoneCard/LookupCached (placeholder masks are empty).
+    std::optional<ManaCost>  gy_play_cost;
+    std::string              gy_play_requires_supertype;  // "Snow"
+    bool                     gy_play_permanent_only = false;
+    bool                     gy_play_enters_tapped = false;
 
     // Cast-trigger token creation (e.g. Worthy Knight: "Whenever you cast a Knight spell,
     // create a 1/1 white Human token"). When cast_trigger_creates_tokens > 0, casting a
@@ -1257,6 +1346,15 @@ struct CardParams
     // stays ~0 because spawns never attack or block, so it carries no eval credit -- implemented
     // faithfully + reusable rather than stubbed.
     bool etb_destroy_opp_creature = false;
+    // Abominable Treefolk: "When this creature enters, tap target creature an opponent controls.
+    // That creature doesn't untap during its controller's next untap step." The tap half is the
+    // Chupacabra shape with tapped=true instead of destruction (largest opponent creature via the
+    // shared pick; fires in the 8-of-10 spawn game indices). Payoff is provably 0 -- no engine
+    // path reads an OPPONENT permanent's tapped state (every `tapped` read is gated on
+    // controller_index == active) -- so it carries no eval credit; implemented faithfully +
+    // human-surfaceable rather than stubbed. The don't-untap rider is NOT modelled: the passive
+    // opponent never takes a turn, so it has no untap step to skip (bracket-noted on the entry).
+    bool etb_tap_opp_creature = false;
     // ETB "each opponent" ping ("deals N damage to each opponent and each creature/planeswalker
     // they control" — Goblin Chainwhirler 1). N to the opponent face (race-relevant, via the
     // OpponentGainsLife life-loss path so the win projection sees it) AND N to each permanent the
@@ -1338,6 +1436,12 @@ struct CardParams
     // from FireOwnEtbTriggers -- deliberately NOT the land-only etb_lifegain (whose only firing
     // site is LandPlay), so no shipped land deck moves.
     int                      etb_self_lifegain = 0;
+    // "When this [creature/artifact] enters, draw a card" (Ice-Fang Coatl, Arcum's Astrolabe:
+    // both N=1). The entering permanent's OWN forced draw, fired from FireOwnEtbTriggers --
+    // contrast own_creature_enters_draw, which is a WATCHER for other creatures entering and
+    // would mis-fire here. The drawn card is not re-solved into the same turn's plan (the
+    // shipped etb_dig shape; MTG_EQUIP_DRAW_BP stays the measurement lever for that question).
+    int                      etb_self_draw = 0;
     // Murderous Redcap: "When this creature enters, it deals damage equal to ITS POWER to any
     // target." Rides etb_damage_any (set to the PRINTED power so every valuation reader keeps
     // working) but substitutes the entering permanent's live EffectivePower() at resolution --
@@ -1974,6 +2078,17 @@ struct CardParams
     std::optional<ManaCost> tap_draw_cost;
     bool                    tap_draw_cost_less_per_rad = false;
     int                     etb_optional_tapped_rad    = 0;
+    // Scrying Sheets "{1}{S}, {T}: Look at the top card of your library. If that card is snow,
+    // you may reveal it and put it into your hand" / Frost Augur "{S}, {T}: <same>". Rides
+    // tap_draw_cost (Sheets "{2}", Augur "{1}" -- {S} written as generic, see the snow block)
+    // with this supertype gate on the TOP LIBRARY CARD: the shared TapDraw resolution looks the
+    // top card's DEFINITION up via LookupCached (DeckLoader placeholders have EMPTY masks -- a
+    // raw HasSupertype read is always false) and draws only on a match; a non-match leaves the
+    // card ON TOP (no draw, mana/tap still spent -- the clairvoyant search simply declines the
+    // whiff, which is the real card's decision too). Empty = Mariposa's ungated draw,
+    // byte-identical. Augur is the first {T} activation on a non-mana-dork CREATURE, so the
+    // enumeration gates on CanTapNow (summoning sickness), not just !tapped.
+    std::string             tap_draw_requires_top_supertype;
 
     // Conservatory / Kitchen: "{4}, {T}: Investigate." Creates one Clue artifact token, whose own
     // "{2}, Sacrifice this token: Draw a card" lives on the "Clue Token" NAMED TOKEN DEF in

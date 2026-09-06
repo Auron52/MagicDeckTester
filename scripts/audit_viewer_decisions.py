@@ -167,6 +167,17 @@ MANIFEST = {
     "tap_damage_cost":       ("main_phase",           truthy),
     "tap_investigate_cost":  ("main_phase",           truthy),
     "tap_draw_cost":         ("main_phase",           truthy),
+    # Snow deck (2026-09-06). The gated look-at-top (Scrying Sheets / Frost Augur): the
+    # take-vs-decline surfaces via the shared dig chooser at the TapDraw resolution.
+    "tap_draw_requires_top_supertype": ("dig",        truthy),
+    # Marit Lage's Slumber: scry 1 per snow permanent entering -- the shared scry chooser.
+    "snow_enter_scry":       ("scry",                 positive),
+    # Rimefeather Owl: WHICH permanent gets the ice counter -- shared dig chooser (central
+    # dialog over candidate permanents) at the IceCounter resolution.
+    "ice_counter_cost":      ("dig",                  truthy),
+    # Kaldring: WHICH graveyard snow permanent is played -- one main_phase plan variant per
+    # legal name (GYP# in the plan signature, gyplay= verb), the Haven convention.
+    "gy_play_cost":          ("main_phase",           truthy),
     "sac_draw_cost":         ("main_phase",           truthy),
     # "Enchant land": WHICH land carries the aura is a real decision and rides the existing
     # enchant_target plan-variant axis (one main_phase variant per legal land host), opened to
@@ -334,6 +345,8 @@ BOARD_ACTIVATIONS = {
     "equip_combat_damage_charges":               ("verb:jittemode", truthy,   None),  # spends a counter
     "gy_exile_instant_sorcery_drain":            ("verb:gyexile",   positive, 1),     # "{B}, {T}"
     "gy_return_cost":                            ("verb:gyreturn",  truthy,   "gy_return_cost"),
+    "gy_play_cost":                              ("verb:gyplay",    truthy,   None),  # Kaldring {T}
+    "ice_counter_cost":                          ("activate",       truthy,   "ice_counter_cost"),
     "can_animate":                               ("verb:animate",   truthy,   "animate_cost"),
     "tap_token_cost":                            ("verb:taptoken",  truthy,   "tap_token_cost"),
     "channel_cost":                              ("verb:channel",   truthy,   "channel_cost"),
@@ -382,7 +395,24 @@ INERT_PARAMS = {
     "tutor_mv_max_is_x": "tutor MV cap = the chosen X (Chord of Calling) -- a legality filter; the X itself rides the chosen_x plan-variant axis -> main_phase",
     "pod_taps": "Birthing Pod {T} constant -- not a choice",
     "pod_activation_cost": "Birthing Pod activation mana cost -- a printed constant; the (victim, fetch) choices ride pod_mv_delta -> main_phase",
-    "etb_destroy_opp_creature": "automatic ETB destroy (largest opponent creature); NO legal target in this deck's games (opponent controls no creatures) -- never surfaces",
+    "etb_destroy_opp_creature": "automatic ETB destroy (largest opponent creature -- heuristic pick, disclosed 6a); fires in the 8-of-10 spawn game indices (USER correction 2026-09-05 -- an earlier note here wrongly claimed no legal target ever exists), payoff ~0 since spawns never attack or block",
+    "etb_tap_opp_creature": "automatic ETB tap (largest opponent creature -- heuristic pick, disclosed 6a); payoff provably unobservable: no engine path reads an OPPONENT permanent's tapped state, and the passive opponent has no untap step for the don't-untap rider to skip. PROVISIONAL",
+    "pt_equals_snow_permanents_you_control": "characteristic-defining P/T (live snow count) -- automatic",
+    "pt_equals_snow_permanents_on_battlefield": "characteristic-defining P/T (live global snow count) -- automatic",
+    "damage_equals_snow_permanents": "computed damage (live snow count on resolution) -- the target pick rides targeting -> target",
+    "ice_counters_are_snow": "static type-changing grant (layer 4) -- automatic",
+    "ice_counters_dont_untap": "static untap gate -- automatic",
+    "upkeep_snow_threshold": "mandatory intervening-if upkeep trigger (no 'may') -- nothing to choose",
+    "upkeep_sac_creates_token": "token creation, mandatory -- no choice",
+    "upkeep_sac_token_power": "token spec constant", "upkeep_sac_token_toughness": "token spec constant",
+    "upkeep_sac_token_subtypes": "token spec constant", "upkeep_sac_token_keywords": "token spec constant",
+    "upkeep_sac_token_legendary": "token spec constant (legend rule is a state-based action)",
+    "etb_self_draw": "mandatory untargeted ETB draw (Ice-Fang Coatl / Arcum's Astrolabe)",
+    "filter_no_free_colorless": "mana-mode constant (no free {C} mode); color auto-resolved in payment",
+    "gy_play_requires_supertype": "gy-play legality FILTER -- the pick rides gy_play_cost -> main_phase (GYP#)",
+    "gy_play_permanent_only": "gy-play legality FILTER -- as above",
+    "gy_play_enters_tapped": "enters-tapped rider, forced -- no choice",
+    "any_color_filter": "mana filter (color auto-resolved in payment) -- pre-existing gap, added with the Snow pass",
     "etb_discard_any_draw_bonus": "draw count constant (Celes '+1')",
     "other_creature_gy_enter_team_counters": "mandatory untargeted trigger (counter on EACH creature) -- nothing to choose",
     "prevents_minus_counters": "static replacement (Melira) -- automatic",

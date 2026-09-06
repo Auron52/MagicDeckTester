@@ -171,6 +171,17 @@ opened when one source offers several distinct activations) is for.
 | `animate=<land>` | Mutavault's `{1}: becomes a 2/2` | a land is played, not cast, so `cast=<land>` is meaningless; several copies must stay distinguishable |
 | `taptoken=<land>` | Sliver Hive's `{5},{T}: create a Sliver` | same |
 | `channel=<card>` | Twinshot Sniper's `{1}{R}, Discard this card: 2 damage` | a from-HAND ability, not a board activation and not a cast — `cast=<name>` cannot say which of the two ways you are playing the card |
+| `gyplay=<played card>` (2026-09-06) | Kaldring, the Rimestaff's `{T}: You may play target snow permanent card from your graveyard this turn. It enters tapped.` | `gyreturn`'s shape for the same reason: the value is the card LEAVING the graveyard, not the source — one Kaldring over a graveyard holding three distinct snow cards is three different activations. Unlike `gyreturn` the card goes straight to the BATTLEFIELD (tapped; a land consumes the land drop), so the verb also cannot collapse into a later `cast=` |
+
+**Snow deck dig-chooser reuse (2026-09-06, no new types):** two Snow decision points ride the
+existing `dig` chooser rather than adding a type. (1) **Gated look-at-top** (Scrying Sheets /
+Frost Augur `tap_draw_requires_top_supertype`): on a snow hit the chooser offers take-vs-leave —
+decline leaves the card on top (the reveal is NOT a draw, and the take is a put-in-hand, per the
+USER 2026-09-06 reveal≠draw convention). (2) **Ice counter placement** (Rimefeather Owl
+`ice_counter_cost`): the chooser picks the target permanent; the heuristic default prefers a
+non-snow OPPONENT creature (feeds the Owl count and, with Rimescale Dragon's `ice_counters_dont_untap`
+out, tap-locks it) and skips own permanents while a dont-untap source is on the battlefield.
+`snow_enter_scry` (Marit Lage's Slumber) is the ordinary `scry` type.
 
 `animate` and `taptoken` are enumerated **only under `HumanPlayActive()`** (the `jitte_modes_open`
 precedent) and the greedy sinks `AnimateLandsShared` / `ActivateTapTokensShared` **stand down** there,

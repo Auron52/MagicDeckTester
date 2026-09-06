@@ -73,6 +73,17 @@ struct Action
                              // Action per distinct legal graveyard card NAME so the search picks
                              // among them (and the viewer shows them all) rather than taking the
                              // first match. One activation per source per plan (shared sac_source_id).
+        GraveyardPlayAbility, // Kaldring, the Rimestaff: "{T}: You may play target snow permanent
+                             // card from your graveyard this turn. If you do, it enters tapped."
+                             // Tap the source (sac_source_id = its card.m_number, NOT sacrificed);
+                             // the chosen target rides tutor_target with one Action per distinct
+                             // legal graveyard NAME (the Haven convention). a.cost = the played
+                             // card's OWN mana cost for a NONLAND (paid by the caller); a LAND
+                             // costs no mana but consumes the turn's land drop (checked at
+                             // enumeration AND re-checked at apply -- stranded = full no-op).
+                             // The enters-tapped rider is applied inside the shared
+                             // ApplyGraveyardPlayAbility. One activation per source per plan
+                             // (shared sac_source_id exclusivity).
         GraveyardExileAbility, // Deathrite Shaman abilities 2/3: pay the colored cost ({B}/{G}) + tap
                              // the source (sac_source_id = its card.m_number), exile the first
                              // matching graveyard card, then drain 2 (gy_exile_mode 1) or gain 2
@@ -1123,6 +1134,12 @@ public:
         // real choice: one Haven with three distinct Dragons in the graveyard offers three plans, and
         // encoding only the source could not tell them apart.
         std::vector<std::string> gy_returns;
+        // "gyplay=<played card name>": Kaldring, the Rimestaff's "{T}: play target snow permanent
+        // card from your graveyard (enters tapped)", one entry per activation. Same rationale as
+        // gyreturn: the action names the SOURCE (Kaldring, never cast this way) and the real
+        // choice is the PLAYED card -- one Kaldring with three distinct snow cards in the yard is
+        // three distinguishable lines only through this token.
+        std::vector<std::string> gy_plays;
         // "channel=<card name>": Twinshot Sniper's from-HAND channel ability. Not a board activation
         // (its source is a card in hand) and not a cast either -- "{1}{R}, Discard this card" plays the
         // same card a different way, so `cast=<name>` cannot distinguish the two. EMPTY => legacy

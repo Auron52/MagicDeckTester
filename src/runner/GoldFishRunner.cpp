@@ -233,6 +233,8 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         if (p.power_bonus > 0 || p.tough_bonus > 0)                          { return true; }
         if (p.scales_per_matching || p.affects_all_creatures
             || p.domain_self_pump || p.power_equals_creature_count)          { return true; }
+        if (p.pt_equals_snow_permanents_you_control
+            || p.pt_equals_snow_permanents_on_battlefield)                   { return true; }
         // AURA pumps live on their own params (aura_power_bonus / aura_scale_*), which this scan
         // missed: the Auras/Bogles deck -- a deck that wins purely by pumped combat -- read
         // feeds_combat=no (found in the 2026-08-18 cast-order review; inert in play only because
@@ -342,7 +344,9 @@ GoldFishRunner::DependencyPulls GoldFishRunner::DeriveDependencyPulls(const Deck
             || p.grants_double_strike || p.team_pump_cost.has_value()
             || p.firebreathing_cost.has_value() || p.power_bonus > 0 || p.tough_bonus > 0
             || p.scales_per_matching || p.affects_all_creatures || p.domain_self_pump
-            || p.power_equals_creature_count;
+            || p.power_equals_creature_count
+            || p.pt_equals_snow_permanents_you_control
+            || p.pt_equals_snow_permanents_on_battlefield;
     };
     // Opponent-lifegain payload of an ENABLES edge. Grove's tap drip (tap_opponent_lifegain)
     // is a land -- never classified, never Main1 -- so it cannot pull; castable payloads only.

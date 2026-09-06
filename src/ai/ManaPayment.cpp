@@ -292,6 +292,9 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     // costs a second source, which is a joint decision the per-pip greedy cannot
                     // make. So the greedy pays generic pips from it and simply declines a coloured
                     // one -- a failure that falls through to the complete solver, never a wrong tap.
+                    // Astrolabe (filter_no_free_colorless): NO free mode at all -- the greedy can
+                    // never tap it; only the backtracker's fed branch may.
+                    if (def->params.filter_no_free_colorless) { continue; }
                     if (any || needed == Color::Colorless) { kind = 3; } else { continue; }
                 }
                 else
@@ -560,6 +563,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 if (p.controller_index != active || p.tapped) { continue; }
                 const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
                 if (!def || !(def->params.is_filter || def->params.any_color_filter)
+                    || def->params.filter_no_free_colorless   // Astrolabe: no free {C} mode
                     || !usable(p, *def)) { continue; }
                 p.tapped = true;
                 floating.Add(Color::Colorless, 1);

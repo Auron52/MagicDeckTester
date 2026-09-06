@@ -798,6 +798,7 @@ inline void ApplyBlink(GameState&, int controller, int source_id, int target_id,
                        bool returns_tapped, bool permanents_ok);
 inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card& left);
 inline void DestroyLargestOppCreature(GameState&, int controller);
+inline void TapLargestOppCreature(GameState&, int controller);
 inline void FireOwnEtbTriggers(GameState&, int controller, int entered_index,
                            const std::string& chosen_tutor, int etb_kx);
 // etb_kx sentinel: "PUT entry with no searched destroy-K axis -- pick heuristically at
@@ -1991,11 +1992,16 @@ inline int FindBurnKillTarget(const GameState& state, int active, int damage)
 }
 
 // The damage a creature-targeting burn deals to its creature target (Searing Blood 2; Searing Blaze 1,
-// or 3 with landfall). Determines whether an own creature would SURVIVE a self-cast for prowess.
+// or 3 with landfall; Skred = the live snow-permanent count). Determines whether an own creature
+// would SURVIVE a self-cast for prowess. Computed at RESOLUTION (CR 608.2b) -- the snow count is a
+// live battlefield scan, never baked at cast.
+inline int SnowPermanentCount(const GameState&, int controller_index);   // defined below
 inline int CreatureBurnDamage(const CardDefinition& def, const GameState& state)
 {
     if (def.params.landfall_damage > 0 && state.ActivePlayer().lands_played_this_turn > 0)
     { return def.params.landfall_damage; }
+    if (def.params.damage_equals_snow_permanents)
+    { return SnowPermanentCount(state, state.active_player_index); }
     return def.params.damage;
 }
 
@@ -3331,6 +3337,9 @@ inline void CreateToken(
         else if (kw == "Haste")     { token.card.AddKeyword(Keyword::Haste); }
         else if (kw == "Trample")   { token.card.AddKeyword(Keyword::Trample); }
         else if (kw == "Vigilance") { token.card.AddKeyword(Keyword::Vigilance); }
+        // Marit Lage (Marit Lage's Slumber). Inert vs the passive opponent (no removal/damage)
+        // but populated for faithfulness, same rationale as Flying above.
+        else if (kw == "Indestructible") { token.card.AddKeyword(Keyword::Indestructible); }
     }
     token.card.m_power     = power;
     token.card.m_toughness = toughness;
@@ -3479,9 +3488,36 @@ inline int CountControlledDragons(const GameState& state, int controller)
 struct PendingSelfBounce { int controller; int perm_number; };
 inline thread_local std::vector<PendingSelfBounce> g_pending_self_bounces;
 
+// Marit Lage's Slumber clause 1: "Whenever Marit Lage's Slumber or another snow permanent you
+// control enters, scry 1." A watcher on the enter cascade, fired once PER COPY per entering snow
+// permanent (its own enter included -- the scan sees the just-entered Slumber). Called from BOTH
+// FireEtbWatchers' top (nonland enters, tokens included) AND the tail of LandPlay's ETB block --
+// land drops do NOT route through FireEtbWatchers, and ~21 of the Snow deck's snow permanents are
+// lands. The supertype mask test comes first, so every non-snow deck pays one bit-test per enter
+// and nothing else (byte-identical).
+inline void ScryTop(GameState& state, int n, const std::string& source);   // defined below
+inline void FireSnowEnterWatchers(GameState& state, int entered_index)
+{
+    if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    const Permanent& e = state.battlefield[entered_index];
+    if (!e.card.HasSupertype(Supertype::Snow)) { return; }
+    const int who = e.controller_index;
+    const int n   = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& w = state.battlefield[i];
+        if (w.controller_index != who) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(w.card);
+        if (d && d->params.snow_enter_scry > 0)
+        { ScryTop(state, d->params.snow_enter_scry, w.card.m_name.str()); }
+    }
+}
+
 inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    // Snow-enter scry watcher (param-gated; one supertype bit-test for every other deck).
+    FireSnowEnterWatchers(state, entered_index);
     // Creature-enter watchers (Creature Giving: Wardens / Suture Priest). This function is the
     // UNIVERSAL enter cascade -- every enter site already calls it -- so the watcher fire lives at
     // its top, BEFORE the Dragon-subtype early-out, gated on the newcomer being a creature. A gift
@@ -4115,6 +4151,25 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         }
     }
 
+    // Ice-Fang Coatl / Arcum's Astrolabe: "When this enters, draw a card." The entering
+    // permanent's OWN forced draw -- a real draw (counts cards_drawn_this_turn, fires the draw
+    // sink), unlike the reveal-and-put family. Same idiom as the enter-watcher draw.
+    if (p.etb_self_draw > 0)
+    {
+        Player& dp = state.players[controller];
+        for (int k = 0; k < p.etb_self_draw && !dp.library.empty(); ++k)
+        {
+            std::size_t before = dp.hand.size();
+            dp.library.DrawN(1, dp.hand);
+            dp.cards_drawn_this_turn += static_cast<int>(dp.hand.size() - before);
+            if (g_play_draw_sink && !g_tap_speculating)
+            {
+                for (std::size_t hi = before; hi < dp.hand.size(); ++hi)
+                { g_play_draw_sink->push_back({ state.turn_number, dp.hand[hi].m_name.str() }); }
+            }
+        }
+    }
+
     // Craterhoof Behemoth: "creatures you control ... get +X/+X until end of turn, where X is the
     // number of creatures you control" (counted AFTER it enters -> includes itself). Temp bonuses
     // (cleared at cleanup); creatures entering later this turn correctly get nothing (CR 611.2c).
@@ -4315,6 +4370,7 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     // entered_index may be stale (an erase shifts indices) -- but only when this very card set
     // the param, and it sets no later-read one.
     if (p.etb_destroy_opp_creature) { DestroyLargestOppCreature(state, controller); }
+    if (p.etb_tap_opp_creature)     { TapLargestOppCreature(state, controller); }
 
     // Celes, Rune Knight ETB rummage: "discard any number of cards, then draw that many cards
     // plus one." N chosen by a RESOLUTION heuristic on both the cast and the put path (uniform;
@@ -5702,6 +5758,98 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
                       sacrificed.m_name.str() + ": returned " + returned.m_name.str()
                       + " from the graveyard to hand");
     }
+}
+
+// ---- Kaldring, the Rimestaff -- "{T}: You may play target snow permanent card from your ----
+// ---- graveyard this turn. If you do, it enters tapped." ------------------------------------
+// The "this turn" permission window is collapsed into one atomic activation+play (single main
+// phase, no instant speed; activating without playing is strictly dominated). The PLAYED card's
+// own mana cost is paid by the caller for a NONLAND (the action carries it); a LAND pays no mana
+// but consumes the turn's land drop (re-checked here). Graveyard cards are name-only placeholders
+// -- every predicate routes through ZoneCard, or the ability silently never fires (the
+// Deathrite/Regrowth empty-mask trap).
+
+inline bool CardHasSupertypeNamed(const Card&, const std::string&);   // defined below (snow block)
+inline void EnforceLegendRule(GameState& state, int controller_index);   // defined below
+inline bool GyPlayTargetLegal(const CardDefinition& def, const Card& gc)
+{
+    if (def.params.gy_play_permanent_only
+        && !(gc.IsCreature() || gc.IsLand() || gc.IsEnchantment()
+             || gc.HasType(CardType::Artifact) || gc.HasType(CardType::Planeswalker)
+             || gc.HasType(CardType::Battle))) { return false; }
+    if (!def.params.gy_play_requires_supertype.empty()
+        && !CardHasSupertypeNamed(gc, def.params.gy_play_requires_supertype)) { return false; }
+    return true;
+}
+
+// Resolve the play half: tap the source ({T} is the whole activation cost), move the picked card
+// from the graveyard onto the battlefield TAPPED (the rider), fire the shared enter cascades and
+// the legend rule (4x Marit Lage's Slumber is Legendary -- replaying one beside a live copy is a
+// real legend-rule event). A LAND consumes the land drop (++lands_played_this_turn); NOTE it does
+// not route through LandPlay, so land-only etb params (etb_scry/surveil/lifegain) would not fire
+// on this path -- none of the Snow deck's lands carry one (flagged in the analysis ledger).
+// Stranded-outlet safe: source tapped/gone, target gone, or the drop consumed -> full no-op
+// (returns false so the caller can refuse to pay the mana half FIRST -- check before paying).
+inline bool ApplyGraveyardPlayAbility(GameState& state, int controller, int source_id,
+                                      const std::string& target_name, bool commit)
+{
+    int src = -1;
+    const CardDefinition* d = nullptr;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller || p.tapped) { continue; }
+        if (p.card.m_number != source_id) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (!pd || !pd->params.gy_play_cost.has_value()) { continue; }
+        if (!CanTapNow(p, state.battlefield)) { continue; }
+        src = i; d = pd;
+        break;
+    }
+    if (src < 0 || !d) { return false; }
+
+    std::vector<Card>& gy = state.players[controller].graveyard;
+    int pick = -1;
+    for (std::size_t i = 0; i < gy.size(); ++i)
+    {
+        if (!GyPlayTargetLegal(*d, ZoneCard(gy[i]))) { continue; }
+        if (pick < 0) { pick = static_cast<int>(i); }                 // fallback: first legal
+        if (!target_name.empty() && gy[i].m_name == target_name) { pick = static_cast<int>(i); break; }
+    }
+    if (pick < 0) { return false; }
+
+    const Card raw = gy[static_cast<std::size_t>(pick)];
+    const CardDefinition* td = CardDatabase::Instance().LookupCached(raw);
+    if (!td) { return false; }
+    Player& ap = state.players[controller];
+    const bool is_land = td->card.IsLand();
+    if (is_land && ap.lands_played_this_turn >= 1 + ap.bonus_land_drops_this_turn)
+    { return false; }   // land drop already consumed
+    if (!commit) { return true; }   // affordability probe only
+
+    // Pay the {T} (tap the source), then move and enter the card tapped.
+    state.battlefield[src].tapped = true;
+    gy.erase(gy.begin() + pick);
+    Permanent perm;
+    perm.card              = td->card;      // real masks (supertypes included)
+    perm.card.m_number     = raw.m_number;  // keep the per-copy id
+    perm.controller_index  = controller;
+    perm.owner_index       = controller;
+    perm.entered_this_turn = true;
+    perm.tapped            = d->params.gy_play_enters_tapped;
+    state.battlefield.push_back(perm);
+    if (is_land) { ++ap.lands_played_this_turn; }
+    const int entered = static_cast<int>(state.battlefield.size()) - 1;
+    FireEtbWatchers(state, controller, entered);       // snow-enter scry fires here too
+    FireOwnEtbTriggers(state, controller, entered, std::string(), kEtbKxHeuristic);
+    EnforceLegendRule(state, controller);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      "\xE2\x9D\x84 Kaldring: played " + raw.m_name.str()
+                      + " from the graveyard (tapped)");
+    }
+    return true;
 }
 
 // Sacrifice-a-creature outlet (Skirk Prospector -> {R}; Siege-Gang -> 2 face damage; Pashalik -> two
@@ -7799,6 +7947,63 @@ inline int CreatureCount(const GameState& state, int controller_index)
     return count;
 }
 
+// ---- Snow (the Snow deck: the first engine readers of Supertype::Snow) ------------------------
+// A permanent is snow if its card carries the supertype OR it has an ice counter while an
+// ice_counters_are_snow source (Rimefeather Owl) is on the battlefield -- the Owl's layer-4
+// type-changing static, evaluated LIVE at every read. Never bake the grant into the card's
+// supertype mask: it ends when the Owl leaves, and a mutated mask would corrupt copiable values
+// (CR 706.2). Battlefield Permanent.card carries full masks (unlike graveyard/library
+// placeholders), so the raw HasSupertype read is safe HERE and only here.
+
+// Is any ice_counters_are_snow source on the battlefield? Only consulted when at least one
+// permanent actually has an ice counter (the AnyIceCounters early-out below), so the common
+// case never pays a LookupCached scan.
+inline bool IceGrantsSnow(const GameState& state)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.ice_counters_are_snow) { return true; }
+    }
+    return false;
+}
+
+inline bool AnyIceCounters(const GameState& state)
+{
+    for (const Permanent& p : state.battlefield)
+    { if (p.ice_counters > 0) { return true; } }
+    return false;
+}
+
+// Supertype test by cards.json param string ("Snow" for every current consumer:
+// tap_draw_requires_top_supertype, gy_play_requires_supertype). The caller must pass a card with
+// REAL masks (a definition's card, or a battlefield permanent's) -- graveyard/library placeholders
+// have empty masks and must be routed through LookupCached first.
+inline bool CardHasSupertypeNamed(const Card& c, const std::string& name)
+{
+    if (name == "Snow")      { return c.HasSupertype(Supertype::Snow); }
+    if (name == "Legendary") { return c.HasSupertype(Supertype::Legendary); }
+    if (name == "Basic")     { return c.HasSupertype(Supertype::Basic); }
+    if (name == "World")     { return c.HasSupertype(Supertype::World); }
+    return false;
+}
+
+// Number of snow permanents controlled by `controller_index`, or on the WHOLE battlefield when
+// controller_index < 0 (Rimefeather Owl's global CDA). Readers: Skred (damage), Abominable
+// Treefolk / Rimefeather Owl (CDA P/T), Marit Lage's Slumber (ten-or-more upkeep threshold).
+inline int SnowPermanentCount(const GameState& state, int controller_index)
+{
+    const bool ice_grants = AnyIceCounters(state) && IceGrantsSnow(state);
+    int count = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (controller_index >= 0 && p.controller_index != controller_index) { continue; }
+        if (p.card.HasSupertype(Supertype::Snow) || (ice_grants && p.ice_counters > 0))
+        { ++count; }
+    }
+    return count;
+}
+
 // ---- Creature Giving upkeep triggers (Varchild's War-Riders / Defense of the Heart) -----------
 // Both are UPKEEP effects of the active player, applied IDENTICALLY at the executor's upkeep
 // (GameEngine::RestOfUpkeep) and the rollout's simulated turn-start (TurnSolver::
@@ -7969,12 +8174,81 @@ inline void PerformUpkeepSacTutor(GameState& state)
     }
 }
 
+// Marit Lage's Slumber clause 2: "At the beginning of your upkeep, if you control ten or more
+// snow permanents, sacrifice Marit Lage's Slumber. If you do, create Marit Lage, a legendary
+// 20/20 black Avatar creature token with flying and indestructible." The PerformUpkeepSacTutor
+// shape: the intervening-if is checked at the upkeep (trigger time == resolution time here),
+// MANDATORY (no "may"), and the loop RE-SCANS after each resolution so a second Slumber re-checks
+// the count -- sacrificing the first drops the snow count by one, so chaining two in one upkeep
+// needs 11+ (CR-correct and reachable with 4 copies). The token is NOT snow. Called IDENTICALLY
+// from the executor's upkeep (GameEngine) and the rollout's simulated turn-start (TurnSolver::
+// SimulateEndAndStartNextTurn) -- lockstep, or the search prices a 20/20 the real game never
+// makes. Param-gated -> byte-identical for every other deck.
+inline void PerformUpkeepSlumber(GameState& state)
+{
+    const int active = state.active_player_index;
+    for (;;)
+    {
+        int                   src_index = -1;
+        const CardDefinition* src_def   = nullptr;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d || d->params.upkeep_snow_threshold <= 0) { continue; }
+            if (SnowPermanentCount(state, active) < d->params.upkeep_snow_threshold) { continue; }
+            src_index = i; src_def = d; break;
+        }
+        if (src_index < 0) { return; }
+
+        const CardParams& pp       = src_def->params;
+        const std::string src_name = state.battlefield[src_index].card.m_name.str();
+
+        // Sacrifice the enchantment FIRST (part of the resolution, before the token exists).
+        state.players[state.battlefield[src_index].owner_index].graveyard
+            .push_back(state.battlefield[src_index].card);
+        state.battlefield.erase(state.battlefield.begin() + src_index);
+
+        if (pp.upkeep_sac_creates_token)
+        {
+            // Find the created token by its number (CreateToken fires the watcher cascade, which
+            // can append further permanents -- "last element" is not a safe address).
+            const int tok_number = state.next_token_number;
+            CreateToken(state, active, pp.upkeep_sac_token_power, pp.upkeep_sac_token_toughness,
+                        pp.upkeep_sac_token_subtypes, "B", pp.upkeep_sac_token_keywords);
+            if (pp.upkeep_sac_token_legendary)
+            {
+                for (Permanent& q : state.battlefield)
+                {
+                    if (q.is_token && q.card.m_number == tok_number)
+                    { q.card.AddSupertype(Supertype::Legendary); break; }
+                }
+                // CR 704.5j is a state-based action; with 4 Slumbers a second Marit Lage while
+                // the first lives is reachable, and keeping both would be an over-count.
+                EnforceLegendRule(state, active);
+            }
+        }
+        if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
+        {
+            EmitPlayEvent(state.turn_number, "tutor",
+                          "\xE2\x9D\x84 " + src_name + ": sacrificed -- Marit Lage awakens ("
+                          + std::to_string(pp.upkeep_sac_token_power) + "/"
+                          + std::to_string(pp.upkeep_sac_token_toughness) + ")");
+        }
+    }
+}
+
 // Extra base power from a characteristic-defining ability (Adeline: power = number of
 // creatures you control). Returns 0 for ordinary creatures. The card's printed power is
 // 0 (printed *), so this is the whole base power before counters/temp/lords.
 inline int DynamicBasePower(const CardDefinition& def, const GameState& state, int controller_index)
 {
     if (def.params.power_equals_creature_count) { return CreatureCount(state, controller_index); }
+    if (def.params.pt_equals_snow_permanents_you_control)
+    { return SnowPermanentCount(state, controller_index); }
+    if (def.params.pt_equals_snow_permanents_on_battlefield)
+    { return SnowPermanentCount(state, -1); }
     return 0;
 }
 
@@ -7985,6 +8259,10 @@ inline int DynamicBaseToughness(const CardDefinition& def, const GameState& stat
                                 int controller_index)
 {
     if (def.params.toughness_equals_creature_count) { return CreatureCount(state, controller_index); }
+    if (def.params.pt_equals_snow_permanents_you_control)
+    { return SnowPermanentCount(state, controller_index); }
+    if (def.params.pt_equals_snow_permanents_on_battlefield)
+    { return SnowPermanentCount(state, -1); }
     return 0;
 }
 
@@ -8012,6 +8290,25 @@ inline void DestroyLargestOppCreature(GameState& state, int controller)
         { state.players[dead.owner_index].graveyard.push_back(dead.card); }
         state.battlefield.erase(state.battlefield.begin() + pick);
     }
+}
+
+// Abominable Treefolk's ETB ("tap target creature an opponent controls"): the Chupacabra pick with
+// tapped=true instead of destruction. No erase, so no index invalidation. Payoff is provably 0 --
+// no engine path reads an opponent permanent's tapped state (spawns never attack, block or tap for
+// mana) -- but it fires faithfully in the 8-of-10 spawn game indices and is human-surfaceable. The
+// human override rides g_play_target_chooser at the call site via TapLargestOppCreature's caller;
+// the default pick here is largest effective power (the shared Chupacabra convention).
+inline void TapLargestOppCreature(GameState& state, int controller)
+{
+    int pick = -1, best_pw = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index == controller || !q.card.IsCreature() || q.tapped) { continue; }
+        const int pw = q.EffectivePower();
+        if (pw > best_pw) { best_pw = pw; pick = i; }
+    }
+    if (pick >= 0) { state.battlefield[pick].tapped = true; }
 }
 
 // Fires "whenever you attack, create N tokens tapped and attacking" triggers (Adeline,
@@ -10834,6 +11131,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         // an unnamed ability on the deck's two win conditions.
         case PermAbilityMode::Drain:          return "target opponent loses life";
         case PermAbilityMode::ExileTop:       return "opponent exiles their top card";
+        case PermAbilityMode::IceCounter:     return "put an ice counter on target permanent";
         default:                              return "activate";
     }
 }
@@ -10874,7 +11172,49 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             CreateClueTokens(state, controller, 1);
             break;
         case PermAbilityMode::TapDraw:
-            TrickDraw(state, controller, 1);
+            if (!d->params.tap_draw_requires_top_supertype.empty())
+            {
+                // Scrying Sheets / Frost Augur: "Look at the top card of your library. If that
+                // card is snow, you may reveal it and put it into your hand." The top card's
+                // supertype comes from its DEFINITION (library cards are placeholders with empty
+                // masks -- the ExileTop/ApplyRadMill trap). A non-match leaves the card ON TOP:
+                // the mana and tap are already spent, which is the real card's whiff too (the
+                // clairvoyant search simply never picks a whiff). A match moves the card to hand
+                // DIRECTLY -- reveal-and-put-into-hand is NOT a draw (USER 2026-09-06): no
+                // cards_drawn_this_turn, no draw watchers, no draw log. The "you may" decline is
+                // the human's via the shared dig chooser (heuristic/autonomous default: take --
+                // weakly dominant; declining leaves it on top for the next natural draw).
+                Player& ap = state.players[controller];
+                if (!ap.library.empty())
+                {
+                    const Card&           top = ap.library.front();
+                    const CardDefinition* td  = CardDatabase::Instance().LookupCached(top);
+                    const bool match = td != nullptr
+                        && CardHasSupertypeNamed(td->card,
+                                                 d->params.tap_draw_requires_top_supertype);
+                    bool take = match;
+                    if (match && g_play_dig_chooser)
+                    {
+                        const std::vector<Card> examined{ top };
+                        const std::vector<int>  legal{ 0 };
+                        take = (*g_play_dig_chooser)(state, controller, src_name,
+                                                     examined, legal, 0) == 0;
+                    }
+                    if (take)
+                    {
+                        Card c = ap.library.DrawTop();
+                        const std::string cname = c.m_name.str();
+                        ap.hand.push_back(std::move(c));
+                        if (g_play_event_sink)
+                        {
+                            EmitPlayEvent(state.turn_number, "tutor",
+                                          "\xE2\x9D\x84 " + src_name + ": revealed " + cname
+                                          + " (snow) into hand");
+                        }
+                    }
+                }
+            }
+            else { TrickDraw(state, controller, 1); }
             break;
         case PermAbilityMode::Drain:
         {
@@ -10893,6 +11233,73 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 EmitPlayEvent(state.turn_number, "damage",
                               "\xF0\x9F\x94\xA5 " + src_name + ": opponent loses "
                               + std::to_string(amt) + " life");
+            }
+            break;
+        }
+        case PermAbilityMode::IceCounter:
+        {
+            // Rimefeather Owl: "{1}{S}: Put an ice counter on target permanent." Legal targets =
+            // every permanent on the battlefield; USEFUL targets = non-snow ones (an ice counter
+            // on an already-snow permanent changes nothing -- see IsSnowPermanent). Autonomous
+            // heuristic (single pick; the K axis is the searched dimension, not the target):
+            //   1. largest non-snow OPPONENT creature (pure upside: +1 to the global snow count
+            //      that feeds this Owl's own P/T, and spawns never untap-matter),
+            //   2. any other non-snow opponent permanent,
+            //   3. OWN non-snow permanent (the Marit Lage token) -- skipped while an
+            //      ice_counters_dont_untap source (Rimescale Dragon) is out, because the static
+            //      would lock our own attacker down permanently,
+            //   4. nothing useful -> no-op (the search never buys this; the cost is spent, which
+            //      is faithful to a forced bad activation but unreachable autonomously).
+            // Human override: the shared dig chooser (central dialog over the candidate
+            // permanents' cards; heuristic pick preselected). Nulled by RevealLogPause.
+            const bool dont_untap_out = [&]{
+                for (const Permanent& q : state.battlefield)
+                {
+                    const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                    if (qd && qd->params.ice_counters_dont_untap) { return true; }
+                }
+                return false;
+            }();
+            const bool ice_grants = IceGrantsSnow(state);
+            auto is_snow_now = [&](const Permanent& q)
+            { return q.card.HasSupertype(Supertype::Snow) || (ice_grants && q.ice_counters > 0); };
+            std::vector<int> cands;   // battlefield indices, heuristic-preferred first
+            int best_opp_creature = -1, best_pw = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[i];
+                if (is_snow_now(q)) { continue; }
+                if (q.controller_index != controller && q.card.IsCreature())
+                {
+                    const int pw = q.EffectivePower();
+                    if (pw > best_pw) { best_pw = pw; best_opp_creature = i; }
+                }
+            }
+            if (best_opp_creature >= 0) { cands.push_back(best_opp_creature); }
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[i];
+                if (is_snow_now(q) || i == best_opp_creature) { continue; }
+                if (q.controller_index != controller) { cands.push_back(i); }
+                else if (!dont_untap_out)             { cands.push_back(i); }
+            }
+            if (cands.empty()) { break; }
+            int pick = cands[0];
+            if (g_play_dig_chooser)
+            {
+                std::vector<Card> examined;
+                std::vector<int>  legal;
+                for (int ci = 0; ci < static_cast<int>(cands.size()); ++ci)
+                { examined.push_back(state.battlefield[cands[ci]].card); legal.push_back(ci); }
+                const int c = (*g_play_dig_chooser)(state, controller, src_name, examined, legal, 0);
+                if (c >= 0 && c < static_cast<int>(cands.size())) { pick = cands[c]; }
+            }
+            ++state.battlefield[pick].ice_counters;
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "counter",
+                              "\xE2\x9D\x84 " + src_name + ": ice counter on "
+                              + state.battlefield[pick].card.m_name.str());
             }
             break;
         }
@@ -10965,6 +11372,8 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
     if (want <= 0) { return 0; }
     const std::optional<ManaCost>* rc = (mode == PermAbilityMode::Drain)
                                       ? &def.params.drain_cost
+                                      : (mode == PermAbilityMode::IceCounter)
+                                      ? &def.params.ice_counter_cost
                                       : &def.params.exile_opponent_top_cost;
     if (!rc->has_value()) { return 0; }
 
@@ -10991,6 +11400,19 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
         else if (mode == PermAbilityMode::ExileTop)
         {
             useful = std::min(useful, static_cast<int>(state.players[1 - controller].library.size()));
+        }
+        else if (mode == PermAbilityMode::IceCounter)
+        {
+            // Only non-snow permanents gain anything from an ice counter (see the enumeration cap).
+            const bool grants = IceGrantsSnow(state);
+            int targets = 0;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.card.HasSupertype(Supertype::Snow)
+                    || (grants && q.ice_counters > 0)) { continue; }
+                ++targets;
+            }
+            useful = std::min(useful, targets);
         }
         if (useful <= 0) { break; }
 
@@ -12668,6 +13090,9 @@ inline const std::vector<Color>& EffectiveProduces(const GameState& state, int c
 inline const std::vector<Color>& UnconditionalProduces(const CardDefinition& def)
 {
     if (!def.params.any_color_filter) { return def.params.produces; }
+    // Arcum's Astrolabe: NO free "{T}: Add {C}" mode -- nothing is unconditional.
+    if (def.params.filter_no_free_colorless)
+    { static const std::vector<Color> kNothing{}; return kNothing; }
     static const std::vector<Color> kFreeModeOnly{ Color::Colorless };   // the "{T}: Add {C}" mode
     return kFreeModeOnly;
 }
@@ -13186,6 +13611,9 @@ inline bool HasUntappedRampFeeder(const GameState& state)
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.ramp_filter) { continue; }
+        // Astrolabe (any_color_filter + no free {C} mode, but mana_rock for the payer's `usable`
+        // gate): it cannot feed anything -- its only output itself needs a feed.
+        if (def->params.any_color_filter && def->params.filter_no_free_colorless) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
                    || (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                    || def->params.mana_rock;
@@ -13219,13 +13647,19 @@ inline bool HasUntappedRampFeeder(const GameState& state)
 inline int AnyColorFilterFedSlots(const GameState& state)
 {
     const int active = state.active_player_index;
-    int filters = 0, others = 0;
+    int filters_free = 0, filters_nofree = 0, others = 0;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
-        if (d->params.any_color_filter) { ++filters; continue; }
+        if (d->params.any_color_filter)
+        {
+            // Arcum's Astrolabe (filter_no_free_colorless): no free {C} mode, so it can never
+            // FEED another filter -- it splits out of the self-feeding arithmetic below.
+            if (d->params.filter_no_free_colorless) { ++filters_nofree; } else { ++filters_free; }
+            continue;
+        }
         if (d->params.ramp_filter)      { continue; }   // no free mode -> cannot feed anything
         const bool is_src = (d->tmpl == CardTemplate::BasicLand)
                          || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
@@ -13236,7 +13670,12 @@ inline int AnyColorFilterFedSlots(const GameState& state)
     }
     if (FloatFeedsRampFilterEnabled() && FloatLeftoverManaEnabled())
     { others += state.floating_mana.Total(); }
-    return std::min(filters, (filters + others) / 2);
+    // No-free filters convert FIRST (they never reduce the feed pool: they had no output to
+    // give up); free filters then self-feed on what remains -- with filters_nofree == 0 this is
+    // exactly the old min(F, (F + S) / 2), byte-identical for Capital City.
+    const int kn = std::min(filters_nofree, others + filters_free);
+    const int kf = std::min(filters_free, (others + filters_free - kn) / 2);
+    return kn + kf;
 }
 
 // True if `perm` (an any_color_filter) is inside AnyColorFilterFedSlots's quota.
@@ -13308,7 +13747,9 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
         // unit count AND the largest reachable coloured count), so it can offer a cast the payer
         // then refuses, never hide one.
         if (AnyColorFilterHasFedSlot(state, def, perm)) { ++pool.wild; }
-        else { pool.Add(Color::Colorless); }
+        // Arcum's Astrolabe: outside its fed quota it contributes NOTHING (no free {C} mode) --
+        // crediting the {C} here is the +4-phantom-mana over-credit its param exists to prevent.
+        else if (!def.params.filter_no_free_colorless) { pool.Add(Color::Colorless); }
         return;
     }
     if (def.params.ramp_filter)
@@ -15097,7 +15538,8 @@ inline bool FlowOrderEnabled()
 inline int SourceMaxNet(const CardDefinition& def)
 {
     if (def.params.is_filter)        { return 1; }
-    if (def.params.any_color_filter) { return 1; }
+    // Astrolabe: fed branch only (1 in, 1 out = 0) -- no free +1 {C} mode.
+    if (def.params.any_color_filter) { return def.params.filter_no_free_colorless ? 0 : 1; }
     if (def.params.ramp_filter) { const int p = static_cast<int>(def.params.produces.size());
                                   return p > 0 ? p - 1 : 0; }
     return ManaProducedPerTap(def);

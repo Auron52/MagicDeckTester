@@ -214,11 +214,32 @@ void GameEngine::UntapStep(GameState& state)
     ap.cards_drawn_this_turn     = 0;   // Fists of Flame drawn-count resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
     ap.life_gained_this_turn     = 0;   // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;   // Hollow One cycle/discard count (same lockstep)
+    // Rimescale Dragon's static ("Creatures with ice counters on them don't untap during their
+    // controllers' untap steps"). Two cheap gates before any lookup: only consulted when some
+    // permanent actually has an ice counter AND a source with the param is out -- every other
+    // deck pays one int-test per untap. Lockstep twin in SimulateEndAndStartNextTurn.
+    bool ice_locks = false;
+    {
+        bool any_ice = false;
+        for (const Permanent& p : state.battlefield)
+        { if (p.ice_counters > 0) { any_ice = true; break; } }
+        if (any_ice)
+        {
+            for (const Permanent& p : state.battlefield)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d && d->params.ice_counters_dont_untap) { ice_locks = true; break; }
+            }
+        }
+    }
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index == state.active_player_index)
         {
-            p.tapped            = false;
+            // The ice lock stops the UNTAP only; summoning sickness and per-turn flags still
+            // clear (the permanent is not phased out, it just stays tapped).
+            if (!(ice_locks && p.ice_counters > 0 && p.card.IsCreature()))
+            { p.tapped = false; }
             p.entered_this_turn = false;
             p.gained_control_this_turn = false;   // control-change sickness clears on YOUR untap (CR 302.6)
             p.storage_hold_this_turn = false;   // #6: the tap-vs-charge hold is a per-turn human choice
@@ -360,6 +381,7 @@ void GameEngine::UpkeepTail(GameState& state)
     // TurnSolver::SimulateEndAndStartNextTurn (lockstep); param-gated -> byte-identical elsewhere.
     PerformUpkeepCumulativeGifts(state);
     PerformUpkeepSacTutor(state);
+    PerformUpkeepSlumber(state);   // Marit Lage's Slumber (lockstep twin in SimulateEndAndStartNextTurn)
     // Mirri's Guile: arrange the top 3 at upkeep (before the draw). Lockstep in both worlds.
     PerformUpkeepReorder(state);
 
@@ -742,6 +764,7 @@ void GameEngine::ResolveStack(GameState& state)
         bool is_draw_spell = (def->tmpl == CardTemplate::DrawUntilNonland
                               || def->params.draw > 0
                               || def->params.etb_dig_count > 0
+                              || def->params.etb_self_draw > 0   // Ice-Fang / Astrolabe ETB draw
                               || TurnSolver::EquipmentEtbDrawFires(state, *def));
         std::vector<int> hand_before_nums;
         if (m_logger && is_draw_spell)

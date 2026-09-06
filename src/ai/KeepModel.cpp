@@ -560,6 +560,7 @@ MidGamePlanSummary SummarizePlanByNames(const std::vector<std::string>& cast_nam
         sum.total_mv += mv;
         if (mv > sum.max_cast_mv) { sum.max_cast_mv = mv; }
         sum.cards_drawn += def->params.draw;   // FIXED draw only (variable draw would be clairvoyant)
+        sum.cards_drawn += def->params.etb_self_draw;   // Ice-Fang / Astrolabe: fixed ETB draw
         // A variable draw / dig / recur engine (Treasure Hunt = draw_until_nonland, cascade, retrace,
         // Expressive Iteration, staged digs). Mirrors TurnSolver::OrderingOpaque so the "card-advantage
         // engine" signal is defined once. Non-clairvoyant: flags the KIND of spell, never how many
@@ -571,7 +572,8 @@ MidGamePlanSummary SummarizePlanByNames(const std::vector<std::string>& cast_nam
             || def->params.etb_exile_until_nonland
             || def->params.retrace
             || def->params.expressive_iteration
-            || def->params.draw > 0)
+            || def->params.draw > 0
+            || def->params.etb_self_draw > 0)
         { sum.draw_engine = 1; }
         // Fixed direct damage (Lightning Bolt = 3). X-spells (Crackle/Fireball) carry a variable
         // damage the name can't resolve, so exclude them (x_damage_multiplier > 1); the exact lethal

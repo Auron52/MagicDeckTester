@@ -29,6 +29,12 @@ enum class PermAbilityMode
     // by mana. The kill it converts unbounded mana into is a DECK-OUT rather than damage, which is
     // why it needs its own win-recognition path (opponentdeck::TakeFromTop sets opponent_decked).
     ExileTop,
+    // {cost}: Put an ice counter on target permanent  (Rimefeather Owl, cost "{2}" -- {1}{S} with
+    // the snow pip written generic). No {T}, no sacrifice -> repeatable, the Drain/ExileTop shape.
+    // Only useful against a NON-snow permanent (every permanent the Snow deck plays is already
+    // snow; the live targets are opponent spawns and a Marit Lage token), so the enumeration caps
+    // the K axis by the non-snow permanent count.
+    IceCounter,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -40,7 +46,8 @@ inline bool PermAbilityTaps(PermAbilityMode m)
 {
     return m != PermAbilityMode::SacDraw
         && m != PermAbilityMode::Drain
-        && m != PermAbilityMode::ExileTop;
+        && m != PermAbilityMode::ExileTop
+        && m != PermAbilityMode::IceCounter;
 }
 
 struct Permanent
@@ -110,6 +117,12 @@ struct Permanent
                                            // FireOnCastTriggers (both cast paths), reset at BOTH untap
                                            // sites (GameEngine::UntapStep + TurnSolver's per-turn reset)
                                            // -- rollout/executor lockstep or [fd-diverge].
+    int       ice_counters         = 0;    // Ice counters (Rimefeather Owl's {1}{S} activation is the
+                                           // only source). Read ONLY by the snow helpers (IsSnowPermanent
+                                           // under an ice_counters_are_snow source) and the
+                                           // ice_counters_dont_untap untap gate -- both param-gated, so
+                                           // it is inert (never inspected) for every other deck ->
+                                           // byte-identical.
     int       age_counters         = 0;    // Cumulative upkeep (Varchild's War-Riders; CardParams::
                                            // cumulative_upkeep_opp_token): one added at each of the
                                            // controller's upkeeps, and the upkeep cost is paid once per

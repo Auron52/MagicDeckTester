@@ -1,4 +1,15 @@
 {
+  "Abominable Treefolk": {
+    "cmc": 4.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{2}{G}{U}",
+    "oracle_text": "Trample\nAbominable Treefolk's power and toughness are each equal to the number of snow permanents you control.\nWhen this creature enters, tap target creature an opponent controls. That creature doesn't untap during its controller's next untap step.",
+    "power": "*",
+    "toughness": "*",
+    "type_line": "Snow Creature — Treefolk"
+  },
   "Acclaimed Contender": {
     "cmc": 3.0,
     "keywords": [],
@@ -137,6 +148,15 @@
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
   },
+  "Arcum's Astrolabe": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{S}",
+    "oracle_text": "({S} can be paid with one mana from a snow source.)\nWhen this artifact enters, draw a card.\n{1}, {T}: Add one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Snow Artifact"
+  },
   "Aria of Flame": {
     "cmc": 3.0,
     "keywords": [],
@@ -250,6 +270,17 @@
     "toughness": null,
     "type_line": "Artifact"
   },
+  "Blasted Landscape": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Blood Crypt": {
     "cmc": 0.0,
     "keywords": [],
@@ -320,6 +351,15 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Boreal Druid": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "{T}: Add {C}.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Snow Creature — Elf Druid"
+  },
   "Boros Garrison": {
     "cmc": 0.0,
     "keywords": [],
@@ -354,7 +394,7 @@
     "oracle_text": "{T}: Add {G}.",
     "power": null,
     "toughness": null,
-    "type_line": "Land // Land"
+    "type_line": "Land"
   },
   "Breaching Dragonstorm": {
     "cmc": 5.0,
@@ -413,6 +453,28 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment"
+  },
+  "Canyon Slough": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {B} or {R}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Swamp Mountain"
+  },
+  "Capital City": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{1}, {T}: Add one mana of any color.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Town"
   },
   "Carrion Feeder": {
     "cmc": 1.0,
@@ -499,6 +561,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Sliver"
+  },
+  "Coldsteel Heart": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{2}",
+    "oracle_text": "This artifact enters tapped.\nAs this artifact enters, choose a color.\n{T}: Add one mana of the chosen color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Snow Artifact"
   },
   "Colossus Hammer": {
     "cmc": 1.0,
@@ -593,7 +664,7 @@
     "oracle_text": "{T}: Add {B}.",
     "power": null,
     "toughness": null,
-    "type_line": "Land // Land"
+    "type_line": "Land"
   },
   "Dauntless Bodyguard": {
     "cmc": 1.0,
@@ -726,6 +797,28 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Drannith Stinger": {
+    "cmc": 2.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Whenever you cycle another card, this creature deals 1 damage to each opponent.\nCycling {1} ({1}, Discard this card: Draw a card.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Wizard"
+  },
+  "Drifting Meadow": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {W}.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Dwarven Hold": {
     "cmc": 0.0,
@@ -919,6 +1012,28 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Festering Thicket": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {B} or {G}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Swamp Forest"
+  },
+  "Fetid Pools": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {U} or {B}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Island Swamp"
+  },
   "Fiery Islet": {
     "cmc": 0.0,
     "keywords": [],
@@ -955,6 +1070,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Fluctuator": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{2}",
+    "oracle_text": "Cycling abilities you activate cost {2} less to activate.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Forbidden Orchard": {
     "cmc": 0.0,
     "keywords": [],
@@ -984,6 +1108,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Forsake the Worldly": {
+    "cmc": 3.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "Exile target artifact or enchantment.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Fortifying Draught": {
     "cmc": 1.0,
     "keywords": [],
@@ -1001,6 +1136,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment"
+  },
+  "Frost Augur": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "{S}, {T}: Look at the top card of your library. If it's a snow card, you may reveal it and put it into your hand. ({S} can be paid with one mana from a snow source.)",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Snow Creature — Human Wizard"
   },
   "Frostboil Snarl": {
     "cmc": 0.0,
@@ -1057,6 +1201,17 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Scout"
+  },
+  "Glittering Massif": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {R} or {W}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Mountain Plains"
   },
   "Glorybringer": {
     "cmc": 5.0,
@@ -1271,6 +1426,15 @@
     "toughness": "2",
     "type_line": "Creature — Sliver"
   },
+  "Highland Weald": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {R} or {G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Snow Land"
+  },
   "Hinata, Dawn-Crowned": {
     "cmc": 4.0,
     "keywords": [
@@ -1282,6 +1446,17 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Legendary Creature — Kirin Spirit"
+  },
+  "Hollow One": {
+    "cmc": 5.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "{5}",
+    "oracle_text": "This spell costs {2} less to cast for each card you've cycled or discarded this turn.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Artifact Creature — Golem"
   },
   "Horizon Canopy": {
     "cmc": 0.0,
@@ -1324,6 +1499,18 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Ice-Fang Coatl": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flash",
+      "Flying"
+    ],
+    "mana_cost": "{G}{U}",
+    "oracle_text": "Flash\nFlying\nWhen this creature enters, draw a card.\nThis creature has deathtouch as long as you control at least three other snow permanents.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Snow Creature — Snake"
   },
   "Icy Blast": {
     "cmc": 1.0,
@@ -1404,6 +1591,17 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Irrigated Farmland": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {W} or {U}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Plains Island"
+  },
   "Island": {
     "cmc": 0.0,
     "keywords": [],
@@ -1452,6 +1650,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land — Mountain Forest Plains"
+  },
+  "Kaldring, the Rimestaff": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}{B}",
+    "oracle_text": "{T}: You may play target snow permanent card from your graveyard this turn. If you do, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Snow Artifact"
   },
   "Karrthus, Tyrant of Jund": {
     "cmc": 7.0,
@@ -1761,6 +1968,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Marit Lage's Slumber": {
+    "cmc": 2.0,
+    "keywords": [
+      "Scry"
+    ],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Whenever Marit Lage's Slumber or another snow permanent you control enters, scry 1.\nAt the beginning of your upkeep, if you control ten or more snow permanents, sacrifice Marit Lage's Slumber. If you do, create Marit Lage, a legendary 20/20 black Avatar creature token with flying and indestructible.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Snow Enchantment"
   },
   "Marsh Flats": {
     "cmc": 0.0,
@@ -2110,6 +2328,17 @@
     "toughness": "1",
     "type_line": "Creature — Sliver"
   },
+  "Polluted Mire": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {B}.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Ponder": {
     "cmc": 1.0,
     "keywords": [],
@@ -2350,6 +2579,37 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Rimefeather Owl": {
+    "cmc": 7.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{5}{U}{U}",
+    "oracle_text": "Flying\nRimefeather Owl's power and toughness are each equal to the number of snow permanents on the battlefield.\n{1}{S}: Put an ice counter on target permanent.\nPermanents with ice counters on them are snow.",
+    "power": "*",
+    "toughness": "*",
+    "type_line": "Snow Creature — Bird"
+  },
+  "Rimescale Dragon": {
+    "cmc": 7.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{5}{R}{R}",
+    "oracle_text": "Flying\n{2}{S}: Tap target creature and put an ice counter on it. ({S} can be paid with one mana from a snow source.)\nCreatures with ice counters on them don't untap during their controllers' untap steps.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Snow Creature — Dragon"
+  },
+  "Rimewood Falls": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {G} or {U}.)\nThis land enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Snow Land — Forest Island"
+  },
   "Rite of Flame": {
     "cmc": 1.0,
     "keywords": [],
@@ -2434,6 +2694,17 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Scattered Groves": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {G} or {W}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Forest Plains"
+  },
   "Scavenging Ooze": {
     "cmc": 2.0,
     "keywords": [],
@@ -2453,6 +2724,15 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Creature — Dragon"
+  },
+  "Scrying Sheets": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{1}{S}, {T}: Look at the top card of your library. If that card is snow, you may reveal it and put it into your hand. ({S} can be paid with one mana from a snow source.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Snow Land"
   },
   "Searing Blaze": {
     "cmc": 2.0,
@@ -2532,6 +2812,17 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Sheltered Thicket": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {R} or {G}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Mountain Forest"
+  },
   "Shivan Dragon": {
     "cmc": 6.0,
     "keywords": [
@@ -2579,6 +2870,15 @@
     "toughness": "1",
     "type_line": "Creature — Goblin"
   },
+  "Skred": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Skred deals damage to target creature equal to the number of snow permanents you control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Skullcrack": {
     "cmc": 2.0,
     "keywords": [],
@@ -2625,6 +2925,44 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Smoldering Crater": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {R}.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Snow-Covered Forest": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {G}.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Basic Snow Land — Forest"
+  },
+  "Snow-Covered Island": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {U}.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Basic Snow Land — Island"
+  },
+  "Snow-Covered Mountain": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {R}.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Basic Snow Land — Mountain"
   },
   "Sol Ring": {
     "cmc": 1.0,
@@ -2923,7 +3261,7 @@
     "oracle_text": "Look at the top seven cards of your library. You may put a creature card from among them onto the battlefield. If that card has mana value 3 or less, it enters with three additional +1/+1 counters on it. Put the rest on the bottom of your library in a random order.",
     "power": null,
     "toughness": null,
-    "type_line": "Sorcery // Land"
+    "type_line": "Sorcery"
   },
   "Twinflame": {
     "cmc": 2.0,
@@ -2989,6 +3327,17 @@
     "power": "1",
     "toughness": "2",
     "type_line": "Creature — Fungus"
+  },
+  "Unearth": {
+    "cmc": 1.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "{B}",
+    "oracle_text": "Return target creature card with mana value 3 or less from your graveyard to the battlefield.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Unexpectedly Absent": {
     "cmc": 2.0,
@@ -3201,190 +3550,5 @@
     "power": null,
     "toughness": null,
     "type_line": "Land — Swamp Forest Island"
-  },
-  "Blasted Landscape": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "{T}: Add {C}.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land"
-  },
-  "Canyon Slough": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "({T}: Add {B} or {R}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land — Swamp Mountain"
-  },
-  "Capital City": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "{T}: Add {C}.\n{1}, {T}: Add one mana of any color.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land — Town"
-  },
-  "Drannith Stinger": {
-    "cmc": 2.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "{1}{R}",
-    "oracle_text": "Whenever you cycle another card, this creature deals 1 damage to each opponent.\nCycling {1} ({1}, Discard this card: Draw a card.)",
-    "power": "2",
-    "toughness": "2",
-    "type_line": "Creature — Human Wizard"
-  },
-  "Drifting Meadow": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "This land enters tapped.\n{T}: Add {W}.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land"
-  },
-  "Festering Thicket": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "({T}: Add {B} or {G}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land — Swamp Forest"
-  },
-  "Fetid Pools": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "({T}: Add {U} or {B}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land — Island Swamp"
-  },
-  "Fluctuator": {
-    "cmc": 2.0,
-    "keywords": [],
-    "mana_cost": "{2}",
-    "oracle_text": "Cycling abilities you activate cost {2} less to activate.",
-    "power": null,
-    "toughness": null,
-    "type_line": "Artifact"
-  },
-  "Forsake the Worldly": {
-    "cmc": 3.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "{2}{W}",
-    "oracle_text": "Exile target artifact or enchantment.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Instant"
-  },
-  "Glittering Massif": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "({T}: Add {R} or {W}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land — Mountain Plains"
-  },
-  "Hollow One": {
-    "cmc": 5.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "{5}",
-    "oracle_text": "This spell costs {2} less to cast for each card you've cycled or discarded this turn.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": "4",
-    "toughness": "4",
-    "type_line": "Artifact Creature — Golem"
-  },
-  "Irrigated Farmland": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "({T}: Add {W} or {U}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land — Plains Island"
-  },
-  "Polluted Mire": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "This land enters tapped.\n{T}: Add {B}.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land"
-  },
-  "Scattered Groves": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "({T}: Add {G} or {W}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land — Forest Plains"
-  },
-  "Sheltered Thicket": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "({T}: Add {R} or {G}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land — Mountain Forest"
-  },
-  "Smoldering Crater": {
-    "cmc": 0.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "",
-    "oracle_text": "This land enters tapped.\n{T}: Add {R}.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Land"
-  },
-  "Unearth": {
-    "cmc": 1.0,
-    "keywords": [
-      "Cycling"
-    ],
-    "mana_cost": "{B}",
-    "oracle_text": "Return target creature card with mana value 3 or less from your graveyard to the battlefield.\nCycling {2} ({2}, Discard this card: Draw a card.)",
-    "power": null,
-    "toughness": null,
-    "type_line": "Sorcery"
   }
 }

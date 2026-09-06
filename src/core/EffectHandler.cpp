@@ -514,6 +514,12 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
         {
             damage = def.params.landfall_damage;
         }
+        // Skred: damage = the live snow-permanent count, computed on RESOLUTION (CR 608.2b).
+        // Lockstep with CreatureBurnDamage (the rollout's amount).
+        if (def.params.damage_equals_snow_permanents)
+        {
+            damage = SnowPermanentCount(state, entry.controller_index);
+        }
         // Soulfire Eruption: bounded multi-target dig. Exile + STAGE the top N cards (opponent +
         // opp creatures + self-if-safe), the face takes the highest MV, the controller the lowest.
         // Mirrors ApplyPlanDirect (lockstep). `damage` = face damage, applied to the opp by the

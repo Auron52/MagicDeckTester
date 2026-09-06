@@ -4026,6 +4026,27 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                             a.tutor_target);
             }
         }
+        else if (a.kind == Action::Kind::GraveyardPlayAbility)
+        {
+            // Kaldring (executor mirror): probe stranded-ness FIRST, then pay the played card's
+            // own cost, then commit -- lockstep twin of the rollout's trailing-pass site.
+            const CardDefinition* td = CardDatabase::Instance().Lookup(a.tutor_target);
+            ManaPool avail = AvailableManaPool(state);
+            if (ApplyGraveyardPlayAbility(state, state.active_player_index, a.sac_source_id,
+                                          a.tutor_target.str(), /*commit=*/false)
+                && TapForCost(state, a.cost, avail,
+                              /*for_creature=*/td && td->card.IsCreature()))
+            {
+                ApplyGraveyardPlayAbility(state, state.active_player_index, a.sac_source_id,
+                                          a.tutor_target.str(), /*commit=*/true);
+                if (m_logger)
+                {
+                    m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                         "played " + a.tutor_target.str()
+                                         + " from the graveyard (tapped)");
+                }
+            }
+        }
         else if (a.kind == Action::Kind::ActivateRevealTop)
         {
             // Call of the Wild (executor mirror): pay K x cost, K sequential reveal-deploys.
@@ -4213,6 +4234,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 { if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, false); } }
                 else
                 {
+                    // Site-8 detection input (lockstep twin of the rollout's): did the gated
+                    // look-at-top (Scrying Sheets / Frost Augur) move a card into hand?
+                    const bool snow_look = a.ability_mode == Action::AbilityMode::TapDraw
+                        && !a.def->params.tap_draw_requires_top_supertype.empty();
+                    const std::size_t hand_before = snow_look
+                        ? state.players[state.active_player_index].hand.size() : 0;
                     ApplyPermAbility(state, state.active_player_index, a.sac_source_id,
                                      a.ability_mode);
                     if (m_logger)
@@ -4237,6 +4264,40 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
                                                    PermAbilityLabel(a.ability_mode)); }
                         }
+                    }
+                    // BREAKPOINT SITE 8 executor twin (rollout: TurnSolver's ActivatePermAbility
+                    // trailing branch): the found snow card is castable/playable THIS turn. The
+                    // class is unconditionally in BpSiteMask, so both worlds always count this
+                    // occurrence -- indices stay aligned. resolve_draw_breakpoint honours the
+                    // plan's searched continuation (bp_choice) or re-solves with the full
+                    // searched engine (MTG_EXEC_BP_SEARCHED).
+                    // PLAYABILITY GATE -- the lockstep twin of the rollout's (see the TurnSolver
+                    // site-8 comment): re-solve only when the found card is playable now, or the
+                    // two worlds' bp_seen counting diverges.
+                    bool snow_look_worth = false;
+                    if (snow_look
+                        && state.players[state.active_player_index].hand.size() > hand_before)
+                    {
+                        const Player& lap = state.players[state.active_player_index];
+                        const CardDefinition* fd =
+                            CardDatabase::Instance().LookupCached(lap.hand.back());
+                        if (fd && fd->card.IsLand())
+                        {
+                            snow_look_worth =
+                                lap.lands_played_this_turn < 1 + lap.bonus_land_drops_this_turn;
+                        }
+                        else if (fd)
+                        {
+                            ManaPool have2 = AvailableManaPool(state);
+                            have2.AddPool(state.floating_mana);
+                            snow_look_worth = static_cast<int>(have2.Total())
+                                           >= fd->card.m_mana_cost.ManaValue();
+                        }
+                    }
+                    if (snow_look_worth)
+                    {
+                        rdb_site = a.def;
+                        resolve_draw_breakpoint(0);
                     }
                 }
             }
@@ -4888,7 +4949,12 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                         // rollout apply and the value-model reach estimate (all use FindBurnKillTarget).
                         : def->params.death_trigger_damage > 0
                           ? FindBurnKillTarget(state, state.active_player_index, def->params.damage)
-                          : FindOpponentCreature(state);
+                          // Skred: dynamic snow-count amount -- prefer a creature it kills.
+                          // Lockstep with the rollout's damage_equals_snow_permanents branch.
+                          : def->params.damage_equals_snow_permanents
+                            ? FindBurnKillTarget(state, state.active_player_index,
+                                                 CreatureBurnDamage(*def, state))
+                            : FindOpponentCreature(state);
             // Prowess line: a creature-burn with no opponent creature self-casts onto a surviving own
             // creature (the enumeration only offered it when such a target + a prowess attacker exist).
             // Lockstep with ApplyPlanDirect / the enumeration gate. Not for Invigorate/Swords.

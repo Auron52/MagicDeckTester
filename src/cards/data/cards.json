@@ -7172,6 +7172,400 @@
     "reanimate_creature_max_mv": 3,
     "cycling_cost": "{2}"
    }
+  },
+  {
+   "name": "Snow-Covered Island",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Basic",
+    "Snow"
+   ],
+   "subtypes": [
+    "Island"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {U}.)",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U"
+    ]
+   }
+  },
+  {
+   "name": "Snow-Covered Forest",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Basic",
+    "Snow"
+   ],
+   "subtypes": [
+    "Forest"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {G}.)",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G"
+    ]
+   }
+  },
+  {
+   "name": "Snow-Covered Mountain",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Basic",
+    "Snow"
+   ],
+   "subtypes": [
+    "Mountain"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {R}.)",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R"
+    ]
+   }
+  },
+  {
+   "name": "Rimewood Falls",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Snow"
+   ],
+   "subtypes": [
+    "Forest",
+    "Island"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {G} or {U}.)\nThis land enters tapped.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "U"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Highland Weald",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Snow"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {R} or {G}.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "G"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Scrying Sheets",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Snow"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{1}{S}, {T}: Look at the top card of your library. If that card is snow, you may reveal it and put it into your hand. ({S} can be paid with one mana from a snow source.) [Both clauses modelled. The mana ability is produces C. The look ability rides tap_draw_cost \"{2}\" + tap_draw_requires_top_supertype Snow: the shared TapDraw resolution looks the top card's DEFINITION up (placeholder masks are empty) and on a snow match moves it to hand DIRECTLY -- reveal-and-put-into-hand is NOT a draw (USER 2026-09-06): no cards_drawn_this_turn, no draw watchers. A non-snow top stays ON TOP (mana/tap spent -- the real whiff; the clairvoyant search declines it; 56 of this deck's 60 cards are snow, the 4 Skred being plain Instants). The found card IS castable/playable the SAME turn (USER 2026-09-06): the activation opens breakpoint site 8, whose re-solve runs in both worlds. The 'you may' decline is the human's via the shared dig chooser; autonomous default is take (weakly dominant). PARTIAL: {S} modelled as generic {1}; exact in this deck -- every mana source is snow; a real forward-looking snow-mana model is the queued follow-up (USER 2026-09-06, done last).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "tap_draw_cost": "{2}",
+    "tap_draw_requires_top_supertype": "Snow"
+   }
+  },
+  {
+   "name": "Skred",
+   "mana_cost": "{R}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Skred deals damage to target creature equal to the number of snow permanents you control. [Damage = a live battlefield scan of snow permanents you control, evaluated on RESOLUTION (CR 608.2b) via the shared SnowPermanentCount -- never baked at cast. NOT itself a snow card and no {S} in its cost. GOLDFISH-INERT by harness construction: opponent spawns never attack or block and Skred has no face-damage rider, so killing one contributes ~0 to avg win turn; with no opponent creature it is uncastable. Modelled faithfully regardless -- the count and the kill are exact; its ~zero card score is a REAL property of this harness, not a modelling gap.]",
+   "template": "direct_damage",
+   "parameters": {
+    "damage": 0,
+    "targeting": "creature",
+    "damage_equals_snow_permanents": true
+   }
+  },
+  {
+   "name": "Boreal Druid",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Snow"
+   ],
+   "subtypes": [
+    "Elf",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{T}: Add {C}.",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "C"
+    ]
+   }
+  },
+  {
+   "name": "Coldsteel Heart",
+   "mana_cost": "{2}",
+   "types": [
+    "Artifact"
+   ],
+   "supertypes": [
+    "Snow"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This artifact enters tapped.\nAs this artifact enters, choose a color.\n{T}: Add one mana of the chosen color. [Mana rock producing WUBRG (Ancient Cornucopia pattern) + enters_tapped (Fire Diamond pattern). The ETB 'choose a color, locked forever' restriction is NOT modelled -- the same simplification already applied to Cavern of Souls / Unclaimed Territory / Secluded Courtyard's ETB type choice: any single tap yields any one of the five colors rather than a color fixed at ETB. Permissive-direction over-approximation of COLOUR only, never AMOUNT (one mana per tap). PROVISIONAL pending user sign-off.]",
+   "template": "custom",
+   "parameters": {
+    "mana_rock": true,
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Abominable Treefolk",
+   "mana_cost": "{2}{G}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Snow"
+   ],
+   "subtypes": [
+    "Treefolk"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "Trample\nAbominable Treefolk's power and toughness are each equal to the number of snow permanents you control.\nWhen this creature enters, tap target creature an opponent controls. That creature doesn't untap during its controller's next untap step. [Printed */* modelled as pt_equals_snow_permanents_you_control (base 0/0 + live SnowPermanentCount on BOTH axes -- the Adeline/Voice-token CDA pattern; it counts itself, so on the battlefield it is never a 0/0 and never dies to the toughness SBA). Trample is parsed but INERT BY CONSTRUCTION (no blocking is modelled; all combat damage already reaches the face). etb_tap_opp_creature models the ETB faithfully (largest opponent creature, the Chupacabra pick; fires in the 8-of-10 spawn game indices) but its PAYOFF IS PROVABLY 0: no engine path reads an opponent permanent's tapped state. PARTIAL: the \"doesn't untap during its controller's next untap step\" rider is NOT modelled -- provably unreachable, the passive opponent never takes a turn so it has no untap step to skip. PROVISIONAL pending user sign-off.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "pt_equals_snow_permanents_you_control": true,
+    "etb_tap_opp_creature": true
+   }
+  },
+  {
+   "name": "Arcum's Astrolabe",
+   "mana_cost": "{1}",
+   "types": [
+    "Artifact"
+   ],
+   "supertypes": [
+    "Snow"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "({S} can be paid with one mana from a snow source.)\nWhen this artifact enters, draw a card.\n{1}, {T}: Add one mana of any color. [PARTIAL: printed cost {S} modelled as generic {1} -- exact in this deck (every mana source is snow) and mana value stays 1 = printed cmc; the forward-looking snow-mana model is the queued follow-up (USER 2026-09-06, done last). ETB draw = etb_self_draw (a REAL draw), fired from FireOwnEtbTriggers so executor and rollout stay lockstep. The mana ability is any_color_filter + filter_no_free_colorless: Capital City's flag bakes in a free \"{T}: Add {C}\" mode this card LACKS -- the no-free variant gates every free-mode credit site (an AMOUNT over-credit of up to +4 mana/turn on 4 copies otherwise). mana_rock is required for an artifact to be a payment source at all. Colour on the fed activation is auto-resolved in payment (the pip forces it).]",
+   "template": "custom",
+   "parameters": {
+    "mana_rock": true,
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G"
+    ],
+    "any_color_filter": true,
+    "filter_no_free_colorless": true,
+    "etb_self_draw": 1
+   }
+  },
+  {
+   "name": "Frost Augur",
+   "mana_cost": "{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Snow"
+   ],
+   "subtypes": [
+    "Human",
+    "Wizard"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 2,
+   "oracle_text": "{S}, {T}: Look at the top card of your library. If it's a snow card, you may reveal it and put it into your hand. ({S} can be paid with one mana from a snow source.) [SHARED mechanism with Scrying Sheets: tap_draw_cost \"{1}\" + tap_draw_requires_top_supertype Snow (see that entry for the full model: non-snow top stays on top; put-into-hand is NOT a draw; breakpoint site 8 makes the find playable the SAME turn; dig-chooser decline). The {T} on a CREATURE is summoning-sickness gated (CanTap in the shared enumeration), so a fresh Augur cannot activate the turn it lands, and activating forfeits its attack. PARTIAL: {S} modelled as generic {1}; exact in this deck -- every mana source is snow; forward-looking snow-mana model queued last (USER 2026-09-06).]",
+   "template": "custom",
+   "parameters": {
+    "tap_draw_cost": "{1}",
+    "tap_draw_requires_top_supertype": "Snow"
+   }
+  },
+  {
+   "name": "Ice-Fang Coatl",
+   "mana_cost": "{G}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Snow"
+   ],
+   "subtypes": [
+    "Snake"
+   ],
+   "keywords": [
+    "Flying",
+    "Flash"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Flash\nFlying\nWhen this creature enters, draw a card.\nThis creature has deathtouch as long as you control at least three other snow permanents. [The Snow supertype is load-bearing: this body feeds Skred / Abominable Treefolk / Marit Lage's Slumber's snow counts. ETB draw = etb_self_draw 1 (forced, untargeted, a REAL draw) in the shared FireOwnEtbTriggers cascade. PARTIAL: Flash is inert -- no priority window exists outside a main phase with an empty stack (the Chord-of-Calling disclosed gap). PARTIAL: Flying is inert -- no blocking is modelled; the one engine reader (Dragon Tempest's haste_on_flying_enter) is not in this deck. PARTIAL: the conditional deathtouch is inert and deliberately NOT modelled (Deathtouch is deliberately NOT in keywords -- listing it would grant it unconditionally): Keyword::Deathtouch is read by zero engine code, and it could only matter on damage to a creature, which never happens (opponent never blocks or attacks; the Coatl has no fight/ping). All three PROVISIONAL pending user sign-off.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_self_draw": 1
+   }
+  },
+  {
+   "name": "Kaldring, the Rimestaff",
+   "mana_cost": "{1}{U}{B}",
+   "types": [
+    "Artifact"
+   ],
+   "supertypes": [
+    "Legendary",
+    "Snow"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: You may play target snow permanent card from your graveyard this turn. If you do, it enters tapped. [MDFC BACK FACE of Jorn, God of Winter // Kaldring, the Rimestaff. The Jorn face ({2}{G} 3/3 Legendary Snow Creature - God, \"Whenever Jorn attacks, untap each snow permanent you control\") is NOT modelled -- the decklist names Kaldring explicitly; PROVISIONAL deferral pending user sign-off (full nonland-MDFC face choice is the follow-up if wanted; Jorn would also flip the deck second-main-relevant). The ability is Action::Kind::GraveyardPlayAbility: {T} only (repeatable each turn), one plan variant per distinct legal graveyard NAME (GYP# signature, gyplay= verb -- the Haven convention). A NONLAND target is cast for its own mana cost; a LAND consumes the turn's land drop. \"This turn\" is collapsed into one atomic action (single main phase; activating without playing is strictly dominated). \"If you do, it enters tapped\" is applied inside the shared resolver. Graveyard predicates route ZoneCard (placeholder masks are empty). EnforceLegendRule fires on the play path (4x Marit Lage's Slumber is Legendary). NOTE: a land played this way does not route through LandPlay, so land-only etb params would not fire -- none of this deck's lands carry one.]",
+   "template": "custom",
+   "parameters": {
+    "gy_play_cost": "{0}",
+    "gy_play_requires_supertype": "Snow",
+    "gy_play_permanent_only": true,
+    "gy_play_enters_tapped": true
+   }
+  },
+  {
+   "name": "Marit Lage's Slumber",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Enchantment"
+   ],
+   "supertypes": [
+    "Legendary",
+    "Snow"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Whenever Marit Lage's Slumber or another snow permanent you control enters, scry 1.\nAt the beginning of your upkeep, if you control ten or more snow permanents, sacrifice Marit Lage's Slumber. If you do, create Marit Lage, a legendary 20/20 black Avatar creature token with flying and indestructible. [CLAUSE 1 = snow_enter_scry 1: a WATCHER fired once per copy per entering snow permanent (its own enter included), from BOTH FireEtbWatchers AND the tail of LandPlay's ETB block (land drops do not route through FireEtbWatchers and most of this deck's snow permanents are lands); routes through the shared ScryTop so the human scry chooser surfaces unchanged. CLAUSE 2 = upkeep_snow_threshold 10 + upkeep_sac_creates_token: MANDATORY intervening-if at the upkeep, PerformUpkeepSlumber (the Defense-of-the-Heart shape) re-scans after each resolution -- chaining two in one upkeep needs 11+ snow permanents, CR-correct. The token is LEGENDARY (EnforceLegendRule fires -- with 4 copies a second Marit Lage is reachable and keeping both 20/20s would over-count) and NOT snow. Flying and Indestructible are populated but INERT (no blockers; no opponent removal or damage) -- the LIVE parts are the 20/20 body (exactly lethal from 20 in one connection) and the self-sacrifice.]",
+   "template": "custom",
+   "parameters": {
+    "snow_enter_scry": 1,
+    "upkeep_snow_threshold": 10,
+    "upkeep_sac_creates_token": true,
+    "upkeep_sac_token_power": 20,
+    "upkeep_sac_token_toughness": 20,
+    "upkeep_sac_token_subtypes": [
+     "Avatar"
+    ],
+    "upkeep_sac_token_keywords": [
+     "Flying",
+     "Indestructible"
+    ],
+    "upkeep_sac_token_legendary": true
+   }
+  },
+  {
+   "name": "Rimefeather Owl",
+   "mana_cost": "{5}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Snow"
+   ],
+   "subtypes": [
+    "Bird"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "Flying\nRimefeather Owl's power and toughness are each equal to the number of snow permanents on the battlefield.\n{1}{S}: Put an ice counter on target permanent.\nPermanents with ice counters on them are snow. [Printed */* = pt_equals_snow_permanents_on_battlefield: base 0/0 + the GLOBAL count on BOTH axes (unlike Abominable Treefolk's you-control variant -- load-bearing because the ice ability can make an OPPONENT permanent snow). The Owl is itself snow, so it is never a 0/0 on the battlefield. 'Permanents with ice counters are snow' = ice_counters_are_snow, a LAYER-4 static evaluated LIVE (never baked into the target's mask -- the grant ends when the Owl leaves, CR 706.2). The activation = ice_counter_cost \"{2}\" (PARTIAL: {1}{S} with the snow pip generic; exact in this deck -- every mana source is snow; forward-looking model queued last, USER 2026-09-06), PermAbilityMode::IceCounter: no {T}, repeatable, K capped by the NON-snow battlefield count (every permanent this deck plays is already snow -- the live targets are opponent spawns and a Marit Lage token). SHIPS AS A PAIR with Rimescale Dragon's ice_counters_dont_untap static (the only real cost of icing our own Marit Lage). Human target pick rides the shared dig chooser; autonomous pick prefers a non-snow opponent creature and skips own permanents while a don't-untap source is out. PARTIAL: Flying inert -- no blocking is modelled.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "pt_equals_snow_permanents_on_battlefield": true,
+    "ice_counter_cost": "{2}",
+    "ice_counters_are_snow": true
+   }
+  },
+  {
+   "name": "Rimescale Dragon",
+   "mana_cost": "{5}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Snow"
+   ],
+   "subtypes": [
+    "Dragon"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 5,
+   "toughness": 5,
+   "oracle_text": "Flying\n{2}{S}: Tap target creature and put an ice counter on it. ({S} can be paid with one mana from a snow source.)\nCreatures with ice counters on them don't untap during their controllers' untap steps. [Body modelled exactly: 5/5 Snow Dragon for {5}{R}{R}; Flying inert (no blocking is modelled). The {2}{S} ACTIVATED ability is DEFERRED as unobservable (the Icy Blast precedent): tapping opponent creatures changes nothing (spawns exist in 8 of 10 game indices but no engine path reads an opponent permanent's tapped state, and they never attack or block), and icing our OWN creatures is strictly self-harmful under this card's static. PROVISIONAL pending user sign-off. The STATIC ('creatures with ice counters don't untap') IS modelled = ice_counters_dont_untap, gating GameEngine::UntapStep and the rollout untap mirror -- shipped as a PAIR with Rimefeather Owl's ice ability, because it is the only real cost of the Owl icing our own Marit Lage token; omitting it would hand the search a free pump the real card punishes. Every permanent in this deck is already snow, so an ice counter feeds the snow counts only via the Owl's static on the one non-snow permanent we can control (the Marit Lage token).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "ice_counters_dont_untap": true
+   }
   }
  ]
 }

@@ -146,6 +146,20 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     // Forbidden Orchard played this turn: it is tapped for mana this turn too, so spawn the
     // opponent's Spirit now (the turn-start spawn only covers copies already in play).
     if (opts.spawn_orchard_spirit && IsForbiddenOrchard(&fdef)) { SpawnOpponentSpirit(state); }
+    // Snow-enter scry watcher (Marit Lage's Slumber): land drops do NOT route through
+    // FireEtbWatchers, and most of the Snow deck's snow permanents are lands -- so the narrow,
+    // param-gated watcher is hooked here too. Deliberately NOT a blanket FireEtbWatchers call
+    // (that would change every deck's enter cascade); one supertype bit-test for non-snow decks.
+    // This is THE land drop for all three callers, so this one edit is executor/rollout lockstep.
+    // Re-find the just-played land by number: the ETBs above can reshape the battlefield (a Karoo
+    // bounce erases an element, an Orchard spawn appends one), so "last element" is not it.
+    for (int li = static_cast<int>(state.battlefield.size()) - 1; li >= 0; --li)
+    {
+        const Permanent& lp = state.battlefield[li];
+        if (!lp.is_token && lp.card.m_number == perm.card.m_number
+            && lp.controller_index == state.active_player_index)
+        { FireSnowEnterWatchers(state, li); break; }
+    }
     return true;
 }
 

@@ -2024,7 +2024,10 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // The conversion is NOT lost by ranking it early: the scarcity greedy only ever offers this
     // land its {C} mode (kind 3, generic/{C} pips), and a COLOURED pip that needs the conversion
     // falls through to the backtracker, which branches over feed and output colour explicitly.
-    if (def.params.any_color_filter) { return 6; }
+    // Astrolabe (filter_no_free_colorless): NO unconditional output, so the rank-6 "spend the
+    // free {C} early" rationale above does not apply -- it is a pure conversion source and takes
+    // the late conversion tier with Cascade Bluffs / Ferrous Lake.
+    if (def.params.any_color_filter && !def.params.filter_no_free_colorless) { return 6; }
     if (IsManaConversionSource(def.params)) { return 25; }
     const std::vector<Color>& prod = EffectiveProduces(s, active, def);
     const int amt = ManaProducedPerTap(def);

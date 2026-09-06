@@ -1295,7 +1295,10 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             if (fbits == 0) { continue; }   // no colours -> this filter makes nothing usable
             if (def->params.any_color_filter)
             {
-                fbits |= static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless));
+                // Astrolabe (filter_no_free_colorless): no free {C} mode -> Colorless is NOT
+                // joined; the fed mode's colours are its whole reachable set.
+                if (!def->params.filter_no_free_colorless)
+                { fbits |= static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless)); }
                 srcs.push_back({ fbits, 1, 1, i });
             }
             else if (def->params.is_filter)
@@ -2373,6 +2376,8 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         {
             // Capital City: "{T}: Add {C}" (free), or "{1},{T}: Add one mana of any color".
             // The free mode first, so a board that only needs colourless never spends a feed.
+            // Astrolabe (filter_no_free_colorless) has NO free mode -- fed branch only.
+            if (!def->params.filter_no_free_colorless)
             { ManaPool f = floating; f.Add(Color::Colorless, 1); if (activate(f)) { return true; } }
             if (floating.Total() >= 1 && !produces.empty())
             {

@@ -3897,8 +3897,14 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
                || HasDoubleStrikeFromLords(def.card, state.battlefield, state.active_player_index);
         // Adeline (power = creatures you control): estimate as the current creature count
         // plus 1 for herself entering. Her printed power is 0, so without this she scores 0.
+        // Snow twins (Abominable Treefolk = you-control count, Rimefeather Owl = global count):
+        // same +1-for-itself-entering shape -- both are snow permanents.
         int dyn = def.params.power_equals_creature_count
-                  ? CreatureCount(state, state.active_player_index) + 1 : 0;
+                  ? CreatureCount(state, state.active_player_index) + 1
+                  : def.params.pt_equals_snow_permanents_you_control
+                  ? SnowPermanentCount(state, state.active_player_index) + 1
+                  : def.params.pt_equals_snow_permanents_on_battlefield
+                  ? SnowPermanentCount(state, -1) + 1 : 0;
         int power = (def.card.m_power.value_or(0) + dyn + lord_pb) * (ds ? 2 : 1);
         // Cascade CREATURE credit (Maelstrom Wanderer / Annoyed Altisaur / Boarding Party):
         // the creature branch used to return before the generic cascade estimate below, so a
@@ -4018,6 +4024,23 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
             }
         }
         return per * fanout;
+    }
+
+    // Marit Lage's Slumber: a 2-mana enchantment whose payoff is a 20/20 at 10+ snow permanents.
+    // Without a branch it falls to the generic `return DMG;` (indistinguishable from any spell),
+    // so the greedy/d0 leaf never prioritises deploying it. Score by DISTANCE to the threshold:
+    // near 10 snow permanents it approaches a one-attack-lethal body's value; far away it is a
+    // cheap early drop whose scry watcher still helps (small floor). +1 counts the Slumber itself
+    // entering (it is snow).
+    if (def.params.upkeep_snow_threshold > 0)
+    {
+        const int have = SnowPermanentCount(state, state.active_player_index) + 1;
+        const int need = std::max(0, def.params.upkeep_snow_threshold - have);
+        // 20 power * DMG when imminent, tapering by distance; floor at DMG (never below a
+        // generic spell -- it also scries on every snow enter).
+        const int val = (need <= 0) ? 20 * DMG
+                                    : std::max(DMG, 20 * DMG / (1 + 2 * need));
+        return val;
     }
 
     // Aether Vial and similar: deploys a creature from hand for free each turn once charged.
@@ -7108,13 +7131,18 @@ static int BpSiteMask()
     {
         const char* v = std::getenv("MTG_BP_SITES");
         if (v == nullptr || *v == '\0') { return 0xF7; }   // 0x77 + site 7 (pod chain, default ON)
-        return std::atoi(v) & 0xFF;
+        return std::atoi(v) & 0x1FF;
     }();
     // OR'd, not overridden: an explicit MTG_BP_SITES stays authoritative for every other class, and
     // with the lever off this returns exactly the old value (byte-identical).
     // MTG_BP_NODE implies the class is open: the node arm is ONE flag, so a node run can never
     // land in the truncate-without-node shape a MTG_BP_NODE=1/MTG_BP_SITE3=0 split would be.
-    return (BpPlainCantripSiteEnabled() || BpNodeEnabled()) ? (m | 0x08) : m;
+    // Site 8 (snow look-at-top put-into-hand: Scrying Sheets / Frost Augur) is UNCONDITIONALLY on,
+    // outside MTG_BP_SITES' reach: same-turn playability of the found card is a correctness
+    // requirement (USER 2026-09-06, "we need to be able to play it"), not a search lever, and the
+    // executor twin counts this class unconditionally -- masking it off here would shift every
+    // later bp_at index (the PodBreakpointClassOn lesson).
+    return ((BpPlainCantripSiteEnabled() || BpNodeEnabled()) ? (m | 0x08) : m) | 0x100;
 }
 
 // Site 7 (pod chain) class accessor for the executor twin -- see the header note. The executor
@@ -8204,6 +8232,8 @@ static bool BoardHasScalingAttacker(const GameState& state)
         if (!d) { continue; }
         if (d->params.domain_self_pump || d->params.domain_mana
             || d->params.power_equals_creature_count
+            || d->params.pt_equals_snow_permanents_you_control    // Abominable Treefolk: every
+            || d->params.pt_equals_snow_permanents_on_battlefield // snow cast pre-combat pumps it
             || d->params.scales_per_matching) { return true; }
     }
     return false;
@@ -8505,7 +8535,9 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
         || p.grants_double_strike || p.team_pump_cost.has_value()
         || p.firebreathing_cost.has_value() || p.power_bonus > 0 || p.tough_bonus > 0
         || p.scales_per_matching || p.affects_all_creatures || p.domain_self_pump
-        || p.power_equals_creature_count)
+        || p.power_equals_creature_count
+        || p.pt_equals_snow_permanents_you_control
+        || p.pt_equals_snow_permanents_on_battlefield)
     { return MP::Main1; }
     // CARD-DEPENDENCY-MAP pull-forward (docs/design/card-dependency-map.md, USER 2026-08-15):
     // a card's phase is a consequence of the deck's dependency graph. A lifegain->loss ENABLER
@@ -12014,6 +12046,53 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
 
+        // Kaldring, the Rimestaff: "{T}: You may play target snow permanent card from your
+        // graveyard this turn. If you do, it enters tapped." One Action per (source, distinct
+        // legal graveyard NAME) -- the Haven convention, so WHICH card is played is searched and
+        // human-visible, never a first-match. A NONLAND carries its own mana cost on the action
+        // (cast for its cost); a LAND is free but gated on the land drop still being open --
+        // enumerated only then, and re-checked at apply. Every graveyard predicate routes
+        // through ZoneCard (placeholder masks are empty).
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || !pd->params.gy_play_cost.has_value()) { continue; }
+            if (!CanTapNow(p, state.battlefield)) { continue; }
+            const Player& gap = state.players[state.active_player_index];
+            const bool drop_open =
+                gap.lands_played_this_turn < 1 + gap.bonus_land_drops_this_turn;
+            std::vector<std::string> seen;
+            for (const Card& gc : gap.graveyard)
+            {
+                if (!GyPlayTargetLegal(*pd, ZoneCard(gc))) { continue; }
+                const std::string nm = gc.m_name.str();
+                bool dup = false;
+                for (const std::string& s : seen) { if (s == nm) { dup = true; break; } }
+                if (dup) { continue; }
+                seen.push_back(nm);
+                const CardDefinition* td = CardDatabase::Instance().Lookup(nm);
+                if (!td) { continue; }
+                const bool is_land = td->card.IsLand();
+                if (is_land && !drop_open) { continue; }
+
+                Action a;
+                a.kind           = Action::Kind::GraveyardPlayAbility;
+                a.card_name      = p.card.m_name;
+                a.hand_index     = -1;
+                a.cost           = is_land ? ManaCost{}
+                                           : EffectiveCost(*td, state);   // the played card's cost
+                a.sac_source_id  = p.card.m_number;
+                a.tutor_target   = nm;            // WHICH card is played (searched / human-picked)
+                // A replayed permanent is board development from the graveyard: a land/rock is
+                // ramp-ish, a Slumber restarts the 20/20 clock. Small flat eval; the search
+                // prices the real line.
+                a.eval           = 2;
+                a.is_noncreature = !td->card.IsCreature();
+                actions.push_back(std::move(a));
+            }
+        }
+
         // Balan, Wandering Knight: "{1}{W}: Attach all Equipment you control to Balan." One action
         // per Balan (legend rule keeps it to one); gated on >= 1 controlled Equipment not already
         // attached to him -- a strict no-op activation is identical-minus-mana, lossless to skip.
@@ -12467,6 +12546,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { Action::AbilityMode::SacDraw,        &sd->params.sac_draw_cost        },
                     { Action::AbilityMode::Drain,          &sd->params.drain_cost           },
                     { Action::AbilityMode::ExileTop,       &sd->params.exile_opponent_top_cost },
+                    { Action::AbilityMode::IceCounter,     &sd->params.ice_counter_cost     },
                 };
                 for (const ModeSpec& m : modes)
                 {
@@ -12499,6 +12579,42 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                 state, src, m.mode,
                                 static_cast<int>(have.Total()) / per_mv);
                         }
+                    }
+                    // Gated look-at-top (Scrying Sheets / Frost Augur), AUTONOMOUS enumeration
+                    // only: the search is clairvoyant, so an activation whose top card is not
+                    // snow (or whose library is empty) is strictly dominated -- spends mana and
+                    // the tap for nothing. Dropping it is a lossless dominated-action removal,
+                    // not a heuristic narrowing; humans keep the full offer (they cannot see the
+                    // top). This also keeps the site-8 re-solve fan to real finds only.
+                    if (m.mode == Action::AbilityMode::TapDraw
+                        && !sd->params.tap_draw_requires_top_supertype.empty()
+                        && !HumanPlayActive())
+                    {
+                        const Player& lap = state.players[state.active_player_index];
+                        if (lap.library.empty()) { continue; }
+                        const CardDefinition* topd =
+                            CardDatabase::Instance().LookupCached(lap.library.front());
+                        if (!topd || !CardHasSupertypeNamed(
+                                topd->card, sd->params.tap_draw_requires_top_supertype))
+                        { continue; }
+                    }
+                    // IceCounter (Rimefeather Owl): only a NON-snow permanent gains anything from
+                    // an ice counter (every permanent the deck plays is already snow), so cap the
+                    // K axis at the non-snow battlefield count -- past that, activations are pure
+                    // waste (the Drain/ExileTop "cap by what is left to DO" clamp). Zero useful
+                    // targets -> no action at all.
+                    if (m.mode == Action::AbilityMode::IceCounter)
+                    {
+                        const bool grants = IceGrantsSnow(state);
+                        int useful = 0;
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (q.card.HasSupertype(Supertype::Snow)
+                                || (grants && q.ice_counters > 0)) { continue; }
+                            ++useful;
+                        }
+                        if (useful <= 0) { continue; }
+                        for (int& k : counts) { k = std::min(k, useful); }
                     }
                     for (int k : counts)
                     {
@@ -13564,6 +13680,7 @@ static int ActivationFamilyKey(const Action& a)
         case Action::Kind::Equip:
         case Action::Kind::GraveyardExileAbility:
         case Action::Kind::GraveyardReturnAbility:   // shared {T}+sacrifice: one rebuy per Haven
+        case Action::Kind::GraveyardPlayAbility:     // shared {T}: one gy-play per Kaldring
         case Action::Kind::AttachAllEquipment:
         case Action::Kind::PutFromHandAbility:   // shared {T}: one put per Stoneforge
         case Action::Kind::JitteModeAbility:     // one counter-spend variant per Jitte per plan
@@ -19950,6 +20067,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 dmg = def.params.landfall_damage;
             }
+            // Skred: damage = the live snow-permanent count on RESOLUTION (CR 608.2b) --
+            // lockstep with EffectHandler::ResolveDirectDamage and CreatureBurnDamage.
+            if (def.params.damage_equals_snow_permanents)
+            {
+                dmg = SnowPermanentCount(state, state.active_player_index);
+            }
             // Soulfire Eruption: bounded multi-target dig (exile + stage top N; face = max MV,
             // self = min MV). Mirrors EffectHandler so the rollout matches the executor (lockstep).
             if (def.params.damage_equals_top_mv)
@@ -20111,6 +20234,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (def.params.death_trigger_damage > 0)
                 {
                     ci = FindBurnKillTarget(state, state.active_player_index, def.params.damage);
+                }
+                else if (def.params.damage_equals_snow_permanents)
+                {
+                    // Skred: dynamic amount (already in dmg) -- pick a creature it actually
+                    // kills via the shared provider ranking, so the resulting board is faithful.
+                    ci = FindBurnKillTarget(state, state.active_player_index, dmg);
                 }
                 else
                 {
@@ -21766,6 +21895,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (taps) { SetPermTapped(state, state.active_player_index, a.sac_source_id, true); }
                 if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
                 {
+                    // Site-8 detection input: did the gated look-at-top (Scrying Sheets / Frost
+                    // Augur) actually move a card into hand? Hand size is the observable -- the
+                    // gated TapDraw is the only thing this apply can grow the hand with.
+                    const bool snow_look = a.ability_mode == Action::AbilityMode::TapDraw
+                        && !a.def->params.tap_draw_requires_top_supertype.empty();
+                    const std::size_t hand_before = snow_look
+                        ? state.players[state.active_player_index].hand.size() : 0;
                     ApplyPermAbility(state, state.active_player_index, a.sac_source_id, a.ability_mode);
                     // Repeatable {T}-less sinks: the plan asked for K activations and only the FIRST
                     // is on the subset's books, so pay the rest here out of what the turn actually
@@ -21776,6 +21912,96 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     {
                         SpendRepeatActivations(state, state.active_player_index, a.sac_source_id,
                                                a.ability_mode, *a.def, a.chosen_x - 1);
+                    }
+                    // BREAKPOINT SITE 8 -- the found snow card must be castable/playable THIS turn
+                    // (USER 2026-09-06; the trailing-pass "next turn" collapse is rejected). Site-7
+                    // shape: trailing pass, no sink push (the executor twin re-derives the same
+                    // continuation from the SHARED EnumerateBreakpointPlans list / its own searched
+                    // re-solve), human play excluded (the main phase re-prompts, so the human owns
+                    // the continuation). A LAND find is covered too: the continuation's Solve sees
+                    // the drop still open and plays it via bp_play_searched_land / land_to_play.
+                    // Counting-order caveat (site 7's): Snow runs no cantrip/trick/equipment/dig/
+                    // staging card, so site 8 is its only class and bp_seen order is trivially
+                    // lockstep; a deck mixing this param with deferred classes must reconcile the
+                    // deferred-vs-trailing counting order first.
+                    // PLAYABILITY GATE (both worlds, lockstep -- the executor twin applies the
+                    // identical test): only re-solve when the FOUND card can actually be played
+                    // now -- a land with the drop still open, or a nonland whose mana value fits
+                    // the remaining available mana (a necessary condition for any cast, so a
+                    // gate-skip == the re-solve would have found nothing for it). Without this
+                    // gate the greedy Solve fired 521k times in ONE d3 game (a 43s game): every
+                    // rollout activation re-solved, usually with the turn's mana already spent.
+                    bool snow_look_worth = false;
+                    if (snow_look
+                        && state.players[state.active_player_index].hand.size() > hand_before)
+                    {
+                        const Player& lap = state.players[state.active_player_index];
+                        const CardDefinition* fd =
+                            CardDatabase::Instance().LookupCached(lap.hand.back());
+                        if (fd && fd->card.IsLand())
+                        {
+                            snow_look_worth =
+                                lap.lands_played_this_turn < 1 + lap.bonus_land_drops_this_turn;
+                        }
+                        else if (fd)
+                        {
+                            ManaPool have = AvailableManaPool(state);
+                            have.AddPool(state.floating_mana);
+                            snow_look_worth = static_cast<int>(have.Total())
+                                           >= fd->card.m_mana_cost.ManaValue();
+                        }
+                    }
+                    // CHAIN CAP: a re-solve's continuation can activate the NEXT look source and
+                    // re-enter this site (4 Sheets + 4 Augur = up to 8 nested Solves per apply --
+                    // a measured 9x playout multiplier). Depth 1 keeps the found card playable
+                    // this turn while a nested find simply waits for the playout's next simulated
+                    // turn (its Solve picks it up). The committed/executor path is not capped.
+                    static thread_local int s_snow_look_depth = 0;
+                    if (snow_look_worth && !s_human_play)
+                    {
+                        // bp_searched_plan runs UNCONDITIONALLY so the occurrence is COUNTED even
+                        // when the greedy resolve below is narrowed -- the executor twin counts
+                        // every occurrence, and a skipped count would shift every later bp_at
+                        // index (the PodBreakpointClassOn lesson).
+                        TurnSolver::Plan extra;
+                        const bool searched = bp_searched_plan(8, extra);
+                        if (searched && s_snow_look_depth == 0)
+                        {
+                            // A SEARCHED continuation (a bp_choice variant targeting this
+                            // occurrence): apply it in full -- this is how the search explores
+                            // "activate, then cast the find" lines. Depth-capped: a nested
+                            // occurrence's variant is dropped (duplicate-of-base, never wrong).
+                            ++s_snow_look_depth;
+                            bp_play_searched_land(extra, nullptr);
+                            apply_continuation_precasts(extra);
+                            apply_plan_actions(extra.actions, extra.searched_order);
+                            apply_trailing_activations(extra.actions);
+                            --s_snow_look_depth;
+                        }
+                        else if (!searched)
+                        {
+                            // GREEDY fallback, deliberately NARROW: a full Solve here fired
+                            // 166k-521k times per d3 game (playouts activate looks nearly every
+                            // simulated turn) -- a measured 9x playout multiplier and 30-300s
+                            // games. A found LAND is played directly (the +1 mana matters and is
+                            // near-free to apply); a found NONLAND waits for the playout's next
+                            // simulated turn, whose own Solve casts it. Same-turn nonland lines
+                            // are still fully expressible where they matter: the searched
+                            // variants above and the executor's committed re-solve (which is
+                            // NOT narrowed) both run the real continuation.
+                            greedysite::Record(8);
+                            const Player& lap2 = state.players[state.active_player_index];
+                            const CardDefinition* fd2 =
+                                CardDatabase::Instance().LookupCached(lap2.hand.back());
+                            if (fd2 && fd2->card.IsLand())
+                            {
+                                TurnSolver::Plan mini;
+                                mini.land_decided = true;
+                                mini.land_to_play = lap2.hand.back().m_name.str();
+                                bp_play_searched_land(mini, nullptr);
+                                greedysite::RecordOutcome(8, true);
+                            }
+                        }
                     }
                 }
                 else if (taps)
@@ -21823,6 +22049,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 ApplyGraveyardReturnAbility(state, state.active_player_index, a.sac_source_id,
                                             a.tutor_target);
+            }
+        }
+        else if (a.kind == Action::Kind::GraveyardPlayAbility)
+        {
+            // Kaldring: PROBE stranded-ness FIRST (commit=false) so the played card's own cost is
+            // never paid for a no-op (source tapped meanwhile / target gone / land drop consumed),
+            // then pay a.cost (the nonland target's mana cost; {0} for a land) and commit.
+            const CardDefinition* td = CardDatabase::Instance().Lookup(a.tutor_target);
+            if (ApplyGraveyardPlayAbility(state, state.active_player_index, a.sac_source_id,
+                                          a.tutor_target.str(), /*commit=*/false)
+                && TapForCostDirect(state, a.cost,
+                                    /*for_creature=*/td && td->card.IsCreature()))
+            {
+                ApplyGraveyardPlayAbility(state, state.active_player_index, a.sac_source_id,
+                                          a.tutor_target.str(), /*commit=*/true);
             }
         }
         else if (a.kind == Action::Kind::AnimateLand)
@@ -22656,11 +22897,27 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ap.cards_cycled_or_discarded_this_turn = 0;    // Hollow One cycle/discard count (same lockstep)
 
     // Untap and advance Aether Vial counters (upkeep trigger).
+    // Rimescale ice lock -- lockstep twin of GameEngine::UntapStep's gate (see the comment there).
+    bool ice_locks = false;
+    {
+        bool any_ice = false;
+        for (const Permanent& p : state.battlefield)
+        { if (p.ice_counters > 0) { any_ice = true; break; } }
+        if (any_ice)
+        {
+            for (const Permanent& p : state.battlefield)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d && d->params.ice_counters_dont_untap) { ice_locks = true; break; }
+            }
+        }
+    }
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index == state.active_player_index)
         {
-            p.tapped            = false;
+            if (!(ice_locks && p.ice_counters > 0 && p.card.IsCreature()))
+            { p.tapped = false; }
             p.entered_this_turn = false;
             p.gained_control_this_turn = false;   // control-change sickness clears on YOUR untap (CR 302.6)
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
@@ -22781,6 +23038,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // (lockstep); param-gated -> byte-identical for every other deck.
     PerformUpkeepCumulativeGifts(state);
     PerformUpkeepSacTutor(state);
+    PerformUpkeepSlumber(state);   // Marit Lage's Slumber (lockstep twin in GameEngine's upkeep)
     // Mirri's Guile: arrange the top 3 at upkeep (before the draw). Lockstep in both worlds.
     PerformUpkeepReorder(state);
 
@@ -25631,6 +25889,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 case Action::Kind::GraveyardReturnAbility:
                     msf.push_back("GYR#" + std::to_string(act.sac_source_id)
                                   + ">" + act.tutor_target); break;
+                // Kaldring gy-play: which source AND which card is played are distinct decisions
+                // (core invariant -- two different graveyard plays must never dedup-collapse).
+                case Action::Kind::GraveyardPlayAbility:
+                    msf.push_back("GYP#" + std::to_string(act.sac_source_id)
+                                  + ">" + act.tutor_target); break;
                 // Equip: which Equipment AND which host are distinct decisions (core invariant).
                 case Action::Kind::Equip:
                     msf.push_back("EQ#" + std::to_string(act.sac_source_id)
@@ -26190,6 +26453,16 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         {
             const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
             if (pd && pd->params.is_equipment) { mask |= 1 << 6; }
+        }
+        // Site 8: a gated look-at-top activation (Scrying Sheets / Frost Augur) that can move the
+        // top library card into hand mid-apply -- the found card must be castable/playable in the
+        // SAME turn (USER 2026-09-06). Conservative in the site-6/7 safe direction: a whiff (non-
+        // matching top) just yields duplicate variants, never a wrong answer.
+        if (a.kind == Action::Kind::ActivatePermAbility
+            && a.ability_mode == Action::AbilityMode::TapDraw)
+        {
+            const CardDefinition* td = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (td && !td->params.tap_draw_requires_top_supertype.empty()) { mask |= 1 << 8; }
         }
         if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
         { continue; }
@@ -27523,6 +27796,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // runs four of each. The dedupe would keep one representative and make the deck's only
         // untapped COLOUR source unenumerable as a land play half the time it is drawn.
         if (pp.any_color_filter)              { s += "acf"; }
+        // Astrolabe: no-free-{C} variant signs differently from Capital City's shape.
+        if (pp.filter_no_free_colorless)      { s += "nfc"; }
         // Storage land: Dwarven Hold and Mercadian Bazaar differ only in their CHARGE MODE.
         if (pp.storage_land)                  { s += "st" + pp.storage_charge_mode; }
         // ---- the 17-param extension (recoverability audit, 2026-09-03) -------------------------
@@ -35315,6 +35590,32 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         }
     }
 
+    // --- gyplay= : Kaldring, the Rimestaff. The source must be live and untapped, and the
+    // graveyard must actually hold the named card as a legal gy-play target.
+    if (!spec.gy_plays.empty())
+    {
+        const CardDefinition* src = nullptr;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != active || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.gy_play_cost.has_value()) { src = d; break; }
+        }
+        if (!src)
+        { return "you control no untapped permanent with a graveyard-play ability"; }
+        for (const std::string& want : spec.gy_plays)
+        {
+            bool found = false;
+            for (const Card& c : s.players[active].graveyard)
+            {
+                if (c.m_name != want) { continue; }
+                if (GyPlayTargetLegal(*src, ZoneCard(c))) { found = true; break; }
+            }
+            if (!found)
+            { return "'" + want + "' is not a legal graveyard-play target in your graveyard"; }
+        }
+    }
+
     (void)ap;
     return {};
 }
@@ -35465,7 +35766,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                       spec.vial_deploys.empty() && spec.retrace_casts.empty() &&
                       spec.sac_outlets.empty() && spec.attach_all.empty() &&
                       spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.equips.empty() &&
-                      spec.gy_exiles.empty() && spec.gy_returns.empty() && spec.channels.empty() &&
+                      spec.gy_exiles.empty() && spec.gy_returns.empty() && spec.gy_plays.empty() && spec.channels.empty() &&
                       spec.suspends.empty() &&
                       spec.animates.empty() && spec.tap_tokens.empty() &&
                       spec.pods.empty() && spec.ooze_exiles.empty() && spec.blinks.empty()))
@@ -35515,7 +35816,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     const bool gyexile_declared   = !spec.gy_exiles.empty();
     const bool gyreturn_declared  = !spec.gy_returns.empty();
     std::vector<std::string> sortedGyReturns = spec.gy_returns;
+    const bool gyplay_declared    = !spec.gy_plays.empty();
+    std::vector<std::string> sortedGyPlays = spec.gy_plays;
     std::sort(sortedGyReturns.begin(), sortedGyReturns.end());
+    std::sort(sortedGyPlays.begin(), sortedGyPlays.end());
     std::vector<std::string> sortedChannels = spec.channels;
     std::sort(sortedChannels.begin(), sortedChannels.end());
     const bool channel_declared   = !spec.channels.empty();
@@ -35586,7 +35890,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         // One entry per Equip action: (equipment name, equipment m_number, host m_number). Matched
         // against spec.equips by EquipsMatch below, which honours the 0 wildcards.
         std::vector<LineSpec::EquipSpec> equipActs;
-        std::vector<std::string> animateNames, tapTokenNames, gyReturnNames;
+        std::vector<std::string> animateNames, tapTokenNames, gyReturnNames, gyPlayNames;
         std::vector<int> jitteModes, gyExileModes;
         std::vector<TurnSolver::LineSpec::PodSpec> podActs;
         std::vector<std::string> oozeNames;
@@ -35625,6 +35929,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             { gyExileModes.push_back(a.gy_exile_mode); continue; }
             if (gyreturn_declared && a.kind == Action::Kind::GraveyardReturnAbility)
             { gyReturnNames.push_back(a.tutor_target); continue; }
+            if (gyplay_declared && a.kind == Action::Kind::GraveyardPlayAbility)
+            { gyPlayNames.push_back(a.tutor_target); continue; }
             if (channel_declared && a.kind == Action::Kind::Channel)
             { channelNames.push_back(a.card_name); continue; }
             if (suspend_declared && a.kind == Action::Kind::Suspend)
@@ -35713,6 +36019,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             std::vector<std::string> v2 = gyReturnNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedGyReturns) { continue; }
+        }
+        if (gyplay_declared)
+        {
+            std::vector<std::string> v2 = gyPlayNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedGyPlays) { continue; }
         }
         if (channel_declared)
         {

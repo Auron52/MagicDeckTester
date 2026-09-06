@@ -690,12 +690,38 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.is_filter        = params.value("is_filter", false);
     p.ramp_filter      = params.value("ramp_filter", false);
     p.any_color_filter = params.value("any_color_filter", false);
+    p.filter_no_free_colorless = params.value("filter_no_free_colorless", false);
 
     // --- Knights tribal extensions ---
     p.affects_all_creatures        = params.value("affects_all_creatures", false);
     p.lord_excludes_self           = params.value("lord_excludes_self", false);
     p.power_equals_creature_count  = params.value("power_equals_creature_count", false);
     p.toughness_equals_creature_count = params.value("toughness_equals_creature_count", false);
+
+    // --- Snow (see the CardParams snow block) ---
+    p.pt_equals_snow_permanents_you_control   = params.value("pt_equals_snow_permanents_you_control", false);
+    p.pt_equals_snow_permanents_on_battlefield = params.value("pt_equals_snow_permanents_on_battlefield", false);
+    p.damage_equals_snow_permanents = params.value("damage_equals_snow_permanents", false);
+    if (params.contains("ice_counter_cost"))
+        p.ice_counter_cost = ManaCostFromString(params["ice_counter_cost"].get<std::string>());
+    p.ice_counters_are_snow   = params.value("ice_counters_are_snow", false);
+    p.ice_counters_dont_untap = params.value("ice_counters_dont_untap", false);
+    p.snow_enter_scry         = params.value("snow_enter_scry", 0);
+    p.upkeep_snow_threshold   = params.value("upkeep_snow_threshold", 0);
+    p.upkeep_sac_creates_token   = params.value("upkeep_sac_creates_token", false);
+    p.upkeep_sac_token_power     = params.value("upkeep_sac_token_power", 0);
+    p.upkeep_sac_token_toughness = params.value("upkeep_sac_token_toughness", 0);
+    for (const std::string& s : params.value("upkeep_sac_token_subtypes", json::array()))
+        p.upkeep_sac_token_subtypes.push_back(s);
+    for (const std::string& s : params.value("upkeep_sac_token_keywords", json::array()))
+        p.upkeep_sac_token_keywords.push_back(s);
+    p.upkeep_sac_token_legendary = params.value("upkeep_sac_token_legendary", false);
+    if (params.contains("gy_play_cost"))
+        p.gy_play_cost = ManaCostFromString(params["gy_play_cost"].get<std::string>());
+    p.gy_play_requires_supertype = params.value("gy_play_requires_supertype", std::string());
+    p.gy_play_permanent_only     = params.value("gy_play_permanent_only", false);
+    p.gy_play_enters_tapped      = params.value("gy_play_enters_tapped", false);
+    p.tap_draw_requires_top_supertype = params.value("tap_draw_requires_top_supertype", std::string());
 
     p.cast_trigger_subtype         = params.value("cast_trigger_subtype", std::string{});
     p.cast_trigger_creates_tokens  = params.value("cast_trigger_creates_tokens", 0);
@@ -909,11 +935,13 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_self_creates_tokens   = params.value("etb_self_creates_tokens", 0);
     p.etb_damage_any            = params.value("etb_damage_any", 0);
     p.etb_destroy_opp_creature  = params.value("etb_destroy_opp_creature", false);
+    p.etb_tap_opp_creature      = params.value("etb_tap_opp_creature", false);
     p.etb_damage_equals_power   = params.value("etb_damage_equals_power", false);
     p.persist                   = params.value("persist", false);
     p.prevents_minus_counters   = params.value("prevents_minus_counters", false);
     p.reduces_minus_counters_by_one = params.value("reduces_minus_counters_by_one", false);
     p.etb_self_lifegain         = params.value("etb_self_lifegain", 0);
+    p.etb_self_draw             = params.value("etb_self_draw", 0);
     p.etb_discard_any_number    = params.value("etb_discard_any_number", false);
     p.etb_discard_any_draw_bonus = params.value("etb_discard_any_draw_bonus", 0);
     p.other_creature_gy_enter_team_counters = params.value("other_creature_gy_enter_team_counters", 0);
