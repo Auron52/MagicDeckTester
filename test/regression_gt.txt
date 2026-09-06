@@ -1,4 +1,4 @@
-# Regression ground truth -- commit ad4f60f7  date 2026-09-05
+# Regression ground truth -- commit 9fdefa0c  date 2026-09-06
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -55,9 +55,9 @@ dragons_smoke_d5_s1001=5.5867/b7981a8bf9dbc75a
 breaching_smoke_d0_s1001=4.8460/8c8e7d2fb5fd0181
 breaching_smoke_d3_s1001=3.1000/03766483807acbd5
 breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
-melira_smoke_d0_s1001=6.4230/066c65909b8bcaca
-melira_smoke_d3_s1001=4.9800/a428ea7cf49ca375
-melira_smoke_d5_s1001=5.0000/a1c26512afcf09b8
+melira_smoke_d0_s1001=6.4230/5efc611d520c5061
+melira_smoke_d3_s1001=4.9600/2e09e1b83c398514
+melira_smoke_d5_s1001=5.0000/4467d5161617a928
 hinata2hg_smoke_d3_s1001=5.6667/1227a1c696313b31
 antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
 minotaur2hg_smoke_d3_s1001=5.3500/d6096734765b010a
@@ -75,7 +75,7 @@ stompy2hg_smoke_d3_s1001=5.0000/73d0994752ca4e51
 kitty2hg_smoke_d3_s1001=4.9400/7bc28551a3faa869
 dragons2hg_smoke_d3_s1001=6.3000/43872dc33fccb094
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
-melira2hg_smoke_d3_s1001=5.2400/6b79fdb102b9a249
+melira2hg_smoke_d3_s1001=5.2000/106e7e26dd3bf0f5
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6790/990aaa21c4bc567e
@@ -120,7 +120,7 @@ auras_regression_d5_s2002=4.0940/7a3abcc5d24d1594
 auras_regression_d5_s3003=4.1740/74887922e98ce67d
 goblins_regression_d0_s2002=4.1040/705e28ad9f6e6a7d
 goblins_regression_d3_s2002=3.8133/558a2fdd7976867b
-goblins_regression_d3_s3003=3.8400/6e3860eba44a39fe
+goblins_regression_d3_s3003=3.8400/0ece0afa47e06f2c
 goblins_regression_d5_s2002=3.8360/de03c71c834913e5
 goblins_regression_d5_s3003=3.8160/ddab5401e4686b1d
 creature_giving_regression_d0_s2002=5.5810/196c4668d4d7e170
@@ -163,11 +163,11 @@ breaching_regression_d3_s2002=3.0933/754d6fb14d56c14f
 breaching_regression_d3_s3003=3.0833/8d3103f293ae7026
 breaching_regression_d5_s2002=3.1000/a253d99d6bb10df1
 breaching_regression_d5_s3003=3.0760/f1ed83ebe4cb9869
-melira_regression_d0_s2002=6.3960/289c1e736b3e4d66
-melira_regression_d3_s2002=4.8267/bd3ca6463d900947
+melira_regression_d0_s2002=6.3960/af5c852f431a6934
+melira_regression_d3_s2002=4.8267/f44e295d725fe795
 melira_regression_d3_s3003=4.8533/73a5908d7b7b9f16
 melira_regression_d5_s2002=4.7500/685694c2122d2c0a
-melira_regression_d5_s3003=4.7500/ea0aedd2f8f86c46
+melira_regression_d5_s3003=4.7500/02952e2e521ad5de
 hinata2hg_regression_d3_s2002=5.5700/d5953ec2c8011f59
 hinata2hg_regression_d5_s2002=5.5200/3b50ae042b766a7b
 antilife2hg_regression_d3_s2002=4.3133/88cdae0a53b9a7f6

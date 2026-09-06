@@ -13387,6 +13387,19 @@ static int ActivationFamilyKey(const Action& a)
         // bounds it to one activation per Pod per plan.
         case Action::Kind::ActivatePod:
             return (a.sac_source_id >= 0) ? -1000 - a.sac_source_id : 0;
+        // Sac-outlet BURSTS and PERSIST LOOPS (sac_count > 1): one burst per outlet per plan.
+        // These were independent bits, and the Melira closer-castable unlock (MTG_POD_HAND_PAIR)
+        // emits one variant per (outlet x persist body x purpose) on combo boards -- the 2^k that
+        // produced single 1.6M-3.1M-plan enumerations (up to 9.4 GB for ONE call) and a measured
+        // 443x wall multiplier on a repro game (docs/design/pod-pair-enumeration-explosion.md,
+        // 2026-09-06). Mutual exclusion is DOMINANCE, not legality (a free outlet can sac
+        // repeatedly): each burst is already sized to its purpose (lethal k / loop cap), so a
+        // plan taking two bursts from one outlet duplicates coverage the single better burst
+        // already provides. Ordinary K=1 sacs keep their independent bits (co-selection of
+        // distinct victims is real coverage). Distinct key base: a source id could in principle
+        // collide with the -1000 activation space above.
+        case Action::Kind::SacCreatureOutlet:
+            return (a.sac_count > 1 && a.sac_source_id >= 0) ? -3000000 - a.sac_source_id : 0;
         default:
             return 0;
     }
@@ -27862,6 +27875,23 @@ namespace plancache
         for (const TurnSolver::Plan& p : plans) { b += ApproxPlanBytes(p) - sizeof(TurnSolver::Plan); }
         return b;
     }
+    // MTG_ENUM_HIWATER_KB (diagnostic, default off = zero cost beyond one branch): print any single
+    // enumeration result whose approximate footprint exceeds the threshold. This is the repro hook
+    // for the working-set transient NO cache cap bounds -- the ~12 GB spikes that survive the
+    // plan-cache budget (2026-09-06) -- and discriminates its shape: prints during a spike mean one
+    // giant enumeration; silence means accumulation across the recursion stack instead.
+    inline long long HiwaterKb()
+    { static const long long v = static_cast<long long>(EnvInt("MTG_ENUM_HIWATER_KB", 0)); return v; }
+    inline void ReportHiwater(const char* site, const GameState& state,
+                              const std::vector<TurnSolver::Plan>& plans)
+    {
+        if (HiwaterKb() <= 0) { return; }
+        const std::size_t kb = ApproxPlansBytes(plans) >> 10;
+        if (static_cast<long long>(kb) < HiwaterKb()) { return; }
+        std::fprintf(stderr, "[enum-hiwater] site=%s plans=%zu kb=%zu turn=%d bf=%zu hand=%zu\n",
+                     site, plans.size(), kb, state.turn_number,
+                     state.battlefield.size(), state.ActivePlayer().hand.size());
+    }
 }
 namespace enummemo
 {
@@ -28071,6 +28101,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long trunc_before = g_fs_trunc_events;
     std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLandUncached(state, is_pre_combat);
+    plancache::ReportHiwater("m1", state, plans);
     const uint32_t own_drops = static_cast<uint32_t>(g_condemn_drops - drops_before);
     const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
     const int own_md = groupwave::g_state.max_dropped;
@@ -28188,6 +28219,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     const unsigned long long drops_before = g_condemn_drops;
     const unsigned long long trunc_before = g_fs_trunc_events;
     std::vector<TurnSolver::Plan> plans = EnumerateM2PlansBody(state);
+    plancache::ReportHiwater("m2", state, plans);
     const uint32_t own_drops = static_cast<uint32_t>(g_condemn_drops - drops_before);
     const uint32_t own_trunc = static_cast<uint32_t>(g_fs_trunc_events - trunc_before);
     const int own_md = groupwave::g_state.max_dropped;
@@ -34184,6 +34216,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
     std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
     --g_bp_enum_depth;
+    plancache::ReportHiwater("bp", state, plans);
 
     if (keyed)
     {
