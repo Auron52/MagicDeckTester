@@ -1,0 +1,14 @@
+{
+  "keep_apart": [
+    { "cards": ["Canyon Slough", "Sheltered Thicket"],
+      "why": "USER ruling 2026-09-06: Canyon Slough produces BOTH of the deck's key colours (B for Unearth, R for Drannith Stinger), so it must not share the R-only cycler bucket. Discovery had merged it there at <=0.01." },
+    { "cards": ["Canyon Slough", "Smoldering Crater"],
+      "why": "Same ruling as the Sheltered Thicket pair: the dual-relevant-colour land stays out of the R-only bucket." }
+  ],
+  "merge": [
+    { "cards": ["Drifting Meadow", "Irrigated Farmland", "Scattered Groves"],
+      "why": "USER ruling 2026-09-06: W-cyclers are identical for this deck's keep decision -- all Cycling {2} (free under Fluctuator), all enter tapped, all give W for Enlightened Tutor / Forsake the Worldly; the U/G side colours cast nothing in this list. Discovery split them on distances in the 0.01-0.06 coin-flip band (integer win turns: a handful of probes moved via tap-order perturbation), the same failure mode as the recorded FiveColour fetchland case." },
+    { "cards": ["Festering Thicket", "Fetid Pools", "Polluted Mire"],
+      "why": "USER ruling 2026-09-06: B-cyclers -- B for Unearth is the only relevant colour; the G/U sides cast nothing here. Discovery merged Festering Thicket + Fetid Pools on its own and left Polluted Mire out on a coin-flip-band distance." }
+  ]
+}
