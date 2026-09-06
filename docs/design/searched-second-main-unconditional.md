@@ -120,10 +120,15 @@ apparatus check):
   (the calls the deletion's d<=0 flip added), with only ~5k deeper calls behind them; the cap can
   only shorten the deep calls, and their full-depth answers agree with their 1-ply answers anyway.
   Corollary: for a deck whose interior profile is d<=0-heavy, rung 2 is not where the recovery is.
-* **The phase-split (HINATA_ALL_MAIN2) is NOT a remedy — measured RED, all seven cells, both
-  variants** (+0.49/game with the blanket drop, +0.33 with M2_RECONSIDER covering the drop). The
-  rejection is recorded at the lever (DecisionProviders.h). It amplifies the very spend it was
-  hoped to restructure.
+* **The phase-split (HINATA_ALL_MAIN2) measured RED as-is, all seven cells, both variants**
+  (+0.49/game with the blanket drop, +0.33 with M2_RECONSIDER covering the drop) — but the unit
+  profile (2026-09-06, logs/hinata_cost) shows the red is NOT spend: the split is **42% CHEAPER**
+  (4.36M → 2.52M units) and loses anyway, because `fs_bp_wave` drops 149,753 → 0 — **FSLineTail
+  has no breakpoint wave phase**, so the split moves this cantrip deck's draw-continuation
+  chains into the loop that cannot walk them. Verdict recorded at the lever: the USER's doctrine
+  ("we shouldn't need the first main for Hinata") is unrefuted; the m2 loop is the weaker path.
+  **The lossless fix — give FSLineTail the wave walker FSLineWin has — is the top de-starvation
+  candidate**: green would buy the doctrine and return ~42% of hinata's budget at once.
 * Rung 1 (the memo) already runs at 47.4% on hinata vs FiveColour's 80%; with the d<=0 calls all
   keying at depth 1 and `clears=0` (the cache never fills), the misses are KEY-DISTINCTNESS, not
   the depth-fold and not capacity. Whether that distinctness is real or SPURIOUS is an open
