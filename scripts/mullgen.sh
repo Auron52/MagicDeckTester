@@ -55,10 +55,12 @@ OUT=logs/${STEM}_mullgen; mkdir -p "$OUT"
 REPORT=$OUT/VALIDATION.txt
 BIN=build/Release/mtg-analyze
 
-# Memory caps (2026-09-06): this driver previously exported NO caps, so every long mulligan
-# generation ran with the search caches UNBOUNDED -- the configuration that OOM'd the 23 GB box
-# six times during the Melira value-leaf generation of 2026-09-05/06. All bounds are result-
-# neutral memo caps (refused store = recompute); see scripts/lib/membudget.sh for the derivation.
+# Memory caps (2026-09-06): PRECAUTIONARY, not a fix for an observed failure -- this driver's
+# history is OOM-free (user), because its decisions run budgeted and its games are lighter than
+# the value-leaf label path whose UNBOUNDED per-worker search OOM'd the 23 GB box six times on
+# 2026-09-05/06. The limits are generous (they never bound the historical workload) and result-
+# neutral (refused store = recompute), so the only effect is that a future heavy deck cannot
+# take the box down. Derivation shared with valueleaf.sh: scripts/lib/membudget.sh.
 . "$(dirname "${BASH_SOURCE[0]}")/lib/membudget.sh"
 
 # SEEDS, allocated in per-round blocks. Every check draws from its own base so no two checks -- and
