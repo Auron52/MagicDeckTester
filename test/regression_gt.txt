@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 9fdefa0c  date 2026-09-06
+# Regression ground truth -- commit 0a7cacb7  date 2026-09-06
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -58,7 +58,7 @@ breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
 melira_smoke_d0_s1001=6.4230/5efc611d520c5061
 melira_smoke_d3_s1001=4.9600/2e09e1b83c398514
 melira_smoke_d5_s1001=5.0000/4467d5161617a928
-hinata2hg_smoke_d3_s1001=5.6667/1227a1c696313b31
+hinata2hg_smoke_d3_s1001=5.6667/1a9f41bd97bea19d
 antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
 minotaur2hg_smoke_d3_s1001=5.3500/d6096734765b010a
 goblins2hg_smoke_d3_s1001=4.0400/98eb843d496e3922
@@ -77,9 +77,9 @@ kitty2hg_smoke_d3_s1001=4.9400/7bc28551a3faa869
 dragons2hg_smoke_d3_s1001=6.3000/43872dc33fccb094
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
 melira2hg_smoke_d3_s1001=5.2000/106e7e26dd3bf0f5
-fluctuator_smoke_d0_s1001=6.2790/a5ceb96ac6b656b7
-fluctuator_smoke_d3_s1001=3.8400/3c2f29229b035325
-fluctuator_smoke_d5_s1001=3.8400/17a4107b968573cf
+fluctuator_smoke_d0_s1001=5.0930/93b3170f143542e3
+fluctuator_smoke_d3_s1001=3.6133/51e2e09c3b083528
+fluctuator_smoke_d5_s1001=3.6000/e7f095b94f5c58c5
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6790/990aaa21c4bc567e
@@ -172,7 +172,7 @@ melira_regression_d3_s2002=4.8267/f44e295d725fe795
 melira_regression_d3_s3003=4.8533/73a5908d7b7b9f16
 melira_regression_d5_s2002=4.7500/685694c2122d2c0a
 melira_regression_d5_s3003=4.7500/02952e2e521ad5de
-hinata2hg_regression_d3_s2002=5.5700/d5953ec2c8011f59
+hinata2hg_regression_d3_s2002=5.5700/a0d1eeabd223ffb3
 hinata2hg_regression_d5_s2002=5.5200/3b50ae042b766a7b
 antilife2hg_regression_d3_s2002=4.3133/88cdae0a53b9a7f6
 minotaur2hg_regression_d3_s2002=5.3933/a6b3c5b4ba60297a
