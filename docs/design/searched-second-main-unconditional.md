@@ -475,6 +475,15 @@ no verified win existed and mode 2's re-scored interior legitimately shuffled th
 pick — honest variance, not unsoundness (no [nonconv] event; persists at 4x budget, so not
 dilution either). Split avg ties mode 1 at 5.80.
 
+**ADOPTED (2026-09-06): hinata provider opt-in, mode 2** (`HinataProvider::M2FixpointOptIn`
+= 2; `M2FixModeFor` resolver in DecisionProviders.h; `MTG_M2_FIXPOINT=0` hard-disables for
+A/B). The USER approved the per-deck opt-in and challenged d0-weighted evidence; the
+DECIDING number is the SHIPPED config (d5/b20), 1000 distinct paired games: **5 better /
+1 worse / 994 tie** (5.7060→5.7020). The 18-deck sweep found hinata the only converter —
+15 decks never fire the class, burn and kitty fire it thousands of times and convert
+nothing (the clearest opt-OUTs: they would pay the most CPU for zero gain). GT accepted
+for hinata's cells both tiers; every other deck byte-identical. Global default stays OFF.
+
 **HELD-OUT (regression tier, disjoint seeds s2002/s3003, melira excluded per USER):** both
 modes net POSITIVE and all movement is hinata's — mode 1: −5 game-turns (d0 −0.003, d3
 s3003 −0.01, d5 s3003 −0.01, d5 s2002 +0.01 = ONE game the grading-variance way); mode 2:
