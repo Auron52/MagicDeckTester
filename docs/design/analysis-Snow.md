@@ -65,12 +65,28 @@ greedy playout SCORING is slightly pessimistic on nonland finds. Resume: `./buil
 `--seed 44 --game-index 2 --games 1 -d3 -b200` (was 50s; want low seconds), then the 10-game
 run, then continue the Still-to-do list below.
 
-**Still to do**: byte-identity smoke (existing decks must not move — bp mask + fed-slots
-refactor are the risky shared edits); scryfall_reference --update + audits (2d-bis); Stage 4
-analyze_deck + provider_audit (expect Generic); Stage 5 battery (verify_deck.py, nonconv/
-fd-diverge, multi-depth, 5c2 leaf_tiebreak_check, 5d claude-play sweep ~15-20 Sonnet agents,
-5h audit_viewer_decisions sweep); DECISIONS.md rows (gyplay verb + dig-reuse notes); Stage 6
-report w/ full deferral disclosure; LAST: forward-looking snow-mana model (USER directive 3).
+**Pipeline state (2026-09-06 end of autonomous window): COMPLETE through Stage 6.**
+Byte-identity ✓ (smoke 73/73 + regression 99/99 at every step, incl. after the Astrolabe fix
+and the {S} model); Scryfall audits ✓ (fully green after real {S}); Stage 4 profile ✓ +
+provider Generic ✓; Stage 5 ✓ — verify_deck GATE PASS (coverage/costs/fields/viewer/wiring/
+mismatch(no nonconv, no fd-diverge, 2 seeds x 60 games)/play_invariants/claude_sweep), multi-
+depth sanity d0 6.72 > d3 6.12 = d5 6.12 loss-penalized (monotone, d3>=d0 in every paired
+game, d5 identical to d3 at b200), 5c2 leaf_tiebreak_check run (verdict recorded below),
+claude-play sweep 16/16 ties 0 unresolved flags, real-play coverage of every mechanic
+(Augur x56 / Sheets x8 / Owl ice x2 / Kaldring gyplay x1 / Marit Lage token + sacrifice +
+legend rule across 175 d0 games); DECISIONS.md ✓; snow-mana model ✓ (section above); CI ✓
+(Linux + Windows + determinism parity green on both pushes).
+**NOT done, deliberately (user-initiated later per policy): mulligan-profile generation and
+the value leaf.** Also open: Snow is NOT in the regression suite yet — its slow games
+(worst ~5-15 min single games at d3/d5 b200 pre-value-leaf, horizon-rollout volume s90, NOT
+site 8) make adding it a shared-budget sizing decision for the user.
+**5e/5f status**: Snow rides the GENERIC provider — no deck narrowing heuristics exist, so 5e
+has nothing to verify (and the 16/16 claude-play ties say the un-narrowed search already plays
+optimally). The 5f PERF GATE is NOT yet cleared for mulligan-gen feasibility: the deck's cost
+is horizon-rollout volume (s90 ~1.2M leaf solves in the worst game), whose designated remedy
+is the VALUE LEAF (1.35–84.8x per value-leaf.md), user-initiated. If post-leaf cost is still
+infeasible, 5f pruning proposals (look/ice enumeration width) are the next lever — grounded in
+the 5e oracle method, unpruned A/B mandatory.
 
 ## Stage 1 — Coverage
 
