@@ -1722,3 +1722,26 @@ identical everywhere, so changing the ceiling mid-table would leave cells holdin
 populations. And `valueleaf.sh` is being executed by a live bash process — editing it in place is
 unsafe. The current table stays VALID (abandoned games are excluded everywhere and backfilled;
 disclosed as `~~ FILTERED`), just expensive.
+
+### 2026-09-07 (late) — suite restore attempted and REVERSED by the user
+
+With both tiers green at the restored cases (smoke 72/72 makespan 200 s vs 77 s without;
+regression 98/98 makespan 262 s, no increase; 0 configs changed; 6 new keys) I committed the
+restore as 16615552. The user reversed it within the hour: **"let's not add melira until we
+are happy with performance. I'm not convinced of that at all."** Commit reset away (unpushed);
+GT back to 414 consistent with 0 melira keys.
+
+The criterion I applied ("comfortably inside the 15-minute smoke target") was mine, not the
+user's. The gap the user is looking at, on the shipped no-sidecar config:
+
+| | melira | costliest other deck (fivecolour) | median suite deck |
+|---|---|---|---|
+| d3 b10 | ~8.4 s/game | 1.19 s/game | ~0.1-0.2 s/game |
+| d5 b20 | ~5.6 s/game | ~2 s/game (d6) | ~0.3 s/game |
+
+i.e. still ~7x the next-costliest deck and ~50-80x the median, after a 5x cut. That is
+the number to move. The value leaf (uncertified) measures 2.5x on top of this, which would
+bring d3 to ~3.4 s/game -- still ~3x fivecolour.
+
+**Standing rule from this:** melira does not re-enter the suite on a "fits the budget"
+argument. It re-enters when the user says the per-game cost is acceptable.
