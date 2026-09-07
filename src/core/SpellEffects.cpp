@@ -2688,6 +2688,11 @@ struct ManaCacheEntry
     int                       self_life;   // total tap_self_damage the solve applied (painland taps):
                                            // the OBSERVED delta, because a painland's {C}-mode tap is
                                            // painless and a per-tap replay cannot know which mode paid
+    int                       energy_spent; // total {E} the solve's coloured energy-gated taps paid
+                                           // (Aether Hub): same observed-delta shape as self_life --
+                                           // the entry cannot know which MODE each tap took, and an
+                                           // unspent replay would make the Hub an unmetered rainbow
+                                           // source (the exact hole its card model warns about)
 };
 inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
 
@@ -3083,6 +3088,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     static thread_local std::vector<std::pair<int, int>> mc_storage_pre;   // (index, counters before)
     int mc_opp_life_pre = 0;
     int mc_life_pre = 0;   // active player's life pre-solve (self_life delta -- see ManaCacheEntry)
+    int mc_energy_pre = 0; // active player's {E} pre-solve (energy_spent delta -- see ManaCacheEntry)
     // Canonical order for this board (empty in indexed mode). Entry taps are POSITIONS in it.
     static thread_local std::vector<std::uint64_t> mc_desc;
     const bool mc_canon = McCanonKey();
@@ -3149,6 +3155,12 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             if (e.drip_life > 0) { OpponentGainsLife(state, hit_active, e.drip_life); }
             // Painland tap damage, as the solve's aggregate (see the tap loop's note above).
             if (e.self_life > 0) { state.players[hit_active].life -= e.self_life; }
+            // Aether Hub {E}: same aggregate replay -- without it a cached coloured-Hub tap never
+            // paid its energy, leaving the Hub an unmetered rainbow source on the hit world.
+            // MTG_ENERGY_REFUND=0 also suppresses this half (one-binary isolation hatch).
+            static const bool s_energy_replay = EnvOn("MTG_ENERGY_REFUND", true);
+            if (s_energy_replay && e.energy_spent > 0)
+            { state.players[hit_active].energy_counters -= e.energy_spent; }
             if (out_full_pool) { *out_full_pool = e.produced; }
             if (out_leftover)  { *out_leftover  = e.leftover; }
             // §2a: a replayed Treasure tap is a SACRIFICE. After the entry is applied, never before
@@ -3163,6 +3175,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         mc_storage_pre.clear();
         mc_opp_life_pre = state.players[1 - active].life;
         mc_life_pre     = state.players[active].life;
+        mc_energy_pre   = state.players[active].energy_counters;
         for (int i = 0; i < n; ++i)
         { const Permanent& p = state.battlefield[i];
           if (p.controller_index != active) { continue; }
@@ -3297,6 +3310,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     {
         if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); }   // bound cross-rollout growth
         ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; e.self_life = 0;
+        e.energy_spent = 0;
         bool storable = true;
         if (ok)
         {
@@ -3311,6 +3325,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             // Painland self-damage: the observed active-life delta (taps are the only thing a solve
             // does to our life). Aggregate, because per-tap replay cannot see which MODE paid.
             e.self_life = mc_life_pre - state.players[active].life;
+            // Aether Hub {E}: the observed energy delta, same aggregate argument.
+            e.energy_spent = mc_energy_pre - state.players[active].energy_counters;
             for (int i = 0; i < n; ++i)
             {
                 const Permanent& p = state.battlefield[i];

@@ -12194,7 +12194,38 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr) { continue; }
         const CardParams& q = d->params;
-        if (q.gy_land_exile_mana || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
+        // PAINLAND with a real {C} mode: ELIGIBLE INSIDE A BLINK LOOP ONLY, tapped ahead in its
+        // separate painless colourless ability (the coloured modes stay out -- speculative float
+        // must not cost life), and its attached aura's bonus rides that tap, which is most of the
+        // value on a Trace-stacked host. USER, EDF s5 T5: three of the four lands were painlands,
+        // so the tap-ahead floated 3 of the board's 7 mana, the {2}{C} activation ate exactly 3,
+        // and every blink of a 7-yield board netted ZERO ("I can't gain mana").
+        //
+        // The g_in_blink_loop scope is CORRECTNESS, not caution: at the CAST sites the very cost
+        // about to be paid can carry a coloured pip only the painland's coloured mode can supply,
+        // and a tap-ahead that floats it as {C} makes that cast unpayable (the reference sweep
+        // caught it as an ENUM-GAP: EDF claude_s1_gi0 T3, "cast: Cloud of Faeries" {1}{U} vanished
+        // -- Yavimaya Coast was the only blue and it had just been floated colourless). Inside the
+        // loop the activation cost is generic/{C} by construction, so {C} float always serves it.
+        //
+        // HUMAN PLAY ONLY (the human-line-vs-AI-average rule), and measured, not cautious: with it
+        // live in rollouts too, the edf_blink_loop_cashes_gorge fixture's search STOPPED going off
+        // (win T4 -> T6 -- it played a land and attacked instead), isolated to exactly this
+        // eligibility via a sub-lever A/B. The human drives the loop by hand and wants every land's
+        // mana banked; the autonomous loop's go-off economics are a measured artefact this must not
+        // perturb. Rollouts (HumanPlaySuppress) and every autonomous game keep the historical
+        // exclusion -- GT, scenarios and references byte-identical.
+        // MTG_PAINLAND_TAPAHEAD=0 isolates just this eligibility (sub-lever of MTG_PAINLAND_C).
+        static const bool s_pain_tapahead = EnvOn("MTG_PAINLAND_TAPAHEAD", true);
+        bool pain_c = false;
+        if (q.tap_self_damage > 0 && PainlandCModeEnabled() && s_pain_tapahead
+            && g_in_blink_loop && HumanPlayActive())
+        {
+            for (Color c : q.produces)
+            { if (c == Color::Colorless) { pain_c = true; break; } }
+        }
+        if (q.gy_land_exile_mana || (q.tap_self_damage > 0 && !pain_c)
+            || q.tap_opponent_lifegain > 0
             || q.storage_land || q.domain_mana || q.colored_creature_only
             || IsManaConversionSource(q)) { continue; }
         bool depletion = false;
@@ -12204,6 +12235,21 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         p.tapped = true;
         ++tapped_n;
         if (refloatstats::On()) { refloatstats::g_tapped.fetch_add(1, std::memory_order_relaxed); }
+        // Painland: the tap IS the painless "{T}: Add {C}" ability -- float exactly {C} (never a
+        // coloured mode: that would be free coloured mana whose life cost was never paid) plus the
+        // aura bonus that rides any tap of the enchanted land. See the eligibility note above.
+        if (pain_c)
+        {
+            state.floating_mana.Add(Color::Colorless, 1);
+            if (refloatstats::On())
+            {
+                refloatstats::g_commit.fetch_add(1, std::memory_order_relaxed);
+                refloatstats::g_by_color[static_cast<int>(Color::Colorless)]
+                    .fetch_add(1, std::memory_order_relaxed);
+            }
+            if (LandAuraBonus(state, p) > 0) { LandAuraAddToPool(state.floating_mana, state, p); }
+            continue;
+        }
         // COMMIT A COLOUR for a choice-limited source, exactly as RitualTapAheadIntoFloat does and
         // for the same reason: this float is REAL spendable mana, and AddSourceToPool books a
         // multi-colour land as `wild`, which pays ANY pip. Floating it wild is free colour-fixing.

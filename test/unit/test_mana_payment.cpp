@@ -744,3 +744,23 @@ TEST_CASE("mana cache: attaching a land aura splits the key (no stale unpayable 
     CHECK(TapForCostBacktrack(s, cost, /*for_creature=*/false, ManaPool{},
                               nullptr, nullptr, &leftover));
 }
+
+// ENERGY REFUND ON FAILED PAYMENT (USER-found, EDF s3 T2, 2026-09-07: "Fertile Ground -> Adarkar
+// Wastes was silently ignored"). tap_source spends Aether Hub's {E} as part of the coloured tap's
+// activation cost, but the total-failure restore in TapForCostSharedOnce put back the battlefield,
+// life and graveyard and NOT the energy -- so the aura-host RESERVED attempt (which must fail, the
+// host being the only other source) burned the Hub's {E}, and the unreserved retry found a
+// spent-out Hub with no coloured mode and dropped a payable cast. The failing-then-payable pair
+// below is that exact shape.
+TEST_CASE("failed payment refunds Aether Hub energy (the retry must see it)")
+{
+    EnsureCards();
+    GameState s = MakeBoard({"Aether Hub", "Adarkar Wastes"});
+    s.players[0].energy_counters = 1;
+    // {G}{G}: the Hub's energy mode covers one G, nothing covers the second -> must fail...
+    CHECK_FALSE(TapForCostDirect(s, Cost(0, 0, 0, 0, 0, /*g=*/2), false));
+    CHECK(s.players[0].energy_counters == 1);   // leaked to 0 before the fix
+    // ...and the SAME state must still pay {1}{G} (the cast the leak was dropping).
+    CHECK(TapForCostDirect(s, Cost(1, 0, 0, 0, 0, /*g=*/1), false));
+    CHECK(s.players[0].energy_counters == 0);   // the successful payment spends it for real
+}

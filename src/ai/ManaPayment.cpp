@@ -742,6 +742,16 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     const bool oll_pre = state.opponent_lost_life_this_turn;
     // Deathrite: a tap may exile a graveyard land; failed attempts must put it back.
     const std::vector<Card> gy_pre = state.players[active].graveyard;
+    // Aether Hub: a coloured tap SPENDS {E} (tap_source, the same activation-cost class as the
+    // Deathrite exile above) -- a failed attempt must refund it. This leaked: the aura-host
+    // reserved attempt tapped the Hub coloured, failed on the remainder, and the unreserved retry
+    // found a spent-out Hub with no coloured mode left, silently dropping a payable cast (USER,
+    // EDF s3 T2: "Fertile Ground -> Adarkar Wastes was silently ignored" -- the {G} was the Hub's
+    // energy mode; hosting the Hub itself worked only because the reservation kept it untapped
+    // through the failing first attempt).
+    const int energy_pre = state.players[active].energy_counters;
+    // MTG_ENERGY_REFUND=0 restores the leak (one-binary isolation hatch).
+    static const bool s_energy_refund = EnvOn("MTG_ENERGY_REFUND", true);
     // Retain over-produced mana (forced filter/depletion over-tap) into the turn-scoped
     // reserve so a later same-(main-)phase cast can spend it (CR 500.4). state.floating_mana
     // already holds the un-spent reserve after SpendFloatingTowardCost; add the leftover on top.
@@ -798,6 +808,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     state.players[active].graveyard = gy_pre;
     state.players[1 - active].life     = opp_pre;
     state.opponent_lost_life_this_turn = oll_pre;
+    if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
     // SNOW guard for the backtracking fallbacks: the backtracker is snow-BLIND (it assigns any
     // source to any pip), which is exact when every untapped source is snow (the Snow deck --
     // its complete fallback is preserved) and could construct an illegal {S} assignment on a
@@ -825,6 +836,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         state.players[active].graveyard = gy_pre;
         state.players[1 - active].life     = opp_pre;   // same drip rollback as above
         state.opponent_lost_life_this_turn = oll_pre;
+        if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
         ManaPool bt2_leftover;
         if (tapstats::Enabled()) { tapstats::g_site_percast_filter.fetch_add(1, std::memory_order_relaxed); }
         if (TapForCostBacktrack(state, cost_in, for_creature, reserve_pre, nullptr, nullptr,
@@ -846,6 +858,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     state.players[active].graveyard    = gy_pre;
     state.players[1 - active].life     = opp_pre;
     state.opponent_lost_life_this_turn = oll_pre;
+    if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
     state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
     return false;
 }

@@ -3367,3 +3367,91 @@ lever (verified by the `=0` byte-identity above), judged NET on the loss-penaliz
 
 GT accepted for the three moved keys (smoke + regression `--accept`). Reference reproducibility
 clean (300 refs, 0 play-drift, 0 contract-fail).
+
+### Issue 4 (same session): failed payments LEAKED Aether Hub energy -- silent aura drop, host-dependent
+
+USER, seed 3 T2: "land=Aether Hub; Fertile Ground -> Adarkar Wastes" silently ignored (no error,
+card left in hand), while "-> Aether Hub" worked. The plan WAS enumerated (index 2 of that menu);
+the drop happened in ApplyPlanDirect's payment. Root cause: `tap_source` spends the Hub's {E} as
+part of the coloured tap's activation cost, but TapForCostSharedOnce's failure restore put back the
+battlefield / life / graveyard / opponent-life and NOT `energy_counters`. So the aura-host RESERVED
+attempt (host Adarkar held back -> pay {1}{G} off the Hub alone -> fails on the {1}) burned the
+game's only {E}, and the unreserved retry found a spent-out Hub with no coloured mode -- no green
+source anywhere -> cast dropped. Hosting the HUB worked precisely because the reservation kept the
+Hub untapped through the failing first attempt.
+
+Fixes (commit with this note):
+* `energy_pre` snapshot + restore at all three rollback sites in TapForCostSharedOnce (the exact
+  Deathrite-graveyard precedent one line above it).
+* The payable-mana cache replay had the sibling hole: a cached coloured-Hub tap never paid its {E}
+  on the hit world (phantom energy -- the "unmetered rainbow source" the Hub's own card note warns
+  about). `ManaCacheEntry::energy_spent` records the solve's observed delta and the replay applies
+  it, same aggregate shape as `self_life` (the key already hashes the energy level, so hits only
+  occur at matching {E}).
+
+Unit-pinned ("failed payment refunds Aether Hub energy"): {G}{G} on Hub+Adarkar with 1 {E} fails
+AND leaves the {E}; the same state then pays {1}{G}. No other deck runs Aether Hub or any energy
+card, so the suite is expected byte-identical (verified below).
+
+### Issue 5 (same session): the human blink loop banked NO mana -- painlands excluded from the tap-ahead
+
+USER, seed 5 T4/T5: "I can't gain mana... there is no reason why I shouldn't be gaining 3 mana per
+untap", and the stated policy: *"generate maximum mana when possible and then once we have some
+floating ensure all lands are untapped; then once all are untapped continue generating maximum
+mana."* Repro (s5 gi0, post-main T5, four untapped lands incl. two Trace'd painlands = 7 yield):
+one Displacer blink of Peregrine Drake ended with all lands untapped and **floating: None** -- net
+zero, every iteration.
+
+Root cause: `EtbUntapTapAheadIntoFloat`'s eligibility filter skipped `tap_self_damage` lands
+outright, so on a painland-heavy board the tap-ahead floated only the painless minority (3 of 7
+mana), the {2}{C} activation ate exactly that, and the ETB untap refunded taps that were never
+made. The painless-{C} model makes a painland's {C} mode a FREE tap-ahead -- and the attached
+aura's bonus rides it, which is most of a Trace-stacked host's value.
+
+Scoping journey, recorded because both wrong scopes FAILED a gate:
+* Unscoped (all four call sites): ENUM-GAP in the reference sweep -- at a CAST site the cost about
+  to be paid can carry a coloured pip only the painland's coloured mode supplies (EDF claude_s1_gi0
+  T3: "Cloud of Faeries" {1}{U} vanished from the menu; Yavimaya was the only blue and had just
+  been floated as {C}).
+* g_in_blink_loop only: `edf_blink_loop_cashes_gorge` broke (win T4 -> T6): with the eligibility
+  live in ROLLOUTS the search stopped going off at all (played a land and attacked). Isolated to
+  exactly this eligibility with the MTG_PAINLAND_TAPAHEAD sub-lever.
+* SHIPPED: `g_in_blink_loop && HumanPlayActive()` -- the human drives the loop and wants every
+  land's mana banked; the autonomous loop's go-off economics are a measured artefact left
+  untouched (rollouts are HumanPlaySuppress). GT / scenarios / references byte-identical by
+  construction.
+
+Verified on the user's board shape: three committed human blinks bank {G:3, C:6, wild:3} = +4 net
+per iteration, all four lands untapped after each, zero life paid. The viewer already renders
+floating mana beside the Lands header, and repeat activations are per-commit (the FINISH plan
+covers recognised go-offs; an explicit "blink xN for mana" picker is raised as an open question --
+likely unnecessary now that each commit nets positive).
+
+### Reference claude_s1_gi0: ENUM-GAP adjudicated -- the recorded line rode the cache bug
+
+The post-fix reference sweep flags `EldraziDisplacerFlicker/claude_s1_gi0.json` as ENUM-GAP: at its
+T3 dec-9 state (hand + battlefield IDENTICAL) the recorded plan "cast: Cloud of Faeries" is no
+longer enumerated. Investigated to a verdict, per the class's own instruction:
+
+* State diff at dec 9: recorded float {wild: 1}; honest replay floats NOTHING.
+* Rules arithmetic: the board (Aether Hub energy spent on T2's two Wild Growths, Conservatory,
+  Mariposa -- no blue land) has NO honest blue source and no honest leftover; Cloud {1}{U} and even
+  its {2} cycling need the phantom wild.
+* Decisive A/B on the PRE-fix binary (73d26fbf): cache ON reproduces the recorded world (wild:1,
+  both plans); MTG_MANA_CACHE=0 on that SAME binary loses them -- the recorded line existed ONLY
+  through a stale aura-blind cache hit (a leftover replayed from an entry solved under a different
+  aura configuration). The fixed key removes the phantom mana; every lever in this batch was also
+  A/B'd (painland, energy, cache-off, combined) and none restores it, as expected.
+
+So the ENUM-GAP is the FIX WORKING: the reference recorded an illegally-good line (its T3 win
+included mana the rules never produced). Per the references policy the file is untouched
+(commit-only, user-owned); the --strict reference gate will keep naming it until the game is
+re-played by hand and re-saved. The other 299 references replay clean (0 play-drift,
+0 contract-fail; the Fluctuator shuffle-dead predates this work).
+
+### Follow-up fixes in the second commit (issues 4-5 + hardening)
+
+* Energy refund on failed payments (`energy_pre` restore x3 in TapForCostSharedOnce) +
+  cache-entry `energy_spent` aggregate replay. `MTG_ENERGY_REFUND=0` = one-binary hatch.
+* Human blink-loop painland tap-ahead (`MTG_PAINLAND_TAPAHEAD` sub-lever) -- see issue 5 above.
+* `LineSummaryOfPlan` blink / perm-ability labels (issue 2's history rows).
