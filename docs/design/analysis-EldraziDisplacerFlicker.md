@@ -3286,3 +3286,84 @@ PermanentManaYield x 4, so an enchanted land wins the next aura too). A wish is 
 ~40% of the trace's raw no-loop rows, so the route is frequently available -- whether the
 search actually converts it (wish -> Faeries -> concentrated loop) is the open empirical
 question for the no-loop bucket, and it is an ENGINE question, not deckbuilding.
+
+## Session 4 (2026-09-07): viewer batch -- the aura-blind mana-cache key, and painless painlands
+
+Three USER viewer reports, two root causes, both fixed and unit-pinned.
+
+### Root cause 1: the payable-mana cache key was BLIND TO ATTACHED LAND AURAS (issues 1 and 3)
+
+The payment DFS credits an enchanted land's bonus when the host taps (`activate()`'s
+`LandAuraAddToPool`), but `ManaCacheKey` identified a source only by (index, def-pointer, tapped)
+plus the special-case dynamic reads (dork eligibility, storage, energy, drip, reflecting,
+domain/scaled). An aura ATTACH therefore did not change the key, and a negative cached on the bare
+board replayed onto the enchanted one. Both reports were exactly that:
+
+* **Rejection s3 gi2 T2** (`logs/play/rejections/..._s3_gi2_t2.json`): `land=Adarkar Wastes; cast
+  Trace of Abundance -> Adarkar Wastes; cast Living Wish` -- "can't pay {1}{G}". CheckLine's
+  host-pick retry (pick 0) first solved `{1}{G}` against the aura-LESS board and cached the
+  failure; pick 1 attached the Trace and hit the stale negative. `MTG_CHECKLINE_TRACE` (new, the
+  instrument that localised it) shows pick=1 attach + fail; `MTG_MANA_CACHE=0` flipped the verdict
+  to legal. The ENUMERATOR was hit by the same staleness through SubsetPayableWithFilters' is_aura
+  branch -- the plan menu offered Trace and Living Wish only in SEPARATE plans; post-fix it offers
+  the combined casts.
+* **Seed 6 T3 Overgrowth silently not attaching** (issue 3): repro `--choices
+  "1,0,-1,-1,9,-1,-1,20"`. Turn 2's probes cached "{2}{G} unpayable" on Kitchen+Brushland BEFORE
+  Fertile Ground attached; turn 3's board keyed identically, so ApplyPlanDirect's payment failed
+  and the committed cast was DROPPED (the engine's own enumerated plan!). With the cache off it
+  resolves and attaches.
+
+Fix: one battlefield pass collects a commutative per-host aura fold (is_land_aura +
+land_aura_extra_mana + land_aura_produces, keyed by host m_number) and folds it into each land's
+per-source descriptor. Aura-less decks leave the list empty -> byte-identical keys. Unit test
+"mana cache: attaching a land aura splits the key" pins solve-fail -> attach -> solve-succeed on
+the exact Adarkar+Trace shape.
+
+### Root cause 2: painlands paid life for GENERIC pips (issue 2, "going off is a mess")
+
+Seed 5's blink turn bled life every iteration: the greedy's any-pip tap used `prod[0]` (a coloured
+mode, 1 damage), and the backtracker's per-colour branching both tried colours first AND charged
+`tap_self_damage` unconditionally -- even on the {C} branch, which the card text makes painless
+(separate abilities; the greedy's `tap_source` guard already modelled that). Three sites fixed:
+
+* `DripLandAnyPipColor` gains a painland branch: a generic pip on a `tap_self_damage` land with a
+  real {C} mode taps Colorless (both greedy call sites). City of Brass (no {C} mode) keeps its pain.
+* Backtracker: {C} ordered FIRST for painlands (the collapse's generic representative is now the
+  painless mode), and `activate(painless=)` charges pain per-branch -- the {C} branch is free.
+* Mana-cache entries: `self_life` records the solve's OBSERVED active-life delta and the replay
+  applies that aggregate, replacing the per-tap unconditional charge (which could not know which
+  MODE each tap took).
+
+Coloured pips still tap coloured and still hurt (unit-pinned: "painland: a generic pip taps the
+separate painless {C} ability"). Scenario expectations updated -- `edf_depleter_drain` active_life
+22 -> 24, `edf_land_aura_pays_color` 18 -> 20 (the aura's bonus rides the painless {C} tap; the
+discriminating opponent-life witnesses are unchanged). **`MTG_PAINLAND_C`, default ON** -- the
+one-binary A/B hatch, one shared reader (`PainlandCModeEnabled`) gating all three sites; `=0`
+reproduced the pre-change melira d0 batch BYTE-IDENTICALLY (digest `86a2eb2c...` == GT), proving
+the deltas below are purely this lever.
+
+### History labels: blink + tap-ability activations read as "cast:" (issue 2's other half)
+
+`LineSummaryOfPlan` -- the summary CheckLine returns as `matched_summary`, which the viewer writes
+into its history on every accepted line -- had no case for `ActivateBlink` or
+`ActivatePermAbility`, so both fell through to a bare card name: seventeen history rows reading
+"cast: Eldrazi Displacer" (same text as hard-casting the outlet, target silent) and Mariposa's
+draw as "cast: Mariposa Military Base". The exact defect class the function's own
+loyalty ("cast: Oko") and equip fixes record. Now "Eldrazi Displacer: blink Cloud of Faeries"
+(with xN repeat count) and "<land>: <ability label>", mirroring main.cpp's SummarizePlan; the
+viewer's 2026-09-05 all-activation relabel then renders these as "activate:". Display-only
+(matching/validation/references untouched).
+
+### Validation
+
+Scenarios 72/72, unit 72/72 (921 assertions, two new). Suite movers, all the intended painland
+lever (verified by the `=0` byte-identity above), judged NET on the loss-penalized avg:
+
+* smoke: `auras_d0` avg unchanged (4.3740, digest moved), `melira_d0_s1001` 6.4270 -> 6.4240.
+* regression: `auras_d3/d5_s3003` avg unchanged at both depths (gi130 a clean like-for-like
+  line change, same T4 kill), `melira_d0_s2002` 6.3970 -> 6.4000.
+* tie-break at 10x the sample: seed 2002 x 10,000 games d0, ON 6.3939 vs OFF 6.3959 -- the
+  lever is neutral-to-slightly-better on melira; the 1000-game windows straddle noise.
+
+GT accepted for the three moved keys (smoke + regression `--accept`). Reference reproducibility
+clean (300 refs, 0 play-drift, 0 contract-fail).

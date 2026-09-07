@@ -1,4 +1,4 @@
-# Regression ground truth -- commit fefa6286  date 2026-09-06
+# Regression ground truth -- commit 73d26fbf  date 2026-09-07
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -25,7 +25,7 @@ hinata_smoke_d5_s1001=5.8133/b720ca531bf58fad
 dragonstorm_smoke_d0_s1001=5.4320/f5da38d6684d4ce0
 dragonstorm_smoke_d3_s1001=4.5467/56d8fb88e2252448
 dragonstorm_smoke_d5_s1001=4.5200/3ef0d54a6ad06c07
-auras_smoke_d0_s1001=4.3740/ec6be34b5c6a75a8
+auras_smoke_d0_s1001=4.3740/3ca7562b0583aa6e
 auras_smoke_d3_s1001=4.1433/e86ae8bac6b86d7c
 auras_smoke_d5_s1001=4.1280/eb26fd6345075596
 goblins_smoke_d0_s1001=4.0680/851c0506a04bd568
@@ -55,7 +55,7 @@ dragons_smoke_d5_s1001=5.5867/b7981a8bf9dbc75a
 breaching_smoke_d0_s1001=4.8460/8c8e7d2fb5fd0181
 breaching_smoke_d3_s1001=3.1000/03766483807acbd5
 breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
-melira_smoke_d0_s1001=6.4270/bd63c7a105a85b7a
+melira_smoke_d0_s1001=6.4240/986193c536692e8b
 hinata2hg_smoke_d3_s1001=5.6667/a6d272170a895fe5
 antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
 minotaur2hg_smoke_d3_s1001=5.3500/d6096734765b010a
@@ -116,9 +116,9 @@ dragonstorm_regression_d5_s2002=4.3160/266e26d9449b1fd4
 dragonstorm_regression_d5_s3003=4.5240/b8c05681e3844e0d
 auras_regression_d0_s2002=4.3620/c9d6a8e39383bd44
 auras_regression_d3_s2002=4.0980/8c78369633415168
-auras_regression_d3_s3003=4.1900/d16d957f634c359d
+auras_regression_d3_s3003=4.1900/11c814cbe13e1c2d
 auras_regression_d5_s2002=4.0940/7a3abcc5d24d1594
-auras_regression_d5_s3003=4.1740/74887922e98ce67d
+auras_regression_d5_s3003=4.1740/22fd5ff9bfeb756d
 goblins_regression_d0_s2002=4.1040/705e28ad9f6e6a7d
 goblins_regression_d3_s2002=3.8133/558a2fdd7976867b
 goblins_regression_d3_s3003=3.8400/0ece0afa47e06f2c
@@ -164,7 +164,7 @@ breaching_regression_d3_s2002=3.0933/754d6fb14d56c14f
 breaching_regression_d3_s3003=3.0833/8d3103f293ae7026
 breaching_regression_d5_s2002=3.1000/a253d99d6bb10df1
 breaching_regression_d5_s3003=3.0760/f1ed83ebe4cb9869
-melira_regression_d0_s2002=6.3970/86a2eb2c2cd7ae8a
+melira_regression_d0_s2002=6.4000/5b760d31d36c0d8f
 hinata2hg_regression_d3_s2002=5.5700/bdfbe1dbf3924799
 hinata2hg_regression_d5_s2002=5.5200/8e4550595e890cae
 antilife2hg_regression_d3_s2002=4.3133/88cdae0a53b9a7f6

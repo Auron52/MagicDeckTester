@@ -684,3 +684,63 @@ TEST_CASE("any-colour filter spends its free {C} FIRST, sparing a real colour so
                       "rollout twin tapped both black lands");
     }
 }
+
+// PAINLAND ({T}: Add {C}. / {T}: Add {G} or {W}. This land deals 1 damage to you.) -- the two are
+// SEPARATE abilities and only the coloured one hurts. A GENERIC pip must take the painless {C}
+// mode (DripLandAnyPipColor's painland branch on the greedy; the {C}-first colour order in the
+// backtracker); a COLOURED pip still taps the coloured ability and takes the damage.
+// USER-found, EDF seed 5 (2026-09-07): the blink loop's generic pips re-tapped the painlands
+// coloured every iteration, bleeding life no pip required.
+TEST_CASE("painland: a generic pip taps the separate painless {C} ability")
+{
+    EnsureCards();
+    const GameState board = MakeBoard({"Brushland"});
+
+    const PayEnd ex = RunExecutor(board, Cost(1), false);
+    const PayEnd ro = RunRollout(board, Cost(1), false);
+    CHECK(ex.ok);
+    CHECK(ro.ok);
+    CHECK(ex.life0 == 20);   // painless (was 19: the tap paid the pip as prod[0] = {G})
+    CHECK(ex == ro);
+
+    // The coloured ability is unchanged: a {G} pip taps it and takes the printed damage.
+    const PayEnd g = RunRollout(board, Cost(0, 0, 0, 0, 0, /*g=*/1), false);
+    CHECK(g.ok);
+    CHECK(g.life0 == 19);
+}
+
+// MANA-CACHE KEY vs LAND AURAS (USER-found twice on EDF, 2026-09-07). The payment DFS credits an
+// enchanted land's bonus when the host taps, but the cache key identified a source only by
+// (index, def, tapped) -- so "unpayable" cached on the bare board replayed onto the SAME board
+// after an aura attached (s3 gi2: Trace of Abundance on Adarkar Wastes, '{1}{G} for Living Wish'
+// falsely illegal; s6 T3: a committed Overgrowth cast silently dropped against turn 2's cached
+// negative). The fixture makes the aura the ONLY route to the pip: nothing on the bare board
+// produces green, so both solves reach the backtracker and the second is answered by the cache
+// unless the key splits on the attach.
+TEST_CASE("mana cache: attaching a land aura splits the key (no stale unpayable replay)")
+{
+    EnsureCards();
+    GameState s = MakeBoard({"Adarkar Wastes"});
+    s.battlefield[0].card.m_number = 4242;         // per-copy ID the aura attaches to
+    const ManaCost cost = Cost(1, 0, 0, 0, 0, /*g=*/1);   // {1}{G}
+
+    {   // bare board: W/U/C only -> unpayable, and the negative is cached
+        GameState bare = s;
+        ManaPool  leftover;
+        CHECK_FALSE(TapForCostBacktrack(bare, cost, /*for_creature=*/false, ManaPool{},
+                                        nullptr, nullptr, &leftover));
+    }
+
+    const CardDefinition* trace = CardDatabase::Instance().Lookup("Trace of Abundance");
+    REQUIRE(trace != nullptr);
+    Permanent aura;
+    aura.card             = trace->card;
+    aura.controller_index = 0;
+    aura.owner_index      = 0;
+    aura.aura_attached_to = 4242;                  // "adds an additional one mana of any color"
+    s.battlefield.push_back(aura);
+
+    ManaPool leftover;
+    CHECK(TapForCostBacktrack(s, cost, /*for_creature=*/false, ManaPool{},
+                              nullptr, nullptr, &leftover));
+}

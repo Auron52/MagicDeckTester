@@ -1075,11 +1075,33 @@ inline void TapDripLandsIfUseful(GameState& state, int controller_index)
 // `colored_pick`, so this is inert outside a drip-land deck. Specific coloured pips (R/G) never route
 // through here -- they always tap coloured and drip (the real, unavoidable cost of that colour).
 // Shared by both tap_source lambdas (TurnSolver + AIEngine) so rollout and executor agree (lockstep).
+// Painland painless-{C} preference (2026-09-07): a generic pip on a tap_self_damage land with a
+// real {C} mode taps the SEPARATE painless colourless ability instead of a coloured one. Read by
+// the greedy's any-pip colour pick (below), the backtracker's colour order, and its per-branch
+// pain guard -- one reader so the three sites cannot disagree. =0 restores the coloured taps.
+inline bool PainlandCModeEnabled()
+{ static const bool v = EnvOn("MTG_PAINLAND_C", true); return v; }
+
 inline Color DripLandAnyPipColor(const GameState& state, int active,
                                  const CardDefinition& def, Color colored_pick)
 {
     if (def.params.tap_opponent_lifegain > 0 && !ResolveProvider(state).OpponentLifegainUseful(state, active))
     { return Color::Colorless; }
+    // PAINLAND (Brushland / Adarkar Wastes / Yavimaya Coast): the "{T}: Add {C}" ability is
+    // SEPARATE from the coloured one and deals no damage (tap_source's pain guard models exactly
+    // that), so a GENERIC pip should take the painless mode -- same shape as the Grove branch
+    // above. USER-found, EDF seed 5: the blink loop's generic pips re-tapped the painlands
+    // coloured (prod[0]) every iteration, bleeding life no pip ever required. Guarded on a REAL
+    // {C} mode: a painland modelled without one (City of Brass) keeps its coloured tap + damage.
+    // Static `produces` (not EffectiveProduces, declared later in this header): no dynamic strip
+    // (energy / cco) ever removes a Colorless mode, so the two reads agree for every pain source.
+    // MTG_PAINLAND_C=0 restores the coloured-first taps (the one-binary A/B hatch; it also gates
+    // the backtracker's {C}-first order + per-branch pain guard in SpellEffects.cpp).
+    if (PainlandCModeEnabled() && def.params.tap_self_damage > 0)
+    {
+        for (Color c : def.params.produces)
+        { if (c == Color::Colorless) { return Color::Colorless; } }
+    }
     return colored_pick;
 }
 

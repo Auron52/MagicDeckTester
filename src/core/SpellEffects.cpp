@@ -2215,14 +2215,18 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // is nonzero only on a COLOURED branch of an energy-gated source -- its free "{T}: Add {C}"
         // mode costs nothing, which is what keeps a spent-out Hub a live {C} source.
         const int energy_snap = state.players[active].energy_counters;
+        // `painless` is true only for a painland's own "{T}: Add {C}" branch (the per-colour loop
+        // passes c == Colorless, and c ranges over `produces`, so the mode genuinely exists) --
+        // the two abilities are separate and only the coloured one hurts, exactly the greedy
+        // tap_source's guard (ManaPayment.cpp). Every other call site keeps the damage.
         auto activate = [&](const ManaPool& next, bool drip_ok = true, int storage_burn = 0,
-                            int energy_spend = 0) -> bool
+                            int energy_spend = 0, bool painless = false) -> bool
         {
             state.players[active].energy_counters -= energy_spend;
             state.battlefield[i].tapped = true;
             DecrementDepletionOnTap(state.battlefield[i]);
             if (def->params.storage_land) { state.battlefield[i].storage_counters -= storage_burn; }
-            if (def->params.tap_self_damage > 0)
+            if (def->params.tap_self_damage > 0 && !painless)
             { state.players[active].life -= def->params.tap_self_damage; }
             // Deathrite Shaman: the tap exiles a graveyard land (eligibility guaranteed one).
             // Remember which slot so a failed branch re-inserts it exactly (byte-identical undo).
@@ -2489,6 +2493,27 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                     { if (!(fm & (1u << static_cast<int>(c)))) { s_col_order.push_back(c); } }
                     order_ptr = &s_col_order;
                 }
+                // PAINLAND {C}-mode FIRST (twin of the drip-land {C}-first branch above and of the
+                // greedy's DripLandAnyPipColor painland guard): the colourless ability is separate
+                // and painless, so a generic pip must not bleed life just because a colour sorts
+                // first in `produces` -- and under collapse_colors the FIRST generic-interchangeable
+                // colour is the only one explored, so ordering is what decides. Coloured pips are
+                // untouched: they sit in special_mask and are explored regardless.
+                static thread_local std::vector<Color> s_pain_order;
+                if (PainlandCModeEnabled() && def->params.tap_self_damage > 0
+                    && !order_ptr->empty() && (*order_ptr)[0] != Color::Colorless)
+                {
+                    bool has_c = false;
+                    for (Color c : *order_ptr) { if (c == Color::Colorless) { has_c = true; break; } }
+                    if (has_c)
+                    {
+                        s_pain_order.clear();
+                        s_pain_order.push_back(Color::Colorless);
+                        for (Color c : *order_ptr)
+                        { if (c != Color::Colorless) { s_pain_order.push_back(c); } }
+                        order_ptr = &s_pain_order;
+                    }
+                }
                 // KAROO / bundle source ("{T}: Add {W}{U}" -- Azorius Chancery, Izzet Boilerworks):
                 // a per-tap yield > 1 across MULTIPLE colours is one mana of EACH, not `amt` of any
                 // one. The per-colour loop below prices it as amt-of-one-colour, which offers a
@@ -2519,7 +2544,8 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                     // energy is there to spend.
                     const int espend = (def->params.energy_per_colored_tap > 0 && c != Color::Colorless)
                                      ? def->params.energy_per_colored_tap : 0;
-                    if (activate(f, /*drip_ok=*/true, storage_burn, espend))
+                    if (activate(f, /*drip_ok=*/true, storage_burn, espend,
+                                 /*painless=*/PainlandCModeEnabled() && c == Color::Colorless))
                     {
                         // LEGACY-KAROO FORENSICS: this branch just took `amt` mana of ONE colour off a
                         // multi-colour bundle source, and the recursion found a full payment from it --
@@ -2659,6 +2685,9 @@ struct ManaCacheEntry
     ManaPool                  leftover;    // out_leftover: the over-production surfaced for floating
     std::vector<ManaCacheTap> taps;
     int                       drip_life;   // total opponent-life amount the solve's drip taps applied
+    int                       self_life;   // total tap_self_damage the solve applied (painland taps):
+                                           // the OBSERVED delta, because a painland's {C}-mode tap is
+                                           // painless and a per-tap replay cannot know which mode paid
 };
 inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
 
@@ -2781,6 +2810,42 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     if (canon) { out_desc->assign(state.battlefield.size(), 0ull); }
     const int active = state.active_player_index;
     const int n = static_cast<int>(state.battlefield.size());
+    // LAND AURAS (Wild Growth / Overgrowth / Fertile Ground / Trace of Abundance): the DFS credits
+    // an enchanted land's bonus when the host taps (activate()'s LandAuraAddToPool), so the host's
+    // yield AND colours depend on what is attached -- state the per-source (index, def, tapped)
+    // fields cannot see. That made the aura the last uncovered member of the "latent stale-hit
+    // hole" list below: a speculative attach (SubsetPayableWithFilters' is_aura branch, CheckLine's
+    // host retry, ApplyPlanDirect after an Aura cast resolves) changes the answer between two
+    // solves that otherwise share a key. USER-found twice on EDF, 2026-09-07: s3 gi2 T2 "can't pay
+    // {1}{G} for Living Wish" off an Adarkar Wastes carrying a fresh Trace (the aura-less pick-0
+    // retry cached the negative), and s6 T3's committed Overgrowth cast silently DROPPED (turn 2
+    // had cached "{2}{G} unpayable" on the pre-Fertile-Ground board; turn 3's key looked
+    // identical). One pass collects a commutative per-host fold (attach order cannot matter -- the
+    // bonus is additive); the source loop folds it into each land's descriptor below. Every
+    // aura-less deck leaves the list empty and keys byte-identically (creature auras are filtered
+    // by is_land_aura, and a bare permanent has aura_attached_to == 0).
+    static thread_local std::vector<std::pair<int, std::uint64_t>> s_aura_fold;  // (host m_number, fold)
+    s_aura_fold.clear();
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& ap = state.battlefield[i];
+        if (ap.aura_attached_to == 0 || ap.controller_index != active) { continue; }
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(ap.card);
+        if (!ad || !ad->params.is_land_aura || ad->params.land_aura_extra_mana <= 0) { continue; }
+        std::uint64_t ah = 0xA02A'11ull
+                         + static_cast<std::uint64_t>(ad->params.land_aura_extra_mana) * 131ull;
+        if (ad->params.land_aura_produces.empty()) { ah ^= 0x3F00ull; }   // "any colour" (wild)
+        else
+        {
+            for (Color c : ad->params.land_aura_produces)
+            { ah ^= (0x100ull << (static_cast<int>(c) & 15)); }
+        }
+        ah *= 0x9E3779B97F4A7C15ull;
+        bool merged = false;
+        for (auto& e : s_aura_fold)
+        { if (e.first == ap.aura_attached_to) { e.second += ah; merged = true; break; } }
+        if (!merged) { s_aura_fold.push_back({ ap.aura_attached_to, ah }); }
+    }
     int gy_fuel = -1;       // lazy, hashed once on the first Deathrite-style source
     int energy_fuel = -1;   // lazy, hashed once on the first energy-gated source (Aether Hub)
     int drip_useful = -1;   // lazy, hashed once on the first drip source
@@ -2825,6 +2890,12 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         if (!canon) { mix(h1, static_cast<std::uint64_t>(i)); mix(h2, static_cast<std::uint64_t>(i) * 0x9E3779B97F4A7C15ull); }
         smix(di, di ^ 0xD1B54A32D192ED03ull);
         smix(p.tapped ? 1ull : 2ull, p.tapped ? 3ull : 5ull);
+        // Attached land Auras change this host's yield/colours (see the s_aura_fold pass above).
+        if (!s_aura_fold.empty() && p.card.IsLand())
+        {
+            for (const auto& e : s_aura_fold)
+            { if (e.first == p.card.m_number) { smix(e.second, e.second * 0xC2B2AE3D27D4EB4Full); break; } }
+        }
         // Chain-eligibility and the FULL counters vector -- the remaining two components of the
         // sibling collapse's equivalence. Counters matter because a tap DECREMENTS a depletion
         // counter: two Sandstone Needles on different counts are not interchangeable even though
@@ -3011,6 +3082,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // warm-up; only charged batteries are recorded, so it is empty on every deck without one.
     static thread_local std::vector<std::pair<int, int>> mc_storage_pre;   // (index, counters before)
     int mc_opp_life_pre = 0;
+    int mc_life_pre = 0;   // active player's life pre-solve (self_life delta -- see ManaCacheEntry)
     // Canonical order for this board (empty in indexed mode). Entry taps are POSITIONS in it.
     static thread_local std::vector<std::uint64_t> mc_desc;
     const bool mc_canon = McCanonKey();
@@ -3051,8 +3123,9 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 p.tapped = true;
                 const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
                 if (!td) { continue; }
-                if (td->params.tap_self_damage > 0)   // City of Brass: replay the tap damage (life 1208-1209)
-                { state.players[hit_active].life -= td->params.tap_self_damage; }
+                // tap_self_damage is NOT replayed per tap: a painland's {C}-mode tap is painless,
+                // and which mode each tap took is not in the entry -- the aggregate e.self_life
+                // (the solve's observed delta) is applied once, after this loop.
                 // Depletion land (Sandstone Needle): replay the counter decrement the DFS's activate()
                 // performs on the solution path. Relative (decrement whatever the current count is),
                 // so the counter value never needs to be part of the key -- production is
@@ -3074,6 +3147,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             // through OpponentGainsLife re-reads RemedyActive, so a Tainted Remedy board flips the
             // gain to a loss (and sets opponent_lost_life_this_turn) exactly as the real solve would.
             if (e.drip_life > 0) { OpponentGainsLife(state, hit_active, e.drip_life); }
+            // Painland tap damage, as the solve's aggregate (see the tap loop's note above).
+            if (e.self_life > 0) { state.players[hit_active].life -= e.self_life; }
             if (out_full_pool) { *out_full_pool = e.produced; }
             if (out_leftover)  { *out_leftover  = e.leftover; }
             // §2a: a replayed Treasure tap is a SACRIFICE. After the entry is applied, never before
@@ -3087,6 +3162,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         const int n = static_cast<int>(state.battlefield.size());
         mc_storage_pre.clear();
         mc_opp_life_pre = state.players[1 - active].life;
+        mc_life_pre     = state.players[active].life;
         for (int i = 0; i < n; ++i)
         { const Permanent& p = state.battlefield[i];
           if (p.controller_index != active) { continue; }
@@ -3220,7 +3296,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     if (mc_active)
     {
         if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); }   // bound cross-rollout growth
-        ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; bool storable = true;
+        ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; e.self_life = 0;
+        bool storable = true;
         if (ok)
         {
             if (out_full_pool) { e.produced = *out_full_pool; }
@@ -3231,6 +3308,9 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             // player), so the magnitude of that one diff is the total drip the solve applied -- and
             // magnitude is all the replay needs, since OpponentGainsLife re-derives the sign.
             e.drip_life = std::abs(state.players[1 - active].life - mc_opp_life_pre);
+            // Painland self-damage: the observed active-life delta (taps are the only thing a solve
+            // does to our life). Aggregate, because per-tap replay cannot see which MODE paid.
+            e.self_life = mc_life_pre - state.players[active].life;
             for (int i = 0; i < n; ++i)
             {
                 const Permanent& p = state.battlefield[i];

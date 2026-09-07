@@ -21,8 +21,10 @@
     "Verified DISCRIMINATING: delete the Fertile Ground entry and the board still makes three mana",
     "but none of it red -- the Gorge cannot be activated and the opponent stays on 20 (against 18",
     "with it). The aura is the only difference and the COLOUR it supplies is the only thing under",
-    "test. active_life 18 is the Adarkar Wastes pain on each coloured tap, which is the second",
-    "witness that the enchanted land is the one being tapped.",
+    "test. active_life stays 20 (was 18): the Wastes now taps its separate painless '{T}: Add {C}'",
+    "mode and the aura's any-colour bonus still rides that tap -- 'tapped for mana' triggers on",
+    "EITHER ability -- so the {R} arrives without the pain (painland {C}-first, 2026-09-07). The",
+    "witness that the ENCHANTED land taps is the opponent's life alone.",
     "",
     "FOUR sites were blind, and only the fourth made the fixture move: the two colour gates above,",
     "the payment DFS (TapForCostBacktrackWorker -- `amt` was ManaProducedPerTap, so an enchanted",
@@ -70,5 +72,5 @@
   "max_turns": 5,
   "expect_no_win": true,
   "expect_opponent_life": 18,
-  "expect_active_life": 18
+  "expect_active_life": 20
 }

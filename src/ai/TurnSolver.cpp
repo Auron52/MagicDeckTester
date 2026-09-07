@@ -35272,7 +35272,9 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
 }
 
 // One-line "land=...; cast: a, b" summary of a plan (for the human-play accept verdict).
-static std::string LineSummaryOfPlan(const TurnSolver::Plan& p)
+static std::string SubChoiceHostLabel(const GameState& s, int num);   // defined below (fwd for labels)
+
+static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState* st = nullptr)
 {
     std::string s;
     if (p.land_decided && !p.land_to_play.empty()) { s += "land=" + p.land_to_play + "; "; }
@@ -35314,6 +35316,29 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p)
         { cast_names.push_back("put " + a.card_name + " from hand"); }
         else if (a.kind == Action::Kind::JitteModeAbility)
         { cast_names.push_back(a.card_name + (a.gy_exile_mode == 1 ? ": -1/-1" : ": gain 2 life")); }
+        // Blink activations: listed bare under "cast:", a blink read "cast: Eldrazi Displacer" --
+        // the SAME text as hard-casting the outlet, silent about the target, and repeated once per
+        // iteration of a go-off (USER, EDF seed 5: seventeen history rows all saying "cast:
+        // Eldrazi Displacer"). Same defect the loyalty/equip labels above fixed; this summary is
+        // what the viewer writes into its history on an accepted line (matched_summary).
+        else if (a.kind == Action::Kind::ActivateBlink)
+        {
+            const std::string tn = st ? SubChoiceHostLabel(*st, a.sac_victim_id) : std::string();
+            std::string lbl = a.card_name + ": blink" + (tn.empty() ? "" : " " + tn);
+            const int bk = std::max(1, a.chosen_x);
+            if (bk > 1) { lbl += " x" + std::to_string(bk); }
+            cast_names.push_back(lbl);
+        }
+        // Battlefield tap abilities (Mariposa's draw, Shivan Gorge's damage, investigate): also
+        // read as a bare "cast: <land>" in the history. Mirror main.cpp's SummarizePlan label.
+        else if (a.kind == Action::Kind::ActivatePermAbility)
+        {
+            cast_names.push_back(a.card_name + ": "
+                + ((a.def != nullptr && a.ability_mode == Action::AbilityMode::TapDraw
+                    && !a.def->params.tap_draw_requires_top_supertype.empty())
+                       ? "look at top; put a snow card into hand"
+                       : PermAbilityLabel(a.ability_mode)));
+        }
         else { cast_names.push_back(a.card_name); }
     }
     s += "cast: ";
@@ -36495,7 +36520,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         // the sub-decisions in CAST ORDER (unsorted `toks`), so two Desperate Rituals read
         // "splice+0; splice+1" in the order cast, not alpha-scrambled (viewer issue #8). Empty subs ->
         // just the line summary (unchanged from the old label.empty() fallback).
-        std::string label = LineSummaryOfPlan(p);
+        std::string label = LineSummaryOfPlan(p, &state);
         if (!toks.empty())
         {
             label += " \xE2\x80\x94 ";   // em dash separating the line from its sub-decisions
@@ -36628,7 +36653,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     if (out.variants.size() == 1)
     {
         out.verdict = V::Accept; out.plan_index = out.variants[0].plan_index;
-        out.matched_summary = LineSummaryOfPlan(plans[out.variants[0].plan_index]);
+        out.matched_summary = LineSummaryOfPlan(plans[out.variants[0].plan_index], &state);
         return out;
     }
     // #7 SPLICE default: the player does NOT get a splice-count picker -- the line just splices as many
@@ -36674,7 +36699,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             { for (const LineVariant& v : out.variants) { int t = totalSplice(v.plan_index); if (t > pick_total) { pick_total = t; pick = v.plan_index; } } }
             out.variants.clear();
             out.verdict = V::Accept; out.plan_index = pick;
-            out.matched_summary = LineSummaryOfPlan(plans[pick]);
+            out.matched_summary = LineSummaryOfPlan(plans[pick], &state);
             return out;
         }
     }
@@ -37249,6 +37274,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                         if (!cost_ok && cost.ManaValue() > 0)
                         { cost_ok = TapForCostDirect(cp, cost, for_creature); host = -1; }
                     }
+                    // MTG_CHECKLINE_TRACE (viewer-validation forensics, default off): one line per
+                    // host-pick payment attempt. This is what localised the aura-blind mana-cache
+                    // key (pick=1 attached the Trace and {1}{G} still failed -- a stale hit).
+                    static const bool s_checkline_trace = EnvOn("MTG_CHECKLINE_TRACE");
+                    if (s_checkline_trace)
+                    { std::fprintf(stderr, "[checkline] pick=%d k=%zu name=%s aura=%d host=%d cost=%s ok=%d\n",
+                                   host_pick, k, pending[k].name.c_str(), (int)aura, host,
+                                   cost.ToString().c_str(), (int)cost_ok); }
                     if (!cost_ok) { continue; }
                     if (pending[k].rock && pending[k].def)   // freshly-cast rock funds later casts
                     {
