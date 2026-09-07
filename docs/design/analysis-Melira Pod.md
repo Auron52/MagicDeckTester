@@ -1681,19 +1681,31 @@ Three mechanisms, only one of which is even eligible here:
    firing, but the threshold is wrong for Melira.
 
 **Why the threshold is wrong.** `ABANDON_FLOOR_UNITS=40000000` was calibrated to mean "~30 minutes"
-(the user's stated intent) using **Mirrorwing's** ~10k-22k units/core-second. Melira's rate on the
-cells where the monsters live is far lower — H5_s11011 bills **1,637 u/core-s**, so the same floor
-means **6.8 hours**. Measured Melira rates: min 1,637, median 26,599, max 296,805 u/core-s.
-Worse, on H4_s8008 the RATIO fires instead of the floor: median 12.35M units x25 = **308.8M**
-ceiling, 7.7x the floor. The floor is a floor with no cap above it.
+(the user's stated intent) using **Mirrorwing's** ~10k-22k units/core-second. Melira runs an order
+of magnitude slower per unit: measured **min 228, median 3,470, max 28,332 u/core-s**. So the 40M
+floor, meant to be 30 minutes, is **12.6 to 48.7 HOURS** depending on the cell (worst: H5_s11011 at
+228 u/core-s = 48.7 h). On wall-clock grounds the floor is effectively inert on this deck.
 
-**Root mechanism (the part that generalises).** Melira's pathological games burn wall-clock in
-ENUMERATION, which bills no units — units accrue only at rollout turn-steps via
-`SearchBudget::Consume`. Live perf sample of a phase-A monster worker: 82% of stack time in
-`EnumeratePlansWithLandUncached` / `AppendSubdecisionAxes` plus `vector<Action>` copies. So the
-games the ceiling exists to stop are exactly the ones that accrue units most slowly: **the guard is
-weakest precisely where it must be strongest.** Same anatomy as the perf-sprint note (gi32 billed
-4.5M units against ~15 s wall).
+On H4_s8008 the RATIO fires instead of the floor — median 12.35M units x25 = **308.8M** ceiling,
+7.7x the floor, ~13.2 h at that cell's median rate. That one DOES fire (its abandoned games bill
+units ~2-3x faster than their cell's median game, so they reach 308.8M in 4-6.5 h) — but only after
+each has burned 4-6.5 core-hours that are then discarded. The floor is a floor with no cap above it.
+
+**ARITHMETIC CORRECTION (same day):** a first version of this section reported rates ~8x too high
+(min 1,637 / median 26,599) and a 6.8 h worst case. Cause: `cells.json`'s `ms` field is TOTAL
+SECONDS per cell, not per-game milliseconds as the name suggests (`valueleaf_depth_matrix.py:144`
+sums it; `:790` divides by `games` for s/game). Cross-check that settles it: sum(ms) = 2,026,646
+against ~692 core-h of elapsed phase C. The corrected numbers above make the mis-calibration
+substantially WORSE, not better.
+
+**Unit-vs-wall divergence (related, but do NOT over-claim it here).** A live perf sample of a
+PHASE A monster worker showed 82% of stack time in `EnumeratePlansWithLandUncached` /
+`AppendSubdecisionAxes` plus `vector<Action>` copies — enumeration, which bills no units (units
+accrue only at rollout turn-steps via `SearchBudget::Consume`), matching the perf-sprint note that
+gi32 billed 4.5M units against ~15 s wall. That is a real effect and it is why Melira's u/core-s is
+low overall. It is NOT the explanation for the H4_s8008 abandonments specifically: those games bill
+units FASTER than their cell median, so there the binding problem is purely the ceiling's size.
+Phase A (unbounded labels) and phase C (matrix) are different workloads; measure before attributing.
 
 `scripts/valueleaf.sh` already documents this exact failure from the 250M first cut ("wrong by
 ~10x... the floor was ~7 HOURS... CALIBRATE AGAINST THE WORKLOAD YOU ARE BOUNDING"). 40M fixed it
