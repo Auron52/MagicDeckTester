@@ -1664,3 +1664,49 @@ enumeration/plan-apply overhead outside Consume sites; the value leaf (H-cell la
 commit; prior queue logs/vlq_melira_pod had banked 2130/2500 phase-A rows — the driver's play-digest
 chunk banking decides what survives today's play change (bottoming policy + sprint = play moved).
 Then mulligan `recommend` once the value leaf's final stage writes value_play.
+
+### 2026-09-07 — the abandon ceiling is mis-calibrated for this deck (finding, NOT actioned mid-run)
+
+**Symptom:** phase C ran games of 4.5-6.5 h. **They were not un-guarded — they were abandoned,
+just far too late:** 467 slow games voided after burning **222 core-h** (60% of phase C's
+370 core-h of slow-game time). Worst cells: H4_s8008 38.4, H4_s10010 28.0, H4_s11011 22.6 core-h
+of pure waste.
+
+Three mechanisms, only one of which is even eligible here:
+1. Rung/quality condemnation — removed 2026-08-21, gone.
+2. Cell condemnation (`--intractable-median-sec-per-game=30`) — **structurally cannot touch an H
+   cell**: `NEVER_CONDEMN` is clamped >=5 and HDEPTHS tops out at 5. Deliberate (the H cells ARE
+   the crossover). Every multi-hour game here is H3/H4/H5, so this guard is inert by design.
+3. Per-game abandon ceiling = `max(ABANDON_K x cell median units, ABANDON_FLOOR_UNITS)` — armed and
+   firing, but the threshold is wrong for Melira.
+
+**Why the threshold is wrong.** `ABANDON_FLOOR_UNITS=40000000` was calibrated to mean "~30 minutes"
+(the user's stated intent) using **Mirrorwing's** ~10k-22k units/core-second. Melira's rate on the
+cells where the monsters live is far lower — H5_s11011 bills **1,637 u/core-s**, so the same floor
+means **6.8 hours**. Measured Melira rates: min 1,637, median 26,599, max 296,805 u/core-s.
+Worse, on H4_s8008 the RATIO fires instead of the floor: median 12.35M units x25 = **308.8M**
+ceiling, 7.7x the floor. The floor is a floor with no cap above it.
+
+**Root mechanism (the part that generalises).** Melira's pathological games burn wall-clock in
+ENUMERATION, which bills no units — units accrue only at rollout turn-steps via
+`SearchBudget::Consume`. Live perf sample of a phase-A monster worker: 82% of stack time in
+`EnumeratePlansWithLandUncached` / `AppendSubdecisionAxes` plus `vector<Action>` copies. So the
+games the ceiling exists to stop are exactly the ones that accrue units most slowly: **the guard is
+weakest precisely where it must be strongest.** Same anatomy as the perf-sprint note (gi32 billed
+4.5M units against ~15 s wall).
+
+`scripts/valueleaf.sh` already documents this exact failure from the 250M first cut ("wrong by
+~10x... the floor was ~7 HOURS... CALIBRATE AGAINST THE WORKLOAD YOU ARE BOUNDING"). 40M fixed it
+for Mirrorwing and reopens the same ~7 h hole on Melira.
+
+**Proposed fix (deferred — needs the user's call):** derive the floor per DECK from that deck's own
+measured units/core-second (phase C already prints median units in the CEILING lines and s/game per
+cell, which is the whole calibration table), and CAP the ratio so `k x median` can never exceed the
+wall-equivalent of the intended bound. Keep it unit-based: units are what make the skip list
+reproducible across machines.
+
+**NOT actioned mid-run, deliberately:** the abandoned set is unioned across cells and must be
+identical everywhere, so changing the ceiling mid-table would leave cells holding different game
+populations. And `valueleaf.sh` is being executed by a live bash process — editing it in place is
+unsafe. The current table stays VALID (abandoned games are excluded everywhere and backfilled;
+disclosed as `~~ FILTERED`), just expensive.
