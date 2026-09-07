@@ -12227,10 +12227,25 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         // perturb. Rollouts (HumanPlaySuppress) and every autonomous game keep the historical
         // exclusion -- GT, scenarios and references byte-identical.
         // MTG_PAINLAND_TAPAHEAD=0 isolates just this eligibility (sub-lever of MTG_PAINLAND_C).
+        //
+        // CAST SITES TOO, under a guard that makes the stranding above impossible (USER, EDF seed 6
+        // T4: "Playing the second drake floats no mana, despite having 6 untapped on board").
+        // That board is Kitchen + Brushland + Adarkar Wastes and TWO of the three are painlands, so
+        // the blanket exclusion left the Drake's untap nothing to bank and the turn lost a mana it
+        // had earned. The guard is `count >= tapped_n` measured over the whole tap-ahead: the ETB
+        // untaps `count` lands, so while the number of tapped lands stays within that budget EVERY
+        // tapped land is untapped again, whatever order the untap picks -- the painland ends the
+        // step untapped AND its {C} banked, and no later cast can be stranded of a colour, because
+        // the land is still there to tap for it. (The loop below already breaks at
+        // `tapped_n >= count`, so it cannot push past the budget; this only decides eligibility.)
+        // Outside that budget the historical exclusion stands, which is the seed-1 ENUM-GAP case.
+        // MTG_PAINLAND_TAPAHEAD_CAST=0 isolates just the cast-site half.
         static const bool s_pain_tapahead = EnvOn("MTG_PAINLAND_TAPAHEAD", true);
+        static const bool s_pain_cast     = EnvOn("MTG_PAINLAND_TAPAHEAD_CAST", true);
         bool pain_c = false;
         if (q.tap_self_damage > 0 && PainlandCModeEnabled() && s_pain_tapahead
-            && g_in_blink_loop && HumanPlayActive())
+            && HumanPlayActive()
+            && (g_in_blink_loop || (s_pain_cast && count >= tapped_n + 1)))
         {
             for (Color c : q.produces)
             { if (c == Color::Colorless) { pain_c = true; break; } }

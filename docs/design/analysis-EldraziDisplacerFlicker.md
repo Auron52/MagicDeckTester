@@ -3647,3 +3647,60 @@ kills (the drain win and the Infiltrator deck-out) after the change.
 **The lesson worth keeping:** a "verify before you promise" step is right, but *where* it runs
 decides its cost. Anything expensive on the human-play enumeration path is multiplied by the
 stateless replay, not paid once -- so it needs the cheap-projection guard the search already had.
+
+## Session 5c (2026-09-07): seed 6's unbanked painland, and COMBO OFF's false promise
+
+### Seed 6: the second Drake banked nothing (painlands excluded from the CAST-site tap-ahead)
+
+*"Playing the second drake floats no mana, despite having 6 untapped on board from the previous
+drake."* Reproduced exactly at seed 6 gi 5 T4: after the second Peregrine Drake, float `{}` with
+all three lands untapped. The board is Kitchen + Brushland + Adarkar Wastes and **two of those
+three are painlands**, and `EtbUntapTapAheadIntoFloat` excluded painlands outside a blink loop -- so
+the only land the untap could have banked was skipped and the turn lost the mana it had earned.
+
+The exclusion existed for a real reason (the seed-1 ENUM-GAP: floating a painland's only coloured
+mode as {C} stranded a later `{1}{U}` cast). The fix is not to drop it but to bound it: painlands
+are eligible at cast sites **while the tapped-land count stays within the ETB's untap budget**
+(`count >= tapped_n + 1`). Inside that budget every tapped land is untapped again whatever order the
+untap picks, so the painland ends the step untapped AND its {C} banked -- nothing can be stranded of
+a colour, because the land is still there to tap for it. Outside the budget the old exclusion
+stands. Measured on the user's frame: float `{}` -> `{G:1}`, all lands still untapped, life
+unchanged at 18 (the painless {C} mode, no extra pain). `MTG_PAINLAND_TAPAHEAD_CAST=0` isolates it.
+
+**It cost a reference.** `claude_s2_gi1` (a user save) goes shuffle-dead: the extra banked mana
+shifts a Living Wish, whose shuffle moves the draws. The reference sweep is otherwise clean
+(0 ENUM-GAP, 0 play-drift), so the guard does hold -- but that game now needs re-playing by hand if
+the user wants it back. Reported rather than reverted; the seed-6 loss was the reported bug.
+
+### Seed 7: COMBO OFF promised a win it could not deliver
+
+The offered plan was `Living Wish -> Adarkar Wastes, Living Wish -> Adarkar Wastes, Eldrazi
+Displacer: blink Peregrine Drake x10 -- COMBO OFF: wins this turn`. It blinked ten times and did not
+win. *"Combo off failed to actually do the right thing here."*
+
+**Cause: the trial apply and the real apply resolved the same plan differently.** The verify runs
+under `RevealLogPause`, which nulls the 26 choosers -- so a sub-decision inside the plan resolves by
+ENGINE RANKING in the trial and by the HUMAN's declared answer in the real apply. Here both Living
+Wishes were declared onto *Adarkar Wastes* (a land); the trial's nulled chooser re-ranked them onto
+the SINK and won, while the real apply honoured the declared lands, left no wish in hand for
+`ApplyBlinkLoop`'s own finisher route, and could not win. Same class as the `g_scripted_*` pin
+hazard, one layer up: **RevealLogPause makes a trial apply optimistic about every human choice.**
+
+**Fix: only a STANDALONE go-off is a COMBO OFF candidate** -- the blink action alone, no land drop
+and no other casts. It has no sub-decision to diverge on, and it loses nothing, because the
+sink-still-in-hand case is handled *inside* `ApplyBlinkLoop`, whose finish route fetches the
+finisher BY NAME rather than by resolution-time ranking -- identically in both worlds. (Seed 1's
+turn-3 kill is exactly that shape: a bare `blink Peregrine Drake x4`.) This reverts the widening
+added earlier the same day, which had been justified by a case that turned out not to need it.
+
+**And a second bug the fix exposed:** the removal of non-winning go-offs had been gated on the same
+`plausible` projection as the expensive verify, so whenever a kill was out of reach *every* banking
+go-off came back onto the menu -- precisely the halfway lines the gate exists to delete. The two
+halves are now gated separately: the verify is skipped when a win is out of reach, the removal
+always runs.
+
+### Placement
+
+COMBO OFF moved from the side column to the right end of the planbar -- the board's own control row,
+beside Commit Line (USER: *"I'd prefer the combo off button to actually be on the right of the
+board, rather than in the history. It is a bit too out of the way over there."*).

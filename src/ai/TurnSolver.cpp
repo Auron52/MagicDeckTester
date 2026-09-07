@@ -34827,20 +34827,29 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             }
             return k;
         };
-        // Candidates, in preference order: the biggest STANDALONE go-off (the cleanest button --
-        // the loop and nothing else), then the biggest go-off overall. The second is not a
-        // "halfway" line and must be offered: the sink this deck wins through is often still in
-        // HAND at the moment the loop goes live (Living Wish -> Essence Depleter), so the winning
-        // plan legitimately casts it, and refusing to look past standalone plans would hide a real
-        // kill behind a menu that no longer contains it either. What stays banned is the
-        // NON-winning go-off, which is the whole complaint. At most two trial-applies, because a
-        // 50-iteration loop apply is not free and this runs on every human main-phase enumeration.
-        int best_alone = -1, best_alone_k = 0, best_any = -1, best_any_k = 0;
+        // ONLY A STANDALONE GO-OFF IS A CANDIDATE: the blink action alone, no land drop and no
+        // other casts. This is not tidiness, it is what makes the verify TRUTHFUL.
+        //
+        // The trial apply below runs under RevealLogPause, which nulls the 26 choosers -- so any
+        // sub-decision inside the plan resolves by ENGINE RANKING in the trial and by the HUMAN's
+        // declared answer in the real apply. A combined plan is exactly where those differ, and it
+        // shipped a false promise (USER, EDF seed 7 T5: the offered plan cast both Living Wishes
+        // for Adarkar Wastes and then blinked x10 -- the trial's nulled chooser re-ranked those
+        // wishes onto the SINK and won, while the real apply honoured the declared lands, left no
+        // wish in hand for the loop's own finisher route, and simply did not win: "Combo off failed
+        // to actually do the right thing here").
+        //
+        // A standalone go-off has no such sub-decision to diverge on, and it loses nothing: the
+        // sink-still-in-hand case is handled INSIDE ApplyBlinkLoop, whose finish route casts the
+        // wish and fetches the finisher BY NAME (not by resolution-time ranking), identically in
+        // both worlds. EDF seed 1's turn-3 kill is exactly that shape -- its COMBO OFF plan is a
+        // bare "blink Peregrine Drake x4".
+        int best_alone = -1, best_alone_k = 0, best_any = -1;
         for (int i = 0; i < static_cast<int>(plans.size()); ++i)
         {
             const int k = goff_of(plans[i]);
             if (k == 0) { continue; }
-            if (k > best_any_k) { best_any = i; best_any_k = k; }
+            best_any = i;   // a go-off exists -> the non-winning ones still get dropped below
             if (plans[i].actions.size() == 1 && plans[i].land_to_play.empty() && k > best_alone_k)
             { best_alone = i; best_alone_k = k; }
         }
@@ -34868,13 +34877,18 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                          || prov.ProjectsAlternateWin(state, casting);
             }
         }
-        if (best_any >= 0 && plausible)
+        // NOTE the two halves are gated DIFFERENTLY, and that is load-bearing. The expensive VERIFY
+        // is skipped when the projection says a win is out of reach; the cheap REMOVAL of
+        // non-winning go-offs runs whenever one exists. Gating both on `plausible` (as the first
+        // cut did) let every banking go-off back onto the menu the moment a kill was out of reach
+        // -- i.e. precisely the "halfway line" case the gate exists to delete.
+        if (best_any >= 0)
         {
             int best = -1;
             bool verified = false;
-            for (int cand : { best_alone, best_any })
+            for (int cand : (plausible ? std::vector<int>{ best_alone } : std::vector<int>{}))
             {
-                if (cand < 0 || cand == best) { continue; }
+                if (cand < 0) { continue; }
                 RevealLogPause pause;      // trial apply: no viewer events / draw log / reveal spam
                 // ...and RevealLogPause is NOT enough on its own. It nulls the 26 CHOOSERS, but the
                 // scripted pins are separate one-shot ints that a resolution CONSUMES (reads, then

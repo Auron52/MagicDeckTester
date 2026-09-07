@@ -48,6 +48,14 @@
       background:#1f2530; border:1px solid var(--good); border-radius:9px; padding:9px 12px;
       box-shadow:0 -6px 18px rgba(0,0,0,.45); }
   #planbar .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--good); font-weight:600; }
+  /* COMBO OFF sits at the RIGHT END of the board's own control row (margin-left:auto), where the
+     eye already is while playing the turn. Gold and pulsing because it appears only when the
+     engine has VERIFIED this turn wins -- it is never merely a suggestion. */
+  #planbar .combooff { margin-left:auto; font-weight:700; letter-spacing:.3px; color:#0c1116;
+                       background:linear-gradient(180deg,#f0dfa0,#d6b84c); border:1px solid #6a5c2a;
+                       animation:combopulse 1.6s ease-in-out infinite; }
+  @keyframes combopulse { 0%,100% { box-shadow:0 0 0 0 rgba(214,184,76,.55); }
+                          50%     { box-shadow:0 0 0 6px rgba(214,184,76,0); } }
   #planbar .chips { display:flex; gap:6px; flex-wrap:wrap; flex:1; }
   #planbar .chip { display:inline-flex; align-items:center; gap:5px; background:#2a313b; border:1px solid var(--line);
       border-radius:13px; padding:2px 6px 2px 4px; font-size:12px; }
@@ -1266,19 +1274,26 @@ function comboOffPlan(){
 // Render (or hide) the COMBO OFF control. Deliberately NOT part of the queued line: it is not a
 // step in a plan the human is building, it is "skip to the end, you have already won" -- so it
 // commits its plan directly, the same path a model-plan button in the verdict box takes.
-function renderComboOff(){
-  const el = $('combooff'); if (!el) return;
+// The button lives with the BOARD's own controls (the planbar, beside Commit Line), not off in the
+// side column: USER 2026-09-07, "I'd prefer the combo off button to actually be on the right of the
+// board, rather than in the history. It is a bit too out of the way over there." The old side-panel
+// slot is emptied rather than removed, so nothing else needs to know where it moved.
+function comboOffButtonHtml(){
   const p = comboOffPlan();
-  if (!p) { el.style.display='none'; el.innerHTML=''; return; }
-  el.innerHTML = `<h4>⚡ This turn is a kill</h4>`+
-    `<div class="sub">The engine simulated the loop through to the end and the opponent loses. `+
-    `Or ignore this and keep playing the turn out one activation at a time.</div>`+
-    `<button id="combooffbtn" class="primary" title="${esc(p.summary)}">Combo Off — win now</button>`;
-  el.style.display='block';
-  $('combooffbtn').onclick = () => {
+  if (!p) return '';
+  return `<button id="combooffbtn" class="combooff" title="${esc(p.summary)}">`+
+         `⚡ Combo Off — win now</button>`;
+}
+function wireComboOffButton(){
+  const b = $('combooffbtn'); if (!b) return;
+  b.onclick = () => {
+    const p = comboOffPlan(); if (!p) return;
     S.plan=[]; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.segmentsLeft=0;
     applyAccepted(p.index, 'COMBO OFF: '+p.summary);
   };
+}
+function renderComboOff(){
+  const el = $('combooff'); if (el) { el.style.display='none'; el.innerHTML=''; }
 }
 function renderBoard() {
   renderComboOff();
@@ -1579,9 +1594,11 @@ function renderPlanbar() {
     (empty?'':`<button id="clearp" class="ghost">Clear</button>`)+
     `<span class="lbl">Turn plan</span>`+
     (empty?`<span class="empty">double-click or drag cards in hand to build a line</span>`:`<div class="chips">${chips}${leChip}</div>`)+
-    tip;
+    tip+
+    comboOffButtonHtml();
   $('commit').onclick = commitLine;
   $('committurn').onclick = commitTurn;
+  wireComboOffButton();
   if ($('clearp')) $('clearp').onclick = clearPlan;
   pb.querySelectorAll('.x[data-rm]').forEach(x=>x.onclick=()=>removePlanAt(+x.dataset.rm));
   // Aura chips: drag onto a creature in the field to (re)assign the enchant target (routes through
