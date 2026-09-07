@@ -3480,3 +3480,31 @@ trace mechanism `ref_regenerate.py` uses). The new recording:
   committed a78440e1 version when this session started; its decision line was dumped before
   replacement and is semantically the same 54-decision phantom-mana T3 game, so nothing user-owned
   was lost that git history does not hold. The old recording remains recoverable at a78440e1.
+
+### CORRECTION (same day): seed 1 IS a T3 -- the adjudication's "no honest blue source" was wrong
+
+The user pushed back on the T4 re-play ("Seed 1 should be T3") and they were right, twice over:
+
+* **The recorded T3 line was rules-legal all along.** The claim "the board has NO honest blue
+  source" missed that a Conservatory tap with Trace attached yields base + {G}(WG) + WILD -- and
+  when that 3-mana tap pays a 2-cost (Living Wish), the mandatory aura bonus means the wild
+  FLOATS. That floating wild is a blue source. The recorded dec-9 float {wild:1} was legally
+  reachable; what the cache A/B actually demonstrated is that the stale cache and the honest
+  solver choose DIFFERENT payment assignments, not that the recorded state was unreachable. The
+  ENUM-GAP classification was mechanically correct (the honest replay's min-waste payments
+  foreclose the recorded plans), but the "illegally-good line" verdict was over-drawn.
+* **The T4 re-play was a misplay** (wished Depleter T3 instead of Cloud, missing the
+  Cloud-untap bootstrap). Re-played properly the game wins T3: T3 = Mariposa; Trace->Aether Hub
+  (paid by Conservatory -- attaching to Hub makes Hub the only remaining {G} source, FORCING
+  Wish's payment to tap it and float the Trace wild); Wish->Cloud; Cloud off the floated wild +
+  Mariposa, untap 2; Drake, Drake, Emiel in one engine-validated triple; bootstrap blink off
+  {G:2} float + Mariposa; blink/investigate/draw loop into Living Wish #2 -> Essence Depleter ->
+  drains 20. win_turn 3, life 40, 30 decisions, round-trips check_reference as plain `ok`.
+* **Payment-assignment sensitivity is the real lesson.** The T3 exists only under specific
+  payment assignments (Trace must NOT consume the land whose later tap must float the wild).
+  The min-waste solver picks the foreclosing assignment for the combined "Trace->Cons + Wish"
+  plan; casting Trace->HUB solo steers it. A human in the viewer can reach T3, but only by
+  understanding this; the search benchmark for this game reports T5 -- now a TWO-turn shortfall
+  vs the human line, worth revisiting if this deck's convergence loop reopens (the search
+  presumably never explores the wild-floating overpay assignment).
+* The T4 recording shipped in 69652a2b was superseded by the T3 recording in this commit.
