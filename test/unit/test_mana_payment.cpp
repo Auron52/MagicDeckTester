@@ -764,3 +764,41 @@ TEST_CASE("failed payment refunds Aether Hub energy (the retry must see it)")
     CHECK(TapForCostDirect(s, Cost(1, 0, 0, 0, 0, /*g=*/1), false));
     CHECK(s.players[0].energy_counters == 0);   // the successful payment spends it for real
 }
+
+// GENERIC PIPS MUST NOT EAT THE COLOURLESS A {C} PIP NEEDS (USER-found, EDF seed 5 reference,
+// 2026-09-07: "we drain the colourless before green even when the colourless matters").
+//
+// Essence Depleter's drain is {1}{C}. Paying it from a go-off float of {G:24, C:37} used to take
+// TWO colourless -- one for the {C} pip and one for the GENERIC -- while 24 green sat untouched,
+// so the bank paid for half the drains it should have. The mana is already FLOATING at that point
+// (the blink loop untapped and banked it), so the old rationale for the default order -- "a drain
+// can just tap a colourless land each pass" -- has no lands left to tap. A cost carrying a {C} pip
+// now pushes colourless to the BACK of its own generic order.
+TEST_CASE("a {C}-pip cost pays its generic from a COLOUR, sparing colourless for the pip")
+{
+    ManaCost drain = Cost(1);                     // {1}{C}: Essence Depleter
+    drain.colorless = 1;
+    ManaPool pool;  pool.green = 24; pool.colorless = 37;
+    SpendFloatingTowardCost(pool, drain, /*keep_flexible=*/false);
+    CHECK(drain.generic == 0);                    // fully paid
+    CHECK(drain.colorless == 0);
+    CHECK(pool.colorless == 36);                  // the PIP only -- was 35 before the fix
+    CHECK(pool.green == 23);                      // the generic came out of green
+
+    // No colour to spare -> colourless still pays the generic; the cost must never go unpaid.
+    ManaCost only_c = Cost(1);  only_c.colorless = 1;
+    ManaPool cpool;  cpool.colorless = 5;
+    SpendFloatingTowardCost(cpool, only_c, false);
+    CHECK(only_c.generic == 0);
+    CHECK(only_c.colorless == 0);
+    CHECK(cpool.colorless == 3);
+
+    // A cost with NO {C} pip is untouched by this rule (colourless stays first in the generic
+    // order, which is what every measurement outside an Eldrazi deck was taken under).
+    ManaCost plain = Cost(2);
+    ManaPool ppool;  ppool.colorless = 2; ppool.green = 2;
+    SpendFloatingTowardCost(ppool, plain, false);
+    CHECK(plain.generic == 0);
+    CHECK(ppool.colorless == 0);
+    CHECK(ppool.green == 2);
+}

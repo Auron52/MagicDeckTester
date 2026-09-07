@@ -128,7 +128,8 @@ function buildDom() {
     + 'window.__MAX_TURNS = MAX_TURNS;'
     + 'window.__subdecisions = SUBDECISIONS;'
     + 'window.__panel = function(d, dec){ return renderDecisionPanel(d, dec); };'
-    + 'window.__actpick = activationPickerHtml;';
+    + 'window.__actpick = activationPickerHtml;'
+    + 'window.__blink = { arm: toggleActivate, at: blinkAtTarget };';
   // NB renderBoard/renderHand are function declarations, so they already are window properties --
   // the MDFC test below drives them directly against a synthetic decision.
   win.document.body.appendChild(acc);
@@ -461,6 +462,74 @@ function testActivationPicker(win) {
 // no affordance at all: user-reported 2026-08-24 with a saved rejection artifact (StompySurprise s5
 // gi4 t2). DOM-only, driven off a synthetic decision, because the bug is entirely in the palette --
 // the engine accepted `land=Turntimber Symbiosis;cast=Priest of Titania` all along.
+// BLINK TARGETING ON THE BOARD (2026-09-07). The choice a blink outlet asks is "which creature",
+// and that creature is on the board -- so clicking the outlet ARMS it and clicking the creature
+// commits, instead of a grid of card images in a modal (USER: "Can we make the flicker decision
+// targeting on the board rather than a dialog?"). Pins: arming highlights exactly the legal
+// targets; a board click queues the right target's option; a repeatable outlet STAYS armed so
+// repeat clicks stack; clicking the outlet again disarms; and a ONE-target outlet needs no arming
+// at all (it queues directly -- "if there is no choice, just choose the only option").
+function testBlinkBoardTargeting(win) {
+  const S = win.__getS(), fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const blinkAct = (tgtNum, tgtName) => ({
+    card: 'Emiel the Blessed', activate: true, verb: 'blink', repeatable: true,
+    blink_target: tgtNum, blink_target_name: tgtName, blink_count: 1,
+  });
+  const perm = (idx, num, name) => ({ idx, num, name, is_land: false, tapped: false });
+  const mk = (idx, acts) => ({
+    type: 'main_phase', decision_index: idx, turn: 4, phase: 'pre_main', on_the_play: true,
+    me: { life: 20, library_size: 40, land_drops_left: 0, graveyard: [], hand: [],
+          battlefield: [perm(0, 21, 'Emiel the Blessed'), perm(1, 42, 'Peregrine Drake'),
+                        perm(2, 43, 'Cloud of Faeries')] },
+    opponent: { life: 20, battlefield: [] },
+    plans: acts.map((a, i) => ({ index: i, summary: 'land=none; cast: Emiel the Blessed: blink',
+                                 land: null, casts: [], actions: [a] })),
+  });
+  const reset = d => { S.decision = d; S.prev = null; S.plan = []; S.over = false; S.busy = false;
+                       S.handOrder = []; S.leMode = false; S.vialMode = null; S.blinkMode = null;
+                       S._actSrcFor = null; S._actSrc = null; win.renderBoard(); };
+
+  // TWO targets -> arming, not a modal.
+  reset(mk(5, [blinkAct(42, 'Peregrine Drake'), blinkAct(43, 'Cloud of Faeries')]));
+  win.__blink.arm('Emiel the Blessed');
+  chk(!!S.blinkMode && S.blinkMode.src === 'Emiel the Blessed',
+      'clicking a multi-target blink outlet ARMS board targeting');
+  chk(!S.actPick, 'arming must NOT also open the modal picker');
+  const lit = [...win.document.querySelectorAll('#playfield .thumb.selectable[data-num]')]
+                .map(t => +t.dataset.num).sort((a, b) => a - b);
+  chk(JSON.stringify(lit) === JSON.stringify([42, 43]),
+      `exactly the legal targets light up, got ${JSON.stringify(lit)}`);
+
+  // Clicking a target queues THAT target, and the repeatable outlet stays armed so clicks stack.
+  const drake = win.document.querySelector('#playfield .thumb[data-num="42"]');
+  chk(!!drake, 'the blink target has a clickable board thumb');
+  if (drake) {
+    drake.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    chk(S.plan.length === 1 && S.plan[0].blinkTarget === 42,
+        `a board click queues that target, got ${JSON.stringify(S.plan)}`);
+    chk(!!S.blinkMode, 'a REPEATABLE outlet stays armed so repeat clicks stack');
+    win.document.querySelector('#playfield .thumb[data-num="42"]')
+       .dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    chk(S.plan.length === 2, `a second click stacks a second activation, got ${S.plan.length}`);
+    chk(win.LineBuild.encodeSegments(S.plan).length === 2,
+        'two stacked activations encode as TWO segments');
+  }
+  // Clicking the outlet again disarms without queueing anything more.
+  const before = S.plan.length;
+  win.__blink.arm('Emiel the Blessed');
+  chk(!S.blinkMode, 'clicking the armed outlet again disarms it');
+  chk(S.plan.length === before, 'disarming queues nothing');
+
+  // ONE target -> no arming and no modal: it just queues (there is no choice to make).
+  reset(mk(6, [blinkAct(42, 'Peregrine Drake')]));
+  win.__blink.arm('Emiel the Blessed');
+  chk(!S.blinkMode && !S.actPick, 'a single-target blink asks nothing');
+  chk(S.plan.length === 1 && S.plan[0].blinkTarget === 42,
+      `a single-target blink queues directly, got ${JSON.stringify(S.plan)}`);
+  return fails;
+}
+
 function testMdfcLandFace(win) {
   const S = win.__getS(), fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
@@ -802,6 +871,10 @@ async function testColorlessFirstTapOrder() {
     const apFails = testActivationPicker(win);
     if (apFails.length) { anyFail = true; console.log(`✗ activation picker: ${apFails.length} fail`); apFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ activation picker renders for sfput / jittemode / attachall'); }
+    // Blink targeting happens on the BOARD, not in a modal (fast, DOM-only).
+    const btFails = testBlinkBoardTargeting(win);
+    if (btFails.length) { anyFail = true; console.log(`✗ blink board targeting: ${btFails.length} fail`); btFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ blink targets picked on the board (arm → click creature → stacks; 1 target asks nothing)'); }
     // MDFC land back reachable from the palette (fast, DOM-only).
     const lfFails = testMdfcLandFace(win);
     if (lfFails.length) { anyFail = true; console.log(`✗ mdfc land face: ${lfFails.length} fail`); lfFails.forEach(m => console.log('  - ' + m)); }

@@ -34844,7 +34844,31 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             if (plans[i].actions.size() == 1 && plans[i].land_to_play.empty() && k > best_alone_k)
             { best_alone = i; best_alone_k = k; }
         }
-        if (best_any >= 0)
+        // CHEAP PROJECTION FIRST -- the trial apply is NOT free. Running the whole go-off (dozens
+        // of iterations plus sink instalments) costs milliseconds, and the viewer's stateless
+        // protocol REPLAYS the game from the start on every step, so a gate that applies
+        // unconditionally pays that cost once per already-decided prefix decision too: measured at
+        // EDF seed 5 mid-go-off, 190ms -> 3075ms for ONE viewer step (USER: "the essence depleter
+        // activations were painfully slow"). The provider's own O(board) arithmetic answers "could
+        // this conceivably win" -- the SAME precondition the search's goff cut uses -- so verify
+        // only when it says yes. Both projections are documented as optimistic-by-contract, which
+        // is exactly what a pre-filter needs: it may over-admit (costing an apply) but never
+        // under-admits a real kill. MTG_COMBO_OFF_PROJECT=0 forces the old unconditional verify.
+        static const bool s_co_project = EnvOn("MTG_COMBO_OFF_PROJECT", true);
+        bool plausible = true;
+        if (best_any >= 0 && s_co_project)
+        {
+            const DecisionProvider& prov = ResolveProvider(state);
+            plausible = false;
+            if (prov.HasExtraLethalModel())
+            {
+                const std::vector<const CardDefinition*> casting;   // nothing extra being cast
+                const int opp_life = state.players[1 - state.active_player_index].life;
+                plausible = prov.ExtraLethalDamage(state, casting) >= opp_life
+                         || prov.ProjectsAlternateWin(state, casting);
+            }
+        }
+        if (best_any >= 0 && plausible)
         {
             int best = -1;
             bool verified = false;

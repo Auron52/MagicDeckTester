@@ -773,7 +773,7 @@ function retargetPlanAura(planIdx, num) {
   renderBoard();
   return true;
 }
-function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; hideVerdict(); renderBoard(); }
+function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; S.blinkMode=null; hideVerdict(); renderBoard(); }
 
 // ---- rendering -------------------------------------------------------------
 // Colored counter badges for a permanent {counters:[{kind,label,count}]}. One circle per kind.
@@ -893,7 +893,7 @@ function digSources() {
 function fireDig(planIndex, label) {
   if (S.busy || S.over || planIndex == null) return;
   if (S.plan && S.plan.length) flashHint('Queued line cleared to ' + label + '.');
-  S.plan = []; S.leMode = false; S.vialMode = null;
+  S.plan = []; S.leMode = false; S.vialMode = null; S.blinkMode = null;
   hideVerdict();
   applyAccepted(planIndex, label);
 }
@@ -1020,6 +1020,11 @@ function clickActivateCount(name){
 function toggleActivate(name){
   if (S.over || !S.decision || S.decision.type!=='main_phase') return;
   hideVerdict();
+  // Clicking the armed outlet again disarms it (the Vial's cancel gesture, verbatim).
+  if (S.blinkMode && S.blinkMode.src===name) {
+    S.blinkMode=null; flashHint(`${name}: blink cancelled.`); renderBoard(); return;
+  }
+  S.blinkMode=null;   // arming a different source drops the old arm
   const opts = clickActivationOptions(name);
   // Equip-only source: there is nothing to click. Say what the gesture IS rather than doing
   // nothing, which is how a removed affordance reads as a broken one.
@@ -1035,8 +1040,35 @@ function toggleActivate(name){
     if (i>=0) { S.plan.splice(i,1); flashHint(`Removed ${name}’s ability from this turn’s line.`); renderBoard(); }
     return;
   }
+  // A BLINK's only real choice is WHICH permanent to exile-and-return, and that choice is about a
+  // creature sitting on the board -- so it is made BY CLICKING THAT CREATURE, not from a grid of
+  // card images in a modal (USER 2026-09-07: "Can we make the flicker decision targeting on the
+  // board rather than a dialog?"). Same shape as the Aether Vial deploy mode and the equip DRAG:
+  // click the outlet to arm it, click the target to commit. Only when the targets genuinely differ
+  // -- one option needs no picker at all and falls through to the direct queue below.
+  if (opts.length > 1 && opts.every(o=>o.verb==='blink')) {
+    S.blinkMode = { src:name, opts };
+    S.leMode=false; S.vialMode=null; S.actPick=null;
+    flashHint(`${name} armed — click the creature on your board to blink. Click ${name} again to cancel.`);
+    renderBoard();
+    return;
+  }
   if (opts.length > 1) { S.actPick = { src:name, opts }; renderBoard(); return; }
   queueActivation(name, opts[0]);
+}
+// Commit the armed blink against the permanent the human clicked (m_number). Returns false when
+// that permanent is not a legal target for this outlet, so the caller can fall through.
+function blinkAtTarget(num){
+  const bm = S.blinkMode; if (!bm) return false;
+  const opt = (bm.opts||[]).find(o => o.blinkTarget === num);
+  if (!opt) return false;
+  // STAY ARMED for a repeatable outlet, so clicking the same creature again stacks another
+  // activation -- "click the ability 10 times -> 10 activations" without re-arming between each
+  // (they commit as consecutive segments; see LB.segmentParts). Click the outlet to disarm.
+  // A non-repeatable blink disarms after its one use, which is all it has.
+  if (!opt.repeatable) { S.blinkMode = null; }
+  queueActivation(bm.src, opt);
+  return true;
 }
 // Commit one chosen activation into the plan. `src` is the permanent clicked; `opt` says which verb
 // the line writes and what it names. Kept apart from toggleActivate so the picker can call it.
@@ -1244,7 +1276,7 @@ function renderComboOff(){
     `<button id="combooffbtn" class="primary" title="${esc(p.summary)}">Combo Off — win now</button>`;
   el.style.display='block';
   $('combooffbtn').onclick = () => {
-    S.plan=[]; S.leMode=false; S.vialMode=null; S.segmentsLeft=0;
+    S.plan=[]; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.segmentsLeft=0;
     applyAccepted(p.index, 'COMBO OFF: '+p.summary);
   };
 }
@@ -1738,6 +1770,19 @@ function wireBoard() {
   // one activation into this phase's line; clicking past the cap removes the last one.
   $('board').querySelectorAll('.thumb[data-activate]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); toggleActivate(t.dataset.activate); });
+  // ARMED BLINK: every legal target lights up and takes the click, so the choice is made on the
+  // board. Wired LAST so it wins over the data-activate handler above -- a legal target can itself
+  // be an activatable permanent (blinking your own Essence Depleter is a real play), and while the
+  // outlet is armed the click means "blink this", not "activate this".
+  if (S.blinkMode) {
+    const legal = new Set((S.blinkMode.opts||[]).map(o=>o.blinkTarget));
+    $('board').querySelectorAll('#playfield .thumb[data-num]').forEach(t=>{
+      const num = +t.dataset.num;
+      if (!legal.has(num)) return;
+      t.classList.add('selectable');
+      t.onclick = e => { e.stopPropagation(); blinkAtTarget(num); };
+    });
+  }
 }
 
 function renderEffects() {
@@ -2118,7 +2163,7 @@ function applyAccepted(planIndex, label) {
   // identical to the old filter for a multi-land line, which is the only shape that had segments).
   if (chaining) { S.plan = LB.dropFirstSegment(S.plan); }
   else          { S.plan=[]; }
-  S.leMode=false; S.vialMode=null;
+  S.leMode=false; S.vialMode=null; S.blinkMode=null;
   renderHistory(); hideVerdict(); step();
 }
 function handleVerdict(v, line) {
@@ -2170,7 +2215,7 @@ function handleVerdict(v, line) {
   ve.querySelectorAll('.vplan').forEach(btn=>btn.onclick=()=>{
     const idx=parseInt(btn.getAttribute('data-plan'),10);
     if (!Number.isFinite(idx)) return;
-    S.plan=[]; S.leMode=false; S.vialMode=null;
+    S.plan=[]; S.leMode=false; S.vialMode=null; S.blinkMode=null;
     applyAccepted(idx, 'chose model plan: '+btn.textContent);
   });
 }
@@ -3511,11 +3556,21 @@ function autoResolveDecision(dec){
   // shouldn't exist") -- auto-take the AI's pick silently, whatever the surfacing toggles say.
   // The answer still rides the positional --choices stream, so replays of recorded games (which
   // answered the old dialog) stay cursor-aligned. Two+ hosts keep the real choice.
-  if (dec.type==='attach_host' && (dec.options||[]).length<=1){
+  // A ONE-option board pick is not a choice either -- same rule, generalised (USER 2026-09-07:
+  // "if there is no choice, just choose the only option"). These all share the shape the
+  // attach_host case established: an `options` list of own permanents, answered by ONE int, whose
+  // engine default already names the only entry. The answer still rides the positional --choices
+  // stream, so a recorded game that answered the old dialog stays cursor-aligned. Two+ options
+  // keep the real choice, and `target` is deliberately EXCLUDED: its option list is legal targets
+  // across BOTH boards and a one-target spell can still be worth declining. So are `sac_tutor` and
+  // `revive`, which LOOK similar but answer with ONE INT PER CANDIDATE rather than a single option
+  // index -- pushing one int for those would desynchronise the whole --choices stream.
+  const ONE_OPTION_AUTO = { attach_host:'attach', flicker:'flicker' };
+  if ((dec.type in ONE_OPTION_AUTO) && (dec.options||[]).length<=1){
     const def=(dec.heuristic_default==null?-1:dec.heuristic_default);
     const o=(dec.options||[])[0];
     dec._autoStep = true;
-    pushChoice(dec, def, `${dec.source||'Equipment'}: attach${o?' → '+o.name:' (none)'} · auto`);
+    pushChoice(dec, def, `${dec.source||dec.type}: ${ONE_OPTION_AUTO[dec.type]}${o?' → '+o.name:' (none)'} · auto`);
     return true;
   }
   if (!(dec.type in AUTO_RESOLVABLE)) return false;
@@ -3539,7 +3594,7 @@ function autoResolveDecision(dec){
   return true;
 }
 function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n));
-  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null;
+  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.boardSel=null; S._selFor=null;
   S.actPick=null;   // a half-open activation picker belongs to the decision it was opened on
   // When this decision was reached by an UNDO (user stepping back), suppress the forward-play
   // auto-advance below for THIS one decision: the dead-opponent auto-pass / commit-turn skip exist to
@@ -3706,7 +3761,7 @@ function rollbackStep() {
             S.handOrder=cp.handOrder?cp.handOrder.slice():undefined; }
   else    { S.lastGy={}; S.lastCasts=new Set(); S.handOrder=undefined; }
   (S.checkpoints||[]).length=S.steps.length;   // drop this + the returned decision's cp; advanceTo recreates it
-  S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false; S.vialMode=null;
+  S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null;
   S.boardSel=null; S._selFor=null; S.divAlloc=null; S._divFor=null; hideDecPanel();
   return true;
 }

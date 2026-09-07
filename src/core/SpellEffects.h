@@ -13997,6 +13997,8 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     cost.generic -= _snow_hold.held;
 
     if (reserve.Total() == 0) { return; }
+    // Does THIS cost want colourless? Read before step 1 spends the pip (see the generic-order note).
+    const bool _own_c = cost.colorless > 0;
     auto drain = [](int& pip, int& pool) { while (pip > 0 && pool > 0) { --pip; --pool; } };
     // 1) Exact colour matches.
     drain(cost.white,     reserve.white);
@@ -14042,13 +14044,29 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     // g_hold_colorless_for_pips moves colourless to the BACK of the generic order, so a bank being
     // assembled for a later {C} pip survives this cost. Off everywhere but the exile sink inside
     // ApplyBlinkLoop, and a no-op even there whenever the reserve holds no colourless.
-    if (!g_hold_colorless_for_pips) { drain(cost.generic, reserve.colorless); }
+    //
+    // ...AND a cost that carries a {C} pip OF ITS OWN holds colourless back too (USER 2026-09-07,
+    // EDF seed 5: "we drain the colourless before green even when the colourless matters"). Their
+    // reference shows 19 consecutive Essence Depleter drains ({1}{C}) each taking TWO colourless
+    // off a float of {G:24, C:37} -- the pip took one and the GENERIC took another -- while 24
+    // green sat untouched, so the bank ran dry at half the drains it could have paid for.
+    //
+    // The flag's own note argued the drain did not need this because "it can just tap a colourless
+    // land each pass". That is exactly what a go-off turn cannot do: the mana is ALREADY FLOATING
+    // from the loop's untaps and there is no land left to tap, so the only colourless that will
+    // ever exist is the pile being spent. A cost asking for {C} is the demand signal, and paying
+    // its generic from a colour instead is free whenever a colour is there to pay it.
+    // `_own_c` is captured BEFORE step 1 drains the pip. MTG_HOLD_C_FOR_PIPS=0 restores the old
+    // order (one-binary A/B).
+    static const bool s_hold_c_own = EnvOn("MTG_HOLD_C_FOR_PIPS", true);
+    const bool hold_c = g_hold_colorless_for_pips || (s_hold_c_own && _own_c);
+    if (!hold_c) { drain(cost.generic, reserve.colorless); }
     drain(cost.generic, reserve.white);
     drain(cost.generic, reserve.blue);
     drain(cost.generic, reserve.black);
     drain(cost.generic, reserve.red);
     drain(cost.generic, reserve.green);
-    if (g_hold_colorless_for_pips) { drain(cost.generic, reserve.colorless); }
+    if (hold_c) { drain(cost.generic, reserve.colorless); }
 }
 
 // True iff the active player's hand holds a card of a subtype this reveal land wants

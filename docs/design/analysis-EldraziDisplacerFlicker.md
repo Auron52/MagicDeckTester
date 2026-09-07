@@ -3597,3 +3597,53 @@ finisher, which resolves a TUTOR -- so without an explicit save/restore the tria
 human's pinned tutor pick and the real apply would silently fall back to the heuristic. The gate now
 snapshots and restores all seven pins around the trial. Any future "simulate a plan to see what
 happens" code in a human-play path needs the same guard.
+
+## Session 5b (2026-09-07): the seed-5 reference -- a wasted-colourless misplay and a self-inflicted stall
+
+The user saved `claude_s5_gi4` and flagged two things in it: *"we drain the colourless before green
+even when the colourless matters"* and *"the essence depleter activations were painfully slow."*
+Both were real; they are unrelated, and one of them I had caused an hour earlier.
+
+### 1. Generic pips were eating the colourless a {C} pip needs
+
+The reference shows it plainly. From decision 55 on, nineteen consecutive Essence Depleter
+activations ({1}{C}) each take **two** colourless off a float of `{G:24, C:37}` -- one for the {C}
+pip, one for the GENERIC -- while twenty-four green sits untouched. The bank runs dry at decision 73
+having paid for half the drains it could have.
+
+`SpendFloatingTowardCost` already had the machinery (`g_hold_colorless_for_pips`, which pushes
+colourless to the back of the generic order) but deliberately did NOT arm it for the drain. Its note
+gives the reason: *"a drain spends its {C} one activation at a time, so it can just tap a colourless
+land each pass."* That is true on an ordinary turn and false on the only turn that matters here --
+in a go-off the mana is ALREADY FLOATING from the loop's untaps, there is no land left to tap, and
+the pile being spent is all the colourless that will ever exist.
+
+**Fix:** a cost carrying a {C} pip of its own now holds colourless back from its generic portion
+(`MTG_HOLD_C_FOR_PIPS=0` restores the old order). Locally free -- paying generic from a colour
+instead is never worse when the colour is there -- and unit-pinned three ways: the drain case, a
+colourless-only pool (must still pay, not stall), and a {C}-free cost (unchanged, which is what
+keeps every non-Eldrazi measurement valid). smoke 73/73 byte-identical: no suite deck runs {C} pips,
+so this is EDF-local by construction.
+
+### 2. The stall was MY COMBO OFF gate, and the fix was the guard I had left out
+
+Timed at the frame the user complained about: **3075 ms for one viewer step, against 190 ms with
+`MTG_COMBO_OFF=0`.** The gate ran `ApplyPlanDirect` on a go-off candidate -- dozens of loop
+iterations plus sink instalments -- and the viewer's stateless protocol REPLAYS the whole game on
+every step, so that cost was paid once per already-decided prefix decision as well: ~25 live-loop
+decisions x up to 2 applies, per click.
+
+The search's own goff cut never had this problem because it is gated on `has_extra_lethal` first --
+the provider's O(board) arithmetic (`ExtraLethalDamage` / `ProjectsAlternateWin`) that answers
+"could this conceivably win" before anything expensive runs. I had gone straight to the apply. The
+gate now runs the same projection first and only verifies when it says yes; both projections are
+documented as optimistic-by-contract, which is exactly what a pre-filter needs -- it may over-admit
+(costing one apply) but can never hide a real kill.
+
+**Measured after: 158 ms, versus 171 ms with the gate off -- a 19x speedup, and the gate is now
+free.** `MTG_COMBO_OFF_PROJECT=0` forces the old unconditional verify. COMBO OFF still fires on both
+kills (the drain win and the Infiltrator deck-out) after the change.
+
+**The lesson worth keeping:** a "verify before you promise" step is right, but *where* it runs
+decides its cost. Anything expensive on the human-play enumeration path is multiplied by the
+stateless replay, not paid once -- so it needs the cheap-projection guard the search already had.
