@@ -290,6 +290,13 @@
   #effects .ef.opp { border-color:#5a3030; color:var(--bad); }
 
   #side h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 8px; }
+  /* COMBO OFF: the engine has VERIFIED this turn wins. Loud (gold, animated) because it is the one
+     panel control that ends the game, and it appears only when that is literally true. */
+  #combooff { display:none; margin-bottom:10px; border-radius:8px; padding:12px 14px;
+              background:rgba(214,184,76,.14); border:1px solid #6a5c2a; }
+  #combooff h4 { margin:0 0 6px; font-size:13px; color:#f0dfa0; }
+  #combooff .sub { font-size:11px; color:#b9ac82; margin-bottom:8px; }
+  #combooff button { width:100%; font-weight:700; letter-spacing:.3px; }
   #verdict { border-radius:8px; padding:12px 14px; font-size:13px; display:none; margin-bottom:10px; }
   #verdict.choose { background:rgba(90,169,230,.12); border:1px solid #2f4a5a; }
   #verdict.legal  { background:rgba(214,184,76,.12); border:1px solid #5a5030; color:#e7d79a; }
@@ -491,6 +498,9 @@
 <main>
   <section id="board"><div class="hint">Start a new game.</div></section>
   <aside id="side">
+    <!-- COMBO OFF sits ABOVE the verdict: when the engine says this turn is winnable outright it is
+         the most important thing on the panel, and it must not be buried under a reject box. -->
+    <div id="combooff"></div>
     <div id="verdict"></div>
     <div id="vialslot"></div>
     <h2>History</h2>
@@ -900,7 +910,7 @@ function activatableSources(){
   const d = S.decision;
   if (!d) return {};
   if (S._actSrcFor === d.decision_index && S._actSrc) return S._actSrc;
-  const max = {}, sacout = {}, opts = {};
+  const max = {}, sacout = {}, opts = {}, rep = {};
   (d.plans||[]).forEach(p=>{
     const per = {};
     // A sac outlet contributes its sac_count, not 1: one Skirk Prospector action with sac_count:3
@@ -935,12 +945,22 @@ function activatableSources(){
       const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload
                 + (a.verb==='blink' ? '|'+a.blink_target+'|'+(a.blink_count||1) : '');
       (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload,
+                                         repeatable:!!a.repeatable,
                                          blinkTarget:(a.verb==='blink' ? a.blink_target : undefined),
                                          blinkCount:(a.verb==='blink' ? (a.blink_count||1) : undefined),
                                          blinkTargetName:(a.verb==='blink' ? a.blink_target_name : undefined) };
+      // REPEATABLE (engine flag: no {T}, no sacrifice -- a blink outlet, Essence Depleter's drain):
+      // the click cap is MANA, which the viewer cannot compute, not one-per-plan. An engine Plan
+      // holds at most one activation of a source, so the per-plan count above caps these at 1 and
+      // the human could not stack them at all. Let the clicks run and let the ENGINE bound them:
+      // each extra click commits as its own segment (LB.segmentParts) and an unaffordable one comes
+      // back as a truthful reject that stops the chain. Non-repeatable sources keep the exact cap
+      // they had, so nothing else moves.
+      if (a.repeatable) { rep[src] = true; }
     }});
     Object.keys(per).forEach(n=>{ if (!(max[n]>=per[n])) max[n]=per[n]; });
   });
+  Object.keys(rep).forEach(n=>{ max[n] = 99; });
   S._actSrcFor = d.decision_index; S._actSrc = max; S._sacOutSrc = sacout;
   S._actOpts = {}; Object.keys(opts).forEach(n=>{ S._actOpts[n] = Object.keys(opts[n]).map(k=>opts[n][k]); });
   return max;
@@ -963,7 +983,14 @@ function jitteModeLabel(m){ return JITTE_MODE_LABEL[m] || ('mode ' + m); }
 // always worked here. So the `equip` option never enters the click path or the queue-time picker: a
 // source whose ONLY activation is Equip (a plain Bonesplitter) has no click affordance at all, while
 // a Jitte -- Equip plus two counter modes -- still opens the picker for the modes alone.
-function clickActivationOptions(name){ return activationOptions(name).filter(o=>o.verb!=='equip'); }
+// ...and the COMBO OFF plan is likewise not a card activation. USER 2026-09-07: "go off should just
+// be a specific button that appears on the right, not part of a card activation" -- so a blink
+// option carrying the recognised go-off count (> 3; see the engine's EnumerateMainPlans gate, which
+// only lets that count through when the line VERIFIABLY wins) is filtered out of the click path and
+// rendered by comboOffHtml instead. What is left on the card is one honest single activation.
+function clickActivationOptions(name){
+  return activationOptions(name).filter(o=>o.verb!=='equip' && !(o.blinkCount > 3));
+}
 // Can THIS battlefield Equipment (permanent `srcNum`) be dragged onto a creature right now? Scoped
 // to the copy, so a loose Bonesplitter does not advertise the hosts that only the copy in hand (via
 // a cast-and-equip plan) can reach -- a menu entry that is a silent no-op is exactly what the
@@ -1021,6 +1048,8 @@ function queueActivation(src, opt){
   // kinds with a dedicated one, and `sacout` predates that field.
   S.plan.push({ name:opt.name, src, kind:'activate', verb:(sac ? 'sacout' : (opt.verb||'cast')),
                 mode:opt.mode, sacout: sac || undefined,
+                // Stackable: repeats of this entry commit as their own consecutive segments.
+                repeatable: opt.repeatable || undefined,
                 // The blinked creature's m_number, so the line can write `blink=<outlet>@<num>` and
                 // CheckLine can tell two target variants of one outlet apart. blinkCount rides along
                 // for the same reason -- it separates one blink from the go-off FINISH plan.
@@ -1037,6 +1066,9 @@ function queueActivation(src, opt){
     : opt.verb==='taptoken' ? `${src}: tapping it to create a token. Commit the phase to resolve it.`
     : opt.verb==='pod' ? `${src}: tapping it and sacrificing a creature to fetch ${opt.name}. You pick the victim when committing.`
     : opt.verb==='ooze' ? `${src}: paying {G} to exile ${opt.name} from a graveyard. Commit the phase to resolve it.`
+    // Repeatable (no {T}, no sacrifice): say it STACKS, since that is the whole point of the flag
+    // and the cap no longer bounds it. Removal is the chip's ✕ -- clicking the source only ever adds.
+    : opt.repeatable ? `${src}: ${have+1} activation${have?'s':''} queued${opt.blinkTargetName?` — blink ${opt.blinkTargetName}`:''}. Click again to stack another (✕ on a chip removes one), then commit ONCE.`
     : `Activating ${src}’s ability${cap>1?` (${have+1}/${cap})`:''}. Commit the phase to resolve it.`);
   renderBoard();
 }
@@ -1191,7 +1223,33 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
 const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','jitte'];
+// The plan the engine flagged as the verified go-off, or null. `combo_off` is only ever set on a
+// plan whose application was re-simulated to an actual win (EnumerateMainPlans' human-play gate),
+// so this button never promises a win the engine has not already proved.
+function comboOffPlan(){
+  const d = S.decision;
+  if (S.over || !d || d.type !== 'main_phase') return null;
+  return (d.plans||[]).find(p => p.combo_off) || null;
+}
+// Render (or hide) the COMBO OFF control. Deliberately NOT part of the queued line: it is not a
+// step in a plan the human is building, it is "skip to the end, you have already won" -- so it
+// commits its plan directly, the same path a model-plan button in the verdict box takes.
+function renderComboOff(){
+  const el = $('combooff'); if (!el) return;
+  const p = comboOffPlan();
+  if (!p) { el.style.display='none'; el.innerHTML=''; return; }
+  el.innerHTML = `<h4>⚡ This turn is a kill</h4>`+
+    `<div class="sub">The engine simulated the loop through to the end and the opponent loses. `+
+    `Or ignore this and keep playing the turn out one activation at a time.</div>`+
+    `<button id="combooffbtn" class="primary" title="${esc(p.summary)}">Combo Off — win now</button>`;
+  el.style.display='block';
+  $('combooffbtn').onclick = () => {
+    S.plan=[]; S.leMode=false; S.vialMode=null; S.segmentsLeft=0;
+    applyAccepted(p.index, 'COMBO OFF: '+p.summary);
+  };
+}
 function renderBoard() {
+  renderComboOff();
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
   // isMain = full main-phase interaction (drag/queue/commit); dec = an active sub-decision that
@@ -2055,7 +2113,10 @@ function applyAccepted(planIndex, label) {
   // for undo, so stepping back rolls the whole human-declared line, not half of it.
   const chaining = (S.segmentsLeft||0) > 0;
   (S.steps=S.steps||[]).push({ n:1, auto:!!(S.decision && S.decision._autoStep) || chaining, co:coKey });
-  if (chaining) { const l = LB.planLands(S.plan)[0]; S.plan = S.plan.filter(p=>p!==l); }
+  // Peel off exactly the segment that just committed and leave the rest queued. Generalised from
+  // "drop the first land" when repeated activations became segments too (LB.dropFirstSegment is
+  // identical to the old filter for a multi-land line, which is the only shape that had segments).
+  if (chaining) { S.plan = LB.dropFirstSegment(S.plan); }
   else          { S.plan=[]; }
   S.leMode=false; S.vialMode=null;
   renderHistory(); hideVerdict(); step();
@@ -2303,9 +2364,11 @@ function activationPickerHtml(pick){
                    : o.verb==='gyreturn'  ? `Sacrifice — return ${o.name} from your graveyard to your hand`
                    : o.verb==='animate'   ? `Animate ${o.name} — it becomes a creature and can attack`
                    : o.verb==='taptoken'  ? `Tap ${o.name} to create a token`
-                   : o.verb==='blink'     ? (o.blinkCount > 1
-                        ? `★ FINISH — blink ${o.blinkTargetName||'a creature'} ${o.blinkCount}× and spend the mana on your sinks`
-                        : `Blink ${o.blinkTargetName||'a creature'} — exile it and return it`)
+                   // Always the single activation now: the go-off count is filtered out of the click
+                   // path (clickActivationOptions) and lives on the COMBO OFF panel button instead,
+                   // so this picker only ever offers real, one-at-a-time plays. Click it again to
+                   // stack a second -- the line commits them as consecutive segments.
+                   : o.verb==='blink'     ? `Blink ${o.blinkTargetName||'a creature'} — exile it and return it`
                    :                        `Activate ${o.name}`;
   let h=`<h3>${esc(pick.src)} — choose an ability</h3>`;
   h+=`<div class="sub">This permanent offers more than one activation this phase. Pick the one to add to your line, then <b>Commit phase</b>.</div>`;

@@ -387,6 +387,11 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 tag = a.card_name + ": blink " + EnchantTargetName(s, a.sac_victim_id);
                 const int bk = std::max(1, a.chosen_x);
                 if (bk > 1) { tag += " x" + std::to_string(bk); }
+                // COMBO OFF: past the EnumerateMainPlans gate, a human-menu blink count > 3 exists
+                // ONLY as the verified-win standalone plan ("either you win or you do each action"),
+                // so the summary can promise the win outright. The GUI keys on blink_count, not on
+                // this text; claude-play agents read it.
+                if (bk > 3) { tag += " -- COMBO OFF: wins this turn"; }
                 break;
             }
             case Action::Kind::ActivatePermAbility:
@@ -1052,6 +1057,19 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // deck without such a land serialises byte-identically. 1 = enter tapped and take the
         // counters, 0 = decline; -1 (no such land) is omitted.
         if (p.rad_mode >= 0) { os << ", \"rad_mode\": " << p.rad_mode; }
+        // COMBO OFF: this plan IS the recognised go-off, and (per EnumerateMainPlans' human-play
+        // gate) applying it verifiably wins the game this turn. The viewer renders it as its own
+        // side-panel button rather than as one of the source card's activations -- USER 2026-09-07:
+        // "go off should just be a specific button that appears on the right, not part of a card
+        // activation ... You either win or let the user do each required action." Structured rather
+        // than sniffed from the summary text, and emitted from the same ">3 == recognised" rule the
+        // gate keys on, so the button cannot appear on an ordinary activation.
+        {
+            bool combo_off = false;
+            for (const Action& ac : p.actions)
+            { if (ac.kind == Action::Kind::ActivateBlink && ac.chosen_x > 3) { combo_off = true; } }
+            if (combo_off) { os << ", \"combo_off\": true"; }
+        }
         // Plain name list (used for the land+cast multiset match). Land's Edge activations
         // are NOT casts -- they are surfaced via the action's "landsedge" count below and the
         // top-level "lands_edge" object, so the GUI's cast match doesn't treat them as spells.
@@ -1341,6 +1359,17 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                    << ", \"blink_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
                 os << ", \"blink_count\": " << std::max(1, ac.chosen_x);
             }
+            // REPEATABLE (no {T} and no sacrifice in the cost, so activation count is bounded only
+            // by mana): tells the viewer it may STACK this activation -- clicking it K times queues
+            // K activations in one declared line, each past the first committing as its own segment
+            // (USER 2026-09-07: "if I click the ability 10 times I should get 10 activations ...
+            // rather than needing to commit line between each"). Blink outlets always qualify;
+            // of the perm-ability modes only Drain / ExileTop do (the Tap* modes tap their source).
+            if (ac.kind == Action::Kind::ActivateBlink
+                || (ac.kind == Action::Kind::ActivatePermAbility
+                    && (ac.ability_mode == Action::AbilityMode::Drain
+                        || ac.ability_mode == Action::AbilityMode::ExileTop)))
+            { os << ", \"repeatable\": true"; }
             if (!ac.chosen_float_color.empty()) { os << ", \"float_color\": "; JsonStr(os, ac.chosen_float_color); }
             // Solo-target trick (Zada/Mirrorwing): the target is chosen at RESOLUTION via the
             // board-click prompt (viewer feedback 2026-08-12 #2), so the GUI must NOT run its

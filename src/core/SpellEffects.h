@@ -11356,6 +11356,17 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 EmitPlayEvent(state.turn_number, "exile",
                               "\xF0\x9F\x93\x9A " + src_name + ": opponent exiles their top card"
                               + std::string(was_land ? " (a land -- return declined)" : ""));
+                // THE deck-out is decided the instant the library empties (TakeFromTop sets the
+                // flag; see its rationale), but the viewer used to bury that moment under dozens
+                // of identical exile lines -- the user finished the seed-2 kill without realising
+                // it ("it looks like the line already won there, but it's confusing"). Say it once,
+                // loudly, the moment it happens.
+                if (state.opponent_decked)
+                {
+                    EmitPlayEvent(state.turn_number, "damage",
+                                  "\xE2\x98\xA0 opponent's library is EMPTY -- they are decked "
+                                  "and lose the game");
+                }
             }
             // The optional return is ALWAYS DECLINED, and `was_land` exists only to say so in the
             // log. Declining is dominant in every line this engine can realise, and decisively so

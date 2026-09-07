@@ -106,11 +106,41 @@
   // casts are paid off the full set of lands the human meant to play -- committing a cast segment
   // before its second land is what made "play two lands, then cast" unreachable. A single-land plan
   // returns exactly one segment == encodeLine(plan), so nothing else changes.
-  function encodeSegments(plan) {
-    const lands = planLands(plan);
-    if (lands.length <= 1) { return [encodeLine(plan)]; }
-    const rest = plan.filter(p => p.kind !== 'land' || p === lands[lands.length - 1]);
-    return lands.slice(0, -1).map(l => 'land=' + l.name).concat([encodeLine(rest)]);
+  // The plan split into the consecutive SEGMENTS the engine can accept, as plan-entry arrays.
+  // Two independent reasons a line needs more than one:
+  //   * two land drops (above), and
+  //   * REPEATED activations of one repeatable ability. An engine Plan holds at most ONE activation
+  //     of a given source, so "blink ten times" cannot be one plan -- but the main phase re-prompts
+  //     after each commit, so ten consecutive one-activation segments IS the ten-activation turn.
+  //     USER 2026-09-07: "if I click the ability 10 times I should get 10 activations (as part of
+  //     the plan) rather than needing to commit line between each." The extra clicks split off here
+  //     and advanceTo auto-commits them, so the human clicks ten times and commits ONCE.
+  // Only repeats of the SAME source split: two DIFFERENT activations are what the engine's powerset
+  // already enumerates together, so they stay in one segment exactly as they do today. A plan with
+  // no repeat is partitioned identically to before -> every existing line and saved reference is
+  // byte-identical.
+  function segmentParts(plan) {
+    const seen = {}, main = [], extras = [];
+    for (const p of plan) {
+      const k = (p.kind === 'activate' && p.repeatable) ? (p.src || p.name) : null;
+      if (k && seen[k]) { extras.push([p]); continue; }
+      if (k) { seen[k] = true; }
+      main.push(p);
+    }
+    const lands = planLands(main);
+    const head = lands.length <= 1
+      ? [main]
+      : lands.slice(0, -1).map(l => [l])
+             .concat([main.filter(p => p.kind !== 'land' || p === lands[lands.length - 1])]);
+    return head.concat(extras);
+  }
+  function encodeSegments(plan) { return segmentParts(plan).map(encodeLine); }
+  // The plan entries left after the FIRST segment commits -- what stays queued while the chain runs.
+  // Idempotent by construction: re-partitioning the remainder peels exactly one more segment, so the
+  // caller can just call it once per accepted segment.
+  function dropFirstSegment(plan) {
+    const first = segmentParts(plan)[0] || [];
+    return plan.filter(p => first.indexOf(p) < 0);
   }
 
   // The "#<equipment m_number>@<host m_number>" suffix an `equip=` token carries. Both halves are
@@ -284,7 +314,7 @@
   }
 
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
-           leCount, leMax, encodeLine, encodeSegments, queueCard, isSacOut, lineVerb,
+           leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
            stampPlanNums,
            nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };
 });

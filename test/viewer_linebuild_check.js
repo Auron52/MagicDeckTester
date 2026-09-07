@@ -334,6 +334,48 @@ function checkQueuedLandIsAuraHost() {
   return fails;
 }
 
+// STACKED REPEATABLE ACTIVATIONS (2026-09-07). Clicking a no-{T}, no-sac ability K times queues K
+// activations in ONE declared line; because an engine Plan holds at most one activation of a given
+// source, the line has to commit as K consecutive segments. Pins both halves of that contract --
+// the split, and that dropFirstSegment peels exactly one segment per accepted commit (the loop
+// advanceTo runs). Also pins the NON-regression: an unrepeatable line partitions as it always did.
+function checkStackedActivations() {
+  const fails = [];
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const blink = () => ({ name:'Emiel the Blessed', src:'Emiel the Blessed', kind:'activate',
+                         verb:'blink', repeatable:true, blinkTarget:42, blinkCount:1 });
+
+  // Three clicks on one outlet -> three segments, one activation each.
+  const three = [blink(), blink(), blink()];
+  const want = ['blink=Emiel the Blessed@42', 'blink=Emiel the Blessed@42', 'blink=Emiel the Blessed@42'];
+  if (!eq(LB.encodeSegments(three), want))
+    fails.push(`3 blinks -> ${JSON.stringify(LB.encodeSegments(three))}`);
+
+  // The first segment carries the land + casts; only the EXTRA activations split off.
+  const mixed = [{ name:'Yavimaya Coast', kind:'land' },
+                 { name:'Peregrine Drake', kind:'nonpermanent' }, blink(), blink()];
+  if (!eq(LB.encodeSegments(mixed),
+          ['land=Yavimaya Coast;cast=Peregrine Drake;blink=Emiel the Blessed@42',
+           'blink=Emiel the Blessed@42']))
+    fails.push(`land+cast+2 blinks -> ${JSON.stringify(LB.encodeSegments(mixed))}`);
+
+  // dropFirstSegment peels ONE segment per call and converges to empty.
+  let rest = LB.dropFirstSegment(three);
+  if (rest.length !== 2) fails.push(`dropFirstSegment left ${rest.length}, want 2`);
+  rest = LB.dropFirstSegment(rest);
+  if (rest.length !== 1) fails.push(`dropFirstSegment(2) left ${rest.length}, want 1`);
+  rest = LB.dropFirstSegment(rest);
+  if (rest.length !== 0) fails.push(`dropFirstSegment(1) left ${rest.length}, want 0`);
+
+  // A NON-repeatable activation never splits: two different sources stay in one segment, which is
+  // what the engine's powerset already enumerates together.
+  const two = [{ name:'A', src:'A', kind:'activate', verb:'cast' },
+               { name:'B', src:'B', kind:'activate', verb:'cast' }];
+  if (LB.encodeSegments(two).length !== 1)
+    fails.push(`two non-repeatable -> ${JSON.stringify(LB.encodeSegments(two))}`);
+  return fails;
+}
+
 function checkBonusLandDrop() {
   const hand = [{ name: 'Forest', kind: 'land' }, { name: 'Forest', kind: 'land' },
                 { name: 'Mountain', kind: 'land' }, { name: 'Gold Rush', kind: 'nonpermanent' }];
@@ -422,8 +464,12 @@ function main() {
   mixFails.forEach(m => console.log(`  FAIL  mixed-sub walk: ${m}`));
   console.log(`Viewer mixed-sub walk: ${mixFails.length ? 'WRONG' : "a variant lacking the dimension is offered as '—', not dumped flat"} ` +
               `(${mixFails.length} FAIL)`);
+  const stackFails = checkStackedActivations();
+  stackFails.forEach(m => console.log(`  FAIL  stacked activation: ${m}`));
+  console.log(`Viewer stacked activations: ${stackFails.length ? 'WRONG' : 'K clicks commit as K segments, one per accepted commit'} ` +
+              `(${stackFails.length} FAIL)`);
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
-          + mixFails.length + hostFails.length) ? 1 : 0;
+          + mixFails.length + hostFails.length + stackFails.length) ? 1 : 0;
 }
 
 process.exit(main());

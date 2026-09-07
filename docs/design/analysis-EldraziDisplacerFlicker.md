@@ -3508,3 +3508,92 @@ The user pushed back on the T4 re-play ("Seed 1 should be T3") and they were rig
   vs the human line, worth revisiting if this deck's convergence loop reopens (the search
   presumably never explores the wild-floating overpay assignment).
 * The T4 recording shipped in 69652a2b was superseded by the T3 recording in this commit.
+
+## Session 5 (2026-09-07): COMBO OFF -- "either you win, or you do each action"
+
+The user played seed 2, watched a 50-iteration blink loop scroll past, and asked "Why can I not
+start producing a bunch of colourless to finish the game? I keep getting green" -- then, reading
+back, "Oh nevermind. It looks like the line already won there, but it's confusing." Both halves
+were right, and both were interface defects rather than engine ones.
+
+### What was actually wrong
+
+1. **The deck-out was invisible.** `TakeFromTop` sets `opponent_decked` the instant the library
+   empties, and the game was already won -- but the viewer's history showed only dozens of
+   identical "opponent exiles their top card" rows, with nothing marking the one that ended it.
+2. **Mixed half-lines.** The human menu carried plans like "cast Living Wish, blink x9" -- a
+   recognised go-off count that does NOT win, offered as an ordinary card activation. The user's
+   verdict: *"We shouldn't have weird mixed lines that are halfway in-between. You either win or
+   let the user do each required action."*
+3. **No stacking.** A blink outlet is repeatable (no {T}, no sacrifice), but an engine Plan holds
+   at most ONE activation of a source, so the viewer capped clicks at one per commit: going off by
+   hand meant committing a line per activation. *"If I click the ability 10 times I should get 10
+   activations (as part of the plan) ... rather than needing to commit line between each."*
+
+### The design the user specified, as built
+
+* **COMBO OFF is a side-panel button, not a card activation** (*"go off should just be a specific
+  button that appears on the right ... Maybe it could say 'Combo Off'. Since combo decks are the
+  only case where we really need the shortcut."*). `EnumerateMainPlans` gained a human-play gate:
+  a plan carrying a recognised go-off (`ActivateBlink` with `chosen_x > 3` -- the same
+  ">3 == recognised" rule the search's EDF cut keys on) reaches the menu ONLY if applying it
+  **verifiably wins** (`ApplyPlanDirect` + `OpponentHasLost`, under `RevealLogPause`); every
+  non-winning go-off plan is dropped. The survivor is APPENDED (so no earlier index moves) and
+  flagged `combo_off` in the decision JSON; `clickActivationOptions` filters it out of the card
+  picker and `renderComboOff` renders it as the panel button. `MTG_COMBO_OFF=0` restores the old
+  menu. Verify order is standalone-go-off first, then the largest go-off overall -- the second is
+  required because this deck's sink is often still in HAND when the loop goes live (Living Wish ->
+  Essence Depleter), so the winning plan legitimately casts it; at most two trial-applies.
+* **Repeatable activations stack.** The engine now emits `repeatable: true` on blink outlets and on
+  the Drain / ExileTop perm-ability modes (no {T}, no sacrifice -> bounded only by mana). The viewer
+  lifts their click cap and `LB.segmentParts` splits repeats of one source into consecutive
+  SEGMENTS, which `advanceTo` auto-commits -- ten clicks, one commit. Only repeats of the SAME
+  source split, so every existing line partitions exactly as before.
+* **The deck-out says so.** A one-time "opponent's library is EMPTY -- they are decked and lose the
+  game" event fires the moment `TakeFromTop` empties the library.
+
+### Why the reference had to be re-played AGAIN (and what it proves)
+
+The gate removes plans from human menus, and saved references replay by `plan_index`. `claude_s4_gi3`
+re-anchored by content (`repaired`, same T6 win). `claude_s1_gi0` -- saved earlier the SAME day --
+did not: its line ran through exactly the mixed "Wish + blink x9" plans the gate now refuses, so it
+had to be re-played on the gated engine. The new recording is the workflow the user asked for and is
+a better artifact for it: bank with single blinks, dig with Mariposa, `Living Wish -> Essence
+Depleter`, cast the Depleter, blink until the kill is real, then **COMBO OFF**. Still turn 3, still
+`ok` on round-trip, 46 decisions.
+
+One thing that looked like driver noise is worth recording: after the Depleter lands, six further
+single blinks are needed before COMBO OFF appears. That is not padding -- it is the user's seed-2
+question answered. The drains cost `{1}{C}`, only Mariposa / Aether Hub / Yavimaya make `{C}`, and a
+float of seven GREEN cannot pay them; the extra iterations are what accumulate colourless. The
+engine refuses to promise a win it cannot actually reach, which is precisely what the verify step is
+for.
+
+### Deferred out of this session
+
+Payment steering (choosing WHICH land funds which spell) is written up in
+`docs/design/viewer-payment-steering.md` -- the user asked for it opt-in, and it is a bigger piece
+than this batch. It matters for this deck specifically: the seed-1 turn 3 exists only under a
+payment assignment the min-waste payer will not choose on its own.
+
+### Validation (session 5)
+
+* scenarios 72/72; unit tests SUCCESS; viewer line-build (301 refs, + a new stacked-activation pin);
+  viewer client (jsdom, renders every panel) clean.
+* **smoke 73/73 and regression 99/99 byte-identical, zero GT motion** -- the gate is inert for
+  autonomous play by construction (`HumanPlayActive()` is false in rollouts and in every headless
+  run), which is what makes a change this visible safe to ship.
+* **Reference protocol sweep: 14 ok, 286 repaired, 0 play-drift, 0 ENUM-GAP, 0 contract-fail
+  (301 refs).** The lone remaining non-ok is the pre-existing Fluctuator shuffle-dead. This is a
+  strictly better state than the session started in (which carried 1 ENUM-GAP).
+* Deck-out event verified end to end on a real go-off: 73 events, the last reading
+  "☠ opponent's library is EMPTY -- they are decked and lose the game" after 49 exiles.
+
+### One trap this found, worth not re-learning
+
+`RevealLogPause` nulls the 26 CHOOSERS but NOT the `g_scripted_*` pins, which are one-shot ints a
+resolution consumes (read, then reset to -1). The gate's trial `ApplyPlanDirect` deploys the wish
+finisher, which resolves a TUTOR -- so without an explicit save/restore the trial would eat the
+human's pinned tutor pick and the real apply would silently fall back to the heuristic. The gate now
+snapshots and restores all seven pins around the trial. Any future "simulate a plan to see what
+happens" code in a human-play path needs the same guard.

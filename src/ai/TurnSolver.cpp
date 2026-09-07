@@ -34798,7 +34798,97 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& state,
                                                              bool is_pre_combat)
 {
-    return EnumeratePlansWithLand(state, is_pre_combat);
+    std::vector<Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
+    // ---- COMBO OFF gate (human play only; USER 2026-09-07) ---------------------------------------
+    // "You either win or let the user do each required action. We shouldn't have weird mixed lines
+    // that are halfway in-between." A recognized go-off count (ActivateBlink chosen_x > 3 -- the
+    // same ">3 means recognized" rule the search's EDF cut keys on; generic human counts stop at 1)
+    // reaches a human menu ONLY as one standalone COMBO OFF plan, and only when applying that plan
+    // right now actually wins (ApplyPlanDirect + OpponentHasLost -- the cut's verify discipline;
+    // the projection is optimistic by contract and is never trusted). Everything else that carries
+    // a go-off count -- combined plans mixing it with casts, and non-winning banking counts (the
+    // seed-2 "x23 banked mana and nobody knew why" confusion) -- is dropped; the manual route
+    // (single activations, click-stacked in the viewer) covers banking. The verified plan is
+    // APPENDED so every other plan keeps the index it would have had with the gate off.
+    //
+    // Human-menu only by construction: HumanPlayActive() is false in rollouts (HumanPlaySuppress)
+    // and in every autonomous run (env unset), so the search -- including its own goff cut, which
+    // enumerates candidates through a different path -- is byte-identical. MTG_COMBO_OFF=0 restores
+    // the ungated menu (one-binary A/B + legacy-reference escape hatch).
+    static const bool s_combo_off = EnvOn("MTG_COMBO_OFF", true);
+    if (HumanPlayActive() && s_combo_off)
+    {
+        auto goff_of = [](const Plan& p) -> int {
+            int k = 0;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind == Action::Kind::ActivateBlink && a.chosen_x > 3)
+                { k = std::max(k, a.chosen_x); }
+            }
+            return k;
+        };
+        // Candidates, in preference order: the biggest STANDALONE go-off (the cleanest button --
+        // the loop and nothing else), then the biggest go-off overall. The second is not a
+        // "halfway" line and must be offered: the sink this deck wins through is often still in
+        // HAND at the moment the loop goes live (Living Wish -> Essence Depleter), so the winning
+        // plan legitimately casts it, and refusing to look past standalone plans would hide a real
+        // kill behind a menu that no longer contains it either. What stays banned is the
+        // NON-winning go-off, which is the whole complaint. At most two trial-applies, because a
+        // 50-iteration loop apply is not free and this runs on every human main-phase enumeration.
+        int best_alone = -1, best_alone_k = 0, best_any = -1, best_any_k = 0;
+        for (int i = 0; i < static_cast<int>(plans.size()); ++i)
+        {
+            const int k = goff_of(plans[i]);
+            if (k == 0) { continue; }
+            if (k > best_any_k) { best_any = i; best_any_k = k; }
+            if (plans[i].actions.size() == 1 && plans[i].land_to_play.empty() && k > best_alone_k)
+            { best_alone = i; best_alone_k = k; }
+        }
+        if (best_any >= 0)
+        {
+            int best = -1;
+            bool verified = false;
+            for (int cand : { best_alone, best_any })
+            {
+                if (cand < 0 || cand == best) { continue; }
+                RevealLogPause pause;      // trial apply: no viewer events / draw log / reveal spam
+                // ...and RevealLogPause is NOT enough on its own. It nulls the 26 CHOOSERS, but the
+                // scripted pins are separate one-shot ints that a resolution CONSUMES (reads, then
+                // resets to -1). A go-off apply deploys the wish finisher, which resolves a TUTOR --
+                // so without this the trial would eat the human's pinned tutor pick and the real
+                // apply would silently fall back to the heuristic. Save/restore around the trial.
+                const int   sv_top     = g_scripted_top_choice;
+                const int   sv_etbdig  = g_scripted_etbdig_choice;
+                const int   sv_tutor   = g_scripted_tutor_choice;
+                const int   sv_reorder = g_scripted_reorder_choice;
+                const int   sv_tapmode = g_scripted_tapmode;
+                const int   sv_fresh   = g_scripted_freshmode;
+                const int   sv_saccur  = g_scripted_sac_cursor;
+                GameState copy = state;
+                ApplyPlanDirect(copy, plans[cand], is_pre_combat);
+                g_scripted_top_choice     = sv_top;
+                g_scripted_etbdig_choice  = sv_etbdig;
+                g_scripted_tutor_choice   = sv_tutor;
+                g_scripted_reorder_choice = sv_reorder;
+                g_scripted_tapmode        = sv_tapmode;
+                g_scripted_freshmode      = sv_fresh;
+                g_scripted_sac_cursor     = sv_saccur;
+                if (OpponentHasLost(copy)) { best = cand; verified = true; break; }
+                best = cand;               // remember it only to skip re-verifying the same index
+            }
+            std::vector<Plan> kept;
+            kept.reserve(plans.size());
+            Plan combo;
+            for (int i = 0; i < static_cast<int>(plans.size()); ++i)
+            {
+                if (goff_of(plans[i]) == 0)          { kept.push_back(std::move(plans[i])); }
+                else if (i == best && verified)      { combo = std::move(plans[i]); }
+            }
+            if (verified) { kept.push_back(std::move(combo)); }
+            plans = std::move(kept);
+        }
+    }
+    return plans;
 }
 
 // MID-TURN-exact state key for the breakpoint enumeration memo. BuildSimKey alone is NOT sufficient:
