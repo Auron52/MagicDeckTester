@@ -3455,3 +3455,28 @@ re-played by hand and re-saved. The other 299 references replay clean (0 play-dr
   cache-entry `energy_spent` aggregate replay. `MTG_ENERGY_REFUND=0` = one-binary hatch.
 * Human blink-loop painland tap-ahead (`MTG_PAINLAND_TAPAHEAD` sub-lever) -- see issue 5 above.
 * `LineSummaryOfPlan` blink / perm-ability labels (issue 2's history rows).
+
+### Reference claude_s1_gi0 RE-PLAYED (2026-09-07, user-requested) -- T4 legal, gate clean
+
+The user asked to fix the reference, so the game (seed 1, gi 0) was re-played through the
+claude-play protocol on the fixed binary (HEAD 9d97f015) and re-saved via `--log-dir` (the same
+trace mechanism `ref_regenerate.py` uses). The new recording:
+
+* **Line**: T1 Conservatory; T2 Aether Hub + Wild Growth -> Hub, Wild Growth -> Conservatory
+  (identical to the old recording's first two turns); T3 Mariposa + Trace -> Conservatory +
+  Living Wish -> Essence Depleter; T4 Yavimaya Coast + Peregrine Drake + Emiel, blink x11
+  (banks {G:30,C:10} float, all lands untapped, zero life lost -- the issue-5 policy in action),
+  then Essence Depleter + blink x11, drains take the opponent 20 -> 0. **win_turn 4, life 40.**
+* **Verification**: round-trips through `viewer_protocol_check.check_reference` as plain `ok`
+  ("replay won=True win_turn=4 vs ref won=True win_turn=4"), both as a candidate and in place.
+  13 decisions, no repairs, no defaults filled. The strict gate no longer names this deck.
+* **AI-misplay candidate**: the shipped autonomous search wins this exact game (same forced
+  opening) on **T5**; the re-played human line wins **T4** by double-deploying Drake + Emiel on
+  T4 (Drake's ETB untap refund pays for Emiel) and casting Depleter inside the loop. Per the
+  claude-play skill this is a weak signal worth one note, not a fire: the search's T5 line was
+  already adopted as fine in this deck's convergence loop, but if more human-beats-search games
+  accumulate on this deck, the T4 double-deploy shape is where to look.
+* **Provenance note**: the worktree copy of the OLD recording differed (uncommitted) from its
+  committed a78440e1 version when this session started; its decision line was dumped before
+  replacement and is semantically the same 54-decision phantom-mana T3 game, so nothing user-owned
+  was lost that git history does not hold. The old recording remains recoverable at a78440e1.
