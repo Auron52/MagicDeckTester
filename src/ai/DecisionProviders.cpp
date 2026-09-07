@@ -13992,6 +13992,16 @@ struct FlickerLoop
     // is already in play. Paired with ComboFinishFromHand, which is what actually deploys it -- the
     // recognizer must not claim a route the apply cannot walk.
     int  hand_setup_mv = 0;
+    // COLOURLESS BUDGET PER ITERATION. `c_refund` is the {C}-capable share of the same top-N lands
+    // the untap refreshes; `c_cost` is the outlet's own {C} pip count (Displacer {2}{C} -> 1,
+    // Emiel {3} -> 0). `net_c = c_refund - c_cost` is what the loop can BANK per iteration, and a
+    // sink whose cost carries a {C} pip is only reachable while that is positive. See
+    // FlickerTopLandYields for why mana value alone cannot answer this.
+    int  c_refund      = 0;
+    int  c_cost        = 0;
+    int  net_c         = 0;
+    int  drain_c_pips  = 0;   // {C} pips per drain activation  (Essence Depleter {1}{C} -> 1)
+    int  exile_c_pips  = 0;   // {C} pips per exile activation  (Infiltrator  {1}{C} -> 1)
     // Set when the loop is not running yet but is ASSEMBLED BY THE PLAN UNDER EVALUATION (a piece
     // cast from hand this turn). Consumers that require a live loop -- the activation-count hooks,
     // which can only fire an ability that is already on the battlefield -- must ignore these.
@@ -14008,22 +14018,41 @@ struct FlickerLoop
 // whole game's runtime for a quantity that is a five-element maximum.
 constexpr int kFlickerMaxUntaps = 8;   // no printed "untap up to N lands" exceeds this
 
-int FlickerTopLandYields(const GameState& s, int controller, int n)
+// `out_colorless` (optional): how much of that same top-N is COLOURLESS-capable -- i.e. can pay a
+// {C} pip. Carried alongside the yield through the insertion sort so it describes exactly the lands
+// the untap will pick, not some other set.
+//
+// WHY IT IS SEPARATE FROM THE YIELD. This deck's sinks are {C} costs (Essence Depleter's drain
+// {1}{C}, Dimensional Infiltrator's exile {1}{C}) and so is one of its two outlets (Eldrazi
+// Displacer's blink {2}{C}; Emiel's {3} is not). Mana value alone cannot see that, and the
+// difference decides whether the loop is a kill: with ONE colourless source on board, a Displacer
+// iteration produces one {C} and spends one {C}, so the sink can never be fed however long the
+// loop runs -- USER, EDF seed 7, 2026-09-07: "there is one colorless on board which cannot properly
+// feed the sink". An aura's bonus is NOT colourless-capable, not even a wild one: "one mana of any
+// color" cannot pay {C} (colourless is not a colour), which is why this counts the LAND's own
+// produces rather than reusing the yield.
+int FlickerTopLandYields(const GameState& s, int controller, int n, int* out_colorless = nullptr)
 {
+    if (out_colorless) { *out_colorless = 0; }
     if (n <= 0) { return 0; }
     if (n > kFlickerMaxUntaps) { n = kFlickerMaxUntaps; }
     int top[kFlickerMaxUntaps] = {0};
+    int topc[kFlickerMaxUntaps] = {0};
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller || !p.card.IsLand()) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         int y = PermanentManaYield(s, p, *d);
+        int c = 0;
+        for (Color col : EffectiveProduces(s, controller, *d, /*in_hand=*/false))
+        { if (col == Color::Colorless) { c = 1; break; } }
         for (int i = 0; i < n; ++i)
-        { if (y > top[i]) { std::swap(y, top[i]); } }
+        { if (y > top[i]) { std::swap(y, top[i]); std::swap(c, topc[i]); } }
     }
-    int sum = 0;
-    for (int i = 0; i < n; ++i) { sum += top[i]; }
+    int sum = 0, csum = 0;
+    for (int i = 0; i < n; ++i) { sum += top[i]; csum += topc[i]; }
+    if (out_colorless) { *out_colorless = csum; }
     return sum;
 }
 
@@ -14067,13 +14096,16 @@ static void ScanBoardSinks(const GameState& s, int controller, FlickerLoop* best
             const int mv = EffectiveActivationCost(s, controller, p.card,
                                                    d->params.drain_cost.value()).ManaValue();
             if (best->drain_amount == 0 || mv < best->drain_cost_mv)
-            { best->drain_cost_mv = mv; best->drain_amount = d->params.drain_amount; }
+            { best->drain_cost_mv = mv; best->drain_amount = d->params.drain_amount;
+              best->drain_c_pips = d->params.drain_cost.value().colorless; }
         }
         if (d->params.exile_opponent_top_cost.has_value())
         {
             const int mv = EffectiveActivationCost(s, controller, p.card,
                                                    d->params.exile_opponent_top_cost.value()).ManaValue();
-            if (best->exile_cost_mv == 0 || mv < best->exile_cost_mv) { best->exile_cost_mv = mv; }
+            if (best->exile_cost_mv == 0 || mv < best->exile_cost_mv)
+            { best->exile_cost_mv = mv;
+              best->exile_c_pips = d->params.exile_opponent_top_cost.value().colorless; }
         }
     }
 }
@@ -14114,6 +14146,7 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
             const int mv = d->params.drain_cost.value().ManaValue();
             if (best->drain_amount == 0 || cast_mv < best->hand_setup_mv)
             { best->drain_cost_mv = mv; best->drain_amount = d->params.drain_amount;
+              best->drain_c_pips = d->params.drain_cost.value().colorless;
               best->hand_setup_mv = cast_mv; }
         }
         else if (d->params.exile_opponent_top_cost.has_value())
@@ -14124,7 +14157,8 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
             if (!s.opponent_library_dealt || s.opponent_decked || best->drain_amount > 0) { return; }
             const int mv = d->params.exile_opponent_top_cost.value().ManaValue();
             if (best->exile_cost_mv == 0 || cast_mv < best->hand_setup_mv)
-            { best->exile_cost_mv = mv; best->hand_setup_mv = cast_mv; }
+            { best->exile_cost_mv = mv; best->hand_setup_mv = cast_mv;
+              best->exile_c_pips = d->params.exile_opponent_top_cost.value().colorless; }
         }
     };
     for (const Card& c : ap.hand) { consider(CardDatabase::Instance().LookupCached(c), 0); }
@@ -14163,8 +14197,10 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
         if (src.controller_index != controller) { continue; }
         const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
         if (!sd || !sd->params.blink_cost.has_value()) { continue; }
-        const int cost_mv = EffectiveActivationCost(s, controller, src.card,
-                                                    sd->params.blink_cost.value()).ManaValue();
+        const ManaCost blink_cost = EffectiveActivationCost(s, controller, src.card,
+                                                            sd->params.blink_cost.value());
+        const int cost_mv  = blink_cost.ManaValue();
+        const int cost_c   = blink_cost.colorless;   // Displacer {2}{C} -> 1; Emiel {3} -> 0
         for (const Permanent& tgt : s.battlefield)
         {
             if (!tgt.card.IsCreature()) { continue; }
@@ -14173,7 +14209,8 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
             const CardDefinition* td = CardDatabase::Instance().LookupCached(tgt.card);
             if (!td || td->params.etb_untap_lands <= 0) { continue; }
             const int n = td->params.etb_untap_lands;
-            const int refund = FlickerTopLandYields(s, controller, n);
+            int c_refund = 0;
+            const int refund = FlickerTopLandYields(s, controller, n, &c_refund);
             const int net = refund - cost_mv;
             if (net <= 0) { continue; }
             // TIE-BREAK BY UNTAP COUNT -- load-bearing, not cosmetic, and MEASURED (2026-09-04).
@@ -14199,6 +14236,7 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
             if (best.ok && (net < best.net || (net == best.net && n <= best.untaps))) { continue; }
             best.ok = true; best.outlet_id = src.card.m_number; best.payload_id = tgt.card.m_number;
             best.untaps = n; best.cost_mv = cost_mv; best.refund = refund; best.net = net;
+            best.c_refund = c_refund; best.c_cost = cost_c; best.net_c = c_refund - cost_c;
         }
     }
     // The hand / wish route LAST, and only for a loop that exists. It is a hand + sideboard scan on a
@@ -14311,10 +14349,13 @@ static void FlickerEconomics(const GameState& s, int controller,
                              FlickerLoop* out)
 {
     const int n      = pd->params.etb_untap_lands;
-    const int cost   = EffectiveActivationCost(s, controller, od->card,
-                                               od->params.blink_cost.value()).ManaValue();
-    const int refund = FlickerTopLandYields(s, controller, n);
+    const ManaCost bc = EffectiveActivationCost(s, controller, od->card,
+                                                od->params.blink_cost.value());
+    const int cost   = bc.ManaValue();
+    int c_refund = 0;
+    const int refund = FlickerTopLandYields(s, controller, n, &c_refund);
     out->untaps = n; out->cost_mv = cost; out->refund = refund; out->net = refund - cost;
+    out->c_refund = c_refund; out->c_cost = bc.colorless; out->net_c = c_refund - bc.colorless;
 }
 
 FlickerLoop RecogniseFlickerLoopProspective(const GameState& s, int controller,
@@ -14388,13 +14429,16 @@ FlickerLoop RecogniseFlickerLoopProspective(const GameState& s, int controller,
             const int mv = EffectiveActivationCost(s, controller, d->card,
                                                    d->params.drain_cost.value()).ManaValue();
             if (best.drain_amount == 0 || mv < best.drain_cost_mv)
-            { best.drain_cost_mv = mv; best.drain_amount = d->params.drain_amount; }
+            { best.drain_cost_mv = mv; best.drain_amount = d->params.drain_amount;
+              best.drain_c_pips = d->params.drain_cost.value().colorless; }
         }
         if (d->params.exile_opponent_top_cost.has_value())
         {
             const int mv = EffectiveActivationCost(s, controller, d->card,
                                                    d->params.exile_opponent_top_cost.value()).ManaValue();
-            if (best.exile_cost_mv == 0 || mv < best.exile_cost_mv) { best.exile_cost_mv = mv; }
+            if (best.exile_cost_mv == 0 || mv < best.exile_cost_mv)
+            { best.exile_cost_mv = mv;
+              best.exile_c_pips = d->params.exile_opponent_top_cost.value().colorless; }
         }
     }
     // ...and last the hand / wish route, which is only consulted when neither the board nor the plan
@@ -14986,7 +15030,24 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
         {
             const long long bank = static_cast<long long>(FlickerMaxIterations()) * loop.net
                                  - loop.hand_setup_mv;
-            const long long acts = bank > 0 ? bank / per : 0;
+            long long acts = bank > 0 ? bank / per : 0;
+            // ...AND THE DRAIN'S {C} PIP HAS ITS OWN BUDGET. Total mana is not the binding
+            // constraint when the sink costs {1}{C} and the outlet costs {2}{C}: each iteration
+            // yields `c_refund` colourless and the outlet eats `c_cost` of it, so only `net_c`
+            // per iteration is ever bankable toward a drain, however large `net` is. With ONE
+            // colourless source and an Eldrazi Displacer that is exactly zero -- the loop spins
+            // forever and the sink never fires (USER, EDF seed 7: "there is one colorless on
+            // board which cannot properly feed the sink"). Capping the activation count by the
+            // colourless bank makes the projection say so instead of claiming a kill.
+            // MTG_EDF_C_BUDGET=0 restores the mana-value-only arithmetic.
+            static const bool s_c_budget = EnvOn("MTG_EDF_C_BUDGET", true);
+            if (s_c_budget && loop.drain_c_pips > 0)
+            {
+                const long long c_bank =
+                    static_cast<long long>(FlickerMaxIterations()) * loop.net_c;
+                const long long c_acts = c_bank > 0 ? c_bank / loop.drain_c_pips : 0;
+                acts = std::min(acts, c_acts);
+            }
             const long long dmg  = acts * loop.drain_amount;
             if (dmg > 0) { return dmg > 1000000 ? 1000000 : static_cast<int>(dmg); }
         }
@@ -15041,7 +15102,16 @@ bool EldraziFlickerProvider::ProjectsAlternateWin(
     // the zone. Below that it is a clock, not a kill, and the ordinary search can price it.
     const long long cards = static_cast<long long>(s.players[1 - s.active_player_index].library.size());
     const long long need  = cards * loop.exile_cost_mv + loop.hand_setup_mv;
-    return need <= static_cast<long long>(FlickerMaxIterations()) * loop.net;
+    if (need > static_cast<long long>(FlickerMaxIterations()) * loop.net) { return false; }
+    // The exile's {C} pip has its own budget, exactly as the drain's does above: emptying the zone
+    // needs `cards` colourless pips, and only `net_c` of one is bankable per iteration.
+    static const bool s_c_budget = EnvOn("MTG_EDF_C_BUDGET", true);
+    if (s_c_budget && loop.exile_c_pips > 0)
+    {
+        const long long c_need = cards * loop.exile_c_pips;
+        if (c_need > static_cast<long long>(FlickerMaxIterations()) * loop.net_c) { return false; }
+    }
+    return true;
 }
 
 // Deploy the combo before anything else: an outlet or a payload on the battlefield is what every

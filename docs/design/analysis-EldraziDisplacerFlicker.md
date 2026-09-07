@@ -3678,13 +3678,36 @@ The offered plan was `Living Wish -> Adarkar Wastes, Living Wish -> Adarkar Wast
 Displacer: blink Peregrine Drake x10 -- COMBO OFF: wins this turn`. It blinked ten times and did not
 win. *"Combo off failed to actually do the right thing here."*
 
-**Cause: the trial apply and the real apply resolved the same plan differently.** The verify runs
+**CORRECTED CAUSE (the user's own diagnosis, and it is the deeper one).** My first write-up blamed
+the wish/sink divergence alone. The user rejected that: *"Getting a sink is easy and I can still do
+that on the board by drawing until another living wish. The problem is simply that there is one
+colorless on board which cannot properly feed the sink."* They are right, and the recognizer's model
+shows why -- `FlickerLoop` was **entirely mana-value based** (`cost_mv` / `refund` / `net` /
+`drain_cost_mv`), with no colourless accounting anywhere. This deck's sinks are {C} costs (drain
+{1}{C}, exile {1}{C}) and so is one of its two outlets: **Eldrazi Displacer's blink is {2}{C}, while
+Emiel's is {3}**. On a board with ONE colourless source a Displacer iteration produces one {C} and
+spends one {C}, so `net_c == 0` -- the loop spins forever and the sink can never fire, however much
+total mana it banks. That is exactly why seed 1 (Emiel) is a real kill and seed 7 (Displacer) is
+not, and no amount of mana-value arithmetic could tell them apart.
+
+`FlickerLoop` now carries a colourless budget: `c_refund` (the {C}-capable share of the SAME top-N
+lands the untap refreshes, carried through the insertion sort so it describes the right set),
+`c_cost` (the outlet's own {C} pips), `net_c`, and the per-activation {C} pips of each sink. Both
+projections cap by it -- the drain's activation count and the deck-out's feasibility. Note an aura's
+bonus is deliberately NOT colourless-capable, not even a wild one: "one mana of any color" cannot
+pay {C}. `MTG_EDF_C_BUDGET=0` restores the old arithmetic.
+
+**The second cause was real too, and both are fixed.** The verify runs
 under `RevealLogPause`, which nulls the 26 choosers -- so a sub-decision inside the plan resolves by
 ENGINE RANKING in the trial and by the HUMAN's declared answer in the real apply. Here both Living
 Wishes were declared onto *Adarkar Wastes* (a land); the trial's nulled chooser re-ranked them onto
 the SINK and won, while the real apply honoured the declared lands, left no wish in hand for
 `ApplyBlinkLoop`'s own finisher route, and could not win. Same class as the `g_scripted_*` pin
 hazard, one layer up: **RevealLogPause makes a trial apply optimistic about every human choice.**
+
+**And the sharpest part of the complaint:** *"I think the living wishes were spent by Combo Off."*
+They were. The button committed the whole plan, so it cast two Living Wishes for lands the user had
+never queued -- a shortcut that spends cards you did not ask it to spend is worse than no shortcut.
 
 **Fix: only a STANDALONE go-off is a COMBO OFF candidate** -- the blink action alone, no land drop
 and no other casts. It has no sub-decision to diverge on, and it loses nothing, because the
