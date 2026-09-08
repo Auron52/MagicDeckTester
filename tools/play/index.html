@@ -1262,7 +1262,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','jitte'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','jitte','choose_color'];
 // The plan the engine flagged as the verified go-off, or null. `combo_off` is only ever set on a
 // plan whose application was re-simulated to an actual win (EnumerateMainPlans' human-play gate),
 // so this button never promises a win the engine has not already proved.
@@ -2370,7 +2370,7 @@ function renderDecisionPanel(d, dec){
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor' || dec==='revive' || dec==='rummage'
-                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte'
+                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color'
                 || dec==='lackey_put' || dec==='free_cast' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
@@ -2396,6 +2396,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='firebreathe' ? firebreathePanelHtml(d)
                   : dec==='jitte' ? jittePanelHtml(d)
                   : dec==='storage_hold' ? storageHoldPanelHtml(d)
+                  : dec==='choose_color' ? chooseColorPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
   // Pre-game keep/bottom decisions consult the deck's MULLIGAN TABLE, but its parse is expensive, so it
@@ -3069,6 +3070,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitJitte(d, +b.dataset.opt));
   else if (dec==='storage_hold')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitStorageHold(d, +b.dataset.opt));
+  else if (dec==='choose_color')
+    panel.querySelectorAll('[data-col]').forEach(b=>b.onclick=()=>commitChooseColor(d, +b.dataset.col));
   else if (dec==='land_entry')
     panel.querySelectorAll('button[data-le]').forEach(b=>b.onclick=()=>commitLandEntry(d, +b.dataset.le));
   else if (dec==='mulligan')
@@ -3355,6 +3358,28 @@ function commitFirebreathe(d, k){
 // #6 storage tap-vs-charge (Dwarven Hold / Mercadian Bazaar): HOLD the land untapped this turn (charge it)
 // or ALLOW the normal tap/burst. Rides the (turn, land-number)-keyed side-channel (S.storageHold), NOT the
 // --choices stream. pre_draw=true (Dwarven Hold) surfaces at UPKEEP -- the blind, pre-draw commitment.
+// "As this permanent enters, choose a color" (Coldsteel Heart). The colour is LOCKED for the
+// permanent's whole life, so this is one of the few genuinely irreversible picks in the viewer --
+// the panel says so, and marks the AI's own choice rather than silently defaulting to it.
+const COLOR_SWATCH = { 0:'#f8f0d8', 1:'#c3e0f5', 2:'#cfc9c8', 3:'#f3b6a4', 4:'#b8ddb4', 5:'#d6d0c8' };
+function chooseColorPanelHtml(d){
+  const src=d.source||'this permanent', ai=(d.heuristic_default===undefined?-1:d.heuristic_default);
+  let h=`<h3>${esc(src)} — choose a color</h3>`;
+  h+=`<div class="sub">This is an <b>as-enters</b> choice: the color is <b>locked for the rest of the game</b> and every tap of ${esc(src)} makes that color only. The AI's pick is highlighted.</div>`;
+  h+=`<div class="tutgrid">`+cardMini(src)+`</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
+  for (const c of (d.colors||[])){
+    const isAi = (c.ordinal===ai);
+    h+=`<button class="${isAi?'primary':'ghost'}" data-col="${c.ordinal}" `
+      +`style="border-left:10px solid ${COLOR_SWATCH[c.ordinal]||'#ccc'}">`
+      +`${esc(c.name)}${isAi?'  ·  AI':''}</button>`;
+  }
+  return h+`</div>`;
+}
+function commitChooseColor(d, ord){
+  const nm=((d.colors||[]).find(c=>c.ordinal===ord)||{}).name||ord;
+  pushChoice(d, ord, `${d.source||'permanent'}: chose ${nm}`);
+}
 function storageHoldPanelHtml(d){
   const land=d.land||'this storage land', c=d.counters||0, pre=!!d.pre_draw;
   let h=`<h3>${esc(land)} — charge or burst?</h3>`;
@@ -3539,6 +3564,7 @@ const AUTO_RESOLVABLE = {
   firebreathe:     'Firebreathing — how much leftover mana to pump',
   storage_hold:    'Storage lands — hold to charge vs. tap/burst',
   jitte:           "Umezawa's Jitte — how many charge counters to spend",
+  choose_color:    'As it enters — choose a color (locked for the game)',
 };
 const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry']);
 function surfaceDefault(type){ return !SURFACE_OFF_BY_DEFAULT.has(type); }

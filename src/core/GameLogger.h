@@ -375,6 +375,21 @@ using DigChooser = std::function<int(const GameState& state, int controller, con
                                      const std::vector<int>& legal_indices, int heuristic_pick)>;
 extern thread_local DigChooser* g_play_dig_chooser;
 
+// ---- Human-play "as this enters, choose a color" chooser (Coldsteel Heart) -----------------
+// CardParams::etb_choose_color. The chooser receives the entering card's name, the colours it may
+// choose from (its `produces` menu) and the provider heuristic's pick, and returns the chosen Color
+// ordinal -- or anything not in the menu to keep the heuristic's pick. Nulled by RevealLogPause for
+// every search/rollout/enumeration scope (and skipped under g_tap_speculating), so it fires only on
+// a REAL entry: autonomous play, the rollouts and the executor all take the provider's pick and stay
+// in lockstep. Inert (heuristic) unless set.
+//
+// `menu` carries Color ORDINALS, not Color: this header is deliberately include-light (it only
+// forward-declares Permanent) and pulling in Card.h for an enum would invert the dependency.
+using EtbColorChooser = std::function<int(const GameState& state, int controller,
+                                          const std::string& source,
+                                          const std::vector<int>& menu, int heuristic_pick)>;
+extern thread_local EtbColorChooser* g_play_etb_color_chooser;
+
 // ---- Human-play Light-Paws tutor-attach chooser (which Aura Light-Paws fetches) -----------
 // Light-Paws, Emperor's Voice: whenever an Aura you CAST resolves, search your library for an Aura
 // (mana value <= the cast Aura's, a name different from every Aura you control, and whose own enchant

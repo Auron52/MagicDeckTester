@@ -1947,6 +1947,30 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
     }
 }
 
+// "As this permanent enters, choose a color" decision (Coldsteel Heart, CardParams::
+// etb_choose_color). The colour is LOCKED for that permanent's lifetime, so this is a real
+// decision rather than a formality: it is the one choice that decides what the rock can pay for
+// the rest of the game. Emits the card's colour MENU as options; reply = a Color ordinal
+// (0=W 1=U 2=B 3=R 4=G), or anything off the menu to keep the AI's pick.
+static void WriteEtbColorDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                      const std::vector<int>& menu, int heuristic_default,
+                                      int decision_index)
+{
+    static const char* kNames[6] = { "White", "Blue", "Black", "Red", "Green", "Colorless" };
+    DecisionJson d(os, decision_index);
+    d.Type("choose_color").Source(source).Turn(s.turn_number).Board(s)
+     .HeuristicDefault(heuristic_default);
+    d.Array("colors", menu.size(), [&](std::size_t i)
+    {
+        const int ci = menu[i];
+        os << "{ \"ordinal\": " << ci << ", \"name\": ";
+        JsonStr(os, (ci >= 0 && ci < 6) ? kNames[ci] : "?");
+        os << " }";
+    });
+    d.Note("reply a color ORDINAL (0=W 1=U 2=B 3=R 4=G) to lock that color in for this permanent "
+           "for the rest of the game. Default = the AI's pick.");
+}
+
 // Light-Paws tutor-attach decision (Light-Paws, Emperor's Voice): the player picks WHICH library Aura
 // Light-Paws fetches and attaches to itself (or declines -- it is a "may search"). Emits the library
 // Aura pool as image options with a `legal` flag (only fetchable Auras are pickable -- MV <= the cast
@@ -2659,6 +2683,7 @@ g_play_target_chooser = nullptr;
 g_play_bounce_chooser = nullptr;
 g_play_sacrifice_chooser = nullptr;
 g_play_dig_chooser = nullptr;
+g_play_etb_color_chooser = nullptr;
 g_play_discard_chooser = nullptr;
 g_play_ei_chooser = nullptr;
 g_play_retrace_chooser = nullptr;
@@ -2859,6 +2884,7 @@ struct ClaudePlayHarness
     BounceChooser         bounce_chooser;
     BounceChooser         sacrifice_chooser;
     DigChooser            dig_chooser;
+    EtbColorChooser       etb_color_chooser;
     LightPawsChooser      lightpaws_chooser;
     LackeyChooser         lackey_chooser;
     FreeCastChooser       free_cast_chooser;
@@ -3494,6 +3520,41 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_dig_chooser = &dig_chooser;
+
+    // "As this enters, choose a color" (Coldsteel Heart). Shares the --choices stream; the reply is
+    // a Color ORDINAL, and anything off the card's menu keeps the engine's heuristic pick (the
+    // provider's "fewest sources of a colour you demand"). This is a genuinely consequential human
+    // choice -- the colour is locked for the permanent's lifetime -- which is exactly why the human
+    // is asked rather than handed the heuristic silently. USER 2026-09-08: "Coldsteel heart is also
+    // not asking for a colour. That is kind of an issue."
+    etb_color_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+               const std::vector<int>& menu, int heuristic_pick) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteEtbColorDecisionJson(ss, s, source, menu, heuristic_pick, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteEtbColorDecisionJson(std::cout, s, source, menu, heuristic_pick, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_etb_color_chooser = &etb_color_chooser;
+
 
     // Light-Paws tutor-attach (Light-Paws, Emperor's Voice): the player picks which library Aura it
     // fetches + attaches to itself (or -1 to decline). Shares the --choices stream; the reply is a pool
@@ -4928,6 +4989,27 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             // Dwarven Hold: storage_counters) or a primed Aether Vial (charge_counters).
             p.storage_counters  = e.value("storage_counters", 0);
             p.charge_counters   = e.value("charge_counters", 0);
+            // "As this enters, choose a color" (Coldsteel Heart). A permanent STAGED directly onto
+            // the battlefield never ran the as-enters replacement (FireOwnEtbTriggers fires only on
+            // a real entry), so without this it would sit at chosen_color = -1 and silently fall
+            // back to its full five-colour menu -- the exact over-permissive model the param
+            // replaced, reappearing in every fixture. So: an explicit "color" pins it (which is what
+            // lets a scenario TEST the lock), and otherwise the provider's heuristic supplies the
+            // same pick a played Heart would have made.
+            if (const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card))
+            {
+                if (pd->params.etb_choose_color)
+                {
+                    if (e.contains("color"))
+                    { p.chosen_color = static_cast<int8_t>(CharToColor(e.at("color").get<std::string>())); }
+                    else
+                    {
+                        const int pick = ResolveProvider(state)
+                                             .EtbChosenColor(state, p.controller_index, *pd);
+                        if (pick >= 0) { p.chosen_color = static_cast<int8_t>(pick); }
+                    }
+                }
+            }
             state.battlefield.push_back(p);
         }
         // Optional ATTACHMENT ("equips": "<host card name>" on an Equipment / Aura entry), resolved

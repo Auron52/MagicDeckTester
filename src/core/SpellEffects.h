@@ -4411,6 +4411,43 @@ inline int ChooseCopyEntrantIndex(GameState& state, int controller, int copy_tar
     return best;
 }
 
+// DEFAULT ON; MTG_ETB_COLOR_LOCK=0 restores the pre-2026-09-08 model in which an etb_choose_color
+// rock was a plain flexible multi-colour source. Kept as the A/B hatch AND as the discriminating
+// control for test/scenarios/coldsteel_heart_color_{locked,honored}.json -- with it off the
+// `locked` fixture verdicts `accept` instead of `illegal`, which is what proves that pair tests the
+// lock rather than an incidentally-poor board.
+inline bool EtbColorLockEnabled()
+{
+    static const bool v = EnvOn("MTG_ETB_COLOR_LOCK", true);
+    return v;
+}
+
+// ---- etb_choose_color telemetry (MTG_ETB_COLOR_STATS; MEASUREMENT ONLY) ---------------------
+// Counts the colours actually LOCKED IN, per Color ordinal. Same reason MTG_REFLOAT_STATS and
+// MTG_ROLLOUT_STATS exist, and this one earned its keep immediately: the first build of this
+// feature chose a colour ZERO times in 248,645 entries -- EtbChosenColorFrom read a hand Card's
+// own m_mana_cost (a placeholder handle; the real cost needs LookupCached), so every demand count
+// was 0 and the heuristic returned -1 every time. The A/B was byte-identical, unit 74/74 and
+// scenarios 74/74 all passed, because the fixtures STAGE `chosen_color` and never exercise the
+// entry path -- so "the lock does nothing on this deck" and "the lock never runs" were
+// indistinguishable from every signal on the board. A counter tells them apart in one run.
+namespace etbcolorstats
+{
+    inline std::atomic<long long> g_chosen[6];
+    inline bool On() { static const bool on = EnvOn("MTG_ETB_COLOR_STATS"); return on; }
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!On()) { return; }
+            std::fprintf(stderr, "[etbcolor] locked W=%lld U=%lld B=%lld R=%lld G=%lld C=%lld\n",
+                         g_chosen[0].load(), g_chosen[1].load(), g_chosen[2].load(),
+                         g_chosen[3].load(), g_chosen[4].load(), g_chosen[5].load());
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_index,
                            const std::string& chosen_tutor = "", int etb_kx = -1)
 {
@@ -4419,6 +4456,49 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         CardDatabase::Instance().LookupCached(state.battlefield[entered_index].card);
     if (!def) { return; }
     const CardParams& p = def->params;
+
+    // "As this permanent enters, choose a color" (Coldsteel Heart). A REPLACEMENT effect, not a
+    // trigger (CR 614 / the rules skill's "as [source] enters" row): it does not use the stack and
+    // cannot be responded to, so it is resolved HERE, ahead of every triggered ability below --
+    // nothing can observe this permanent without its colour already locked.
+    //
+    // Chosen ONCE per object and never revisited: a re-entering Heart is a new object and chooses
+    // afresh, which falls out of this for free (the fresh Permanent carries chosen_color = -1).
+    // Provider-owned heuristic, not searched -- see DecisionProvider::EtbChosenColor.
+    //
+    // The HUMAN picks their own colour in the viewer (g_play_etb_color_chooser); the chooser is
+    // null in the search and every rollout, so autonomous play takes the provider's pick and both
+    // worlds stay in lockstep. Param-gated -> byte-identical for every deck without such a card.
+    // The hatch gates the CHOICE ITSELF, not merely the colour reader, so MTG_ETB_COLOR_LOCK=0 is a
+    // COMPLETE revert to the pre-2026-09-08 behaviour. It has to be: the human-play chooser consumes
+    // a `--choices` slot, so a reader-only hatch still shifts every recorded decision stream after
+    // it, and an A/B arm that changes the protocol is not a control.
+    if (p.etb_choose_color && EtbColorLockEnabled()
+        && state.battlefield[entered_index].chosen_color < 0)
+    {
+        int pick = ResolveProvider(state).EtbChosenColor(state, controller, *def);
+        if (g_play_etb_color_chooser && !g_tap_speculating)
+        {
+            std::vector<int> menu;
+            for (Color c : def->params.produces) { menu.push_back(static_cast<int>(c)); }
+            const int human = (*g_play_etb_color_chooser)(state, controller, def->card.m_name.str(),
+                                                          menu, pick);
+            // Only a colour the card can actually make; anything else keeps the provider's pick.
+            for (Color c : def->params.produces)
+            { if (static_cast<int>(c) == human) { pick = human; break; } }
+        }
+        if (pick >= 0)
+        {
+            state.battlefield[entered_index].chosen_color = static_cast<int8_t>(pick);
+            etbcolorstats::g_chosen[pick < 6 ? pick : 5].fetch_add(1, std::memory_order_relaxed);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "choose_color",
+                              def->card.m_name.str() + " -- chose "
+                              + ColorName(static_cast<Color>(pick)));
+            }
+        }
+    }
 
     // Breaching Dragonstorm: RECORD the enter trigger for the world-specific drain (executor:
     // a Triggered{EtbExileFreeCast} stack entry; rollout: inline in apply_one). Recorded, not
@@ -10415,6 +10495,14 @@ inline int RitualRefloatMana(const GameState& state, int count)
 // must not be repeated here -- the call below passes in_hand explicitly).
 inline const std::vector<Color>& EffectiveProduces(const GameState& state, int controller,
                                                   const CardDefinition& def, bool in_hand);
+// Per-PERMANENT colour resolution. Identical to EffectiveProduces for every source in the repo
+// except one whose colour is a property of the OBJECT rather than the card: an
+// etb_choose_color permanent (Coldsteel Heart) that has locked a colour reports THAT COLOUR ALONE.
+// `perm == nullptr` (a rock projected from hand, a definition-only query) or an unchosen permanent
+// falls through to the definition, so this is byte-identical everywhere the param is absent.
+inline const std::vector<Color>& EffectiveProducesFor(const GameState& state, int controller,
+                                                     const CardDefinition& def,
+                                                     const Permanent* perm, bool in_hand = false);
 
 // ONE per-source colour rule for every ritual float/tap-ahead contribution: a single-colour
 // source gives `amt` of its colour; a lumpy multi-colour source (a Karoo's 2-for-1) gives one of
@@ -13795,11 +13883,44 @@ struct CreatureAbilityPayScope
 // but not coloured pips. for_creature == true (or the flag off) -> the full EffectiveProduces list.
 // Returns a thread_local buffer when it strips (safe like ReflectedColors: consumed within one
 // source's loop, never held across another Produces* call). Byte-identical for every deck without a
-// colored_creature_only source.
-inline const std::vector<Color>& ProducesForPayment(const GameState& state, int controller,
-                                                    const CardDefinition& def, bool for_creature)
+// See the forward declaration for the contract. The single-colour vectors are function-local
+// statics (never mutated), so returning a reference is safe and allocation-free -- the same shape
+// EffectiveProduces already uses for its own pinned-colour returns.
+
+inline const std::vector<Color>& EffectiveProducesFor(const GameState& state, int controller,
+                                                      const CardDefinition& def,
+                                                      const Permanent* perm, bool in_hand)
 {
-    const std::vector<Color>& base = EffectiveProduces(state, controller, def);
+    if (perm != nullptr && def.params.etb_choose_color && perm->chosen_color >= 0
+        && EtbColorLockEnabled())
+    {
+        static const std::vector<Color> kW{ Color::White }, kU{ Color::Blue }, kB{ Color::Black },
+                                        kR{ Color::Red },   kG{ Color::Green },
+                                        kC{ Color::Colorless };
+        switch (static_cast<Color>(perm->chosen_color))
+        {
+            case Color::White:     return kW;
+            case Color::Blue:      return kU;
+            case Color::Black:     return kB;
+            case Color::Red:       return kR;
+            case Color::Green:     return kG;
+            case Color::Colorless: return kC;
+        }
+    }
+    return EffectiveProduces(state, controller, def, in_hand);
+}
+
+// colored_creature_only source.
+// `perm` (optional): resolve an etb_choose_color permanent's LOCKED colour rather than the
+// definition's menu. Load-bearing for payment legality -- this is the function the payer's
+// source-selection loop asks "can this source make the colour I need?", so without the permanent a
+// Heart locked to green is still offered for a {U} pip and the executor taps it for a colour it
+// cannot make. Null (a definition-only query, a rock projected from hand) keeps the old behaviour.
+inline const std::vector<Color>& ProducesForPayment(const GameState& state, int controller,
+                                                    const CardDefinition& def, bool for_creature,
+                                                    const Permanent* perm = nullptr)
+{
+    const std::vector<Color>& base = EffectiveProducesFor(state, controller, def, perm);
     if (!def.params.colored_creature_only || for_creature) { return base; }
     // D12: Secluded Courtyard's clause also covers activated abilities of creature sources.
     if (def.params.colored_creature_ability_ok && PayingCreatureAbility()) { return base; }
@@ -14479,7 +14600,13 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     if (amt < 0) { amt = 0; }
     // Reflecting Pool: its colours are the union of the controller's other lands (empty -> adds
     // nothing, the solo-RP dead case). For every normal source this is the static produces[].
-    const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, def);
+    // Per-PERMANENT where we have one: an etb_choose_color rock reports its LOCKED colour, so a
+    // Coldsteel Heart credits pool.Add(chosen) below instead of falling into the `wild` branch.
+    // Crediting it wild is what made four Hearts read as four any-colour sources -- the
+    // over-permissive model this replaces. `perm` is null for a rock projected from HAND, which
+    // correctly keeps the full menu (no choice has been made yet).
+    const std::vector<Color>& prod =
+        EffectiveProducesFor(state, state.active_player_index, def, perm);
     // Domain source (Faeburrow / Bloom Tender): one mana of EACH colour among your permanents
     // from a single tap -- the yield is the dynamic colour count, ignoring the static amount.
     // Credited as wild like a Karoo (the one-of-each nuance is exact at tap time in tap_source).

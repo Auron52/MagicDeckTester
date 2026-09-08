@@ -1,0 +1,42 @@
+{
+  "_comment": [
+    "Coldsteel Heart's ETB colour is LOCKED PER OBJECT (CardParams::etb_choose_color, stored in",
+    "Permanent::chosen_color as an as-enters REPLACEMENT effect -- CR 614, no stack).",
+    "",
+    "USER-FOUND, 2026-09-08, hand-playing Snow references: 'Coldsteel heart is also not asking for a",
+    "colour. That is kind of an issue.' Before this, the card was modelled as a plain WUBRG rock --",
+    "each tap free to make any of five colours -- the Cavern of Souls / Unclaimed Territory ETB-choice",
+    "simplification. That is over-permissive IN THE ENGINE'S FAVOUR: a real Heart is locked, so a",
+    "three-colour deck running four of them carries colour-screw risk the engine never faced.",
+    "",
+    "THIS IS THE NEGATIVE HALF. Board = two Coldsteel Hearts both pinned GREEN + a Snow-Covered",
+    "Forest ({G}). There is NO blue source anywhere. Ice-Fang Coatl costs {G}{U}, so it is UNPAYABLE:",
+    "three mana on board, all of it green. Under the old model either Heart would simply produce the",
+    "{U} and the cast would be legal, so this fixture verdicts `accept` on the pre-fix engine and",
+    "`illegal` on the fixed one -- i.e. it is DISCRIMINATING, not merely passing.",
+    "",
+    "Its twin coldsteel_heart_color_honored.json flips ONE Heart to BLUE on an otherwise identical",
+    "board and must verdict `accept`. The pair brackets the boundary in both directions: a locked",
+    "colour is really PAYABLE, and a colour the permanent did not choose is really UNAVAILABLE. The",
+    "positive half is what stops this one from passing for the trivial reason that a Heart pinned to",
+    "anything pays nothing at all."
+  ],
+  "deck": "decks/Snow/Snow.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Coldsteel Heart", "controller": 0, "tapped": false, "color": "G" },
+    { "name": "Coldsteel Heart", "controller": 0, "tapped": false, "color": "G" },
+    { "name": "Snow-Covered Forest", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Ice-Fang Coatl" ],
+  "library_filler": "Snow-Covered Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 3,
+  "validate_line": "cast=Ice-Fang Coatl",
+  "expect_verdict": "illegal"
+}

@@ -7356,7 +7356,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "This artifact enters tapped.\nAs this artifact enters, choose a color.\n{T}: Add one mana of the chosen color. [Mana rock producing WUBRG (Ancient Cornucopia pattern) + enters_tapped (Fire Diamond pattern). The ETB 'choose a color, locked forever' restriction is NOT modelled -- the same simplification already applied to Cavern of Souls / Unclaimed Territory / Secluded Courtyard's ETB type choice: any single tap yields any one of the five colors rather than a color fixed at ETB. Permissive-direction over-approximation of COLOUR only, never AMOUNT (one mana per tap). PROVISIONAL pending user sign-off.]",
+   "oracle_text": "This artifact enters tapped.\nAs this artifact enters, choose a color.\n{T}: Add one mana of the chosen color. [Mana rock (Ancient Cornucopia pattern) + enters_tapped (Fire Diamond pattern). The ETB colour choice IS MODELLED as of 2026-09-08 (etb_choose_color): `produces` is the five-colour MENU the choice picks from, and the pick is LOCKED PER OBJECT into Permanent::chosen_color as an as-enters REPLACEMENT effect (CR 614 -- no stack, resolved ahead of every ETB trigger), so four Hearts are four independent choices and a re-entering one chooses afresh. The colour is chosen HEURISTICALLY, not searched (USER 2026-09-08 -- branching five ways per rock would multiply the plan space at the site Snow can least afford it): the provider takes the colour you have FEWEST sources of among those your hand actually demands. SnowProvider narrows the candidates to GREEN or BLUE; Red is an APPROVED phase-2 deferral (USER: 'technically the deck has red, but there is no point in worrying about that until Skred is active' -- Skred is goldfish-inert, so its {R} is demand for a spell that cannot matter). In HUMAN PLAY the viewer asks. This REPLACES the previous over-permissive simplification (any tap yielding any of five colours, the Cavern of Souls / Unclaimed Territory pattern), which was wrong in the ENGINE'S FAVOUR: a real Heart is locked, and a three-colour deck running four of them has colour-screw risk the engine never faced.]",
    "template": "custom",
    "parameters": {
     "mana_rock": true,
@@ -7367,7 +7367,8 @@
      "R",
      "G"
     ],
-    "enters_tapped": true
+    "enters_tapped": true,
+    "etb_choose_color": true
    }
   },
   {

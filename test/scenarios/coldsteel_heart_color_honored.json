@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "The POSITIVE half of the Coldsteel Heart colour-lock pair (see",
+    "coldsteel_heart_color_locked.json for the full rationale and the user report).",
+    "",
+    "Identical board except ONE Coldsteel Heart is pinned BLUE instead of green, so the board makes",
+    "{G} (Forest) + {U} (blue Heart) + {G} (green Heart) and Ice-Fang Coatl's {G}{U} IS payable.",
+    "Verdict `accept`.",
+    "",
+    "This is the half that proves the lock is a RESTRICTION and not a refusal: a source pinned to a",
+    "colour must actually PAY that colour. Without it, a bug that made every etb_choose_color",
+    "permanent produce nothing at all would still pass the negative fixture."
+  ],
+  "deck": "decks/Snow/Snow.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Coldsteel Heart", "controller": 0, "tapped": false, "color": "U" },
+    { "name": "Coldsteel Heart", "controller": 0, "tapped": false, "color": "G" },
+    { "name": "Snow-Covered Forest", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Ice-Fang Coatl" ],
+  "library_filler": "Snow-Covered Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 3,
+  "validate_line": "cast=Ice-Fang Coatl",
+  "expect_verdict": "accept"
+}

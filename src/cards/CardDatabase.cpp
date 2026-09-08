@@ -718,6 +718,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (params.contains("lifelink_grant_cost"))
         p.lifelink_grant_cost = ManaCostFromString(params["lifelink_grant_cost"].get<std::string>());
     p.ice_counters_dont_untap = params.value("ice_counters_dont_untap", false);
+    p.etb_choose_color        = params.value("etb_choose_color", false);
     p.snow_enter_scry         = params.value("snow_enter_scry", 0);
     p.upkeep_snow_threshold   = params.value("upkeep_snow_threshold", 0);
     p.upkeep_sac_creates_token   = params.value("upkeep_sac_creates_token", false);

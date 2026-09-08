@@ -34,6 +34,7 @@ thread_local BounceChooser*  g_play_sacrifice_chooser = nullptr;
 thread_local BounceChooser*  g_play_attach_host_chooser = nullptr;
 thread_local LoyaltyTargetChooser* g_play_loyalty_chooser = nullptr;
 thread_local DigChooser*     g_play_dig_chooser    = nullptr;
+thread_local EtbColorChooser* g_play_etb_color_chooser = nullptr;
 thread_local DiscardChooser* g_play_discard_chooser = nullptr;
 thread_local EIChooser*      g_play_ei_chooser      = nullptr;
 thread_local RetraceDiscardChooser* g_play_retrace_chooser = nullptr;

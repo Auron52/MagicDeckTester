@@ -1350,6 +1350,23 @@ public:
     // header; GenericProvider implements it and every archetype inherits that.
     virtual int ManaSourceRank(const GameState& s, const CardDefinition& def) const = 0;
 
+    // EtbChosenColor -- "As this permanent enters, choose a color" (CardParams::etb_choose_color;
+    // Coldsteel Heart). Returns the Color ordinal to LOCK into Permanent::chosen_color, or -1 to
+    // leave it unchosen (readers then fall back to the definition's full menu).
+    //
+    // HEURISTIC, NOT SEARCHED, and deliberately so (USER 2026-09-08: "In the search we can
+    // heuristically pick either Green or Blue depending on what our other sources are producing").
+    // Branching the search over five colours at every rock's entry multiplies the plan space at the
+    // exact site Snow can least afford it -- the deck's cost is already 50% lookahead
+    // (analysis-Snow.md's perf section). One committed choice, like the tap order above.
+    //
+    // GenericProvider implements the shared rule (fewest sources of a colour you actually demand);
+    // an archetype narrows the CANDIDATE SET when its deck knows better. Not pure-virtual-defaulted
+    // here for the same reason as ManaSourceRank -- it needs SpellEffects helpers this header
+    // cannot see.
+    virtual int EtbChosenColor(const GameState& s, int controller,
+                               const CardDefinition& def) const = 0;
+
     // ReserveCreatureHold -- which of the turn's reservable mana CREATURES the whole-turn reserve
     // ladder (BatchPrepayMainCasts) should keep holding once the full "hold every dork" rung has
     // FAILED, i.e. when the bodies genuinely compete for mana. `crea_mask` is the battlefield-index

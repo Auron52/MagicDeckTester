@@ -124,6 +124,17 @@ struct Permanent
                                            // FireOnCastTriggers (both cast paths), reset at BOTH untap
                                            // sites (GameEngine::UntapStep + TurnSolver's per-turn reset)
                                            // -- rollout/executor lockstep or [fd-diverge].
+    // "As this permanent enters, choose a color" (Coldsteel Heart), CardParams::etb_choose_color.
+    // The colour is LOCKED FOR THE PERMANENT'S LIFETIME -- it is a per-OBJECT property, which is
+    // exactly why it cannot live on the CardDefinition like every other `produces`: four Coldsteel
+    // Hearts are four independent choices, and a re-entering one chooses afresh (new object).
+    // -1 = unchosen (a definition with the param that somehow entered off the FireOwnEtbTriggers
+    // path); readers fall back to the definition's produces there, i.e. the pre-2026-09-08
+    // behaviour, so an unset value degrades to the old over-permissive model rather than to an
+    // illegal one. Values are Color enum ordinals. Read ONLY via EffectiveProducesFor and the
+    // payer's per-permanent colour resolution -- both param-gated, so this is never inspected for
+    // any other deck -> byte-identical.
+    int8_t    chosen_color         = -1;
     int       ice_counters         = 0;    // Ice counters (Rimefeather Owl's {1}{S} activation is the
                                            // only source). Read ONLY by the snow helpers (IsSnowPermanent
                                            // under an ice_counters_are_snow source) and the

@@ -387,8 +387,34 @@ wastes") and says to measure before touching the predictor. Now measured, on one
    (`b1551194`, section above). The line survived here after being resolved; do not re-raise it.
 2. **The nine PROVISIONAL card deferrals still have no sign-off** ("Approved deferrals: none yet").
    Eight are inert by construction; **Coldsteel Heart is the one that is not** — see below.
-3. **Coldsteel Heart does not ask for a colour** (USER, hand-playing references 2026-09-08: "that
-   is kind of an issue"). The ETB "choose a color, locked forever" is unmodelled, so each of the
+3. ~~**Coldsteel Heart does not ask for a colour**~~ — **IMPLEMENTED 2026-09-08.** USER ruling:
+   "We should probably implement Coldsteel Heart. In the search we can heuristically pick either
+   Green or Blue depending on what our other sources are producing ... You choose whatever you
+   have less of in hand and board." Shipped as `CardParams::etb_choose_color` +
+   `Permanent::chosen_color`, resolved at entry as an as-enters REPLACEMENT effect (CR 614, no
+   stack, ahead of every ETB trigger), read through `EffectiveProducesFor` /
+   `ProducesForPayment(perm)`. Heuristic, NOT searched (a five-way branch per rock would multiply
+   the plan space at the site this deck can least afford). The human is asked in the viewer
+   (`choose_color` decision). Off-switch `MTG_ETB_COLOR_LOCK=0`; telemetry `MTG_ETB_COLOR_STATS`.
+   **APPROVED DEFERRAL (phase 2): Red is excluded from the candidate set.** USER: "Technically the
+   deck has red, but there is no point in worrying about that until Skred is active." Skred is
+   goldfish-inert, so its 4 real {R} pips are demand for a spell that cannot matter; when Skred
+   becomes live, DELETE `SnowProvider::EtbChosenColor` so the deck falls back to the generic
+   demand rule rather than growing a third case.
+   **THE BUG THIS ALMOST SHIPPED WITH, because it is the reusable lesson.** The first build chose
+   a colour **zero times in 248,645 entries** and every gate still passed — unit 74/74, scenarios
+   74/74 (including two new ones written specifically for this feature), and a 300-game A/B that
+   came back byte-identical. Cause: `EtbChosenColorFrom` read a hand `Card`'s own `m_mana_cost`,
+   which is a PLACEHOLDER on a zone handle (the real cost needs `LookupCached`) — so every demand
+   count was 0 and the heuristic returned -1 every time. The fixtures all STAGE `chosen_color`
+   explicitly and so never exercised the entry path at all. **"The feature does nothing on this
+   deck" and "the feature never runs" are indistinguishable from an unchanged average**, which is
+   the exact rationale `MTG_REFLOAT_STATS` was created for; `MTG_ETB_COLOR_STATS` now tells them
+   apart in one run (U=97,111 G=47,965 on three games). Any future param-gated feature whose A/B
+   comes back byte-identical must prove its code RAN before that result is believed.
+
+   The original report, kept for context (USER, hand-playing references 2026-09-08: "that
+   is kind of an issue"): The ETB "choose a color, locked forever" is unmodelled, so each of the
    4 copies taps for ANY of WUBRG every turn instead of one colour fixed at ETB. This is the one
    deferral that is **over-permissive in the engine's favour** — a real Snow deck's Hearts are
    locked and it has colour-screw risk this engine never faces, in a 3-colour (U/G/R) deck running

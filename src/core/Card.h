@@ -12,6 +12,21 @@ struct CardDefinition; // fwd decl: Card caches a pointer into the CardDatabase 
 
 enum class CardType { Land, Creature, Instant, Sorcery, Enchantment, Artifact, Planeswalker, Battle };
 enum class Color { White, Blue, Black, Red, Green, Colorless };
+
+// Human-readable colour name, for play-event text and viewer labels only (never parsed back).
+inline const char* ColorName(Color c)
+{
+    switch (c)
+    {
+        case Color::White:     return "White";
+        case Color::Blue:      return "Blue";
+        case Color::Black:     return "Black";
+        case Color::Red:       return "Red";
+        case Color::Green:     return "Green";
+        case Color::Colorless: return "Colorless";
+    }
+    return "?";
+}
 enum class Keyword
 {
     Haste, Flying, Trample, Deathtouch, Lifelink, FirstStrike, DoubleStrike,

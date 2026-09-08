@@ -2144,7 +2144,97 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     return rank;
 }
 
+// "As this permanent enters, choose a color" (CardParams::etb_choose_color). Shared rule:
+// among the colours the card may choose, keep only those the controller actually DEMANDS, and
+// pick the one they have the FEWEST SOURCES of. USER 2026-09-08: "You choose whatever you have
+// less of in hand and board."
+//
+// DEMAND is coloured pips in the controller's HAND (a colour no card in hand needs is not worth
+// fixing toward), SUPPLY is producing sources across hand + battlefield -- the user's "in hand and
+// board" on both halves. Deliberately NOT library-aware: that would be clairvoyance.
+//
+// Ties break toward higher demand, then Color ordinal, so the choice is deterministic -- this runs
+// in rollouts and the executor alike and a non-deterministic pick would desync them ([fd-diverge]).
+// Returns -1 when nothing is demanded (readers then keep the definition's full menu, i.e. today's
+// behaviour) -- never a colour the card cannot make.
+static int EtbChosenColorFrom(const GameState& s, int controller, const CardDefinition& def,
+                              const std::vector<Color>& candidates)
+{
+    int demand[6] = {}, supply[6] = {};
+    const Player& me = s.players[controller];
+    for (const Card& c : me.hand)
+    {
+        // THE PLACEHOLDER-MASK TRAP: a Card in a zone is a light handle whose own m_mana_cost is
+        // NOT the real cost -- it must be resolved through LookupCached. Reading c.m_mana_cost
+        // directly made every demand count ZERO, so this heuristic returned -1 on every entry and
+        // the colour was never chosen at all (probe: 248,645 entries, 0 picks) while every unit
+        // test and scenario still passed, because those stage `chosen_color` explicitly.
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+        if (!hd) { continue; }
+        const ManaCost& mc = hd->card.m_mana_cost;
+        demand[static_cast<int>(Color::White)] += mc.white;
+        demand[static_cast<int>(Color::Blue)]  += mc.blue;
+        demand[static_cast<int>(Color::Black)] += mc.black;
+        demand[static_cast<int>(Color::Red)]   += mc.red;
+        demand[static_cast<int>(Color::Green)] += mc.green;
+        for (Color pc : EffectiveProduces(s, controller, *hd, /*in_hand=*/true))
+        { if (static_cast<int>(pc) < 6) { ++supply[static_cast<int>(pc)]; } }
+    }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        // The entering permanent is already on the battlefield when the choice is made (it is an
+        // as-enters replacement, resolved from FireOwnEtbTriggers), and it has no colour yet -- so
+        // skip anything still unchosen with this param, or it would count itself as supply for
+        // every colour and flatten the comparison it is trying to make.
+        if (d->params.etb_choose_color && p.chosen_color < 0) { continue; }
+        for (Color pc : EffectiveProducesFor(s, controller, *d, &p))
+        { if (static_cast<int>(pc) < 6) { ++supply[static_cast<int>(pc)]; } }
+    }
+    int best = -1;
+    for (Color c : candidates)
+    {
+        const int ci = static_cast<int>(c);
+        if (ci >= 6 || demand[ci] == 0) { continue; }
+        if (best < 0) { best = ci; continue; }
+        if (supply[ci] != supply[best]) { if (supply[ci] < supply[best]) { best = ci; } continue; }
+        if (demand[ci] != demand[best]) { if (demand[ci] > demand[best]) { best = ci; } continue; }
+        if (ci < best) { best = ci; }
+    }
+    (void)def;
+    return best;
+}
+
+int GenericProvider::EtbChosenColor(const GameState& s, int controller,
+                                    const CardDefinition& def) const
+{
+    return EtbChosenColorFrom(s, controller, def, def.params.produces);
+}
+
 // ---- SnowProvider ------------------------------------------------------------
+
+// Coldsteel Heart: GREEN or BLUE, never Red. USER 2026-09-08: "Technically the deck has red, but
+// there is no point in worrying about that until Skred is active. This is a deferral for phase 2."
+//
+// The generic rule above would admit Red on demand grounds -- 4x Skred is 4 real {R} pips sitting
+// in hand -- and it would be wrong to. Skred is GOLDFISH-INERT: no blocking is modelled and the
+// passive opponent's creatures are never attacked into, so its removal changes nothing, and its
+// card_score in Snow.profile.json is -0.236 (the engine already prices it as a dead slot). Fixing
+// the manabase toward a spell that cannot matter costs a real {G} or {U} the deck's actual threats
+// (Ice-Fang Coatl {G}{U}, Abominable Treefolk {2}{G}{U}, Frost Augur {U}) need to deploy on curve.
+// Rimescale Dragon's {5}{R}{R} is a 1-of at seven mana and does not change that.
+//
+// APPROVED DEFERRAL, phase 2: when Skred becomes live (a blocking model, or any deck where its
+// damage matters), Red rejoins the candidate set -- and at that point this override should simply
+// be DELETED so the deck falls back to the generic demand rule, rather than grown a third case.
+int SnowProvider::EtbChosenColor(const GameState& s, int controller,
+                                 const CardDefinition& def) const
+{
+    static const std::vector<Color> kGreenBlue{ Color::Green, Color::Blue };
+    return EtbChosenColorFrom(s, controller, def, kGreenBlue);
+}
 
 // DEFAULT ON; MTG_SNOW_SHEETS_HOLD=0 restores the plain ladder (the A/B hatch).
 inline bool SnowSheetsHoldEnabled()
@@ -8971,7 +9061,8 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
         if (!(d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock)) { continue; }
         if (!GraveyardFuelLive(s, controller, *d)) { continue; }
         ++bf_sources;
-        count(EffectiveProduces(s, controller, *d), d->card.IsLand());
+        // Per-PERMANENT: a locked Coldsteel Heart is ONE colour source, not five.
+        count(EffectiveProducesFor(s, controller, *d, &p), d->card.IsLand());
     }
     // Plus non-fetch lands already in hand (a land we are about to play is a near-future source,
     // so fetching to re-cover a colour it already brings is wasted fixing).
@@ -9911,7 +10002,9 @@ bool MirrorwingProvider::TrickCastSensible(const GameState& s, int me,
         if (src && d)
         {
             ++pot;
-            for (Color c : EffectiveProduces(s, me, *d)) { have_color[static_cast<int>(c)] = true; }
+            // Per-PERMANENT: a locked Coldsteel Heart covers its ONE colour, not all five.
+            for (Color c : EffectiveProducesFor(s, me, *d, &p))
+            { have_color[static_cast<int>(c)] = true; }
         }
     }
 

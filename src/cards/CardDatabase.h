@@ -496,6 +496,21 @@ struct CardParams
     // this turn and do not already have lifelink (past that, activations are pure waste).
     std::optional<ManaCost> lifelink_grant_cost;
 
+    // "As this permanent enters, choose a color. {T}: Add one mana of the chosen color."
+    // (Coldsteel Heart). The card's `produces` stays the FULL menu of colours the choice may pick
+    // from; this flag says the menu is resolved ONCE, PER OBJECT, at entry -- stored in
+    // Permanent::chosen_color -- rather than re-chosen at every tap.
+    //
+    // Why it needs a flag at all: an unflagged multi-colour `produces` means a genuinely flexible
+    // source (Birds of Paradise), where the controller really does choose per tap. Modelling
+    // Coldsteel Heart that way is over-permissive IN THE ENGINE'S FAVOUR -- a real Heart is locked
+    // and a 3-colour deck running four of them has colour-screw risk the engine never faces. USER
+    // 2026-09-08: "Coldsteel heart is also not asking for a colour. That is kind of an issue."
+    //
+    // A card in HAND has made no choice yet, so `in_hand` readers keep the full menu -- correct,
+    // since the choice WILL be made optimally on entry.
+    bool etb_choose_color = false;
+
     // Marit Lage's Slumber clause 1: "Whenever this or another snow permanent you control
     // enters, scry N." A WATCHER on the enter cascade, fired once per copy per entering snow
     // permanent, from BOTH FireEtbWatchers (nonland enters) and the tail of LandPlay's ETB

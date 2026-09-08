@@ -31,10 +31,13 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // old EffectiveProduces read so the fix's effect stays measurable in one binary (it makes the
     // rollout score lines the game cannot realise; see docs/design/post-breakpoint-search.md).
     static const bool s_legacy_cco = EnvOn("MTG_LEGACY_CCO_PAY");
-    auto pay_produces = [&](const CardDefinition& d) -> const std::vector<Color>&
+    // `pm` (optional): the PERMANENT this query is about, so an etb_choose_color source resolves
+    // its locked colour instead of the definition's menu. Callers that have one must pass it.
+    auto pay_produces = [&](const CardDefinition& d, const Permanent* pm = nullptr)
+                            -> const std::vector<Color>&
     {
-        if (honor_legacy_cco && s_legacy_cco) { return EffectiveProduces(state, active, d); }
-        return ProducesForPayment(state, active, d, for_creature);
+        if (honor_legacy_cco && s_legacy_cco) { return EffectiveProducesFor(state, active, d, pm); }
+        return ProducesForPayment(state, active, d, for_creature, pm);
     };
 
     // STRICT SNOW PAYMENT scope (see g_snow_pay_strict): only when the cost carries {S} pips AND
@@ -129,7 +132,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             // ONE EffectiveProduces call: it returns a reference into a thread_local buffer that
             // the next call overwrites (see RitualTapAheadIntoFloat's note).
             bool has_c_mode = false;
-            for (Color pc : EffectiveProduces(state, active, def))
+            for (Color pc : EffectiveProducesFor(state, active, def, &p))
             { if (pc == Color::Colorless) { has_c_mode = true; break; } }
             if (!(col == Color::Colorless && has_c_mode))
             { state.players[active].life -= def.params.tap_self_damage; }
@@ -172,7 +175,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         else if (def.params.domain_mana)
         {
             // Faeburrow / Bloom Tender: one mana of EACH colour among controlled permanents.
-            amt = consumed = static_cast<int>(EffectiveProduces(state, active, def).size());
+            amt = consumed = static_cast<int>(EffectiveProducesFor(state, active, def, &p).size());
         }
         else if (IsScaledManaDork(def))
         {
@@ -180,7 +183,10 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             amt = consumed = ScaledDorkCount(state, active, def);
         }
         else { amt = consumed = ManaProducedPerTap(def); }
-        const std::vector<Color>& prod = EffectiveProduces(state, active, def);
+        // Per-PERMANENT: a locked etb_choose_color rock produces its ONE colour here, so it takes
+        // the single-colour path below instead of the multi-colour `wild` accounting -- which is
+        // what makes the executor's tap match the pool credit AddSourceToPool made for it.
+        const std::vector<Color>& prod = EffectiveProducesFor(state, active, def, &p);
         // A multi-mode source that could have made {C} stops being able to once it is tapped, so
         // retire its share of ManaPool::wild_c alongside its `wild` -- otherwise the projection keeps
         // promising a {C} the board can no longer produce. Only ever nonzero for a source whose
@@ -279,7 +285,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     if (!q.card.IsLand() && qd->tmpl != CardTemplate::ManaDork
                         && !qd->params.mana_rock) { continue; }
                     int seen = 0;
-                    for (Color c : EffectiveProduces(state, active, *qd))
+                    for (Color c : EffectiveProducesFor(state, active, *qd, &q))
                     {
                         const int ci = static_cast<int>(c);
                         if (ci < 5 && !(seen & (1 << ci))) { seen |= 1 << ci; ++hp_supply[ci]; }
@@ -363,7 +369,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     // Payment-legal produces (see pay_produces above): a colored_creature_only land
                     // is NOT selected for a coloured pip on a non-creature spell (but still pays a
                     // generic pip as {C}).
-                    const std::vector<Color>& prod = pay_produces(*def);
+                    const std::vector<Color>& prod = pay_produces(*def, &p);
                     bool makes = false;
                     if (any) { makes = !prod.empty(); }
                     else { for (Color c : prod) { if (c == needed) { makes = true; break; } } }
@@ -410,7 +416,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 if (hp_demand_live && kind == 1)
                 {
                     int worst = 1 << 20; bool has_col = false;
-                    for (Color c : pay_produces(*def))
+                    for (Color c : pay_produces(*def, &p))
                     {
                         const int ci = static_cast<int>(c);
                         if (ci >= 5) { continue; }
@@ -450,7 +456,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                         const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                         if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
                         bool m = false;
-                        for (Color pc : EffectiveProduces(state, active, *sd))
+                        for (Color pc : EffectiveProducesFor(state, active, *sd, &s))
                         { for (Color ic : fd->params.produces) { if (pc == ic) { m = true; break; } } if (m) { break; } }
                         if (!m) { continue; }
                         ++feeders;
@@ -488,7 +494,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                             if (!td || IsManaConversionSource(td->params) || !usable(t, *td)) { continue; }
                             if (gd->params.ramp_filter) { chain_feed = true; break; }
                             bool m = false;
-                            for (Color pc : EffectiveProduces(state, active, *td))
+                            for (Color pc : EffectiveProducesFor(state, active, *td, &t))
                             { for (Color gc : gd->params.produces) { if (pc == gc) { m = true; break; } } if (m) { break; } }
                             if (m) { chain_feed = true; break; }
                         }
@@ -502,7 +508,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             {
                 // {C}-only for a non-creature colored_creature_only land -> the generic tap uses {C}
                 // (prod[0]) rather than a colour that could leak to pay a coloured pip.
-                const std::vector<Color>& prod = pay_produces(*bdef);
+                const std::vector<Color>& prod = pay_produces(*bdef, &bp);
                 tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, prod[0]) : needed);
                 return true;
             }
@@ -546,7 +552,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                     if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
                     bool m = false; Color match = Color::Colorless;
-                    for (Color pc : EffectiveProduces(state, active, *sd))
+                    for (Color pc : EffectiveProducesFor(state, active, *sd, &s))
                     { for (Color ic : bdef->params.produces) { if (pc == ic) { m = true; match = ic; break; } } if (m) { break; } }
                     if (!m) { continue; }
                     int r = ResolveProvider(state).ManaSourceRank(state, *sd);
@@ -577,7 +583,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             // ProducesForPayment (RP-aware; identity for every non-colored_creature_only source).
             // NOTE: the pre-unification executor read EffectiveProduces here -- the unfixed twin of
             // the 6bb2791 coloured-pip fix, reachable only under MTG_TAP_LEGACY (see ManaPayment.h).
-            const std::vector<Color>& prod = ProducesForPayment(state, active, *def, for_creature);
+            const std::vector<Color>& prod = ProducesForPayment(state, active, *def, for_creature, &p);
             Color col;
             if (any)
             {
@@ -654,7 +660,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                         const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
                         if (!sd || IsManaConversionSource(sd->params) || !usable(s, *sd)) { continue; }
                         bool m = false;
-                        for (Color c : EffectiveProduces(state, active, *sd)) { if (c == ic) { m = true; break; } }  // RP feeder
+                        for (Color c : EffectiveProducesFor(state, active, *sd, &s)) { if (c == ic) { m = true; break; } }  // RP feeder
                         if (!m) { continue; }
                         tap_source(s, *sd, ic);
                         fed = true; break;
@@ -2166,7 +2172,7 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
                           && GraveyardFuelLive(state, active, *d);
         if (!dork && !p.card.IsLand() && !d->params.mana_rock) { continue; }
         int seen = 0;
-        for (Color c : EffectiveProduces(state, active, *d))
+        for (Color c : EffectiveProducesFor(state, active, *d, &p))
         {
             const int ci = static_cast<int>(c);
             if (ci >= 5 || (seen & (1 << ci))) { continue; }

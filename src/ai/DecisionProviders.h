@@ -171,6 +171,8 @@ public:
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
     int         ManaSourceRank(const GameState&, const CardDefinition&) const override;
+    int         EtbChosenColor(const GameState&, int controller,
+                               const CardDefinition&) const override;
     double      NcLandDropTempoBonus(const GameState&, int) const override;
 };
 
@@ -1231,6 +1233,13 @@ public:
     // exactly backwards for a land whose tap has a second, better use. USER 2026-09-08, found while
     // hand-playing references. Liveness-gated and provider-scoped; see the definition.
     int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
+    // Coldsteel Heart's locked colour: GREEN or BLUE only. USER 2026-09-08 -- "Technically the deck
+    // has red, but there is no point in worrying about that until Skred is active. This is a
+    // deferral for phase 2." The generic rule would admit Red (4x Skred is genuine {R} demand in
+    // the decklist), but Skred is goldfish-inert -- no blocking is modelled, so its removal does
+    // nothing and its {R} is demand for a spell that cannot matter. See the definition.
+    int EtbChosenColor(const GameState& s, int controller,
+                       const CardDefinition& def) const override;
 };
 
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /

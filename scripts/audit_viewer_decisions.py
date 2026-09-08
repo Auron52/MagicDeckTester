@@ -183,6 +183,13 @@ MANIFEST = {
     # Kaldring: WHICH graveyard snow permanent is played -- one main_phase plan variant per
     # legal name (GYP# in the plan signature, gyplay= verb), the Haven convention.
     "gy_play_cost":          ("main_phase",           truthy),
+    # Coldsteel Heart (2026-09-08): "As this enters, choose a color." An as-enters REPLACEMENT
+    # effect (CR 614, no stack), so it is not a main_phase plan variant but its own decision at
+    # resolution -- g_play_etb_color_chooser, decision type `choose_color`. Genuinely
+    # consequential and IRREVERSIBLE: the colour is locked for the permanent's whole life, which
+    # is exactly why the human is asked rather than handed the provider's heuristic silently.
+    # USER 2026-09-08: "Coldsteel heart is also not asking for a colour. That is kind of an issue."
+    "etb_choose_color":      ("choose_color",         truthy),
     "sac_draw_cost":         ("main_phase",           truthy),
     # "Enchant land": WHICH land carries the aura is a real decision and rides the existing
     # enchant_target plan-variant axis (one main_phase variant per legal land host), opened to
