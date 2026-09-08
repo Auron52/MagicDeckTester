@@ -1941,3 +1941,8 @@ Byte-identity bonus: this batch's topk5 arms reproduce batch 1's leaf0 digests e
 (d3 3ae70e58147fd761, d5 d099668502343bdb) across the tutor-fill skip + walk micro-opts --
 2000 games of byte-identical evidence on top of smoke + refs. (Their core-s are within batch
 noise of batch 1's -- the 5-9% gain is only visible on the solo 50-set scans.)
+
+Worst-case class after this session: `--seed 800529 --depth 5 --budget-ms 20` (a mulligan game
+that wins t7): 42 s inside the 24-thread batch, **18.2 s solo** -- the topk-5 refine's five
+full d5 playouts at ~3 s each (t3 decisions of 660K units) plus the real game. That is the
+mull-tail class the topk A/B above says we should keep paying for.
