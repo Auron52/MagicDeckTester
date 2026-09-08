@@ -960,6 +960,15 @@ public:
     // never EnumerateMainPlans, or the realised play would drift from the searched one.
     static std::vector<Plan> EnumerateBreakpointPlans(const GameState& state, bool is_pre_combat);
 
+    // CHAIN SLOT. A Plan::bp_choice of kBpChainChoice + j is not a rank: it resolves at apply time
+    // to the j-th continuation that itself OPENS another breakpoint, which is the continuation the
+    // static value ranker buries (it buys options, not board) and the one a chain deck's kill turn
+    // needs. Public because the EXECUTOR must resolve the sentinel exactly as the rollout did, or
+    // the realised line is not the line that was scored. Full rationale at kBpChainChoice's
+    // definition in TurnSolver.cpp; MTG_BP_CHAIN_SLOT=0 restores the pre-fix engine.
+    static constexpr int kBpChainChoice = 1 << 21;
+    static int BpChainCandIndex(const GameState& state, const std::vector<Plan>& cands, int j);
+
     // BREAKPOINT SITE 7 -- the Birthing Pod CHAIN (bit 7 of MTG_BP_SITES, default ON). A Pod
     // activation's fetch is a mid-phase event that creates a NEW actionable object: the fetched
     // creature is a legal sac victim for a SECOND untapped Pod (and outlet fodder) in the SAME
