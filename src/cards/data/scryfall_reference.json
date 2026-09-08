@@ -57,6 +57,15 @@
     "toughness": null,
     "type_line": "Artifact"
   },
+  "Ajani, Strength of the Pride": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}{W}",
+    "oracle_text": "+1: You gain life equal to the number of creatures you control plus the number of planeswalkers you control.\n−2: Create a 2/2 white Cat Soldier creature token named Ajani's Pridemate with \"Whenever you gain life, put a +1/+1 counter on this token.\"\n0: If you have at least 15 life more than your starting life total, exile Ajani and each artifact and creature your opponents control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Planeswalker — Ajani"
+  },
   "All That Glitters": {
     "cmc": 2.0,
     "keywords": [
@@ -147,6 +156,18 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Druid"
+  },
+  "Archangel of Thune": {
+    "cmc": 5.0,
+    "keywords": [
+      "Flying",
+      "Lifelink"
+    ],
+    "mana_cost": "{3}{W}{W}",
+    "oracle_text": "Flying\nLifelink (Damage dealt by this creature also causes you to gain that much life.)\nWhenever you gain life, put a +1/+1 counter on each creature you control.",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Creature — Angel"
   },
   "Arcum's Astrolabe": {
     "cmc": 1.0,
@@ -674,6 +695,15 @@
     "power": "2",
     "toughness": "1",
     "type_line": "Creature — Human Knight"
+  },
+  "Daxos, Blessed by the Sun": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{W}{W}",
+    "oracle_text": "Daxos's toughness is equal to your devotion to white. (Each {W} in the mana costs of permanents you control counts toward your devotion to white.)\nWhenever another creature you control enters or dies, you gain 1 life.",
+    "power": "2",
+    "toughness": "*",
+    "type_line": "Legendary Enchantment Creature — Demigod"
   },
   "Daybreak Coronet": {
     "cmc": 2.0,
@@ -1416,6 +1446,17 @@
     "power": "3",
     "toughness": "3",
     "type_line": "Legendary Creature — Human Knight"
+  },
+  "Heliod, Sun-Crowned": {
+    "cmc": 3.0,
+    "keywords": [
+      "Indestructible"
+    ],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "Indestructible\nAs long as your devotion to white is less than five, Heliod isn't a creature.\nWhenever you gain life, put a +1/+1 counter on target creature or enchantment you control.\n{1}{W}: Another target creature gains lifelink until end of turn.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Legendary Enchantment Creature — God"
   },
   "Hibernation Sliver": {
     "cmc": 2.0,
@@ -2455,6 +2496,15 @@
     "oracle_text": "When this creature enters, you may search your library for up to two creature cards with mana value 1 or less, reveal them, put them into your hand, then shuffle.",
     "power": "3",
     "toughness": "2",
+    "type_line": "Creature — Human Soldier Ranger"
+  },
+  "Ranger-Captain of Eos": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}{W}",
+    "oracle_text": "When this creature enters, you may search your library for a creature card with mana value 1 or less, reveal it, put it into your hand, then shuffle.\nSacrifice this creature: Your opponents can't cast noncreature spells this turn.",
+    "power": "3",
+    "toughness": "3",
     "type_line": "Creature — Human Soldier Ranger"
   },
   "Ravenous Chupacabra": {

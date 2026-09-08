@@ -11013,6 +11013,35 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // -- the top of library reflects this turn's earlier cantrips by then -- and at the SAME
             // fd-diverge as the searched 2-variant baseline (no lockstep regression).
             actions.push_back(std::move(a));   // a.ponder_keep stays -1
+            // PLANESWALKER cast + same-turn LOYALTY ACTIVATION as extra cast variants (provider-
+            // gated; see DecisionProvider::SearchesWalkerCastActivation). They share hand_index
+            // with the plain cast (mutually exclusive), carry loyalty_ability (already folded
+            // into the plan signature), and are applied right after the walker enters. Only
+            // TARGET-FREE abilities: the targeted ones (Oko's elk, Bolas's steal/destroy) carry
+            // their own searched target axes that do not fit a cast variant. Autonomous only --
+            // human play reaches the activation through the main-phase re-prompt.
+            if (def.params.loyalty_start > 0 && !def.params.loyalty_abilities.empty()
+                && !HumanPlayActive() && ResolveProvider(state).SearchesWalkerCastActivation())
+            {
+                constexpr int DMG = 100;
+                const Action base = actions.back();
+                for (int li = 0; li < static_cast<int>(def.params.loyalty_abilities.size()); ++li)
+                {
+                    const CardParams::LoyaltyAbilityParam& ab = def.params.loyalty_abilities[li];
+                    if (ab.delta < 0 && def.params.loyalty_start < -ab.delta) { continue; }
+                    int extra = 0;
+                    if      (ab.effect == "kavu_token")                     { extra = 3 * DMG; }
+                    else if (ab.effect == "food_token")                     { extra = DMG / 3; }
+                    else if (ab.effect == "face_damage")                    { extra = ab.amount * DMG; }
+                    else if (ab.effect == "lifegain_creatures_plus_walkers") { extra = DMG; }
+                    else if (ab.effect == "pridemate_token")                { extra = 2 * DMG; }
+                    else { continue; }   // targeted / value-gated abilities: not a cast variant
+                    Action v = base;
+                    v.loyalty_ability = li;
+                    v.eval            = base.eval + extra;
+                    actions.push_back(std::move(v));
+                }
+            }
         }
     }
 
@@ -19274,6 +19303,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // by the hand emptying -- each continuation cast consumes a card -- the same argument the
     // executor's kMaxDrawBreakpointDepth makes explicit on its side.
     bool bp_truncate = false;
+    // Same-turn loyalty activation riding a CAST action (Action::loyalty_ability). Set by the
+    // Action-based apply_one callers right before the call, consumed (and reset) at apply_one's
+    // head; -1 = none. A captured local rather than a 21st apply_one parameter.
+    int cast_loyalty_ability = -1;
 
     // Karoo bounce-land play-at-end timing. A Karoo (Izzet Boilerworks: etb_bounce_land,
     // enters tapped) returns one of our lands to hand on ETB. Played land-FIRST it bounces a
@@ -19893,6 +19926,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // plan is not ours to make. One guard here rather than in each of the seven cast loops.
         // Never set unless MTG_EQUIP_DRAW_BP_INLINE is on -> byte-identical otherwise.
         if (bp_truncate) { return; }
+        const int cast_loyalty = cast_loyalty_ability;   // consume the caller's same-cast activation
+        cast_loyalty_ability = -1;
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
         // ~200k/game). Byte-identical: it->m_name == name so LookupCached(*it) == Lookup(name),
@@ -21698,6 +21733,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 EnforceLegendRule(state, state.active_player_index);
             }
+            // Same-turn loyalty activation carried on this cast (see ApplyCastLoyaltyActivation):
+            // AFTER the legend rule, exactly where the real game's priority window falls.
+            if (cast_loyalty >= 0 && def.params.loyalty_start > 0)
+            {
+                ApplyCastLoyaltyActivation(state, state.active_player_index, cast_number,
+                                           def.card.m_name.str(), cast_loyalty);
+            }
         }
 
         // (On-cast triggers + Prowess already fired above, at cast time, before the
@@ -21777,7 +21819,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                    cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
                     fire_unlock();
                 }
             }
@@ -21849,7 +21891,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                          < ResolveProvider(state).CastOrderRank(state, *dy);
                 });
                 for (int i : ena)
-                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock(); }
+                { const Action& a = acts[i]; prep_free(a); cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock(); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -21873,7 +21915,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                        cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -21900,7 +21942,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
-                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock();
+                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock();
                 }
             }
             else
@@ -21928,7 +21970,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                    cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
                     fire_unlock();
                 }
             }
@@ -21940,14 +21982,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
                 prep_free(a);
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
             }
         }
 
@@ -26284,6 +26326,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // DISTINCT plans (core invariant); gated on the param.
                         + ((act.def && act.def->params.etb_blink_permanent)
                            ? ("#F" + std::to_string(act.chosen_x)) : "")
+                        // Planeswalker cast + same-turn loyalty activation (CritterLifegain's Ajani):
+                        // the plain cast and each "cast + activate #k" variant are DISTINCT plans
+                        // (core invariant; the name-only dedup would keep the first and hide the
+                        // activation the enumeration deliberately emitted). Gated on the walker
+                        // param + a set index, so every existing deck's signature is unchanged.
+                        + ((act.def && act.def->params.loyalty_start > 0 && act.loyalty_ability >= 0)
+                           ? ("#L" + std::to_string(act.loyalty_ability)) : "")
                         // Phyrexian ({G/P} -- Birthing Pod): paying the pip with mana vs 2 life
                         // are DISTINCT plans (the life payment frees a source; core invariant).
                         // Gated on the field, so no existing deck's signature moves.

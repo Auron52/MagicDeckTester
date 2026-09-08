@@ -3213,9 +3213,12 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // exile makes the opponent gain life = the creature's power (a Tainted Remedy flips that to
             // a loss -- the whole point of the deck), so surface the target as a human choice.
             const bool exile_removal = (def.tmpl == CardTemplate::Removal);
-            const std::string remove_desc = exile_removal
-                ? std::string("exiled; you gain life equal to its power (a Tainted Remedy / Plague Drone flips that to a life loss)")
-                : std::string();
+            // Tuck removal (Unexpectedly Absent) neither exiles nor gains life -- the Swords wording
+            // here was actively misleading in a lifegain-trigger deck (5d sweep, gi=9).
+            const std::string remove_desc = !exile_removal ? std::string()
+                : def.params.tuck_to_library
+                ? std::string("put into its owner's library just beneath the top X cards (a token ceases to exist); no life gain")
+                : std::string("exiled; you gain life equal to its power (a Tainted Remedy / Plague Drone flips that to a life loss)");
             // Creature-targeting burn (Searing Blood "target creature"; Searing Blaze "... that player
             // controls"): the human picks WHICH creature takes the damage. Own creatures are offered too
             // (cast for prowess with no opponent creature). Not the face-inclusive damage-target set.
@@ -4108,8 +4111,21 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
                 // damage-target collector uses, so the viewer's label normaliser already knows it.
                 std::string lbl = p.card.m_name.str();
                 if (p.card.IsCreature())
-                { lbl += " (" + std::to_string(p.EffectivePower()) + "/"
-                              + std::to_string(p.EffectiveToughness()) + ")"; }
+                {
+                    // Live P/T: base + counters + temp (EffectivePower) PLUS the characteristic-
+                    // defining base (Daxos: toughness = devotion; Adeline) and the static buffs the
+                    // combat/SBA paths apply (ComputeLordBonus: lords, Serra Ascendant's 30-life
+                    // +5/+5). The state-free reads alone showed Daxos as a dying "2/0" (5d sweep).
+                    int pw = p.EffectivePower(), tf = p.EffectiveToughness();
+                    if (const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card))
+                    {
+                        pw += DynamicBasePower(*pd, s, p.controller_index);
+                        tf += DynamicBaseToughness(*pd, s, p.controller_index);
+                    }
+                    const auto lb = ComputeLordBonus(p.card, s, p.controller_index, p.is_animated, &p);
+                    pw += lb.first; tf += lb.second;
+                    lbl += " (" + std::to_string(pw) + "/" + std::to_string(tf) + ")";
+                }
                 lbl += (p.controller_index == controller ? " (yours)" : " (opponent)");
                 legal_labels.push_back(lbl);
             }

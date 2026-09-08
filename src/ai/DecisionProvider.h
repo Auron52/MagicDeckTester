@@ -59,6 +59,7 @@
 // RestrictSacColorsToHasteAndRed were added unnumbered.
 // ---------------------------------------------------------------------------------------------
 
+#include "../core/EnvFlags.h"   // EnvOn: SearchesWalkerCastActivation's lever
 #include "../core/GameState.h"
 #include "../core/ManaPool.h"
 #include "../cards/CardDatabase.h"
@@ -858,6 +859,17 @@ public:
     // a Cartesian explosion. Human play picks off the board from the full rules-legal set.
     virtual int LifegainCounterTarget(const GameState& s, int controller) const
     { (void)s; (void)controller; return -1; }
+
+    // SearchesWalkerCastActivation -- emit "cast this planeswalker AND activate ability #k this
+    // turn" as extra CastFromHand plan variants (Action::loyalty_ability), applied right after the
+    // walker enters (ApplyCastLoyaltyActivation, both worlds). Loyalty actions are otherwise
+    // enumerated only from walkers already on the battlefield, so the autonomous search could
+    // never use a walker the turn it was cast (the CritterLifegain 5d finding: Ajani idled a
+    // turn). Generic = MTG_WALKER_CAST_ACTIVATE (default OFF): FiveColour's Jared/Oko/Bolas would
+    // gain the same reach, but that is a GT-moving change to measure per game before adopting
+    // there. CritterLifegainProvider opts in (its three Ajani are the deck's engine).
+    virtual bool SearchesWalkerCastActivation() const
+    { return EnvOn("MTG_WALKER_CAST_ACTIVATE"); }
 
     // LandAuraHostCandidates -- which LANDS an "Enchant land" Aura may be cast onto, as m_numbers.
     // Empty means "no narrowing" (every land the controller has). Generic returns empty; only a

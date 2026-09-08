@@ -69,8 +69,24 @@ devotion flip, Serra threshold, GrantLifelink + counter merge); scenario
   `modeled_tokens` keys only on `targeting`/`spectacle_cost` -- the MANIFEST maps it; noted).
 - Known UX gap (disclose): Heliod's counter target fires a board prompt PER gain event (5-15/turn).
 
-## Verification verdicts (Stage 5)
-(pending)
+## Verification verdicts (Stage 5) -- commit fbe93635 + provider scoping
+
+- 4a provider routing: `CritterLifegain` (intended -- Ranger-Captain alone trips goblin + anti).
+- 5a mismatch: seed 2002 -- d3/b20 200 games: 0 `[nonconv]`; d5/b40 100 games (`MTG_FD_ORACLE=1`):
+  0 `[fd-diverge]`, 0 `[nonconv]`. (NOTE: the skill's `MTG_FULL_DEPTH` flag no longer exists --
+  the binary warns; `MTG_FD_ORACLE` alone is the oracle.)
+- 5b multi-depth (seed 2002, first 100 games shared): avg d0 5.13 / d3 5.02 / d5 5.02; d3 never
+  slower than d0 (11 faster), d5 never slower than d3. Distributions d0 T4-T8, d3 T4-T8, d5 T4-T7.
+  Outlier: gi=0 unwon at every depth = a 5-Plains keep that drew five more Plains (cards 22-30) --
+  three 1/1s from T4 leave the opponent at 2 on the T8 cap. Flood, not a play error.
+- 5c budget: no starvation seen (d3 == d5 per game); suite budgets 10/20 (breaching-class cost).
+- 5h viewer: static self-guard clean; runtime sweep (seed 4242, 12 games) PASS -- `bounce`,
+  `discard`, `target` surfaced; `--verify-card "Heliod, Sun-Crowned"` VERIFIED (target).
+- 5i discard: analyzer verdict DISCARD_INERT (no cleanup shed reached by either caller).
+- 5c2 leaf tie-break: RUNNING (`logs/critter/tiebreak.log`).
+- 5d claude-play sweep: RUNNING -- 16 Opus agents, base seed 31337, gi 0-15.
+- Suite: added to `test/regression_cases.sh` (breaching shape, + `critter2hg` canary); GT to be
+  accepted after the tie-break batch frees the box.
 
 ## Approved deferrals
 (none yet — every proposed deferral is PROVISIONAL until the user signs off; user is asleep

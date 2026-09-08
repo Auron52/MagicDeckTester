@@ -35,6 +35,7 @@ declare -A DECK_FILE=(
   [kitty]=decks/KittyEquipment/KittyEquipment.cod
   [dragons]=decks/Dragons/Dragons.cod
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
+  [critter]=decks/CritterLifegain/CritterLifegain.cod
   [melira]="decks/Melira Pod/Melira Pod.cod"
   [fluctuator]=decks/Fluctuator/Fluctuator.cod
 )
@@ -56,6 +57,7 @@ declare -A DECK_PROF=(
   [kitty]=decks/KittyEquipment/KittyEquipment.profile.json
   [dragons]=decks/Dragons/Dragons.profile.json
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
+  [critter]=decks/CritterLifegain/CritterLifegain.profile.json
   [melira]="decks/Melira Pod/Melira Pod.profile.json"
   [fluctuator]=decks/Fluctuator/Fluctuator.profile.json
 )
@@ -182,6 +184,14 @@ SMOKE_CASES=(
   "breaching 0 1001 1000 0"
   "breaching 3 1001  150 10"
   "breaching 5 1001   75 20"
+  # critter: CritterLifegain -- mono-white lifegain aggro (Soul Warden shell into Ajani's Pridemate /
+  # Voice of the Blessed / Archangel of Thune / Heliod; wins ~T5). Probed single-thread 2026-09-08 at
+  # the gate budgets: d3 b10 ~0.20 s/game, d5 b20 ~0.43 s/game -- breaching-class cost, so it takes
+  # breaching's shape. CritterLifegainProvider (Generic + walker-aware legend keep); no keep model /
+  # value leaf yet (the d5 cell will move when a value leaf is adopted -- regenerate GT then).
+  "critter 0 1001 1000 0"
+  "critter 3 1001  150 10"
+  "critter 5 1001   75 20"
   # melira: RESTORED 2026-09-08 (user: "performance should be close to other decks"). Dropped
   # 2026-09-06 at smoke d3 31 s/game, d5 26 s/game (72% of the tier's core-time from one deck).
   # The wall was the 1-ply search LEAF re-running the greedy subset walk at every rollout turn
@@ -223,6 +233,7 @@ SMOKE_CASES=(
   "kitty2hg           3 1001 50 10"
   "dragons2hg         3 1001 50 10"
   "breaching2hg       3 1001 50 10"
+  "critter2hg         3 1001 50 10"
   "melira2hg          3 1001 25 10"
   # fluctuator: free-cycling combo (Fluctuator makes every cycler {0}; Drannith Stinger turns each
   # cycle into a ping). Measured single-thread at the GATE budgets 2026-09-05: d0 0.0001 s/game,
@@ -343,6 +354,12 @@ REGRESSION_CASES=(
   "breaching 3 3003  300 10"
   "breaching 5 2002  250 20"
   "breaching 5 3003  250 20"
+  # critter: breaching-shaped two-seed sweep (~0.20/0.43 s/game at the gate budgets).
+  "critter 0 2002 1000 0"
+  "critter 3 2002  300 10"
+  "critter 3 3003  300 10"
+  "critter 5 2002  250 20"
+  "critter 5 3003  250 20"
   # melira: restored 2026-09-08 (see the SMOKE block).
   "melira 0 2002 1000 0"
   "melira 3 2002   75 10"
@@ -638,6 +655,19 @@ OVERNIGHT_CASES=(
   "breaching 5 5005  500 40"
   "breaching 5 6006  500 40"
   "breaching 5 7007  500 40"
+  # critter: breaching-shaped 4-seed sweep at 2x gate budgets (~1.5 core-hours at the probe rates).
+  "critter 0  4004 2000 0"
+  "critter 0  6006 2000 0"
+  "critter 0  8008 2000 0"
+  "critter 0 10010 2000 0"
+  "critter 3 4004 1000 20"
+  "critter 3 5005 1000 20"
+  "critter 3 6006 1000 20"
+  "critter 3 7007 1000 20"
+  "critter 5 4004  500 40"
+  "critter 5 5005  500 40"
+  "critter 5 6006  500 40"
+  "critter 5 7007  500 40"
   # melira: restored 2026-09-08 (see the SMOKE block). The four-seed d3/d5 sweep that was
   # ~7.5 CPU-hours from one deck now projects to ~25 core-minutes.
   "melira 0 4004 2000 0"

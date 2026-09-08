@@ -5797,6 +5797,36 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
     }
 }
 
+// Same-turn loyalty activation carried on a CAST plan action (Action::loyalty_ability >= 0 on a
+// CastFromHand of a planeswalker). Loyalty actions are enumerated from walkers ALREADY on the
+// battlefield, so "cast Ajani, then -2 this turn" was unreachable for the autonomous search (human
+// play gets it through the main-phase re-prompt) -- found by the CritterLifegain Stage-5d sweep
+// (gi=5: the search cast Ajani and idled it a turn). Called AFTER the walker has entered and the
+// legend rule has run, in the rollout's apply and the executor alike (lockstep). The walker is
+// found by its per-copy number; if the legend rule kept an OLDER same-name copy instead, the
+// activation goes to that surviving copy when it can still activate (the player's real option).
+inline void ApplyCastLoyaltyActivation(GameState& state, int controller, int cast_number,
+                                       const std::string& name, int ability_index)
+{
+    if (ability_index < 0) { return; }
+    int walker_id = -1;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.loyalty <= 0) { continue; }
+        if (p.card.m_number == cast_number) { walker_id = p.card.m_number; break; }
+    }
+    if (walker_id < 0)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller || p.loyalty <= 0) { continue; }
+            if (p.card.m_name.str() == name && !p.loyalty_activated_this_turn) { walker_id = p.card.m_number; }
+        }
+    }
+    if (walker_id < 0) { return; }
+    ApplyLoyaltyAbility(state, controller, walker_id, ability_index);
+}
+
 // ---- Equipment attach (Lightning Greaves) -------------------------------------------------------
 // Equip: sorcery-speed re-point of an is_equipment permanent onto a controlled creature (CR 701.3;
 // equip ATTACHES, it does not target -- the goldfish has no targeting restrictions anyway). The

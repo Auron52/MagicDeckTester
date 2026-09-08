@@ -1246,6 +1246,10 @@ public:
     // Bolas spent its +3 in main 2 on our own permanent and cost the winning cast), so the
     // refinement lives with the deck that wants it. MTG_LEGEND_KEEP_LOYALTY=0 restores oldest.
     int LegendKeepIndex(const GameState&, int, const std::vector<int>&) const override;
+    // Same-turn "cast Ajani + activate" plan variants (see DecisionProvider). DEFAULT ON here;
+    // MTG_WALKER_CAST_ACTIVATE=0 restores the cast-only enumeration for the A/B.
+    bool SearchesWalkerCastActivation() const override
+    { return EnvOn("MTG_WALKER_CAST_ACTIVATE", true); }
 };
 
 // Rakdos Minotaur tribal aggro. Like DragonsProvider it exists to hold ONE measured hook, the
