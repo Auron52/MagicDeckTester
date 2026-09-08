@@ -35,6 +35,11 @@ struct Arm
     // per-job override an A/B of them needs one `mtg --batch` per arm -- which strands cores on each
     // invocation's tail and re-introduces the wave pattern this file was written to remove.
     int         esc_to_trust      = -1;     // -1 unset | 0 off | 1 on     (MTG_ESC_TO_TRUST)
+    // SINGLE HEURISTIC PASS AT THE PROBE'S COMMITTED DEPTH (MTG_ESC_SINGLE_AT_COMMITTED): the value-leaf
+    // ladder finds the depth D it can afford, then ONE heuristic pass at exactly D runs to completion
+    // and its line is always taken. No d1..D heuristic re-ladder, no crossover fall-back, no
+    // starvation. User paradigm 2026-09-08 ("don't search further; heuristic at the final depth").
+    int         esc_single        = -1;     // -1 unset | 0 off | 1 on     (MTG_ESC_SINGLE_AT_COMMITTED)
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).
     // "none"/"off"/"0" => explicitly NO sidecar, which is how an H-arm job asks for the pure

@@ -607,6 +607,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     // PATH-TO-TRUST arm (see ValueArm.h): both are process-wide statics, so carrying them per job is
     // what lets ONE pooled batch run the A/B instead of one invocation per arm.
     if (jspec.contains("esc_to_trust")) { j.arm.esc_to_trust = jspec["esc_to_trust"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("esc_single"))   { j.arm.esc_single   = jspec["esc_single"].get<bool>() ? 1 : 0; }
     if (jspec.contains("trust_slack"))  { j.arm.trust_slack  = jspec["trust_slack"].get<double>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());
     // "flags": {"MTG_KE_ORDER": true, ...} -- per-job boolean lever overrides (see ai/HeuristicArm.h).

@@ -2178,15 +2178,15 @@ seeds 700000+1000i, delta vs no-sidecar at the same config, negative = better; c
 | ladesc | ladder warm-ups on value + escalation | -0.0033 (same digest as staged) | 1.47x | — | — |
 | pure | value leaf every pass, no escalation, 8x gate | +0.0200 (+3.7, 1/7) | 1.31x | +0.0413 (+11.7, 0/8) | 0.79x |
 | pure_a1 | as pure, gate leniency pinned to 1 (leaf is the ONLY difference) | +0.0874 (+23, 0/8) | 0.53x | +0.0963 (+23, 0/8) | 0.50x |
-| ladder | value warm-ups, heuristic committing pass, no redo (the proposal, form 1) | +0.0867 (+22, 0/8) | 0.57x | +0.0711 (+17, 0/8) | 1.02x |
-| staged_a1 | probe pinned to heuristic depth + heuristic escalation (the proposal, form 2) | +0.0122 (+6.0, 0/8) | 0.82x | +0.0108 (+3.7, 0/8) | 0.79x |
+| ladder | EXISTING lever MTG_LADDER_VALUE_LEAF: value warm-ups, heuristic committing pass -- NOT the user's proposal (falls back to the value line on overrun) | +0.0867 (+22, 0/8) | 0.57x | +0.0711 (+17, 0/8) | 1.02x |
+| staged_a1 | EXISTING hybrid with the probe gate pinned to 1 -- NOT the user's proposal (starved d1..5 re-ladder, crossover fall-back) | +0.0122 (+6.0, 0/8) | 0.82x | +0.0108 (+3.7, 0/8) | 0.79x |
 | **livebud** | **heuristic, no sidecar, 1.5x budget (d5/b30, d3/b15)** | **-0.0088 (-9.0, 8/0)** | **1.20x** | **-0.0120 (-9.0, 8/0)** | **1.16x** |
 
 Readings:
 * **Everything else equal, the value leaf is much WORSE at bounded budget on this deck** (pure_a1:
   +0.09 t at half the cost) — its lines at the depths a pinned gate admits are value-leaf lines, and
   the matrix says V(k) is worse than H(k) at every k<5 (V3 4.8054 vs H3 4.7599).
-* **The ladder form of the proposal does not deliver "heuristic at the final depth"**: when the
+* **CORRECTION (user, same day: "you implemented my idea wrong and then are presenting numbers about it"): the two arms above were existing levers run as stand-ins, not the proposal.** The ladder lever does not deliver "heuristic at the final depth": when the
   committing heuristic pass overruns, the ladder keeps the previous pass's line, which is a value-leaf
   warm-up line — so it lands exactly on pure_a1. The escalate form (staged_a1) is cheaper than live
   but worse (0/8 seeds both configs).
@@ -2202,3 +2202,12 @@ Readings:
   leaf, so no hybrid form can beat the heuristic at equal cost; V(k) ~= H(k-3) decks are where the
   deeper probe pays and escalation is the right paradigm. Fluctuator's table should be read the
   same way next.
+
+### 2026-09-08e — the proposal, implemented faithfully: ONE completing heuristic pass at the probe's depth
+
+New per-job mode `esc_single` (env `MTG_ESC_SINGLE_AT_COMMITTED`, default OFF = byte-identical; smoke-gated):
+the value-leaf ladder finds the depth D it can afford; then the heuristic rollout leaf plays exactly one
+pass at D with an unlimited budget so it completes, and that line is taken unconditionally (a verified
+probe win is kept). No d1..depth re-ladder, no crossover fall-back, no starvation. Two arms, same seeds
+as 2026-09-08d: `single_a1` (probe gate pinned to 1, so D is what the heuristic would have committed)
+and `single_a8` (default 8x leniency, deeper D). Results in the table appended below when the batch lands.

@@ -33312,6 +33312,41 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // per-model trust depth: knights/slivers stop at d5 where their leaf matches, others escalate up to the
     // user depth) is escalated to the exact heuristic leaf. See learned-d0-policy.md.
     const bool verified = (line.win_turn <= state.turn_number + committed - 1);
+    // SINGLE HEURISTIC PASS AT THE COMMITTED DEPTH (MTG_ESC_SINGLE_AT_COMMITTED / per-job `esc_single`,
+    // default OFF = byte-identical). The user's paradigm (2026-09-08): the value-leaf ladder decides the
+    // depth D it can afford; then the heuristic rollout leaf plays exactly ONE pass at D, to completion
+    // (unlimited budget -- the point is that it finishes), and that line is taken unconditionally. This
+    // is what neither existing lever does: MTG_LADDER_VALUE_LEAF keeps the value-leaf warm-up line when
+    // its committing pass overruns, and the shipped escalation re-ladders d1..depth from the starved
+    // remaining budget and may fall back by crossover. A VERIFIED probe win is a real simulation and is
+    // kept as-is (nothing for the heuristic to improve).
+    static const bool s_esc_at_committed_env = EnvOn("MTG_ESC_SINGLE_AT_COMMITTED");
+    const bool s_esc_at_committed = (valuearm::t_arm.esc_single >= 0) ? (valuearm::t_arm.esc_single != 0)
+                                                                : s_esc_at_committed_env;
+    if (s_esc_at_committed && value_active && !verified)
+    {
+        ForceHeuristicLeafGuard _fh1(true);
+        FSLineCache        single_cache1;
+        TranspositionTable single_tt1_local;
+        TranspositionTable* single_tt1 = (tt != nullptr) ? tt : &single_tt1_local;
+        SearchBudget        single_budget1;   // unlimited: the pass at D must complete
+        const int d1 = std::max(1, committed);
+        const SearchLine hl = FSLineWin(state, d1, max_turns, max_turns + 1, second_main,
+                                        single_tt1, &single_cache1, &single_budget1);
+        if (g_hybrid_stats.enabled)
+        {
+            g_hybrid_stats.decisions.fetch_add(1);
+            const int di = (committed >= 0 && committed < 16) ? committed : 15;
+            g_hybrid_stats.probe_depth[di].fetch_add(1);
+            g_hybrid_stats.redos.fetch_add(1);
+            g_hybrid_stats.redo_depth[di].fetch_add(1);
+            g_hybrid_stats.redo_hdepth[di].fetch_add(1);
+        }
+        line = hl;   // committed depth unchanged: the heuristic played the probe's depth
+        if (out_committed_depth) { *out_committed_depth = committed; }
+        RecordIdDepth(committed);
+        return line;
+    }
     const bool escalate = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified);
     if (g_hybrid_stats.enabled && value_active)
     {
