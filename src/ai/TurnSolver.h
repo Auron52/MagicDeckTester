@@ -956,6 +956,27 @@ public:
     // The structural gate both worlds share: does the active player control an UNTAPPED second
     // Pod-style source (pod_mv_delta != 0) that could act on the just-fetched creature?
     static bool PodChainAnotherActivatablePod(const GameState& state);
+    // BREAKPOINT SITE 9 -- POST-ENTRY ACTIVATION (bit 9; unconditionally counted, hatch
+    // MTG_POST_ENTRY_BP=0 read through PostEntryBreakpointClassOn in BOTH worlds). USER 2026-09-08:
+    // "Walkers and other sources with activated abilities should also breakpoint in some fashion.
+    // We could probably skip doing so for sources for which we don't have the ability to activate
+    // them (can't pay the mana or tap costs). But for everything else, we need to allow for the
+    // ability activation." Every activation is enumerated against the battlefield the plan started
+    // from, so a permanent the plan itself casts -- a planeswalker, a mana-sink permanent (Heliod's
+    // lifelink grant), a no-{T} outlet -- could never be activated in the phase it landed. The site
+    // opens in the trailing pass after the plan's own activations and re-decides the rest of the
+    // phase exactly like site 7 (searched candidate via bp_choice, else the greedy Solve). The gate
+    // is the user's affordability test, evaluated identically in both worlds at the same point.
+    // `pre_plan_numbers` = the m_numbers of the active player's permanents when the phase's plan
+    // STARTED (ApplyPlanDirect entry / TakeTurn entry). Only a permanent absent from it -- one this
+    // plan itself put onto the battlefield -- can carry an activation the plan could not express;
+    // anything already there was enumerated, and a plan that DECLINED its activation made a
+    // decision the continuation must not override (first smoke: the site re-fired on a walker cast
+    // the turn before and the greedy continuation overrode the plan's own loyalty choice).
+    static bool PostEntryActivationPending(const GameState& state,
+                                           const std::vector<int>& pre_plan_numbers);
+    static std::vector<int> OwnPermanentNumbers(const GameState& state);
+    static bool PostEntryBreakpointClassOn();
     // #10 cast-order: canonical (executor clean-set) order of a plan's non-sac hand casts, for the
     // viewer to diff the human's queued order against (equal => don't emit --cast-order).
     static std::vector<std::string> CanonicalNonSacCastOrder(const GameState& state, const Plan& plan);

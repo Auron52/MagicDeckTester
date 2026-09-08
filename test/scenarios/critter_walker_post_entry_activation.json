@@ -1,0 +1,37 @@
+{
+  "deck": "decks/CritterLifegain/CritterLifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 12,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 9,
+  "_comment": "CritterLifegain (2026-09-08). BREAKPOINT SITE 9 (post-entry activation, searched-only): Ajani, Strength of the Pride cast this turn must be able to activate in the same phase even with the cast-carried activation variant OFF (MTG_WALKER_CAST_ACTIVATE=0 pins the general path). Board: 4 Plains + Ajani's Pridemate. Hand: Ajani (4 mana). Opponent at 12: with a same-phase activation the search wins T6; with the site off (MTG_POST_ENTRY_BP=0) the walker idles this turn and the win is T7 (measured sweep: opp 8 -> T5/T6, 12-16 -> T6/T7). Horizon note: a fixture that ends the game this turn makes every continuation tie with doing nothing -- assert the win turn, not this turn's life.",
+  "env": {
+    "MTG_WALKER_CAST_ACTIVATE": "0"
+  },
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Ajani's Pridemate"
+    }
+  ],
+  "hand": [
+    "Ajani, Strength of the Pride"
+  ],
+  "expect_win_turn": 6
+}

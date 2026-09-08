@@ -1388,7 +1388,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     if (emit_chosen_extra) { emit_plan(static_cast<size_t>(chosen_index), true); }
     os << "  ],\n";
     if (plans.size() > n_emit) { os << "  \"plans_total\": " << plans.size() << ",\n"; }
-    os << "  \"note\": \"reply with one plan index (0-based), or -1 to pass / cast nothing\"\n";
+    // An EXPLICIT pass entry, so a menu holding only optional variants (a tuck, an inert self-sac)
+    // still shows "do nothing" as a listed choice rather than an implicit -1 (5d sweep, gi 2/6:
+    // "listed only UA variants with no explicit pass entry"). Index -1 is the pass the note has
+    // always documented; the viewer's own Pass buttons submit the same value.
+    os << "  \"pass\": { \"index\": -1, \"summary\": \"pass -- cast nothing this phase\" },\n";
+    os << "  \"note\": \"reply with one plan index (0-based), or -1 (the pass entry) to cast nothing\"\n";
     os << "}\n";
 }
 
@@ -1817,8 +1822,11 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                   << "\", \"index\": " << options[oi].targets[ti].index << " }"; }
         os << "] }";
     });
+    // Worded as "this ability", not "this loyalty ability": the same board-click chooser serves a
+    // triggered ability's target too (Heliod, Sun-Crowned's "put a +1/+1 counter on target creature
+    // or enchantment you control" -- the 5d sweep read the old wording as a mislabel, gi=14).
     if (!loyalty_desc.empty())
-    { d.Note("reply an option index -- the permanent this loyalty ability targets. It is "
+    { d.Note("reply an option index -- the permanent this ability (" + source + ") targets. It is "
              + loyalty_desc + ". Default = the AI's pick."); }
     else if (!pump_desc.empty())
     { d.Note("reply an option index. The chosen creature gets " + pump_desc

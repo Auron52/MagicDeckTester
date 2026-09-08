@@ -1240,6 +1240,17 @@ struct CardParams
     //                                          gain N" (Daxos, Blessed by the Sun's second half),
     //                                          fired from OnCreatureDies via FireCreatureDiesWatchers.
     int  lifegain_self_counters              = 0;
+    //   counter_threshold_flying_vigilance  -- "As long as this creature has N or more +1/+1
+    //                                          counters on it, it has flying and vigilance"
+    //   counter_threshold_indestructible    -- same shape, indestructible at N (Voice of the
+    //                                          Blessed: 4 / 10). Layer-6 keyword grants toggled
+    //                                          on the permanent's Card copy at the two counter
+    //                                          chokepoints (AddPlusCounters / AnnihilateCounters)
+    //                                          -- RefreshCounterThresholdKeywords -- so the
+    //                                          attack-tap, the lethal-damage SBA and the viewer
+    //                                          all read the live keyword. 0 = no such clause.
+    int  counter_threshold_flying_vigilance  = 0;
+    int  counter_threshold_indestructible    = 0;
     int  lifegain_each_own_creature_counters = 0;
     bool lifegain_target_own_counter         = false;
     int  own_creature_dies_lifegain          = 0;

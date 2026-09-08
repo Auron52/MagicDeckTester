@@ -267,3 +267,67 @@ TEST_CASE("Heliod's {1}{W}: grants until-EOT lifelink to another creature; count
     CHECK(PlusCounters(s.battlefield[pm]) == 3 + 3);   // 3 self + 3 Heliod counters (only creature)
     CHECK(s.battlefield[pm].counters.size() == 1);     // merged, not one entry per event
 }
+
+TEST_CASE("Voice of the Blessed: flying+vigilance from the 4th +1/+1 counter, indestructible from the 10th; both drop with the counters")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    const int v = Put(s, "Voice of the Blessed", 0, 10);
+    CHECK_FALSE(s.battlefield[v].card.HasKeyword(Keyword::Vigilance));
+    AddPlusCounters(s.battlefield[v], 3);
+    CHECK_FALSE(s.battlefield[v].card.HasKeyword(Keyword::Flying));
+    CHECK_FALSE(s.battlefield[v].card.HasKeyword(Keyword::Vigilance));
+    AddPlusCounters(s.battlefield[v], 1);                    // 4
+    CHECK(s.battlefield[v].card.HasKeyword(Keyword::Flying));
+    CHECK(s.battlefield[v].card.HasKeyword(Keyword::Vigilance));
+    CHECK_FALSE(s.battlefield[v].card.HasKeyword(Keyword::Indestructible));
+    AddPlusCounters(s.battlefield[v], 6);                    // 10
+    CHECK(s.battlefield[v].card.HasKeyword(Keyword::Indestructible));
+    // Continuously checked (CR 611.3): seven -1/-1 counters annihilate down to 3 -> all gone.
+    s.battlefield[v].counters.push_back(Counter{Counter::Type::MinusOneMinusOne, 7});
+    AnnihilateCounters(s.battlefield[v]);
+    CHECK(PlusCounters(s.battlefield[v]) == 3);
+    CHECK_FALSE(s.battlefield[v].card.HasKeyword(Keyword::Flying));
+    CHECK_FALSE(s.battlefield[v].card.HasKeyword(Keyword::Vigilance));
+    CHECK_FALSE(s.battlefield[v].card.HasKeyword(Keyword::Indestructible));
+    // The grant lives on the permanent's copy only: the definition is untouched.
+    CHECK_FALSE(Def("Voice of the Blessed").card.HasKeyword(Keyword::Vigilance));
+    // The lifegain path is the real counter source: 4 events -> the 4th turns the keywords on.
+    GameState t = Fresh();
+    const int v2 = Put(t, "Voice of the Blessed", 0, 11);
+    for (int i = 0; i < 4; ++i) { GainLife(t, 0, 1); }
+    CHECK(t.battlefield[v2].card.HasKeyword(Keyword::Vigilance));
+}
+
+TEST_CASE("Legend rule: a second Heliod dying as a CREATURE is a death -- Daxos gains 1, the survivor drops off")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Daxos, Blessed by the Sun", 0, 1);       // {W}{W}: devotion 2
+    Put(s, "Ajani's Pridemate", 0, 2);               // {1}{W}: 3
+    const int h1 = Put(s, "Heliod, Sun-Crowned", 0, 3);   // {2}{W}: 4
+    CHECK_FALSE(s.battlefield[h1].card.IsCreature());
+    Put(s, "Heliod, Sun-Crowned", 0, 4);             // 5: BOTH Heliods are creatures now
+    CHECK(s.battlefield[h1].card.IsCreature());
+    CHECK(s.battlefield[3].card.IsCreature());
+    const int pridemate_before = PlusCounters(s.battlefield[1]);
+    EnforceLegendRule(s, 0);
+    int heliods = 0;
+    for (const Permanent& p : s.battlefield) { if (p.card.m_name == "Heliod, Sun-Crowned") { ++heliods; } }
+    CHECK(heliods == 1);
+    // Daxos: "whenever another creature you control dies, you gain 1 life" -- ONE event, seen by
+    // TWO watchers: the Pridemate's own counter and the surviving Heliod's target counter (a God's
+    // abilities work whether or not it is a creature), which the default target lands on the same
+    // Pridemate (the only attack-eligible creature). So +2 counters from +1 life.
+    CHECK(s.players[0].life == 21);
+    CHECK(PlusCounters(s.battlefield[1]) == pridemate_before + 2);
+    // Devotion fell back to 4: the surviving Heliod is no longer a creature.
+    CHECK_FALSE(ByNumber(s, 3).card.IsCreature());
+    // A doomed NON-creature Heliod (devotion < 5 for both) is not a creature death: no gain.
+    GameState u = Fresh();
+    Put(u, "Daxos, Blessed by the Sun", 0, 1);
+    Put(u, "Heliod, Sun-Crowned", 0, 3);
+    Put(u, "Heliod, Sun-Crowned", 0, 4);             // devotion 4
+    EnforceLegendRule(u, 0);
+    CHECK(u.players[0].life == 20);
+}

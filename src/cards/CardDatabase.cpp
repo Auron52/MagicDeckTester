@@ -916,6 +916,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.opp_creature_enters_life_loss = params.value("opp_creature_enters_life_loss", 0);
     // "Whenever you gain life" watchers (CritterLifegain)
     p.lifegain_self_counters              = params.value("lifegain_self_counters", 0);
+    p.counter_threshold_flying_vigilance  = params.value("counter_threshold_flying_vigilance", 0);
+    p.counter_threshold_indestructible    = params.value("counter_threshold_indestructible", 0);
     p.lifegain_each_own_creature_counters = params.value("lifegain_each_own_creature_counters", 0);
     p.lifegain_target_own_counter         = params.value("lifegain_target_own_counter", false);
     p.own_creature_dies_lifegain          = params.value("own_creature_dies_lifegain", 0);

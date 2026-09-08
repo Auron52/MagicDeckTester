@@ -1489,6 +1489,40 @@ struct GyEnterBatchScope
 // persist body in the pool); ANY future site that adds either counter type to a body that may
 // carry the other MUST call this too. No-op (and byte-identical) unless both types coexist,
 // which no deck outside Melira Pod can produce.
+// Counter-threshold keyword grants (Voice of the Blessed: "as long as this creature has four or
+// more +1/+1 counters on it, it has flying and vigilance ... ten or more ... indestructible").
+// A layer-6 static whose condition is the permanent's own counter count, re-evaluated at the two
+// counter chokepoints the card's counters ever pass through (AddPlusCounters, AnnihilateCounters)
+// and toggled on the PERMANENT's Card copy -- the Heliod RemoveType pattern -- so Combat.cpp's
+// attack-tap (vigilance), the lethal-damage SBA (indestructible), the flying readers and the
+// viewer's board labels all see the live keyword with no per-site hook. A keyword the printed card
+// already carries is never cleared (the clause only ever ADDS). Param-gated: one cached-pointer
+// lookup for every other permanent.
+inline void RefreshCounterThresholdKeywords(Permanent& p)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr) { return; }
+    const CardParams& pp = d->params;
+    if (pp.counter_threshold_flying_vigilance <= 0 && pp.counter_threshold_indestructible <= 0)
+    { return; }
+    int plus = 0;
+    for (const Counter& c : p.counters)
+    { if (c.type == Counter::Type::PlusOnePlusOne) { plus += c.count; } }
+    auto set = [&](Keyword k, bool on)
+    {
+        if (on)                            { p.card.AddKeyword(k); }
+        else if (!d->card.HasKeyword(k))   { p.card.RemoveKeyword(k); }
+    };
+    if (pp.counter_threshold_flying_vigilance > 0)
+    {
+        const bool on = plus >= pp.counter_threshold_flying_vigilance;
+        set(Keyword::Flying, on);
+        set(Keyword::Vigilance, on);
+    }
+    if (pp.counter_threshold_indestructible > 0)
+    { set(Keyword::Indestructible, plus >= pp.counter_threshold_indestructible); }
+}
+
 inline void AnnihilateCounters(Permanent& p)
 {
     int plus = 0, minus = 0;
@@ -1515,6 +1549,7 @@ inline void AnnihilateCounters(Permanent& p)
     p.counters.erase(std::remove_if(p.counters.begin(), p.counters.end(),
                                     [](const Counter& c) { return c.count <= 0; }),
                      p.counters.end());
+    RefreshCounterThresholdKeywords(p);
 }
 
 // Total -1/-1 counters on a permanent (persist reads this at every death site: a persist creature
@@ -1542,9 +1577,11 @@ inline void RefreshDevotionCreatures(GameState& state);
 inline void AddPlusCounters(Permanent& p, int n)
 {
     if (n <= 0) { return; }
+    bool merged = false;
     for (Counter& c : p.counters)
-    { if (c.type == Counter::Type::PlusOnePlusOne) { c.count += n; return; } }
-    p.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, n});
+    { if (c.type == Counter::Type::PlusOnePlusOne) { c.count += n; merged = true; break; } }
+    if (!merged) { p.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, n}); }
+    RefreshCounterThresholdKeywords(p);
 }
 
 inline int MinusCountersOn(const Permanent& p)
@@ -8893,9 +8930,23 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
             if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
         }
     }
+    // A legend-rule "death" IS a death (CR 704.5j puts the permanent into the graveyard; CR 700.4
+    // "dies" = battlefield -> graveyard), so a doomed CREATURE must fire the same death cascade as
+    // every other death site (OnCreatureDies: LTB triggers, devotion, "another creature you control
+    // dies" -- Daxos, Blessed by the Sun -- subtype watchers such as Pashalik Mons, persist). It did
+    // not: the copies were graveyarded silently, so a second Heliod, Sun-Crowned dying to the legend
+    // rule while it was a creature never triggered Daxos (CritterLifegain ledger's disclosed gap,
+    // USER 2026-09-08: "we may as well fix the Daxos + 2x Heliod case"). Captured BEFORE the erase
+    // (creature-ness is read on the doomed body as it leaves: a Heliod that is a creature at this
+    // moment dies as a creature) and fired AFTER every erase, when no saved index is live -- the
+    // "erase first, then OnCreatureDies" discipline every other death site follows.
+    struct DoomedDeath { Card card; int controller; bool token; int minus; };
+    std::vector<DoomedDeath> doomed_creatures;
     for (int idx : doomed)   // ascending -> graveyard order matches the old scan
     {
         const Permanent& dp = state.battlefield[idx];
+        if (dp.card.IsCreature())
+        { doomed_creatures.push_back({ dp.card, dp.controller_index, dp.is_token, MinusCountersOn(dp) }); }
         // History narration (sink-guarded -> search/rollout byte-identical): a legend-rule death
         // is otherwise INVISIBLE in the viewer -- the user's Protege copied their own Maelstrom
         // Wanderer and "just vanished" (2026-09-04). A doomed copy-entrant is named by its
@@ -8912,6 +8963,8 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     for (auto it = doomed.rbegin(); it != doomed.rend(); ++it)   // descending -> indices stay valid
     { state.battlefield.erase(state.battlefield.begin() + *it); }
     RefreshDevotionCreatures(state);   // a doomed white permanent lowers devotion (Heliod x2)
+    for (const DoomedDeath& dd : doomed_creatures)
+    { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus); }
 }
 
 // ============================================================================

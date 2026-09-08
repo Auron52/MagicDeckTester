@@ -7234,7 +7234,7 @@ static int BpSiteMask()
     {
         const char* v = std::getenv("MTG_BP_SITES");
         if (v == nullptr || *v == '\0') { return 0xF7; }   // 0x77 + site 7 (pod chain, default ON)
-        return std::atoi(v) & 0x1FF;
+        return std::atoi(v) & 0x3FF;
     }();
     // OR'd, not overridden: an explicit MTG_BP_SITES stays authoritative for every other class, and
     // with the lever off this returns exactly the old value (byte-identical).
@@ -7245,7 +7245,10 @@ static int BpSiteMask()
     // requirement (USER 2026-09-06, "we need to be able to play it"), not a search lever, and the
     // executor twin counts this class unconditionally -- masking it off here would shift every
     // later bp_at index (the PodBreakpointClassOn lesson).
-    return ((BpPlainCantripSiteEnabled() || BpNodeEnabled()) ? (m | 0x08) : m) | 0x100;
+    // Site 9 (post-entry activation) is likewise unconditional here -- its own hatch lives in the
+    // shared gate (PostEntryBreakpointClassOn), which both worlds read, so a disabled class is
+    // simply never reached rather than masked on one side only.
+    return ((BpPlainCantripSiteEnabled() || BpNodeEnabled()) ? (m | 0x08) : m) | 0x100 | 0x200;
 }
 
 // Site 7 (pod chain) class accessor for the executor twin -- see the header note. The executor
@@ -7265,6 +7268,115 @@ bool TurnSolver::PodChainAnotherActivatablePod(const GameState& state)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d != nullptr && d->params.pod_mv_delta != 0
             && (!d->params.pod_taps || !p.tapped)) { return true; }
+    }
+    return false;
+}
+
+// BREAKPOINT SITE 9 -- POST-ENTRY ACTIVATION (header note in TurnSolver.h). The shared gate both
+// worlds evaluate at the same point (after the plan's own trailing activations): does a permanent
+// the active player took control of THIS TURN carry an activation the enumerator would emit for it
+// now -- one the plan could not have carried, because every activation is enumerated against the
+// battlefield the plan started from? The USER's affordability rule is the whole test: "skip sources
+// for which we don't have the ability to activate them (can't pay the mana or tap costs), but for
+// everything else, allow for the ability activation". Cheap by construction (one battlefield scan,
+// param-gated per permanent) because it runs in every rollout apply; the continuation itself is
+// what costs, and it is only paid when the gate says a decision exists.
+//   * planeswalker: loyalty > 0 and not yet activated this turn (the cast-carried activation --
+//     ApplyCastLoyaltyActivation -- already sets loyalty_activated_this_turn, so a walker that fired
+//     in-plan does not reopen);
+//   * the eight PermAbilityMode sinks: {T} modes need an untapped, non-sick source; every mode's
+//     effective cost must fit the REMAINING pool (total only -- a colour miss just yields an empty
+//     continuation, whereas a colour-exact test could disagree between the two worlds' tap orders);
+//   * blink (Displacer/Emiel) and team pump (Lathliss): no {T}, priced the same way;
+//   * a self-only sac outlet (Ranger-Captain) only while a death payoff is live -- the enumerator's
+//     own dominated-action gate, so the site never opens for an activation it would not emit;
+//   * a Pod-style source: untapped (or no-{T}) and affordable.
+// A source is EXCLUDED when its activation was enumerable from the start of the phase (it was on
+// the battlefield already) -- that is the base plan's business, and re-solving for it would only
+// re-bias plan selection toward lines whose greedy continuation misplays (the ACQ_DIG lesson).
+bool TurnSolver::PostEntryBreakpointClassOn()
+{
+    static const bool v = EnvOn("MTG_POST_ENTRY_BP", true);   // DEFAULT ON; =0 disables
+    return v;
+}
+
+std::vector<int> TurnSolver::OwnPermanentNumbers(const GameState& state)
+{
+    std::vector<int> out;
+    if (!PostEntryBreakpointClassOn()) { return out; }
+    out.reserve(state.battlefield.size());
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index && p.card.m_number != 0)
+        { out.push_back(p.card.m_number); }
+    }
+    return out;
+}
+
+bool TurnSolver::PostEntryActivationPending(const GameState& state,
+                                            const std::vector<int>& pre_plan_numbers)
+{
+    if (!PostEntryBreakpointClassOn()) { return false; }
+    const int ctrl = state.active_player_index;
+    int total = -1;   // lazily priced: most applies never reach a candidate
+    auto have_total = [&]() -> int
+    {
+        if (total < 0)
+        {
+            ManaPool have = AvailableManaPool(state);
+            have.AddPool(state.floating_mana);
+            total = static_cast<int>(have.Total());
+        }
+        return total;
+    };
+    auto affordable = [&](const std::optional<ManaCost>& c, const Card& src) -> bool
+    {
+        if (!c.has_value()) { return false; }
+        const ManaCost eff = EffectiveActivationCost(state, ctrl, src, c.value());
+        return eff.ManaValue() <= have_total();
+    };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != ctrl || !p.entered_this_turn) { continue; }
+        // Tokens (m_number 0) are excluded: they cannot be told apart from a pre-plan token, and
+        // no token in the card pool carries an activation this gate looks for.
+        if (p.card.m_number == 0) { continue; }
+        if (std::find(pre_plan_numbers.begin(), pre_plan_numbers.end(), p.card.m_number)
+            != pre_plan_numbers.end()) { continue; }   // on the battlefield when the plan started
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& pp = d->params;
+        // Planeswalker: the loyalty cost is paid in loyalty, so any live walker qualifies.
+        if (pp.loyalty_start > 0 && !pp.loyalty_abilities.empty()
+            && p.loyalty > 0 && !p.loyalty_activated_this_turn) { return true; }
+        // The PermAbilityMode sinks (the ModeSpec table in CollectActions).
+        struct ModeCost { PermAbilityMode mode; const std::optional<ManaCost>* cost; };
+        const ModeCost modes[] = {
+            { PermAbilityMode::TapDamage,      &pp.tap_damage_cost         },
+            { PermAbilityMode::TapInvestigate, &pp.tap_investigate_cost    },
+            { PermAbilityMode::TapDraw,        &pp.tap_draw_cost           },
+            { PermAbilityMode::SacDraw,        &pp.sac_draw_cost           },
+            { PermAbilityMode::Drain,          &pp.drain_cost              },
+            { PermAbilityMode::ExileTop,       &pp.exile_opponent_top_cost },
+            { PermAbilityMode::IceCounter,     &pp.ice_counter_cost        },
+            { PermAbilityMode::GrantLifelink,  &pp.lifelink_grant_cost     },
+        };
+        for (const ModeCost& m : modes)
+        {
+            if (!m.cost->has_value()) { continue; }
+            if (PermAbilityTaps(m.mode) && (p.tapped || !p.CanTap())) { continue; }
+            if (affordable(*m.cost, p.card)) { return true; }
+        }
+        if (affordable(pp.blink_cost, p.card))     { return true; }
+        if (affordable(pp.team_pump_cost, p.card)) { return true; }
+        if (pp.pod_mv_delta != 0 && (!pp.pod_taps || (!p.tapped && p.CanTap()))
+            && affordable(pp.pod_activation_cost, p.card)) { return true; }
+        if (pp.sac_creature_outlet && (!pp.sac_creature_cost.has_value()
+                                       || affordable(pp.sac_creature_cost, p.card)))
+        {
+            if (!pp.sac_outlet_self_only) { return true; }
+            if (SelfSacHasDeathPayoff(state, ctrl, p.card.m_number)) { return true; }
+        }
     }
     return false;
 }
@@ -19128,6 +19240,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     PROF_INC(applyplan_calls);
     Player& ap  = state.ActivePlayer();
     int opp_idx = 1 - state.active_player_index;
+    // BREAKPOINT SITE 9 input: the permanents this plan STARTS from (empty when the class is off).
+    // Lockstep twin: AIEngine::TakeTurn captures the same set at its entry.
+    const std::vector<int> pre_plan_numbers = TurnSolver::OwnPermanentNumbers(state);
 
     // ORDER-CONDEMNATION stamp (rollout/interior half of the lockstep pair -- see
     // GameState::m1_hand): the pre-combat apply IS this projected turn's m1 decision point, so
@@ -20853,6 +20968,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // non-Goblin creature -> other decks byte-identical.
             FireOwnEtbTriggers(state, state.active_player_index,
                            static_cast<int>(state.battlefield.size()) - 1, tutor_target, chosen_x);
+
+            // ETB TUTOR-TO-HAND (Ranger-Captain of Eos / Goblin Matron / Ranger of Eos): the fetched
+            // card competes for this turn's remaining mana exactly like a tutor SPELL's fetch, but
+            // only the spell branch armed the deferred acquisition re-solve (AcqResolveEnabled /
+            // MTG_ACQ_RESOLVE), so at every SEARCHED depth a creature's fetch waited a whole turn:
+            // critter 300 games d3, 0 of 7 fetches with spare mana were cast the same turn, while
+            // d0's executor second pass cast 8 of 8 -- AIEngine::note_draw_engine already classifies
+            // ANY tutor_to_hand card, so the executor half was in place and only this arm was
+            // missing. Same arm as the spell branch, same executor lockstep (the plan's recorded
+            // breakpoint script). CAST path only: the Vial-put path has no executor draw-engine
+            // classification (see the ACQ_DIG note in EngineFlags.h), so arming there would desync.
+            // USER 2026-09-08: "Tutoring to hand should open a breakpoint if the engine is
+            // implemented correctly."
+            if (AcqResolveEnabled() && def.params.tutor_to_hand && !s_human_play
+                && sink_stack.empty())
+            { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
+              deferred_hand_before = hand_at_cast; }
 
             // Breaching Dragonstorm enter trigger (recorded just above when this creature IS a
             // copy of it): resolve now, lockstep with the executor's post-resolution drain.
@@ -22688,6 +22820,51 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     }
     };
     apply_trailing_activations(plan.actions);
+
+    // BREAKPOINT SITE 9 -- POST-ENTRY ACTIVATION (TurnSolver::PostEntryActivationPending; USER
+    // 2026-09-08: "Walkers and other sources with activated abilities should also breakpoint in
+    // some fashion"). A permanent this plan cast can carry an activation nothing in the plan could
+    // express -- every ActivateLoyalty / ActivatePermAbility / outlet action was enumerated against
+    // the battlefield the plan STARTED from -- so a just-cast Ajani could not +1, a just-cast Heliod
+    // could not grant lifelink, in the phase they landed (the 5d sweep's gi=5 misplay was one
+    // instance, patched for target-free loyalty abilities by the cast-carried variant; this is the
+    // general form). Site-7 shape, in the TRAILING pass after the plan's own activations: searched
+    // continuation (bp_choice targets this occurrence -> candidate k of EnumerateBreakpointPlans,
+    // collected at the post-plan state, where the new permanent's activations enumerate normally)
+    // or the greedy Solve fallback; the continuation's activations apply through
+    // apply_trailing_activations. No sink push: the executor twin (AIEngine, after its trailing
+    // loop) re-derives the same continuation from the SHARED list -- the non-full-depth contract.
+    // Human play is excluded: the main phase re-prompts, so the human owns the continuation.
+    // Once per apply (not re-entered by the continuation): bounded, and a continuation that casts a
+    // second walker waits for the next decision exactly as every cast did before this site.
+    // ORDERING (lockstep): trailing pass, before the Karoo drop and the deferred classes (3/5/6) --
+    // the executor twin sits at the same point (after exec_trailing_activations, before its Karoo
+    // play and the recorded-script replay).
+    // SEARCHED-ONLY, deliberately -- NO greedy fallback, unlike every other site. The first
+    // build had the site-7 greedy Solve fallback and the smoke tier went searched slower=24 /
+    // faster=15, with the slowdowns PERSISTING at 16x budget (fivecolour gi71/83/97, goblins
+    // gi55/141, all isolated to this site): a greedy continuation is a poor judge of a TRADE-OFF
+    // activation -- it sacrifices into a fresh outlet, it +1s a just-cast walker where the
+    // scored line wanted the loyalty held for next turn's -3 -- and it ran inside every rollout,
+    // so it also re-biased every future-turn projection (the ACQ_DIG lesson, again). The base
+    // plan is already a complete scored line; the activation it could not express is reached
+    // through the WAVE: the occurrence is counted here (bp_searched_plan -> g_bp_seen_last), the
+    // wave walker opens bp_choice slots for it, and each variant applies candidate k of
+    // EnumerateBreakpointPlans at this post-plan state, scored by its own outer rollout. A plan
+    // without a variant is exactly the plan as scored -- zero cost, exact lockstep (the executor
+    // twin likewise applies only a searched candidate). Depth 0 has no wave and therefore no
+    // site 9: greedy play stays greedy, by design.
+    if (!s_human_play && TurnSolver::PostEntryActivationPending(state, pre_plan_numbers))
+    {
+        TurnSolver::Plan extra;
+        if (bp_searched_plan(9, extra))
+        {
+            bp_play_searched_land(extra, nullptr);
+            apply_continuation_precasts(extra);
+            apply_plan_actions(extra.actions, extra.searched_order);
+            apply_trailing_activations(extra.actions);
+        }
+    }
 
     // Play the deferred Karoo bounce land now -- after the main casts have tapped the lands we
     // needed, so BounceKarooLand returns a SPENT land at no tempo cost (see karoo_deferred
@@ -26879,6 +27056,23 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
 // same plan casts -- the deck's own reviewed order puts Puresteel Paladin ahead of the equipment
 // precisely so its draws happen. Missing that second case would leave the deck's best turns
 // (Paladin + two Equipment) permanently greedy while fanning out the lesser ones.
+// Site 9 (post-entry activation) fan-out predicate, by CARD PARAM like every other class here:
+// does casting this card put a permanent with an activation onto the battlefield? The apply-time
+// gate (PostEntryActivationPending) adds the affordability / tap-state test; this only decides
+// which base plans wave 0 fans out, so it must be the SUPERSET of what the gate can accept.
+static bool CardHasPostEntryActivation(const CardParams& pp)
+{
+    if (pp.loyalty_start > 0 && !pp.loyalty_abilities.empty()) { return true; }
+    if (pp.tap_damage_cost.has_value() || pp.tap_investigate_cost.has_value()
+        || pp.tap_draw_cost.has_value() || pp.sac_draw_cost.has_value()
+        || pp.drain_cost.has_value() || pp.exile_opponent_top_cost.has_value()
+        || pp.ice_counter_cost.has_value() || pp.lifelink_grant_cost.has_value()) { return true; }
+    if (pp.blink_cost.has_value() || pp.team_pump_cost.has_value()) { return true; }
+    if (pp.pod_mv_delta != 0) { return true; }
+    if (pp.sac_creature_outlet) { return true; }
+    return false;
+}
+
 static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p)
 {
     int mask = 0;
@@ -26990,6 +27184,11 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         // Equipment cast under a watcher -> the deferred site-6 re-solve (see the header note).
         if (watcher && d->params.is_equipment && a.kind == Action::Kind::CastFromHand)
         { mask |= 1 << 6; }
+        // Site 9: a cast that lands an activatable permanent. Not gated on the cast-carried walker
+        // variant (Action::loyalty_ability): that variant already activated in-plan and the
+        // apply-time gate then sees loyalty_activated_this_turn and stands down at zero cost.
+        if (TurnSolver::PostEntryBreakpointClassOn() && CardHasPostEntryActivation(d->params))
+        { mask |= 1 << 9; }
     }
     return mask;
 }

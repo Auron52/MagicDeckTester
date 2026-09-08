@@ -364,6 +364,10 @@ struct Card
     void AddSupertype(Supertype s) { m_supertype_mask |= Bit(s); }
     void AddColor(Color c)         { m_color_mask     |= Bit(c); }
     void AddKeyword(Keyword k)     { m_keyword_mask   |= Bit(k); }
+    // Counter-threshold keywords (Voice of the Blessed) are toggled on the PERMANENT's own Card
+    // copy by RefreshCounterThresholdKeywords, the same layer-6 pattern RemoveType uses for
+    // Heliod's devotion creature-ness -- so every HasKeyword reader is right at once.
+    void RemoveKeyword(Keyword k)  { m_keyword_mask   &= ~Bit(k); }
 
     bool IsLand()     const { return HasType(CardType::Land); }
     bool IsCreature() const { return HasType(CardType::Creature); }

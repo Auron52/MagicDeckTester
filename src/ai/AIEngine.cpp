@@ -1815,6 +1815,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (resolve_stack && !state.stack.empty()) { resolve_stack(state); }
     };
     bool cast_draw_engine = false;
+    // BREAKPOINT SITE 9 input (lockstep twin of ApplyPlanDirect's capture): the permanents this
+    // phase's plan starts from. Empty when the class is off.
+    const std::vector<int> pre_plan_numbers = TurnSolver::OwnPermanentNumbers(state);
     // M2 FIXPOINT exit stamp (see WantsSecondMainReentry): did THIS call's execution DRAW cards?
     // The executor's plain-cantrip/EI draws resolve inline (no breakpoint-machinery hook fires
     // for a non-committed plan), so the honest signal is the per-turn draw counter the engine
@@ -4567,6 +4570,85 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     }
     };
     exec_trailing_activations(plan.actions);
+
+    // BREAKPOINT SITE 9 executor twin -- POST-ENTRY ACTIVATION (lockstep pair of ApplyPlanDirect's
+    // trailing-pass site; gate and header note at TurnSolver::PostEntryActivationPending). Same
+    // gate at the same point (after the plan's own trailing activations, before the Karoo play and
+    // the recorded-script replay), same counting (the class is unconditionally in BpSiteMask, its
+    // hatch is inside the shared gate), and the searched continuation indexes the SHARED
+    // EnumerateBreakpointPlans list -- re-solving greedily for a plan that scored a searched
+    // continuation would realise a turn the search never scored (fd-diverge). Otherwise the
+    // searched re-solve (MTG_EXEC_BP_SEARCHED, depth > 0) or the greedy Solve, exactly as the
+    // site-7 twin. Precasts, then the casts in the executor's canonical order, then the
+    // continuation's ACTIVATIONS through the trailing dispatcher -- which is the whole point of the
+    // site. Human play never auto-continues: the main-phase re-prompt lists the new permanent's
+    // abilities, so the human owns the rest of the phase.
+    // SEARCHED-ONLY, like the rollout site (see its note): a plan that carries no variant for
+    // this occurrence realises exactly the line that was scored -- no greedy and no searched
+    // re-solve here, because the rollout ran neither. The occurrence is still COUNTED whenever
+    // the plan carries a choice, or every later bp_at index would shift.
+    if (!HumanPlayActive() && TurnSolver::PostEntryActivationPending(state, pre_plan_numbers))
+    {
+        TurnSolver::Plan extra;
+        bool pe_searched = false;
+        const int pe_idx = (plan.bp_choice >= 0) ? bp_seen_exec++ : -1;
+        if (pe_idx >= 0 && (plan.bp_all || pe_idx == plan.bp_at))
+        {
+            const std::vector<TurnSolver::Plan> cands =
+                TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
+            if (plan.bp_choice < static_cast<int>(cands.size()))
+            {
+                extra       = cands[plan.bp_choice];
+                pe_searched = true;
+                if (extra.land_decided && !extra.land_to_play.empty())
+                { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+            }
+        }
+        if (pe_searched)
+        {
+            // Precasts, then the casts in the executor's canonical order, then the continuation's
+            // ACTIVATIONS through the trailing dispatcher (the site-7 applier shape).
+            for (const Action& ca : extra.actions)
+            {
+                if (ca.kind == Action::Kind::SacForMana)
+                { ApplySacForMana(state, state.active_player_index, ca.sac_source_id,
+                                  TurnSolver::SacFloatColorFor(state, extra.actions, ca),
+                                  ca.ritual_float, ca.sac_victim_id); }
+                else if (ca.kind == Action::Kind::Suspend)
+                { ApplySuspend(state, state.active_player_index, ca.card_name); }
+                else if (ca.kind == Action::Kind::CastFromHand
+                         && (ca.convoke_green > 0 || ca.convoke_other > 0))
+                { ApplyConvokeTaps(state, state.active_player_index, ca.convoke_green, ca.convoke_other); }
+            }
+            std::vector<int> pe_cont_order;
+            for (int ci = 0; ci < static_cast<int>(extra.actions.size()); ++ci)
+            {
+                const Action& ca = extra.actions[ci];
+                if (ca.kind == Action::Kind::CastFromHand && !ca.sacrifice_land)
+                { pe_cont_order.push_back(ci); }
+            }
+            if (!extra.searched_order && pe_cont_order.size() > 1)
+            {
+                std::stable_sort(pe_cont_order.begin(), pe_cont_order.end(),
+                    [&](int x, int y)
+                    { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
+            }
+            auto pe_cast = [&](const Action& ca)
+            {
+                cast_by_name(ca.card_name, ca.tutor_target, ca.chosen_x,
+                             ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
+                             ca.splice_count, ca.chosen_float_color, ca.enchant_target,
+                             ca.free_cast, ca.bestow, ca.replicate_count, ca.convoke_green,
+                             ca.convoke_other, ca.phyrexian_life, ca.evoke);
+                resolve_now();
+                walker_cast_activation(ca);
+            };
+            for (int ci : pe_cont_order) { pe_cast(extra.actions[ci]); }
+            for (const Action& ca : extra.actions)
+            { if (ca.kind == Action::Kind::CastFromHand && ca.sacrifice_land) { pe_cast(ca); } }
+            exec_trailing_activations(extra.actions);
+        }
+    }
 
     // Play the deferred Karoo bounce land now (mirror of ApplyPlanDirect): the main casts have
     // tapped the lands we needed, so BounceKarooLand returns a spent land at no tempo cost. Sits

@@ -132,16 +132,20 @@ devotion flip, Serra threshold, GrantLifelink + counter merge); scenario
 | One trigger per life-gain EVENT (CR 119.10); lifelink gains applied AFTER the damage step (CR 510.2) | GainLife / Combat.cpp | rules | verified by 10 unit tests + scenario + 20 sweep games |
 | Heliod counter target = ONE resolution pick (`DefaultLifegainCounterTarget`: highest-power own creature that can still attack this turn, else highest-power own creature; never a non-creature while a creature exists; tie lowest m_number) | SpellEffects.h (provider hook `LifegainCounterTarget` = default) | PRUNING (resolution heuristic) | could miss: spreading vs piling counters (identical for raw damage; differs only for Voice's inert thresholds); NOT openable by MTG_UNPRUNED (5-15 events/turn -> Cartesian); human play picks from the full legal set |
 | Heliod lifelink-grant target = highest-power own attacker without lifelink (K axis searched, cap = #useful targets) | ApplyPermAbility / ModeSpec | PRUNING (resolution heuristic) | could miss: granting a smaller attacker (never better vs a non-blocker); human play picks any other creature |
-| Ranger-Captain self-sac emitted only while a death payoff (Daxos) is live | TurnSolver enumeration (`SelfSacHasDeathPayoff`) | lossless dominated-action removal | with no payoff the sac is a strict loss; human play always offered |
-| Ranger-Captain tutor: all 3 legal MV<=1 names searched (tutor axis width 6); plan-less paths take the first library match | Generic TutorCandidates | none (full) | disclosed plan-less fallback |
+| Ranger-Captain self-sac emitted only while a death payoff (Daxos) is live | TurnSolver enumeration (`SelfSacHasDeathPayoff`) | lossless dominated-action removal | with no payoff the sac is a strict loss; human play always offered; a Ranger-Captain cast this turn can sac in the same phase via breakpoint site 9 |
+| Ranger-Captain tutor: all 3 legal MV<=1 names searched (tutor axis width 6); plan-less paths take the first library match; the FETCH IS CASTABLE THE SAME PHASE (2026-09-08 fix: the creature-ETB tutor now arms the acquisition re-solve in the rollout, as a tutor spell did; 0/7 -> 6/7 spare-mana fetches cast same-turn on 300 games d3) | Generic TutorCandidates + `MTG_ACQ_RESOLVE` | none (full) | fixture `critter_ranger_captain_fetch_same_turn` |
 | Ajani 0 NOT enumerated autonomously | TurnSolver loyalty enumeration | value gate | strictly negative vs this opponent; human play sees it |
 | Ajani cast + same-turn activation variants (target-free abilities) | `SearchesWalkerCastActivation` (CritterLifegain ON, Generic OFF) | WIDENING (search reach) | +29/-0 games on 300; other decks unchanged until measured |
+| BREAKPOINT SITE 9 -- post-entry activation (2026-09-08, user directive): after the plan's own activations, if a permanent that entered this turn has an affordable, live activation (walker not yet activated; a PermAbility mode / blink / team pump / Pod whose cost fits the remaining pool and whose {T} source is untapped and not sick; a self-only outlet with a payoff live) the rest of the phase is re-decided through the SEARCHED breakpoint variants only (wave-0 fans out plans that cast such a permanent; `bp_choice` indexes the continuation list at the post-plan state; NO greedy fallback in either world -- the first build had one and it measured a real regression, see the review section) | `TurnSolver::PostEntryActivationPending` (`MTG_POST_ENTRY_BP`, default ON) | WIDENING (search reach) | engine-wide; fixtures `critter_walker_post_entry_activation` (cast variant pinned off) and `critter_heliod_post_entry_lifelink_grant` |
 | Cast order: enter-watchers (rank 8) before lifegain_self_counters payoffs (rank 9) before the rest | `CritterLifegainProvider::CastOrderRank` (`MTG_CRITTER_WATCHER_ORDER`) | ordering heuristic (5g-mined, 0-conflict) | A/B +7/-0 (d0), +11/-0 (d3); only the canonical execution order moves -- plan choice is still searched |
 | Legend rule keeps the walker with the most loyalty (tie: can still activate, then oldest) | `CritterLifegainProvider::LegendKeepIndex` (`MTG_LEGEND_KEEP_LOYALTY`) | correctness shortcut | rejected as a Generic default (FiveColour d0 gi=15 6->7) |
 | EvalCard credits: Pridemate/Voice entry counters = #own enter-watchers; Thune team credit; Heliod flat +2 DMG and body discounted by devotion distance | TurnSolver EvalCard (param-gated) | greedy-d0 ordering only | rollout owns the real valuation; no other deck's eval moves |
-| Voice's 4+/10+ counter keywords, Serra/Thune flying, Auriok protection, Heliod indestructible + God-subtype/removed-from-combat halves | bracket notes (PROVISIONAL partials) | card-modeling collapse | each provably unobservable vs this opponent (see the notes) |
-| Daxos: simultaneous-death look-back and legend-rule deaths not firing dies-triggers | bracket note | known engine gap | unreachable / a 1-life miss on a 2-of x 2-of collision |
-| Viewer: Heliod's counter target fires a board prompt PER gain event | 2c-ter | UX | faithful; a per-turn "apply to all" affordance is a follow-up |
+| Voice's 4+/10+ counter keywords | MODELLED 2026-09-08 (`counter_threshold_flying_vigilance` 4 / `counter_threshold_indestructible` 10; `RefreshCounterThresholdKeywords` at the counter chokepoints toggles the permanent's keyword bits) | none | user: "it will look wrong in the viewer"; unit-tested incl. the drop-off when counters are annihilated |
+| Serra/Thune flying, Auriok protection, Heliod indestructible + God-subtype/removed-from-combat halves | bracket notes (PROVISIONAL partials) | card-modeling collapse | each provably unobservable vs this opponent (see the notes) |
+| Daxos: legend-rule deaths | FIXED 2026-09-08: `EnforceLegendRule` routes every doomed CREATURE through `OnCreatureDies` after the erase (unit-tested: second Heliod as a creature -> Daxos +1, one event) | none | engine-wide: any legend-rule creature death now fires LTB / dies watchers |
+| Daxos: simultaneous-death look-back | bracket note | known engine gap | unreachable in this deck (no sweeper, no opponent removal, Daxos never at toughness 0) |
+| Viewer: Heliod's counter target fires a board prompt PER gain event | 2c-ter | UX | faithful; a per-turn "apply to all" affordance is a follow-up; prompt now worded "this ability (<source>)" not "loyalty ability" (gi=14 cosmetic, fixed) |
+| Viewer/claude-play: main-phase dump carries an explicit `pass` entry (index -1) | main.cpp WriteDecisionJson | UX | gi 2/6 cosmetic, fixed |
 | Provider routing: `CritterLifegain` (intended -- Ranger-Captain alone trips goblin + anti) | 4a | routing | Generic for everything but the two hooks above |
 
 ## Claude-play sweep
@@ -155,6 +159,43 @@ devotion flip, Serra threshold, GrantLifelink + counter merge); scenario
 ## Approved deferrals
 (none yet — every proposed deferral is PROVISIONAL until the user signs off; user is asleep
 2026-09-08, so all are provisional through this run)
+
+## Deferred-item review (2026-09-08, user directive after the report)
+User: "we absolutely need to fix things like Ranger-Captain ... Tutoring to hand should open a
+breakpoint ... Walkers and other sources with activated abilities should also breakpoint in some
+fashion ... skip sources we can't activate ... fix the viewer cosmetics ... fix the lack of
+vigilance on Voice ... fix the Daxos + 2x Heliod case."
+- Ranger-Captain: the ledger's "cannot be cast the same turn" was WRONG in cause and half-wrong in
+  effect. Measured on 300 games (seed 7001, d3 b10): 7 fetches had spare mana, 0 cast same-turn;
+  at d0 the executor's second pass cast 8 of 8. Cause: the deferred acquisition re-solve
+  (`MTG_ACQ_RESOLVE`) was armed only in the tutor-SPELL branch of `ApplyPlanDirect`; the creature
+  ETB path never armed it, so no committed line ever recorded the continuation. Fix = the same arm
+  in the creature branch (cast path only; the Vial path has no executor classification). Re-measured:
+  6 of 7. (The 7th: the plan spent the spare mana elsewhere.)
+- Post-entry activation = BREAKPOINT SITE 9 (see the 6a row). General mechanism; supersedes
+  nothing -- the cast-carried walker variant stays (it is scored inside the plan, which is stronger)
+  and site 9 covers the rest (targeted abilities, other decks, mana-sink permanents, outlets).
+  DESIGN LESSON (cost one smoke run): the first build gave the site the site-7 shape -- a greedy
+  Solve continuation whenever no searched variant targeted the occurrence, in every rollout and in
+  the executor (searched re-solve there). Smoke: searched slower=24 / faster=15, and the harness's
+  classifier said the slowdowns PERSIST at 16x budget (fivecolour gi71/83/97/120/134/145, goblins
+  gi55/141, melira gi14), every one isolating to `MTG_POST_ENTRY_BP=0`. Mechanism, read from
+  fivecolour gi71: the greedy continuation +1'd a just-cast Jared for a Kavu where the scored line
+  wanted the loyalty held; goblins: it sacrificed into a fresh outlet. A greedy continuation is a
+  poor judge of a TRADE-OFF activation, and it also re-biased every future-turn rollout. Shipped
+  shape = SEARCHED-ONLY: the occurrence is counted, wave 0 fans out the plans that cast such a
+  permanent, the variants apply candidate k of the post-plan continuation list and are scored by
+  their own rollout; a plan without a variant is exactly the plan as scored (zero cost, exact
+  lockstep). Depth 0 has no wave and therefore no site 9 -- greedy stays greedy.
+- Voice keywords, legend-rule deaths, both viewer cosmetics: fixed (rows above).
+- STILL DEFERRED (unchanged, PROVISIONAL): Serra/Thune flying, Auriok protection, Heliod
+  indestructible + God-subtype/removed-from-combat halves, Daxos simultaneous-death look-back,
+  Ajani's 0 (value gate), Heliod counter target as one resolution pick, `MTG_WALKER_CAST_ACTIVATE`
+  OFF for other decks (site 9 now reaches those walkers anyway), UA's human target list omitting
+  own permanents (Anti-Lifegain's card), Heliod prompt once per gain event.
+- Scenario-harness lesson (cost an hour): a fixture whose `max_turns` ends the game on the turn
+  under test makes the search DECLINE a free land drop and a free 1-drop cast -- nothing after the
+  horizon can value them, so they tie with doing nothing. Assert on a later win turn instead.
 
 ## Open questions surfaced (non-blocking)
 (collected here and re-raised in the closing message)

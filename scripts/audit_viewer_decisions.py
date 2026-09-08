@@ -694,6 +694,8 @@ INERT_PARAMS = {
     "sac_outlet_self_only": "sac-outlet victim gating detail ('Sacrifice THIS creature' -- the source is the only legal victim, so the `sacrifice` decision is a forced non-choice; rides sac_creature_outlet -> activate)",
     # ---- CritterLifegain (2026-09-08) -- every trigger here is automatic and untargeted except Heliod's (MANIFEST) ----
     "lifegain_self_counters": "automatic 'whenever you gain life' trigger: +1/+1 counter on THIS creature (Ajani's Pridemate / Voice of the Blessed / the Ajani token) -- no target, no may",
+    "counter_threshold_flying_vigilance": "static keyword grant at N +1/+1 counters (Voice of the Blessed) -- no decision",
+    "counter_threshold_indestructible": "static keyword grant at N +1/+1 counters (Voice of the Blessed) -- no decision",
     "lifegain_each_own_creature_counters": "automatic 'whenever you gain life' trigger: +1/+1 counter on EACH creature you control (Archangel of Thune) -- no target, no may",
     "own_creature_dies_lifegain": "automatic death trigger (Daxos: 'another creature you control dies, you gain 1') -- no choice",
     "toughness_equals_devotion_color": "CDA (Daxos's toughness = devotion to white) -- static, no choice",

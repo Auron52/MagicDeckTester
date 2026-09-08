@@ -1,0 +1,37 @@
+{
+  "deck": "decks/CritterLifegain/CritterLifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 16,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 8,
+  "_comment": "CritterLifegain (2026-09-08). Ranger-Captain of Eos's ETB tutor-to-hand must open the acquisition re-solve at SEARCHED depth (the spell-tutor arm existed; the creature-ETB arm did not, so the fetch waited a turn at every d>0). Board: 4 Plains + Soul Warden. Hand: Ranger-Captain (3 mana). Library: exactly one MV<=1 creature (Soul's Attendant) so the fetch is forced. Same-turn cast: T4 Warden 1, T5-T7 RC 3 + Warden 1 + Attendant 1 = 16 by T7 = lethal at 16. A turn-later cast deals 15 by T7 and wins T8. NOTE the horizon: a fixture whose max_turns ends the game this turn makes BOTH the land drop and the fetch worthless to the search (it declines them as a tie), so the guard is the win turn, not this turn's life.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Soul Warden"
+    }
+  ],
+  "hand": [
+    "Ranger-Captain of Eos"
+  ],
+  "library": [
+    "Soul's Attendant"
+  ],
+  "expect_win_turn": 7
+}

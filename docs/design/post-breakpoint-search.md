@@ -94,6 +94,10 @@ Five `ApplyPlanDirect` sites ran the same greedy `TurnSolver::Solve` + `apply_pl
 | 3 | `deferred_cantrip_resolve` | Ponder / Preordain | Hinata |
 | 4 | dig-through-lands | sac / cycle dig | TH |
 | 5 | trick payload (deferred, same shape as 3) | Gold Rush / Expedite (`solo_target_trick` with `cast_draw`/`creates_treasures`) | Mirrorwing |
+| 6 | equipment-ETB draw | Puresteel Paladin | KittyEquipment |
+| 7 | Pod chain (trailing pass) | Birthing Pod fetch with a second Pod standing by | Melira |
+| 8 | snow look-at-top put (trailing) | Scrying Sheets / Frost Augur | Snow |
+| 9 | **post-entry activation** (trailing pass, 2026-09-08): a permanent that entered this turn carries an affordable, live activation the plan could not express (walker not yet activated; PermAbility / blink / team-pump / Pod cost within the remaining pool, {T} source untapped and not sick; self-only outlet with a payoff live). Gate `TurnSolver::PostEntryActivationPending` (only permanents the plan itself put onto the battlefield -- `pre_plan_numbers` captured at ApplyPlanDirect / TakeTurn entry), hatch `MTG_POST_ENTRY_BP=0`, unconditionally counted (like 8). **SEARCHED-ONLY**: no greedy continuation in either world (the site-7 greedy shape measured a real, budget-persistent regression on fivecolour/goblins/melira -- a greedy re-solve mis-judges trade-off activations); the activation is reached through the wave variants (`bp_choice` -> candidate k of the post-plan list), so d0 never opens it. Executor twin after `exec_trailing_activations` applies only a searched candidate. The ETB tutor-to-hand of a CREATURE (Ranger-Captain) joined the site-3 deferred class the same day (it was spell-only). | CritterLifegain (Ajani, Heliod), any walker / mana-sink deck |
 
 Site 5 was split OUT of site 3 (2026-08-12): the trick class shares the deferred main-level
 re-solve SHAPE with plain cantrips but must not share their prune — chaining them made the Gold

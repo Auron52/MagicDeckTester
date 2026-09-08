@@ -1,0 +1,37 @@
+{
+  "deck": "decks/CritterLifegain/CritterLifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 12,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 9,
+  "_comment": "CritterLifegain (2026-09-08). BREAKPOINT SITE 9 for a mana-sink permanent: Heliod, Sun-Crowned cast this turn (3 of 5 Plains) then {1}{W}: the attacking Pridemate gains lifelink -- its combat damage is a life-gain event that puts a Heliod counter and a Pridemate counter on the board AFTER damage (CR 510.2), so next turn's attack is bigger. Opponent at 12: same-phase grant wins T6, site off (MTG_POST_ENTRY_BP=0) wins T7 (sweep: opp 10/12 -> T6/T7, 16 -> T7/T8). Assert the win turn (horizon note in the walker fixture).",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Ajani's Pridemate"
+    }
+  ],
+  "hand": [
+    "Heliod, Sun-Crowned"
+  ],
+  "expect_win_turn": 6
+}
