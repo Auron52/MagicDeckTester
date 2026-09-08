@@ -3847,3 +3847,95 @@ Two pins updated to the adopted menu, guarded property preserved in both:
 Fusion side-note: fused ctrl s3001 summed wall 2,457s vs 9,149s pre-fusion (-73%); s3001 avg
 moved 6.0000 -> 6.0400 under fusion (both arms equally; refs unmoved) -- the accepted price of
 the user-directed shortcut.
+
+## Session 8 (2026-09-08): quality vs the human references -- s1/s5 root causes
+
+Focus per the user: *"performance is in a better spot, so the focus would be primarily on
+quality, matching the human references."* Gaps at session start: s1_gi0 search T5 vs human T3;
+s5_gi4 search T6 vs human T4. The old "horizon-bound at the wish" diagnosis is REVISED: depth
+and budget ladders (d5..d7, 20ms..2000ms) move NEITHER game, so the misses were structural, and
+they decompose into one engine bug + two structural findings.
+
+### Energy phantom mana -- ENGINE BUG, FIXED
+
+`EtbUntapTapAheadIntoFloat` (the Drake cast-site/loop tap-ahead) banked Aether Hub's "{T}, Pay
+{E}: Add one mana of any color" mode into `floating_mana` as a committed colour or `wild`
+WITHOUT spending the {E} -- the real payment path (`tap_source`, ManaPayment.cpp) spends it
+beside the tap. Every tap-ahead of the Hub therefore minted a fresh any-colour unit off the same
+unspent energy. Proof (T1-pinned counterfactual line, [paydbg]): TWO Peregrine Drakes' {4}{U}
+paid with `energy 1->1` and zero taps, then Emiel's {W}{W} spent the energy a third time --
+three coloured pips off one {E}. Fix mirrors the real tap: at a cast site whose pending cost has
+coloured pips, the Hub is left UNTAPPED for the payment to tap (the painland cast-reserve
+precedent); otherwise only the free {C} mode is banked; inside a live blink loop the combo
+ladder may take ONE coloured unit and pays the {E} for it. All six reference-bench games:
+IDENTICAL digests (the shipped lines never leaned on the phantom -- Trace of Abundance's
+any-colour bonus covered their {U}s legally); the bug only inflated counterfactual lines, i.e.
+it distorted SEARCH comparisons. EDF-only by construction (energy_per_colored_tap is Aether
+Hub's param).
+
+Diagnostics that earned their keep (both default off): `MTG_TAPDBG` -- every real-resolution
+payment as `[paydbg] cost=... ok=... energy a->b taps: <lands>` (TapForCostShared wrapper) plus
+per-tap `[tapdbg]` lines at the greedy tap site. This is the instrument that separated
+"float-paid" from "tap-paid" and found the energy leak.
+
+### s1_gi0 (human T3, search T5): two stacked walls
+
+1. **The human's T3 kill is UNREPRESENTABLE**: it digs mid-loop (Mariposa draws + investigate)
+   into the library for the SECOND Living Wish -> Essence Depleter -> drain. The recognizer's
+   hand/wish finisher route (ScanHandSinks / ComboFinishFromHand) reaches a sink in HAND or
+   WISHABLE, not one still in the library behind loop draws. Nothing at any budget finds T3.
+2. **T4 is representable but budget-starved**: the T2 solve at 20ms completes only a d1 pass
+   (263 d1 / 56 d2 plan-scans even at 1000ms); every tail is a greedy estimate stuck at 5. At
+   10,000ms/decision the d3 pass runs, finds `[Wild Growth, Trace of Abundance]` at T2 with
+   tail=4, and the game WINS T4 (verified end-to-end, avg 4.0). Budget ladder: 20/100/500/2000ms
+   all 5.0 with byte-identical digests; 10s -> 4.0. The value leaf (deferred) is the designed
+   fix for exactly this regime.
+
+### s5_gi4 (human T4, search T6): the second-main hole
+
+EDF is not on the `DeckUsesSecondMain` whitelist, so the search runs ONE main per turn -- and
+abilities are enumerated from BATTLEFIELD state, so "cast Emiel (+ payloads) then go off with
+his blink loop THE SAME TURN" is unrepresentable: at enumeration time the outlet is still in
+hand, and there is no re-enumeration point after the casts resolve. `MTG_FORCE_USES_M2=1` alone
+(same 20ms budget) moves s5 6.0 -> 5.0. It is NOT a free win: the same probe moved s4 6.0 -> 7.0
+(m2 roughly doubles per-turn search cost, diluting the fixed budget), so it goes through the
+pooled A/B (heurarm `MTG_EDF_M2`, default OFF, flicker-combo pairwise predicate: blink_cost
+outlet + etb_untap_lands payload in one mainboard). Batch wiring fix required and landed:
+`j.second_main` was precomputed at manifest-parse time BEFORE the worker installs the per-job
+arm, so a per-job m2 lever was silently off -- the precompute now runs under the job's flags.
+
+Budget ladder summary (fixed binary, pooled): s1 5/5/5/5/4 and s5 6/5/5/5/5 at
+20/100/500/2000/10000ms. Human refs are 3 and 4: one turn beyond the model's ceiling even at
+500x budget (s1 needs the dig; s5's T4 needs [m2 + more than 500ms] or a representability fix).
+
+### USER directive: no searched second main -- the SAME-MAIN GO-OFF instead (2026-09-08)
+
+Mid-measurement the user closed the m2 route: *"There should be no need to use multiple mains in
+my understanding"*, refined with *"To be fair, it's probably slightly better as a main-2 deck so
+the creatures can attack before they get flickered, but realistically this doesn't matter much"*,
+and the operative constraint: *"The more important thing is that we don't have extra mains to
+search."* That matches the engine's own retired-Utvara lesson (m2 as a workaround surface for
+main-1 expressibility holes) and the measured budget dilution (s4 6 -> 7 under forced m2). The
+EDF_M2 lever stays as a measurement-only hatch, default OFF, never to be adopted; its A/B was
+cancelled.
+
+The shipped fix is the clue-fusion shape, one level up: `EdfAutoGoOffAfterCasts`
+(MTG_EDF_AUTOGOFF, heurarm slot, default ON) at ApplyPlanDirect's tail and the autonomous
+executor's matching point (lockstep). When a main's casts have just landed and the board NOW
+holds a live self-funding loop that FlickerGoOffCount prices to lethal (sink on board, in hand,
+or wishable), the apply runs the loop as part of realising the plan -- so a d1 pass at 20ms
+scores "cast Emiel + payloads, go off, win NOW" correctly, with zero extra enumeration and zero
+extra mains. Skipped when the plan carried an explicit ActivateBlink (the on-board-outlet case);
+human play excluded (the viewer keeps per-action blinks + FINISH); provider-gated
+(HasExtraLethalModel) so every other deck pays one virtual call.
+
+Measured on the refs at the shipped depth-5/20ms: **s5_gi4 6.0 -> 5.0** (the gap ref), s3/s4
+unchanged (s4 digest byte-identical), s1/s2/s7 same win turns on shifted lines. Unit 938/938,
+scenarios 72/72. 200-game pooled on/off A/B: results below.
+
+**Auto-go-off 200-game pooled A/B (2 arms x seeds 3001/3061 x 50, one batch, max_turns 12):**
+on-arm wins BOTH seed sets -- s3001 6.1000 -> 5.7200 (-0.38t), s3061 5.8200 -> 5.2400 (-0.58t) --
+at +15.6% summed game wall (7,721s -> 8,925s; realising the loop costs apply time in rollouts,
+and every slow-game report in the run's first wave was in the OFF arm: going off also ENDS the
+fat games). ADOPTED default ON as the user-directed fix; the wall trade is disclosed above --
+`MTG_EDF_AUTOGOFF=0` is the hatch if it is ever unwanted.
