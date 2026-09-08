@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <vector>
 #include <thread>
+#include <tuple>
 #include <sstream>
 #include <cstdlib>
 #include <map>
@@ -2629,9 +2630,18 @@ std::map<int, std::vector<std::string>> ParseForceAttackersSpec(const std::strin
     return attackers_by_turn;
 }
 
-// --tap-pref "<turn>:<pre|post>:<card#>,<card#>;..." -> (turn, is_post_main) -> the CARD NUMBERS of
-// the sources the RECORDING tapped in that main phase (the tapped-delta between two same-phase
-// recorded frames). The payment greedy prefers those sources; see TapPrefChooser (GameLogger.h).
+// --tap-pref "<turn>:<pre|post>[:<ordinal>]:<card#>,<card#>;..." -> (turn, is_post_main, ordinal) ->
+// the CARD NUMBERS of the sources the RECORDING tapped in that main phase (the tapped-delta between
+// two same-phase recorded frames). The payment greedy prefers those sources; see TapPrefChooser
+// (GameLogger.h). Two accepted forms per ';'-entry:
+//   "turn:pre|post:num,num"          -- phase-scoped (ordinal -1 = every payment of the phase)
+//   "turn:pre|post:ordinal:num,num"  -- ORDINAL-scoped: only payments of the committed line chosen
+//                                       at that main ordinal (g_play_cur_main_ordinal)
+// The ordinal form exists because a phase-scoped pref is payment-BLIND: Fluctuator s10_gi9's
+// recording tapped Canyon Slough for the Fluctuator and Fetid Pools only LATER for Unearth, and
+// the aggregated "prefer {both}" spent both on the first {2} -- stranding the recorded Unearth's
+// {B} and killing the reference replay. Keyed per tuple, each payment prefers only the sources its
+// own bracketing frames witnessed.
 //
 // THESE ARE CARD NUMBERS (Card::m_number), NOT battlefield indices, and the difference is the whole
 // point. The old form pinned a position in `state.battlefield` -- a vector the replay rebuilds --
@@ -2648,9 +2658,9 @@ std::map<int, std::vector<std::string>> ParseForceAttackersSpec(const std::strin
 // instead of a Permanent*), so this keeps the recording's EXACT per-copy split -- "these two
 // Scrying Sheets" -- which a card-name pin would have collapsed. No back-compat tier is needed:
 // the spec is rebuilt by test/viewer_protocol_check.py on every run and never stored on disk.
-std::map<std::pair<int, int>, std::set<int>> ParseTapPrefSpec(const std::string& spec)
+std::map<std::tuple<int, int, int>, std::set<int>> ParseTapPrefSpec(const std::string& spec)
 {
-    std::map<std::pair<int, int>, std::set<int>> pref;
+    std::map<std::tuple<int, int, int>, std::set<int>> pref;
     std::stringstream cs(spec);
     std::string entry;
     while (std::getline(cs, entry, ';'))
@@ -2663,12 +2673,28 @@ std::map<std::pair<int, int>, std::set<int>> ParseTapPrefSpec(const std::string&
         try { turn = std::stoi(entry.substr(0, c1)); }
         catch (...) { continue; }
         const int post = (entry.substr(c1 + 1, c2 - c1 - 1) == "post") ? 1 : 0;
+        int  ordinal = -1;
+        auto c3 = entry.find(':', c2 + 1);
+        std::string idx_part = entry.substr(c2 + 1);
+        if (c3 != std::string::npos)
+        {
+            try
+            {
+                ordinal  = std::stoi(entry.substr(c2 + 1, c3 - c2 - 1));
+                idx_part = entry.substr(c3 + 1);
+            }
+            catch (...) { ordinal = -1; }   // 3-field form whose idx list just isn't numeric-first
+        }
         std::set<int> idxs;
-        std::stringstream ns(entry.substr(c2 + 1));
+        std::stringstream ns(idx_part);
         std::string tok;
         while (std::getline(ns, tok, ','))
         { try { idxs.insert(std::stoi(tok)); } catch (...) { /* skip malformed token */ } }
-        if (!idxs.empty()) { pref[{ turn, post }] = std::move(idxs); }
+        if (!idxs.empty())
+        {
+            auto& slot = pref[{ turn, post, ordinal }];
+            slot.insert(idxs.begin(), idxs.end());
+        }
     }
     return pref;
 }
@@ -2898,7 +2924,7 @@ struct ClaudePlayHarness
     std::map<std::pair<int, int>, bool>     storage_hold_by_land;
     std::map<int, int>                      jitte_by_turn;   // Umezawa's Jitte counter-spend
     std::map<int, std::vector<std::string>> attackers_by_turn;   // --force-attackers (ref replay)
-    std::map<std::pair<int, int>, std::set<int>> tap_pref_by_phase;   // --tap-pref (ref replay)
+    std::map<std::tuple<int, int, int>, std::set<int>> tap_pref_by_phase;   // --tap-pref (ref replay; (turn, post, ordinal|-1))
     bool firebreathe_prompt  = false;
     bool storage_hold_prompt = false;
     bool jitte_prompt        = false;
@@ -4292,18 +4318,22 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
 
     // Payment-tap preference (reference replay): where the recording brackets a main phase's
     // payment between two same-phase frames, the tapped-delta names the sources it spent
-    // (--tap-pref "turn:pre|post:idx,idx;..."). The scarcity greedy prefers those battlefield
-    // indices in that (turn, phase); everything else -- other phases, enumeration, the search
+    // (--tap-pref "turn:pre|post[:ordinal]:card#,card#;..."). The scarcity greedy prefers those
+    // CARD NUMBERS in that (turn, phase, main ordinal); everything else -- other phases, enumeration, the search
     // (chooser nulled by RevealLogPause) -- is untouched. Order bias only, never legality.
     tap_pref_chooser =
         [this](const GameState& s, const Permanent& p) -> bool
         {
             const int post = (s.phase == Phase::PostCombatMain) ? 1 : 0;
-            auto it = tap_pref_by_phase.find({ s.turn_number, post });
-            if (it == tap_pref_by_phase.end()) { return false; }
             // Match the permanent's STABLE CARD NUMBER, never its battlefield position -- see
             // ParseTapPrefSpec for the reference this broke.
-            return it->second.count(p.card.m_number) > 0;
+            const int num = p.card.m_number;
+            // ORDINAL-scoped entry first (the current committed line's own witnessed taps --
+            // see ParseTapPrefSpec), then the phase-wide wildcard (legacy 3-field form).
+            auto it = tap_pref_by_phase.find({ s.turn_number, post, g_play_cur_main_ordinal });
+            if (it != tap_pref_by_phase.end() && it->second.count(num) > 0) { return true; }
+            it = tap_pref_by_phase.find({ s.turn_number, post, -1 });
+            return it != tap_pref_by_phase.end() && it->second.count(num) > 0;
         };
     if (!tap_pref_by_phase.empty()) { g_play_tap_pref_chooser = &tap_pref_chooser; }
 

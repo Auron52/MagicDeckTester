@@ -233,7 +233,7 @@ def recorded_attackers(decisions):
 
 
 def recorded_tap_prefs(decisions):
-    """(turn, phase) -> battlefield idxs the recording's committed plan TAPPED in that main phase,
+    """(turn, phase, main_ordinal) -> CARD NUMBERS the recording's committed plan TAPPED in that main phase,
     read from the tapped-delta between two consecutive same-(turn, phase) main_phase frames (the
     engine re-prompts after committing a line, so the pair brackets exactly that line's payment
     and activations). Which sources pay is engine-automatic, and no static tap order reproduces
@@ -242,7 +242,16 @@ def recorded_tap_prefs(decisions):
     graveyard fuel paid T4) -- so where the recording witnessed the taps, --tap-pref pins them.
     Restricted to permanents already present in the FIRST frame (a fetched land arriving tapped
     between the frames is an ETB state, not a payment tap). Turns/phases without a pair replay on
-    the engine's own order, exactly as before."""
+    the engine's own order, exactly as before.
+
+    Keyed PER PAIR by the FIRST frame's main_ordinal -- the ordinal of the decision whose
+    committed line the delta brackets -- so the engine prefers each payment's own witnessed
+    sources only (--tap-pref "turn:phase:ordinal:idxs"). The old turn-aggregated key was
+    payment-BLIND and broke Fluctuator s10_gi9: the recording tapped Canyon Slough for the
+    Fluctuator and Fetid Pools only LATER for Unearth, and the merged pref spent both on the
+    first {2}, stranding the recorded Unearth's {B}. A pair whose first frame carries no
+    main_ordinal (a reference that predates the field) falls back to the wildcard -1 =
+    phase-wide, the historical behaviour."""
     prefs = {}
     prev = None
     for d in decisions:
@@ -257,7 +266,7 @@ def recorded_tap_prefs(decisions):
                         and (bool(p.get("tapped")) or not want_tapped)}
             delta = (field(dec, True) - field(prev, True)) & field(prev, False)
             if delta:
-                # Emit the tapped sources by NAME, not by the battlefield index they happened to
+                # Emit the tapped sources by CARD NUMBER, not by the battlefield index they happened to
                 # occupy in the recording. An index is a position in a vector the replay rebuilds,
                 # so pinning one steers the payer onto whatever now sits in that slot -- on
                 # Snow/claude_s4_gi3 `5:pre:1,4,7,9` pinned Snow-Covered Islands where the human had
@@ -269,7 +278,10 @@ def recorded_tap_prefs(decisions):
                           if isinstance(p.get("idx"), int)}
                 nums = {by_idx[i] for i in delta if isinstance(by_idx.get(i), int)}
                 if nums:
-                    key = (dec.get("turn"), dec.get("phase"))
+                    ordinal = prev.get("main_ordinal")
+                    if not isinstance(ordinal, int):
+                        ordinal = -1
+                    key = (dec.get("turn"), dec.get("phase"), ordinal)
                     prefs[key] = sorted(set(prefs.get(key, [])) | nums)
         prev = dec
     return prefs
@@ -306,10 +318,13 @@ def side_channel_args(decisions):
         extra += ["--force-attackers",
                   ";".join(f"{t}:" + "|".join(ns) for t, ns in sorted(fa.items()))]
     if tp:
+        # 4-field ordinal-scoped form (see recorded_tap_prefs / ParseTapPrefSpec); ordinal -1
+        # (a reference predating main_ordinal) emits the legacy 3-field phase-wide entry.
         extra += ["--tap-pref",
                   ";".join(f"{t}:{'post' if ph == 'post_main' else 'pre'}:"
+                           + (f"{o}:" if o >= 0 else "")
                            + ",".join(str(i) for i in idxs)
-                           for (t, ph), idxs in sorted(tp.items()))]
+                           for (t, ph, o), idxs in sorted(tp.items()))]
     return extra
 
 

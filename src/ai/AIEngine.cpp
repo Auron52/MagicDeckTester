@@ -2212,6 +2212,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                   && (menu_was_empty || (!first_pre && !drew_last && !any_play));
             const int this_main_ordinal = added_frame ? -1 : m_ext_main_ordinal++;   // #10 key
             g_play_frame_no_ordinal = added_frame;
+            // Payment-scope ordinal for the ORDINAL-KEYED --tap-pref form (GameLogger.h): the
+            // chosen plan's payment taps run inside this loop iteration, so they see the ordinal
+            // of the decision that chose them.
+            g_play_cur_main_ordinal = this_main_ordinal;
             int idx = m_external_chooser(state, plans, is_pre_combat_main);
             g_play_frame_no_ordinal = false;
             if (idx < 0 || idx >= static_cast<int>(plans.size())) { break; }  // pass / done
