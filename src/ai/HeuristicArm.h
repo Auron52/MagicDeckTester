@@ -163,6 +163,8 @@ enum Slot : int
     EDF_C_BUDGET,             // MTG_EDF_C_BUDGET         go-off projection budgets {C} pips, not just mana value
     EDF_WISH_CAST_GATE,       // MTG_EDF_WISH_CAST_GATE   hand coverage in the wish ranking needs a CASTABLE card
     EDF_TUTOR_NARROW,         // MTG_EDF_TUTOR_NARROW     wish width 8 -> 3: the RANKING decides, not the eval
+    EDF_SINK_KMAX,            // MTG_EDF_SINK_KMAX        sink K axis {1..3} -> {kmax}: apply-loop realises what's payable
+    EDF_BLINK_KMAX,           // MTG_EDF_BLINK_KMAX       blink K axis {1..3} -> {kmax}: same shape, same apply-loop degrade
     COUNT
 };
 
@@ -303,6 +305,8 @@ inline const char* Name(int slot)
         "MTG_EDF_C_BUDGET",
         "MTG_EDF_WISH_CAST_GATE",
         "MTG_EDF_TUTOR_NARROW",
+        "MTG_EDF_SINK_KMAX",
+        "MTG_EDF_BLINK_KMAX",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

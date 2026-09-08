@@ -3774,3 +3774,44 @@ scored, `MTG_ENUM_HIWATER_KB` evidence). Two consequences: (1) the deck's real i
 fat states is 1, not 5 -- a quality fact, not just a perf one; (2) the perf lead is the ROOT PLAN
 FAN on fat boards (blink counts x Overgrowth hosts x activations), not the tutor axis. Repro lines
 for a dozen 30 s-87 min games are in `logs/edf_refbench/width_gate_2x2.out` (SLOW-GAME lines).
+
+## Session 7 (2026-09-08): K-axis fan cut -- MTG_EDF_SINK_KMAX / MTG_EDF_BLINK_KMAX
+
+Follow-up to Session 6's depth-1-starvation finding: attack the root plan fan. Recon first
+(enum-stats + the plan-signature/dedup contract + a `--trace` capture on the gi8 repro):
+
+* The fat calls are a PRODUCT of 8-10 small groups (`[enum-stats]` on gi8 T7: two Overgrowth
+  groups, two Mariposa groups, Emiel g3-4, Depleter g3, casts -- bound 13,824). The autonomous
+  plan signature keys aura hosts away (heuristic decides) but keeps EVERY K-count variant:
+  `BLINK#src>tgt xK` and `PABIL#src mM xK` are signature keys, so the ~250 surviving plans are
+  name-subsets x the K cross-product.
+* Every K variant rides the subset's books at ONE activation (the ActivateBlink precedent), so
+  k=1/2/3 are admitted by exactly the same subsets, and the apply loop pays per iteration and
+  stops at the first unpayable one -- a kmax plan REALISES a lower count when mana runs short.
+  What the small counts still express is a deliberate early stop that leaves mana for an ability
+  LATER in the plan's trailing pass. So the cut is a measured provider narrowing, not lossless.
+* perf (Profile build, gi8): no single hotspot -- ~29% mana-payment (TapForCostBacktrack etc.),
+  ~24% GameState copying, 5.6% greedy Solve. Cost is linear in plans applied; the fan IS the cost.
+
+Two heurarm levers (default OFF): `MTG_EDF_SINK_KMAX` (ManaSinkActivationCounts {1..3} -> {kmax},
++finish unchanged) and `MTG_EDF_BLINK_KMAX` (BlinkActivationCounts likewise; go-off count
+unchanged). Human play untouched (both sites fold to {1} under HumanPlayActive already).
+
+Measured (both levers on unless noted):
+* gi8 solo: units 852,719 -> 674,807 (-21%), cand_scored -35%, id_depth 1.06 -> 1.17,
+  IDENTICAL play digest. Sink alone -3%, blink alone -18%.
+* All SIX references: identical win turns AND identical play digests; wall -16..-37% on the
+  heavy ones (s7 24.6s -> 15.5s, s5 37.9 -> 28.5).
+* Pooled 200-game A/B (2 arms x seeds 3001/3061 x 50, one batch): s3001 avg 6.0000 == 6.0000,
+  summed game wall -34% (9,149s -> 6,027s, same shared pool). s3061: see below.
+* Dead ends probed and closed: MTG_BIG_SOLVE_MEMO (units unchanged, clears 11->0 with no hit
+  gain -- the cap was not binding); MTG_COST_REFRAME=1 showed -14% units at identical digest on
+  gi8 (candidate for a separate, global measurement -- not pursued here).
+
+### The degenerate class is NOT the fan
+
+Seed set 3061 contains true monsters (30 min - 2.5 h single games; 88 of 200 games in the A/B
+crossed the 30 s SLOW-GAME bar). The heartbeat comparison is decisive: gi=30 ctrl 1.08h vs kmax
+0.93h both RUNNING; gi=20 kmax ran LONGER than ctrl. The K levers trim the broad fan ~20-35% but
+do not touch this class -- something else keeps those games in fat states for hours. Next
+diagnosis target: `--seed 3081 --game-index 20` / `--seed 3091 --game-index 30` solo.

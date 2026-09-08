@@ -14806,7 +14806,16 @@ std::vector<int> EldraziFlickerProvider::BlinkActivationCounts(const GameState& 
 {
     std::vector<int> out;
     const int kmax = std::min(3, max_affordable);
-    for (int k = 1; k <= kmax; ++k) { out.push_back(k); }
+    // MTG_EDF_BLINK_KMAX (2026-09-08, default OFF until measured): the ManaSinkActivationCounts
+    // narrowing's blink twin -- see the note there. One caveat is blink-specific: a blink is not
+    // monotone-good the way a drain is (a net-negative loop wastes mana per iteration, and a
+    // blinked would-be attacker comes back summoning-sick), so the apply-loop degradation covers
+    // the can't-pay case but NOT the shouldn't-continue case. Measured jointly with the sink lever.
+    static const bool s_blink_kmax = EnvOn("MTG_EDF_BLINK_KMAX", false);
+    if (heurarm::Flag(heurarm::EDF_BLINK_KMAX, s_blink_kmax))
+    { if (kmax >= 1) { out.push_back(kmax); } }
+    else
+    { for (int k = 1; k <= kmax; ++k) { out.push_back(k); } }
     if (!s_edf_goff) { return out; }
 
     const FlickerLoop loop = RecogniseFlickerLoop(s, source.controller_index);
@@ -14871,7 +14880,22 @@ std::vector<int> EldraziFlickerProvider::ManaSinkActivationCounts(const GameStat
 {
     std::vector<int> out;
     const int kmax = std::min(3, max_affordable);
-    for (int k = 1; k <= kmax; ++k) { out.push_back(k); }
+    // MTG_EDF_SINK_KMAX (2026-09-08, default OFF until measured): {1..kmax} -> {kmax}. The K
+    // variants ride the subset's books at ONE activation each (the ActivateBlink precedent), so
+    // k=1/2/3 are admitted by exactly the same subsets and the apply loop pays per iteration,
+    // stopping at the first unpayable one -- a kmax plan REALISES a lower count whenever the mana
+    // runs short, so the small counts mostly re-score the same outcome. What they still express is
+    // a DELIBERATE early stop that leaves mana for an ability LATER in the same plan's trailing
+    // pass (drain x1, save the rest for the blink loop) -- a real partition, which is why this is
+    // a measured provider narrowing and not a lossless prune. What it buys: the sink axes multiply
+    // the plan fan at every fat node (gi8 T7: 10 groups, odometer bound 13824, 195-292 plans
+    // scored per call, id_depth mean 1.06 -- the deck effectively searches at depth 1), and every
+    // rollout turn-step pays the same product again (T6 rollout decisions: mean 56 candidates).
+    static const bool s_sink_kmax = EnvOn("MTG_EDF_SINK_KMAX", false);
+    if (heurarm::Flag(heurarm::EDF_SINK_KMAX, s_sink_kmax))
+    { if (kmax >= 1) { out.push_back(kmax); } }
+    else
+    { for (int k = 1; k <= kmax; ++k) { out.push_back(k); } }
     if (!s_edf_goff) { return out; }
 
     const int me = source.controller_index;
