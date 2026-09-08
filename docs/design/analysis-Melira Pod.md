@@ -2129,3 +2129,37 @@ Staged at `logs/eval/Melira Pod.value.STAGED.json`; adoption is the user's call
 Consequence: phase F (mull_gen setting + expected_buckets) cannot run without a live sidecar, so the
 mulligan generation setting must be derived by hand (`scripts/derive_mullgen_setting.py` against a
 temporary value.json, or the built-in d5/b20 default) if the model stays unadopted.
+
+### 2026-09-08c — why the sidecar costs 1.48x: the PROBE ladders deeper, and depth is enumeration
+
+User: *"even the fact that escalation is that slow is somewhat suspect given that we are expected to
+cache all of the search work and only do the rollouts on escalation... We should probably try to
+understand the mechanism first."* Diagnostic (logs/melira_vl_diag/, 200 games d5/b20 seed 700000,
+MTG_HYBRID_STATS + MTG_ROLLOUT_STATS + MTG_ESC_MEASURE), live = no sidecar, staged = shipped hybrid:
+
+| | live (heuristic) | staged (value probe + heuristic redo) |
+|---|---|---|
+| core-s / 200 games | 264 | 458 (1.74x) |
+| work units | 22.2M | 55.9M (2.5x) |
+| interior nodes | 2.83M | 15.35M (5.4x) — of which the escalation re-traverses 0.94M (6%) |
+| rollout steps | 6.63M | 2.45M |
+| unit shares | rollout 30% + greedy leaf 30%, interior 39% | interior 90% (fs_main2 63%, fs_pre 27%), rollouts 4% |
+| ladder committed depth (mean; hist) | 2.70; 1:38 2:911 3:587 4:227 5:98 | probe 3.37; 2:295 3:486 4:487 5:175 |
+| escalations | — | 953 of 1445 decisions (66%); 888 of them fell short of d5 |
+| probe budget left at escalation | — | mean 27.7%; 518 of 953 (54%) had under 10% |
+| cold single pass vs ladder (esc-measure) | — | 0.88 (shallow passes cost ~12%, the memo buys little here) |
+
+**Mechanism.** Neither hypothesis in the user's list is the cause: it is not a budget reset (default
+is the legacy shared REMAINING budget; the escalation starts starved, 54% with <10% left) and it is
+not the value leaf's per-node cost (V is cheaper per node). It is that the value-leaf PROBE climbs
+one rung deeper on average (3.37 vs 2.70; d4+d5 in 46% of decisions vs 17%) because its leaf is
+nearly free and the value start gate is 8x more lenient — and on this deck each rung is ~5-7x more
+enumeration (plans_enum 35.3M vs 5.8M). The probe's memo is leaf-dependent so none of that
+interior is reusable by the redo, but the redo itself is only 6% of interior nodes: the cost IS the
+probe. The prior finding on hinata (escalation rollout-bound, probe 61%) holds in kind and is
+sharper here: probe ~94% of the extra work. The quality gain (-0.0055 t) comes with it — the
+deeper probe is what found the wins.
+
+Bounded paradigm A/B running (logs/melira_vl_ab/, 8 seeds x 1000 paired games; d5/b20: live /
+pure / pure_a1 (gate leniency pinned 1) / staged / ladder / ladesc; d3/b10 same minus ladesc).
+`pure_a1` vs `pure` isolates the gate leniency; `pure_a1` vs `live` is the leaf alone.
