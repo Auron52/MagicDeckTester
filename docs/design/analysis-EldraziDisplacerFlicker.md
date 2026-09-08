@@ -3815,3 +3815,22 @@ crossed the 30 s SLOW-GAME bar). The heartbeat comparison is decisive: gi=30 ctr
 0.93h both RUNNING; gi=20 kmax ran LONGER than ctrl. The K levers trim the broad fan ~20-35% but
 do not touch this class -- something else keeps those games in fat states for hours. Next
 diagnosis target: `--seed 3081 --game-index 20` / `--seed 3091 --game-index 30` solo.
+
+### Clue fusion (USER directive, 2026-09-08) -- the monster-class fix
+
+Mid-diagnosis the user cut through the design space: *"for the purposes of the search just use
+create clue -> sac to draw as one operation"*, refined to *"if you have the mana you do both and
+if you don't you just create the clue, so it can be used on another turn"*, and scoped: *"this is
+just a shortcut for the search. The viewer can be done normally."*
+
+Shipped as `ffae45d3` at the one shared effect site (ApplyPermAbility TapInvestigate): create the
+token, then pay its {2} from what is actually available and crack immediately; a failed payment
+banks the Clue (which still enumerates as SacDraw later). `!HumanPlayActive()` keeps the viewer
+normal; rollout + autonomous executor share the site so scored lines match realised lines.
+`MTG_CLUE_FUSE=0` is the hatch.
+
+Measured: seed 3081 gi=20 **807s -> 49s (16.5x)**, identical win turn AND game digest; seed 3091
+gi=30 **2.5h+ -> 286s (>=30x)**, wt=7. gi8 win turn unchanged. All six references keep their
+exact win turns (s2's digest moves at the same avg; the rest identical). Smoke 73/73
+byte-identical (investigate is EDF-only), unit SUCCESS, scenarios 72/72. Residual heavy class:
+~5min games where the board is legitimately fat -- the value leaf remains the structural answer.
