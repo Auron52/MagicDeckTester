@@ -1141,6 +1141,15 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (a) { os << ", "; }
             const Action& ac = p.actions[a];
             os << "{ \"card\": "; JsonStr(os, ac.card_name);
+            // PER-COPY IDENTITY of a board activation's source (Action::sac_source_id is the
+            // permanent's stable card.m_number). Without it, two plans that activate DIFFERENT
+            // COPIES of the same card serialise byte-identically -- same summary, same casts, same
+            // actions -- so a saved reference cannot say which one the human picked, and a replay
+            // whose enumeration widened (the checker runs MTG_UNPRUNED) resolves the recorded index
+            // to the other copy. That silently re-routes the turn's payment and kills the line
+            // several frames later. Diagnosed 2026-09-08 on references/Snow/claude_s4_gi3.json,
+            // where two untapped Scrying Sheets made plans 9 and 10 indistinguishable.
+            if (ac.sac_source_id) { os << ", \"src_num\": " << ac.sac_source_id; }
             if (ac.kind == Action::Kind::DiscardToLandsEdge) { os << ", \"landsedge\": " << ac.discard_lands; }
             if (ac.kind == Action::Kind::DigDraw) { os << ", \"dig\": true, \"dig_sacrifice\": " << (ac.dig_sacrifice ? "true" : "false"); }
             // An activated ability of a permanent ALREADY ON THE BATTLEFIELD (Krenko's "{T}: create X
@@ -2620,9 +2629,25 @@ std::map<int, std::vector<std::string>> ParseForceAttackersSpec(const std::strin
     return attackers_by_turn;
 }
 
-// --tap-pref "<turn>:<pre|post>:<idx>,<idx>;..." -> (turn, is_post_main) -> battlefield indices the
-// RECORDING tapped in that main phase (the tapped-delta between two same-phase recorded frames).
-// The payment greedy prefers these sources; see TapPrefChooser (GameLogger.h).
+// --tap-pref "<turn>:<pre|post>:<card#>,<card#>;..." -> (turn, is_post_main) -> the CARD NUMBERS of
+// the sources the RECORDING tapped in that main phase (the tapped-delta between two same-phase
+// recorded frames). The payment greedy prefers those sources; see TapPrefChooser (GameLogger.h).
+//
+// THESE ARE CARD NUMBERS (Card::m_number), NOT battlefield indices, and the difference is the whole
+// point. The old form pinned a position in `state.battlefield` -- a vector the replay rebuilds --
+// so a replay that assembled the board in any different order pinned whatever now sat in that slot.
+// Diagnosed 2026-09-08 on references/Snow/claude_s4_gi3.json: `5:pre:1,4,7,9` steered the payer onto
+// Snow-Covered Islands where the human had tapped Scrying Sheets, spending the {U} the recorded
+// Frost Augur needed; the reference then died several frames later as an opaque "board differs",
+// which is why it sat misfiled as an accepted `shuffle-dead` (nothing about the shuffle had moved --
+// the checker's own message said the hand was identical). Same stale-index class that once cost
+// five Mirrorwing references, and the same lesson the plan matcher already learned: a reference
+// stores WHAT it chose, so the index it was stored under must not be load-bearing.
+//
+// m_number is the repo's established stable per-copy id (it is why `aura_attached_to` holds one
+// instead of a Permanent*), so this keeps the recording's EXACT per-copy split -- "these two
+// Scrying Sheets" -- which a card-name pin would have collapsed. No back-compat tier is needed:
+// the spec is rebuilt by test/viewer_protocol_check.py on every run and never stored on disk.
 std::map<std::pair<int, int>, std::set<int>> ParseTapPrefSpec(const std::string& spec)
 {
     std::map<std::pair<int, int>, std::set<int>> pref;
@@ -4276,8 +4301,9 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
             const int post = (s.phase == Phase::PostCombatMain) ? 1 : 0;
             auto it = tap_pref_by_phase.find({ s.turn_number, post });
             if (it == tap_pref_by_phase.end()) { return false; }
-            const int idx = static_cast<int>(&p - s.battlefield.data());
-            return it->second.count(idx) > 0;
+            // Match the permanent's STABLE CARD NUMBER, never its battlefield position -- see
+            // ParseTapPrefSpec for the reference this broke.
+            return it->second.count(p.card.m_number) > 0;
         };
     if (!tap_pref_by_phase.empty()) { g_play_tap_pref_chooser = &tap_pref_chooser; }
 

@@ -257,8 +257,20 @@ def recorded_tap_prefs(decisions):
                         and (bool(p.get("tapped")) or not want_tapped)}
             delta = (field(dec, True) - field(prev, True)) & field(prev, False)
             if delta:
-                key = (dec.get("turn"), dec.get("phase"))
-                prefs[key] = sorted(set(prefs.get(key, [])) | delta)
+                # Emit the tapped sources by NAME, not by the battlefield index they happened to
+                # occupy in the recording. An index is a position in a vector the replay rebuilds,
+                # so pinning one steers the payer onto whatever now sits in that slot -- on
+                # Snow/claude_s4_gi3 `5:pre:1,4,7,9` pinned Snow-Covered Islands where the human had
+                # tapped Scrying Sheets, spending the {U} the recorded Frost Augur needed and
+                # killing the reference several frames later as an opaque "board differs". Same
+                # stale-index class that cost five Mirrorwing references. Copies of a card are
+                # interchangeable to a payment, so the name IS the whole recoverable intent.
+                by_idx = {p["idx"]: p.get("num") for p in prev.get("me", {}).get("battlefield", [])
+                          if isinstance(p.get("idx"), int)}
+                nums = {by_idx[i] for i in delta if isinstance(by_idx.get(i), int)}
+                if nums:
+                    key = (dec.get("turn"), dec.get("phase"))
+                    prefs[key] = sorted(set(prefs.get(key, [])) | nums)
         prev = dec
     return prefs
 
@@ -392,6 +404,14 @@ def actions_key(p):
     return tuple(sorted(action_sig(a) for a in (p.get("actions") or [])))
 
 
+# Board fingerprint for divergence detection: the multiset of (permanent name, tapped). Tap state
+# is IN it deliberately -- an upstream payment that tapped a different source is exactly the class
+# of divergence that kills a recorded line while leaving the hand untouched.
+def board_key(state):
+    return sorted((pp.get("name"), bool(pp.get("tapped")))
+                  for pp in state.get("me", {}).get("battlefield", []))
+
+
 def find_plan(recorded, plans, recorded_index=None, prefer=None):
     """Index of `recorded` in the current `plans`, or None. Exact summary first (keeps cast-order
     variants distinct), then land+casts (tolerates a summary-format change or a dropped order
@@ -446,6 +466,24 @@ def find_plan(recorded, plans, recorded_index=None, prefer=None):
         narrowed = [i for i in hits if actions_key(plans[i]) == want_acts]
         if narrowed:
             hits = narrowed
+    # PER-COPY narrowing (src_num, added 2026-09-08): which COPY a board activation used. Two plans
+    # that activate different copies of the same card are otherwise byte-identical in every recorded
+    # field, so an index resolved against a widened enumeration can silently pick the other copy and
+    # re-route the turn's payment (references/Snow/claude_s4_gi3.json).
+    #
+    # PRESENCE-GATED, and that is load-bearing: folding src_num into action_sig instead REGRESSED
+    # Melira_Pod/claude_s3_gi2 from `repaired` to a false board-diverged, because a reference saved
+    # before the field exists has no src_num while the current emission does -- so the narrowing
+    # matched only the plans with NO board activation, i.e. exactly the wrong subset. A new field
+    # must never invalidate an old recording; it may only refine one that carries it.
+    if len(hits) > 1:
+        rec_acts = recorded.get("actions") or []
+        if any("src_num" in a for a in rec_acts):
+            want_src = sorted(a.get("src_num", 0) for a in rec_acts)
+            n2 = [i for i in hits
+                  if sorted(a.get("src_num", 0) for a in (plans[i].get("actions") or [])) == want_src]
+            if n2:
+                hits = n2
     if prefer is not None:
         want = [i for i in hits if prefer(plans[i])]
         if want:
@@ -751,6 +789,7 @@ def check_reference(path, collect=None):
     # recognised as satisfied-early and passed instead.
     freecast_done = {}
     hand_checked = False
+    first_board_div = None   # see the tracker below: the CAUSE frame, not the symptom frame
 
     def stale_pass_frame(entry, dec):
         """§2a compat (TREASURE_PAY_COMPAT): is this recorded frame a PASS on a main-phase decision
@@ -912,6 +951,19 @@ def check_reference(path, collect=None):
             continue
 
         rd = kept[ri]["decision"]
+        # FIRST BOARD DIVERGENCE. The failure this file reports is wherever a recorded plan finally
+        # stops matching -- which is a SYMPTOM, often turns after the cause. The line that actually
+        # broke the game is the first frame whose board no longer matches the recording, so capture
+        # it as it goes past and quote it in the verdict. Without this the report said only "the
+        # BOARD differs" at the symptom frame, which is not something anyone can act on.
+        if first_board_div is None and rd.get("me", {}).get("battlefield") is not None \
+                and dec.get("me", {}).get("battlefield") is not None:
+            rb, cb = board_key(rd), board_key(dec)
+            if rb != cb:
+                only_ref = [f"{n}{'(T)' if t else ''}" for n, t in rb if (n, t) not in cb]
+                only_now = [f"{n}{'(T)' if t else ''}" for n, t in cb if (n, t) not in rb]
+                first_board_div = (f"first board divergence at {frame_ident(dec)}: "
+                                   f"ref-only {only_ref} vs now {only_now}")
         # Like-for-like opening-hand check, on the FIRST aligned frame only: comparing a mulligan
         # frame (hand at top level) against a post-draw main_phase frame (hand under me.hand) is
         # what used to report a bogus "8->0 cards" mulligan divergence.
@@ -1028,14 +1080,23 @@ def check_reference(path, collect=None):
                     # already tapped). That is the shuffle-dead shape, not an enumeration gap:
                     # only re-playing can restore the game. The gating ENUM-GAP class is reserved
                     # for a truly identical visible state.
-                    def board_key(state):
-                        return sorted((pp.get("name"), bool(pp.get("tapped")))
-                                      for pp in state.get("me", {}).get("battlefield", []))
                     if board_key(dec) != board_key(rd):
-                        return True, "shuffle-dead", (
-                            f"{where}; hand identical but the BOARD differs (tap state / "
-                            f"permanents) -> an upstream payment or decision diverged the game; "
-                            f"only re-playing can restore this reference")
+                        # NAME THE DELTA. "the BOARD differs" is not a diagnosis -- it was
+                        # reported for months without anyone being able to act on it. The
+                        # divergence is an upstream payment/decision, so the two boards' symmetric
+                        # difference IS the lead: a tap-state-only delta points at mana ordering, a
+                        # missing/extra permanent at a different line entirely.
+                        rb, cb = board_key(rd), board_key(dec)
+                        only_ref = [f"{n}{'(T)' if t else ''}" for n, t in rb if (n, t) not in cb]
+                        only_now = [f"{n}{'(T)' if t else ''}" for n, t in cb if (n, t) not in rb]
+                        same_perms = sorted(n for n, _ in rb) == sorted(n for n, _ in cb)
+                        return True, "board-diverged", (
+                            f"{where}; hand identical, board differs "
+                            f"({'TAP STATE only' if same_perms else 'PERMANENTS differ'}): "
+                            f"ref-only {only_ref} vs now {only_now} -> an upstream payment or "
+                            f"decision diverged the game"
+                            + (f"; {first_board_div}" if first_board_div else
+                               "; boards matched at every earlier aligned frame"))
                     if TREASURE_PAY_COMPAT and (inserted or skipped):
                         # §2a compat: this replay is already LOOSE (defaults / collapsed frames
                         # upstream -- hidden state may have diverged invisibly). The pre-compat
@@ -1160,10 +1221,10 @@ def main():
             threads = max(1, int(sys.argv[1:][i + 1]))
         elif a.startswith("--threads="):
             threads = max(1, int(a.split("=", 1)[1]))
-    counts = {k: 0 for k in ("ok", "repaired", "play", "shuffle-dead", "unresolvable",
+    counts = {k: 0 for k in ("ok", "repaired", "play", "shuffle-dead", "board-diverged", "unresolvable",
                              "mulligan", "contract")}
     LABEL = {"ok": "ok            ", "repaired": "repaired      ", "play": "play-drift    ",
-             "shuffle-dead": "shuffle-dead  ", "unresolvable": "ENUM-GAP      ",
+             "shuffle-dead": "shuffle-dead  ", "board-diverged": "BOARD-DIVERGED", "unresolvable": "ENUM-GAP      ",
              "mulligan": "mull-drift    "}
     if threads > 1:
         from concurrent.futures import ThreadPoolExecutor
@@ -1179,6 +1240,7 @@ def main():
             print(f"  {LABEL[kind]}{rel}: {detail}"); counts[kind] += 1
     print(f"\nViewer protocol: {counts['ok']} ok, {counts['repaired']} repaired, "
           f"{counts['play']} play-drift, {counts['shuffle-dead']} shuffle-dead, "
+          f"{counts['board-diverged']} board-diverged, "
           f"{counts['unresolvable']} enum-gap, {counts['mulligan']} mull-drift, "
           f"{counts['contract']} contract-fail  ({len(refs)} refs)")
     if counts["repaired"]:
