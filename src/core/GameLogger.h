@@ -490,6 +490,15 @@ extern thread_local AttackersChooser* g_play_attackers_chooser;
 // is offered never changes -- only which copies pay it. Inert unless set.
 using TapPrefChooser = std::function<bool(const GameState& state, const Permanent& p)>;
 extern thread_local TapPrefChooser* g_play_tap_pref_chooser;
+// The MAIN ORDINAL of the decision whose committed line is currently being applied (external-
+// chooser play only; -1 outside a main-phase apply / for an added no-ordinal frame). Set by
+// AIEngine's external-chooser loop right before it asks for the choice, so the payment taps of
+// the chosen plan see the ordinal of the decision that chose them. Exists for the ORDINAL-KEYED
+// --tap-pref form: a turn-aggregated preference applied to every payment tapped a land the
+// recording spent only LATER that turn (Fluctuator s10_gi9: the {B} source went to the
+// Fluctuator's {2}, stranding the recorded Unearth), so the pref must be scoped to the payment
+// pair that witnessed it.
+extern thread_local int g_play_cur_main_ordinal;
 
 // ---- Human-play cast-ORDER chooser (#10) -------------------------------------------------------
 // After the human commits a main-phase plan, they may pin the ORDER its non-sacrifice hand casts
