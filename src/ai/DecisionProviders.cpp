@@ -14383,6 +14383,72 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
         for (const Card& sb : ap.sideboard)
         { consider(CardDatabase::Instance().LookupCached(sb), wish_mv); }
     }
+    if (best->drain_amount > 0 || best->exile_cost_mv > 0) { return; }   // wish-in-hand route found
+
+    // THE LIBRARY ROUTE (USER, 2026-09-08: "I don't get why the T3 line is not representable").
+    // The user's own recorded seed-1 T3 kill digs MID-LOOP -- Mariposa draws / investigate --
+    // until the SECOND Living Wish comes off the library, then wishes and drains. Every other
+    // link of that chain already exists (SpendSurplusOnDrawSinks draws only-to-find;
+    // ComboFinishFromHand deploys the wish the draws just landed); what was missing is only this
+    // PRICING: a finisher behind library draws was never given a hand_setup_mv, so
+    // FlickerGoOffCount returned 0 and no kill-sized count was ever proposed -- the apply that
+    // could realise the dig was never handed a loop to do it in.
+    //
+    // Priced clairvoyantly like every rollout read (the library is a known permutation): the
+    // first wish (or direct finisher) at index i costs (i+1) draws at the board's cheapest
+    // repeatable draw sink, plus the wish and the finisher casts. Execution stays the arbiter --
+    // the loop's draws really pay, really dig, and the finish deploys only what actually reached
+    // hand, so an optimistic price costs a mis-sized count, never a phantom win.
+    //
+    // SEARCH ONLY, stricter than the surrounding function: drawing the library on a human's
+    // behalf is exactly what LoopDrawSinkOn refuses, so this route is not used even to SIZE a
+    // human bank count. Depth-capped at 20: a deeper dig costs more setup mana than
+    // FlickerMaxIterations of any real board's net can bank, and the cap bounds this scan on the
+    // recognizer's hot path.
+    //
+    // DEFAULT OFF -- MEASURED NEGATIVE AS PRICED (200 pooled games vs the auto-go-off baseline:
+    // s3001 5.72 -> 5.92, s3061 5.24 -> 5.38). The pricing counts MANA only, but Mariposa /
+    // investigate draws carry {T}: ONE draw per loop iteration -- so a 6-deep dig needs >= 6
+    // iterations as well as the mana, and the mana-only count proposes loops that stall mid-dig
+    // and waste the turn. Representability stands (all three links exist); shipping it needs
+    // iteration-aware sizing. Re-measure with MTG_EDF_LIB_ROUTE=1 after fixing the sizing.
+    static const bool s_lib_route = EnvOn("MTG_EDF_LIB_ROUTE", false);
+    if (!heurarm::Flag(heurarm::EDF_LIB_ROUTE, s_lib_route)) { return; }
+    if (HumanPlayActive()) { return; }
+    int draw_mv = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        int mv = 0;
+        if (d->params.tap_draw_cost.has_value())
+        { mv = EffectiveActivationCost(s, controller, p.card,
+                                       d->params.tap_draw_cost.value()).ManaValue(); }
+        else if (d->params.tap_investigate_cost.has_value())
+        { mv = EffectiveActivationCost(s, controller, p.card,
+                                       d->params.tap_investigate_cost.value()).ManaValue()
+               + 2; }   // + the Clue's own {2} crack: the DRAW costs both halves
+        else { continue; }
+        if (draw_mv == 0 || mv < draw_mv) { draw_mv = mv; }
+    }
+    if (draw_mv <= 0) { return; }   // no repeatable draw sink on board: nothing can dig
+    const int lib_cap = std::min<int>(20, static_cast<int>(ap.library.size()));
+    for (int i = 0; i < lib_cap; ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+        if (d == nullptr) { continue; }
+        const int dig_mv = (i + 1) * draw_mv;
+        consider(d, dig_mv);   // a finisher sitting in the library directly
+        if (best->drain_amount > 0 || best->exile_cost_mv > 0) { return; }
+        if (d->params.tutor_to_hand && d->params.wish_from_sideboard)
+        {
+            const int wish_mv = d->card.m_mana_cost.ManaValue();
+            for (const Card& sb : ap.sideboard)
+            { consider(CardDatabase::Instance().LookupCached(sb), dig_mv + wish_mv); }
+            if (best->drain_amount > 0 || best->exile_cost_mv > 0) { return; }
+        }
+    }
 }
 
 FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
