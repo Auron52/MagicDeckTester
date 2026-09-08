@@ -1946,3 +1946,22 @@ Worst-case class after this session: `--seed 800529 --depth 5 --budget-ms 20` (a
 that wins t7): 42 s inside the 24-thread batch, **18.2 s solo** -- the topk-5 refine's five
 full d5 playouts at ~3 s each (t3 decisions of 660K units) plus the real game. That is the
 mull-tail class the topk A/B above says we should keep paying for.
+
+### 2026-09-08 — RE-ADDED TO THE SUITE (user: "The performance should be close to other decks")
+
+Per-game cost vs the suite (smoke tier, same run, batch-contended ms/game): fluctuator
+1674 d3 / 3103 d5, fivecolour 1272 / 1932, **melira 1117 / 1675**, hinata 295 / 550, median
+deck ~130 / ~140. Third-costliest deck, under the two it used to be 7x above => added back
+with the ORIGINAL counts in every tier (the same cases b528a390 pulled): smoke d0/d3/d5 +
+melira2hg, regression d0 + d3/d5 x 2002/3003, overnight d0 x4 + d3/d5 x 4004-7007.
+
+| tier | result | makespan | melira in-tier ms/game |
+|---|---|---|---|
+| smoke | 72 unchanged, 4 new, accepted | 86 s (76 s without melira; the 2026-09-07 attempt was 200 s) | d3 1117, d5 1675, 2hg 920 |
+| regression | 98 unchanged, 5 new, accepted | 192 s | d3 779-1172, d5 1022-3969 (s2002's d5 has a few ~10-18 s mulligan games; no game over 30 s) |
+| overnight (--deck=melira, per-deck accept) | 12 new, accepted | 52 s for the 12 melira cases (was ~7.5 CPU-hours) | d3 683-1065, d5 1283-1618 |
+
+GT consistent: 435 logs, 0 stale, 0 missing; only melira keys changed. The overnight tier's
+audit showed "43 configs changed" -- stale Sep-4 .wins of OTHER decks in the shared wins dir,
+not this run; the per-deck accept promotes only this run's keys by design (regression.sh
+~183). Pushes remain paused (user).

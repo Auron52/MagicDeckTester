@@ -1,4 +1,4 @@
-# Regression ground truth -- commit b528a390  date 2026-09-06
+# Regression ground truth -- commit 45b408cb  date 2026-09-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -55,6 +55,9 @@ dragons_smoke_d5_s1001=5.5867/b7981a8bf9dbc75a
 breaching_smoke_d0_s1001=4.8460/8c8e7d2fb5fd0181
 breaching_smoke_d3_s1001=3.1000/03766483807acbd5
 breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
+melira_smoke_d0_s1001=6.4400/d12f6a68433b2b2d
+melira_smoke_d3_s1001=4.9000/a23e38d9b63f23a1
+melira_smoke_d5_s1001=5.0000/b05d8081036d2a42
 hinata2hg_smoke_d3_s1001=5.6667/1a9f41bd97bea19d
 antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
 minotaur2hg_smoke_d3_s1001=5.3500/d6096734765b010a
@@ -73,6 +76,7 @@ stompy2hg_smoke_d3_s1001=5.0000/73d0994752ca4e51
 kitty2hg_smoke_d3_s1001=4.9400/7bc28551a3faa869
 dragons2hg_smoke_d3_s1001=6.3000/43872dc33fccb094
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
+melira2hg_smoke_d3_s1001=5.1200/3f980685e3d2daf6
 fluctuator_smoke_d0_s1001=5.0930/93b3170f143542e3
 fluctuator_smoke_d3_s1001=3.6133/51e2e09c3b083528
 fluctuator_smoke_d5_s1001=3.6000/e7f095b94f5c58c5
@@ -163,6 +167,11 @@ breaching_regression_d3_s2002=3.0933/754d6fb14d56c14f
 breaching_regression_d3_s3003=3.0833/8d3103f293ae7026
 breaching_regression_d5_s2002=3.1000/a253d99d6bb10df1
 breaching_regression_d5_s3003=3.0760/f1ed83ebe4cb9869
+melira_regression_d0_s2002=6.4070/fae3c89891ffef1d
+melira_regression_d3_s2002=4.8267/962a9e47d026949b
+melira_regression_d3_s3003=4.8400/242be36f3d1b9452
+melira_regression_d5_s2002=4.7500/2e637c92b0e55ba4
+melira_regression_d5_s3003=4.7750/d6ba85574a8ee1bd
 hinata2hg_regression_d3_s2002=5.5700/a0d1eeabd223ffb3
 hinata2hg_regression_d5_s2002=5.5200/3b50ae042b766a7b
 antilife2hg_regression_d3_s2002=4.3133/88cdae0a53b9a7f6
@@ -382,6 +391,18 @@ breaching_overnight_d5_s4004=3.0900/800200b70223d677
 breaching_overnight_d5_s5005=3.1240/1766df6ea14a4bdb
 breaching_overnight_d5_s6006=3.1200/282307edb6b0bf77
 breaching_overnight_d5_s7007=3.1220/6a143cd0563fe174
+melira_overnight_d0_s4004=6.4040/28baa8e47e632e29
+melira_overnight_d0_s6006=6.4415/024143c9fe953fa3
+melira_overnight_d0_s8008=6.4055/fe965b7088587fc6
+melira_overnight_d0_s10010=6.3820/7c86feebe58f524f
+melira_overnight_d3_s4004=4.9050/60769e2d8e6198fd
+melira_overnight_d3_s5005=4.8500/c2fd362cff76f31b
+melira_overnight_d3_s6006=4.8850/80424319f3c856ed
+melira_overnight_d3_s7007=4.8050/70e86b6010aae9a7
+melira_overnight_d5_s4004=4.8733/69c5f5f3cebb68b3
+melira_overnight_d5_s5005=4.8533/87a233ee8e3d8cef
+melira_overnight_d5_s6006=4.8667/cc6ea879355a80ec
+melira_overnight_d5_s7007=4.8133/d87701d3a261abea
 hinata2hg_overnight_d5_s4004=5.5000/79b7f2b5fde7eb96
 hinata2hg_overnight_d5_s5005=5.3800/4ec802188122b534
 hinata2hg_overnight_d5_s6006=5.7700/8203231de10b8490

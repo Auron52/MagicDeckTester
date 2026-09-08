@@ -182,12 +182,17 @@ SMOKE_CASES=(
   "breaching 0 1001 1000 0"
   "breaching 3 1001  150 10"
   "breaching 5 1001   75 20"
-  # melira: DROPPED FROM THE SUITE ENTIRELY (user, 2026-09-06) until per-game cost is
-  # guaranteed. Measured in the tiers themselves: smoke d3 31 s/game, d5 26 s/game -- 72% of the
-  # whole smoke tier's core-time and 52% of regression's, from one deck. The cost is the
-  # combo-board enumeration wall (docs/design/pod-pair-enumeration-explosion.md); the burst-family
-  # fix (f66f2949) and plan-space cap bound MEMORY but not this wall. Restore the cases from git
-  # history once the wall is fixed AND a re-probe shows s/game in the ordinary-deck range.
+  # melira: RESTORED 2026-09-08 (user: "performance should be close to other decks"). Dropped
+  # 2026-09-06 at smoke d3 31 s/game, d5 26 s/game (72% of the tier's core-time from one deck).
+  # The wall was the 1-ply search LEAF re-running the greedy subset walk at every rollout turn
+  # (93% of a d3 game, unprunable: 99.5% of visited subsets survive every feasibility filter);
+  # the deck now ships `search_leaf_depth: 0` in its profile (quality-neutral on 3000/2000
+  # paired games) plus byte-identical walk/tutor opts. Measured 2026-09-08 in 1000-game batches:
+  # d3 0.65-0.78 s/game, d5 1.2 s/game -- third-costliest deck, under fivecolour (1.27 / 1.93)
+  # and fluctuator (1.67 / 3.10). Full record: docs/design/analysis-Melira Pod.md SESSION 2026-09-08.
+  "melira 0 1001 1000 0"
+  "melira 3 1001   50 10"
+  "melira 5 1001   25 20"
   # 2HG gate (user request 2026-09-04): "<deck>2hg" = the SAME deck/profile at starting_life 30
   # + opponent_heads 2 (regression.sh strips the suffix for file lookup and adds the job fields).
   # Small on purpose -- just enough that a change which obviously ignores 2HG (second-face
@@ -218,7 +223,7 @@ SMOKE_CASES=(
   "kitty2hg           3 1001 50 10"
   "dragons2hg         3 1001 50 10"
   "breaching2hg       3 1001 50 10"
-  # melira2hg pulled with the other melira searched cases (2026-09-06, see the melira block).
+  "melira2hg          3 1001 25 10"
   # fluctuator: free-cycling combo (Fluctuator makes every cycler {0}; Drannith Stinger turns each
   # cycle into a ping). Measured single-thread at the GATE budgets 2026-09-05: d0 0.0001 s/game,
   # d3 b10 1.34 s/game, d5 b20 2.81 s/game, with NO game over 30 s at any of them -- the heavy tail
@@ -338,7 +343,12 @@ REGRESSION_CASES=(
   "breaching 3 3003  300 10"
   "breaching 5 2002  250 20"
   "breaching 5 3003  250 20"
-  # melira: dropped from the suite entirely 2026-09-06 (see the SMOKE block).
+  # melira: restored 2026-09-08 (see the SMOKE block).
+  "melira 0 2002 1000 0"
+  "melira 3 2002   75 10"
+  "melira 3 3003   75 10"
+  "melira 5 2002   40 20"
+  "melira 5 3003   40 20"
   # 2HG gate, second seed (see the SMOKE block for the design): the seven 2HG-relevant decks at
   # d3, plus ONE d5 case (hinata2hg -- the value_play/deep-search path under two heads, covering
   # the Crackle declared-count search where the second face changes lethality). No canaries here
@@ -628,8 +638,20 @@ OVERNIGHT_CASES=(
   "breaching 5 5005  500 40"
   "breaching 5 6006  500 40"
   "breaching 5 7007  500 40"
-  # melira: dropped from the suite entirely 2026-09-06 (see the SMOKE block) -- the four-seed
-  # d3/d5 sweep was ~7.5 CPU-hours from one deck.
+  # melira: restored 2026-09-08 (see the SMOKE block). The four-seed d3/d5 sweep that was
+  # ~7.5 CPU-hours from one deck now projects to ~25 core-minutes.
+  "melira 0 4004 2000 0"
+  "melira 0 6006 2000 0"
+  "melira 0 8008 2000 0"
+  "melira 0 10010 2000 0"
+  "melira 3 4004  200 10"
+  "melira 3 5005  200 10"
+  "melira 3 6006  200 10"
+  "melira 3 7007  200 10"
+  "melira 5 4004  150 20"
+  "melira 5 5005  150 20"
+  "melira 5 6006  150 20"
+  "melira 5 7007  150 20"
   # 2HG gate, deep tier (user request 2026-09-04): the six 2HG-relevant decks at DEFAULT
   # SETTINGS -- depth-5 rows drop the depth key so each deck's value_play block owns the play
   # depth (fivecolour runs d6), at the SAME per-deck overnight d5 budget as the deck's own rows.
