@@ -3996,3 +3996,26 @@ worse on both. Mechanism: the pricing counts MANA only, but Mariposa/investigate
 {T} (one draw per loop iteration), so a deep dig needs iterations the mana-only count never
 demands -- proposed loops stall mid-dig and waste the turn. Gated MTG_EDF_LIB_ROUTE (heurarm
 slot, default OFF). Representability stands; shipping needs iteration-aware sizing.
+
+## Session 9 (2026-09-08, overnight): shortfall triage, library-route verdict corrected
+
+**Budget ladder over the corpus's six remaining shortfall games** (search worse than the human
+reference at shipped settings): melira_pod s8 (4v3), mirrorwing s2 (7v6), EDF s2 (5v4) and EDF s5
+(5v4) all MATCH their human turn at a 100 ms budget (digests stable up to 10 s) -- pure 20 ms
+budget starvation, the class the value leaf exists for. dragonstorm s1 was budget-IMMUNE (T5 at
+every budget to 10 s) and root-caused separately: the breakpoint-continuation rank cap inside
+rollout plies buried the second-Apex-from-hand continuation at rank 32 vs W=2; fixed by the
+CHAIN SLOT (kBpChainChoice sentinel, MTG_BP_CHAIN_SLOT, default 1) -- see TurnSolver.cpp. EDF s1
+remains the two-lever case (dig pricing + budget).
+
+**Library route: the "stall mid-dig" diagnosis is FALSIFIED; the route stays OFF.** dig_draws
+(iteration-aware sizing) was implemented and the 200-game A/B REPRODUCED the negative result
+byte-identically -- the bound never binds, because draw_mv (>=5) exceeds any real board's net.
+Per-game diff (s3001): 8 games worse, 0 better. The real mechanism, traced via MTG_EDF_TURN_TRACE
+on a moved game: the route can only price a dig on boards that HAVE a draw land, which are exactly
+the boards where FlickerGoOffCount's draw-land fallback already sizes an affordable loop; filling
+the drain slot shadows that branch, and the dig's setup (observed 60 mana) fails startable() --
+so an affordable kill projection is replaced by an unstartable one and the turn declines to go
+off. Reviving it needs a redesign (never displace the fallback; bank-then-deploy startability),
+worth attempting only after the value leaf moves the deck's horizon. The route's comment in
+ScanHandSinks carries the full record.
