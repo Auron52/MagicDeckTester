@@ -160,6 +160,7 @@ enum Slot : int
     DIG_HOLD_FUEL,            // MTG_DIG_HOLD_FUEL        hold-fuel's DIG-SITE half: re-solve skips fuel casts
     FLUCT_REBUY,              // MTG_FLUCT_REBUY          cycle-Stinger -> Unearth this-turn deployment line
     GREEDY_HOLD_LAND,         // MTG_GREEDY_HOLD_LAND     hold-fuel's LAND-DROP site (d0 greedy): skip the drop, cycle the land
+    EDF_C_BUDGET,             // MTG_EDF_C_BUDGET         go-off projection budgets {C} pips, not just mana value
     COUNT
 };
 
@@ -297,6 +298,7 @@ inline const char* Name(int slot)
         "MTG_DIG_HOLD_FUEL",
         "MTG_FLUCT_REBUY",
         "MTG_GREEDY_HOLD_LAND",
+        "MTG_EDF_C_BUDGET",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

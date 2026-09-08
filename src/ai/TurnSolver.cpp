@@ -3465,6 +3465,21 @@ bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creatu
 static bool SubsetPayableWithFilters(const GameState& state, const std::vector<Action>& cands,
                                      const std::vector<int>& sel)
 {
+    // PROFILED HOTSPOT, DELIBERATELY LEFT ALONE (2026-09-07). This copy is the single largest cost in
+    // the engine on this deck: a task-clock profile (EDF seed 6105 gi=4, 29k samples) puts
+    // SubsetPayableWithFilters at 55.8% of the game, of which GameState's copy CONSTRUCTOR alone is
+    // 11.3 points -- almost entirely Player's deep-copied zone vectors, re-malloc'd per call and
+    // freed on return (another ~6% across operator new / malloc / free). Only the battlefield and the
+    // mana pool are ever mutated below, so most of that copy is waste.
+    //
+    // A thread_local scratch reused across calls was written and REVERTED unmeasured, and the reason
+    // is worth recording: this container cannot currently measure it. WSL2 exposes no PMU, so there
+    // are no instruction counts (see .devcontainer/README.md); wall clock on the same game with
+    // IDENTICAL work counters swung 17s / 38s / 48s across the session as the host load changed; and
+    // callgrind is impractical at ~50x on a 40s game. An unmeasured rewrite of the hottest path is
+    // exactly what this repo's standing lesson forbids. Fixing it properly means either a
+    // load-immune harness or -- better -- copying only what the walk touches instead of the whole
+    // GameState. Both are real work, not a drive-by.
     GameState cp = state;
     // Pay each selected cast's mana cost with real sources; taps persist across casts in cp, so a
     // filter consumed by one cast is unavailable to the next. Mana producers (rocks) pay first and
@@ -18096,7 +18111,25 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (discard_lands_used > lands_in_hand)              { mc_store_reject(); return; }
         // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U} hard-cast off a
         // W/R/B-only land). Strict tightening; inert for decks whose lands produce their colors.
-        if (!mc_hit && !SubsetPayable(have_colors, cands, sel)) { mc_store_reject(); return; }
+        //
+        // ...but ONLY ON THE FLAT-POOL PATH, for exactly the reason the colour_feas gate below is
+        // already guarded on `mana_ok`: a subset rescued by SubsetPayableWithFilters was judged by a
+        // REAL PAYMENT through the executor's own TapForCostDirect, and `have_colors` -- built from
+        // the flat AvailableManaPool -- cannot see mana that does not exist yet. A land Aura's bonus
+        // is precisely that: {Wild Growth {G}, Fertile Ground {1}{G}} needs two {G} pips off a board
+        // whose only green source is one Conservatory, so the flat check rejects it -- while the real
+        // payment pays it exactly (Conservatory funds the Growth; the Growth rides Mariposa, which
+        // then taps for {C} plus the Aura's {G}). The rescue proved the subset payable and this line
+        // threw that answer away, which is why the USER's seed 8 gi=7 T2 line stayed "rules-legal,
+        // but the search never enumerated this line" even after the rescue admitted it.
+        //
+        // Byte-identical wherever the rescue cannot fire: reaching this point with any_filter false
+        // implies mana_ok (the guard above returns otherwise), so the condition is unchanged for
+        // every deck without a filter source or a pending land Aura. MTG_RESCUED_COLOR_GATE=1
+        // restores the old unconditional check.
+        static const bool s_rescued_color_gate = EnvOn("MTG_RESCUED_COLOR_GATE", false);
+        if (!mc_hit && (mana_ok || s_rescued_color_gate)
+            && !SubsetPayable(have_colors, cands, sel)) { mc_store_reject(); return; }
         if (enumstats::Enabled()) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
         // ... and the COUNT the gate above deliberately does not model: two white pips off one white
         // source. Only on the flat-pool path -- a subset rescued by SubsetPayableWithFilters was
@@ -26764,6 +26797,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             int  aura_bonus  = 0;           // new mana a same-subset land Aura brings online
             bool other_inter = interacts;   // any interaction OTHER than a land Aura?
             int  nonaura     = 0;           // casts the Aura could be funding
+            int  n_aura      = 0;           // ...and how many Auras are in the subset (see ef-aura-solo)
             for (int j : sel)
             {
                 const Action& c = cands[j];
@@ -26796,7 +26830,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // sequencing question. See SeqLandAuraEnabled() in EngineFlags.h.
                 if (seq_on_aura && c.def && c.def->params.is_land_aura
                     && c.def->params.land_aura_extra_mana > 0)
-                { interacts = true; aura_bonus += c.def->params.land_aura_extra_mana; }
+                { interacts = true; aura_bonus += c.def->params.land_aura_extra_mana; ++n_aura; }
                 else { ++nonaura; }
             }
             // AURA-ONLY SUBSETS GET A TIGHT CEILING, and it is a pure cost cut. When the Aura is the
@@ -26807,11 +26841,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // multiplied how many run (this deck holds sixteen of them), so declining the hopeless
             // ones here is where the admission's cost goes back.
             //
-            // An Aura-ONLY subset never needs the walk at all: nothing in it is being funded, so the
+            // A SINGLE Aura-only subset never needs the walk: nothing in it is being funded, so the
             // flat gate that rejected it was right.
+            //
+            // TWO Auras FUND EACH OTHER, though, and that is the case this guard used to throw away.
+            // `nonaura == 0` was read as "nothing is being funded", but an Aura is itself a cast with
+            // a mana cost, so the FIRST Aura's bonus is supply for the SECOND. USER, seed 8 gi=7 T2:
+            // "land=Mariposa Military Base; cast=Wild Growth; cast=Fertile Ground" -- Conservatory
+            // pays the Growth's {G}, the Growth rides Mariposa, and Mariposa then taps for {C} plus
+            // the Growth's {G} to pay Fertile Ground's {1}{G} exactly. Rules-legal, and refused here
+            // before the sequenced walk could ever price it -- the last of the gates that kept that
+            // line off the menu. This deck runs SIXTEEN land Auras, so aura-into-aura is one of its
+            // most ordinary development turns, not a corner case.
+            //
+            // Still conservative: the scalar ceiling below (pool + every Aura's bonus, an upper
+            // bound, since an Aura cannot fund itself) prunes the hopeless ones, and what survives is
+            // priced by SubsetPayableSequential paying each cast in order against a real GameState.
+            // MTG_AURA_FUNDS_AURA=0 restores the old refuse-all-aura-only behaviour.
+            static const bool s_aura_funds_aura = EnvOn("MTG_AURA_FUNDS_AURA", true);
             if (aura_bonus > 0 && !other_inter)
             {
-                if (nonaura == 0) { _ct.label = "ef-aura-solo"; return false; }
+                if (nonaura == 0 && !(s_aura_funds_aura && n_aura >= 2))
+                { _ct.label = "ef-aura-solo"; return false; }
                 if (static_cast<int>(pool.Total()) + aura_bonus < combined.ManaValue())
                 { _ct.label = "ef-aura-scalar"; return false; }
             }
@@ -40982,15 +41033,51 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         // check already failed, and only over the untapped lands (`host_pick` indexes them; the loop
         // stops as soon as a pick runs out of lands to name). Pick 0 reproduces the historical choice
         // exactly, so a board where the guess was already right is answered on the first attempt.
+        // ONE INDEX PER AURA, not one index shared by all of them. A line may cast SEVERAL land
+        // Auras (USER, EDF seed 8 gi=7 T2: "Mariposa Military Base; Wild Growth; Fertile Ground"),
+        // and their hosts are chosen independently -- the assignment space is a PRODUCT, and a
+        // single shared index can only ever walk its diagonal. Worse, the old loop `break`ed the
+        // moment one Aura's index named no land, abandoning the line instead of trying the rest:
+        // at pick=1 Wild Growth correctly took Mariposa, then Fertile Ground -- with one untapped
+        // land left to name and an index of 1 -- ended the entire search. A legal line came back
+        // ILLEGAL, which is precisely what the "TRY EACH ONE" note above says this loop exists to
+        // prevent. (The line is legal: Conservatory pays Wild Growth's {G}, Wild Growth rides
+        // Mariposa, and Mariposa then taps for {C} plus the Aura's {G} = exactly {1}{G}.)
+        //
+        // `combo` is a mixed-radix counter whose digit `aura_ord[k]` is Aura k's own pick. The radix
+        // is the untapped-land count at entry -- an upper bound, since payments only tap more -- so a
+        // line with ONE Aura walks exactly the picks the old loop did, in the same order, and stays
+        // byte-identical. An out-of-range digit now means "this Aura carries no host", which is a
+        // real outcome the unreserved retry below already produced, rather than an abort.
         const int kHostPicks = 12;
-        for (int host_pick = 0; host_pick < kHostPicks; ++host_pick)
+        std::vector<int> aura_ord(pending.size(), -1);
+        int n_aura = 0;
+        for (size_t k = 0; k < pending.size(); ++k)
+        {
+            if (pending[k].def && pending[k].def->params.is_land_aura
+                && pending[k].def->params.land_aura_extra_mana > 0)
+            { aura_ord[k] = n_aura++; }
+        }
+        int untapped_lands = 0;
+        for (const Permanent& lp : s.battlefield)
+        {
+            if (lp.controller_index == s.active_player_index && !lp.tapped && lp.card.IsLand())
+            { ++untapped_lands; }
+        }
+        const int radix = std::min(kHostPicks, std::max(1, untapped_lands));
+        // Bounded on purpose: this runs on a human's keystroke, so the product is capped rather than
+        // allowed to grow as radix^n_aura for a pathological many-Aura line.
+        const long long kComboCap = 512;
+        long long combos = 1;
+        for (int i = 0; i < n_aura && combos < kComboCap; ++i) { combos *= radix; }
+        if (combos > kComboCap) { combos = kComboCap; }
+        for (long long combo = 0; combo < combos; ++combo)
         {
         GameState cp = s;
         std::vector<bool> paid(pending.size(), false);
         bool spec = s.opponent_lost_life_this_turn;
         size_t left = pending.size();
         bool prog = true;
-        bool pick_in_range = (host_pick == 0);   // was there an untapped land at this index at all?
         while (left > 0 && prog)
         {
             prog = false;
@@ -41007,17 +41094,21 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     // The host is chosen BEFORE the payment and hidden from it, because which land
                     // pays for the Aura and which land carries it are the same scarce resource.
                     int host = -1;
+                    int my_pick = -1;
                     if (aura)
                     {
+                        // This Aura's OWN digit of `combo` (see the mixed-radix note above).
+                        long long d = combo;
+                        for (int i = 0; i < aura_ord[k]; ++i) { d /= radix; }
+                        my_pick = static_cast<int>(d % radix);
                         int seen = 0;
                         for (const Permanent& lp : cp.battlefield)
                         {
                             if (lp.controller_index != cp.active_player_index || lp.tapped) { continue; }
                             if (!lp.card.IsLand()) { continue; }
-                            if (seen++ != host_pick) { continue; }
-                            host = lp.card.m_number; pick_in_range = true; break;
+                            if (seen++ != my_pick) { continue; }
+                            host = lp.card.m_number; break;
                         }
-                        if (host < 0 && host_pick > 0) { break; }   // this pick names no land
                         if (host > 0) { SetPermTapped(cp, cp.active_player_index, host, true); }
                     }
                     const ManaCost cost = pending[k].alt_free ? ManaCost{}
@@ -41039,8 +41130,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     // key (pick=1 attached the Trace and {1}{G} still failed -- a stale hit).
                     static const bool s_checkline_trace = EnvOn("MTG_CHECKLINE_TRACE");
                     if (s_checkline_trace)
-                    { std::fprintf(stderr, "[checkline] pick=%d k=%zu name=%s aura=%d host=%d cost=%s ok=%d\n",
-                                   host_pick, k, pending[k].name.c_str(), (int)aura, host,
+                    { std::fprintf(stderr,
+                                   "[checkline] combo=%lld pick=%d k=%zu name=%s aura=%d host=%d "
+                                   "cost=%s ok=%d\n",
+                                   combo, my_pick, k, pending[k].name.c_str(), (int)aura, host,
                                    cost.ToString().c_str(), (int)cost_ok); }
                     if (!cost_ok) { continue; }
                     if (pending[k].rock && pending[k].def)   // freshly-cast rock funds later casts
@@ -41072,7 +41165,6 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                           "the search never enumerated this line";
             return out;
         }
-        if (!pick_in_range) { break; }   // no land at this index -> no higher index will name one
         }
     }
 
