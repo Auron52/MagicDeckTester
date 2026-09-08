@@ -48,6 +48,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `type` | Chooser hook (GameLogger.h) | Call site | Emitter (main.cpp) | GUI (index.html) | Shape |
 |---|---|---|---|---|---|
 | `main_phase` | — (plans, no chooser) | `TurnSolver::ApplyPlan` | `WriteDecisionJson` | `renderBoard` | board |
+| `target` (reuse: Heliod, Sun-Crowned lifegain counter -- "put a +1/+1 counter on target creature or enchantment you control"; and its `{1}{W}` lifelink grant's "another target creature") | `g_play_loyalty_chooser` (`LoyaltyTargetChooser` -- the own-permanent board-pick shape) | `FireLifegainWatchers` / `ApplyPermAbility(GrantLifelink)` (SpellEffects.h, shared) | `WriteTargetDecisionJson` with a `loyalty` prompt (the loyalty chooser's emitter) | `promptPanelHtml` (`d.loyalty` branch) | board |
 | `mulligan` | — (mulligan path) | KeepHand path | `WriteMulliganDecisionJson` | `mulliganPanelHtml` | modal |
 | `bottom` | — (mulligan path) | bottoming path | `WriteBottomDecisionJson` | `bottomPanelHtml` | modal |
 | `scry` / `surveil` / `reorder` | `g_play_top_chooser` (`TopChooser`) | `SpellEffects.h` look-at-top | `WriteTopDecisionJson` | `lookPanelHtml` | modal |

@@ -175,6 +175,11 @@ MANIFEST = {
     # Rimefeather Owl: WHICH permanent gets the ice counter -- shared dig chooser (central
     # dialog over candidate permanents) at the IceCounter resolution.
     "ice_counter_cost":      ("dig",                  truthy),
+    # CritterLifegain (2026-09-08): Heliod, Sun-Crowned. Both of its choices ride the loyalty-target
+    # chooser (g_play_loyalty_chooser -> WriteTargetDecisionJson with a `loyalty` prompt), i.e. the
+    # `target` board-click decision -- no new type.
+    "lifegain_target_own_counter": ("target",          truthy),   # "put a +1/+1 counter on target creature or enchantment you control"
+    "lifelink_grant_cost":   ("target",               truthy),   # "{1}{W}: Another target creature gains lifelink" (which creature)
     # Kaldring: WHICH graveyard snow permanent is played -- one main_phase plan variant per
     # legal name (GYP# in the plan signature, gyplay= verb), the Haven convention.
     "gy_play_cost":          ("main_phase",           truthy),
@@ -347,6 +352,7 @@ BOARD_ACTIVATIONS = {
     "gy_return_cost":                            ("verb:gyreturn",  truthy,   "gy_return_cost"),
     "gy_play_cost":                              ("verb:gyplay",    truthy,   None),  # Kaldring {T}
     "ice_counter_cost":                          ("activate",       truthy,   "ice_counter_cost"),
+    "lifelink_grant_cost":                       ("activate",       truthy,   "lifelink_grant_cost"),  # Heliod {1}{W}
     "can_animate":                               ("verb:animate",   truthy,   "animate_cost"),
     "tap_token_cost":                            ("verb:taptoken",  truthy,   "tap_token_cost"),
     "channel_cost":                              ("verb:channel",   truthy,   "channel_cost"),
@@ -618,7 +624,7 @@ INERT_PARAMS = {
     # qualifying opponent creature, and the cumulative upkeep is a disclosed always-paid
     # auto-decision (weakly dominant vs the passive opponent; see the War-Riders bracket note).
     "etb_opp_creates_tokens": "automatic ETB gift (fixed count, single opponent -> no target)",
-    "any_creature_enters_lifegain": "automatic enter trigger (Wardens)",
+    "any_creature_enters_lifegain": "automatic enter trigger (Soul Warden; Soul's Attendant / Auriok Champion's 'you may' always taken -- disclosed 6a)",
     "own_creature_enters_lifegain": "automatic enter trigger (Suture Priest, may-always-taken)",
     "opp_creature_enters_life_loss": "automatic enter trigger (Suture Priest, may-always-taken)",
     "etb_opp_creatures_debuff": "automatic ETB sweep, hits every qualifying opponent creature",
@@ -685,6 +691,17 @@ INERT_PARAMS = {
     # Sac-outlet EFFECT detail -- the ACTIVATION rides main_phase (sac_creature_outlet); these are its payload/cost:
     "sac_creature_cost": "sac-outlet activation cost detail (rides sac_creature_outlet main_phase)",
     "sac_creature_requires_subtype": "sac-outlet victim gating detail (which subtype; rides sac_creature_outlet)",
+    "sac_outlet_self_only": "sac-outlet victim gating detail ('Sacrifice THIS creature' -- the source is the only legal victim, so the `sacrifice` decision is a forced non-choice; rides sac_creature_outlet -> activate)",
+    # ---- CritterLifegain (2026-09-08) -- every trigger here is automatic and untargeted except Heliod's (MANIFEST) ----
+    "lifegain_self_counters": "automatic 'whenever you gain life' trigger: +1/+1 counter on THIS creature (Ajani's Pridemate / Voice of the Blessed / the Ajani token) -- no target, no may",
+    "lifegain_each_own_creature_counters": "automatic 'whenever you gain life' trigger: +1/+1 counter on EACH creature you control (Archangel of Thune) -- no target, no may",
+    "own_creature_dies_lifegain": "automatic death trigger (Daxos: 'another creature you control dies, you gain 1') -- no choice",
+    "toughness_equals_devotion_color": "CDA (Daxos's toughness = devotion to white) -- static, no choice",
+    "life_threshold_pump_life": "conditional static self-buff threshold (Serra Ascendant's 30 life) -- no choice",
+    "life_threshold_pump_power": "conditional static self-buff magnitude (Serra Ascendant +5) -- no choice",
+    "life_threshold_pump_tough": "conditional static self-buff magnitude (Serra Ascendant +5) -- no choice",
+    "creature_requires_devotion": "layer-4 type-changing static (Heliod isn't a creature below devotion 5) -- no choice",
+    "devotion_color": "the colour Heliod's devotion gate counts -- a printed constant, no choice",
     "sac_outlet_add_mana_color": "sac-outlet mana output color (Skirk {R}); auto-resolved (left to engine)",
     "sac_outlet_add_mana_amount": "sac-outlet mana output amount; auto-resolved (left to engine)",
     "sac_outlet_damage": "automatic sac-outlet damage, no target in goldfish (Siege-Gang -> face)",

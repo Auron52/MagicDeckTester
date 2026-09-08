@@ -710,6 +710,7 @@ static std::string BoardSignature(const GameState& s)
         if (p.age_counters > 0) { e += "/g" + std::to_string(p.age_counters); }   // cumulative upkeep
         e += "/p" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
         if (p.temp_haste)   { e += "/h"; }    // Expedite until-EOT haste
+        if (p.temp_lifelink){ e += "/ll"; }   // Heliod until-EOT lifelink grant
         if (p.exile_at_end) { e += "/x"; }    // Twinflame token, exiled at end step
         e += "/d" + std::to_string(p.damage);
         e += "/a" + std::to_string(p.aura_attached_to);
@@ -3961,7 +3962,53 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
                   ? SnowPermanentCount(state, state.active_player_index) + 1
                   : def.params.pt_equals_snow_permanents_on_battlefield
                   ? SnowPermanentCount(state, -1) + 1 : 0;
+        // "Whenever you gain life, put a +1/+1 counter on this creature" (Ajani's Pridemate /
+        // Voice of the Blessed): the body enters INTO its own entry's enter-watcher gains -- one
+        // counter per own watcher permanent (Soul Warden / Soul's Attendant / Auriok Champion /
+        // Daxos), exactly the size it is the instant it resolves. Counted by watcher PERMANENT,
+        // not life amount (counters are per event). Param-gated -> 0 for every other creature.
+        int lifegain_deck_credit = 0;
+        if (def.params.lifegain_self_counters > 0 || def.params.lifegain_each_own_creature_counters > 0
+            || def.params.lifegain_target_own_counter || def.params.creature_requires_devotion > 0)
+        {
+            int watchers = 0, own_creatures = 0;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != state.active_player_index) { continue; }
+                if (q.card.IsCreature()) { ++own_creatures; }
+                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                if (qd && (qd->params.any_creature_enters_lifegain > 0
+                           || qd->params.own_creature_enters_lifegain > 0)) { ++watchers; }
+            }
+            dyn += def.params.lifegain_self_counters * watchers;
+            // Archangel of Thune: one gain event = +1/+1 on the whole team it joins -- price one
+            // event's worth of permanent team growth so the greedy leaf deploys the deck's payoff
+            // ahead of a vanilla five-drop; the search owns the multi-event valuation.
+            if (def.params.lifegain_each_own_creature_counters > 0)
+            { lifegain_deck_credit += def.params.lifegain_each_own_creature_counters * (own_creatures + 1) * DMG; }
+            // Heliod: a counter per gain event on one body -- a flat engine credit.
+            if (def.params.lifegain_target_own_counter) { lifegain_deck_credit += 2 * DMG; }
+        }
         int power = (def.card.m_power.value_or(0) + dyn + lord_pb) * (ds ? 2 : 1);
+        // Heliod, Sun-Crowned is a creature only at devotion >= 5: discount the body by its
+        // distance to the threshold (its own pips count once it is on the battlefield), so an
+        // empty-board Heliod is not priced as a 5/5 while a T5 one that turns on immediately is.
+        if (def.params.creature_requires_devotion > 0 && power > 0)
+        {
+            int own_pips = 0;
+            switch (def.params.devotion_color.empty() ? '\0' : def.params.devotion_color[0])
+            {
+                case 'W': own_pips = def.card.m_mana_cost.white; break;
+                case 'U': own_pips = def.card.m_mana_cost.blue;  break;
+                case 'B': own_pips = def.card.m_mana_cost.black; break;
+                case 'R': own_pips = def.card.m_mana_cost.red;   break;
+                case 'G': own_pips = def.card.m_mana_cost.green; break;
+                default: break;
+            }
+            const int need = std::max(0, def.params.creature_requires_devotion
+                                         - (DevotionTo(state, state.active_player_index, def.params.devotion_color) + own_pips));
+            if (need > 0) { power = std::max(1, power / (1 + need)); }
+        }
         // Cascade CREATURE credit (Maelstrom Wanderer / Annoyed Altisaur / Boarding Party):
         // the creature branch used to return before the generic cascade estimate below, so a
         // cascade creature was priced as a bare body and its free ~5-7 MV spell scored ZERO to
@@ -3991,7 +4038,7 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
                   || (def.params.grants_haste && def.params.affects_all_creatures);
         int  attacks = ExpectedAttacks(state);
         if (!haste && attacks > 0) { --attacks; }
-        return power * attacks * DMG + cascade_credit;
+        return power * attacks * DMG + cascade_credit + lifegain_deck_credit;
     }
 
     if (def.tmpl == CardTemplate::DrawSpell)
@@ -10564,7 +10611,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 eq += CanAttackFull(p, state.battlefield, state.active_player_index) ? "/A" : "/s";
                 eq += "/" + std::to_string(p.temp_power_bonus) + ","
                           + std::to_string(p.temp_tough_bonus)
-                          + (p.temp_haste ? "h" : "") + "/c" + std::to_string(p.counters.size());
+                          + (p.temp_haste ? "h" : "") + (p.temp_lifelink ? "L" : "")
+                          + "/c" + std::to_string(p.counters.size());
                 if (!seen_equiv.insert(eq).second) { continue; }
                 emit_with_strive(p.card.m_number, true);
             }
@@ -11884,6 +11932,64 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     ev = best_pow * DMG * std::max(0, ExpectedAttacks(state) - 1);
                     if (ev <= 0) { if (!HumanPlayActive()) { continue; } ev = 1; }
                 }
+                else if (ab.effect == "lifegain_creatures_plus_walkers")
+                {
+                    // Ajani +1: ONE gain event -> a counter on every lifegain_self_counters body,
+                    // a team pump per Archangel, one Heliod counter. Priced as those counters'
+                    // damage over the remaining attacks (the counters land precombat, so the
+                    // marginal attack convention is ExpectedAttacks - 1); floored so the loyalty
+                    // ramp still outranks idling on an empty board. The AMOUNT gained is not
+                    // priced: it does not create extra events (life itself is goldfish-inert,
+                    // except toward Serra Ascendant's threshold -- left to the rollout).
+                    int recip = 0; bool team = false;
+                    int own_creatures = 0;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index) { continue; }
+                        if (q.card.IsCreature()) { ++own_creatures; }
+                        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                        if (!qd) { continue; }
+                        if (qd->params.lifegain_self_counters > 0)              { recip += qd->params.lifegain_self_counters; }
+                        if (qd->params.lifegain_each_own_creature_counters > 0) { team = true; }
+                        if (qd->params.lifegain_target_own_counter)             { recip += 1; }
+                    }
+                    if (team) { recip += own_creatures; }
+                    ev = std::max(DMG / 2, recip * DMG * std::max(0, ExpectedAttacks(state) - 1));
+                }
+                else if (ab.effect == "pridemate_token")
+                {
+                    // Ajani -2: a 2/2 that attacks from next turn, plus the enter burst -- every
+                    // own enter-watcher (Soul Warden / Soul's Attendant / Auriok Champion / Daxos)
+                    // fires its own gain event, each a counter on every recipient incl. the new
+                    // token itself.
+                    int wardens = 0, recip = 1; bool team = false; int own_creatures = 0;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index) { continue; }
+                        if (q.card.IsCreature()) { ++own_creatures; }
+                        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                        if (!qd) { continue; }
+                        if (qd->params.any_creature_enters_lifegain > 0
+                            || qd->params.own_creature_enters_lifegain > 0)      { ++wardens; }
+                        if (qd->params.lifegain_self_counters > 0)              { recip += qd->params.lifegain_self_counters; }
+                        if (qd->params.lifegain_each_own_creature_counters > 0) { team = true; }
+                        if (qd->params.lifegain_target_own_counter)             { recip += 1; }
+                    }
+                    if (team) { recip += own_creatures + 1; }
+                    ev = 2 * DMG * std::max(0, ExpectedAttacks(state) - 1) + wardens * recip * DMG;
+                    if (ev <= 0) { ev = 1; }
+                }
+                else if (ab.effect == "exile_all_opponent_artifacts_creatures")
+                {
+                    // Ajani 0: vs the passive opponent the exile half is inert (spawns never
+                    // attack or block, and future spawns still enter -- lifegain FOR us) and
+                    // exiling Ajani forfeits every future +1 event and -2 body: strictly negative
+                    // in every board state. A VALUE gate, not a legality one: human play sees the
+                    // ability whenever it is rules-legal (any life total -- below the threshold it
+                    // simply resolves as nothing), per the never-narrow-a-legal-choice rule.
+                    if (!HumanPlayActive()) { continue; }
+                    ev = 1;
+                }
                 else if (ab.effect == "face_damage") { ev = ab.amount * DMG; }
                 else if (ab.effect == "food_token") { ev = DMG / 3; }
                 else if (ab.effect == "elk_transform")
@@ -12603,6 +12709,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { Action::AbilityMode::Drain,          &sd->params.drain_cost           },
                     { Action::AbilityMode::ExileTop,       &sd->params.exile_opponent_top_cost },
                     { Action::AbilityMode::IceCounter,     &sd->params.ice_counter_cost     },
+                    { Action::AbilityMode::GrantLifelink,  &sd->params.lifelink_grant_cost  },
                 };
                 for (const ModeSpec& m : modes)
                 {
@@ -12667,6 +12774,26 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         {
                             if (q.card.HasSupertype(Supertype::Snow)
                                 || (grants && q.ice_counters > 0)) { continue; }
+                            ++useful;
+                        }
+                        if (useful <= 0) { continue; }
+                        for (int& k : counts) { k = std::min(k, useful); }
+                    }
+                    // GrantLifelink (Heliod, Sun-Crowned): only an OWN attack-eligible creature
+                    // without lifelink gains anything (an opponent's spawn never attacks; a second
+                    // instance is redundant; "another" bars the source) -- cap K there, none ->
+                    // no action. Same clamp as SpendRepeatActivations' block payment.
+                    if (m.mode == Action::AbilityMode::GrantLifelink)
+                    {
+                        int useful = 0;
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (q.controller_index != state.active_player_index
+                                || !q.card.IsCreature()) { continue; }
+                            if (q.card.m_number == src.card.m_number) { continue; }
+                            if (CreatureHasLifelink(q, state)) { continue; }
+                            if (q.tapped || !CanAttackFull(q, state.battlefield,
+                                                           state.active_player_index)) { continue; }
                             ++useful;
                         }
                         if (useful <= 0) { continue; }
@@ -12909,6 +13036,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                                      sd->params.sac_outlet_allows_enchantment,
                                                      sd->params.sac_outlet_excludes_self);
             if (victim_id < 0) { continue; }   // no legal victim to sacrifice
+            // "Sacrifice THIS creature" outlet with no payload (Ranger-Captain of Eos): its whole
+            // effect is the death event, so while no controller-side death payoff is live
+            // (Daxos) it removes our own 3/3 and changes nothing else -- a strictly dominated
+            // no-op. Dropping it is a lossless dominated-action removal (the TapDraw non-snow-top
+            // shape), not a heuristic narrowing; humans keep the full offer.
+            if (sd->params.sac_outlet_self_only && !HumanPlayActive()
+                && !SelfSacHasDeathPayoff(state, state.active_player_index, src.card.m_number))
+            { continue; }
             Action a;
             a.card_name      = src.card.m_name;
             a.hand_index     = -1;
@@ -21013,6 +21148,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 const Card tucked    = tgt.card;
                 const int  owner     = tgt.owner_index;
                 state.battlefield.erase(state.battlefield.begin() + ci);
+                RefreshDevotionCreatures(state);   // lockstep with EffectHandler's tuck branch
                 if (!is_tok)
                 {
                     Library& lib = state.players[owner].library;
@@ -21090,6 +21226,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (def.params.damage > 0) { state.exile.push_back(state.battlefield[ci].card); }
                 else { state.players[tgt_controller].graveyard.push_back(state.battlefield[ci].card); }
                 state.battlefield.erase(state.battlefield.begin() + ci);
+                RefreshDevotionCreatures(state);   // lockstep with EffectHandler's tuck branch
                 if (def.params.controller_lifegain_equals_power && tgt_power > 0)
                 {
                     OpponentGainsLife(state, 1 - tgt_controller, tgt_power);
@@ -23143,6 +23280,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.temp_power_bonus      = 0;
         p.temp_tough_bonus      = 0;
         p.temp_haste            = false;   // Expedite until-EOT haste expires (lockstep w/ CleanupStep)
+        p.temp_lifelink         = false;   // Heliod's until-EOT lifelink grant expires (same lockstep)
         p.is_animated           = false;
     }
 
@@ -23189,6 +23327,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
     ap.life_gained_this_turn      = 0;             // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;    // Hollow One cycle/discard count (same lockstep)
+    RefreshDevotionCreatures(state);               // Heliod's devotion gate: per-turn correctness ceiling (lockstep w/ UntapStep)
 
     // Untap and advance Aether Vial counters (upkeep trigger).
     // Rimescale ice lock -- lockstep twin of GameEngine::UntapStep's gate (see the comment there).
@@ -29654,6 +29793,7 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // eligibility; the token vanishes at end step). Folded ONLY when set, so every deck that
         // never sets them keeps the EXACT prior key (byte-identical).
         if (perm.temp_haste)   { Fold(tk, 0x7A57E); }
+        if (perm.temp_lifelink){ Fold(tk, 0x11FE11); }   // Heliod's until-EOT lifelink grant
         if (perm.exile_at_end) { Fold(tk, 0xE71E); }
         // Planeswalker loyalty + once-per-turn activation flag (found 2026-08-20 by the enum
         // memo's verify harness): loyalty is a DEDICATED field, not a Counter, and an

@@ -233,6 +233,7 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         if (p.power_bonus > 0 || p.tough_bonus > 0)                          { return true; }
         if (p.scales_per_matching || p.affects_all_creatures
             || p.domain_self_pump || p.power_equals_creature_count)          { return true; }
+        if (p.life_threshold_pump_life > 0)                                  { return true; }   // Serra Ascendant's +5/+5
         if (p.pt_equals_snow_permanents_you_control
             || p.pt_equals_snow_permanents_on_battlefield)                   { return true; }
         // AURA pumps live on their own params (aura_power_bonus / aura_scale_*), which this scan

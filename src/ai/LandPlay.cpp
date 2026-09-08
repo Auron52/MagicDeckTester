@@ -140,8 +140,9 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     // no gain-reversal enabler interaction (OpponentGainsLife is for the OPPONENT's gain).
     if (fdef.params.etb_lifegain > 0)
     {
-        ap.life += fdef.params.etb_lifegain;
-        ap.life_gained_this_turn += fdef.params.etb_lifegain;   // Kazandu Refuge feeds Fortifying Draught's X
+        // GainLife bumps life_gained_this_turn (Kazandu Refuge feeds Fortifying Draught's X) and
+        // fires any "whenever you gain life" watchers -- one gain event.
+        GainLife(state, state.active_player_index, fdef.params.etb_lifegain);
     }
     // Forbidden Orchard played this turn: it is tapped for mana this turn too, so spawn the
     // opponent's Spirit now (the turn-start spawn only covers copies already in play).

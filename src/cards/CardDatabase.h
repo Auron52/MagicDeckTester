@@ -431,6 +431,12 @@ struct CardParams
     // DynamicBaseToughness at every DynamicBasePower call site + the SBA toughness checks (a CDA
     // 0/0 token with zero other creatures is 0/0 and dies to SBA -- rules-correct).
     bool toughness_equals_creature_count = false;
+    // Daxos, Blessed by the Sun (printed 2/*): "Daxos's toughness is equal to your devotion to
+    // white." A CDA read live by DynamicBaseToughness via DevotionTo (CR 700.5 -- counts the
+    // permanent's OWN pips, so on the battlefield it is never below its own cost's count). Colour
+    // letter ("W"); empty = off. Toughness-only: deliberately NOT in DynamicBasePower and NOT in
+    // the combat-feeder lists (a toughness CDA feeds no damage).
+    std::string toughness_equals_devotion_color;
 
     // --- Snow (the Snow deck, 2026-09-06: first engine readers of Supertype::Snow) ------------
     // Snow-ness is decided by the shared IsSnowPermanent/SnowPermanentCount helpers in
@@ -472,6 +478,23 @@ struct CardParams
     // the untap in GameEngine::UntapStep and the rollout's untap mirror. The Dragon's OWN
     // {2}{S} tap-target activation stays unmodelled (opponent tapped state is unobservable).
     bool ice_counters_dont_untap = false;
+
+    // --- Heliod, Sun-Crowned (CritterLifegain, 2026-09-08) --------------------------------------
+    // "As long as your devotion to white is less than five, Heliod isn't a creature." A layer-4
+    // type-changing static: creature_requires_devotion N + devotion_color "W". Evaluated by
+    // RefreshDevotionCreatures (SpellEffects.h), which toggles CardType::Creature on the
+    // PERMANENT's own Card copy so every existing IsCreature() read is correct at once. Called at
+    // the shared membership chokepoints (enter cascade top, death, legend rule, exile/tuck, both
+    // turn-start resyncs, attacker collection); early-outs when no permanent carries it, so every
+    // other deck pays one scan of a flag per call. 0 = not devotion-gated.
+    int         creature_requires_devotion = 0;
+    std::string devotion_color;
+    // "{1}{W}: Another target creature gains lifelink until end of turn." PermAbilityMode::
+    // GrantLifelink -- no {T}, no sacrifice, so repeatable within a turn and bounded only by mana
+    // (the Drain/ExileTop/IceCounter shape). Sets Permanent::temp_lifelink on the target (reset at
+    // both cleanup sites). The K axis is capped by the count of OTHER own creatures that can attack
+    // this turn and do not already have lifelink (past that, activations are pure waste).
+    std::optional<ManaCost> lifelink_grant_cost;
 
     // Marit Lage's Slumber clause 1: "Whenever this or another snow permanent you control
     // enters, scry N." A WATCHER on the enter cascade, fired once per copy per entering snow
@@ -1199,6 +1222,27 @@ struct CardParams
     int  any_creature_enters_lifegain  = 0;
     int  own_creature_enters_lifegain  = 0;
     int  opp_creature_enters_life_loss = 0;
+    // ---- "Whenever you gain life" watchers (CritterLifegain, 2026-09-08) --------------------
+    // Fired by FireLifegainWatchers from the ONE shared GainLife(state, player, amount) hook that
+    // every controller-side lifegain site routes through (enter-watchers, ETB lifegain, lifelink
+    // combat damage, cast lifegain, gy-exile modes, drain self-gain, charge lifegain, land ETB
+    // lifegain, Ajani's +1). ONCE PER LIFE-GAIN EVENT (CR 119.10): each source's gain is its own
+    // event -- two Soul Wardens on one creature entering = two events, two lifelink attackers in
+    // one combat = two events, a gain of 5 from one source = one event, a gain of 0 = no event.
+    //   lifegain_self_counters              -- put N +1/+1 counters on THIS permanent (Ajani's
+    //                                          Pridemate, Voice of the Blessed, the Ajani token).
+    //   lifegain_each_own_creature_counters -- ... on EACH creature you control (Archangel of Thune).
+    //   lifegain_target_own_counter         -- ... on TARGET creature or enchantment you control
+    //                                          (Heliod, Sun-Crowned). ONE provider pick
+    //                                          (LifegainCounterTarget), not a searched branch;
+    //                                          human play picks off the board.
+    //   own_creature_dies_lifegain          -- "whenever another creature you control dies, you
+    //                                          gain N" (Daxos, Blessed by the Sun's second half),
+    //                                          fired from OnCreatureDies via FireCreatureDiesWatchers.
+    int  lifegain_self_counters              = 0;
+    int  lifegain_each_own_creature_counters = 0;
+    bool lifegain_target_own_counter         = false;
+    int  own_creature_dies_lifegain          = 0;
     // Massacre Wurm ETB: "creatures your opponents control get -2/-2 until end of turn",
     // collapsed to "destroy each opponent creature with toughness - damage <= N at ETB"
     // (equivalent in goldfish: opp creatures never block/attack/get buffs, and the power
@@ -1845,6 +1889,16 @@ struct CardParams
     int hand_size_anthem_power = 0;
     int hand_size_anthem_tough = 0;
 
+    // Serra Ascendant: "As long as you have 30 or more life, this creature gets +5/+5 and has
+    // flying." A CONDITIONAL STATIC self-buff (CR 611.3, continuously checked) keyed on the
+    // controller's LIFE TOTAL, evaluated inside ComputeLordBonus beside domain_self_pump (the
+    // battlefield alone cannot see a life total) -- so every combat/eval/SBA read site picks it up,
+    // and it switches off again if life falls below the threshold. Deliberately NOT the until-EOT
+    // temp_power_bonus lane. 0 = not a life-threshold pump. Flying is inert (no blockers).
+    int life_threshold_pump_life  = 0;
+    int life_threshold_pump_power = 0;
+    int life_threshold_pump_tough = 0;
+
     // Neheb, the Worthy: "Whenever Neheb deals combat damage to a player, each player discards a
     // card." > 0 gates it: after this creature's combat damage connects, its controller discards
     // that many cards (chosen by the provider's cleanup-discard ranking, so the deck's own doctrine
@@ -1889,6 +1943,13 @@ struct CardParams
     // trigger above, so an outlet with no payload is legal and is NOT a no-op.
     bool sac_outlet_allows_enchantment = false;
     bool sac_outlet_excludes_self      = false;
+    // Ranger-Captain of Eos: "Sacrifice THIS creature: ..." -- the SOURCE is the only legal victim
+    // (the opposite of sac_outlet_excludes_self). With no payload params the activation's whole
+    // effect is the death event (its printed effect is inert vs the passive opponent), so the
+    // autonomous enumerator emits it only while a controller-side death payoff is live
+    // (SelfSacHasDeathPayoff: Daxos's own_creature_dies_lifegain) -- a lossless dominated-action
+    // removal; human play always sees it. false = ordinary any-victim outlet (byte-identical).
+    bool sac_outlet_self_only          = false;
 
     // Gnarled Scarhide: "Bestow {3}{B}". An ALTERNATE cast mode (CR 702.103): the same card may be
     // cast for its printed cost as a creature, or for this cost as an AURA that enters attached to

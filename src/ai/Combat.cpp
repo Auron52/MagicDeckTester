@@ -55,6 +55,14 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     std::vector<const Permanent*> attackers;
     attackers.reserve(atk_idx.size());
     std::vector<int> damaging_idx;   // attackers that dealt >0 damage (Goblin Lackey cheat)
+    // Lifelink gains, ONE ENTRY PER LIFELINKING ATTACKER, applied AFTER the damage loop. Combat
+    // damage is simultaneous (CR 510.2) and lifelink's gain is part of that damage event
+    // (CR 702.15b), so nothing it causes -- Serra Ascendant's 30-life +5/+5 switching on, an
+    // Archangel of Thune team counter -- may change THIS step's damage; applying the gain inside
+    // the loop let a later attacker's ComputeLordBonus read the post-gain life (attacker-order
+    // dependent, and the search's projection never modelled it). Each attacker's gain stays its
+    // own life-gain EVENT (CR 119.10: two lifelink attackers = two Pridemate triggers).
+    std::vector<int> pending_lifelink;
 
     // Pre-filter the active player's lord permanents ONCE (usually none), so the per-attacker
     // ComputeLordBonus / HasDoubleStrikeFromLords below iterate that tiny list instead of each
@@ -129,14 +137,18 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
             if (adef && adef->params.combat_damage_free_cast) { ++state.free_casts_available; }
             // Lifelink (modeled): combat damage also gains the controller that much life. Inert vs
             // the passive opponent's clock, tracked for life-total decks.
-            if (CreatureHasLifelink(p, state))
-            { state.players[active].life += power; state.players[active].life_gained_this_turn += power; }
+            if (CreatureHasLifelink(p, state)) { pending_lifelink.push_back(power); }
         }
         if (collect_descs && power > 0)
         { out.attacker_descs.push_back(p.card.m_name.str() + " (" + std::to_string(power) + ")"); }
         if (!p.card.HasKeyword(Keyword::Vigilance)) { p.tapped = true; }
         attackers.push_back(&p);
     }
+
+    // Lifelink (deferred, see pending_lifelink): one GainLife per lifelinking attacker, in attack
+    // order. GainLife's watchers only add counters -- they never add or remove a permanent -- so
+    // the `attackers` pointers consumed below stay valid.
+    for (int amt : pending_lifelink) { GainLife(state, active, amt); }
 
     // Attack triggers (e.g. Leeching Sliver: each attacking Sliver costs the opponent 1 life).
     // Life LOSS, not combat damage: it still marks the lost-life flag (which drives spectacle), and

@@ -35,6 +35,12 @@ enum class PermAbilityMode
     // snow; the live targets are opponent spawns and a Marit Lage token), so the enumeration caps
     // the K axis by the non-snow permanent count.
     IceCounter,
+    // {cost}: Another target creature gains lifelink until end of turn  (Heliod, Sun-Crowned,
+    // "{1}{W}"). No {T}, no sacrifice -> repeatable within a turn, bounded only by mana. Sets the
+    // target's temp_lifelink (until-EOT). In a lifegain-watcher deck each lifelink damage event is
+    // a life-gain EVENT (a counter on every Pridemate/Voice, an Archangel team pump), which is the
+    // whole reason to pay for it; the life itself is goldfish-inert.
+    GrantLifelink,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -47,7 +53,8 @@ inline bool PermAbilityTaps(PermAbilityMode m)
     return m != PermAbilityMode::SacDraw
         && m != PermAbilityMode::Drain
         && m != PermAbilityMode::ExileTop
-        && m != PermAbilityMode::IceCounter;
+        && m != PermAbilityMode::IceCounter
+        && m != PermAbilityMode::GrantLifelink;
 }
 
 struct Permanent
@@ -137,6 +144,11 @@ struct Permanent
                                             // TurnSolver::SimulateEndAndStartNextTurn) in lockstep;
                                             // folded into the sim key. Never set outside the
                                             // grants_temp_haste payload -> byte-identical elsewhere.
+    bool      temp_lifelink        = false; // "gains lifelink until end of turn" (Heliod, Sun-Crowned's
+                                            // {1}{W}). Read by CreatureHasLifelink. Reset at BOTH cleanup
+                                            // sites in lockstep; folded into the sim key only when set.
+                                            // Never set outside PermAbilityMode::GrantLifelink ->
+                                            // byte-identical elsewhere.
     bool      exile_at_end         = false; // Twinflame token: "exile those tokens at the beginning
                                             // of the next end step." Swept (battlefield -> exile) at
                                             // BOTH end-of-turn sites in lockstep; folded into the

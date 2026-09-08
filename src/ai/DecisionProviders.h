@@ -1228,6 +1228,26 @@ public:
     bool GradesNoWinLeaf() const override { return false; }
 };
 
+// CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /
+// Auriok Champion feeding Ajani's Pridemate / Voice of the Blessed / Archangel of Thune / Heliod,
+// Sun-Crowned, with Ajani, Strength of the Pride x3). Exists FIRST for routing correctness:
+// Ranger-Captain of Eos alone carries sac_creature_outlet (the Goblins signature) AND tutor_to_hand
+// (the anti-lifegain signature) -- the recorded misroute class -- so the deck needs its own
+// signature, OR-ed across the three lifegain-watcher params (Pridemate/Voice, Thune, Heliod), none
+// of which any other deck sets. It holds exactly ONE hook: the walker-aware legend keep below.
+// Everything else is Generic -- no narrowing, full search.
+class CritterLifegainProvider : public GenericProvider
+{
+public:
+    const char* Name() const override { return "CritterLifegain"; }
+    // Legend rule for three Ajani, Strength of the Pride: keep the copy with the MOST loyalty
+    // (tie: the one that can still activate this turn, then the oldest). Tried as the generic
+    // default first and REJECTED there: fivecolour smoke d0 gi=15 moved 6->7 (the kept fresh
+    // Bolas spent its +3 in main 2 on our own permanent and cost the winning cast), so the
+    // refinement lives with the deck that wants it. MTG_LEGEND_KEEP_LOYALTY=0 restores oldest.
+    int LegendKeepIndex(const GameState&, int, const std::vector<int>&) const override;
+};
+
 // Rakdos Minotaur tribal aggro. Like DragonsProvider it exists to hold ONE measured hook, the
 // cleanup-discard bucket policy; everything else inherits Generic. The deck routed to
 // GenericProvider from the 2026-08-21 misroute fix (Slaughter-Priest's sac_creature_outlet had it

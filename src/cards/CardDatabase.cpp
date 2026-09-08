@@ -703,6 +703,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.lord_excludes_self           = params.value("lord_excludes_self", false);
     p.power_equals_creature_count  = params.value("power_equals_creature_count", false);
     p.toughness_equals_creature_count = params.value("toughness_equals_creature_count", false);
+    p.toughness_equals_devotion_color = params.value("toughness_equals_devotion_color", std::string{});
 
     // --- Snow (see the CardParams snow block) ---
     p.pt_equals_snow_permanents_you_control   = params.value("pt_equals_snow_permanents_you_control", false);
@@ -711,6 +712,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (params.contains("ice_counter_cost"))
         p.ice_counter_cost = ManaCostFromString(params["ice_counter_cost"].get<std::string>());
     p.ice_counters_are_snow   = params.value("ice_counters_are_snow", false);
+    // Heliod, Sun-Crowned (CritterLifegain)
+    p.creature_requires_devotion = params.value("creature_requires_devotion", 0);
+    p.devotion_color             = params.value("devotion_color", std::string{});
+    if (params.contains("lifelink_grant_cost"))
+        p.lifelink_grant_cost = ManaCostFromString(params["lifelink_grant_cost"].get<std::string>());
     p.ice_counters_dont_untap = params.value("ice_counters_dont_untap", false);
     p.snow_enter_scry         = params.value("snow_enter_scry", 0);
     p.upkeep_snow_threshold   = params.value("upkeep_snow_threshold", 0);
@@ -908,6 +914,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.any_creature_enters_lifegain  = params.value("any_creature_enters_lifegain", 0);
     p.own_creature_enters_lifegain  = params.value("own_creature_enters_lifegain", 0);
     p.opp_creature_enters_life_loss = params.value("opp_creature_enters_life_loss", 0);
+    // "Whenever you gain life" watchers (CritterLifegain)
+    p.lifegain_self_counters              = params.value("lifegain_self_counters", 0);
+    p.lifegain_each_own_creature_counters = params.value("lifegain_each_own_creature_counters", 0);
+    p.lifegain_target_own_counter         = params.value("lifegain_target_own_counter", false);
+    p.own_creature_dies_lifegain          = params.value("own_creature_dies_lifegain", 0);
     p.etb_opp_creatures_debuff      = params.value("etb_opp_creatures_debuff", 0);
     p.opp_dies_life_loss            = params.value("opp_dies_life_loss", 0);
     p.cumulative_upkeep_opp_token   = params.value("cumulative_upkeep_opp_token", false);
@@ -1078,6 +1089,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.hand_size_anthem_max          = params.value("hand_size_anthem_max", -1);
     p.hand_size_anthem_power        = params.value("hand_size_anthem_power", 0);
     p.hand_size_anthem_tough        = params.value("hand_size_anthem_tough", 0);
+    p.life_threshold_pump_life  = params.value("life_threshold_pump_life", 0);
+    p.life_threshold_pump_power = params.value("life_threshold_pump_power", 0);
+    p.life_threshold_pump_tough = params.value("life_threshold_pump_tough", 0);
     p.combat_damage_each_discards   = params.value("combat_damage_each_discards", 0);
     p.firebreathing_discard         = params.value("firebreathing_discard", false);
     p.etb_token_includes_self       = params.value("etb_token_includes_self", false);
@@ -1085,6 +1099,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.sacrifice_watch_pump_power    = params.value("sacrifice_watch_pump_power", 0);
     p.sac_outlet_allows_enchantment = params.value("sac_outlet_allows_enchantment", false);
     p.sac_outlet_excludes_self      = params.value("sac_outlet_excludes_self", false);
+    p.sac_outlet_self_only          = params.value("sac_outlet_self_only", false);
     if (params.contains("bestow_cost"))
         p.bestow_cost = ManaCostFromString(params["bestow_cost"].get<std::string>());
 

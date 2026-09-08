@@ -849,6 +849,16 @@ public:
                                                    const Permanent& source) const
     { (void)s; (void)source; return {}; }
 
+    // LifegainCounterTarget -- Heliod, Sun-Crowned's "Whenever you gain life, put a +1/+1 counter
+    // on target creature or enchantment you control": WHICH permanent, as a battlefield index, or
+    // -1 for the generic default (DefaultLifegainCounterTarget in SpellEffects.h: the highest-power
+    // own creature that can still attack this turn, else the highest-power own creature; never a
+    // non-creature while a creature exists). A RESOLUTION heuristic returning ONE pick, not a
+    // searched branch: a lifegain deck fires this 5-15 times a turn and a per-event target axis is
+    // a Cartesian explosion. Human play picks off the board from the full rules-legal set.
+    virtual int LifegainCounterTarget(const GameState& s, int controller) const
+    { (void)s; (void)controller; return -1; }
+
     // LandAuraHostCandidates -- which LANDS an "Enchant land" Aura may be cast onto, as m_numbers.
     // Empty means "no narrowing" (every land the controller has). Generic returns empty; only a
     // deck that actually plays land auras has a reason to narrow, and it must justify it, because
@@ -1686,6 +1696,8 @@ public:
     // It duplicated ZERO times in 600 games. Revisit this hook if a deck runs a legend with a tap
     // ability or a sacrifice outlet that actually duplicates; until then the base rule is not a
     // placeholder, it is the answer.
+    // (CritterLifegainProvider overrides this for its three Ajani, Strength of the Pride -- see
+    // that class: the walker-aware keep moved a FiveColour d0 game when tried here generically.)
     virtual int LegendKeepIndex(const GameState& /*s*/, int /*controller*/,
                                 const std::vector<int>& duplicates) const
     {

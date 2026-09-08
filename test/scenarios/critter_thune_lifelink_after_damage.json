@@ -1,0 +1,13 @@
+{
+  "_comment": "CritterLifegain (2026-09-08). Guards CR 510.2 ordering: combat lifelink gains are applied AFTER every attacker's damage, so Archangel of Thune's own lifelink trigger cannot pump the OTHER attackers in the same damage step. Board: Thune (3/4 lifelink) + Ajani's Pridemate (2/2) + Soul Warden (1/1), all attack-eligible, opponent at 6. Correct combat: 3+2+1 = 6 = exactly lethal on turn 5. If the gain were applied inside the loop it would still be lethal, so the guard is the LIFE total: 20 + 3 (one lifelink event) = 23 -- an in-loop double-count or a per-point event fan-out would read differently in the log. Hand = Plains only so no cast can add damage; library_filler = Plains.",
+  "deck": "decks/CritterLifegain/CritterLifegain.cod",
+  "turn": 5, "on_the_play": true, "active_life": 20, "opponent_life": 6,
+  "battlefield": [
+    { "name": "Plains" }, { "name": "Plains" }, { "name": "Plains" },
+    { "name": "Archangel of Thune" }, { "name": "Ajani's Pridemate" }, { "name": "Soul Warden" }
+  ],
+  "hand": [ "Plains" ],
+  "library_filler": "Plains", "library_size": 30,
+  "depth": 3, "budget_ms": 50, "max_turns": 5,
+  "expect_win_turn": 5
+}

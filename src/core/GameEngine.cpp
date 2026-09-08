@@ -214,6 +214,7 @@ void GameEngine::UntapStep(GameState& state)
     ap.cards_drawn_this_turn     = 0;   // Fists of Flame drawn-count resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
     ap.life_gained_this_turn     = 0;   // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;   // Hollow One cycle/discard count (same lockstep)
+    RefreshDevotionCreatures(state);    // Heliod's devotion gate: per-turn correctness ceiling (lockstep w/ rollout)
     // Rimescale Dragon's static ("Creatures with ice counters on them don't untap during their
     // controllers' untap steps"). Two cheap gates before any lookup: only consulted when some
     // permanent actually has an ice counter AND a source with the param is out -- every other
@@ -717,6 +718,7 @@ void GameEngine::CleanupStep(GameState& state)
         p.temp_power_bonus      = 0;
         p.temp_tough_bonus      = 0;
         p.temp_haste            = false;   // "gains haste until end of turn" (Expedite) expires
+        p.temp_lifelink         = false;   // Heliod's "gains lifelink until end of turn" expires
         p.is_animated           = false;
     }
 

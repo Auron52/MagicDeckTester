@@ -632,6 +632,7 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
                 const Card tucked   = target.card;
                 const int  owner    = target.owner_index;
                 state.battlefield.erase(state.battlefield.begin() + t.permanent_index);
+            RefreshDevotionCreatures(state);   // an own white permanent leaving lowers devotion (Heliod)
                 if (!is_tok)
                 {
                     Library& lib = state.players[owner].library;
@@ -660,6 +661,7 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
                 state.players[target.controller_index].graveyard.push_back(target.card);
             }
             state.battlefield.erase(state.battlefield.begin() + t.permanent_index);
+            RefreshDevotionCreatures(state);   // an own white permanent leaving lowers devotion (Heliod)
 
             // The exiled creature's controller gains `power` life. OpponentGainsLife(X) makes
             // (1-X) gain, so pass (1 - tgt_controller). When tgt_controller is the opponent

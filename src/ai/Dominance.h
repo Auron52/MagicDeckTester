@@ -88,7 +88,11 @@
 // printed cost, fully determined by the card identity (m_number, already folded), identical for
 // the same card in any two states Build() could compare. Nothing to fold (the copy_printed_name
 // argument verbatim).
-static_assert(sizeof(Permanent) == 272,
+// 272 -> 280 (2026-09-08): Permanent gained `temp_lifelink` (Heliod, Sun-Crowned's "gains lifelink
+// until end of turn"). Classification: BOUNDARY ASSERTION -- until-EOT state that cleanup clears,
+// folded into AtCleanBoundary beside temp_haste (a state still carrying it is refused, never
+// compared).
+static_assert(sizeof(Permanent) == 280,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // 160 -> 184 (2026-09-02): Player gained `sideboard`, the OUTSIDE-THE-GAME zone a wish searches
@@ -339,6 +343,7 @@ inline bool AtCleanBoundary(const GameState& s)
         if (p.damage != 0 || p.pending_death_trigger != 0)          { return false; }
         if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)     { return false; }
         if (p.temp_haste || p.is_animated || p.exile_at_end)        { return false; }
+        if (p.temp_lifelink)                                        { return false; }   // Heliod until-EOT grant
         if (p.marked_for_destruction)                               { return false; }
     }
     return true;

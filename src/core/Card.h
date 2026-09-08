@@ -357,6 +357,10 @@ struct Card
     void RehashName() { m_name_hash = std::hash<std::string>{}(m_name); }
 
     void AddType(CardType t)       { m_type_mask      |= Bit(t); }
+    // Layer-4 type REMOVAL on a permanent's own Card copy (Heliod, Sun-Crowned: "isn't a creature"
+    // below devotion five -- RefreshDevotionCreatures). Only ever applied to a battlefield
+    // permanent's copy, never to a definition (CR 706.2 copiable values stay printed).
+    void RemoveType(CardType t)    { m_type_mask      &= ~Bit(t); }
     void AddSupertype(Supertype s) { m_supertype_mask |= Bit(s); }
     void AddColor(Color c)         { m_color_mask     |= Bit(c); }
     void AddKeyword(Keyword k)     { m_keyword_mask   |= Bit(k); }

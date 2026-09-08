@@ -1519,6 +1519,34 @@ inline void AnnihilateCounters(Permanent& p)
 
 // Total -1/-1 counters on a permanent (persist reads this at every death site: a persist creature
 // returns only if it died with none).
+// ---- "Whenever you gain life" (CritterLifegain, 2026-09-08) -- the ONE shared lifegain hook ----
+// Every controller-side lifegain site in the engine routes through GainLife so that the deck's
+// "whenever you gain life" watchers (Ajani's Pridemate / Voice of the Blessed / Archangel of Thune /
+// Heliod, Sun-Crowned) fire ONCE PER LIFE-GAIN EVENT (CR 119.10) in the executor and the rollout
+// alike. NOT routed: the OPPONENT's gain (OpponentGainsLife -- "you gain" never fires for them) and
+// the 2HG partner's gain into our shared pool (explicitly not "you gained", see AltLifegainPayload).
+// Definitions sit below CanAttackFull (the Heliod target heuristic needs it); declared here so the
+// early sites (Ancient Cornucopia's cast lifegain, the enter-watchers) can call them.
+inline void GainLife(GameState& state, int player, int amount);
+inline void FireLifegainWatchers(GameState& state, int player);
+inline void FireCreatureDiesWatchers(GameState& state, int dead_controller);
+inline void RefreshDevotionCreatures(GameState& state);
+
+// Add N +1/+1 counters to a permanent, MERGING into an existing +1/+1 entry rather than pushing a
+// new Counter each time. The sim key folds `counters` as an ORDERED list of (type, count) entries
+// (BuildSimKey), so a 5/5 built from three separate +1 entries would key differently from the
+// game-identical 5/5 built from one +3 entry -- and a lifegain-watcher deck adds dozens of counters
+// per game. Pre-existing push_back sites are untouched (byte-identical); every NEW counter source
+// uses this. Callers that can ever put both counter types on one body follow with
+// AnnihilateCounters (CR 704.5r), exactly as the existing sites do.
+inline void AddPlusCounters(Permanent& p, int n)
+{
+    if (n <= 0) { return; }
+    for (Counter& c : p.counters)
+    { if (c.type == Counter::Type::PlusOnePlusOne) { c.count += n; return; } }
+    p.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, n});
+}
+
 inline int MinusCountersOn(const Permanent& p)
 {
     int n = 0;
@@ -2359,6 +2387,7 @@ inline bool CreatureHasShroud(const Permanent& creature, const GameState& state,
 inline bool CreatureHasLifelink(const Permanent& creature, const GameState& state)
 {
     if (creature.card.HasKeyword(Keyword::Lifelink)) { return true; }
+    if (creature.temp_lifelink) { return true; }   // Heliod's "{1}{W}: gains lifelink until end of turn"
     for (const Permanent& a : state.battlefield)
     {
         if (a.controller_index != creature.controller_index) { continue; }
@@ -2558,9 +2587,8 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             && !state.battlefield[i].colored_cast_lifegain_used_this_turn
             && cast_def.card.ColorCount() > 0)
         {
-            state.players[active].life += cast_def.card.ColorCount();
-            state.players[active].life_gained_this_turn += cast_def.card.ColorCount();
             state.battlefield[i].colored_cast_lifegain_used_this_turn = true;
+            GainLife(state, active, cast_def.card.ColorCount());   // one gain event (fires watchers)
         }
 
         // Aria of Flame verse engine: casting an instant or sorcery puts a verse counter on
@@ -2727,6 +2755,18 @@ inline std::pair<int,int> ComputeLordBonus(
             }
             const int n = have[0] + have[1] + have[2] + have[3] + have[4];
             pb += n; tb += n;
+        }
+        // Serra Ascendant: "As long as you have 30 or more life, this creature gets +5/+5" -- a
+        // conditional STATIC self-buff (CR 611.3) keyed on the controller's life total, which is
+        // why it lives here rather than in a battlefield-only helper. Continuously re-evaluated,
+        // so it switches off again if life falls back below the threshold. Same sdef lookup as
+        // the domain self-pump above -> no extra LookupCached on this hot path. Param-gated ->
+        // byte-identical for every other deck.
+        if (sdef && sdef->params.life_threshold_pump_life > 0
+            && state.players[controller_index].life >= sdef->params.life_threshold_pump_life)
+        {
+            pb += sdef->params.life_threshold_pump_power;
+            tb += sdef->params.life_threshold_pump_tough;
         }
     }
 
@@ -3188,10 +3228,13 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         if (!wd) { continue; }
         const CardParams& wp = wd->params;
         // "Whenever another creature enters, you gain N" (Soul Warden / Essence Warden: ANY side).
+        // One GainLife call PER WATCHER, never summed: each watcher's trigger is its own life-gain
+        // EVENT (CR 119.10), so 2 Soul Wardens + 2 Soul's Attendants on one creature entering are
+        // FOUR Ajani's Pridemate triggers, not one gain of 4. GainLife never adds or removes a
+        // permanent (its watchers only add counters), so `w` / `n` stay valid across the call.
         if (wp.any_creature_enters_lifegain > 0)
         {
-            state.players[w.controller_index].life += wp.any_creature_enters_lifegain;
-            state.players[w.controller_index].life_gained_this_turn += wp.any_creature_enters_lifegain;
+            GainLife(state, w.controller_index, wp.any_creature_enters_lifegain);
             if (log) { note(w.controller_index, w.card.m_name.str()); }
         }
         // "Whenever another creature you control enters, you [may] gain N" (Suture Priest cl. 1;
@@ -3200,8 +3243,7 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             && (wp.creature_enters_min_power <= 0
                 || entered_power_now() >= wp.creature_enters_min_power))
         {
-            state.players[w.controller_index].life += wp.own_creature_enters_lifegain;
-            state.players[w.controller_index].life_gained_this_turn += wp.own_creature_enters_lifegain;
+            GainLife(state, w.controller_index, wp.own_creature_enters_lifegain);
             if (wp.own_creature_enters_draw > 0)
             { watcher_draw(w.controller_index, wp.own_creature_enters_draw); }
             if (log) { note(w.controller_index, w.card.m_name.str()); }
@@ -3268,8 +3310,7 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             && (ed->params.creature_enters_min_power <= 0
                 || entered_power_now() >= ed->params.creature_enters_min_power))
         {
-            state.players[e.controller_index].life += ed->params.own_creature_enters_lifegain;
-            state.players[e.controller_index].life_gained_this_turn += ed->params.own_creature_enters_lifegain;
+            GainLife(state, e.controller_index, ed->params.own_creature_enters_lifegain);
             if (ed->params.own_creature_enters_draw > 0)
             { watcher_draw(e.controller_index, ed->params.own_creature_enters_draw); }
             if (log) { note(e.controller_index, e.card.m_name.str()); }
@@ -3319,6 +3360,170 @@ inline void FireOppCreatureDies(GameState& state, int dead_controller)
         EmitPlayEvent(state.turn_number, "drain",
                       DescribeLifeWatchers(state, dead_controller, -1, on_dead, {},
                                            life_before, state.players[1 - dead_controller].life));
+    }
+}
+
+// ---- GainLife: THE controller-side lifegain primitive (see the forward declaration's note) ----
+// One call = one life-gain EVENT. amount <= 0 is not an event (CR 119.10) and returns before
+// touching anything. Bumps life_gained_this_turn (Fortifying Draught's "life you gained this
+// turn") at every routed site -- three sites (Kitchen Finks' ETB, Scavenging Ooze's grow, Essence
+// Depleter's drain self-gain) did not bump it before this hook; that was the inconsistency, and it
+// is only observable to a deck holding both such a card and a lifegain-count reader.
+inline void GainLife(GameState& state, int player, int amount)
+{
+    if (amount <= 0) { return; }
+    Player& pl = state.players[player];
+    pl.life                  += amount;
+    pl.life_gained_this_turn += amount;
+    FireLifegainWatchers(state, player);
+}
+
+// Heliod's counter TARGET (autonomous default): the creature whose extra +1 converts to face
+// damage SOONEST -- an attacker that can still swing THIS turn (the gain is precombat and the
+// body is attack-eligible), else the highest-power own creature (it attacks next turn); ties to
+// the lowest m_number so executor and rollout agree. Never a non-creature (a counter on a
+// non-creature Heliod does nothing until it turns on) unless nothing else is legal -- the trigger
+// is not optional. Returns a battlefield index, or -1 when no legal target exists. The provider
+// may override (LifegainCounterTarget); this is the generic pick.
+inline int DefaultLifegainCounterTarget(const GameState& state, int controller)
+{
+    const bool precombat = (state.battlefield_at_combat < 0);
+    int best = -1, best_key = -1;
+    int fallback = -1;   // an own enchantment (a non-creature Heliod) when no own creature exists
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index != controller) { continue; }
+        if (!q.card.IsCreature())
+        {
+            if (q.card.IsEnchantment() && fallback < 0) { fallback = i; }
+            continue;
+        }
+        const bool swings_now = precombat && !q.tapped
+                             && CanAttackFull(q, state.battlefield, controller);
+        const int key = (swings_now ? 1000 : 0) + q.EffectivePower();
+        if (key > best_key) { best_key = key; best = i; }
+    }
+    return best >= 0 ? best : fallback;
+}
+
+inline void FireLifegainWatchers(GameState& state, int player)
+{
+    // Speculative-tap regions save/restore LIFE around phantom taps but not counters; no
+    // controller-side gain fires inside one today (they are mana-tap speculations), so this guard
+    // is insurance against a rolled-back gain leaving a permanent counter behind.
+    if (g_tap_speculating) { return; }
+    // Cheap early-out: no watcher on this player's board -> byte-identical for every other deck.
+    bool any = false;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != player) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (!qd) { continue; }
+        const CardParams& qp = qd->params;
+        if (qp.lifegain_self_counters > 0 || qp.lifegain_each_own_creature_counters > 0
+            || qp.lifegain_target_own_counter) { any = true; break; }
+    }
+    if (!any) { return; }
+    // Re-entrancy guard: no watcher gains life today (they only add counters), so recursion cannot
+    // happen; the guard is insurance against a future counter-triggered lifegain looping forever.
+    static thread_local int depth = 0;
+    if (depth > 0) { return; }
+    struct DepthScope { int& d; explicit DepthScope(int& x) : d(x) { ++d; } ~DepthScope() { --d; } } scope(depth);
+
+    const bool log = (g_play_event_sink != nullptr);
+    std::string ev;
+    // Walk by INDEX and never add/remove a permanent: the enter-watcher loop that calls GainLife
+    // holds references into the battlefield across this call.
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        if (state.battlefield[i].controller_index != player) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(state.battlefield[i].card);
+        if (!wd) { continue; }
+        const CardParams& wp = wd->params;
+        // "put a +1/+1 counter on this creature" (Ajani's Pridemate / Voice of the Blessed / token).
+        if (wp.lifegain_self_counters > 0)
+        {
+            AddPlusCounters(state.battlefield[i], wp.lifegain_self_counters);
+            if (log) { ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str() + " +1/+1"; }
+        }
+        // "put a +1/+1 counter on each creature you control" (Archangel of Thune). Counters land on
+        // every creature INCLUDING Thune itself and bodies that entered this turn. Annihilate
+        // after each (CR 704.5r) -- a no-op unless a body carries -1/-1 counters.
+        if (wp.lifegain_each_own_creature_counters > 0)
+        {
+            for (int j = 0; j < n; ++j)
+            {
+                Permanent& c = state.battlefield[j];
+                if (c.controller_index != player || !c.card.IsCreature()) { continue; }
+                AddPlusCounters(c, wp.lifegain_each_own_creature_counters);
+                AnnihilateCounters(c);
+            }
+            if (log) { ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str() + ": +1/+1 on each creature"; }
+        }
+        // "put a +1/+1 counter on target creature or enchantment you control" (Heliod). ONE pick:
+        // the provider's, else the generic default. Human play picks off the board from the FULL
+        // rules-legal set (every own creature or enchantment, Heliod itself included), the
+        // heuristic's pick preselected -- the loyalty-target chooser's shape (board click).
+        if (wp.lifegain_target_own_counter)
+        {
+            int pick = ResolveProvider(state).LifegainCounterTarget(state, player);
+            if (pick < 0 || pick >= n) { pick = DefaultLifegainCounterTarget(state, player); }
+            if (g_play_loyalty_chooser != nullptr)
+            {
+                std::vector<int> legal;
+                for (int j = 0; j < n; ++j)
+                {
+                    const Permanent& c = state.battlefield[j];
+                    if (c.controller_index == player
+                        && (c.card.IsCreature() || c.card.IsEnchantment())) { legal.push_back(j); }
+                }
+                if (!legal.empty())
+                {
+                    int heur = 0;
+                    for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+                    { if (legal[k] == pick) { heur = k; break; } }
+                    const std::string src = state.battlefield[i].card.m_name.str() + " (life gained)";
+                    const int c = (*g_play_loyalty_chooser)(state, player, src,
+                                                            "given a +1/+1 counter", legal, heur);
+                    if (c >= 0 && c < static_cast<int>(legal.size())) { pick = legal[c]; }
+                }
+            }
+            if (pick >= 0 && pick < n)
+            {
+                AddPlusCounters(state.battlefield[pick], 1);
+                AnnihilateCounters(state.battlefield[pick]);
+                if (log) { ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str()
+                               + " \xE2\x86\x92 +1/+1 on " + state.battlefield[pick].card.m_name.str(); }
+            }
+        }
+    }
+    if (log && !ev.empty())
+    { EmitPlayEvent(state.turn_number, "trigger", "\xE2\x9D\xA4\xEF\xB8\x8F life gained: " + ev); }
+}
+
+// "Whenever another creature you control dies, you gain N" (Daxos, Blessed by the Sun). Called
+// from OnCreatureDies, i.e. AFTER the dead creature has left the battlefield at every death site,
+// which is what makes "another" structural: a scan cannot see the dying Daxos itself. One GainLife
+// per watcher (one event each, CR 119.10). Param-gated -> byte-identical elsewhere.
+inline void FireCreatureDiesWatchers(GameState& state, int dead_controller)
+{
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& w = state.battlefield[i];
+        if (w.controller_index != dead_controller) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (!wd || wd->params.own_creature_dies_lifegain <= 0) { continue; }
+        const int amt = wd->params.own_creature_dies_lifegain;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "lifegain",
+                          "\xE2\x9D\xA4\xEF\xB8\x8F " + w.card.m_name.str() + " -- a creature died: gain "
+                          + std::to_string(amt) + " life");
+        }
+        GainLife(state, dead_controller, amt);
     }
 }
 
@@ -3549,6 +3754,12 @@ inline void FireSnowEnterWatchers(GameState& state, int entered_index)
 inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    // Devotion-gated creature-ness (Heliod, Sun-Crowned) re-evaluated at the universal enter
+    // cascade, ABOVE the IsCreature() gate below: a Heliod entering into devotion >= 5 IS a
+    // creature as it enters (fires Soul Warden), one entering below 5 is not (CR 603.6d); and a
+    // later permanent lifting devotion to 5 flips an older Heliod on WITHOUT it "entering" (only
+    // the actual entrant is passed to the creature-enter watchers). Param-gated early-out.
+    RefreshDevotionCreatures(state);
     // Snow-enter scry watcher (param-gated; one supertype bit-test for every other deck).
     FireSnowEnterWatchers(state, entered_index);
     // Creature-enter watchers (Creature Giving: Wardens / Suture Priest). This function is the
@@ -3873,6 +4084,29 @@ inline int DevotionTo(const GameState& state, int controller, const std::string&
     return dev;
 }
 
+// Heliod, Sun-Crowned: "As long as your devotion to white is less than five, Heliod isn't a
+// creature." A layer-4 type-changing static, re-evaluated at the shared battlefield-membership
+// chokepoints (enter cascade, death, legend rule, exile/tuck, loyalty death, both turn-start
+// resyncs). Toggles CardType::Creature on the PERMANENT's own Card copy, so every existing
+// IsCreature() read (attack eligibility, creature counts, enter-watcher gates, EvalCard) is
+// correct at once; the definition's copiable values are never touched (CR 706.2). Devotion only
+// moves when a permanent with a matching pip enters or leaves, so those chokepoints are the
+// complete set. Summoning sickness needs nothing: entered_this_turn tracks CONTROL duration
+// (CR 302.6), so a Heliod that turns on turns after landing may attack. First loop is a flag
+// scan, so every deck without a devotion-gated permanent pays that scan and nothing else.
+inline void RefreshDevotionCreatures(GameState& state)
+{
+    for (Permanent& p : state.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.creature_requires_devotion <= 0) { continue; }
+        const bool is_creature = DevotionTo(state, p.controller_index, d->params.devotion_color)
+                              >= d->params.creature_requires_devotion;
+        if (is_creature) { p.card.AddType(CardType::Creature); }
+        else             { p.card.RemoveType(CardType::Creature); }
+    }
+}
+
 // A permanent just entered under `controller` at battlefield slot `entered_index`: fire ITS OWN
 // "When this enters, ..." abilities. Everything below is read off the newcomer's own CardParams,
 // which is the line that separates this from FireEtbWatchers (other permanents watching the
@@ -4165,9 +4399,10 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
 
     // Elderscale Wurm: "When this creature enters, if your life total is less than N, your life
     // total becomes N."
+    // "Your life total becomes N" = you GAIN the difference (CR 119.4) -> one gain event.
     if (p.etb_life_floor > 0 && state.players[controller].life < p.etb_life_floor)
     {
-        state.players[controller].life = p.etb_life_floor;
+        GainLife(state, controller, p.etb_life_floor - state.players[controller].life);
     }
 
     // Kitchen Finks: "When this creature enters, you gain 2 life." A CREATURE ETB lifegain --
@@ -4175,7 +4410,7 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     // including a persist return (new object, new ETB).
     if (p.etb_self_lifegain > 0)
     {
-        state.players[controller].life += p.etb_self_lifegain;
+        GainLife(state, controller, p.etb_self_lifegain);
         if (g_play_event_sink && !g_tap_speculating)
         {
             EmitPlayEvent(state.turn_number, "lifegain",
@@ -4782,12 +5017,45 @@ inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, cons
                                             d->params.ltb_return_max_power, left.m_name.str());
 }
 
+// Would sacrificing `source_id` (an own creature) produce ANYTHING on death? True iff a
+// controller-side permanent carries a death watcher that would fire for it (Daxos's
+// own_creature_dies_lifegain; a subtype-keyed dies_watch_subtype matching the source; an LTB
+// return watcher), or the source itself persists. Read by the autonomous enumerator to drop a
+// self-only sac outlet with no payload (Ranger-Captain of Eos) while it is a strictly dominated
+// no-op -- a lossless dominated-action removal, not a heuristic; human play never consults it.
+// Lives beside OnCreatureDies so the two cannot drift.
+inline bool SelfSacHasDeathPayoff(const GameState& state, int controller, int source_id)
+{
+    const Permanent* src = nullptr;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == controller && p.card.m_number == source_id) { src = &p; break; } }
+    if (!src) { return false; }
+    const CardDefinition* sd = CardDatabase::Instance().LookupCached(src->card);
+    if (sd && sd->params.persist && MinusCountersOn(*src) == 0) { return true; }
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != controller || w.card.m_number == source_id) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (!wd) { continue; }
+        const CardParams& wp = wd->params;
+        if (wp.own_creature_dies_lifegain > 0) { return true; }
+        if (wp.ltb_return_creatures > 0)       { return true; }
+        if (!wp.dies_watch_subtype.empty() && CardHasSubtype(src->card, wp.dies_watch_subtype)) { return true; }
+    }
+    return false;
+}
+
 inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card,
                            bool dead_was_token, int dead_minus_counters)
 {
     // LTB triggers fire on every death (Reveillark sacrificed to Carrion Feeder / Pod / combat).
     // Before the persist block: independent mechanics, and Reveillark itself has no persist.
     FireLeavesBattlefieldTriggers(state, dead_controller, dead_card);
+    // The dead permanent has left: devotion may have dropped (Heliod off), and "another creature
+    // you control dies" lifegain (Daxos) fires. Both ABOVE the `reactions.empty()` early-out
+    // below, which only knows subtype-keyed watchers.
+    RefreshDevotionCreatures(state);
+    FireCreatureDiesWatchers(state, dead_controller);
 
     std::vector<CardParams> reactions;
     // Other watchers still in play under the same controller: "another <subtype> you control dies".
@@ -5093,6 +5361,12 @@ inline std::string LoyaltyAbilityText(const CardParams::LoyaltyAbilityParam& ab)
         ab.effect == "food_token"              ? "create a Food token" :
         ab.effect == "elk_transform"           ? "turn a permanent into a 3/3 Elk" :
         ab.effect == "steal_creature"          ? "gain control of a creature" :
+        ab.effect == "lifegain_creatures_plus_walkers"
+                                               ? "gain life per creature and planeswalker" :
+        ab.effect == "pridemate_token"         ? "create an Ajani's Pridemate" :
+        ab.effect == "exile_all_opponent_artifacts_creatures"
+                                               ? ("at " + std::to_string(ab.amount)
+                                                  + "+ life over starting: exile Ajani and your opponents' artifacts and creatures") :
                                                  ab.effect;
     return (ab.delta >= 0 ? "+" : "") + std::to_string(ab.delta) + ": " + what;
 }
@@ -5189,9 +5463,91 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         token.entered_this_turn = true;
         token.is_token          = true;
         state.battlefield.push_back(token);
+        // Universal enter cascade (was missing here): a loyalty-made token is a permanent
+        // entering like any other, so the enter-watchers fire for it (Soul Warden on Ajani's
+        // Pridemate token). No-op for every deck without an enter-watcher (Jared's Kavu, Oko's
+        // Food, the Treasures) -> byte-identical there.
+        FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
     };
 
-    if (ab.effect == "kavu_token")
+    if (ab.effect == "lifegain_creatures_plus_walkers")
+    {
+        // Ajani, Strength of the Pride +1: "You gain life equal to the number of creatures you
+        // control plus the number of planeswalkers you control." ONE life-gain event (CR 119.10:
+        // one source, one event) -- the AMOUNT scales the life total (Serra Ascendant's threshold,
+        // Ajani's own 0), never the number of Pridemate/Voice/Archangel triggers. Ajani counts
+        // himself, so the gain is never 0.
+        int n = 0;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller) { continue; }
+            if (q.card.IsCreature() || q.card.HasType(CardType::Planeswalker)) { ++n; }
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "lifegain",
+                          "\xE2\x9D\xA4\xEF\xB8\x8F " + d->card.m_name.str() + " +1: gain "
+                          + std::to_string(n) + " life");
+        }
+        GainLife(state, controller, n);
+    }
+    else if (ab.effect == "pridemate_token")
+    {
+        // Ajani -2: "Create a 2/2 white Cat Soldier creature token NAMED Ajani's Pridemate with
+        // 'Whenever you gain life, put a +1/+1 counter on this token.'" The token carries the
+        // printed NAME, so LookupCached resolves the real Ajani's Pridemate entry (identical
+        // sentence, lifegain_self_counters 1) and its trigger is live -- no separate token
+        // definition. Enters through make_token's cascade, so Soul Warden & co. fire on it, and
+        // being on the battlefield first it collects its own counter from those gains.
+        make_token("Ajani's Pridemate", true, 2, 2, {"Cat", "Soldier"}, false, false, false);
+        for (Permanent& q : state.battlefield)
+        {
+            if (q.controller_index == controller && q.is_token && q.card.m_name.str() == "Ajani's Pridemate"
+                && q.card.m_color_mask == 0) { q.card.AddColor(Color::White); }
+        }
+    }
+    else if (ab.effect == "exile_all_opponent_artifacts_creatures")
+    {
+        // Ajani 0: "If you have at least 15 life more than your starting life total, exile Ajani
+        // and each artifact and creature your opponents control." Threshold against
+        // gamesetup::StartingLife() (never a literal 20 -- a 30-life/2HG job). Below it the
+        // ability resolves as a no-op (still used for the turn). At or above: opponents'
+        // artifacts/creatures leave (nontokens to exile, tokens cease -- CR 111.7), then Ajani.
+        // Not enumerated autonomously (a value gate, see TurnSolver); reachable in human play.
+        if (state.players[controller].life >= gamesetup::StartingLife() + ab.amount)
+        {
+            for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+            {
+                const Permanent& q = state.battlefield[i];
+                const bool theirs = q.controller_index != controller
+                                 && (q.card.IsCreature() || q.card.HasType(CardType::Artifact));
+                const bool ajani  = q.controller_index == controller && q.card.m_number == walker_id;
+                if (!theirs && !ajani) { continue; }
+                const int dead_num = q.card.m_number;
+                if (!q.is_token) { state.exile.push_back(q.card); }
+                for (Permanent& e : state.battlefield)
+                {
+                    if (e.equipped_to     == dead_num) { e.equipped_to = 0; }
+                    if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
+                }
+                state.battlefield.erase(state.battlefield.begin() + i);
+            }
+            RefreshDevotionCreatures(state);   // Ajani's {W}{W} left devotion
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "exile",
+                              "\xE2\x98\x80 " + d->card.m_name.str()
+                              + " 0: exiled itself and every opposing artifact and creature");
+            }
+        }
+        else if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          d->card.m_name.str() + " 0: life below starting+"
+                          + std::to_string(ab.amount) + " -- nothing happens");
+        }
+    }
+    else if (ab.effect == "kavu_token")
     {
         // Jared +1: a 3/3 Kavu with trample that's ALL colors (its colors feed domain mana,
         // Jared's -3 counter count, and the -6 all-colors check on other cards).
@@ -5436,6 +5792,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         const Card dead_card = q.card;
         state.players[q.owner_index].graveyard.push_back(dead_card);
         state.battlefield.erase(state.battlefield.begin() + i);
+        RefreshDevotionCreatures(state);   // a dead walker's pips leave devotion (Ajani {2}{W}{W})
         break;
     }
 }
@@ -5663,7 +6020,7 @@ inline void ApplyGraveyardExileGrow(GameState& state, int controller, int source
             q.counters.push_back(Counter{Counter::Type::PlusOnePlusOne,
                                          od->params.gy_exile_grow_counters});
         }
-        ap.life += od->params.gy_exile_grow_lifegain;
+        GainLife(state, controller, od->params.gy_exile_grow_lifegain);
         if (g_play_event_sink && !g_tap_speculating)
         {
             EmitPlayEvent(state.turn_number, "ability",
@@ -5710,8 +6067,7 @@ inline void ApplyGraveyardExileAbility(GameState& state, int controller, int sou
         }
         else
         {
-            state.players[controller].life += d->params.gy_exile_creature_lifegain;
-            state.players[controller].life_gained_this_turn += d->params.gy_exile_creature_lifegain;
+            GainLife(state, controller, d->params.gy_exile_creature_lifegain);
         }
         return;
     }
@@ -5934,7 +6290,8 @@ inline int SacExpendabilityRank(const Permanent& v, int source_id)
 // default false -> every pre-existing outlet (Skirk / Siege-Gang / Pashalik) is byte-identical.
 inline int CanonicalSacVictim(const GameState& state, int controller, int source_id,
                               const std::string& need_sub,
-                              bool allow_enchantment = false, bool exclude_self = false)
+                              bool allow_enchantment = false, bool exclude_self = false,
+                              bool self_only = false)
 {
     // Expendability heuristic (lower rank = sacrifice FIRST). Base metric is EFFECTIVE power (sac the
     // weakest), adjusted so we:
@@ -5953,6 +6310,7 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
                            || (allow_enchantment && v.card.IsEnchantment());
         if (!eligible) { continue; }
         if (exclude_self && v.card.m_number == source_id) { continue; }   // "another ..."
+        if (self_only && v.card.m_number != source_id)    { continue; }   // "Sacrifice THIS creature"
         // A SELF-DIRECTED payload outlet (Carrion Feeder's +1/+1-to-self, Bloodthrone's
         // self-pump) sacrificing ITSELF nullifies its own payload -- the bonus lands on the
         // body that just left. Found live 2026-09-05: T1 Feeder, alone on board, sacked itself
@@ -6346,7 +6704,7 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
 // fine when a human is pointing at one.
 inline int ChooseSacOutletVictimIndex(GameState& state, int controller, int source_id,
                                       const std::string& need_sub, int heuristic_vid,
-                                      const std::string& source_name)
+                                      const std::string& source_name, bool self_only = false)
 {
     if (!g_play_sacrifice_chooser) { return -1; }
     std::vector<int> cands;
@@ -6355,6 +6713,7 @@ inline int ChooseSacOutletVictimIndex(GameState& state, int controller, int sour
         const Permanent& v = state.battlefield[i];
         if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
         if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+        if (self_only && v.card.m_number != source_id) { continue; }   // "Sacrifice THIS creature"
         cands.push_back(i);
     }
     if (cands.empty())     { return -1; }
@@ -6388,7 +6747,8 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     { if (p.controller_index == controller && p.card.m_number == source_id)
       { src_name = p.card.m_name.str(); break; } }
     const int hidx = ChooseSacOutletVictimIndex(state, controller, source_id,
-                                                op->sac_creature_requires_subtype, victim_id, src_name);
+                                                op->sac_creature_requires_subtype, victim_id, src_name,
+                                                op->sac_outlet_self_only);
     // Find + remove the chosen victim (a controlled creature of the required subtype; self-inclusive).
     Card victim; bool found = false; bool victim_tok = false; int victim_m1 = 0;
     if (hidx >= 0)
@@ -6426,6 +6786,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
                 && !(op->sac_outlet_allows_enchantment && q.card.IsEnchantment())) { continue; }
             if (q.card.m_number != victim_id) { continue; }
             if (op->sac_outlet_excludes_self && q.card.m_number == source_id) { continue; }
+            if (op->sac_outlet_self_only && q.card.m_number != source_id)     { continue; }
             if (!op->sac_creature_requires_subtype.empty() && q.card.IsCreature()
                 && !CardHasSubtype(q.card, op->sac_creature_requires_subtype)) { continue; }
             victim = q.card; found = true; victim_tok = q.is_token;
@@ -6438,7 +6799,8 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         victim_id = CanonicalSacVictim(state, controller, source_id,
                                        op->sac_creature_requires_subtype,
                                        op->sac_outlet_allows_enchantment,
-                                       op->sac_outlet_excludes_self);
+                                       op->sac_outlet_excludes_self,
+                                       op->sac_outlet_self_only);
         if (victim_id < 0) { break; }
     }
     if (!found) { return; }
@@ -8332,6 +8694,8 @@ inline int DynamicBasePower(const CardDefinition& def, const GameState& state, i
 inline int DynamicBaseToughness(const CardDefinition& def, const GameState& state,
                                 int controller_index)
 {
+    if (!def.params.toughness_equals_devotion_color.empty())   // Daxos: toughness = devotion to white
+    { return DevotionTo(state, controller_index, def.params.toughness_equals_devotion_color); }
     if (def.params.toughness_equals_creature_count) { return CreatureCount(state, controller_index); }
     if (def.params.pt_equals_snow_permanents_you_control)
     { return SnowPermanentCount(state, controller_index); }
@@ -8517,6 +8881,7 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     }
     for (auto it = doomed.rbegin(); it != doomed.rend(); ++it)   // descending -> indices stay valid
     { state.battlefield.erase(state.battlefield.begin() + *it); }
+    RefreshDevotionCreatures(state);   // a doomed white permanent lowers devotion (Heliod x2)
 }
 
 // ============================================================================
@@ -8630,7 +8995,7 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
     // Untargeted riders (resolve for every instance, targeted or not).
     TrickDraw(state, controller, pp.cast_draw);
     if (pp.creates_treasures > 0) { CreateTreasureTokens(state, controller, pp.creates_treasures); }
-    if (pp.cast_lifegain > 0)     { pl.life += pp.cast_lifegain; pl.life_gained_this_turn += pp.cast_lifegain; }
+    if (pp.cast_lifegain > 0)     { GainLife(state, controller, pp.cast_lifegain); }
     if (pp.grants_extra_land_drop > 0) { pl.bonus_land_drops_this_turn += pp.grants_extra_land_drop; }
 
     if (ti < 0 || ti >= static_cast<int>(state.battlefield.size())) { return; }
@@ -11206,6 +11571,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::Drain:          return "target opponent loses life";
         case PermAbilityMode::ExileTop:       return "opponent exiles their top card";
         case PermAbilityMode::IceCounter:     return "put an ice counter on target permanent";
+        case PermAbilityMode::GrantLifelink:  return "another target creature gains lifelink until end of turn";
         default:                              return "activate";
     }
 }
@@ -11301,7 +11667,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             state.players[1 - controller].life -= amt;
             state.opponent_lost_life_this_turn = true;
             if (d->params.drain_self_gain > 0)
-            { state.players[controller].life += d->params.drain_self_gain; }
+            { GainLife(state, controller, d->params.drain_self_gain); }
             if (g_play_event_sink)
             {
                 EmitPlayEvent(state.turn_number, "damage",
@@ -11374,6 +11740,63 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 EmitPlayEvent(state.turn_number, "counter",
                               "\xE2\x9D\x84 " + src_name + ": ice counter on "
                               + state.battlefield[pick].card.m_name.str());
+            }
+            break;
+        }
+        case PermAbilityMode::GrantLifelink:
+        {
+            // Heliod, Sun-Crowned: "{1}{W}: Another target creature gains lifelink until end of
+            // turn." Legal targets = every creature but the source (either side); USEFUL targets =
+            // OWN creatures that can attack this turn and lack lifelink (an opponent's spawn never
+            // attacks, so its lifelink gains nobody anything; a second instance is redundant).
+            // Autonomous pick (the K axis is the searched dimension, not the target): the
+            // highest-power such attacker, tie-break lowest m_number -- each activation of a
+            // K-block takes the next un-granted body. Human override: the loyalty-target chooser
+            // (board click over the FULL rules-legal set, heuristic pick preselected).
+            std::vector<int> cands;   // battlefield indices, heuristic-preferred first
+            {
+                std::vector<std::pair<int,int>> ranked;   // (-power, m_number) -> index via loop
+                for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                {
+                    const Permanent& q = state.battlefield[i];
+                    if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+                    if (q.card.m_number == source_id) { continue; }   // "ANOTHER target creature"
+                    if (CreatureHasLifelink(q, state)) { continue; }
+                    if (q.tapped || !CanAttackFull(q, state.battlefield, controller)) { continue; }
+                    ranked.emplace_back(-q.EffectivePower() * 100000 + q.card.m_number, i);
+                }
+                std::sort(ranked.begin(), ranked.end());
+                for (const auto& r : ranked) { cands.push_back(r.second); }
+            }
+            int pick = cands.empty() ? -1 : cands[0];
+            if (g_play_loyalty_chooser)
+            {
+                std::vector<int> legal;
+                for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                {
+                    const Permanent& q = state.battlefield[i];
+                    if (!q.card.IsCreature() || q.card.m_number == source_id) { continue; }
+                    legal.push_back(i);
+                }
+                if (!legal.empty())
+                {
+                    int heur = 0;
+                    for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+                    { if (legal[k] == pick) { heur = k; break; } }
+                    const int c = (*g_play_loyalty_chooser)(state, controller, src_name + " {1}{W}",
+                                                            "granted lifelink until end of turn",
+                                                            legal, heur);
+                    if (c >= 0 && c < static_cast<int>(legal.size())) { pick = legal[c]; }
+                }
+            }
+            if (pick < 0) { break; }   // no legal target: the cost is spent, nothing happens
+            state.battlefield[pick].temp_lifelink = true;
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              "\xE2\x9D\xA4\xEF\xB8\x8F " + src_name + ": "
+                              + state.battlefield[pick].card.m_name.str()
+                              + " gains lifelink until end of turn");
             }
             break;
         }
@@ -11459,6 +11882,8 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
                                       ? &def.params.drain_cost
                                       : (mode == PermAbilityMode::IceCounter)
                                       ? &def.params.ice_counter_cost
+                                      : (mode == PermAbilityMode::GrantLifelink)
+                                      ? &def.params.lifelink_grant_cost
                                       : &def.params.exile_opponent_top_cost;
     if (!rc->has_value()) { return 0; }
 
@@ -11495,6 +11920,20 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
             {
                 if (q.card.HasSupertype(Supertype::Snow)
                     || (grants && q.ice_counters > 0)) { continue; }
+                ++targets;
+            }
+            useful = std::min(useful, targets);
+        }
+        else if (mode == PermAbilityMode::GrantLifelink)
+        {
+            // Only an OWN attack-eligible creature without lifelink gains anything (see the
+            // enumeration cap): count them, excluding the source.
+            int targets = 0;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+                if (q.card.m_number == source_id || CreatureHasLifelink(q, state)) { continue; }
+                if (q.tapped || !CanAttackFull(q, state.battlefield, controller)) { continue; }
                 ++targets;
             }
             useful = std::min(useful, targets);

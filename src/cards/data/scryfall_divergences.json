@@ -23,5 +23,8 @@
   },
   "Glorybringer": {
     "keywords": "'Exert' is a real keyword but its use is OPTIONAL and provably worthless here: exerting costs the next untap step (so Glorybringer cannot attack the following turn -- strictly negative) and its payload is 4 damage to a non-Dragon creature an opponent controls, which against the passive goldfish never blocks, never attacks, and is read by no card in the deck. Never exerting is therefore the OPTIMAL line, so omitting the keyword is byte-identical to modelling it and playing it correctly. USER-approved deferral 2026-08-26; see docs/design/analysis-Dragons.md. Mirrors the Progenitus / Goblin Piledriver protection precedent (a real keyword, inert in goldfishing). Revisit in phase 2, when a real opponent makes removal meaningful."
+  },
+  "Auriok Champion": {
+    "keywords": "'Protection from black and from red' is a real keyword but inert in goldfishing on all four DEBT axes (the passive opponent never damages, targets, blocks or enchants; the CritterLifegain deck runs no Auras/Equipment, and its only targeting sources are white). Mirrors the Goblin Piledriver / Progenitus protection precedent; NOT protection_from_everything (that would wrongly exclude it from Heliod's targets)."
   }
 }

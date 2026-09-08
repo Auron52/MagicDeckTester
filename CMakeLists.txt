@@ -279,6 +279,7 @@ add_executable(mtg-test
     test/unit/test_opponent_deck.cpp
     test/unit/test_breaching_clauses.cpp
     test/unit/test_edf_blink_target.cpp
+    test/unit/test_critter_lifegain.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working

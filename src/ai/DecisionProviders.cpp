@@ -9263,6 +9263,7 @@ namespace
     const MinotaurProvider       g_minotaur;
     const DragonsProvider        g_dragons;
     const SnowProvider           g_snow;
+    const CritterLifegainProvider g_critter;
     const FluctuatorProvider     g_fluctuator;
     const AurasProvider          g_auras;
     const EldraziFlickerProvider g_eldrazi_flicker;
@@ -9295,6 +9296,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // is new + gated (0/false/nullopt inert), so no existing deck can set it.
     bool eldrazi = false;
     bool snow = false;   // Snow midrange -- SnowProvider (Generic + the 5c2 tie-break opt-out)
+    bool critter = false; // CritterLifegain -- routes ABOVE goblin (Ranger-Captain's sac outlet) and anti (its tutor)
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -9302,6 +9304,13 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardParams& p = def->params;
 
         if (p.blink_cost.has_value() || p.etb_untap_lands > 0 || p.is_land_aura) { eldrazi = true; }
+
+        // CritterLifegain: OR-ed across three different payoff cards' params (Ajani's Pridemate /
+        // Voice of the Blessed, Archangel of Thune, Heliod) so a deckbuilding swap cannot lose it;
+        // every one is new + gated (0/false inert), so no existing deck sets it. MUST return ABOVE
+        // goblin (Ranger-Captain of Eos's sac_creature_outlet) and anti (its tutor_to_hand).
+        if (p.lifegain_self_counters > 0 || p.lifegain_each_own_creature_counters > 0
+            || p.lifegain_target_own_counter) { critter = true; }
 
         // Fluctuator cycling combo. Signature = the four params this deck introduced, OR-ed across
         // FOUR DIFFERENT CARDS (Fluctuator, Drannith Stinger, Hollow One, Unearth) so a
@@ -9522,6 +9531,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
 
     // ABOVE everything: this deck's own signature is unambiguous, and its tutor_to_hand would
     // otherwise be read as anti-lifegain (see the flag's comment).
+    if (critter)     { return g_critter; }
     if (eldrazi)     { return g_eldrazi_flicker; }
     if (dragonstorm) { return g_dragonstorm; }
     if (hinata) { return g_hinata; }
@@ -9938,6 +9948,34 @@ bool MirrorwingProvider::TrickCastSensible(const GameState& s, int me,
     { return true; }
 
     return false;   // magnetless bank with no use -- not a line
+}
+
+// ---- CritterLifegainProvider::LegendKeepIndex -------------------------------
+//
+// Three Ajani, Strength of the Pride: a fresh copy enters at loyalty 5 and has not activated
+// this turn, while the incumbent may be at 1 and already spent -- keeping the oldest there throws
+// away four loyalty and this turn's activation. Keep the MOST loyalty; tie -> the copy that can
+// still activate; tie -> oldest. Non-walker duplicates (Daxos x1, Heliod x2: loyalty 0 on both)
+// fall through to the oldest, i.e. the base rule. MTG_LEGEND_KEEP_LOYALTY=0 restores keep-oldest
+// for the A/B (DEFAULT ON).
+int CritterLifegainProvider::LegendKeepIndex(const GameState& s, int /*controller*/,
+                                             const std::vector<int>& duplicates) const
+{
+    if (duplicates.empty()) { return -1; }
+    static const bool s_keep_loyalty = EnvOn("MTG_LEGEND_KEEP_LOYALTY", true);
+    if (!s_keep_loyalty) { return duplicates.front(); }
+    int keep = duplicates.front();
+    for (int idx : duplicates)
+    {
+        if (idx < 0 || idx >= static_cast<int>(s.battlefield.size())) { continue; }
+        const Permanent& a = s.battlefield[idx];
+        const Permanent& b = s.battlefield[keep];
+        if (a.loyalty > b.loyalty
+            || (a.loyalty == b.loyalty && a.loyalty > 0
+                && !a.loyalty_activated_this_turn && b.loyalty_activated_this_turn))
+        { keep = idx; }
+    }
+    return keep;
 }
 
 // ---- MirrorwingProvider::LegendKeepIndex ------------------------------------

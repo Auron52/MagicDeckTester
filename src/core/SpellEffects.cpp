@@ -721,8 +721,7 @@ void ApplyJitteMode(GameState& state, int controller, int jitte_id, int mode, in
     else if (mode == 2)
     {
         je->charge_counters -= 1;
-        state.players[controller].life += d->params.charge_lifegain;
-        state.players[controller].life_gained_this_turn += d->params.charge_lifegain;
+        GainLife(state, controller, d->params.charge_lifegain);   // one gain event (fires watchers)
     }
     else if (mode == 3)
     {
