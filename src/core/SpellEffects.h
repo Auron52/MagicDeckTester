@@ -807,7 +807,8 @@ constexpr int kEtbKxHeuristic = -2;
 extern thread_local int g_scripted_tutor_choice;   // defined below (ScriptedTutor)
 inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefinition&);   // defined below
 inline void EtbUntapLands(GameState&, int controller, int count, bool log_ledger = true);    // defined below
-inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count);                // defined below
+inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count,
+                                      int reserve_color_mask = 0);                           // defined below
 inline int  EtbUntapLandsCredit(const GameState&, int count);                                // defined below
 // `keep_flexible` (see the definition): spend the LEAST flexible mana on a generic pip and retain
 // the wild, instead of the default wild-first order. For the leftover computation only.
@@ -12120,7 +12121,27 @@ inline bool PickComboRefloatColor(const GameState& state, int controller,
     return false;   // 5. bulk -- any producible type, left to the ordinary rule
 }
 
-inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int count)
+// Bit per coloured pip of `cost` (1 << Color, W..G only). Hybrid pairs contribute BOTH halves --
+// either colour can pay the pip, so a painland producing either is a source the payment may still
+// need. Used by the cast-site painland tap-ahead below to RESERVE the pending cost's colours.
+inline int ColoredPipReserveMask(const ManaCost& cost)
+{
+    int m = 0;
+    if (cost.white > 0) { m |= 1 << static_cast<int>(Color::White); }
+    if (cost.blue  > 0) { m |= 1 << static_cast<int>(Color::Blue);  }
+    if (cost.black > 0) { m |= 1 << static_cast<int>(Color::Black); }
+    if (cost.red   > 0) { m |= 1 << static_cast<int>(Color::Red);   }
+    if (cost.green > 0) { m |= 1 << static_cast<int>(Color::Green); }
+    for (uint8_t i = 0; i < cost.hybrid_count && i < 4; ++i)
+    {
+        const int second = cost.hybrid_pair[i] & 0x0F;
+        if (second >= 0 && second < static_cast<int>(Color::Colorless)) { m |= 1 << second; }
+    }
+    return m;
+}
+
+inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int count,
+                                      int reserve_color_mask)
 {
     if (count <= 0) { return; }
     // COMBO MODE is scoped to a live loop (g_in_blink_loop), never to a plain ETB-untap cast.
@@ -12240,12 +12261,39 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         // `tapped_n >= count`, so it cannot push past the budget; this only decides eligibility.)
         // Outside that budget the historical exclusion stands, which is the seed-1 ENUM-GAP case.
         // MTG_PAINLAND_TAPAHEAD_CAST=0 isolates just the cast-site half.
+        //
+        // ...AND THE PENDING COST'S COLOURS ARE RESERVED (USER, EDF seed 9 T4, 2026-09-08:
+        // "I have 5 mana and blue, so there is no reason I cannot play drake" -- rejected). The
+        // `count >= tapped_n + 1` invariant above reasons about the board AFTER the ETB untap,
+        // but the cast's own coloured pips are paid BEFORE that untap exists -- and if this
+        // tap-ahead floats the board's only blue source as {C}, the cast it is banking for
+        // becomes unpayable, the whole line rolls back, and the untap that justified the banking
+        // never happens. Circular. On that board (Conservatory, Adarkar+Wild Growth, Mariposa,
+        // Brushland; Drake {4}{U}; count=5) every land passed the budget test, the float ended
+        // {G:2,C:3} with zero blue, and the committed Drake was DROPPED. So at cast sites a
+        // painland whose coloured modes intersect the pending cost's coloured pips
+        // (`reserve_color_mask`, threaded from the caster's effective cost) stays OUT of the {C}
+        // tap-ahead: it ends the step untapped and the payment can still take its coloured mode
+        // (pain and all). Painlands with no such overlap keep the seed-6 banking win. The
+        // blink-loop branch is untouched -- activation costs are generic/{C} by construction.
+        // MTG_PAINLAND_CAST_RESERVE=0 restores the stranding behaviour.
         static const bool s_pain_tapahead = EnvOn("MTG_PAINLAND_TAPAHEAD", true);
         static const bool s_pain_cast     = EnvOn("MTG_PAINLAND_TAPAHEAD_CAST", true);
+        static const bool s_pain_reserve  = EnvOn("MTG_PAINLAND_CAST_RESERVE", true);
+        bool reserve_overlap = false;
+        if (s_pain_reserve && reserve_color_mask != 0)
+        {
+            for (Color c : q.produces)
+            {
+                if (c != Color::Colorless
+                    && (reserve_color_mask & (1 << static_cast<int>(c))) != 0)
+                { reserve_overlap = true; break; }
+            }
+        }
         bool pain_c = false;
         if (q.tap_self_damage > 0 && PainlandCModeEnabled() && s_pain_tapahead
             && HumanPlayActive()
-            && (g_in_blink_loop || (s_pain_cast && count >= tapped_n + 1)))
+            && (g_in_blink_loop || (s_pain_cast && count >= tapped_n + 1 && !reserve_overlap)))
         {
             for (Color c : q.produces)
             { if (c == Color::Colorless) { pain_c = true; break; } }
