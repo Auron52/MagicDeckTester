@@ -15244,12 +15244,34 @@ EldraziFlickerProvider::TutorCandidates(const GameState& s, int controller,
     // is worth far less than the piece we are missing, and the wish resolves before we cast it.
     bool have_outlet = false, have_payload = false, have_sink = false;
     int  lands       = 0;
+    // MTG_EDF_WISH_CAST_GATE (2026-09-08). Mode 2's assemblability gate reads coverage off hand
+    // PRESENCE, and that is one notch too weak: on seed 1 the turn-2 wish counted a just-drawn
+    // Peregrine Drake (5mv, two turns from castable on a two-land board) as "payload covered",
+    // which made the sink tier live and fetched Essence Depleter -- the exact sink-before-it-can-
+    // be-fed shape the gate exists to prevent. The reference line fetches Cloud of Faeries there
+    // and combos two turns earlier. Under the gate, a hand card only covers the outlet/payload
+    // tiers if a FULL UNTAP of today's board could pay for it (top-land yields, aura bonuses
+    // included). Battlefield pieces always count; the sink flag stays presence-based -- a held
+    // finisher needs no mana until the loop's mana is unbounded anyway.
+    //
+    // BUILT FOR THE SWEEP, NOT ADOPTED (default OFF). The 6-reference probe moved no win turn,
+    // and on seed 1 itself the off/on digests are IDENTICAL: the pool fits inside the tutor
+    // width there, so the search evaluated both fetches and picked the Depleter on its own
+    // judgement -- the ranking was never the binding constraint. That is a HORIZON problem
+    // (depth 5 / 20 ms cannot see the Cloud line's payoff), which is the value leaf's job, not
+    // this tier table's. Re-measure this arm only after the deck has a value leaf.
+    static const bool s_cast_gate_env = EnvOn("MTG_EDF_WISH_CAST_GATE", false);
+    const bool cast_gate = heurarm::Flag(heurarm::EDF_WISH_CAST_GATE, s_cast_gate_env);
+    const int  capacity  = cast_gate ? FlickerTopLandYields(s, controller, kFlickerMaxUntaps)
+                                     : 0;
     auto note = [&](const Card& c, bool on_battlefield)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d) { return; }
-        if (d->params.blink_cost.has_value())      { have_outlet  = true; }
-        if (d->params.etb_untap_lands > 0)         { have_payload = true; }
+        const bool deployable = on_battlefield || !cast_gate
+                             || d->card.m_mana_cost.ManaValue() <= capacity;
+        if (deployable && d->params.blink_cost.has_value()) { have_outlet  = true; }
+        if (deployable && d->params.etb_untap_lands > 0)    { have_payload = true; }
         if (d->params.drain_cost.has_value()
             || d->params.exile_opponent_top_cost.has_value()) { have_sink = true; }
         if (on_battlefield && d->card.IsLand())    { ++lands; }

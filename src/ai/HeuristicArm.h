@@ -161,6 +161,7 @@ enum Slot : int
     FLUCT_REBUY,              // MTG_FLUCT_REBUY          cycle-Stinger -> Unearth this-turn deployment line
     GREEDY_HOLD_LAND,         // MTG_GREEDY_HOLD_LAND     hold-fuel's LAND-DROP site (d0 greedy): skip the drop, cycle the land
     EDF_C_BUDGET,             // MTG_EDF_C_BUDGET         go-off projection budgets {C} pips, not just mana value
+    EDF_WISH_CAST_GATE,       // MTG_EDF_WISH_CAST_GATE   hand coverage in the wish ranking needs a CASTABLE card
     COUNT
 };
 
@@ -299,6 +300,7 @@ inline const char* Name(int slot)
         "MTG_FLUCT_REBUY",
         "MTG_GREEDY_HOLD_LAND",
         "MTG_EDF_C_BUDGET",
+        "MTG_EDF_WISH_CAST_GATE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
