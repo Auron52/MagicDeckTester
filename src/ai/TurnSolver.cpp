@@ -34990,15 +34990,39 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                 if (OpponentHasLost(copy)) { best = cand; verified = true; break; }
                 best = cand;               // remember it only to skip re-verifying the same index
             }
+            // KEEP THE BIGGEST STANDALONE BANKING COUNT even when it does not win (USER,
+            // 2026-09-08: "There should be no broken references. If there are please repair
+            // them."). The removal above was scoped by the seed-7 FALSE-PROMISE bug -- a COMBINED
+            // plan whose trial apply and real apply resolve sub-decisions differently -- but a
+            // STANDALONE xN blink has no sub-decision to diverge on, and deleting it also deleted
+            // the user's own sized multi-activate (2026-09-05: "I would like to be able to
+            // multi-activate the displacer") and broke a user save: claude_s2_gi1's recorded T4
+            // kill is "blink x23 (bank), wish -> Infiltrator, cast it, blink x50", and with only
+            // single blinks on the menu its replay banked too little and slid T4 -> T7. What stays
+            // deleted is every COMBINED goff plan and every smaller banking variant -- the menu
+            // gains at most ONE banking entry, and only the verified winner ever says COMBO OFF.
+            int best_bank = -1, best_bank_k = 0;
+            if (!verified)
+            {
+                for (int i = 0; i < static_cast<int>(plans.size()); ++i)
+                {
+                    const int k = goff_of(plans[i]);
+                    if (k > best_bank_k && plans[i].actions.size() == 1
+                        && plans[i].land_to_play.empty())
+                    { best_bank = i; best_bank_k = k; }
+                }
+            }
             std::vector<Plan> kept;
             kept.reserve(plans.size());
             Plan combo;
+            bool have_combo = false;
             for (int i = 0; i < static_cast<int>(plans.size()); ++i)
             {
                 if (goff_of(plans[i]) == 0)          { kept.push_back(std::move(plans[i])); }
-                else if (i == best && verified)      { combo = std::move(plans[i]); }
+                else if ((i == best && verified) || i == best_bank)
+                { combo = std::move(plans[i]); have_combo = true; }
             }
-            if (verified) { kept.push_back(std::move(combo)); }
+            if (have_combo) { kept.push_back(std::move(combo)); }
             plans = std::move(kept);
         }
     }
