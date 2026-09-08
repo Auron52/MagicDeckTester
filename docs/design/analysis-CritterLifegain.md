@@ -3,8 +3,8 @@
 Deck: `decks/CritterLifegain/CritterLifegain.cod` (60, mono-white lifegain; no sideboard).
 Started 2026-09-08 on branch `phase-1-2-deck-analyzer` (base 67ef4c66).
 
-Status: **IN FLIGHT** — Stage 1 done; Stage 2 research fan-out COMPLETE (10 Opus drafts saved under
-`logs/critter/drafts/*.md`, one per card); serial integration in progress.
+Status: **ANALYZED** (2026-09-08) — all Stage-5 checks green; suite GT accepted for all three tiers
+(smoke/regression/overnight); tie-break `--blocks 121` re-run + 5g mining are the remaining box work.
 
 ## Stage 1 — coverage (2026-09-08)
 
@@ -84,9 +84,56 @@ devotion flip, Serra threshold, GrantLifelink + counter merge); scenario
   `discard`, `target` surfaced; `--verify-card "Heliod, Sun-Crowned"` VERIFIED (target).
 - 5i discard: analyzer verdict DISCARD_INERT (no cleanup shed reached by either caller).
 - 5c2 leaf tie-break: RUNNING (`logs/critter/tiebreak.log`).
-- 5d claude-play sweep: RUNNING -- 16 Opus agents, base seed 31337, gi 0-15.
+- 5d claude-play sweep (16 Opus agents, base seed 31337, gi 0-15, at fbe93635): 15/16 games
+  identical win turn to the search; gi=5 Claude T5 vs search T6 -> ROOT-CAUSED as a search gap:
+  loyalty actions are enumerated only from walkers already on the battlefield, so "cast Ajani,
+  then -2 this turn" was unreachable autonomously (human play reaches it via the re-prompt).
+  FIXED 2a6e8453: provider-gated cast-plan variants carrying `loyalty_ability` (target-free
+  abilities), folded into `plan_signature` (#L<k>), applied after the walker enters + legend rule in
+  both worlds. First attempt missed the executor half (showed as [fd-diverge] on every such line --
+  the oracle caught it); final A/B on critter 300 games d3/b10 seed 2002: 29 faster / 0 slower
+  (5.0234 -> 4.9264), 0 fd-diverge / 0 nonconv, gi=5 now T5. Generic stays OFF
+  (`MTG_WALKER_CAST_ACTIVATE`): FiveColour's walkers are a follow-up A/B.
+  Flags: 0 confirmed rules/state defects. Dismissed: Basilica bounce prompt after a same-plan
+  cast (gi=10) = the legal tap-in-response shortcut. Cosmetic, FIXED 2a6e8453: board-prompt P/T
+  labels without CDA/statics (Daxos "2/0", Serra without +5/+5; gi 0/7/13/15); Unexpectedly
+  Absent's prompt inheriting the Swords wording (gi=9). Cosmetic, OPEN: Heliod's target prompt says
+  "loyalty ability" (gi=14); no explicit pass entry when only UA/self-sac variants remain (-1
+  passes; gi 2/6). FOLLOW-UP (pre-existing, Anti-Lifegain's card): UA's human target list omits
+  own permanents although its note claims human play opens them (gi=9).
+  Re-sweep of the four Ajani games (gi 5/11/13/15) under 2a6e8453: see below.
 - Suite: added to `test/regression_cases.sh` (breaching shape, + `critter2hg` canary); GT to be
   accepted after the tie-break batch frees the box.
+
+## Stage 6a -- encoded heuristics & assumptions disclosure (read from the code, 2026-09-08)
+
+| assumption / heuristic | source | class | cost / why safe |
+|---|---|---|---|
+| Passive opponent (never blocks/attacks/casts/targets); its spawns enter on 8 of 10 game indices and DO fire the Wardens | engine | global | flying / vigilance / protection / indestructible inert; spawn pattern is a per-gi variance source for lifegain totals |
+| Clairvoyant search, first-main only (`DeckUsesSecondMain` did not fire) | engine | global | Ranger-Captain's sac is taken pre-combat (forgoes that turn's 3 dmg) -- small disclosed under-rating |
+| Suite settings d3/b10, d5/b20 (2x overnight); profile = card-scores only (min_lands 1 / max_lands 5, no keep table, no value leaf) | Stage 4 | global | gi=0 s2002 unwon = a 5-Plains keep that flooded (max_lands 5) |
+| "you may gain 1 life" (Attendant, Champion) ALWAYS taken | cards.json | correctness shortcut | dominated (no lifegain hate; every gain = counters) |
+| One trigger per life-gain EVENT (CR 119.10); lifelink gains applied AFTER the damage step (CR 510.2) | GainLife / Combat.cpp | rules | verified by 10 unit tests + scenario + 20 sweep games |
+| Heliod counter target = ONE resolution pick (`DefaultLifegainCounterTarget`: highest-power own creature that can still attack this turn, else highest-power own creature; never a non-creature while a creature exists; tie lowest m_number) | SpellEffects.h (provider hook `LifegainCounterTarget` = default) | PRUNING (resolution heuristic) | could miss: spreading vs piling counters (identical for raw damage; differs only for Voice's inert thresholds); NOT openable by MTG_UNPRUNED (5-15 events/turn -> Cartesian); human play picks from the full legal set |
+| Heliod lifelink-grant target = highest-power own attacker without lifelink (K axis searched, cap = #useful targets) | ApplyPermAbility / ModeSpec | PRUNING (resolution heuristic) | could miss: granting a smaller attacker (never better vs a non-blocker); human play picks any other creature |
+| Ranger-Captain self-sac emitted only while a death payoff (Daxos) is live | TurnSolver enumeration (`SelfSacHasDeathPayoff`) | lossless dominated-action removal | with no payoff the sac is a strict loss; human play always offered |
+| Ranger-Captain tutor: all 3 legal MV<=1 names searched (tutor axis width 6); plan-less paths take the first library match | Generic TutorCandidates | none (full) | disclosed plan-less fallback |
+| Ajani 0 NOT enumerated autonomously | TurnSolver loyalty enumeration | value gate | strictly negative vs this opponent; human play sees it |
+| Ajani cast + same-turn activation variants (target-free abilities) | `SearchesWalkerCastActivation` (CritterLifegain ON, Generic OFF) | WIDENING (search reach) | +29/-0 games on 300; other decks unchanged until measured |
+| Legend rule keeps the walker with the most loyalty (tie: can still activate, then oldest) | `CritterLifegainProvider::LegendKeepIndex` (`MTG_LEGEND_KEEP_LOYALTY`) | correctness shortcut | rejected as a Generic default (FiveColour d0 gi=15 6->7) |
+| EvalCard credits: Pridemate/Voice entry counters = #own enter-watchers; Thune team credit; Heliod flat +2 DMG and body discounted by devotion distance | TurnSolver EvalCard (param-gated) | greedy-d0 ordering only | rollout owns the real valuation; no other deck's eval moves |
+| Voice's 4+/10+ counter keywords, Serra/Thune flying, Auriok protection, Heliod indestructible + God-subtype/removed-from-combat halves | bracket notes (PROVISIONAL partials) | card-modeling collapse | each provably unobservable vs this opponent (see the notes) |
+| Daxos: simultaneous-death look-back and legend-rule deaths not firing dies-triggers | bracket note | known engine gap | unreachable / a 1-life miss on a 2-of x 2-of collision |
+| Viewer: Heliod's counter target fires a board prompt PER gain event | 2c-ter | UX | faithful; a per-turn "apply to all" affordance is a follow-up |
+| Provider routing: `CritterLifegain` (intended -- Ranger-Captain alone trips goblin + anti) | 4a | routing | Generic for everything but the two hooks above |
+
+## Claude-play sweep
+- commit: `2a6e8453` (16 games at fbe93635 + 4 Ajani-game re-sweeps at 2a6e8453, all under the current play)
+- seeds: 31337 games: 16 (gi 0-15) + re-sweep gi 5/11/13/15
+- flags: 0 unresolved
+- results: `logs/critter/sweep_results.jsonl`. 15/16 identical win turn; gi=5 (search T6 vs Claude T5)
+  root-caused and FIXED (same-turn walker activation); re-sweep: 4/4 identical, walker path verified.
+  Dismissed/cosmetic flags listed under Stage 5 above.
 
 ## Approved deferrals
 (none yet — every proposed deferral is PROVISIONAL until the user signs off; user is asleep
