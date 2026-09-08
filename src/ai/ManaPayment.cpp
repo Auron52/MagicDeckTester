@@ -142,6 +142,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                           std::uint64_t reserved_mask, ManaPool* available,
                           bool honor_legacy_cco)
 {
+    if (tapstats::Enabled()) { tapstats::g_pay_once.fetch_add(1, std::memory_order_relaxed); }
     int      active = state.active_player_index;
     ManaPool floating;  // mana produced this payment but not yet consumed (held locally)
 
@@ -932,7 +933,9 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     };
     // §2a: a Treasure that paid is SACRIFICED, not left tapped. Deferred to here because erasing
     // mid-payment invalidates the source loops' references (see CommitPaySacSacrifices). Inert when off.
-    if (greedy()) { commit_leftover(floating); CommitPaySacSacrifices(state, active); return true; }
+    if (greedy())
+    { if (tapstats::Enabled()) { tapstats::g_pay_greedy_ok.fetch_add(1, std::memory_order_relaxed); }
+      commit_leftover(floating); CommitPaySacSacrifices(state, active); return true; }
     // Greedy failed: try the backtracking solver from a clean board.
     // OPPONENT life is part of the rollback (2026-08-21): a Grove-class drip land tapped by the
     // failed greedy arrangement has already paid the opponent's gain/loss, and without restoring
@@ -999,6 +1002,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     state.opponent_lost_life_this_turn = oll_pre;
     if (s_energy_refund) { state.players[active].energy_counters = energy_pre; }   // Aether Hub {E} (see energy_pre)
     state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
+    if (tapstats::Enabled()) { tapstats::g_pay_once_fail.fetch_add(1, std::memory_order_relaxed); }
     return false;
 }
 
@@ -2351,9 +2355,71 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     return ok;
 }
 
+// ---- FAIL-FAST TOTAL-MANA BOUND (MTG_PAY_BOUND, default ON) ----------------------------------
+//
+// A payment ATTEMPT is expensive before it has looked at a single pip: TapForCostSharedImpl runs five
+// O(battlefield) reservation scans (each with a LookupCached per permanent), then -- when any of them
+// returns a mask -- snapshots the battlefield, runs a whole held attempt, restores, and runs a second
+// unrestricted one. Each of those attempts copies the battlefield AGAIN for its own rollback, walks
+// the per-pip greedy, and on failure enters the backtracker, which builds a source list, an
+// O(sources^2) identical-sibling chain, a 128-bit mana-cache key and a max-flow oracle before it can
+// answer. On EldraziDisplacerFlicker every one of those is paid over and over for costs the board
+// cannot cover AT ALL, because the dominant caller is a payability PROBE: SubsetPayableWithFilters
+// pays a subset's casts in sequence on one copied board (a pending land Aura opens that path for this
+// deck -- PendingLandAuraColorMask), so the LAST casts of a long subset routinely ask a board whose
+// sources are already spent.
+//
+// The bound is the backtracker's own branch-and-bound gate, hoisted to the front door: total mana is
+// the one quantity that is cheap to bound exactly and that no amount of colour-fixing can create.
+// Filters convert colour, they do not add mana; every source taps at most once (`usable` skips a
+// tapped permanent); one tap adds at most SourceMaxNetLive to the pool. So a false from
+//     PaymentManaCovers(state, for_creature, cost.ManaValue() - state.floating_mana.Total())
+// -- i.e. UntappedManaUpperBound short of the cost's remaining pips -- proves the cost unpayable by
+// the greedy, by the backtracker, by the held attempt, by the unrestricted attempt and by every
+// hybrid expansion (ExpandHybrids preserves ManaValue). Bounded with reserved_mask 0 -- i.e.
+// crediting even the sources the reservation audit would hold back -- so it can never be tighter
+// than what any of those attempts is allowed to spend. See PaymentManaCovers for why the test is
+// cheap enough to run on every payment: it is what the bound COSTS, not what it saves, that decides
+// this (the first cut called LandAuraBonus -- itself a battlefield rescan -- per source, which on
+// this aura-heavy deck made the whole thing O(n^2) and measured net -0.4%).
+//
+// BYTE-IDENTICAL, and the argument has exactly one moving part: what a FAILED payment leaves behind.
+// TapForCostSharedOnce's total-failure path restores battlefield, both players' life,
+// opponent_lost_life_this_turn, the graveyard (a Deathrite tap's exile is a graveyard erase, nothing
+// more), the energy counters and the floating reserve; CommitPaySacSacrifices runs only on success.
+// So a failed payment is state-neutral -- with ONE deliberate exception, documented in ManaPayment.h:
+// the executor's `available` accounting pool is NOT rolled back, so a failed greedy leaves it
+// decremented by whatever it managed to tap. That is observable behaviour, so the fast path is
+// restricted to `available == nullptr` -- which is the rollout/search world (TapForCostDirect) where
+// all the cost is, and excludes the executor's real-play payments entirely.
+// The thread_local payment caches are unaffected: skipping a solve skips a negative cache STORE,
+// which can only cost a later hit, never change an answer.
+static bool PayBoundEnabled()
+{ static const bool v = EnvOn("MTG_PAY_BOUND", true); return v; }
+
 static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
                                  ManaPool* available, bool honor_legacy_cco)
 {
+    if (tapstats::Enabled()) { tapstats::g_pay_impl.fetch_add(1, std::memory_order_relaxed); }
+    // The fail-fast bound (see the block above). MTG_PAY_BOUND=0 restores the old behaviour, and
+    // under MTG_TAP_STATS the OFF arm still records what the bound WOULD have pruned, so the rate is
+    // measurable on the unmodified engine.
+    if (available == nullptr)
+    {
+        const bool pb = PayBoundEnabled();
+        if (pb || tapstats::Enabled())
+        {
+            if (!PaymentManaCovers(state, for_creature,
+                                   cost_in.ManaValue() - state.floating_mana.Total()))
+            {
+                if (tapstats::Enabled())
+                { (pb ? tapstats::g_bound_prune : tapstats::g_bound_probe)
+                      .fetch_add(1, std::memory_order_relaxed); }
+                if (pb) { return false; }
+            }
+        }
+    }
+
     // Two-colour hybrid pips ({B/G}, Deathrite Shaman): expand into concrete-colour assignments
     // and try each through the (hybrid-unaware) full pipeline below. bits==0 IS the flat cost the
     // historical first-colour collapse produced, tried first and UNsnapshotted -- so whenever it
