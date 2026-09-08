@@ -1396,7 +1396,20 @@ public:
     // search at every depth, in every game, forever. Candidates come back in zone order, and for a
     // sideboard that is decklist order, so it is deterministic rather than merely likely. This is a
     // COVERAGE fix, not a heuristic one.
-    int  TutorSearchWidth() const override { return 8; }
+    //
+    // MTG_EDF_TUTOR_NARROW (2026-09-08, default OFF): width 8 -> 3. The width-8 patch predates the
+    // adopted mode-2 ranking; with every candidate inside the width the ranking never BINDS -- the
+    // search evaluates all eight fetches and its depth-5/20ms horizon picks the sink over the
+    // enabler (seed 1: Depleter over Cloud of Faeries, T3 human win vs T5). Narrowing hands the
+    // choice to the board-aware ranking, and the width is also a straight cost multiplier on the
+    // root plan set (one profiled game: w8 90.9s, w3 38.1s, w1 26.1s). Paired with
+    // MTG_EDF_WISH_CAST_GATE -- without the castability gate the ranking itself tops the sink, so
+    // the two are measured JOINTLY (2x2), not in sequence.
+    int  TutorSearchWidth() const override
+    {
+        static const bool s_narrow_env = EnvOn("MTG_EDF_TUTOR_NARROW", false);
+        return heurarm::Flag(heurarm::EDF_TUTOR_NARROW, s_narrow_env) ? 3 : 8;
+    }
     // The board-aware ranking a NARROWER width rests on (MTG_EDF_TUTOR_RANK: 0 off = the old
     // zone-order list, 1 flat tiers, 2 tiers with the kill gated on an assemblable loop). ADOPTED
     // at 2. Ranks by card PARAMS, never by name, so it is correct for any wish pool.
