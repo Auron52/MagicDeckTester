@@ -2085,3 +2085,47 @@ Also noted: the 40M-unit abandon floor now fires at ~4-6 minutes on V5-V8/H5 (th
 ~150k u/core-s at leaf-0 play), so the 2026-09-07 "floor = 12-48 h" mis-calibration is moot for
 the V cells; H4 abandoned nothing in 25 games. The mirror check from the previous section closed
 at 63/67 recovered; the 4 unrecovered were the unbounded old-leaf jobs I killed to free the box.
+
+### 2026-09-08b — value-leaf pipeline COMPLETE (staged, NOT adopted): the model buys nothing at leaf-0 play
+
+Run: `valueleaf.sh run` 03:48 UTC (frozen 98170986), phase A re-dumped (user: a bad call — the old
+rows' labels were byte-identical under both leaves; and phase A was capped at 24 workers on the
+2026-09-05 OOM history — also a bad call, all cores always), user cancelled the phase A tail at
+12,070 rows 05:29, `finish` → train (held-out RMSE 0.640) → matrix 05:30-08:32 (3 h 2 min, 32
+workers, ~100 core-h, 84 of 20,800 games abandoned = 0.4%, risk gate CLEAN) → D → E → F FAILED as
+expected (needs the live sidecar). Total 5 h 8 min wall.
+
+**Matrix (374 paired games/cell x 4 seeds, unbounded):**
+
+| rung | H (turns, s/game) | V (turns, s/game) |
+|---|---|---|
+| 1 | 5.1946, 0.09 | 5.4841, 0.08 |
+| 2 | 4.8536, 0.94 | 4.9288, 0.45 |
+| 3 | 4.7599, 5.0 | 4.8054, 2.4 |
+| 4 | 4.7440, 18.6 | 4.7500, 10.8 |
+| 5 | 4.7414, 34.8 | 4.7434, 32.8 |
+| 6/7/8 | — | 4.7421 / 4.7414 / 4.7414, ~36 |
+
+Crossover derived = identity (1->1 2->2 3->3 4->4 5->5 6->5 7->6 8->6); trust UNSET (V5 gap
++0.0020, upper bound 0.0039 > tol). To match H4 the value leaf needs V5 at 1.8x H4's cost. The old
+table's case (H4 1177 s vs V5 33 s) is gone: the greedy leaf made the heuristic rollout nearly free
+and enumeration is what remains in both arms.
+
+**Phase E, bounded play (built-in d5/b20), 8 seeds x 1000 paired games:**
+
+| arm | avg | delta | t | seeds better/worse | core-s | cost |
+|---|---|---|---|---|---|---|
+| live (no sidecar) | 4.83812 | — | — | — | 11836 | 1.00x |
+| staged (sidecar present) | 4.83263 | -0.0055 | -2.47 | 7/1 | 17574 | **1.48x** |
+
+Play-profile sweep on the staged model (4 seeds x 500): every ENABLED arm (d4/d5/d6 with
+escalation_cap=d) is WORSE than the presence-only default (+0.0135..+0.015 t, t +3..+4) while
+0.84-0.92x the cost — capping escalation costs more quality than the depth buys.
+
+**Verdict: NOT a clean win.** +0.0055 t (significant, 7/8 seeds) for **1.48x the per-game cost** at
+the shipped play — on a deck re-admitted to the suite on cost grounds, the third-costliest already.
+Staged at `logs/eval/Melira Pod.value.STAGED.json`; adoption is the user's call
+([[adopt-clean-wins-without-asking]] applies only to no-drawback wins). Recommendation: do not adopt.
+Consequence: phase F (mull_gen setting + expected_buckets) cannot run without a live sidecar, so the
+mulligan generation setting must be derived by hand (`scripts/derive_mullgen_setting.py` against a
+temporary value.json, or the built-in d5/b20 default) if the model stays unadopted.
