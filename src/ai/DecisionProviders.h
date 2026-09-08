@@ -1489,3 +1489,11 @@ int DorkAtkContestedKind(const GameState& s);
 // real-vs-hypothetical discriminator is cleared. No-op unless the env flag is set, and it never
 // branches game logic.
 void EdfTurnTrace(const GameState& s, int controller);
+
+// SAME-MAIN GO-OFF (MTG_EDF_AUTOGOFF, default ON; USER 2026-09-08 "no extra mains to search"):
+// after a main's casts have been applied, if the board now holds a live self-funding blink loop
+// whose go-off count prices to lethal, run the loop as part of realising the plan -- the fix for
+// "cast the outlet, then go off, in ONE searched main" without a second main phase. Called at
+// ApplyPlanDirect's tail and the autonomous executor's matching point (lockstep). Search only
+// (no-op under human play); inert for decks without a blink outlet. Returns true if it blinked.
+bool EdfAutoGoOffAfterCasts(GameState& s, int controller);

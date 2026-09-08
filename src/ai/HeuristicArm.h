@@ -165,6 +165,8 @@ enum Slot : int
     EDF_TUTOR_NARROW,         // MTG_EDF_TUTOR_NARROW     wish width 8 -> 3: the RANKING decides, not the eval
     EDF_SINK_KMAX,            // MTG_EDF_SINK_KMAX        sink K axis {1..3} -> {kmax}: apply-loop realises what's payable
     EDF_BLINK_KMAX,           // MTG_EDF_BLINK_KMAX       blink K axis {1..3} -> {kmax}: same shape, same apply-loop degrade
+    EDF_M2,                   // MTG_EDF_M2               flicker-combo decks (blink outlet + ETB-untap payload) get the searched second main
+    EDF_AUTOGOFF,             // MTG_EDF_AUTOGOFF         same-main go-off: plan apply runs the assembled loop (USER: no extra mains to search)
     COUNT
 };
 
@@ -307,6 +309,8 @@ inline const char* Name(int slot)
         "MTG_EDF_TUTOR_NARROW",
         "MTG_EDF_SINK_KMAX",
         "MTG_EDF_BLINK_KMAX",
+        "MTG_EDF_M2",
+        "MTG_EDF_AUTOGOFF",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

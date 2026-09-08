@@ -696,7 +696,16 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
         std::cerr << "\n";
     }
 
-    j.second_main = GoldFishRunner::DeckUsesSecondMain(j.deck);
+    // Evaluated UNDER THE JOB'S ARM: DeckUsesSecondMain reads heurarm levers (EDF_M2), and this
+    // parse-time precompute runs before the worker installs t_arm -- without the swap an m2 lever
+    // set per-job in the manifest is silently OFF for the whole job (found 2026-09-08, the first
+    // EDF_M2 A/B measured off-vs-off).
+    {
+        const heurarm::Arm saved = heurarm::t_arm;
+        heurarm::t_arm = j.flags;
+        j.second_main = GoldFishRunner::DeckUsesSecondMain(j.deck);
+        heurarm::t_arm = saved;
+    }
     return j;
 }
 } // namespace

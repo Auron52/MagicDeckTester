@@ -14677,6 +14677,59 @@ inline bool EdfProspectiveOn()
 // AIEngine::TakeTurn links against.
 void EdfTurnTrace(const GameState& s, int controller) { EdfTurnTraceImpl(s, controller); }
 
+// SAME-MAIN GO-OFF (USER directive, 2026-09-08: "There should be no need to use multiple mains"
+// ... "The more important thing is that we don't have extra mains to search").
+//
+// The hole this closes: abilities are enumerated from BATTLEFIELD state, so a plan that casts the
+// outlet (Emiel/Displacer) this turn carries no blink action for it -- the assemble-and-go-off
+// turn was unrepresentable in a single searched main, and the engine won a full turn late (EDF
+// claude_s5_gi4: search T6 vs human T4; s1's T4 line, same shape). The wrong fix is a searched
+// second main (m2 as a re-enumeration point): it roughly doubles per-turn search cost against a
+// fixed budget and measurably regressed a neighbouring ref (s4 6 -> 7 under MTG_FORCE_USES_M2).
+//
+// The right fix is the CLUE-FUSION shape: when the searched casts have just landed and the board
+// NOW holds a live self-funding loop that FlickerGoOffCount sizes to a kill (sink on board, in
+// hand, or wishable -- hand_setup_mv prices the deploy; ApplyBlinkLoop's ComboFinishFromHand is
+// the apply half), run the loop AT THE APPLY, as part of realising the plan. Everything stays
+// verified-by-execution: the loop pays real mana per iteration and stops the moment one cannot be
+// paid, so an over-sized count realises only what is payable (the kmax-adoption precedent), and
+// the score a plan gets IS what replaying it produces (no projection drift). One shared site --
+// ApplyPlanDirect's tail (enumeration scoring, rollouts, interior nodes) and the executor's
+// TakeTurn at the same lockstep point -- so scored lines match realised lines by construction.
+//
+// HUMAN PLAY EXCLUDED: the viewer keeps per-action blinking and its explicit FINISH plan (the
+// 2026-09-04 autocash resolution). Fires only when the go-off count is > 0, i.e. the recognizer
+// prices the loop to LETHAL; a live loop that cannot kill keeps the banked-blink status quo.
+// MTG_EDF_AUTOGOFF=0 (heurarm EDF_AUTOGOFF) is the hatch; inert for every deck without a blink
+// outlet (RecogniseFlickerLoop's cheap gate).
+bool EdfAutoGoOffAfterCasts(GameState& s, int controller)
+{
+    static const bool s_on_env = EnvOn("MTG_EDF_AUTOGOFF", true);
+    if (!heurarm::Flag(heurarm::EDF_AUTOGOFF, s_on_env)) { return false; }
+    // Provider gate FIRST: this sits on the apply hot path of EVERY deck, and the recognizer's
+    // own cheap gate still walks the battlefield. HasExtraLethalModel() is one virtual call and
+    // true only for the flicker provider, so every other deck pays nothing measurable.
+    if (!ResolveProvider(s).HasExtraLethalModel()) { return false; }
+    if (HumanPlayActive()) { return false; }
+    if (s.players[1 - controller].life <= 0) { return false; }   // already over
+    const FlickerLoop loop = RecogniseFlickerLoop(s, controller);
+    if (!loop.ok) { return false; }
+    const int n = FlickerGoOffCount(s, loop);
+    if (n <= 0) { return false; }
+    const CardDefinition* od = nullptr;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.card.m_number == loop.outlet_id)
+        { od = CardDatabase::Instance().LookupCached(p.card); break; }
+    }
+    if (od == nullptr || !od->params.blink_cost.has_value()) { return false; }
+    const int done = ApplyBlinkLoop(s, controller, loop.outlet_id, loop.payload_id,
+                                    od->params, n,
+                                    [&s](const ManaCost& c)
+                                    { return TapForCostDirect(s, c, /*for_creature=*/false); });
+    return done > 0;
+}
+
 
 // WHICH creature to blink. Unnarrowed this is "every creature on the board", and across two or
 // three outlets that product is a large part of the 1.38e9. Only two targets can matter:

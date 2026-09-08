@@ -8,6 +8,7 @@
 #include "../core/HardwareConcurrency.h"
 #include "../ai/AIEngine.h"
 #include "../ai/DecisionProviders.h"
+#include "../ai/HeuristicArm.h"   // EDF_M2 lever (flicker-combo second main)
 #include "../ai/Profiler.h"
 #include "../deck/DeckLoader.h"
 #include <nlohmann/json.hpp>
@@ -198,6 +199,26 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
                 if (IsManaRitual(*d2))               { ritual = true; }
             }
             if (ping && ritual) { return true; }
+        }
+
+        //   * FLICKER COMBO (blink OUTLET + ETB-untap PAYLOAD, pairwise like Utvara above). The
+        //     go-off turn is "cast the outlet (+ payloads), THEN activate its blink loop" -- but
+        //     abilities are enumerated from BATTLEFIELD state, so in a single searched main the
+        //     ability of a creature cast this turn does not exist yet and the whole
+        //     assemble-and-go-off turn is UNREPRESENTABLE; the second main is the engine's one
+        //     re-enumeration point after the casts resolve. Found 2026-09-08 (EDF claude_s5_gi4:
+        //     search T6 vs human T4; MTG_FORCE_USES_M2 alone moved it to T5 at the same 20ms
+        //     budget). Lever MTG_EDF_M2 (heurarm EDF_M2) so the A/B pools per-job in one batch.
+        //     DEFAULT OFF until the 2x50-game sweep + refs measure it (adoption doctrine).
+        static const bool s_edf_m2 = EnvOn("MTG_EDF_M2", false);
+        if (def->params.blink_cost.has_value()
+            && heurarm::Flag(heurarm::EDF_M2, s_edf_m2))
+        {
+            for (const Card& c2 : deck.mainboard)
+            {
+                const CardDefinition* d2 = CardDatabase::Instance().LookupCached(c2);
+                if (d2 && d2->params.etb_untap_lands > 0) { return true; }
+            }
         }
     }
     return false;
