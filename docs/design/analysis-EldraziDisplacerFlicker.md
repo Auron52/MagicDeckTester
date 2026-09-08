@@ -3834,3 +3834,16 @@ gi=30 **2.5h+ -> 286s (>=30x)**, wt=7. gi8 win turn unchanged. All six reference
 exact win turns (s2's digest moves at the same avg; the rest identical). Smoke 73/73
 byte-identical (investigate is EDF-only), unit SUCCESS, scenarios 72/72. Residual heavy class:
 ~5min games where the board is legitimately fat -- the value leaf remains the structural answer.
+
+### K levers ADOPTED (2026-09-08, default ON)
+
+Re-measured on the clue-fused binary, 200 pooled games (2 arms x seeds 3001/3061 x 50, one
+batch): EXACTLY quality-neutral on both seed sets (avg 6.0400==6.0400, 5.7800==5.7800) at
+-28%/-34% summed game wall; all six references at identical win turns and digests. Defaults
+flipped ON in the provider reads (`MTG_EDF_SINK_KMAX=0` / `MTG_EDF_BLINK_KMAX=0` restore).
+Two pins updated to the adopted menu, guarded property preserved in both:
+`test/scenarios/edf_human_can_activate_the_drain.json` (choose still offered; 2 variants) and
+`test_edf_blink_target.cpp` (the go-off count still survives; menu is {3, go-off}).
+Fusion side-note: fused ctrl s3001 summed wall 2,457s vs 9,149s pre-fusion (-73%); s3001 avg
+moved 6.0000 -> 6.0400 under fusion (both arms equally; refs unmoved) -- the accepted price of
+the user-directed shortcut.
