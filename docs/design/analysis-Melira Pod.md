@@ -1965,3 +1965,55 @@ GT consistent: 435 logs, 0 stale, 0 missing; only melira keys changed. The overn
 audit showed "43 configs changed" -- stale Sep-4 .wins of OTHER decks in the shared wins dir,
 not this run; the per-deck accept promotes only this run's keys by design (regression.sh
 ~183). Pushes remain paused (user).
+
+### 2026-09-08 (later) — the two questions: is quality worse overall, and are the worse cases recoverable?
+
+USER: *"there are always 2 questions to answer: Is quality worse overall and are any worse cases
+recoverable with depth and budget? If there are no unrecoverable regressions and the quality is
+not worse overall we can proceed."*
+
+**Q1 -- worse overall?** No. Pooled paired: d3 +0.005t (se 0.006) over 3000 games, d5 -0.008t
+(se 0.006) over 2000. Neither outside noise.
+
+**Why the d3 games moved (traced, 3 games):** the arms split on a TURN-1/2 sequencing choice two
+turns before the kill (T2 Voice vs Melira; T2 Finks vs Vizier; T1 Birds vs Feeder). The ladder
+telemetry shows why the leaf decides those turns at all: at "d3 b10" every decision commits
+DEPTH 1 (id_depth hist 1:4 on the traced game; the start gate never admits a deeper pass), and
+d5/b20 commits 1-2. So the turn-4 kill is never in the tree at turn 2 -- the leaf ranks it, and
+the pure greedy leaf ranks by PROJECTION, blind to resolution-driven kills (Pod -> Redcap loop,
+Chord -> Melira) the old 1-ply leaf applied and simulated.
+
+**A first-turn-only 1-ply leaf (`search_leaf_first_turn_depth`, built + measured) is DEAD**: no
+better than leaf-0 at d5 (+0.009, 23 better / 32 worse, 1000 games) and 14.1 core-s/game -- MORE
+than the original leaf, because rollouts average 1.09 turns, so "first turn only" IS the whole
+leaf. Kept as a default-off, unset-everywhere lever (byte-identical; smoke below) so it is not
+re-implemented; do not ship it.
+
+**Q2 -- recoverable with depth and budget?** Yes, all of them. The 92 games the new leaf plays
+worse at d3/b10 (both seed bases), replayed under the shipped profile:
+
+| recovered at | games |
+|---|---|
+| d3 b20 | 31 |
+| d5 b20 | 1 |
+| d5 b40 | 14 |
+| d7 b80 | 9 |
+| unbounded (d5 or d7, b0) | 37 |
+| NOT recovered | **0** |
+
+That 37 need an UNBOUNDED budget is the same budget story as above: a bounded ladder on this
+deck never reaches its nominal depth, so "more depth" only helps once the budget stops binding.
+
+**Mirror check (is the old leaf's blind spot the same size?):** the 67 games the NEW leaf wins
+EARLIER, replayed under the OLD leaf at the same ladder + unbounded d5: 59 recovered, 8 still
+running their unbounded jobs at the time of writing (the old leaf is expensive unbounded); at
+bounded settings up to d7/b80 the old leaf failed to recover 18 of 67 -- the same shape as the
+new leaf's 37 of 92. Two leaves with symmetric, budget-limited blind spots = churn, not a
+regression class.
+
+HARNESS TRAP (cost one wrong table): a per-game batch job must set `seed = base + game_index`
+(the chunk convention) -- with `seed = base` every job replays game 0. `game_index` alone only
+sets the spawn schedule and log number.
+
+**Verdict under the user's rule: proceed** -- quality not worse overall, no unrecoverable
+regressions. Melira stays in the suite with `search_leaf_depth: 0`.

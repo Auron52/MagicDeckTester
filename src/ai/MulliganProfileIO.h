@@ -442,6 +442,8 @@ inline std::string DeckProfileToJson(const MulliganProfile& profile)
         root["vial_target_mv"] = profile.vial_target_mv;
     if (profile.search_leaf_depth >= 0)
         root["search_leaf_depth"] = profile.search_leaf_depth;
+    if (profile.search_leaf_first_turn_depth >= 0)
+        root["search_leaf_first_turn_depth"] = profile.search_leaf_first_turn_depth;
     if (!profile.card_scores.empty())
     {
         json cs = json::object();
@@ -599,6 +601,8 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
     // Per-deck search-leaf fidelity (see MulliganProfile::search_leaf_depth). Absent => -1 => byte-identical.
     if (root.contains("search_leaf_depth"))
         profile.search_leaf_depth = root["search_leaf_depth"].get<int>();
+    if (root.contains("search_leaf_first_turn_depth"))
+        profile.search_leaf_first_turn_depth = root["search_leaf_first_turn_depth"].get<int>();
 
     if (root.contains("keep_model"))
         profile.keep_model = KeepModelFromJsonObj(root["keep_model"]);
@@ -699,6 +703,7 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
     root["mulligan"] = MulliganProfileToJsonObj(profile);
     if (profile.vial_target_mv > 0) { root["vial_target_mv"] = profile.vial_target_mv; }
     if (profile.search_leaf_depth >= 0) { root["search_leaf_depth"] = profile.search_leaf_depth; }
+    if (profile.search_leaf_first_turn_depth >= 0) { root["search_leaf_first_turn_depth"] = profile.search_leaf_first_turn_depth; }
     if (!profile.card_scores.empty())
     {
         json cs = json::object();

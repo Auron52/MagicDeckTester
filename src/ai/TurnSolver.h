@@ -1324,15 +1324,18 @@ public:
     // MulliganProfile::search_leaf_depth). The engine opens one of these around each decision
     // with the deck's value; -1 = leave the default (1-ply) in place. An explicitly-set
     // MTG_FD_LEAF_DEPTH env always wins (A/B hatch). Thread-local, RAII-restored.
+    // `first_turn_depth` (MulliganProfile::search_leaf_first_turn_depth): the outermost horizon
+    // rollout's FIRST simulated turn plays at this depth, the rest at `depth`; -1 = none.
     class SearchLeafDepthScope
     {
     public:
-        explicit SearchLeafDepthScope(int depth);
+        explicit SearchLeafDepthScope(int depth, int first_turn_depth = -1);
         ~SearchLeafDepthScope();
         SearchLeafDepthScope(const SearchLeafDepthScope&) = delete;
         SearchLeafDepthScope& operator=(const SearchLeafDepthScope&) = delete;
     private:
         int m_saved;
+        int m_saved_first;
     };
 
     // FULL-DEPTH search (experimental, env-gated via MTG_FULL_DEPTH). Unlike

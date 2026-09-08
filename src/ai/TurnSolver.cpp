@@ -64,15 +64,29 @@ static const int   s_fd_leaf_depth     = s_fd_leaf_depth_env ? std::atoi(s_fd_le
 // decision via TurnSolver::SearchLeafDepthScope); -1 = none. An EXPLICITLY-set MTG_FD_LEAF_DEPTH
 // wins over it (the A/B hatch), mirroring the bottom_eval precedence rule.
 static thread_local int t_search_leaf_depth = -1;
+// FIRST-ROLLOUT-TURN depth override (MulliganProfile::search_leaf_first_turn_depth; -1 = none):
+// the OUTERMOST horizon rollout plays its first simulated turn at this depth and the rest at the
+// leaf depth. Why: on Melira at d3/b10 the ladder commits depth 1-2 (the budget never reaches
+// the nominal depth), so a turn-2 decision's turn-4 kill lives in the leaf -- and the pure
+// greedy leaf ranks by PROJECTION, blind to resolution-driven kills (Pod -> Redcap loop, Chord
+// -> Melira), so it mis-ranked setup turns (three 4->5 games traced, 2026-09-08). One searched
+// ply at the horizon's first turn applies + simulates those kills; the remaining turns stay
+// greedy. Only the outermost rollout (g_rollout_nest == 0 on entry): the nested candidate
+// rollouts inside that first ply are exactly the greedy ones the depth-1 pass already implies.
+static thread_local int t_search_leaf_first_turn_depth = -1;
 static inline int EffectiveFdLeafDepth()
 {
     if (s_fd_leaf_depth_env != nullptr && *s_fd_leaf_depth_env) { return s_fd_leaf_depth; }
     return t_search_leaf_depth >= 0 ? t_search_leaf_depth : s_fd_leaf_depth;
 }
-TurnSolver::SearchLeafDepthScope::SearchLeafDepthScope(int depth)
-    : m_saved(t_search_leaf_depth)
-{ if (depth >= 0) { t_search_leaf_depth = depth; } }
-TurnSolver::SearchLeafDepthScope::~SearchLeafDepthScope() { t_search_leaf_depth = m_saved; }
+TurnSolver::SearchLeafDepthScope::SearchLeafDepthScope(int depth, int first_turn_depth)
+    : m_saved(t_search_leaf_depth), m_saved_first(t_search_leaf_first_turn_depth)
+{
+    if (depth >= 0) { t_search_leaf_depth = depth; }
+    if (first_turn_depth >= 0) { t_search_leaf_first_turn_depth = first_turn_depth; }
+}
+TurnSolver::SearchLeafDepthScope::~SearchLeafDepthScope()
+{ t_search_leaf_depth = m_saved; t_search_leaf_first_turn_depth = m_saved_first; }
 
 // Deterministic rollout-cost telemetry (MTG_ROLLOUT_STATS): total SimulateToEnd calls + simulated
 // turn-steps this process. A CONTENTION-PROOF measure of rollout work (wall-clock is not, under shared
@@ -29820,6 +29834,12 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     static const int s_roll_horizon = []{ const char* e = std::getenv("MTG_ROLLOUT_HORIZON");
                                           return (e && *e) ? std::atoi(e) : -1; }();
     const int roll_start = state.turn_number;
+    // First-turn depth override applies to the OUTERMOST rollout only (see the thread_local).
+    // Read BEFORE the nest guard increments. Also gated on the env hatch: an explicitly-set
+    // MTG_FD_LEAF_DEPTH is the A/B baseline and must not carry the per-deck first-turn ply.
+    const int first_turn_depth = (g_rollout_nest == 0
+                                  && !(s_fd_leaf_depth_env != nullptr && *s_fd_leaf_depth_env))
+                               ? t_search_leaf_first_turn_depth : -1;
     RolloutNestGuard _rollout_nest;   // see g_rollout_nest: this rollout re-enters SolveWithLookahead
     GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks inside this rollout bill here
     if (s_rollout_stats) { g_rollout_calls.fetch_add(1, std::memory_order_relaxed); }   // deterministic telemetry
@@ -29904,6 +29924,10 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                 }), rp.hand.end());
         }
 
+        // This turn's plan depth: the first-turn override on the rollout's first simulated turn
+        // (outermost rollout only), else the leaf depth. -1 override => `depth` => byte-identical.
+        const int turn_depth = (first_turn_depth >= 0 && state.turn_number == roll_start)
+                             ? first_turn_depth : depth;
         // Pre-combat main: pick and apply plan (includes Vial activations), then animate + tokens.
         TurnSolver::Plan pre_plan;
         if (g_honest_teacher && depth > 0)
@@ -29930,7 +29954,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         else
         {
             pre_plan = TurnSolver::SolveWithLookahead(
-                state, true, depth, max_turns, budget, false, second_main, tt);
+                state, true, turn_depth, max_turns, budget, false, second_main, tt);
         }
         int life_before_pl = state.Opponent().life;
         ApplyPlanDirect(state, pre_plan, true);   // future turn: no stamp (root-turn authority)
@@ -29978,7 +30002,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                 // the rollout's last greedy plan step: every future turn's second main was decided
                 // by the d0 heuristic, so a rollout could not see a future turn holding mana for a
                 // post-combat finisher any more than this turn could.
-                post_plan = SolveSecondMainInSearch(state, depth, max_turns, budget, second_main, tt,
+                post_plan = SolveSecondMainInSearch(state, turn_depth, max_turns, budget, second_main, tt,
                                                     /*in_rollout=*/true);
             }
             const bool m2fix_here = M2FixModeFor(state) != 0;   // per-deck (DecisionProviders.h)

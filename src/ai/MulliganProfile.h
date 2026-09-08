@@ -148,6 +148,12 @@ struct MulliganProfile
     // win turns (see docs/design/analysis-Melira Pod.md, 2026-09-08). Env twin MTG_FD_LEAF_DEPTH
     // overrides this when EXPLICITLY set (A/B hatch) -- same precedence rule as bottom_eval_*.
     int search_leaf_depth = -1;
+    // ...and the depth of the horizon rollout's FIRST simulated turn (outermost rollout only;
+    // top-level `search_leaf_first_turn_depth`, -1 = same as search_leaf_depth). One searched
+    // ply at the horizon applies + simulates resolution-driven kills the greedy projection
+    // cannot see (Pod -> Redcap loop), which is where a pure greedy leaf mis-ranked Melira's
+    // setup turns; the remaining rollout turns stay greedy. See TurnSolver's thread_local.
+    int search_leaf_first_turn_depth = -1;
 
     // Curve requirement for the opening hand. See CurveCheck enum above.
     // None and TwoDrop are the most common; OneDrop and OneAndTwo exist for decks
