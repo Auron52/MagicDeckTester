@@ -155,6 +155,25 @@ apparatus check):
   interior-m2 fallback family ~9%) — FullSearchLine's own second-main loop, not the interior m2,
   is where the budget goes on both decks.
 
+  **RE-PRICED with a FAIR comparator (2026-09-08).** The reverted claim's defect was the
+  comparator (searched@40 vs greedy@20). Re-measured searched-vs-searched at the SAME depth, on
+  the overnight seeds/sizings so the control lands on GT exactly (24-job pooled batch,
+  `logs/postrebase/hinata_budget*`; the b10/b20 control arms reproduce the accepted GT
+  byte-identically, digests included):
+  * **d5 (the SHIPPED config, `value_play` d5/b20): b40 = -0.0167 t/game at 1.37x wall.**
+    3 seeds better, 1 flat, 0 worse. So the gain survives a fair comparator (-0.0167 vs the
+    reverted -0.0156) and the wall cost is GENTLER than the feared ~2x -- consistent with the
+    +39.7% units/game price sheet above (budget is not fully consumed at every decision).
+  * d3/b10 (a SUITE GATE, not shipped): 5.7694 -> b20 5.7444 -> b40 5.7263 -> b80 5.7194,
+    monotone on ALL 4 seeds at every step (12/12). b20 alone puts d3 0.0050 BELOW the greedy era.
+  * **Still NOT proposed for adoption.** It remains a TRADE (quality for wall), so per the bar
+    below it is the USER's call, not an agent's -- and the precondition stands: measure the
+    memo-key coarsening (item 1) FIRST, so the two effects are not conflated again. Budget still
+    buys PAST the dilution rather than remedying it.
+  * Context for the question that prompted this: the post-rebase GT drift that looked like a
+    hinata regression is **+0.0200 at d3/b10 (the gate) but only +0.0008 at the SHIPPED d5/b20**
+    (2 seeds better, 2 worse) -- i.e. essentially absent from the configuration anyone plays.
+
   **The adoption bar this fixes in place (USER, 2026-09-06):** *"having no drawbacks in quality
   or performance would also be automatically adoptable, but this doesn't meet that bar."* A
   STRICT improvement — no quality loss, no performance loss (cf. M2_RECONSIDER's adoption) —
