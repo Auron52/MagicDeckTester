@@ -83,7 +83,23 @@ devotion flip, Serra threshold, GrantLifelink + counter merge); scenario
 - 5h viewer: static self-guard clean; runtime sweep (seed 4242, 12 games) PASS -- `bounce`,
   `discard`, `target` surfaced; `--verify-card "Heliod, Sun-Crowned"` VERIFIED (target).
 - 5i discard: analyzer verdict DISCARD_INERT (no cleanup shed reached by either caller).
-- 5c2 leaf tie-break: RUNNING (`logs/critter/tiebreak.log`).
+- 5c2 leaf tie-break: KEEP THE DEFAULT. 12,000 paired: 1 changed (helped); re-run at `--blocks 121`
+  = 121,000 paired: 1 changed (helped), 0 worse. The lever essentially never fires for this deck
+  (wins well inside the horizon) -- "unbindable at a large sample, the default is fine".
+- 5g heuristic mining (300 games x seeds 2002/3003, d5 b3000, 2940 decisions): ORDER rules, all
+  0-conflict, one shape -- enter-WATCHERS before PAYOFFS (Auriok Champion before Serra 11/0,
+  before Pridemate 6/0, before Voice 4/0; Soul Warden / Soul's Attendant before Voice 6/0, 6/0,
+  before Serra 5/0, 6/0; Pridemate before Serra 3/0). INCLUSION: every payoff/watcher negative
+  (cast it); Serra +0.10 (help 44 / hurt 78) and Daxos +0.05 are situational -> left to the search;
+  Auriok +0.01 neutral. LAND: Plains first (Basilica 1141 vs 7372). Encoded as
+  `CritterLifegainProvider::CastOrderRank` (watchers 8, lifegain_self_counters payoffs 9) behind
+  `MTG_CRITTER_WATCHER_ORDER` (default ON). With/without A/B, seed 2002: d0 400 games 7 faster /
+  0 slower (5.1332 -> 5.1156); d3/b10 300 games 11 faster / 0 slower (4.9264 -> 4.8896). Clean win
+  -> ADOPTED (no-drawback rule, USER 2026-09-03). Suite re-run after adoption: smoke 76 other keys
+  byte-identical; critter overnight 201 faster / 4 slower (all four d0 greedy churn, 0 searched-depth
+  slower); GT re-accepted for all three tiers. (The overnight audit's 65 'searched slower' were stale
+  other-deck .wins left in test/logs/overnight/ by earlier full runs -- the classifier found 0 critter
+  games among them.)
 - 5d claude-play sweep (16 Opus agents, base seed 31337, gi 0-15, at fbe93635): 15/16 games
   identical win turn to the search; gi=5 Claude T5 vs search T6 -> ROOT-CAUSED as a search gap:
   loyalty actions are enumerated only from walkers already on the battlefield, so "cast Ajani,
@@ -120,6 +136,7 @@ devotion flip, Serra threshold, GrantLifelink + counter merge); scenario
 | Ranger-Captain tutor: all 3 legal MV<=1 names searched (tutor axis width 6); plan-less paths take the first library match | Generic TutorCandidates | none (full) | disclosed plan-less fallback |
 | Ajani 0 NOT enumerated autonomously | TurnSolver loyalty enumeration | value gate | strictly negative vs this opponent; human play sees it |
 | Ajani cast + same-turn activation variants (target-free abilities) | `SearchesWalkerCastActivation` (CritterLifegain ON, Generic OFF) | WIDENING (search reach) | +29/-0 games on 300; other decks unchanged until measured |
+| Cast order: enter-watchers (rank 8) before lifegain_self_counters payoffs (rank 9) before the rest | `CritterLifegainProvider::CastOrderRank` (`MTG_CRITTER_WATCHER_ORDER`) | ordering heuristic (5g-mined, 0-conflict) | A/B +7/-0 (d0), +11/-0 (d3); only the canonical execution order moves -- plan choice is still searched |
 | Legend rule keeps the walker with the most loyalty (tie: can still activate, then oldest) | `CritterLifegainProvider::LegendKeepIndex` (`MTG_LEGEND_KEEP_LOYALTY`) | correctness shortcut | rejected as a Generic default (FiveColour d0 gi=15 6->7) |
 | EvalCard credits: Pridemate/Voice entry counters = #own enter-watchers; Thune team credit; Heliod flat +2 DMG and body discounted by devotion distance | TurnSolver EvalCard (param-gated) | greedy-d0 ordering only | rollout owns the real valuation; no other deck's eval moves |
 | Voice's 4+/10+ counter keywords, Serra/Thune flying, Auriok protection, Heliod indestructible + God-subtype/removed-from-combat halves | bracket notes (PROVISIONAL partials) | card-modeling collapse | each provably unobservable vs this opponent (see the notes) |

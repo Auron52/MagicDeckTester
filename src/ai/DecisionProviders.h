@@ -1250,6 +1250,12 @@ public:
     // MTG_WALKER_CAST_ACTIVATE=0 restores the cast-only enumeration for the A/B.
     bool SearchesWalkerCastActivation() const override
     { return EnvOn("MTG_WALKER_CAST_ACTIVATE", true); }
+    // 5g-mined cast order (2026-09-08, 2940 earliest-win decisions, every rule 0-conflict): enter-
+    // WATCHERS (Soul Warden / Soul's Attendant / Auriok Champion / Daxos) before the lifegain
+    // PAYOFFS (Pridemate / Voice), both before everything else -- a watcher cast first catches every
+    // later enter this turn; cast after them it catches none. MTG_CRITTER_WATCHER_ORDER=0 restores
+    // Generic for the A/B.
+    int CastOrderRank(const GameState&, const CardDefinition&) const override;
 };
 
 // Rakdos Minotaur tribal aggro. Like DragonsProvider it exists to hold ONE measured hook, the

@@ -9978,6 +9978,19 @@ int CritterLifegainProvider::LegendKeepIndex(const GameState& s, int /*controlle
     return keep;
 }
 
+// ---- CritterLifegainProvider::CastOrderRank ---------------------------------
+int CritterLifegainProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    static const bool s_on = EnvOn("MTG_CRITTER_WATCHER_ORDER", true);
+    if (s_on && def.card.IsCreature())
+    {
+        const CardParams& p = def.params;
+        if (p.any_creature_enters_lifegain > 0 || p.own_creature_enters_lifegain > 0) { return 8; }
+        if (p.lifegain_self_counters > 0)                                              { return 9; }
+    }
+    return GenericProvider::CastOrderRank(s, def);
+}
+
 // ---- MirrorwingProvider::LegendKeepIndex ------------------------------------
 //
 // User directive (Stage 6 review, analysis-Mirrorwing Dragon.md): the base keep-the-oldest rule is
