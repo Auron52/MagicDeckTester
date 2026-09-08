@@ -32972,7 +32972,19 @@ namespace
     // antilife deck OUT of the suite; revisit if NODES_PER_VIRTUAL_MS is rebased.
     // See search-perf-investigation memory.
     constexpr double    kOverrunBeta  = 2.0;
-    constexpr long long kOverrunFloor = 1000000;
+    // SWEEP LEVER (MTG_OVERRUN_FLOOR, default 1000000 = the shipped constant, so unset is
+    // byte-identical). Value-carrying, so it keeps the raw EnvInt read per the conventions skill.
+    //
+    // WHY IT IS WORTH SWEEPING (measured 2026-09-08, Snow): the guard is
+    // max(kOverrunBeta * budget->Limit(), kOverrunFloor), and at a 20 virtual-ms budget Limit() is
+    // 20 * 900 = 18,000 units -- so the beta ceiling is 36,000 and the FIXED FLOOR SWAMPS IT BY
+    // 55x. The floor only stops binding above a ~556 virtual-ms budget, i.e. never in play. Snow's
+    // worst game of 300 spent 1,001,374 of its 1,778,424 units (56%) inside ONE aborted pass that
+    // ran to exactly this floor. Deck-wide it is rarer than that game suggests (1 abort in 300
+    // games, 1.95% of units), so this is a TAIL/p99 lever, not a mean one -- which is precisely
+    // what generation makespan cares about.
+    static const long long kOverrunFloor =
+        static_cast<long long>(EnvInt("MTG_OVERRUN_FLOOR", 1000000));
 }
 
 TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int depth,
