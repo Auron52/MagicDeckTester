@@ -3727,3 +3727,50 @@ always runs.
 COMBO OFF moved from the side column to the right end of the planbar -- the board's own control row,
 beside Commit Line (USER: *"I'd prefer the combo off button to actually be on the right of the
 board, rather than in the history. It is a bit too out of the way over there."*).
+
+## Session 6 (2026-09-08): the seed-9 stranded {U}, the width/gate 2x2 verdict, and depth-1 starvation
+
+### Seed 9 T4: "I have 5 mana and blue, so there is no reason I cannot play drake" -- FIXED
+
+CheckLine accepted `land=Brushland; cast: Peregrine Drake` and the apply DROPPED it. The board:
+Conservatory, Adarkar Wastes(+Wild Growth), Mariposa, Brushland -- 5 mana, blue only from Adarkar.
+The ETB-untap tap-ahead (Drake untaps 5) passed its `count >= tapped_n + 1` budget test for every
+land, tapped all four ahead, floated the painlands via the painless {C} mode -- Adarkar included --
+and the `{4}{U}` payment found `{G:2,C:3}` and no blue. The budget invariant ("the land ends the
+step untapped, so no later cast can be stranded") reasons about the board AFTER the untap, but the
+cast's own coloured pips are paid BEFORE the untap exists: the banking made the cost unpayable, the
+line rolled back, and the untap that justified the banking never happened. Circular.
+
+Fix (`eccdc44a`): the caster's effective-cost coloured pips (hybrid pairs: both halves) thread into
+`EtbUntapTapAheadIntoFloat` as `reserve_color_mask`; at cast sites a painland whose coloured modes
+intersect it stays out of the {C} tap-ahead. Blink-loop branch untouched. Verified on the user's
+board (Drake resolves, Adarkar pays the {U}, ends untapped); unit SUCCESS, scenarios 72/72, smoke
+73/73 byte-identical, references: only mover is s2_gi1, already shuffle-dead, now play-drift.
+`MTG_PAINLAND_CAST_RESERVE=0` restores. Human-play behaviour is pinned by the protocol sweep, per
+the test-file precedent on env-static human-play gates.
+
+### The tutor width x castability gate 2x2 -- measured, NEITHER adopted
+
+Hypothesis from the s1/s5 reference shortfalls: with the whole 8-card wish pool inside width 8 the
+adopted ranking never BINDS (s1's off/on digests are byte-identical -- the search evaluated both
+fetches and picked the Depleter itself), so narrow to 3 and let the ranking decide; and gate hand
+coverage on castability so the ranking's sink tier cannot go live off an uncastable Drake.
+
+Verdict over 4 seeds x 50 games (one pooled batch, heurarm arms; killed at 36/40 jobs -- the
+remaining s3061 pairs could not flip it): w3 is slightly WORSE or equal (+0.14, +0.04, 0.00), the
+gate moves nothing (+-0.02), and on the references w3 trades s5 (6->5) for s4 (6->7) and s7 (5->6).
+Both levers ship default OFF (`b043efab`, `MTG_EDF_TUTOR_NARROW` / `MTG_EDF_WISH_CAST_GATE`).
+The mechanism conclusion stands: candidate-ordering cannot override the depth-5/20ms evaluation.
+
+### Where the slowness actually lives: depth-1 starvation and degenerate games
+
+The sweep captured the deck's cost profile. A control-arm game ran 2.5+ h; an 87-minute game sat on
+the GATE arm (width 8) and 17-20 minute games on w3 arms -- so the width is NOT the driver; a
+minority of intrinsically degenerate games dominates wall time. On a 41 s solo repro
+(`--seed 3069 --game-index 8`): `id_depth mean=1.06` (48 of 51 decisions finished only depth 1),
+~780 ms/decision against a 20 ms budget -- the overrun is BELOW the deepening loop, in the
+mandatory root pass over plan sets that reach 195-1337 plans on turn 6-8 boards (266k candidates
+scored, `MTG_ENUM_HIWATER_KB` evidence). Two consequences: (1) the deck's real in-play depth in
+fat states is 1, not 5 -- a quality fact, not just a perf one; (2) the perf lead is the ROOT PLAN
+FAN on fat boards (blink counts x Overgrowth hosts x activations), not the tutor axis. Repro lines
+for a dozen 30 s-87 min games are in `logs/edf_refbench/width_gate_2x2.out` (SLOW-GAME lines).
