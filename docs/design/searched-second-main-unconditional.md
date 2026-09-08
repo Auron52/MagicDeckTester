@@ -141,7 +141,21 @@ apparatus check):
   (logs/hinata_budget): total old-GT 5.6800 / current-1x 5.7011 / 2x 5.6689 / 4x 5.6544; held-out
   8/8 cells non-worse at 2x, −0.0156/game (logs/hinata_heldout). On that evidence hinata
   `value_play.budget_ms` 20→40 was ADOPTED 2026-09-05 — **and REVERTED 2026-09-06 on USER
-  review**, because the claim "2x beats the greedy era" compared **searched@40 vs greedy@20**, an
+  review**.
+
+  **THE PRIMARY REASON FOR THE REVERT WAS THE ADOPTION ROUTE, NOT THE MEASUREMENT
+  (USER, clarified 2026-09-08).** Verbatim: *"The reason 20-40 was rejected at the time was
+  because it was done without asking me as a 'lossless' operation. It was not lossless nor
+  user-approved."* A budget raise is a TRADE (quality bought with wall time), and a trade is
+  never an agent's call — it is not "lossless", and mislabelling it as such is what made the
+  adoption illegitimate regardless of what the numbers said. Recording the objection as merely
+  "unfair comparator + uncounted cost" (as this doc originally did, below) UNDERSTATES it and
+  implies that fixing the measurement would make the change self-adoptable. **It would not.**
+  Even a perfectly-measured, strictly-positive-quality budget raise still costs wall time and
+  therefore still goes to the USER.
+
+  The measurement critiques below remain true and worth keeping, but they are SECONDARY: the claim
+  "2x beats the greedy era" compared **searched@40 vs greedy@20**, an
   unfair comparator (greedy at 2x would presumably also improve — hinata is likely starved under
   ANY interior policy), and the ~2x per-game search cost was never counted against the gain. The
   USER's bar, verbatim: *"we can hardly say that is an improvement, when we didn't count the
@@ -155,8 +169,10 @@ apparatus check):
   interior-m2 fallback family ~9%) — FullSearchLine's own second-main loop, not the interior m2,
   is where the budget goes on both decks.
 
-  **RE-PRICED with a FAIR comparator (2026-09-08).** The reverted claim's defect was the
-  comparator (searched@40 vs greedy@20). Re-measured searched-vs-searched at the SAME depth, on
+  **RE-PRICED with a FAIR comparator, AT THE USER'S REQUEST (2026-09-08).** The USER asked for
+  contention-free performance AND quality numbers in order to rule on the trade themselves — the
+  re-measurement below is decision INPUT, not a re-adoption attempt. Re-measured
+  searched-vs-searched at the SAME depth, on
   the overnight seeds/sizings so the control lands on GT exactly (24-job pooled batch,
   `logs/postrebase/hinata_budget*`; the b10/b20 control arms reproduce the accepted GT
   byte-identically, digests included):
