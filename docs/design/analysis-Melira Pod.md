@@ -2211,3 +2211,22 @@ pass at D with an unlimited budget so it completes, and that line is taken uncon
 probe win is kept). No d1..depth re-ladder, no crossover fall-back, no starvation. Two arms, same seeds
 as 2026-09-08d: `single_a1` (probe gate pinned to 1, so D is what the heuristic would have committed)
 and `single_a8` (default 8x leniency, deeper D). Results in the table appended below when the batch lands.
+
+**2026-09-08e RESULTS** (same seeds/pairing as 2026-09-08d; sanity: mode engages -- 543 decisions, 160
+verified probe wins kept, 383 single passes at D, 0 short; smoke 76/76 configs changed 0 with the mode off):
+
+| arm | d5/b20 delta (t, better/worse) | cost | d3/b10 delta | cost |
+|---|---|---|---|---|
+| single_a1 (gate pinned 1; D ~ heuristic's depth, mean 3.05) | **-0.0161 (-11.5, 8/0)** | 1.59x | **-0.0247 (-10.8, 8/0)** | 1.55x |
+| single_a8 (default 8x gate; deeper D) | -0.0399 (-15.0, 8/0) | 3.77x | -0.0479 (-19.6, 8/0) | 2.54x |
+| staged (shipped hybrid) | -0.0033 (ns) | 1.48x | -0.0020 (ns) | 1.04x |
+| livebud (heuristic, 1.5x budget) | -0.0088 (8/0) | 1.20x | -0.0120 (8/0) | 1.16x |
+
+**The faithful paradigm is the first value-leaf form on this deck that beats the heuristic on every
+seed, and it beats the shipped hybrid at about the same cost by 5-12x the margin.** Why it works where
+the hybrid does not: the hybrid's redo is a starved d1..depth re-ladder (54% start with <10% budget,
+888/953 fall short) whose result is then subject to crossover fall-back; this mode plays ONE completing
+heuristic pass at exactly the depth the cheap probe established, so every decision gets a heuristic
+line at the deepest depth it could afford. Open: quality at EQUAL cost vs the heuristic (livebud at
+1.2x is not matched to single_a1's 1.6x) -- matched-budget heuristic arms (d5/b40, d5/b50, d3/b20)
+running on the same frozen binary; appended when they land.
