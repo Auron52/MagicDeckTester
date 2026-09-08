@@ -11169,6 +11169,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
 // Resolve one ActivatePermAbility. The cost is already paid by the caller; this is the effect half
 // only, shared by the rollout and the executor. `source_id` is the activating permanent's
 // m_number.
+bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);   // TurnSolver
 inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode)
 {
     int idx = -1;
@@ -11199,8 +11200,54 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             break;
         }
         case PermAbilityMode::TapInvestigate:
+        {
             CreateClueTokens(state, controller, 1);
+            // CLUE FUSION (USER directive, 2026-09-08): "for the purposes of the search just use
+            // create clue -> sac to draw as one operation... the only exception should be if you
+            // don't have the mana for both." Rationale (measured, analysis doc Session 7): the
+            // blink go-off untaps the investigate lands every iteration, so search lines
+            // re-investigate and BANK the Clues -- rollout boards reached 67-69 permanents, and
+            // each Clue is its own odometer group AND plan-signature key, so N banked Clues cost
+            // ~2^N crack-subsets (single enumerations of 3060-7000 plans, 19k avg odometer in the
+            // groups=9-12 cells) plus 69-permanent GameState copies on every apply. A 13.5-minute
+            // solo game (seed 3081 gi=20) carried FEWER search units than a 41-second one -- the
+            // whole overrun was per-operation board-size cost.
+            //
+            // The mana-for-both exception is HOW it is implemented, not a special case: the crack
+            // below pays the Clue's own {2} out of what is actually available RIGHT NOW, so a
+            // {4}-only turn simply banks the Clue (TapForCostDirect fails, token stays), and a
+            // banked Clue still enumerates as an ordinary SacDraw action next turn. When the loop
+            // is live the mana is unbounded and the fuse always fires. What the fuse deliberately
+            // gives up is "could pay both but bank anyway to spend the {2} elsewhere this turn" --
+            // the user's call, and the trailing-pass order means earlier actions already took what
+            // they needed.
+            //
+            // HUMAN PLAY EXCLUDED: the viewer keeps the real token and the crack-later choice.
+            // The library guard mirrors CrackCluesForCards (never draw the last card).
+            // MTG_CLUE_FUSE=0 restores banked Clues everywhere (the A/B hatch).
+            {
+                static const bool s_fuse = EnvOn("MTG_CLUE_FUSE", true);
+                if (s_fuse && !HumanPlayActive()
+                    && state.players[controller].library.size() > 1)
+                {
+                    const int clue_id = state.next_token_number - 1;
+                    for (const Permanent& tok : state.battlefield)
+                    {
+                        if (tok.card.m_number != clue_id
+                            || tok.controller_index != controller) { continue; }
+                        const CardDefinition* td = CardDatabase::Instance().LookupCached(tok.card);
+                        if (td == nullptr || !td->params.sac_draw_cost.has_value()) { break; }
+                        const ManaCost crack =
+                            EffectiveActivationCost(state, controller, tok.card,
+                                                    td->params.sac_draw_cost.value());
+                        if (TapForCostDirect(state, crack, /*for_creature=*/false))
+                        { ApplyPermAbility(state, controller, clue_id, PermAbilityMode::SacDraw); }
+                        break;
+                    }
+                }
+            }
             break;
+        }
         case PermAbilityMode::TapDraw:
             if (!d->params.tap_draw_requires_top_supertype.empty())
             {
