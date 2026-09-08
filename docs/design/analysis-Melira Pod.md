@@ -1886,3 +1886,40 @@ re-scan below is the like-for-like number).
 Win turns identical to the leaf-0 arm (avg 4.9000 on the 50-set). The remaining tail is the
 mulligan games' bottoming refine (topk 5 full playouts per mulligan at play settings) -- now
 the only thing above ~1 s. Fleet gates for the tutor-fill skip: smoke 72/72, configs changed 0.
+
+### Byte-identical greedy-walk micro-opts (consider() by reference, mana-verdict cache, hoisted MVs)
+
+Post-leaf-0 profile of a typical game (gi13, ~1 s): the greedy walk is still 74% of it
+(SolveUncached self 27%, `ColorFeasibility::Payable` 14%, `ManaCost::ManaValue` 6% as a
+per-position per-digit re-sum, operator new / push_back ~6% from consider()'s by-value `sel`).
+Three byte-identical changes in `SolveUncached`:
+1. `consider()` takes `std::vector<int>&` (the odometer's reusable buffer; temporaries at the
+   short-circuit sites became named locals) -- no heap copy per visited position.
+2. A 1-entry MANA-VERDICT cache keyed on the mask with the mana-INERT independent bits
+   cleared (cost 0, no hybrid, no float/rock/mint, no land sac/discard -- the K=1 persist sacs).
+   Consecutive odometer positions differ only in those bits, so flat CanPay / SubsetPayable /
+   ColorFeasibility verdicts are reused instead of recomputed. Armed only by the inline walk and
+   only when no affinity/reducer/tap-debit/filter credit path is live in the call; costed
+   independents (Ooze's {G} exile) stay in the key.
+3. Per-action `ManaValue()` hoisted into `cand_mv[]` for the odometer's cost loops.
+
+Measured: 50-set d3 30.3 -> 28.7 s, 25-set d5 19.0 -> 17.5 s (~5-9%; smaller than the profile
+suggested -- the cache's hit rate is bounded by how many walks have inert independents at all).
+Win turns identical on both sets; smoke 72/72 configs changed 0; 299 refs 0 drift.
+
+**State at the end of this session (box idle, shipped profile):**
+
+| | session start | now |
+|---|---|---|
+| 50-game d3 b10 | 357.7 s (7.2 s/game) | **28.7 s (0.57 s/game)** |
+| 25-game d5 b20 | ~140 s (5.6 s/game) | **17.5 s (0.70 s/game)** |
+| 1000-game d3 / d5 (batch, core-s/game) | 9.3-9.9 / 10.8-11.4 | 0.63-0.82 / 1.21-1.25 (pre-cache binary) |
+| worst game | gi49 96 s | gi32 6.8 s (2 mulligans; bottoming stage-1 + topk-5 refine) |
+
+fivecolour, the costliest suite deck, is 1.19 s/game at d3. Melira is now below it on
+average; its remaining tail is the mulligan games (~5-7 s: two bottoming rounds each of
+C(h,k) depth-0 playouts plus 5 refine playouts at play settings). Whether that is "happy with
+performance" is the user's call -- **melira is NOT re-added to the suite by this session**.
+Open question for the user: re-add now (d0/d3/d5 cases would cost ~30 s + ~18 s + the d0
+canary at smoke scale), or first take the mulligan tail down (topk 5 -> 3 measured win-turn
+identical on gi32/gi47 but SLOWER on gi32 -- chaotic; stage-1 C(h,k) is the other half)?

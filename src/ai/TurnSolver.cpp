@@ -16183,6 +16183,23 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     int m = static_cast<int>(cands.size());
     Plan best;
     int  best_mask = 0;     // action mask of `best` (0 = the do-nothing default); ties keep min mask
+    // MANA-VERDICT CACHE for the inline odometer walk (perf, 2026-09-08; byte-identical). The walk
+    // visits every 2^num_ind independent-bit extension of each group selection CONSECUTIVELY, and
+    // on a board whose independent actions are MANA-INERT (cost 0, no hybrid, no float/rock/mint
+    // credit, no land sac/discard -- Melira's K=1 persist sacs and Ooze exiles) every one of those
+    // positions has the SAME combined cost, the same credited pool and therefore the same flat
+    // CanPay / SubsetPayable / ColorFeasibility verdicts. Those checks were 20-35% of a Melira
+    // rollout leaf (ColorFeasibility::Payable alone 14-29% of the game), all recomputing an answer
+    // the previous position already had. Cache the verdict keyed on the GROUP part of the mask
+    // (mask with the inert independent bits cleared): a 1-entry cache hits 2^num_ind-1 times per
+    // group selection. Armed ONLY by the inline walk after `independent` is known and only when
+    // the cache is provably sound for this call (see mana_cache_on's condition there); every other
+    // consider() caller (short-circuits, the two-stage driver) runs the full section unchanged.
+    unsigned mana_inert_ind_mask = 0;   // cand-index bits of the mana-inert independents
+    bool     mana_cache_on       = false;
+    int      mc_last_gmask       = -1;   // group-part mask of the cached verdict (-1 = empty)
+    bool     mc_reject           = false;
+    bool     mc_mana_ok          = false;
     // DEFERRED best materialization (perf, 2026-09-06): the walk records the winning SELECTION
     // (indices + the rare surplus-fill substitution), never the Action vector -- profiling a Melira
     // combo game (g88) showed 12-17% of the WHOLE game inside Action copy-ctors from rebuilding
@@ -16260,7 +16277,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // wins. That last tie-break is exactly the plan the ascending-mask powerset below settles on
     // (first-found under a strict '>' test) -- making it explicit lets the odometer enumeration
     // return the byte-identical plan despite visiting subsets in a different order.
-    auto consider = [&](std::vector<int> sel)
+    // By MUTABLE REFERENCE (perf, 2026-09-08; byte-identical): the odometer walk hands in its
+    // reusable position buffer, rebuilt before every call, so the sort below may run in place.
+    // Previously by value -- one heap copy per visited position (operator new + push_back were
+    // ~6% of a Melira game). Temporaries at the short-circuit sites are named locals now.
+    auto consider = [&](std::vector<int>& sel)
     {
         // Greedy-walk budget charge (MTG_SOLVE_CHARGE; see GreedyChargeGuard above the function):
         // one unit per subset visit, walk stops (keeping best-so-far) when the rollout budget is
@@ -16387,6 +16408,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // only once the board can already pay for the rocks themselves (a rock never funds its own
         // cost). The casts' own costs are already in `combined`, so this stays net/conservative.
         // Both inert -> byte-identical for decks without rituals or rocks.
+        // Mana-verdict cache (see mana_cache_on at the declaration): on a HIT the previous position
+        // differed from this one only in mana-inert independent bits, so every verdict below is
+        // already known -- a cached reject returns here, a cached accept skips the checks.
+        const int  gmask  = static_cast<int>(static_cast<unsigned>(mask) & ~mana_inert_ind_mask);
+        const bool mc_hit = mana_cache_on && gmask == mc_last_gmask;
+        if (mc_hit && mc_reject) { return; }
+        auto mc_store_reject = [&]() { if (mana_cache_on) { mc_last_gmask = gmask; mc_reject = true; } };
         ManaPool eff = pool, eff_nc = pool_noncreature;
         bool credited = false;
         int  simul_ritual_credit = 0;
@@ -16537,8 +16565,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 credited = true;
             }
         }
-        bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
-                                 : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
+        bool mana_ok = mc_hit ? mc_mana_ok
+                     : credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
+                                : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
         // SEQUENCED ritual credit, applied LAZILY. The sequenced credit is never LARGER than the
         // simultaneous one, so a position the cheap model already rejects would be rejected by the
         // sequenced model too -- only the SURVIVORS need the walk. Most odometer positions are
@@ -16568,19 +16597,19 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             mana_ok = eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined);
         }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
-        if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))) { return; }
+        if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))) { mc_store_reject(); return; }
         if (enumstats::Enabled()) { enumstats::g_c_mana.fetch_add(1, std::memory_order_relaxed); }   // passed flat mana
         if (seq_on) { apply_seq(); }   // filter-rescued survivor: keep its credited pool honest too
-        if (sacrifice_count > total_lands)                   { return; }
-        if (discard_lands_used > lands_in_hand)              { return; }
+        if (sacrifice_count > total_lands)                   { mc_store_reject(); return; }
+        if (discard_lands_used > lands_in_hand)              { mc_store_reject(); return; }
         // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U} hard-cast off a
         // W/R/B-only land). Strict tightening; inert for decks whose lands produce their colors.
-        if (!SubsetPayable(have_colors, cands, sel))         { return; }
+        if (!mc_hit && !SubsetPayable(have_colors, cands, sel)) { mc_store_reject(); return; }
         if (enumstats::Enabled()) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
         // ... and the COUNT the gate above deliberately does not model: two white pips off one white
         // source. Only on the flat-pool path -- a subset rescued by SubsetPayableWithFilters was
         // judged by a real payment, and colour_feas is unusable on a filter board anyway.
-        if (mana_ok
+        if (!mc_hit && mana_ok
             && ((colour_feas.usable
                  && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff)))
              || (colour_feas_nc.usable
@@ -16588,8 +16617,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                             /*noncreature_only=*/true))))
         {
             if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }
+            mc_store_reject();
             return;
         }
+        if (mana_cache_on && !mc_hit) { mc_last_gmask = gmask; mc_reject = false; mc_mana_ok = mana_ok; }
         if (enumstats::Enabled()) { enumstats::g_c_feas.fetch_add(1, std::memory_order_relaxed); }   // passed colour feasibility
 
         // Irencrag Feat "you can cast only one more spell this turn": reject any subset that casts
@@ -17105,7 +17136,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             const Action saved_fa = best_fill_action;
             // Line 1: the loop alone (a closer is already live). consider() rejects it outright
             // when no closer is active OR cast -- that is SubsetHasUnclosedPersistLoop's job.
-            consider(std::vector<int>{ loop_j });
+            { std::vector<int> loop_only{ loop_j }; consider(loop_only); }
             if (!best.wins_this_turn)
             {
                 // Line 2: loop + one castable closer-class card (the s10 cast-and-loop pairing).
@@ -17117,7 +17148,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                     if (a.def->params.prevents_minus_counters
                         || a.def->params.reduces_minus_counters_by_one
                         || a.def->params.other_creature_gy_enter_team_counters > 0)
-                    { consider(std::vector<int>{ j, loop_j }); }
+                    { std::vector<int> pair_sel{ j, loop_j }; consider(pair_sel); }
                 }
             }
             if (best.wins_this_turn)
@@ -17149,7 +17180,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         && !DecisionUnpruned(UnprunedGate::ComboLine)
         && pending_atk >= state.Opponent().life)
     {
-        consider(std::vector<int>{});                   // the empty (attack-only) subset
+        { std::vector<int> empty_sel; consider(empty_sel); }   // the empty (attack-only) subset
         if (best.wins_this_turn) { return materialize_best(); }   // board already lethal -> skip the powerset
         // consider()'s exact projection did not confirm the win (should not happen given the guard) ->
         // fall through; `best` is merely pre-seeded (harmless move-ordering).
@@ -17454,6 +17485,38 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // 2026-07-29). Mirrored in Solve and EnumeratePlans -- change one, change both.
         std::vector<int> choice(num_groups, 0);
         std::vector<int> sel;   // reused across positions (clear keeps capacity)
+        // Arm consider()'s mana-verdict cache (see its declaration). Sound exactly when NOTHING
+        // in the mana section can read an independent bit: no ritual/rock (this branch), no
+        // affinity / reducer / tap-debit / filter credit paths in this call, no Treasure mint on
+        // an independent, and every independent action carries no cost, no hybrid pip, no float,
+        // no land sacrifice and no discard. Such a bit changes the subset's eval only, never its
+        // payability, so the cached verdict is exactly what the full checks would recompute.
+        // Costed independents (Scavenging Ooze's {G} exile) simply STAY in the key -- the verdict
+        // is a function of the selected costed actions, and only the inert bits are masked out.
+        {
+            const bool call_ok = !any_affinity && !any_reducer && !any_tap_debit && !any_filter;
+            unsigned inert_mask = 0;
+            for (int b = 0; call_ok && b < num_ind; ++b)
+            {
+                const Action& ia = cands[independent[b]];
+                const bool inert = ia.cost.ManaValue() == 0 && ia.cost.hybrid_count == 0
+                                && ia.ritual_float == 0 && ia.rock_mana.Total() == 0
+                                && !ia.sacrifice_land && ia.discard_lands == 0
+                                && !(ia.def && ia.def->params.creates_treasures > 0)
+                                && independent[b] < 31;
+                if (inert) { inert_mask |= 1u << independent[b]; }
+            }
+            if (call_ok && inert_mask != 0)
+            {
+                mana_inert_ind_mask = inert_mask;
+                mana_cache_on       = true;
+                mc_last_gmask       = -1;
+            }
+        }
+        // Per-action mana values, hoisted out of the per-position loops below (ManaValue was ~6%
+        // of a Melira game as a sum recomputed per position per digit).
+        std::vector<int> cand_mv(m, 0);
+        for (int j = 0; j < m; ++j) { cand_mv[j] = cands[j].cost.ManaValue(); }
         // Running "which digits are non-zero" mask, maintained by the carry below instead of
         // rebuilt per position -- see EquipPieceDepViolated's fast overload.
         std::uint64_t sel_mask = 0;
@@ -17481,7 +17544,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             else if (!copy_skip)
             {
                 for (int g = 0; g < num_groups; ++g)
-                { if (choice[g] > 0) { mcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
+                { if (choice[g] > 0) { mcost += cand_mv[groups[g][choice[g] - 1]]; } }
             }
             // Group-level early-out FIRST: if this selection is unpayable even with every independent
             // action's float credited, no imask extension of it can be paid, so skip the whole inner
@@ -17520,7 +17583,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                     {
                         if (!(imask & (1 << b))) { continue; }
                         sel.push_back(independent[b]);
-                        pcost += cands[independent[b]].cost.ManaValue();
+                        pcost += cand_mv[independent[b]];
                     }
                 }
                 if (sel.empty()) { continue; }
