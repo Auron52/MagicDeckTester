@@ -24541,6 +24541,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // real executor (AIEngine::TakeTurn) calls the same helper at the same point -> lockstep.
     if (is_pre_combat) { TapDripLandsIfUseful(state, state.active_player_index); }
 
+    // SAME-MAIN GO-OFF (MTG_EDF_AUTOGOFF; see EdfAutoGoOffAfterCasts): the casts above may have
+    // just assembled the flicker loop, and abilities of a creature cast THIS plan were never in
+    // the enumerated action pool -- so realise the go-off here, as part of the plan, when the
+    // recognizer prices it to lethal. SKIPPED when the plan already carried an explicit blink
+    // action (the on-board-outlet case): that action ran in the loop above and a second loop
+    // would only re-spend what it left. The executor calls the same helper at its matching
+    // point -> lockstep; human play is excluded inside the helper.
+    {
+        bool had_blink = false;
+        for (const Action& pa : plan.actions)
+        { if (pa.kind == Action::Kind::ActivateBlink) { had_blink = true; break; } }
+        if (!had_blink) { EdfAutoGoOffAfterCasts(state, state.active_player_index); }
+    }
+
     // Sacrifice depletion lands (e.g. Saprazzan Skerry) exhausted by this turn's taps.
     SacrificeDepletedLands(state);
 }
@@ -33978,6 +33992,15 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; break; }
         // A constant-leaf pass stops at exhaustion (see g_constant_leaf_pass); the truncation is recorded.
         if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; break; }
+        // COUNTERFACTUAL PIN (MTG_FORCE_T1_LAND=<name>, diagnosis only, unset = byte-identical):
+        // at the REAL turn-1 root, keep only plans whose land drop is the named land. Exists to
+        // measure a land-sequencing counterfactual (EDF s1: T1 Conservatory-vs-Aether Hub) with
+        // everything downstream searched normally -- never ship a decision through this.
+        {
+            static const char* s_force_t1_land = std::getenv("MTG_FORCE_T1_LAND");
+            if (s_force_t1_land != nullptr && state.turn_number == 1 && bp_root
+                && p.land_to_play != s_force_t1_land) { continue; }
+        }
         ++scanned;
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         ConsumeAt(budget, unitsite::kFsPre);   // one interior node (plan applied)

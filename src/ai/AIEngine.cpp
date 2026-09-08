@@ -4756,6 +4756,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Anti-Lifegain).
     if (is_pre_combat_main) { TapDripLandsIfUseful(state, state.active_player_index); }
 
+    // SAME-MAIN GO-OFF: the realised-game half of ApplyPlanDirect's matching call (lockstep --
+    // the search scored this plan WITH the go-off, so the executor must realise it too). Same
+    // skip when the plan carried an explicit blink action; human play is excluded inside.
+    {
+        bool had_blink = false;
+        for (const Action& pa : plan.actions)
+        { if (pa.kind == Action::Kind::ActivateBlink) { had_blink = true; break; } }
+        if (!had_blink) { EdfAutoGoOffAfterCasts(state, state.active_player_index); }
+    }
+
     // Animate lands and activate tap-token abilities with mana remaining after spells.
     // Only in pre-combat main so any resulting creatures can attack this turn.
     if (is_pre_combat_main)
