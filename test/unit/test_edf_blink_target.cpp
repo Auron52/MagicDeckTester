@@ -203,9 +203,12 @@ TEST_CASE("EDF go-off count survives a saturated-refund tie, in EITHER battlefie
         BuildSaturatedRefundBoard(s, drake_first);
 
         const std::vector<int> counts = CountsForPreferredTarget(s);
-        // The generic small counts are always there; what the tie used to eat is the ONE proposed
-        // "finish it" count above them, which is the only way ~20 iterations is ever reachable.
-        REQUIRE(counts.size() >= 4);
+        // What the tie used to eat is the ONE proposed "finish it" count above the generic ones,
+        // which is the only way ~20 iterations is ever reachable -- counts.back() > 3 is the
+        // guarded property. (2026-09-08: the generic counts narrowed {1,2,3} -> {kmax} when
+        // MTG_EDF_BLINK_KMAX was ADOPTED default-ON -- 200-game pooled A/B exactly quality-neutral
+        // at -28..-34% wall -- so the menu here is {3, go-off}, size 2, not the old >= 4.)
+        REQUIRE(counts.size() >= 2);
         CHECK(counts.back() > 3);
     }
 }

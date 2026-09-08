@@ -24,7 +24,16 @@
   "drain is payable from the pool and the fixture passes with MTG_REFLOAT_WILD_C=0 too. It guards",
   "the affordance, NOT the wild_c repair -- that one is covered by the A/B in",
   "docs/design/analysis-EldraziDisplacerFlicker.md section 14. Said plainly so nobody later reads a",
-  "green run here as proof the credit bug is fixed."
+  "green run here as proof the credit bug is fixed.",
+  "",
+  "2026-09-08: expect_variants 4 -> 2. MTG_EDF_SINK_KMAX was ADOPTED (default ON) after a",
+  "200-game pooled A/B came back exactly quality-neutral at -28..-34% wall: the provider now",
+  "offers {kmax, finish} instead of {1,2,3, finish}, so this validate_line path (autonomous",
+  "enumeration -- no MTG_HUMAN_PLAY here) sees 2 variants. The guarded property is unchanged:",
+  "the drain is ENUMERATED and surfaces as a CHOOSE sub-decision; an `accept` would still mean",
+  "the fan-out collapsed. The REAL viewer path is untouched by the lever (fold_fanout under",
+  "MTG_HUMAN_PLAY never consults ManaSinkActivationCounts; the human keeps one-at-a-time plus",
+  "the finish count)."
  ],
  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
  "turn": 4,
@@ -95,5 +104,5 @@
  "hand": [],
  "validate_line": "cast=Essence Depleter",
  "expect_verdict": "choose",
- "expect_variants": 4
+ "expect_variants": 2
 }

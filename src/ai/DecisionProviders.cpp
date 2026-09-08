@@ -15016,12 +15016,15 @@ std::vector<int> EldraziFlickerProvider::BlinkActivationCounts(const GameState& 
 {
     std::vector<int> out;
     const int kmax = std::min(3, max_affordable);
-    // MTG_EDF_BLINK_KMAX (2026-09-08, default OFF until measured): the ManaSinkActivationCounts
+    // MTG_EDF_BLINK_KMAX (2026-09-08, ADOPTED default ON): the ManaSinkActivationCounts
     // narrowing's blink twin -- see the note there. One caveat is blink-specific: a blink is not
     // monotone-good the way a drain is (a net-negative loop wastes mana per iteration, and a
     // blinked would-be attacker comes back summoning-sick), so the apply-loop degradation covers
     // the can't-pay case but NOT the shouldn't-continue case. Measured jointly with the sink lever.
-    static const bool s_blink_kmax = EnvOn("MTG_EDF_BLINK_KMAX", false);
+    // ADOPTED default ON 2026-09-08: on the clue-fused binary, 200 pooled games (2 arms x seeds
+    // 3001/3061 x 50) came back EXACTLY quality-neutral (avg 6.0400==6.0400 and 5.7800==5.7800)
+    // at -28%/-34% summed game wall, with all six references at identical win turns and digests.
+    static const bool s_blink_kmax = EnvOn("MTG_EDF_BLINK_KMAX", true);
     if (heurarm::Flag(heurarm::EDF_BLINK_KMAX, s_blink_kmax))
     { if (kmax >= 1) { out.push_back(kmax); } }
     else
@@ -15090,7 +15093,7 @@ std::vector<int> EldraziFlickerProvider::ManaSinkActivationCounts(const GameStat
 {
     std::vector<int> out;
     const int kmax = std::min(3, max_affordable);
-    // MTG_EDF_SINK_KMAX (2026-09-08, default OFF until measured): {1..kmax} -> {kmax}. The K
+    // MTG_EDF_SINK_KMAX (2026-09-08, ADOPTED default ON): {1..kmax} -> {kmax}. The K
     // variants ride the subset's books at ONE activation each (the ActivateBlink precedent), so
     // k=1/2/3 are admitted by exactly the same subsets and the apply loop pays per iteration,
     // stopping at the first unpayable one -- a kmax plan REALISES a lower count whenever the mana
@@ -15101,7 +15104,8 @@ std::vector<int> EldraziFlickerProvider::ManaSinkActivationCounts(const GameStat
     // the plan fan at every fat node (gi8 T7: 10 groups, odometer bound 13824, 195-292 plans
     // scored per call, id_depth mean 1.06 -- the deck effectively searches at depth 1), and every
     // rollout turn-step pays the same product again (T6 rollout decisions: mean 56 candidates).
-    static const bool s_sink_kmax = EnvOn("MTG_EDF_SINK_KMAX", false);
+    // ADOPTED default ON 2026-09-08 -- see the blink twin's adoption note.
+    static const bool s_sink_kmax = EnvOn("MTG_EDF_SINK_KMAX", true);
     if (heurarm::Flag(heurarm::EDF_SINK_KMAX, s_sink_kmax))
     { if (kmax >= 1) { out.push_back(kmax); } }
     else
