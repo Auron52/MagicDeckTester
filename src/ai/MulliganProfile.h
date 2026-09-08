@@ -137,6 +137,18 @@ struct MulliganProfile
     int bottom_eval_budget_ms = -1;   // -1 = unset (rollouts at real play budget)
     int bottom_eval_topk      = 0;    //  0 = no refine stage
 
+    // Per-deck SEARCH-LEAF fidelity (top-level `search_leaf_depth` key): the lookahead depth of
+    // the horizon rollout that scores every leaf of the commit-the-line search (FSLineWin ->
+    // SimulateToEnd). Unset (-1) => the engine default (1 = a 1-ply lookahead at every rollout
+    // turn) => byte-identical. 0 = a pure greedy playout. WHY per-deck: the 1-ply leaf runs
+    // SolveWithLookahead at EVERY simulated turn of EVERY leaf, i.e. one greedy subset walk per
+    // enumerated candidate per turn; on Melira the greedy walk cannot prune (its actions are free
+    // sac/exile activations, 99.5% of visited subsets survive every feasibility test) so the leaf
+    // owned 93% of a d3 game. depth 0 measured 6.5x faster on the 50-game d3 set at equal-or-better
+    // win turns (see docs/design/analysis-Melira Pod.md, 2026-09-08). Env twin MTG_FD_LEAF_DEPTH
+    // overrides this when EXPLICITLY set (A/B hatch) -- same precedence rule as bottom_eval_*.
+    int search_leaf_depth = -1;
+
     // Curve requirement for the opening hand. See CurveCheck enum above.
     // None and TwoDrop are the most common; OneDrop and OneAndTwo exist for decks
     // whose analysis requires distinguishing T1 presence from T1+T2 coverage.

@@ -2491,6 +2491,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // all count) -- required to read its no-win as full-coverage proof.
                     const unsigned long long rf_trunc_before =
                         s_refuted_follow ? TurnSolver::TruncEvents() : 0;
+                    // Per-deck search-leaf fidelity (profile `search_leaf_depth`; -1 = engine
+                    // default => byte-identical). Scoped to this decision; nested rollouts on this
+                    // thread inherit it, which is the point -- the leaf IS the rollout.
+                    TurnSolver::SearchLeafDepthScope _sld(m_profile.search_leaf_depth);
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
                         fd_tt, &budget, &searched_depth, escalate_below, m_budget_ms,

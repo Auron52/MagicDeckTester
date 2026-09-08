@@ -1320,6 +1320,21 @@ public:
     // "I ran out" (see MTG_REFUTED_FOLLOW in AIEngine).
     static unsigned long long TruncEvents();
 
+    // Per-deck SEARCH-LEAF fidelity for the commit-the-line search's horizon rollout (see
+    // MulliganProfile::search_leaf_depth). The engine opens one of these around each decision
+    // with the deck's value; -1 = leave the default (1-ply) in place. An explicitly-set
+    // MTG_FD_LEAF_DEPTH env always wins (A/B hatch). Thread-local, RAII-restored.
+    class SearchLeafDepthScope
+    {
+    public:
+        explicit SearchLeafDepthScope(int depth);
+        ~SearchLeafDepthScope();
+        SearchLeafDepthScope(const SearchLeafDepthScope&) = delete;
+        SearchLeafDepthScope& operator=(const SearchLeafDepthScope&) = delete;
+    private:
+        int m_saved;
+    };
+
     // FULL-DEPTH search (experimental, env-gated via MTG_FULL_DEPTH). Unlike
     // SolveWithLookahead — which iterative-deepens the PRE-COMBAT decision and
     // approximates every future turn with a reduced-depth rollout plus a GREEDY

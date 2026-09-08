@@ -1745,3 +1745,100 @@ bring d3 to ~3.4 s/game -- still ~3x fivecolour.
 
 **Standing rule from this:** melira does not re-enter the suite on a "fits the budget"
 argument. It re-enters when the user says the per-game cost is acceptable.
+
+## SESSION 2026-09-08 — the greedy leaf was the whole game; per-deck `search_leaf_depth` ADOPTED (0)
+
+User (post-compaction): *"get back to optimizing Melira... we may need to go beyond byte
+identical and do some serious pruning."* Phase A rows may stay as-is (byte-identity no
+longer a constraint).
+
+### Where the d3/b10 time actually goes (clean per-game scan + suite-config profile)
+
+A clean per-game wall scan of the 50-game d3 set (`scripts/attic/melira_wall_scan.sh`,
+`--seed 1001+gi`, only `%e` captured): total 358 s, 6 games hold 271 s of it (gi49 96 s,
+gi32 59 s, gi13 37 s, gi47 36 s, gi2 22 s, gi1 21 s); 39 games are under 5 s. NOTE the
+resume hook's "gi32 ~15 s" was wrong -- 58 s solo re-timed; gi49 (seed 1050, NO mulligan,
+t5 win) is the true monster and was not in the catalogue.
+
+gi49 decomposed with `MTG_DECISION_WORK_DEBUG` + `MTG_ROLLOUT_STATS`: turns 1-3 cost 52K
+units combined, **turn 4's single main-phase decision cost 832K units** (t5 wins in 1 unit).
+A 10 ms budget is 9,000 units, so that decision ran ~92x over budget -- legally, because
+FullSearchLine's per-pass overrun guard has `kOverrunFloor = 1,000,000` units (the floor
+exists so ordinary decks' passes never trip it). 501,477 candidates were scored in that one
+decision through 163K rollouts of 1.09 turn-steps each.
+
+DWARF-unwound perf of gi49 at the SUITE config (not the unbounded H4 repro, whose hotspots
+differ): **93% of the game is inside the greedy `SolveUncached` subset walk** (called from
+`SimulateToEnd` rollout steps and `SolveSecondMainInSearch`): `ColorFeasibility::Payable`
+29% self, the consider() lambda 14%, the Subset* rules ~15%, `SubsetPayable` 5%.
+`FSLineWin` itself is 1.75% -- the search TREE is small; the LEAVES are the bill.
+
+### The walk cannot be pruned by feasibility (funnel measurement)
+
+Added a consider() funnel to `MTG_ENUM_STATS` (cumulative pass counts). gi49:
+
+| stage | positions |
+|---|---|
+| entered consider() | 288,943,644 |
+| passed subset rules | 288,842,221 (rules reject 0.03%) |
+| passed flat mana | 287,416,959 (0.5%) |
+| passed SubsetPayable | 287,414,046 |
+| passed ColorFeasibility | 287,413,788 |
+| fully scored | 287,413,788 |
+
+**99.5% of visited subsets survive every filter and are fully scored.** The deck's actions
+are free (K=1 persist-sac bits, Ooze exiles, Feeder outlets; Pod at {1}{G/P}), so the mana
+bound never bites and no incremental/monotone prune can help. Typical walk shape (the only
+one over the 3,000-position watermark): `groups=3 ind=6` -> 2^6 x 2 x 3 x 13 = 4,992
+positions; 209K walks averaging ~1,380 positions. Per-position cost ~330 ns is already
+cheap; the COUNT is the problem, and the count is structural: every rollout turn of every
+leaf pays one full walk. So the lever is fewer walks, i.e. a cheaper search leaf.
+
+### Screen on the 50-game d3 set (8-way parallel; win turns vs `logs/melira_perf/scan_d3`)
+
+| arm | wall | avg | better / worse (games) |
+|---|---|---|---|
+| base | 357.7 s | 4.9600 | -- |
+| `MTG_FD_LEAF_DEPTH=0` (pure greedy horizon rollout) | 54.8 s (0.15x) | 4.9000 | 4 [16,25,27,29] / 1 [43] |
+| `MTG_POD_VICTIM_TOP=1` | 144.4 s (0.40x) | 5.0600 | 2 / 6 |
+| `MTG_POD_VICTIM_TOP=2` | 293.4 s (0.82x) | 4.9600 | 1 / 1 |
+
+Pod-victim narrowing is either quality-negative (top1) or barely faster (top2) -- not the
+lever, and still the user-reserved provider heuristic; not taken. The leaf depth is the lever:
+the 1-ply leaf runs `SolveWithLookahead` at every simulated turn of every leaf, i.e. one
+greedy walk per enumerated candidate per turn, and on THIS deck the extra ply buys nothing
+(the combo turn is found by the FSLine tree, not by the leaf's lookahead).
+
+### Confirmation: 1000 fresh-seed games (seed 800000), ONE pooled batch, both suite configs
+
+Implemented as a PER-DECK profile field `search_leaf_depth` (top-level key; -1/absent =
+engine default 1 = byte-identical; explicitly-set `MTG_FD_LEAF_DEPTH` wins as the A/B hatch,
+same precedence as `bottom_eval_*`), plumbed via `TurnSolver::SearchLeafDepthScope` opened
+by AIEngine around each FullSearchLineHybrid decision (thread-local, nested rollouts inherit
+it). Profile-driven arm reproduced the env arm's 50-set win turns exactly; default profile
+reproduced base exactly.
+
+| config | base avg | leaf0 avg | delta | base core-s/game | leaf0 core-s/game | speedup |
+|---|---|---|---|---|---|---|
+| d3 b10 | 4.8730 | 4.8650 | **-0.008** | 9.95 | 0.78 | **12.8x** |
+| d5 b20 | 4.8590 | 4.8460 | **-0.013** | 11.35 | 1.21 | **9.4x** |
+
+(First launch of this batch was OOM-killed at 22.8 GB anon RSS -- I had not sourced
+`scripts/lib/membudget.sh`; relaunched under the caps at 20 threads, peak RSS 4.8 GB.)
+
+Better on BOTH configs on 1000 games AND ~10x faster => a clean win vs the shipped baseline
+on every axis => **ADOPTED** in `decks/Melira Pod/Melira Pod.profile.json`
+(`"search_leaf_depth": 0`) under the standing clean-win pre-approval. Melira's per-game cost
+is now ~0.8 s d3 / ~1.2 s d5 -- at fivecolour's level (the bar the user named), from
+~8.4 / ~5.6 before this session. Gates + a second per-game-paired confirmation follow below.
+
+Why it is better and not merely cheaper: the 1-ply leaf's per-turn lookahead is clairvoyant
+over the real library order (it ranks candidates by depth-0 rollouts that read the true
+draws), so at the leaf it rewards lines that happen to line up with the next draw; the pure
+greedy leaf is a flatter, less draw-fitted estimate, and the FSLine tree above it -- which is
+where this deck's combo turn is actually found -- is untouched.
+
+Fleet note: the field is per-deck and absent everywhere else, so every other deck is
+byte-identical by construction (smoke gate below). Whether other decks would ALSO prefer
+depth 0 is a separate heuristic-optimization question (TH was the deck that originally
+motivated the 1-ply leaf; see the s_fd_leaf_depth comment) -- not pursued here.

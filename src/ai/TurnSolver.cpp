@@ -60,6 +60,19 @@ static bool CreditFixedColorSac(ManaPool& eff, const Action& a);
 // project-search-distillation). See project-full-depth-search (TH leaf-depth finding).
 static const char* s_fd_leaf_depth_env = std::getenv("MTG_FD_LEAF_DEPTH");
 static const int   s_fd_leaf_depth     = s_fd_leaf_depth_env ? std::atoi(s_fd_leaf_depth_env) : 1;
+// Per-deck override (MulliganProfile::search_leaf_depth, set by the engine for the duration of a
+// decision via TurnSolver::SearchLeafDepthScope); -1 = none. An EXPLICITLY-set MTG_FD_LEAF_DEPTH
+// wins over it (the A/B hatch), mirroring the bottom_eval precedence rule.
+static thread_local int t_search_leaf_depth = -1;
+static inline int EffectiveFdLeafDepth()
+{
+    if (s_fd_leaf_depth_env != nullptr && *s_fd_leaf_depth_env) { return s_fd_leaf_depth; }
+    return t_search_leaf_depth >= 0 ? t_search_leaf_depth : s_fd_leaf_depth;
+}
+TurnSolver::SearchLeafDepthScope::SearchLeafDepthScope(int depth)
+    : m_saved(t_search_leaf_depth)
+{ if (depth >= 0) { t_search_leaf_depth = depth; } }
+TurnSolver::SearchLeafDepthScope::~SearchLeafDepthScope() { t_search_leaf_depth = m_saved; }
 
 // Deterministic rollout-cost telemetry (MTG_ROLLOUT_STATS): total SimulateToEnd calls + simulated
 // turn-steps this process. A CONTENTION-PROOF measure of rollout work (wall-clock is not, under shared
@@ -14847,10 +14860,25 @@ namespace enumstats
                                       g_m_exact{0}, g_m_bucket{0}, g_m_manastorm{0}, g_m_manaonly{0},
                                       g_calls_with_mana{0},
                                       g_p_lines{0}, g_p_rowskip{0}, g_pairs_live{0}, g_pairs_total{0};
+    // Greedy consider() FUNNEL: where each visited subset is rejected (Melira greedy-leaf diagnosis).
+    inline std::atomic<std::uint64_t> g_c_enter{0}, g_c_rules{0}, g_c_mana{0}, g_c_color{0},
+                                      g_c_feas{0}, g_c_surv{0};
     struct Dumper {
         ~Dumper()
         {
             if (!Enabled()) { return; }
+            std::fprintf(stderr,
+                "\n=== GREEDY consider() FUNNEL (cumulative PASS counts; each line's drop from the "
+                "one above = rejections at that stage) ===\n"
+                "entered                    : %llu\n"
+                "  passed subset rules      : %llu\n"
+                "  passed flat mana         : %llu\n"
+                "  passed SubsetPayable     : %llu\n"
+                "  passed ColorFeasibility  : %llu\n"
+                "  survivors (fully scored) : %llu\n",
+                (unsigned long long)g_c_enter.load(), (unsigned long long)g_c_rules.load(),
+                (unsigned long long)g_c_mana.load(), (unsigned long long)g_c_color.load(),
+                (unsigned long long)g_c_feas.load(), (unsigned long long)g_c_surv.load());
             const double kept = (double)g_m_kept.load();
             auto ratio = [&](std::uint64_t d) { return d > 0 ? kept / (double)d : 0.0; };
             std::fprintf(stderr,
@@ -16253,6 +16281,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             if (decisionwork::Exceeded()) { walk_exhausted = true; return; }
         }
         std::sort(sel.begin(), sel.end());          // ascending -> matches the powerset's bit order
+        if (enumstats::Enabled()) { enumstats::g_c_enter.fetch_add(1, std::memory_order_relaxed); }
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
@@ -16295,6 +16324,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (SubsetHasMissingTrickTarget(state, cands, sel)) { return; }
+        if (enumstats::Enabled()) { enumstats::g_c_rules.fetch_add(1, std::memory_order_relaxed); }   // passed the rules
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
 
@@ -16539,12 +16569,14 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
         if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))) { return; }
+        if (enumstats::Enabled()) { enumstats::g_c_mana.fetch_add(1, std::memory_order_relaxed); }   // passed flat mana
         if (seq_on) { apply_seq(); }   // filter-rescued survivor: keep its credited pool honest too
         if (sacrifice_count > total_lands)                   { return; }
         if (discard_lands_used > lands_in_hand)              { return; }
         // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U} hard-cast off a
         // W/R/B-only land). Strict tightening; inert for decks whose lands produce their colors.
         if (!SubsetPayable(have_colors, cands, sel))         { return; }
+        if (enumstats::Enabled()) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
         // ... and the COUNT the gate above deliberately does not model: two white pips off one white
         // source. Only on the flat-pool path -- a subset rescued by SubsetPayableWithFilters was
         // judged by a real payment, and colour_feas is unusable on a filter board anyway.
@@ -16558,6 +16590,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }
             return;
         }
+        if (enumstats::Enabled()) { enumstats::g_c_feas.fetch_add(1, std::memory_order_relaxed); }   // passed colour feasibility
 
         // Irencrag Feat "you can cast only one more spell this turn": reject any subset that casts
         // more than max_casts_after spells AFTER the restricting ritual (ordered by CastOrderRank).
@@ -16835,6 +16868,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             rank_value = LearnedPlanScore(state, psum, *ev);
         }
 
+        if (enumstats::Enabled()) { enumstats::g_c_surv.fetch_add(1, std::memory_order_relaxed); }   // fully scored
         bool better;
         if (best.wins_this_turn != wins)   { better = wins; }                    // winning dominates
         else if (rank_value != best.value) { better = rank_value > best.value; } // then higher (learned) value
@@ -31436,7 +31470,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // rollout only CONSUMES the budget (enforce_budget is false inside), so it
         // never truncates -- the start gate alone reads the budget, between passes.
         GameState leaf = state;
-        int w = SimulateToEnd(std::move(leaf), s_fd_leaf_depth, max_turns, budget, cutoff, second_main, tt);
+        int w = SimulateToEnd(std::move(leaf), EffectiveFdLeafDepth(), max_turns, budget, cutoff, second_main, tt);
         return { w, {} };
     }
 
