@@ -381,6 +381,44 @@ This is Step 1 of `anytime-search-budget-prediction.md`, which asks for exactly 
 ("we do not currently know how often the cutoff actually fires mid-line, or how much time it
 wastes") and says to measure before touching the predictor. Now measured, on one deck.
 
+**Step 2, the floor sweep (2026-09-08).** `MTG_OVERRUN_FLOOR` exposes the constant; 300 games per
+arm at play settings, each arm alone on the box:
+
+| floor | avg | total_s | mean | p95 | p99 | max | movers vs control |
+|---|---|---|---|---|---|---|---|
+| 1,000,000 (shipped) | 6.0867 | 1557.8 | 5193 | 23,627 | 72,802 | 86,641 | — |
+| 200,000 | 6.0900 | 1480.1 | 4934 | 21,398 | **52,436** | 85,279 | +0/−1 |
+| 100,000 | 6.0900 | 1511.7 | 5039 | 22,032 | 54,656 | 80,110 | +1/−2 |
+| 50,000 | 6.0900 | **1928.0** | 6427 | 25,606 | 66,006 | 110,421 | +1/−2 |
+
+- It is a **TAIL lever**: 200k buys **p99 −28%** (72.8 s → 52.4 s) for −5% mean. That is the number
+  generation MAKESPAN cares about, and the mean barely moves because only ~1 pass in 300 games
+  aborts at all.
+- **The curve turns.** 50k is **+24% WORSE on wall** than the shipped floor — cutting passes that
+  would have completed just pays for the same work again a level shallower. A lower guard is not
+  monotonically cheaper; assume that and you adopt a regression.
+- **Cross-deck safe:** smoke at 200k is **0 configs changed / 73 unchanged** — no suite deck ever
+  reaches the floor, so an engine-wide constant is Snow-scoped in practice.
+**HELD-OUT CONFIRMATION (1,200 games, seeds 5600001+ — disjoint from the 300-game sweep above):**
+
+| arm | avg | paired movers | total | mean | p95 | p99 | max |
+|---|---|---|---|---|---|---|---|
+| control | 6.0867 | — | 10,776.9 s | 8981 | 41,077 | 107,835 | 268,444 |
+| 200,000 | 6.0867 | **0 better / 0 worse** | 10,427.1 s | 8689 | 38,489 | 98,601 | 244,871 |
+
+**Quality is EXACTLY neutral on held-out: not one game of 1,200 changes win turn** (the digest still
+moves, so play changes and outcomes do not). The +0.0033 seen on the train set was that single game
+and it does not reproduce — which is the whole reason the bar asks for a held-out sample.
+
+Cost side, stated honestly: **−3.2% wall, p99 −8.6%, max −8.8%.** The train set's headline
+"p99 −28%" does NOT survive the larger sample — 1,200 games have a much longer tail (max 268 s vs
+86 s), so the guard clips a smaller fraction of it. This is a ~3% lever, not a step change.
+
+**Meets the adoption bar** (neutral-at-play-settings on a large sample, with upside) and is
+cross-deck inert (smoke 0 configs changed). **Still NOT adopted — that is the user's call**, and
+the honest pitch is "3% and a slightly shorter tail", not a fix for Snow's cost. Snow's cost is
+structural: the 49% of units in rollout+greedy that the VALUE LEAF replaces.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. ~~`{S}` modelled as generic `{1}`~~ — **CLOSED 2026-09-06** by the real snow-mana model
