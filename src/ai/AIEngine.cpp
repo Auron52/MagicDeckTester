@@ -1922,6 +1922,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // set): emit de-clairvoyed per-candidate (eval) and/or per-position (value) rows at this REAL decision.
     if ((s_eval_rows_path || s_value_rows_path) && !m_in_rollout && is_pre_combat_main)
     {
+        // The label search runs OUTSIDE the play scope opened around FullSearchLineHybrid below,
+        // so without this it labels under the ENGINE-DEFAULT leaf even when the deck's profile
+        // pins `search_leaf_depth`. Melira 2026-09-08: the profile ships 0 (greedy leaf, ~12x on
+        // play) and phase A of the value leaf did not speed up at ALL (25-game probe: 1128 s vs
+        // 1127 s) until the label search took the same leaf -- then 490 s (2.3x, worst game
+        // 284 s -> 127 s) with all 120 rows byte-identical (features, labels, the one dropped
+        // position). The label is the ladder's earliest win, so the leaf only changes what a
+        // shallow pass can already prove, not the label; -1 (every other deck) is a no-op scope.
+        TurnSolver::SearchLeafDepthScope _sld_rows(m_profile.search_leaf_depth,
+                                                   m_profile.search_leaf_first_turn_depth);
         EmitEvalRows(state, m_max_turns, m_search_post_combat);
     }
 

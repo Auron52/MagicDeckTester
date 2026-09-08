@@ -2017,3 +2017,71 @@ sets the spawn schedule and log number.
 
 **Verdict under the user's rule: proceed** -- quality not worse overall, no unrecoverable
 regressions. Melira stays in the suite with `search_leaf_depth: 0`.
+
+## SESSION 2026-09-08b — value-leaf pipeline re-costed at leaf-0 play; label search now honours `search_leaf_depth`
+
+User: *"How far are we off from being able to finish the value-leaf in 2-3 hours?"* Answered by
+measurement (logs/vl_probe/), not by scaling the 12x play cut — and the play cut does NOT carry
+uniformly: it lands on the H cells, not on the V cells (the value evaluator never used the rollout
+leaf) and — until this session's fix — not on phase A at all.
+
+### Probe: seed 8008, games 0-24 (the old run's first chunk), unbounded cells, 40M-unit abandon cap
+
+| cell | old s/game (17 survivors) | new s/game (all 25) | cut | mean wt, 21 common games |
+|---|---|---|---|---|
+| H1 | 9.4 | 0.08 | ~125x | 5.143 |
+| H2 | 183 | 0.94 | ~195x | 4.857 |
+| H3 | 439 | 4.3 | ~100x | 4.762 |
+| H4 | 847 | 19.8 | ~43x | 4.714 |
+| H5 | 367 | 79 (2 abandoned) | ~4.6x | 4.714 |
+| V4 | 17 | 11 | 1.5x | 4.714 |
+| V5 | 108 | 76 (4 abandoned) | 1.4x | 4.714 |
+| V6/V7/V8 | ~100 | ~81 (3 abandoned) | 1.2x | 4.714 |
+
+**The finding that matters more than the cost: on these games H4 = V5 = V6 = V7 = V8 in quality,
+and H4 now costs a QUARTER of V5.** The old table's whole case for the model on this deck was
+H4 at 1177 s/game vs V5 at 33 s/game for equal quality (crossover 4->3, 5->3). At leaf-0 play the
+heuristic ladder is the cheap one: H3 (4.3 s) is within one game of the value ladder on this chunk.
+25 games, one seed — a signal, not a verdict — but the mechanism is structural: the greedy leaf
+made the rollout nearly free, so what is left in an H cell is enumeration, which the value leaf
+does not remove either.
+
+### Phase A (row dump, K=3 searched labels): no speedup until the label search took the deck's leaf
+
+Same 25 games (seed 900000, chunk 0), d5/b20 default play, profile attached:
+
+| dump | core-s / 25 games | worst game | rows |
+|---|---|---|---|
+| old play (2026-09-06 run, >30 s games only) | 1036 (8 games) | 342 s | — |
+| leaf-0 profile, label search on engine-default leaf | 1128 | 284 s | 120 (+1 dropped) |
+| `MTG_FD_LEAF_DEPTH=0` (leaf-0 everywhere) | 490 | 127 s | 120, BYTE-IDENTICAL |
+| **fixed binary** (profile-scoped label search) | 516 (smoke running alongside) | — | 120, BYTE-IDENTICAL |
+
+Cause: `EmitEvalRows` ran before/outside the `SearchLeafDepthScope` AIEngine opens around
+`FullSearchLineHybrid`, so the labels were searched under `s_fd_leaf_depth` (1) regardless of the
+profile. Fix (this session, byte-identical play: smoke 76/76 configs changed 0): open the same scope
+around `EmitEvalRows`. Labels are the ladder's earliest win, so the leaf only changes what a shallow
+pass can already prove; the 120/120 identity on this chunk is the empirical check. Every other deck
+ships -1 = no-op scope.
+
+### Projection at leaf-0 play, 32 cores (old run in brackets)
+
+| phase | work | est. core-h | est. wall |
+|---|---|---|---|
+| A rows, 2500 games | ~33 s/game (old 76 s/game avg, 53 core-h) | ~23 | ~45 min + the worst game's tail (old: one 6.3 h game) |
+| C matrix, 13 cells x 4 seeds x 400 | H ~99 s + V ~122 s per game-set (old 677 core-h) | ~100 | 3-4.5 h |
+| E A/B + play sweep + trust, ~40k games | ~1 s/game | ~12 | ~25 min |
+| F mullgen contract | 48 hands x R24 x a few settings | small | minutes |
+| **total** | | **~135** | **~4.5-6 h** (old: 35+ h and never completed) |
+
+**So: roughly 2x off the 2-3 h target, and the excess is entirely V5-V8 + H5 (~75 of the 100
+matrix core-h), which the leaf change cannot touch.** The matrix's target and ladder are fixed by
+design (retired knobs), so closing the gap is a user decision: (a) run it as-is at ~5 h; (b) accept
+the parity signal above and skip the model for Melira — but note `mullgen_finalize` (phase F) and
+the mulligan generator read their settings from the value sidecar, so that route needs the settings
+derived by hand; (c) trim the V ladder / target for this deck (their knob, not mine).
+
+Also noted: the 40M-unit abandon floor now fires at ~4-6 minutes on V5-V8/H5 (these cells bill
+~150k u/core-s at leaf-0 play), so the 2026-09-07 "floor = 12-48 h" mis-calibration is moot for
+the V cells; H4 abandoned nothing in 25 games. The mirror check from the previous section closed
+at 63/67 recovered; the 4 unrecovered were the unbounded old-leaf jobs I killed to free the box.
