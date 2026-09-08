@@ -355,8 +355,15 @@ for spec in "${CASES[@]}"; do
   if [ "$deck" != "$CUR_DECK" ]; then CUR_DECK="$deck"; log ""; log "-- $CUR_DECK --"; fi
   key="${deck}_${MODE}_d${depth}_s${seed}"
   line=$(printf '%s\n' "$BATCH_OUT" | grep "^${key}: ")
-  avg=$(printf '%s\n' "$line" | sed -nE 's/.*[^a-z]avg=([0-9.]+).*/\1/p')
-  dg=$(printf '%s\n' "$line" | sed -nE 's/.*digest=([0-9a-f]+).*/\1/p')
+  # ANCHOR the extraction to THIS key and the exact field order. The old patterns led with a
+  # greedy `.*`, so when two workers' result lines spliced together in the batch output (seen
+  # 2026-09-08: "stompy...ms=216" + "fivecolour_overnight_d5_s4004: played=300 avg=4.8633...")
+  # the greedy prefix skipped this case's own avg/digest and captured the SPLICED-IN case's --
+  # reporting stompy as 4.5540 -> 4.8633, a 0.31-turn "regression" that never happened, and one
+  # that --accept would have written into GT as a false fingerprint. Anchored, a malformed line
+  # simply yields no avg and the case fails safe as "(no output)".
+  avg=$(printf '%s\n' "$line" | sed -nE "s/^${key}: played=[0-9]+ avg=([0-9.]+) .*/\1/p")
+  dg=$(printf '%s\n' "$line" | sed -nE "s/^${key}: played=[0-9]+ avg=[0-9.]+ digest=([0-9a-f]+)( .*)?$/\1/p")
   expected="${!key-}"
   if [ -z "$avg" ]; then
     status="FAIL"; got="(no output)"; FAIL=$((FAIL+1))
