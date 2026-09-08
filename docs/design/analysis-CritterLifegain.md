@@ -197,6 +197,43 @@ vigilance on Voice ... fix the Daxos + 2x Heliod case."
   under test makes the search DECLINE a free land drop and a free 1-drop cast -- nothing after the
   horizon can value them, so they tie with doing nothing. Assert on a later win turn instead.
 
+## Deck-combination screen (2026-09-08, after the search fixes; user: "look at optimizations for the deck")
+`scripts/deck_compare.py logs/critter/screen/screen1.json` -- 6 arms x 10,000 paired games, d3/b10
+(spec override; the deck has no value_play), shared card-scores profile, no keep table on any arm
+(the deck ships none -- symmetric), `pool_table: false`. Report `logs/deckcmp/CritterLifegain/screen.out`.
+
+| arm | edit | avg | delta vs base 4.9394 | se | t | identical |
+|---|---|---|---|---|---|---|
+| rc2 | Ranger-Captain 1->2, Unexpectedly Absent 3->2 | 4.8838 | **-0.0556** | 0.0027 | -20.3 | 95.2% |
+| cut_basilica | Orzhov Basilica 3->0, Plains 21->23 | 4.8880 | **-0.0514** | 0.0049 | -10.6 | 85.0% |
+| serra4 | Serra Ascendant 2->4, Auriok Champion 4->2 | 4.9022 | -0.0372 | 0.0025 | -15.2 | 94.2% |
+| lands23 | Plains 21->20 (23 lands), Serra Ascendant 2->3 | 4.9089 | -0.0305 | 0.0031 | -9.9 | 92.9% |
+| daxos2 | Daxos 1->2, Auriok Champion 4->3 | 4.9301 | -0.0093 | 0.0012 | -7.9 | 98.6% |
+
+rc2 vs cut_basilica head-to-head: -0.0042 +-0.0053 (t -0.8) -- a tie at the top. Held-out
+confirmation of rc2 (`--confirm rc2`, seed 1410000, 10,000 paired games): **-0.0528 +-0.0026**
+(shrinkage +0.0028 +-0.0038, t +0.7 -- reproduces); pooled point estimate **-0.0542 over
+20,000 games**. NOT adopted -- deckbuilding is the user's call (and see the UA caveat below).
+
+READ WITH THESE CAVEATS (the judgement the driver cannot make):
+- **Unexpectedly Absent is INERT against the passive opponent** (it only ever tucks a spawn
+  token that never attacks or blocks), so any arm that cuts a copy banks a free slot in the
+  simulator that is NOT free in a real game. rc2's -0.056 is "a second Ranger-Captain instead
+  of a dead card"; the real-game value of UA (answering a blocker / a bomb) is not measured here.
+  The honest reading of rc2 is "a second Ranger-Captain is worth ~0.05t in goldfish tempo".
+- Orzhov Basilica's cost (enters tapped, bounce) is fully modelled; its benefit (virtual card
+  advantage against flood) is real but only matters when spells run out -- a goldfish with 24
+  lands rarely does, so the screen overstates the cut a little. Still, 24 lands with a curve
+  topping at 5 and three tapped lands is a lot for an aggro deck; 23 untapped lands is a
+  defensible real-world change.
+- serra4 / lands23 / daxos2 are count changes inside modelled cards: read at face value. Serra
+  Ascendant's 30-life threshold is reached routinely here (12 enter-watchers), which is why the
+  3rd and 4th copies pay; the 2nd Daxos (legendary) is worth little.
+- The floor is unmeasured (`--floor` generates a table; this deck ships none, so the bracket
+  route does not apply). With NO table on any arm the apparatus is symmetric by construction;
+  the residual bias is the shared card-scores profile only.
+- Combining the top two (rc2 + cut_basilica) is untested; they touch disjoint slots.
+
 ## Open questions surfaced (non-blocking)
 (collected here and re-raised in the closing message)
 
