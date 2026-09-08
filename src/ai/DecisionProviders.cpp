@@ -15040,7 +15040,8 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
             // board which cannot properly feed the sink"). Capping the activation count by the
             // colourless bank makes the projection say so instead of claiming a kill.
             // MTG_EDF_C_BUDGET=0 restores the mana-value-only arithmetic.
-            static const bool s_c_budget = EnvOn("MTG_EDF_C_BUDGET", true);
+            static const bool s_c_budget_env = EnvOn("MTG_EDF_C_BUDGET", true);
+            const bool s_c_budget = heurarm::Flag(heurarm::EDF_C_BUDGET, s_c_budget_env);
             if (s_c_budget && loop.drain_c_pips > 0)
             {
                 const long long c_bank =
@@ -15105,7 +15106,8 @@ bool EldraziFlickerProvider::ProjectsAlternateWin(
     if (need > static_cast<long long>(FlickerMaxIterations()) * loop.net) { return false; }
     // The exile's {C} pip has its own budget, exactly as the drain's does above: emptying the zone
     // needs `cards` colourless pips, and only `net_c` of one is bankable per iteration.
-    static const bool s_c_budget = EnvOn("MTG_EDF_C_BUDGET", true);
+    static const bool s_c_budget_env = EnvOn("MTG_EDF_C_BUDGET", true);
+    const bool s_c_budget = heurarm::Flag(heurarm::EDF_C_BUDGET, s_c_budget_env);
     if (s_c_budget && loop.exile_c_pips > 0)
     {
         const long long c_need = cards * loop.exile_c_pips;
@@ -15126,8 +15128,62 @@ int EldraziFlickerProvider::CastOrderRank(const GameState& s, const CardDefiniti
     // perfectly legal stack. Ranking the shroud one last makes every same-turn combination realise
     // the legal ordering -- which is also what keeps enumeration honest, since its frozen snapshot
     // sees the pre-shroud board and is therefore RIGHT under this order and wrong under any other.
+    // CHEAPEST AURA FIRST, because an Aura chain FUNDS ITSELF and the order decides whether it is
+    // payable at all. Every non-shroud land Aura used to return a flat 3, and the walks sort on this
+    // rank with a stable_sort -- so a tie left the order to the candidate list, which put Fertile
+    // Ground {1}{G} ahead of Wild Growth {G}. In that order the chain genuinely cannot pay (two
+    // lands, one of them {C}-only), so SubsetPayableSequential reported ef-walk-fail and the line
+    // never reached the menu; cast cheap-first, the same two lands pay it exactly -- Conservatory
+    // funds the Growth, the Growth rides Mariposa, and Mariposa taps for {C} plus the Aura's {G}.
+    // USER, seed 8 gi=7 T2. This is a payability question before it is a preference: a chain the
+    // expensive-first order strands is a chain the deck simply never gets to play.
+    //
+    // The sub-order stays INSIDE the tier -- 1..3 by mana value, all still below the shroud Aura's 4
+    // -- so every relative ordering this function already guaranteed is untouched, above all the
+    // shroud-last LEGALITY rule (an Aura targets its host, and shroud stops the next one).
+    // MTG_EDF_AURA_CHEAP_FIRST=0 restores the flat tier.
     if (def.params.is_land_aura)
-    { return def.params.land_aura_grants_shroud ? 4 : 3; }
+    {
+        static const bool s_cheap_first = EnvOn("MTG_EDF_AURA_CHEAP_FIRST", true);
+        if (!s_cheap_first) { return def.params.land_aura_grants_shroud ? 4 : 3; }
+        // THE SHROUD AURA IS ORDERED BY COST TOO, not pinned last. Pinning it last was a blunt
+        // encoding of a legality rule -- an Aura targets its host (CR 303.4a) and shroud stops that
+        // (CR 702.18a), so a shrouded land can carry no further Aura. But that only ever constrains
+        // Auras sharing ONE host, and the constraint is already enforced where it belongs: the
+        // host-selection sites consult LandHasShroud (SpellEffects.h), so a shrouded land is simply
+        // not offered as a host and no illegal line can be built whatever this rank says.
+        //
+        // Pinning it last cost real lines, because on THIS deck the shroud Aura is also the best
+        // FUNDER. USER: "Trace should probably go before overgrowth. Both because of the higher mana
+        // cost and because overgrowth is not very good at paying the cost for trace." The card data
+        // agrees on both counts -- Trace {R/W}{G} is mv 2 against Overgrowth's mv 3, and Trace's
+        // bonus is WILD (land_aura_produces empty = one mana of any colour) while Overgrowth's is
+        // land_aura_produces ["G"], two GREEN that cannot pay Trace's {R/W} pip at all. So
+        // Overgrowth-then-Trace strands, and Trace-then-Overgrowth funds.
+        //
+        // THE TRADE, stated because it is a real one: with Trace ordered earlier, stacking BOTH onto
+        // a single land is no longer expressible in one turn (Trace resolves first and shrouds the
+        // host). That is the rarer line and the one the user ranked below the funding chain; making
+        // it order host-aware would need the chosen host, which CastOrderRank does not receive.
+        // MTG_EDF_AURA_CHEAP_FIRST=0 restores the old flat tiers with shroud pinned last.
+        // EASIEST TO CAST FIRST: mana value dominates, and COLOUR difficulty breaks the ties it
+        // leaves (USER: "Same with the easier to cast ones. So Fertile Ground before Trace of
+        // Abundance" -- both mv 2, but {1}{G} is easier than {R/W}{G}). A hybrid pip scores as
+        // half a strict one because it has two ways to be paid; {C} counts as strict, since a
+        // colour cannot pay it. Hybrid pips are baked into the flat colour ints, so the strict
+        // count is the coloured total minus hybrid_count.
+        const ManaCost& mc  = def.card.m_mana_cost;
+        const int coloured  = mc.white + mc.blue + mc.black + mc.red + mc.green + mc.colorless;
+        const int hybrid    = static_cast<int>(mc.hybrid_count);
+        const int strict    = coloured > hybrid ? coloured - hybrid : 0;
+        int score = mc.ManaValue() * 8 + 2 * strict + hybrid;
+        if (score < 0)  { score = 0; }
+        if (score > 99) { score = 99; }
+        // Kept far below every later tier (reducer 5, payload 6, outlet 7, generic 10/20), so the
+        // ONLY thing this changes is the order AMONG land Auras -- they still all precede the rest
+        // of the deck exactly as before.
+        return score - 1000;
+    }
     if (def.params.reduces_creature_activation)  { return 5; }   // Training Grounds cheapens both outlets
     if (def.params.etb_untap_lands > 0)          { return 6; }   // the payload refunds its own cost
     if (def.params.blink_cost.has_value())       { return 7; }   // then the outlet
