@@ -3,9 +3,14 @@
 Deck: `decks/Snow/Snow.cod` (mainboard only; sideboard unreachable — no wish effects — and user
 explicitly said to ignore it).
 
-Status: **IN FLIGHT** (Stage 2 implementation COMPLETE + built; Stage 3 coverage CLEAN; unit
-tests 70/70 + scenarios 72/72 PASS on the new binary; currently tuning the site-8 perf fix, then:
-byte-identity smoke for existing decks → Stage 4 profile + provider audit → Stage 5 battery).
+Status: **COMPLETE THROUGH STAGE 6** (see the pipeline-state block below, which is authoritative).
+Remaining, deliberately user-initiated: the value leaf and the mulligan profile. Snow is not yet
+in the regression suite.
+
+> The old status line here said "IN FLIGHT ... currently tuning the site-8 perf fix". That was
+> stale by two days: the site-8 fix landed and the pipeline ran to Stage 6. Kept as a note because
+> a stale status line at the top of a ledger is read as current and this one misdirected a later
+> session into re-opening finished work.
 
 ## Implementation state (2026-09-06, for resumption after compaction)
 
@@ -314,6 +319,89 @@ only CONSTRAINS payment:
   everywhere else makes other decks provably untouched. Prove both: Snow 10-game digest match
   + smoke suite.
 
+## Perf characterisation (2026-09-08, measured — the 5f gate's evidence)
+
+Measured at Snow's REAL shipped settings. **Snow has no `value_play` block, so it resolves to the
+built-in default d5 / 20 virtual-ms** (`[play] depth=5 budget=20ms source=default`) — NOT the
+`d3/d5 b200` gate cells the "worst ~5-15 min single games" note above came from. Any future
+perf claim about this deck must say which of the two it means.
+
+**Cost vs the rest of the repo** (300 Snow games + 100 each comparator, ONE pooled batch,
+`MTG_SLOW_GAME_MS=1`, seeds 5500001+):
+
+| deck | mean | median | p90 | p99 | max |
+|---|---|---|---|---|---|
+| **snow** | **4,888 ms** | 1,276 | 10,325 | 72,673 | **124,312** |
+| hinata | 777 | 450 | 2,236 | 5,513 | 5,513 |
+| kitty | 220 | 51 | 620 | 3,598 | 3,598 |
+| fluct | 217 | 170 | 434 | 846 | 846 |
+| dstorm | 148 | 6 | 121 | 4,576 | 4,576 |
+| goblins | 28 | 4 | 49 | 1,179 | 1,179 |
+
+**6.3x the next-worst deck on the mean, and tail-dominated: the top 12 of 300 games are 41% of all
+Snow time.** Snow was the entire remaining tail of the 800-game batch.
+
+**There is no hotspot.** `perf` (cpu-clock, Profile build) on a representative 7 s game: top self-time
+symbol is `Action::Action` at 2.79%, nothing above 3%, 82% of samples land in "other". The win has to
+come from doing LESS WORK, not from optimising a function.
+
+**Where the units go** (`MTG_ROLLOUT_STATS`, 300 games vs Hinata 100):
+
+| site | Snow | Hinata |
+|---|---|---|
+| la_cand | **33.5%** | 6.8% |
+| rollout_step | **25.0%** | 5.6% |
+| greedy_fallback | **24.2%** | 4.8% |
+| la_bp_wave | **16.2%** | 0.8% |
+| fs_main2 + fs_pre | 0.8% | 79.1% |
+
+Snow burns **3.2x the units per game** (170,742 vs 53,264) and spends them somewhere completely
+different: the LOOKAHEAD sites (la_cand + la_bp_wave ≈ 50%) and rollout+greedy (≈ 49%), where Hinata
+is 79% full-solve. Two consequences:
+
+- **`rollout_step + greedy_fallback ≈ 49%` is exactly what the VALUE LEAF replaces.** That is the
+  quantified case for the 5f remedy, and it is the reason to run the leaf before reaching for
+  anything else.
+- **`la_bp_wave` at 20x Hinata's share is the price of the site-8 same-turn-playability directive**
+  (USER 2026-09-06, "Sheets/Augur found card MUST be playable the same turn"). The directive is not
+  in question; it now has a number attached, which is what a future 5f pruning proposal has to beat.
+
+**The extreme tail has a separate, named cause.** The 124 s worst game (gi=224) spent
+**1,001,374 of its 1,778,424 units (56%) inside ONE ABORTED iterative-deepening pass**. The overrun
+guard is `max(kOverrunBeta * budget->Limit(), kOverrunFloor)` = `max(2 * 18,000, 1,000,000)` — at
+Snow's 20 virtual-ms budget the **FIXED 1,000,000-unit floor swamps the intended 2x-of-budget
+ceiling by 55x**, so a runaway pass burns 55 decision-budgets before it is cut. The floor only stops
+binding above a ~556 ms budget, i.e. never in play.
+**But it is a TAIL fix, not a general one, and the first read of this was wrong:** deck-wide there
+was exactly **1 aborted pass in 300 games** — `waste_share = 1.95%` of units. Worth doing for
+generation makespan and for the p99; NOT the deck's cost. (Any change here is an engine-wide
+constant and needs the full suite, not a Snow-only argument.)
+
+This is Step 1 of `anytime-search-budget-prediction.md`, which asks for exactly this measurement
+("we do not currently know how often the cutoff actually fires mid-line, or how much time it
+wastes") and says to measure before touching the predictor. Now measured, on one deck.
+
 ## Open questions for the user (surfaced, not blocking)
 
-1. `{S}` modelled as generic `{1}` (see above) — PROVISIONAL.
+1. ~~`{S}` modelled as generic `{1}`~~ — **CLOSED 2026-09-06** by the real snow-mana model
+   (`b1551194`, section above). The line survived here after being resolved; do not re-raise it.
+2. **The nine PROVISIONAL card deferrals still have no sign-off** ("Approved deferrals: none yet").
+   Eight are inert by construction; **Coldsteel Heart is the one that is not** — see below.
+3. **Coldsteel Heart does not ask for a colour** (USER, hand-playing references 2026-09-08: "that
+   is kind of an issue"). The ETB "choose a color, locked forever" is unmodelled, so each of the
+   4 copies taps for ANY of WUBRG every turn instead of one colour fixed at ETB. This is the one
+   deferral that is **over-permissive in the engine's favour** — a real Snow deck's Hearts are
+   locked and it has colour-screw risk this engine never faces, in a 3-colour (U/G/R) deck running
+   4 copies. It inflates the deck's numbers, and it is a MODELING bug (rules-arbitrated), not a
+   heuristic to tune.
+   **Scope, measured honestly:** there is NO per-permanent chosen-colour machinery anywhere in the
+   engine. `EffectiveProduces(state, controller, def)` is keyed on the DEFINITION, with ~78 call
+   sites, so a locked colour needs a `Permanent` field, an ETB decision (searched or heuristic),
+   viewer prompting, and per-permanent context threaded through the mana spine — carrying the
+   "grep every raw `produces` read" hazard recorded in `any-color-filter-and-raw-produces-reads`.
+   A real project, not a patch. Precedent for the current simplification: Cavern of Souls,
+   Unclaimed Territory, Secluded Courtyard.
+   **Ordering consequence:** fixing it CHANGES PLAY, so a value leaf generated before the fix must
+   be regenerated after it.
+4. **Snow is still not in the regression suite** — a shared-budget sizing call, and an expensive
+   one at 4.9 s/game mean.
