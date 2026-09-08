@@ -1589,38 +1589,13 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     const int active = state.active_player_index;
     const int n      = static_cast<int>(state.battlefield.size());
 
-    // Upper bound on one source's net mana, state-aware for the scaled land (SourceMaxNet has no
-    // GameState, so it under-counts Three Tree City's board-scaled net -> a losslessness violation
-    // that could prune a payable scaled line). The B&B gate needs an OVER-count, so take the larger
-    // of the static bound and the scaled net (N - feeder). Identity for every non-scaled source.
+    // Upper bound on one source's net mana, state-aware for every board-scaled shape (scaled land /
+    // scaled dork / untap-land burst / domain source / land aura) that the two static SourceMaxNet
+    // overloads under-count -- each of those under-counts was a losslessness violation that pruned a
+    // payable line. The body now lives in SpellEffects.h as SourceMaxNetLive, shared with the
+    // payment-entry fail-fast (UntappedManaUpperBound) so the two bounds cannot drift apart.
     auto source_max_net = [&](const Permanent& pp, const CardDefinition& dd) -> int
-    {
-        int b = SourceMaxNet(pp, dd);
-        if (IsScaledManaLand(dd))
-        { b = std::max(b, ScaledManaCreatureCount(state) - dd.params.mana_per_creature_feeder_generic); }
-        // Scaled mana DORK (Priest of Titania / Elvish Archdruid): the static bound reads 1; the
-        // real one-tap yield is the live Elf count -- an under-count here would be a LOSSY prune
-        // (the domain lesson). Over-counting is safe (B&B gate wants an upper bound).
-        if (IsScaledManaDork(dd))
-        { b = std::max(b, ScaledDorkCount(state, pp.controller_index, dd)); }
-        // Untap-land (Wirewood Lodge): the static bound reads 1 ({C}); the burst nets
-        // (best scaled-Elf yield - 1). Under-counting would be a LOSSY prune, over is safe.
-        if (dd.params.untap_creature_cost.has_value())
-        { b = std::max(b, UntapLandBurstNet(state, pp.controller_index, dd)); }
-        // Domain source (Faeburrow / Bloom Tender): one tap yields |domain| mana (2-5), but the
-        // static bound reads ManaProducedPerTap = 1 -- the under-count made this LOSSY: the gate
-        // pruned payable WUBRG costs and the executor silently dropped legal casts the search had
-        // committed (the FiveColour claude-play sweep's convergent finding, 14/18 games).
-        if (dd.params.domain_mana)
-        { b = std::max(b, static_cast<int>(EffectiveProduces(state, active, dd).size())); }
-        // Land aura (Wild Growth / Overgrowth): the DFS credits the aura's bonus when the host
-        // taps (next_with_aura, below), but neither SourceMaxNet overload carries it -- so the
-        // bound under-counted an enchanted land by its bonus (1-2) and could prune a payable
-        // cost the DFS pays: a losslessness violation, the storage/scaled/domain lesson again.
-        // Additive, not max: the bonus rides on top of whatever the host itself yields.
-        b += LandAuraBonus(state, pp);
-        return b;
-    };
+    { return SourceMaxNetLive(state, pp, dd); };
 
     // Failure-state memo. The backtracker explores tap ORDERINGS, and many orderings converge on the
     // same (tapped-source set, floating pool) state -- once such a state is proven to admit no legal
@@ -1995,28 +1970,11 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     // we record the failure (like the loop's fall-through) so revisits short-circuit too.
     if (MaxManaGateEnabled())
     {
-        if (untapped_max < 0)   // top-level: sum the board's remaining max output once
-        {
-            untapped_max = 0;
-            for (int i = 0; i < n; ++i)
-            {
-                const Permanent& p = state.battlefield[i];
-                if (p.controller_index != active || p.tapped) { continue; }
-                if (reserved_mask & (1ull << i)) { continue; }   // reservation audit: held source unavailable
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                if (!d) { continue; }
-                const bool is_src = (d->tmpl == CardTemplate::BasicLand)
-                                 || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-                                 || d->params.mana_rock
-                                 || PaySacSpendableNow(state, p, *d);   // §2a (fresh-hold aware, matching the payer)
-                if (!is_src) { continue; }
-                if (d->params.creature_mana_only && !for_creature) { continue; }
-                if (!StorageSourceLive(p, *d)) { continue; }   // uncharged storage land makes no mana
-                if (!GraveyardFuelLive(state, active, *d)) { continue; }   // Deathrite: no gy land
-                if (!ManaSubtypeGateLive(state, active, *d)) { continue; } // Arbor Elf: no Forest
-                untapped_max += source_max_net(p, *d);
-            }
-        }
+        // Top-level: sum the board's remaining max output once. The loop is UntappedManaUpperBound
+        // in SpellEffects.h -- same source filter, same per-source bound -- shared with the
+        // payment-entry fail-fast so the two can never disagree about what is provably unpayable.
+        if (untapped_max < 0)
+        { untapped_max = UntappedManaUpperBound(state, for_creature, reserved_mask); }
         if (floating.Total() + untapped_max < cost.ManaValue())
         {
             if (fail_memo) { fail_memo->insert(key); }
@@ -2779,11 +2737,19 @@ inline bool McSimpleTap(const CardDefinition* d)
 
 // Scan the active player's mana sources ONCE: build the 128-bit key (k1,k2) AND the global gate.
 // Returns false (caller skips the cache) if a state-dependent source is present.
+//
+// `out_ord` / `out_nsrc` (2026-09-08): the SOURCE-ORDINAL map the caller used to build in its own
+// separate O(battlefield) pre-pass, with a LookupCached per permanent -- over the identical source
+// predicate this loop already applies. On EldraziDisplacerFlicker that pre-pass ran 85.4M times per
+// game (every greedy stranding enters the backtracker) and 99.8% of those were cache HITS that never
+// needed the map at all: only a MISS reads it. Folding it into this scan removes one of the two
+// full battlefield walks from every hit. nullptr -> not produced (the pre-pass's old callers).
 inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_creature,
                          std::uint64_t reserved_mask, int untapped_max,
                          bool want_leftover, bool want_full_pool, const ManaPool& floating,
                          std::uint64_t& k1, std::uint64_t& k2,
-                         std::vector<std::uint64_t>* out_desc)
+                         std::vector<std::uint64_t>* out_desc,
+                         std::vector<int>* out_ord = nullptr, int* out_nsrc = nullptr)
 {
     auto mix = [](std::uint64_t& h, std::uint64_t v){ h ^= v; h *= 1099511628211ull; h ^= h >> 29; };
     std::uint64_t h1 = 1469598103934665603ull, h2 = 14695981039346656037ull;
@@ -2856,6 +2822,13 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     int drip_useful = -1;   // lazy, hashed once on the first drip source
     bool domain_done = false;   // lazy, hashed once on the first domain source (Elder / Bloom Tender)
     bool scaled_done = false;   // lazy, hashed once on the first scaled source (Three Tree City)
+    if (out_ord) { out_ord->assign(state.battlefield.size(), -1); }
+    int nsrc = 0;
+    // The legacy scaling bail-out (below) SETS this instead of returning immediately, so the source
+    // ordinals the caller asked for are still counted over the whole board -- the pre-pass it
+    // replaces had no such early exit. Hashing is skipped from that point on (the key is discarded
+    // with the `false` return anyway), so the returned verdict is unchanged.
+    bool scaling_bail = false;
     for (int i = 0; i < n; ++i)
     {
         const Permanent& p = state.battlefield[i];
@@ -2864,10 +2837,13 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         if (!d) { continue; }
         if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
               || d->params.mana_rock || IsPaySacSource(*d))) { continue; }   // §2a
+        if (out_ord) { (*out_ord)[static_cast<std::size_t>(i)] = nsrc; }
+        ++nsrc;
         // Domain source: its yield IS the colour domain -- the set of colours among every permanent
         // you control, most of which this loop never visits. Hash the realised SET (not a count: two
         // boards with two colours each pay different pips), once, exactly as `reflecting` does below.
-        if ((McDomain(d) || McScaled(d)) && !McScalingHashed()) { return false; }   // legacy bail-out
+        if ((McDomain(d) || McScaled(d)) && !McScalingHashed()) { scaling_bail = true; }  // legacy bail-out
+        if (scaling_bail) { if (!out_ord) { return false; } continue; }
         if (McDomain(d) && !domain_done)
         {
             domain_done = true;
@@ -2994,6 +2970,8 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         // the absolute indices, which is the part that was creating spurious keys.
         if (canon) { (*out_desc)[i] = dh; mix(h1, dh); mix(h2, dh * 0x9E3779B97F4A7C15ull); }
     }
+    if (out_nsrc) { *out_nsrc = nsrc; }
+    if (scaling_bail) { return false; }
     auto mixcost = [&](std::uint64_t& h){
         mix(h, static_cast<std::uint64_t>(cost.generic));
         mix(h, static_cast<std::uint64_t>(cost.white) | (static_cast<std::uint64_t>(cost.blue) << 16)
@@ -3058,26 +3036,22 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // battlefield slot to its ordinal among the active player's mana sources (-1 = not a source),
     // which is the same ordinal the canonical key's tap records already use.
     // MTG_MANA_CACHE_BF_GATE=1 restores the old board-size gate from ONE binary (A/B hatch).
+    //
+    // THE ORDINAL MAP IS BUILT BY ManaCacheKey (2026-09-08), not by a pre-pass of its own. It used to
+    // be a separate O(battlefield) walk with a LookupCached per permanent, applying exactly the source
+    // predicate the key's own walk applies two lines later -- so every backtracker entry paid for the
+    // same scan twice, and on EldraziDisplacerFlicker that is 85.4M entries per game of which 99.8%
+    // are cache HITS that never read the map at all (only a miss does: `pre_tapped` and the store).
+    // The only thing that had to move with it is `mc_fits`, which reads the source COUNT and so used
+    // to have to precede the key build; it now reads the count the key build returns, and gates the
+    // RESULT instead. Same verdict either way -- an over-64 board is a cache skip in both orders --
+    // the only difference being that such a board now pays for a key it discards, which is exactly
+    // the board where a wasted key is cheapest relative to the solve it would otherwise have done.
     static thread_local std::vector<int> mc_ord;
     int mc_nsrc = 0;
-    {
-        const int nbf = static_cast<int>(state.battlefield.size());
-        mc_ord.assign(static_cast<std::size_t>(nbf), -1);
-        const int act = state.active_player_index;
-        for (int i = 0; i < nbf; ++i)
-        {
-            const Permanent& p = state.battlefield[i];
-            if (p.controller_index != act) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (!d) { continue; }
-            if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
-                  || d->params.mana_rock || IsPaySacSource(*d))) { continue; }   // §2a
-            mc_ord[static_cast<std::size_t>(i)] = mc_nsrc++;
-        }
-    }
     static const bool s_mc_bf_gate = EnvOn("MTG_MANA_CACHE_BF_GATE");
-    const bool mc_fits = s_mc_bf_gate ? (state.battlefield.size() <= 64) : (mc_nsrc <= 64);
-    const bool mc = ManaCacheEnabled() && rp_colors == nullptr && mc_fits
+    // Everything about the call SHAPE, which is all that can be known before the scan.
+    const bool mc_shape = ManaCacheEnabled() && rp_colors == nullptr
                     && (McLeftoverShape()
                         || (out_full_pool != nullptr && out_leftover == nullptr && floating.Total() == 0));
     std::uint64_t mk1 = 0, mk2 = 0, pre_tapped = 0; bool mc_active = false;
@@ -3092,9 +3066,13 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // Canonical order for this board (empty in indexed mode). Entry taps are POSITIONS in it.
     static thread_local std::vector<std::uint64_t> mc_desc;
     const bool mc_canon = McCanonKey();
-    const bool mc_keyed = mc && ManaCacheKey(state, cost, for_creature, reserved_mask, untapped_max,
+    bool mc_keyed = mc_shape && ManaCacheKey(state, cost, for_creature, reserved_mask, untapped_max,
                                              out_leftover != nullptr, out_full_pool != nullptr, floating,
-                                             mk1, mk2, mc_canon ? &mc_desc : nullptr);
+                                             mk1, mk2, mc_canon ? &mc_desc : nullptr,
+                                             &mc_ord, &mc_nsrc);
+    const bool mc_fits = s_mc_bf_gate ? (state.battlefield.size() <= 64) : (mc_nsrc <= 64);
+    const bool mc = mc_shape && mc_fits;
+    if (!mc_fits) { mc_keyed = false; }
     if (tapstats::Enabled() && !mc_keyed)
     { (mc ? tapstats::g_mc_skip_key : tapstats::g_mc_skip_shape).fetch_add(1, std::memory_order_relaxed); }
     if (mc_keyed)

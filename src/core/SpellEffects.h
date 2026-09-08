@@ -15669,6 +15669,19 @@ namespace tapstats
     inline std::atomic<std::uint64_t> g_memo_clear_empty{0};
     inline std::atomic<std::uint64_t> g_memo_clear_full{0};
     inline std::atomic<std::uint64_t> g_memo_reset{0};      // over-cap tables swapped out for a fresh one
+    // PAYMENT-ENTRY accounting (2026-09-08). Everything above measures the BACKTRACKER; these measure
+    // the layer that calls it, which is where the fail-fast bound lives. `impl` = TapForCostSharedImpl
+    // entries (one per payment QUESTION); `once` = TapForCostSharedOnce attempts (an rmask board asks
+    // twice: held, then unrestricted); `greedy_ok` = attempts the per-pip greedy solved without ever
+    // reaching the backtracker. `bound_prune` counts entries the total-mana upper bound proved
+    // unpayable; `bound_probe` counts the same thing with the fast path DISABLED, so the prune RATE
+    // can be measured on the unmodified engine before the fast path is trusted.
+    inline std::atomic<std::uint64_t> g_pay_impl{0};
+    inline std::atomic<std::uint64_t> g_pay_once{0};
+    inline std::atomic<std::uint64_t> g_pay_once_fail{0};
+    inline std::atomic<std::uint64_t> g_pay_greedy_ok{0};
+    inline std::atomic<std::uint64_t> g_bound_prune{0};
+    inline std::atomic<std::uint64_t> g_bound_probe{0};
     struct Dumper {
         ~Dumper()
         {
@@ -15745,6 +15758,23 @@ namespace tapstats
                 nskip, nodes ? 100.0 * (double)nskip / (double)nodes : 0.0,
                 (ms + mk) ? (double)nskip / (double)(ms + mk) : 0.0);
             const unsigned long long ce = g_memo_clear_empty.load(), cf = g_memo_clear_full.load();
+            const unsigned long long pim = g_pay_impl.load(), pon = g_pay_once.load();
+            const unsigned long long pof = g_pay_once_fail.load(), pgo = g_pay_greedy_ok.load();
+            std::fprintf(stderr,
+                "=== PAYMENT ENTRIES: impl=%llu  once=%llu (%.2f per impl)  greedy-solved=%llu (%.1f%% "
+                "of once)  failed=%llu (%.1f%%)  reached-backtracker=%llu (%.1f%% of once) ===\n",
+                pim, pon, pim ? (double)pon / (double)pim : 0.0,
+                pgo, pon ? 100.0 * (double)pgo / (double)pon : 0.0,
+                pof, pon ? 100.0 * (double)pof / (double)pon : 0.0,
+                (unsigned long long)(g_site_percast.load() + g_site_percast_filter.load()),
+                pon ? 100.0 * (double)(g_site_percast.load() + g_site_percast_filter.load())
+                            / (double)pon : 0.0);
+            std::fprintf(stderr,
+                "=== PAY BOUND: fail-fast prunes=%llu (%.1f%% of impl)  would-prune probe=%llu (%.1f%%) ===\n",
+                (unsigned long long)g_bound_prune.load(),
+                pim ? 100.0 * (double)g_bound_prune.load() / (double)pim : 0.0,
+                (unsigned long long)g_bound_probe.load(),
+                pim ? 100.0 * (double)g_bound_probe.load() / (double)pim : 0.0);
             std::fprintf(stderr,
                 "=== MEMO BUCKETS: max retained=%llu (%.1f KB memset per clear at that size)  "
                 "clears: empty=%llu (%.1f%% -- memset of an all-zero array) full=%llu  resets=%llu ===\n",
@@ -15841,6 +15871,134 @@ inline int SourceMaxNet(const Permanent& perm, const CardDefinition& def)
 {
     if (def.params.storage_land) { return perm.storage_counters; }
     return SourceMaxNet(def);
+}
+
+// LAND-AURA FOLD: (host card number -> summed land_aura_extra_mana) over `controller`'s land auras,
+// collected in ONE pass. LandAuraBonus is itself a full battlefield scan, so calling it per source
+// turns a bound over k sources into an O(n*k) walk -- which is exactly what EldraziDisplacerFlicker
+// is (four Wild Growth, four Overgrowth, four Fertile Ground, four Trace of Abundance), and what
+// made the first cut of the payment-entry fail-fast cost as much as it saved (measured: net -0.4%
+// on seed 3001 gi0). Every deck with no land aura leaves this empty, and an empty fold reads as a
+// zero bonus in O(1).
+inline void CollectLandAuraFold(const GameState& state, int controller,
+                                std::vector<std::pair<int, int>>& out)
+{
+    out.clear();
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.aura_attached_to == 0 || a.controller_index != controller) { continue; }
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+        if (!ad || !ad->params.is_land_aura) { continue; }
+        bool merged = false;
+        for (std::pair<int, int>& e : out)
+        { if (e.first == a.aura_attached_to) { e.second += ad->params.land_aura_extra_mana; merged = true; break; } }
+        if (!merged) { out.push_back({ a.aura_attached_to, ad->params.land_aura_extra_mana }); }
+    }
+}
+
+// LandAuraBonus read out of a fold instead of by rescanning the battlefield. Identical value: the
+// fold sums exactly the (attached, same-controller, is_land_aura) permanents LandAuraBonus sums,
+// and the host test is the same m_number match. An EMPTY fold therefore also means "credit no aura"
+// -- which the fail-fast's cheap first arm uses deliberately (see PaymentManaCovers).
+inline int LandAuraBonusFolded(const std::vector<std::pair<int, int>>& fold, const Permanent& land)
+{
+    if (fold.empty() || !land.card.IsLand()) { return 0; }
+    for (const std::pair<int, int>& e : fold)
+    { if (e.first == land.card.m_number) { return e.second; } }
+    return 0;
+}
+
+// LIVE per-permanent bound: SourceMaxNet(perm, def) corrected for every BOARD-SCALED shape the two
+// static overloads above under-count. Verbatim the `source_max_net` lambda TapForCostBacktrackWorker
+// used to carry inline; hoisted here so the backtracker's branch-and-bound gate and the payment-entry
+// fail-fast (UntappedManaUpperBound, below) read ONE bound and cannot drift apart -- the EngineFlags
+// lockstep rule applied to a losslessness argument. Every correction is a `max`/`+`: the bound must
+// OVER-count, because a looser bound only fails to prune, while an under-count prunes a payable cost.
+//
+// `aura_fold` nullptr = read the aura bonus by the exact per-source LandAuraBonus rescan (what the
+// backtracker's own gate has always done -- byte-identical); non-null = read it out of a fold.
+inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const CardDefinition& dd,
+                            const std::vector<std::pair<int, int>>* aura_fold = nullptr)
+{
+    int b = SourceMaxNet(pp, dd);
+    // Scaled LAND (Three Tree City): N of a chosen colour, N = creatures you control, minus its feeder.
+    if (IsScaledManaLand(dd))
+    { b = std::max(b, ScaledManaCreatureCount(state) - dd.params.mana_per_creature_feeder_generic); }
+    // Scaled DORK (Priest of Titania / Elvish Archdruid): the static bound reads 1; the real one-tap
+    // yield is the live subtype count.
+    if (IsScaledManaDork(dd))
+    { b = std::max(b, ScaledDorkCount(state, pp.controller_index, dd)); }
+    // Untap-land (Wirewood Lodge): the static bound reads 1 ({C}); the burst nets (best scaled yield - 1).
+    if (dd.params.untap_creature_cost.has_value())
+    { b = std::max(b, UntapLandBurstNet(state, pp.controller_index, dd)); }
+    // Domain source (Faeburrow / Bloom Tender): one tap yields |domain| mana (2-5) where
+    // ManaProducedPerTap reads 1 -- the under-count that once pruned payable WUBRG costs.
+    if (dd.params.domain_mana)
+    { b = std::max(b, static_cast<int>(EffectiveProduces(state, state.active_player_index, dd).size())); }
+    // Land aura (Wild Growth / Overgrowth): additive, the bonus rides on whatever the host yields.
+    b += aura_fold ? LandAuraBonusFolded(*aura_fold, pp) : LandAuraBonus(state, pp);
+    return b;
+}
+
+// UPPER bound on the TOTAL mana the active player can still extract from their UNTAPPED sources --
+// SourceMaxNetLive summed over every live source, with `reserved_mask` excluding held ones. This is
+// the quantity the backtracker's B&B gate threads down as `untapped_max`; it is also a bound on what
+// the GREEDY can produce, because every payment path can only TAP each source once (`usable` skips a
+// tapped permanent) and one tap adds at most SourceMaxNetLive to the floating pool. So for any cost,
+//     floating.Total() + UntappedManaUpperBound(...) < cost.ManaValue()
+// proves NO tap ordering pays it, by the greedy, the backtracker, or any retry between them.
+// `stop_at >= 0` short-circuits the walk the moment the running total reaches it: the fail-fast only
+// ever asks "does the board cover this cost", never "by how much", and most costs are covered by the
+// first two or three sources. -1 (the backtracker's B&B gate) walks the whole board for the exact sum.
+inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
+                                  std::uint64_t reserved_mask, int stop_at = -1,
+                                  const std::vector<std::pair<int, int>>* aura_fold = nullptr)
+{
+    const int active = state.active_player_index;
+    const int n      = static_cast<int>(state.battlefield.size());
+    int total = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (stop_at >= 0 && total >= stop_at) { break; }
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active || p.tapped) { continue; }
+        if (reserved_mask & (1ull << i)) { continue; }   // reservation audit: held source unavailable
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool is_src = (d->tmpl == CardTemplate::BasicLand)
+                         || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                         || d->params.mana_rock
+                         || PaySacSpendableNow(state, p, *d);   // §2a (fresh-hold aware, matching the payer)
+        if (!is_src) { continue; }
+        if (d->params.creature_mana_only && !for_creature) { continue; }
+        if (!StorageSourceLive(p, *d)) { continue; }   // uncharged storage land makes no mana
+        if (!GraveyardFuelLive(state, active, *d)) { continue; }   // Deathrite: no gy land
+        if (!ManaSubtypeGateLive(state, active, *d)) { continue; } // Arbor Elf: no Forest
+        total += SourceMaxNetLive(state, p, *d, aura_fold);
+    }
+    return total;
+}
+
+// THE fail-fast question: can the board conceivably cover `need` more mana than is already floating?
+// False is a PROOF of unpayability (see the fail-fast block in ManaPayment.cpp); true means only
+// "not provably unpayable", which is all the caller needs to fall through to the real payment.
+//
+// TWO ARMS, and the split is what makes this cheap enough to run on every payment. Arm 1 walks the
+// board with NO aura credit and stops as soon as it has found `need` mana: under-crediting can only
+// make it answer "not covered", never "covered", so a `true` from it is already sound -- and on a
+// board that plainly affords the cost it exits after two or three permanents having touched no aura
+// machinery at all. Only when arm 1 comes up short is the aura fold built and the sound bound run.
+inline bool PaymentManaCovers(const GameState& state, bool for_creature, int need)
+{
+    if (need <= 0) { return true; }
+    static thread_local std::vector<std::pair<int, int>> s_no_aura;   // stays empty: "credit no aura"
+    s_no_aura.clear();
+    if (UntappedManaUpperBound(state, for_creature, /*reserved_mask=*/0, need, &s_no_aura) >= need)
+    { return true; }
+    static thread_local std::vector<std::pair<int, int>> s_fold;
+    CollectLandAuraFold(state, state.active_player_index, s_fold);
+    if (s_fold.empty()) { return false; }   // arm 1 was already the sound bound
+    return UntappedManaUpperBound(state, for_creature, /*reserved_mask=*/0, need, &s_fold) >= need;
 }
 
 // Reservation audit (see ReserveEnabled): the bitmask of the active player's untapped SPECIAL mana
