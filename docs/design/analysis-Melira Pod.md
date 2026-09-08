@@ -2230,3 +2230,18 @@ heuristic pass at exactly the depth the cheap probe established, so every decisi
 line at the deepest depth it could afford. Open: quality at EQUAL cost vs the heuristic (livebud at
 1.2x is not matched to single_a1's 1.6x) -- matched-budget heuristic arms (d5/b40, d5/b50, d3/b20)
 running on the same frozen binary; appended when they land.
+
+**Equal-cost read (matched-budget heuristic arms, same seeds):**
+
+| config | esc_single (gate pinned) | heuristic at matched cost |
+|---|---|---|
+| d5 | -0.0161 at 1.59x | b40: -0.0130 at 1.42x; **b50: -0.0165 at 1.54x** |
+| d3 | -0.0247 at 1.55x | b15: -0.0120 at 1.16x; b20: -0.0180 at 1.30x (curve extrapolates to ~-0.026 at 1.55x) |
+
+**Verdict for Melira: the paradigm is a WASH against spending the same budget on the heuristic, and a
+large win over the shipped hybrid (the escalation approach).** So on an identity-crossover deck the
+value leaf still cannot beat the heuristic per unit of cost; what this mode fixes is the hybrid's own
+inefficiency (starved re-ladder + fall-back). Where the crossover is NOT the identity (V(k) ~= H(k-3)
+decks) the same mode should carry the leaf's cost advantage through to the committed line without
+the redo tax -- that is the deck class to test next (Fluctuator, then a V<<H deck such as hinata).
+Adoption for Melira: not proposed (no sidecar; budget is the simpler lever). Lever kept, default off.
