@@ -14202,6 +14202,15 @@ struct FlickerLoop
     // is already in play. Paired with ComboFinishFromHand, which is what actually deploys it -- the
     // recognizer must not claim a route the apply cannot walk.
     int  hand_setup_mv = 0;
+    // DRAW ACTIVATIONS the hand_setup needs BEFORE the finisher can be cast: the library route's
+    // dig. The loop's untap refreshes ONE draw land per iteration, so a wish/finisher i cards down
+    // takes i+1 ITERATIONS as well as the mana already priced into hand_setup_mv. 0 for the hand
+    // and wish-in-hand routes. FlickerGoOffCount sizes iterations to max(by-mana, dig_draws) --
+    // the same shape as the draw-land route's max(cards, by_mana). NOTE: measured INERT in
+    // practice (2026-09-08, byte-identical A/B) -- draw_mv (>=5) exceeds any real net, so by-mana
+    // always covers the digs. Kept because it is the correct bound and free; the library route's
+    // real defect is elsewhere (see the route's comment in ScanHandSinks).
+    int  dig_draws     = 0;
     // COLOURLESS BUDGET PER ITERATION. `c_refund` is the {C}-capable share of the same top-N lands
     // the untap refreshes; `c_cost` is the outlet's own {C} pip count (Displacer {2}{C} -> 1,
     // Emiel {3} -> 0). `net_c = c_refund - c_cost` is what the loop can BANK per iteration, and a
@@ -14406,12 +14415,28 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
     // FlickerMaxIterations of any real board's net can bank, and the cap bounds this scan on the
     // recognizer's hot path.
     //
-    // DEFAULT OFF -- MEASURED NEGATIVE AS PRICED (200 pooled games vs the auto-go-off baseline:
-    // s3001 5.72 -> 5.92, s3061 5.24 -> 5.38). The pricing counts MANA only, but Mariposa /
-    // investigate draws carry {T}: ONE draw per loop iteration -- so a 6-deep dig needs >= 6
-    // iterations as well as the mana, and the mana-only count proposes loops that stall mid-dig
-    // and waste the turn. Representability stands (all three links exist); shipping it needs
-    // iteration-aware sizing. Re-measure with MTG_EDF_LIB_ROUTE=1 after fixing the sizing.
+    // DEFAULT OFF -- MEASURED NEGATIVE, TWICE, AND THE SECOND RUN CORRECTED THE DIAGNOSIS
+    // (2026-09-08, 200 pooled games vs the auto-go-off baseline: s3001 5.72 -> 5.92, s3061
+    // 5.24 -> 5.38; per-game diff over s3001: 8 games worse, 0 better).
+    //
+    //   * The first hypothesis -- mana-only sizing stalls the dig ({T} draws are one per
+    //     iteration) -- is FALSIFIED: adding dig_draws to the count sizer reproduced the
+    //     negative result BYTE-IDENTICALLY (same digests), i.e. by-mana iterations always
+    //     cover the digs, because draw_mv (>=5) exceeds any real board's net.
+    //   * The real mechanism is SHADOWING + STARTABILITY. This route can only price a dig on a
+    //     board that has a draw land -- exactly the boards where FlickerGoOffCount's draw-land
+    //     fallback already sizes an affordable library-devouring loop. Filling the drain/exile
+    //     slots makes that drain branch return FIRST, and the dig's setup (observed at 60 mana:
+    //     (i+1)*draw_mv + wish + finisher) fails every consumer's startable() test, which wants
+    //     setup NOW out of the current pool. Net effect: a kill projection the board could
+    //     afford (bank first, deploy at the loop's end) is replaced by one it cannot start, and
+    //     the turn declines to go off. The recognizer also runs inside rollout scoring, so the
+    //     damage is deck-wide, not just on loop turns (traced games diverge from T2).
+    //
+    // Reviving this needs a redesign, not a knob: the library candidate must never displace the
+    // draw-land fallback sizing, and its lethal projection needs a bank-then-deploy startability
+    // test instead of pay-it-all-now. Worth re-measuring only after the value leaf moves the
+    // deck's effective horizon (the s1 T3 target line is budget-blocked upstream at 20 ms anyway).
     static const bool s_lib_route = EnvOn("MTG_EDF_LIB_ROUTE", false);
     if (!heurarm::Flag(heurarm::EDF_LIB_ROUTE, s_lib_route)) { return; }
     if (HumanPlayActive()) { return; }
@@ -14440,13 +14465,15 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
         if (d == nullptr) { continue; }
         const int dig_mv = (i + 1) * draw_mv;
         consider(d, dig_mv);   // a finisher sitting in the library directly
-        if (best->drain_amount > 0 || best->exile_cost_mv > 0) { return; }
+        if (best->drain_amount > 0 || best->exile_cost_mv > 0)
+        { best->dig_draws = i + 1; return; }
         if (d->params.tutor_to_hand && d->params.wish_from_sideboard)
         {
             const int wish_mv = d->card.m_mana_cost.ManaValue();
             for (const Card& sb : ap.sideboard)
             { consider(CardDatabase::Instance().LookupCached(sb), dig_mv + wish_mv); }
-            if (best->drain_amount > 0 || best->exile_cost_mv > 0) { return; }
+            if (best->drain_amount > 0 || best->exile_cost_mv > 0)
+            { best->dig_draws = i + 1; return; }
         }
     }
 }
@@ -14812,7 +14839,12 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         const int iters = FlickerIterationsForMana(loop.hand_setup_mv
                                                        + activations * std::max(1, loop.drain_cost_mv),
                                                    loop.net);
-        if (iters > 0) { return iters; }
+        // A library-dug sink needs its DRAWS as well as its mana: one draw-land untap per
+        // iteration, so at least dig_draws iterations -- the draw-land route's max(cards, by_mana),
+        // applied to a bounded dig. Without it a high-net loop affords the mana before the dig
+        // completes and stalls with the finisher still in the library.
+        if (iters > 0)
+        { return std::clamp(std::max(iters, loop.dig_draws), 1, FlickerMaxIterations()); }
     }
     if (loop.exile_cost_mv > 0 && s.opponent_library_dealt)
     {
@@ -14821,7 +14853,8 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         const int cards = static_cast<int>(s.players[1 - s.active_player_index].library.size());
         const int iters = FlickerIterationsForMana(loop.hand_setup_mv + cards * loop.exile_cost_mv,
                                                    loop.net);
-        if (iters > 0) { return iters; }
+        if (iters > 0)
+        { return std::clamp(std::max(iters, loop.dig_draws), 1, FlickerMaxIterations()); }
     }
 
     // NO COUNTER-WATCHER ROUTE. An earlier version of this heuristic sized the loop to "enough
