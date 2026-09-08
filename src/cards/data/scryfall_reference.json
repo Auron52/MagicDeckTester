@@ -3600,5 +3600,54 @@
     "power": null,
     "toughness": null,
     "type_line": "Land — Swamp Forest Island"
+  },
+  "Soul's Attendant": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "Whenever another creature enters, you may gain 1 life.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Cleric"
+  },
+  "Auriok Champion": {
+    "cmc": 2.0,
+    "keywords": [
+      "Protection"
+    ],
+    "mana_cost": "{W}{W}",
+    "oracle_text": "Protection from black and from red\nWhenever another creature enters, you may gain 1 life.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Cleric"
+  },
+  "Serra Ascendant": {
+    "cmc": 1.0,
+    "keywords": [
+      "Lifelink"
+    ],
+    "mana_cost": "{W}",
+    "oracle_text": "Lifelink (Damage dealt by this creature also causes you to gain that much life.)\nAs long as you have 30 or more life, this creature gets +5/+5 and has flying.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Monk"
+  },
+  "Ajani's Pridemate": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Whenever you gain life, put a +1/+1 counter on this creature.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Cat Soldier"
+  },
+  "Voice of the Blessed": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{W}{W}",
+    "oracle_text": "Whenever you gain life, put a +1/+1 counter on this creature.\nAs long as this creature has four or more +1/+1 counters on it, it has flying and vigilance.\nAs long as this creature has ten or more +1/+1 counters on it, it has indestructible.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Spirit Cleric"
   }
 }
