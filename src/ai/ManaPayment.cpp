@@ -18,6 +18,126 @@
 // this is read on every payment, and a magic static would add a guard check to each.
 static const bool g_float_trace = EnvOn("MTG_FLOAT_TRACE");
 
+// ---- COMPACT PAYMENT SNAPSHOT (2026-09-08) ---------------------------------------------------
+//
+// Payment rollback used to deep-copy the whole battlefield (`std::vector<Permanent> bf_pre =
+// state.battlefield`) at THREE sites -- every TapForCostSharedOnce, the reserved-retry wrapper and
+// the hybrid wrapper -- and EDF profiling put that copy machinery at ~23% of a whole game
+// (vector<Permanent> copy-ctor 14.3% + operator= 6.9% + the allocator traffic behind them): each
+// snapshot is N Permanent deep copies, each allocating for its counters vector, taken 2-3x per
+// payment attempt, millions of times per game.
+//
+// A payment attempt mutates EXACTLY three Permanent fields before any restore point:
+//   * tapped                (tap_source and the backtracker's tap sites)
+//   * the Depletion counter (DecrementDepletionOnTap -- decrements the first entry's count;
+//                            entries are never added or removed mid-payment)
+//   * storage_counters      (a storage-land burst zeroes the battery)
+// Everything else a payment touches lives on the PLAYERS or the pools (life, graveyard, energy,
+// floating_mana, `available`) and was always restored separately. The battlefield's SIZE is
+// invariant across every restore path: CommitPaySacSacrifices -- the only eraser -- runs strictly
+// on success returns, which never restore. So rollback needs 9 bytes per permanent, not a deep
+// Permanent copy. (AnimateLands' is_animated write is a separate entry point, outside every
+// payment snapshot scope.)
+//
+// MTG_PAY_SNAP_VERIFY=1 (diagnostic, default off): every site ALSO takes the old full copy and
+// compares field-by-field after the compact restore, aborting on the first divergence -- the
+// tool that proves the mutation census above stays complete if the payment path grows a new
+// side effect. The standing proof for the shipped engine is byte-identity across the full
+// suite (this change is pure perf).
+struct PermPaySnap
+{
+    bool tapped;
+    int  depletion;   // first Depletion entry's count; -1 = no Depletion entry
+    int  storage;
+};
+
+static const bool g_pay_snap_verify = EnvOn("MTG_PAY_SNAP_VERIFY");
+
+static void SnapPayFields(const std::vector<Permanent>& bf, std::vector<PermPaySnap>& out)
+{
+    out.resize(bf.size());
+    for (std::size_t i = 0; i < bf.size(); ++i)
+    {
+        int dep = -1;
+        for (const Counter& c : bf[i].counters)
+        { if (c.type == Counter::Type::Depletion) { dep = c.count; break; } }
+        out[i] = PermPaySnap{ bf[i].tapped, dep, bf[i].storage_counters };
+    }
+}
+
+static void RestorePayFields(std::vector<Permanent>& bf, const std::vector<PermPaySnap>& snap)
+{
+    // The size invariant (see the header comment) makes the index alignment exact. min() is pure
+    // belt: a violation would mean a new eraser ran on a failure path, which MTG_PAY_SNAP_VERIFY
+    // exists to catch.
+    const std::size_t n = std::min(bf.size(), snap.size());
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        Permanent& p       = bf[i];
+        p.tapped           = snap[i].tapped;
+        p.storage_counters = snap[i].storage;
+        if (snap[i].depletion >= 0)
+        {
+            for (Counter& c : p.counters)
+            { if (c.type == Counter::Type::Depletion) { c.count = snap[i].depletion; break; } }
+        }
+    }
+}
+
+// Verify half: full-copy comparison over EVERY Permanent field (kept in sync with Permanent.h by
+// hand; a miss here only weakens the diagnostic, never the engine).
+static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
+                                 const std::vector<Permanent>& want, const char* site)
+{
+    auto fail = [&](std::size_t i, const char* field)
+    {
+        std::fprintf(stderr, "[pay-snap-verify] DIVERGENCE at %s: permanent %zu field %s\n",
+                     site, i, field);
+        std::abort();
+    };
+    if (now.size() != want.size())
+    { std::fprintf(stderr, "[pay-snap-verify] SIZE DIVERGENCE at %s: %zu vs %zu\n",
+                   site, now.size(), want.size()); std::abort(); }
+    for (std::size_t i = 0; i < now.size(); ++i)
+    {
+        const Permanent& a = now[i];
+        const Permanent& b = want[i];
+        if (a.card.m_number != b.card.m_number)   { fail(i, "card"); }
+        if (a.controller_index != b.controller_index) { fail(i, "controller_index"); }
+        if (a.owner_index != b.owner_index)       { fail(i, "owner_index"); }
+        if (a.tapped != b.tapped)                 { fail(i, "tapped"); }
+        if (a.damage != b.damage)                 { fail(i, "damage"); }
+        if (a.pending_death_trigger != b.pending_death_trigger) { fail(i, "pending_death_trigger"); }
+        if (a.counters.size() != b.counters.size()) { fail(i, "counters.size"); }
+        for (std::size_t k = 0; k < a.counters.size(); ++k)
+        { if (a.counters[k].type != b.counters[k].type
+              || a.counters[k].count != b.counters[k].count) { fail(i, "counters"); } }
+        if (a.entered_this_turn != b.entered_this_turn) { fail(i, "entered_this_turn"); }
+        if (a.gained_control_this_turn != b.gained_control_this_turn) { fail(i, "gained_control_this_turn"); }
+        if (a.aura_attached_to != b.aura_attached_to) { fail(i, "aura_attached_to"); }
+        if (a.marked_for_destruction != b.marked_for_destruction) { fail(i, "marked_for_destruction"); }
+        if (a.temp_power_bonus != b.temp_power_bonus) { fail(i, "temp_power_bonus"); }
+        if (a.temp_tough_bonus != b.temp_tough_bonus) { fail(i, "temp_tough_bonus"); }
+        if (a.charge_counters != b.charge_counters)   { fail(i, "charge_counters"); }
+        if (a.verse_counters != b.verse_counters)     { fail(i, "verse_counters"); }
+        if (a.storage_counters != b.storage_counters) { fail(i, "storage_counters"); }
+        if (a.storage_hold_this_turn != b.storage_hold_this_turn) { fail(i, "storage_hold_this_turn"); }
+        if (a.garth_chosen_mask != b.garth_chosen_mask) { fail(i, "garth_chosen_mask"); }
+        if (a.loyalty != b.loyalty)                   { fail(i, "loyalty"); }
+        if (a.loyalty_activated_this_turn != b.loyalty_activated_this_turn) { fail(i, "loyalty_activated_this_turn"); }
+        if (a.equipped_to != b.equipped_to)           { fail(i, "equipped_to"); }
+        if (a.colored_cast_lifegain_used_this_turn != b.colored_cast_lifegain_used_this_turn) { fail(i, "colored_cast_lifegain"); }
+        if (a.ice_counters != b.ice_counters)         { fail(i, "ice_counters"); }
+        if (a.age_counters != b.age_counters)         { fail(i, "age_counters"); }
+        if (a.temp_haste != b.temp_haste)             { fail(i, "temp_haste"); }
+        if (a.exile_at_end != b.exile_at_end)         { fail(i, "exile_at_end"); }
+        if (a.chosen_subtype_id != b.chosen_subtype_id) { fail(i, "chosen_subtype_id"); }
+        if (a.is_animated != b.is_animated)           { fail(i, "is_animated"); }
+        if (a.is_token != b.is_token)                 { fail(i, "is_token"); }
+        if (a.echo_resolved != b.echo_resolved)       { fail(i, "echo_resolved"); }
+    }
+}
+
 bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_creature,
                           std::uint64_t reserved_mask, ManaPool* available,
                           bool honor_legacy_cco)
@@ -749,7 +869,10 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // (e.g. Throes of Chaos via a Cascade Bluffs + Ferrous Lake chain). Snapshot so the
     // greedy's success path is byte-identical (no GT churn) and only previously-FAILING
     // casts gain the chain solution. See TapForCostBacktrack.
-    const std::vector<Permanent> bf_pre = state.battlefield;
+    std::vector<PermPaySnap> bf_pre;          // compact rollback -- see PermPaySnap's header
+    SnapPayFields(state.battlefield, bf_pre);
+    std::vector<Permanent> bf_pre_full;       // verify mode only (MTG_PAY_SNAP_VERIFY)
+    if (g_pay_snap_verify) { bf_pre_full = state.battlefield; }
     const int life_pre = state.players[active].life;
     const int opp_pre = state.players[1 - active].life;
     const bool oll_pre = state.opponent_lost_life_this_turn;
@@ -816,7 +939,8 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // it the backtracker's own tap pays it AGAIN -- the opponent took Grove's drip twice for one
     // cast (found by the USER's off-by-one audit of a T3 "12-damage" main that legally totals 11).
     // The total-failure restore below always had these two lines; the mid-path restores missed them.
-    state.battlefield        = bf_pre;
+    RestorePayFields(state.battlefield, bf_pre);
+    if (g_pay_snap_verify) { VerifyPaySnapRestore(state.battlefield, bf_pre_full, "once.greedy-fail"); }
     state.players[active].life = life_pre;
     state.players[active].graveyard = gy_pre;
     state.players[1 - active].life     = opp_pre;
@@ -844,7 +968,8 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // (byte-identical), and any cast the greedy/first backtracker already paid never reaches a fallback.
     if (reserve_pre.Total() > 0 && AnyUntappedFilterSource(state) && snow_backtrack_ok())
     {
-        state.battlefield          = bf_pre;
+        RestorePayFields(state.battlefield, bf_pre);
+        if (g_pay_snap_verify) { VerifyPaySnapRestore(state.battlefield, bf_pre_full, "once.filter-retry"); }
         state.players[active].life  = life_pre;
         state.players[active].graveyard = gy_pre;
         state.players[1 - active].life     = opp_pre;   // same drip rollback as above
@@ -866,7 +991,8 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // end-state. Callers (cycling/sac loops, ill-ordered plans) rely on a failed payment being
     // side-effect-free; the old greedy-fail restore leaked tapped lands / spent counters.
     // (The executor's `available` accounting is deliberately NOT restored -- see ManaPayment.h.)
-    state.battlefield                  = bf_pre;
+    RestorePayFields(state.battlefield, bf_pre);
+    if (g_pay_snap_verify) { VerifyPaySnapRestore(state.battlefield, bf_pre_full, "once.total-fail"); }
     state.players[active].life         = life_pre;
     state.players[active].graveyard    = gy_pre;
     state.players[1 - active].life     = opp_pre;
@@ -2239,7 +2365,10 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
     if (cost_in.hybrid_count > 0)
     {
         const int a = state.active_player_index;
-        const std::vector<Permanent> bf_snap = state.battlefield;
+        std::vector<PermPaySnap> bf_snap;      // compact rollback -- see PermPaySnap's header
+        SnapPayFields(state.battlefield, bf_snap);
+        std::vector<Permanent> bf_snap_full;
+        if (g_pay_snap_verify) { bf_snap_full = state.battlefield; }
         const ManaPool               fm_snap = state.floating_mana;
         const ManaPool               av_snap = available ? *available : ManaPool{};
         const std::vector<Card>      gy_snap = state.players[a].graveyard;   // Deathrite exile
@@ -2248,7 +2377,9 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const bool oll = state.opponent_lost_life_this_turn;
         auto restore = [&]()
         {
-            state.battlefield                  = bf_snap;
+            RestorePayFields(state.battlefield, bf_snap);
+            if (g_pay_snap_verify)
+            { VerifyPaySnapRestore(state.battlefield, bf_snap_full, "impl.hybrid"); }
             state.floating_mana                = fm_snap;
             if (available) { *available = av_snap; }
             state.players[a].graveyard         = gy_snap;
@@ -2277,7 +2408,10 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
     if (rmask != 0)
     {
         const int a = state.active_player_index;
-        const std::vector<Permanent> bf_snap  = state.battlefield;
+        std::vector<PermPaySnap> bf_snap;      // compact rollback -- see PermPaySnap's header
+        SnapPayFields(state.battlefield, bf_snap);
+        std::vector<Permanent> bf_snap_full;
+        if (g_pay_snap_verify) { bf_snap_full = state.battlefield; }
         const ManaPool               fm_snap  = state.floating_mana;
         const ManaPool               av_snap  = available ? *available : ManaPool{};
         const std::vector<Card>      gy_snap  = state.players[a].graveyard;   // Deathrite exile
@@ -2286,7 +2420,9 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const bool oll = state.opponent_lost_life_this_turn;
         if (TapForCostSharedOnce(state, cost_in, for_creature, rmask, available, honor_legacy_cco))
         { return true; }
-        state.battlefield                  = bf_snap;
+        RestorePayFields(state.battlefield, bf_snap);
+        if (g_pay_snap_verify)
+        { VerifyPaySnapRestore(state.battlefield, bf_snap_full, "impl.rmask"); }
         state.floating_mana                = fm_snap;
         if (available) { *available = av_snap; }
         state.players[a].graveyard         = gy_snap;
