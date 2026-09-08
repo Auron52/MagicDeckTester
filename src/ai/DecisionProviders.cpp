@@ -2144,6 +2144,67 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     return rank;
 }
 
+// ---- SnowProvider ------------------------------------------------------------
+
+// DEFAULT ON; MTG_SNOW_SHEETS_HOLD=0 restores the plain ladder (the A/B hatch).
+inline bool SnowSheetsHoldEnabled()
+{
+    static const bool v = EnvOn("MTG_SNOW_SHEETS_HOLD", true);
+    return v;
+}
+
+// Scrying Sheets: a {C}-only LAND whose {T} is ALSO the cost of its look ability ({1}{S}, "look at
+// the top card; if it is snow, put it into your hand"). ManaSourceRankBase ranks a colourless-only
+// source 5 -- the "least flexible, spend it FIRST" tier -- which is right for a Blasted Landscape
+// and exactly backwards here: the greedy pays a generic pip with the ONE land whose tap we wanted
+// for cards, and the ability is gone for the turn.
+//
+// USER 2026-09-08, hand-playing references: "scrying sheets keeps getting tapped for colourless
+// when I want to activate it for cards ... It should be deprioritized for tapping until we would
+// end up with 2 or less mana."
+//
+// So the reserve is LIVENESS-GATED, the same shape as the scaled-land (61) and untap-burst (63)
+// tiers: holding Sheets back only buys something while the REST of the board can still pay the
+// {1}{S}. Below that the hold buys nothing -- the ability is unaffordable either way -- and the
+// land keeps its ordinary rank, which is the user's "until we would end up with 2 or less mana".
+//
+// Rank 60 mirrors the {C}-manland's "tapped only when nothing else can pay": this is ORDERING, not
+// exclusion. A payment that genuinely needs the mana still taps Sheets (it is merely last), so no
+// line is removed from the space -- a coverage-preserving reordering, not a truncation.
+//
+// SCOPE: provider-local on purpose. `tap_draw_cost` is also carried by Mariposa Military Base
+// (EldraziDisplacerFlicker), whose ability costs {5} and whose deck has its own measured tap
+// behaviour -- putting this in ManaSourceRankBase would move that deck too. Snow-only keeps every
+// other deck byte-identical, which is checkable rather than merely argued.
+//
+// APPROXIMATION, disclosed: SpareUntappedMana is the board's mana BEFORE this payment, not the
+// remainder after it, so this is a board-scope answer to a turn-scope question -- the same myopia
+// the scaler-demotion note warns about one tier up. It is the computable form at a per-source site.
+//
+// HUMAN PLAY ONLY -- the human-line-vs-AI-average rule, and the SAME shape (and the same reason) as
+// the filter-{C} tier at ManaPayment.cpp's rank-6 clause. MEASURED at play settings, 300 paired
+// games, same binary, seeds 5500001+: the unconditional hold moves 5 of 300 games (3 better, 2
+// worse), NET -1 turn (-0.0033/game, indistinguishable from zero) for +20.5% wall, +32% p99 and
+// +19% max. The mechanism is visible in the deck's own unit profile: holding Sheets keeps its
+// ability LIVE more often, and every live look feeds the site-8 same-turn re-solve, which is
+// already Snow's most disproportionate cost (la_bp_wave 16.2% of units vs Hinata's 0.8%). So the
+// search gains nothing it can measure and pays a fifth of the deck's wall for it.
+//
+// What the human gains is real and unmeasurable by the average: the payer no longer spends the one
+// land whose tap they wanted for cards. So it fires only for the human, and autonomous play, every
+// rollout, all GT and the value-leaf generation stay BYTE-IDENTICAL -- verified: with this gate the
+// deck's 300-game digest is 881cef62453f8d6f either way.
+int SnowProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    const int base = GenericProvider::ManaSourceRank(s, def);
+    if (!SnowSheetsHoldEnabled() || !def.params.tap_draw_cost) { return base; }
+    if (!HumanPlayActive()) { return base; }
+    // Cheap param gate above: every other source in the deck returns before the board scan.
+    const int need  = def.params.tap_draw_cost->ManaValue();
+    const int spare = SpareUntappedMana(s, s.active_player_index) - ManaProducedPerTap(def);
+    return (spare >= need) ? 60 : base;
+}
+
 bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
                                                const CardDefinition& draw_def) const
 {

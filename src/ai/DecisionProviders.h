@@ -1226,6 +1226,11 @@ class SnowProvider : public GenericProvider
 public:
     const char* Name() const override { return "Snow"; }
     bool GradesNoWinLeaf() const override { return false; }
+    // Scrying Sheets holds its tap for the {1}{S} look ability while the board can still PAY that
+    // ability without it -- the plain ladder ranks a {C}-only land 5 ("spend it FIRST"), which is
+    // exactly backwards for a land whose tap has a second, better use. USER 2026-09-08, found while
+    // hand-playing references. Liveness-gated and provider-scoped; see the definition.
+    int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
 };
 
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /
