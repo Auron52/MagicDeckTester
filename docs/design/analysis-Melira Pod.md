@@ -1826,11 +1826,33 @@ reproduced base exactly.
 (First launch of this batch was OOM-killed at 22.8 GB anon RSS -- I had not sourced
 `scripts/lib/membudget.sh`; relaunched under the caps at 20 threads, peak RSS 4.8 GB.)
 
-Better on BOTH configs on 1000 games AND ~10x faster => a clean win vs the shipped baseline
-on every axis => **ADOPTED** in `decks/Melira Pod/Melira Pod.profile.json`
-(`"search_leaf_depth": 0`) under the standing clean-win pre-approval. Melira's per-game cost
-is now ~0.8 s d3 / ~1.2 s d5 -- at fivecolour's level (the bar the user named), from
-~8.4 / ~5.6 before this session. Gates + a second per-game-paired confirmation follow below.
+That first read said "better on both configs". Two more seed bases with per-game pairing
+(`--game-log-dir`, `scripts/attic/paired_wins.py`) CORRECTED it to **quality-NEUTRAL**:
+
+| base | config | base avg | leaf0 avg | delta | t | better / worse |
+|---|---|---|---|---|---|---|
+| 800000 | d3 | 4.8730 | 4.8650 | -0.008 | (no per-game file) | |
+| 900000 | d3 | 4.8390 | 4.8540 | +0.015 | +1.56 | 31 / 47 |
+| 1000000 | d3 | 4.8320 | 4.8410 | +0.009 | +0.96 | 36 / 45 |
+| 800000 | d5 | 4.8590 | 4.8460 | -0.013 | | |
+| 900000 | d5 | 4.8340 | 4.8310 | -0.003 | -0.35 | 34 / 33 |
+
+Pooled: **d3 +0.005t over 3000 games (se ~0.006), d5 -0.008t over 2000 games (se ~0.006)** --
+neither outside noise; the d3 lean is one game in ~200 winning a turn later (transitions are
+mostly 4->5 vs 5->4: 27 vs 18 on base 900000 -- the 1-ply leaf occasionally sees a turn-4
+kill line the greedy playout under-ranks at the horizon; at d5 the tree covers that ply and
+the effect vanishes). Speed: d3 9.3-9.9 -> 0.63-0.82 core-s/game (12-15x), d5 10.8-11.4 ->
+1.21-1.25 (9x).
+
+**ADOPTED** in `decks/Melira Pod/Melira Pod.profile.json` (`"search_leaf_depth": 0`) as the
+"serious pruning, well-tested" trade the user asked for this session: ~10x at a quality
+delta inside +-0.01t on 2000-3000 paired games per config. It is NOT claimed as a clean win
+on the quality axis (the 50-game and first-1000 reads that said "better" were noise -- the
+same trap as the value-leaf 50-game read, and the reason a second base is mandatory). If the
+user wants zero measurable d3 cost, the natural follow-up is a 1-ply leaf on the FIRST
+rollout turn only (greedy after) -- not measured. Melira's per-game cost is now ~0.6-0.8 s d3
+/ ~1.2 s d5, at fivecolour's level (the bar the user named), from ~8.4 / ~5.6 before this
+session. Gates below.
 
 Why it is better and not merely cheaper: the 1-ply leaf's per-turn lookahead is clairvoyant
 over the real library order (it ranks candidates by depth-0 rollouts that read the true
@@ -1842,3 +1864,25 @@ Fleet note: the field is per-deck and absent everywhere else, so every other dec
 byte-identical by construction (smoke gate below). Whether other decks would ALSO prefer
 depth 0 is a separate heuristic-optimization question (TH was the deck that originally
 motivated the 1-ply leaf; see the s_fd_leaf_depth comment) -- not pursued here.
+
+### Byte-identical follow-up: skip the provider tutor ranking when the plan pinned the put
+
+Leaf-0 world profile of gi32 (the mull tail): `PerformPodActivate -> PerformTutorToBattlefield
+-> MeliraPodProvider::TutorCandidates` was 12% (library walk + string set + string sort per
+rollout Pod activation). In the Pod path the fetch is plan-pinned (`preferred = {fetch}`,
+max_puts 1), so pass 1 fills the single slot and pass 2's fill loop broke on its first
+iteration -- AFTER computing the whole ranking. Now skipped when pass 1 already filled every
+slot (`SpellEffects.h`); TutorCandidates is pure, so byte-identical (smoke below). Effect
+visible in base-3: leaf0 d3 0.78 -> 0.63 core-s/game (different seed base; the 50-set clean
+re-scan below is the like-for-like number).
+
+### Clean re-scan under the shipped profile (leaf 0 + tutor-fill skip), box idle
+
+| set | session start | now | max game |
+|---|---|---|---|
+| 50-game d3 b10 (seed 1001+gi) | 357.7 s (8.4 s/game avg per the earlier batch) | **30.3 s (0.61 s/game)** | gi32 7.3 s (2 mulligans), gi47 5.7 s (1 mulligan); every other game <= 1.1 s |
+| 25-game d5 b20 | ~140 s | **19.0 s (0.76 s/game)** | gi1 7.5 s; next 1.4 s |
+
+Win turns identical to the leaf-0 arm (avg 4.9000 on the 50-set). The remaining tail is the
+mulligan games' bottoming refine (topk 5 full playouts per mulligan at play settings) -- now
+the only thing above ~1 s. Fleet gates for the tutor-fill skip: smoke 72/72, configs changed 0.

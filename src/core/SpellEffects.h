@@ -1830,7 +1830,11 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     //    Dragonstorm unpruned) this reproduces the pre-provider flat loop exactly -> byte-identical.
     //    SKIPPED when the human made an explicit override selection (else deselected Dragons would be
     //    topped back up, defeating the pick-fewer choice); their picks stand exactly as chosen.
-    if (!human_override)
+    //    ALSO skipped when pass 1 already filled every slot: the fill loop below would break on its
+    //    first iteration, so the provider's ranking (a library walk + string sort -- 12% of a Melira
+    //    leaf-0 game, where every rollout Pod activation arrives with its fetch plan-pinned) was pure
+    //    waste. TutorCandidates is a pure function of the state, so this is byte-identical.
+    if (!human_override && static_cast<int>(put_names.size()) < max_puts)
     {
         std::vector<std::string> prov =
             ResolveProvider(state).TutorCandidates(state, controller, pp);
