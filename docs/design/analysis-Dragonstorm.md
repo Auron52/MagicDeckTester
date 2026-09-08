@@ -574,3 +574,27 @@ real play, and the search never picks these dominated orderings). Not a game-sta
 and does not affect win-rate; a cosmetic follow-up could canonicalize plan action order (mana
 sources before dependent spells) and stop the plan summary advertising an unpayable-at-position
 cast. Left as a deferred cleanliness item, not an unresolved sweep flag.
+
+## 2026-09-08: reference s1_gi0 (human T4 vs search T5) -- the CHAIN SLOT
+
+Budget-immune shortfall (identical digest 20 ms .. 120 s, depth 5..8): not starvation. Root
+cause: `bp_choice` indexes a heuristically RANKED continuation list; the wave phase demotes the
+W=2 rank cap to a cost prune only at search nodes, while ROLLOUT plies stay capped -- and the
+continuation the T4 kill needs (the SECOND Apex of Power from hand: +10 mana, 7 more exiles,
+where Dragonstorm actually appears) ranks 32/47, because the static ranker scores board and a
+second Apex buys options. Bisected: W<=32 -> T5, W>=33 -> T4; root-only widening (W=64 +
+MTG_NO_BP_SEARCH_ROLLOUT=1) stays T5.
+
+Fix: the CHAIN SLOT (`kBpChainChoice` sentinel, `MTG_BP_CHAIN_SLOT` default 1, =0 restores the
+old engine byte-identically): one reserved variant per breakpoint-opening base plan that resolves
+AT APPLY TIME to the first continuation that itself opens a further breakpoint
+(PlanOpensBreakpoint, the classifier wave selection already uses). Additive -- never reorders
+cands, collapses onto the base plan when no chain continuation exists; executor resolves the
+sentinel in lockstep. Full rationale at the sentinel's definition in TurnSolver.cpp.
+
+Verified: s1_gi0 T4 at shipped settings (and 34x faster: 17 ms vs 577 ms); full 337-game
+reference bench moved exactly two games, both Dragonstorm, both FASTER (s26_gi25 also 5 -> 4);
+deck 4.487 -> 4.436, 0/39 short. Suite blast radius: net +0.0200 smoke (one mirrorwing2hg game
+that classify_turn_later calls churn -- recovers at 4x/16x budget), +0.0039 regression across 6
+movers pairing equal-and-opposite across seeds. Cost ~ +2% suite wall. C=1 vs C=2 measured
+identical on the reference bench; 1 perturbs less and is the default.

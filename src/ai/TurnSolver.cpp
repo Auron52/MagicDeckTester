@@ -6800,6 +6800,82 @@ static int BpNodeWaveDrop()
 // cands enumeration, so the empty arm costs no enumeration at all.
 static constexpr int kBpEmptyChoice = 1 << 20;
 
+// ---- The CHAIN SLOT (kBpChainChoice) ---------------------------------------------------------
+// `bp_choice = k` indexes cands[k] of a HEURISTICALLY RANKED list, so wave 0 reaches ranks 0..W-1
+// and nothing else (BpNestFanoutDepth's note: "the width cap is a QUALITY prune, not a cost prune").
+// The deferred wave phase walks the deeper ranks, but ONLY at the ~16-96 nodes it attaches to; the
+// ROLLOUT plies -- where the leaf evaluator actually scores lines -- stay capped at W. That is the
+// asymmetry AppendBreakpointVariants' own header calls out ("the win comes from rollouts, not the
+// root"), and it has a systematic victim: a continuation that CONTINUES THE CHAIN (casts another
+// dig / stager / impulse-exile, opening a further breakpoint) buys OPTIONS, not board, so the static
+// value ranker -- which scores board -- pushes it far down the list. It is exactly the continuation
+// a chain deck's kill turn needs.
+//
+// MEASURED, Dragonstorm reference claude_s1_gi0 (the deck's own Apex chain; human T4, search T5):
+// the Apex breakpoint offers 47 continuations, and the one that casts the SECOND Apex of Power from
+// hand (+10 mana, 7 more exiles -> Dragonstorm) sits at RANK 32. Bisected: W<=32 is T5, W>=33 is T4.
+// Invariant at T5 across budget 20ms..120000ms (6000x), depth 5..8, MTG_BP_WAVES=0/1,
+// MTG_BP_WAVE_COMPLETE=1, MTG_BP_MAXBASE=256 and MTG_UNPRUNED=1 -- i.e. NOT starvation. And
+// root-only widening does not fix it either (MTG_BP_SEARCH=64 MTG_NO_BP_SEARCH_ROLLOUT=1 stays T5),
+// while W=33 with the waves OFF wins T4 -- which is what pins the defect to the rollout-ply cap.
+//
+// THE SLOT: reserve searched capacity for the chain rather than widening W for everyone. A variant
+// carrying kBpChainChoice + j resolves at APPLY time to the j-th continuation that itself opens a
+// breakpoint (PlanOpensBreakpoint -- the SAME classifier wave 0 and the wave walker select base
+// plans with, so no new ordering rule is introduced). Properties that make it safe:
+//   * ADDITIVE. It appends variants; it never reorders cands, never changes cands[0], and so leaves
+//     the greedy/canonical continuation and every existing rank's meaning untouched.
+//   * BOUNDED. +C variants per breakpoint-opening base plan (C = 1 by default), the same additive
+//     shape as bp_all's +W -- not the W^L cross product.
+//   * DEGENERATE TO TODAY. When no continuation opens a further breakpoint (every non-chain deck,
+//     and most turns of a chain deck) the scan finds nothing, the variant collapses onto its base
+//     plan, and behaviour is unchanged. MTG_BP_CHAIN_SLOT=0 restores the pre-fix engine exactly.
+//   * NO NEW ENUMERATION. It indexes the memoised EnumerateBreakpointPlans list the sibling
+//     variants already derived (BpEnumEntryFor), so the scan is a vector walk, not a re-solve.
+// The executor honours it identically (AIEngine::resolve_draw_breakpoint) or the realised line would
+// not be the line that was scored -- the fd-diverge class chosen_float_color documents.
+// The sentinel and its resolver are declared on TurnSolver (the header) so the executor shares them.
+static constexpr int kBpChainChoice = TurnSolver::kBpChainChoice;
+
+// How many chain continuations get a reserved slot (MTG_BP_CHAIN_SLOT, 0 = off = byte-identical).
+//
+// ONE, MEASURED -- not assumed. The guess was that 2 would be needed (a payable-but-worse chain
+// continuation could rank ahead of the one the kill needs), but 1 and 2 are IDENTICAL on the whole
+// 39-game Dragonstorm reference bench (both fix claude_s1_gi0 5->4 AND claude_s26_gi25 5->4), while
+// 1 perturbs strictly less of the suite: 4 smoke + 15 regression cases move at C=1 versus 6 + 20 at
+// C=2, with every mover inside churn either way. Same gain for less work and less churn, so the
+// minimal setting is the default; C=2 stays reachable through the knob if a future chain deck needs
+// the second slot.
+static int BpChainSlots()
+{
+    static const int c = []() -> int
+    {
+        const char* v = std::getenv("MTG_BP_CHAIN_SLOT");
+        if (v == nullptr || *v == '\0') { return 1; }   // DEFAULT ON
+        const int n = std::atoi(v);
+        return n < 0 ? 0 : n;
+    }();
+    return c;
+}
+
+// Defined with the wave-0 selector far below; the chain slot reads the same predicate.
+static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p);
+
+// Resolve kBpChainChoice + j -> the index of the j-th continuation that opens a further breakpoint,
+// or -1 when the list holds fewer than j+1 of them (caller then falls through to greedy, making the
+// variant a duplicate of its base plan -- a wasted node, never a wrong answer).
+int TurnSolver::BpChainCandIndex(const GameState& state,
+                                 const std::vector<TurnSolver::Plan>& cands, int j)
+{
+    int seen = 0;
+    for (int i = 0; i < static_cast<int>(cands.size()); ++i)
+    {
+        if (PlanOpensBreakpoint(state, cands[i]) == 0) { continue; }
+        if (seen++ == j) { return i; }
+    }
+    return -1;
+}
+
 // Content fingerprint of one continuation cand (MEASUREMENT ONLY, MTG_ROLLOUT_STATS): two cands
 // with equal fingerprints applied to the same prefix snapshot should produce the same post-state,
 // so cands.size() - distinct(fingerprints) sizes an exact enumeration-side dedup. Folds every
@@ -19193,9 +19269,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // plan all re-reach the SAME breakpoint state (that is the enum memo's premise), and
             // bp_choice == 0 is always emitted, so gating on it counts each occurrence exactly once.
             if (plan.bp_choice == 0) { BpCands(site, g_bp_cands_last, BpSearchWidth()); }
+            // CHAIN SLOT (kBpChainChoice + j): resolve to the j-th continuation that opens a
+            // further breakpoint. Checked before the rank test because the sentinel is deliberately
+            // far past any real cands.size(), so the plain index path would read it as an overrun.
+            if (plan.bp_choice >= kBpChainChoice)
+            {
+                const int ci = TurnSolver::BpChainCandIndex(state, cands,
+                                                            plan.bp_choice - kBpChainChoice);
+                if (ci >= 0)
+                {
+                    out      = cands[ci];
+                    resolved = true;
+                }
+            }
             // Fewer continuations than variants -> fall back to greedy, making this variant a
             // duplicate of its base plan (a wasted node, never a wrong answer).
-            if (plan.bp_choice < static_cast<int>(cands.size()))
+            else if (plan.bp_choice < static_cast<int>(cands.size()))
             {
                 out      = cands[plan.bp_choice];
                 resolved = true;
@@ -26656,6 +26745,19 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
                 v.bp_wave0  = false;
                 variants.push_back(std::move(v));
             }
+        }
+        // ...plus the CHAIN SLOT (see kBpChainChoice): reserved capacity for the continuation that
+        // CONTINUES the chain, which the value ranker buries because it buys options rather than
+        // board. bp_all = true so a chain turn keeps chaining at EVERY breakpoint it reaches -- the
+        // Apex-on-Apex shape is one decision repeated, exactly the case bp_all exists for.
+        for (int j = 0; j < BpChainSlots(); ++j)
+        {
+            TurnSolver::Plan v = p;
+            v.bp_choice = kBpChainChoice + j;
+            v.bp_at     = 0;
+            v.bp_all    = true;
+            v.bp_wave0  = false;
+            variants.push_back(std::move(v));
         }
     }
     plans.insert(plans.end(), std::make_move_iterator(variants.begin()),

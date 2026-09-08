@@ -3283,9 +3283,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             const std::vector<TurnSolver::Plan> cands =
                 TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
-            if (plan.bp_choice < static_cast<int>(cands.size()))
+            // CHAIN SLOT lockstep (TurnSolver's kBpChainChoice): the search scored a turn in which
+            // this breakpoint took the j-th CHAIN continuation, so the executor must resolve the
+            // sentinel the same way. Resolving it as a rank would overrun into the greedy fallback
+            // and realise a different turn than the one that was ranked (the fd-diverge class).
+            const int bp_idx_resolved =
+                (plan.bp_choice >= TurnSolver::kBpChainChoice)
+                    ? TurnSolver::BpChainCandIndex(state, cands,
+                                                   plan.bp_choice - TurnSolver::kBpChainChoice)
+                    : plan.bp_choice;
+            if (bp_idx_resolved >= 0 && bp_idx_resolved < static_cast<int>(cands.size()))
             {
-                extra            = cands[plan.bp_choice];
+                extra            = cands[bp_idx_resolved];
                 bp_searched_here = true;
                 // The continuation's land drop is part of the searched decision; play it first so
                 // its mana funds the casts (mirrors bp_play_searched_land in ApplyPlanDirect).
