@@ -5384,7 +5384,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // realises a different board than the plan priced ([fd-diverge]).
         if (def->params.etb_untap_lands > 0)
         {
-            EtbUntapTapAheadIntoFloat(state, state.active_player_index, def->params.etb_untap_lands);
+            EtbUntapTapAheadIntoFloat(state, state.active_player_index, def->params.etb_untap_lands,
+                                      ColoredPipReserveMask(def->card.m_mana_cost));
             available = AvailableManaPool(state);
         }
         // Sac-fodder-first (MTG_SAC_FODDER_PAYS): lockstep twin of the rollout's apply-cast

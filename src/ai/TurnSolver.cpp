@@ -3897,7 +3897,8 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
             // this sequential-payability answer prices the chain the way it will really be paid.
             if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(cp, a.chosen_x); }
             if (def.params.etb_untap_lands > 0)
-            { EtbUntapTapAheadIntoFloat(cp, cp.active_player_index, def.params.etb_untap_lands); }
+            { EtbUntapTapAheadIntoFloat(cp, cp.active_player_index, def.params.etb_untap_lands,
+                                        ColoredPipReserveMask(ec)); }
             if (_dbg) { ManaPool _ap = AvailableManaPool(cp);
                         std::fprintf(stderr, "[dbgseq]   pay %s cost=%s float{w%d u%d b%d r%d g%d c%d *%d} avail{w%d u%d b%d r%d g%d c%d *%d}\n",
                                      def.card.m_name.str().c_str(), ec.ToString().c_str(),
@@ -21454,7 +21455,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // RitualTapAheadIntoFloat; lockstep twins in CastSpellFromHand + SubsetPayableSequential).
             if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(state, chosen_x); }
             if (def.params.etb_untap_lands > 0)
-            { EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands); }
+            { EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands,
+                                        ColoredPipReserveMask(ec)); }
             PaySacVictimScope _psv(
                 !def.params.sac_additional_creature_color.empty() ? own_targets : 0);
             // Phyrexian life gate (before the tap, which mutates): the payment must leave us
