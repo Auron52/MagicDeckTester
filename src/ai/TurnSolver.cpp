@@ -22854,7 +22854,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // without a variant is exactly the plan as scored -- zero cost, exact lockstep (the executor
     // twin likewise applies only a searched candidate). Depth 0 has no wave and therefore no
     // site 9: greedy play stays greedy, by design.
-    if (!s_human_play && TurnSolver::PostEntryActivationPending(state, pre_plan_numbers))
+    // ONLY for a plan that carries a choice (plan.bp_choice >= 0). bp_searched_plan's first act
+    // is `++g_bp_fired_last` -- "a breakpoint fired in this apply", which the second-main
+    // fix-point (M2FixModeFor / WantsSecondMainReentry twins) reads to decide whether the phase
+    // must be re-solved. A base plan whose gate is merely TRUE fired nothing here (no
+    // continuation is applied), yet reporting it re-solved every such second main inside every
+    // rollout: dragonstorm regression gi117 5->8 at d3 AND d5, gi193, s3003 gi1 -- all isolating
+    // to MTG_POST_ENTRY_BP=0 while the site applied no continuation at all. Variant plans still
+    // count (their apply DOES fire), and the executor twin counts on exactly the same condition.
+    // AND ONLY AS THE FIRST COUNTED OCCURRENCE OF THE APPLY (bp_seen == 0). The executor's
+    // committed-line path replays an INLINE site (Apex of Power, site 2) from the recorded script
+    // without consuming a breakpoint index, while this apply counted it -- so a site-9 occurrence
+    // that FOLLOWS an inline site is index 1 here and index 0 there, and the executor twin either
+    // applies nothing or the wrong candidate. Dragonstorm regression gi117 (b0 too, so not budget):
+    // T4 rituals + Apex, the continuation cast Lathliss, the wave scored a Lathliss-pump variant at
+    // bp_at 1 as a T5 win, the executor never applied it, realised T8. Site 7 records the same
+    // ordering constraint and survives only because Melira mixes no classes; site 9 is engine-wide
+    // and cannot rely on that, so it stands down behind any earlier occurrence, in both worlds.
+    if (!s_human_play && plan.bp_choice >= 0 && bp_seen == 0
+        && TurnSolver::PostEntryActivationPending(state, pre_plan_numbers))
     {
         TurnSolver::Plan extra;
         if (bp_searched_plan(9, extra))

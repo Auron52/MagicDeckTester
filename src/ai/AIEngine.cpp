@@ -4587,11 +4587,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // this occurrence realises exactly the line that was scored -- no greedy and no searched
     // re-solve here, because the rollout ran neither. The occurrence is still COUNTED whenever
     // the plan carries a choice, or every later bp_at index would shift.
-    if (!HumanPlayActive() && TurnSolver::PostEntryActivationPending(state, pre_plan_numbers))
+    // FIRST-OCCURRENCE ONLY (lockstep pair of the rollout's `bp_seen == 0`): an inline site
+    // replayed from the committed script consumed no index here (bp_replayed) while the rollout
+    // counted it; a non-committed inline re-solve did consume one (bp_seen_exec). Either way an
+    // earlier occurrence means the indices no longer agree, so the site stands down exactly as the
+    // rollout did -- see the rollout note (Dragonstorm gi117).
+    if (!HumanPlayActive() && plan.bp_choice >= 0 && bp_seen_exec == 0 && !bp_replayed
+        && TurnSolver::PostEntryActivationPending(state, pre_plan_numbers))
     {
         TurnSolver::Plan extra;
         bool pe_searched = false;
-        const int pe_idx = (plan.bp_choice >= 0) ? bp_seen_exec++ : -1;
+        const int pe_idx = bp_seen_exec++;
         if (pe_idx >= 0 && (plan.bp_all || pe_idx == plan.bp_at))
         {
             const std::vector<TurnSolver::Plan> cands =

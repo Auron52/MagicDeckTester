@@ -187,6 +187,15 @@ vigilance on Voice ... fix the Daxos + 2x Heliod case."
   permanent, the variants apply candidate k of the post-plan continuation list and are scored by
   their own rollout; a plan without a variant is exactly the plan as scored (zero cost, exact
   lockstep). Depth 0 has no wave and therefore no site 9 -- greedy stays greedy.
+  SECOND LESSON (cost a regression run): the searched-only build still slowed Dragonstorm on all
+  four regression keys (gi117 5->8 at d3, d5 AND unbounded budget). Cause: the committed-line
+  executor replays INLINE sites (Apex of Power) from the recorded script without consuming a
+  breakpoint index, while the rollout counts them -- so a site-9 occurrence after an inline site
+  is index 1 in the rollout and index 0 in the executor; the wave scored a Lathliss-pump variant
+  at bp_at 1 as a T5 win and the executor never applied it. Site 7 documents this very ordering
+  constraint and survives only because Melira mixes no classes. Fix: site 9 opens only as the
+  FIRST counted occurrence of an apply (`bp_seen == 0` / `bp_seen_exec == 0 && !bp_replayed`),
+  in both worlds. Dragonstorm gi117/193/s3003-gi1 back to T5/T5/T6.
 - Voice keywords, legend-rule deaths, both viewer cosmetics: fixed (rows above).
 - STILL DEFERRED (unchanged, PROVISIONAL): Serra/Thune flying, Auriok protection, Heliod
   indestructible + God-subtype/removed-from-combat halves, Daxos simultaneous-death look-back,
