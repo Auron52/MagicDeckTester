@@ -2163,3 +2163,42 @@ deeper probe is what found the wins.
 Bounded paradigm A/B running (logs/melira_vl_ab/, 8 seeds x 1000 paired games; d5/b20: live /
 pure / pure_a1 (gate leniency pinned 1) / staged / ladder / ladesc; d3/b10 same minus ladesc).
 `pure_a1` vs `pure` isolates the gate leniency; `pure_a1` vs `live` is the leaf alone.
+
+### 2026-09-08d — paradigm A/B: on Melira the heuristic with more budget dominates every value-leaf form
+
+User: *"maybe for decks like these ones we should use value-leaf up to the final level and use the
+heuristic rollout at that point instead? ... not search further and go through heuristic
+escalations at the final depth."* Measured (logs/melira_vl_ab/, 8 seeds x 1000 paired games each,
+seeds 700000+1000i, delta vs no-sidecar at the same config, negative = better; cost = core-s ratio):
+
+| arm | what it is | d5/b20 delta (t, better/worse) | cost | d3/b10 delta | cost |
+|---|---|---|---|---|---|
+| live | heuristic leaf, no sidecar | 0 | 1.00x | 0 | 1.00x |
+| staged | shipped hybrid: value probe (8x gate) + heuristic redo | -0.0033 (-1.0, 5/3) | 1.48x | -0.0020 (-0.9, 5/3) | 1.04x |
+| ladesc | ladder warm-ups on value + escalation | -0.0033 (same digest as staged) | 1.47x | — | — |
+| pure | value leaf every pass, no escalation, 8x gate | +0.0200 (+3.7, 1/7) | 1.31x | +0.0413 (+11.7, 0/8) | 0.79x |
+| pure_a1 | as pure, gate leniency pinned to 1 (leaf is the ONLY difference) | +0.0874 (+23, 0/8) | 0.53x | +0.0963 (+23, 0/8) | 0.50x |
+| ladder | value warm-ups, heuristic committing pass, no redo (the proposal, form 1) | +0.0867 (+22, 0/8) | 0.57x | +0.0711 (+17, 0/8) | 1.02x |
+| staged_a1 | probe pinned to heuristic depth + heuristic escalation (the proposal, form 2) | +0.0122 (+6.0, 0/8) | 0.82x | +0.0108 (+3.7, 0/8) | 0.79x |
+| **livebud** | **heuristic, no sidecar, 1.5x budget (d5/b30, d3/b15)** | **-0.0088 (-9.0, 8/0)** | **1.20x** | **-0.0120 (-9.0, 8/0)** | **1.16x** |
+
+Readings:
+* **Everything else equal, the value leaf is much WORSE at bounded budget on this deck** (pure_a1:
+  +0.09 t at half the cost) — its lines at the depths a pinned gate admits are value-leaf lines, and
+  the matrix says V(k) is worse than H(k) at every k<5 (V3 4.8054 vs H3 4.7599).
+* **The ladder form of the proposal does not deliver "heuristic at the final depth"**: when the
+  committing heuristic pass overruns, the ladder keeps the previous pass's line, which is a value-leaf
+  warm-up line — so it lands exactly on pure_a1. The escalate form (staged_a1) is cheaper than live
+  but worse (0/8 seeds both configs).
+* **The only value-leaf arm at parity is the shipped hybrid, and it gets there by searching deeper
+  (8x gate) at 1.48x.** Spending a smaller increment on the heuristic instead (b20->b30 = 1.20x
+  core-s) is better on all 8 seeds at both configs. **Value-leaf verdict for Melira: DEAD.** Ship no
+  sidecar; the STAGED model stays in logs/eval as a record. If the suite wants Melira's quality
+  back, the lever is budget (b30 at d5 / b15 at d3: -0.009 / -0.012 t for ~1.2x), a user decision
+  since it moves GT.
+* **General rule (user, 2026-09-08: "this may not be the right tool for all decks, but it is worth a
+  consideration vs the escalation approach"):** the depth matrix's crossover is the per-deck signal.
+  Identity crossover (V(k) == H(k)) means the probe cannot buy quality by going deeper on the cheap
+  leaf, so no hybrid form can beat the heuristic at equal cost; V(k) ~= H(k-3) decks are where the
+  deeper probe pays and escalation is the right paradigm. Fluctuator's table should be read the
+  same way next.
