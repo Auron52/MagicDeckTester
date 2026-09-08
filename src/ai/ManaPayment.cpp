@@ -7,6 +7,7 @@
 #include "EngineFlags.h"
 #include "../cards/CardDatabase.h"
 #include "../core/SpellEffects.h"
+#include "../core/GameLogger.h"   // g_real_resolution (TEMP MTG_TAPDBG diagnostic)
 
 #include <algorithm>
 #include <cstdio>
@@ -106,6 +107,12 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     auto tap_source = [&](Permanent& p, const CardDefinition& def, Color col)
     {
         CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
+        // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): every real tap with source, colour and energy.
+        { static const bool s_tapdbg = EnvOn("MTG_TAPDBG");
+          if (s_tapdbg && g_real_resolution)
+          { std::fprintf(stderr, "[tapdbg] tap %s col=%d energy=%d\n",
+                         def.card.m_name.str().c_str(), (int)col,
+                         state.players[active].energy_counters); } }
         p.tapped = true;
         DecrementDepletionOnTap(p);
         // Aether Hub: "{T}, Pay {E}: Add one mana of any color." Energy is part of the ACTIVATION
@@ -2186,8 +2193,34 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
 // Snapshot everything a payment can touch (incl. the executor's `available` accounting pool, when
 // present) so a reserved MISS restores byte-identically before the normal attempt (which must
 // reproduce the pre-reservation payment exactly).
+static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
+                                 ManaPool* available, bool honor_legacy_cco);
+
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
+{
+    // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): every REAL payment -- cost, outcome, energy delta,
+    // which lands went from untapped to tapped. Reads clean because real payments are rare.
+    static const bool s_paydbg = EnvOn("MTG_TAPDBG");
+    if (!(s_paydbg && g_real_resolution))
+    { return TapForCostSharedImpl(state, cost_in, for_creature, available, honor_legacy_cco); }
+    const int e0 = state.players[state.active_player_index].energy_counters;
+    std::vector<uint8_t> was_untapped;
+    was_untapped.reserve(state.battlefield.size());
+    for (const Permanent& p : state.battlefield) { was_untapped.push_back(!p.tapped); }
+    const bool ok = TapForCostSharedImpl(state, cost_in, for_creature, available, honor_legacy_cco);
+    std::string taps;
+    for (size_t i = 0; i < state.battlefield.size() && i < was_untapped.size(); ++i)
+    { if (was_untapped[i] && state.battlefield[i].tapped)
+      { taps += " " + state.battlefield[i].card.m_name.str(); } }
+    std::fprintf(stderr, "[paydbg] cost=%s ok=%d energy %d->%d taps:%s\n",
+                 cost_in.ToString().c_str(), ok ? 1 : 0, e0,
+                 state.players[state.active_player_index].energy_counters, taps.c_str());
+    return ok;
+}
+
+static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
+                                 ManaPool* available, bool honor_legacy_cco)
 {
     // Two-colour hybrid pips ({B/G}, Deathrite Shaman): expand into concrete-colour assignments
     // and try each through the (hybrid-unaware) full pipeline below. bits==0 IS the flat cost the

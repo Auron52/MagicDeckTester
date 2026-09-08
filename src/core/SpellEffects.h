@@ -12353,6 +12353,46 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         for (const Counter& c : p.counters)
         { if (c.type == Counter::Type::Depletion) { depletion = true; break; } }
         if (depletion) { continue; }
+        // ENERGY-GATED SOURCE (Aether Hub: "{T}: Add {C}" free, "{T}, Pay {E}: Add one mana of any
+        // color"). The coloured mode is PAID FOR by the energy, and this tap-ahead was banking it
+        // as wild/committed colour while leaving the {E} on the player -- minting mana the card
+        // cannot make (found 2026-09-08, EDF s1: TWO Peregrine Drakes' {U} pips were paid off ONE
+        // energy that was still unspent afterwards, then Emiel's payment spent it a third time;
+        // [paydbg] showed cost={4}{U} ok=1 energy 1->1 twice). Mirror the real tap_source
+        // (ManaPayment.cpp), which spends the {E} beside the tap:
+        //   - at a CAST site where the pending cost has any coloured pip (reserve_color_mask), the
+        //     paid mode may be the only source of that colour -> leave the land UNTAPPED so the
+        //     payment itself taps it and spends the {E} (the painland cast-reserve precedent);
+        //   - otherwise bank only the free "{T}: Add {C}" mode -- no {E} spent;
+        //   - inside a live blink loop, the combo ladder may take ONE coloured unit and PAYS the
+        //     {E} for it; once spent, EffectiveProduces strips the coloured modes and every later
+        //     tap-ahead banks {C}, which is the legal ceiling.
+        if (q.energy_per_colored_tap > 0)
+        {
+            Player& epl = state.players[controller];
+            const bool can_pay_e = epl.energy_counters >= q.energy_per_colored_tap;
+            if (!g_in_blink_loop && can_pay_e && reserve_color_mask != 0) { continue; }
+            p.tapped = true;
+            ++tapped_n;
+            if (refloatstats::On()) { refloatstats::g_tapped.fetch_add(1, std::memory_order_relaxed); }
+            Color epick = Color::Colorless;
+            if (g_in_blink_loop && can_pay_e && combo)
+            {
+                const std::vector<Color>& eprod = EffectiveProduces(state, controller, *d, false);
+                Color cp = Color::Colorless;
+                if (PickComboRefloatColor(state, controller, eprod, next_c_pip, cp)
+                    && cp != Color::Colorless)
+                { epick = cp; epl.energy_counters -= q.energy_per_colored_tap; }
+            }
+            state.floating_mana.Add(epick, 1);
+            if (refloatstats::On())
+            {
+                refloatstats::g_commit.fetch_add(1, std::memory_order_relaxed);
+                refloatstats::g_by_color[static_cast<int>(epick)].fetch_add(1, std::memory_order_relaxed);
+            }
+            if (LandAuraBonus(state, p) > 0) { LandAuraAddToPool(state.floating_mana, state, p); }
+            continue;
+        }
         p.tapped = true;
         ++tapped_n;
         if (refloatstats::On()) { refloatstats::g_tapped.fetch_add(1, std::memory_order_relaxed); }
