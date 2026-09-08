@@ -1934,9 +1934,29 @@ async function commitLine() {
 // in the remaining set, couplings are respected automatically: a fetch target that can't pay for a
 // given tutor target was never enumerated together, so that combination is simply never offered.
 function renderChooseDialog(v, line){
-  const variants=(v.variants||[]).slice();
+  let variants=(v.variants||[]).slice();
   // A `choose` with no variants is a protocol error, not a decision -- there is nothing to pick.
   if (!variants.length) return showError('the engine returned a "choose" with no variants', JSON.stringify(v));
+  // THE GO-OFF IS NOT A DIMENSION OF AN ACTIVATION. clickActivationOptions already keeps the
+  // recognised go-off count off the CARD (see its note: "go off should just be a specific button
+  // ... not part of a card activation"), but the variant dialog is the OTHER path to the same plans
+  // and it had no such filter. So a committed single blink still came back as a `choose` whose
+  // variants were {one activation, the whole go-off}, which the walk rendered as an `x` dimension --
+  // USER 2026-09-07: "a question that makes no sense and when I answered with X=1 it finished the
+  // game randomly". Asking "x?" is already wrong (the count is not the decision the user was
+  // making), and either answer risks committing a line that wins the game outright.
+  // Dropped here so the go-off is reachable ONLY through the Combo Off button, which is the whole
+  // point of that button: "You either win or let the user do each required action."
+  {
+    const plan_of = i => ((S.decision||{}).plans||[]).find(p => p.index === i) || null;
+    const manual = variants.filter(x => { const p = plan_of(x.plan_index); return !(p && p.combo_off); });
+    // Never empty the dialog: if the go-off were somehow the only variant, keep the set as-is and
+    // let the walk render it rather than showing a "no variants" protocol error.
+    if (manual.length) { variants = manual; }
+  }
+  // One survivor after the filter is no longer a choice -- commit it instead of opening a dialog
+  // whose every remaining dimension has a single value.
+  if (variants.length === 1) { hideDecPanel(); return applyAccepted(variants[0].plan_index, variants[0].label); }
   // NO FLAT FALLBACK (USER 2026-09-01: "I would actually like to kill every one of those confusing
   // and ugly dialogs with overlapping text and random pictures, for all decklists"). The old
   // renderChooseFlat dumped every variant into one grid of card art labelled by its FULL line
