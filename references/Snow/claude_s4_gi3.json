@@ -1,0 +1,551 @@
+{
+  "seed": 4, "game_index": 3, "win_turn": 5, "won": true,
+  "mulligan": { "count": 2, "bottom": [14, 60] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 17, "name": "Frost Augur" }, { "num": 50, "name": "Snow-Covered Island" }, { "num": 51, "name": "Snow-Covered Island" }, { "num": 58, "name": "Snow-Covered Mountain" }, { "num": 52, "name": "Snow-Covered Island" }, { "num": 22, "name": "Ice-Fang Coatl" }, { "num": 18, "name": "Frost Augur" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 43, "name": "Skred" }, { "num": 42, "name": "Skred" }, { "num": 37, "name": "Scrying Sheets" }, { "num": 14, "name": "Coldsteel Heart" }, { "num": 10, "name": "Boreal Druid" }, { "num": 56, "name": "Snow-Covered Island" }, { "num": 8, "name": "Arcum's Astrolabe" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 60, "name": "Snow-Covered Mountain" }, { "num": 14, "name": "Coldsteel Heart" }, { "num": 39, "name": "Scrying Sheets" }, { "num": 24, "name": "Ice-Fang Coatl" }, { "num": 50, "name": "Snow-Covered Island" }, { "num": 45, "name": "Snow-Covered Forest" }, { "num": 11, "name": "Boreal Druid" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 60, "name": "Snow-Covered Mountain", "win_optimal": true }, { "num": 14, "name": "Coldsteel Heart", "win_optimal": true }, { "num": 39, "name": "Scrying Sheets", "win_optimal": true }, { "num": 24, "name": "Ice-Fang Coatl", "win_optimal": true }, { "num": 50, "name": "Snow-Covered Island", "win_optimal": true }, { "num": 45, "name": "Snow-Covered Forest", "win_optimal": true }, { "num": 11, "name": "Boreal Druid", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 60, "name": "Snow-Covered Mountain" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 60, "name": "Snow-Covered Mountain", "win_optimal": true }, { "num": 39, "name": "Scrying Sheets", "win_optimal": true }, { "num": 24, "name": "Ice-Fang Coatl", "win_optimal": true }, { "num": 50, "name": "Snow-Covered Island", "win_optimal": true }, { "num": 45, "name": "Snow-Covered Forest", "win_optimal": true }, { "num": 11, "name": "Boreal Druid", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 60, "name": "Snow-Covered Mountain" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 11, "name": "Boreal Druid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Snow-Covered Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Snow-Covered Forest; cast: Boreal Druid", "land": "Snow-Covered Forest", "casts": ["Boreal Druid"], "actions": [{ "card": "Boreal Druid" }] },
+    { "index": 1, "summary": "land=Scrying Sheets; cast: (nothing)", "land": "Scrying Sheets", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Snow-Covered Island; cast: (nothing)", "land": "Snow-Covered Island", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Snow-Covered Forest; cast: (nothing)", "land": "Snow-Covered Forest", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 24, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 24, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Abominable Treefolk" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abominable Treefolk", "cost": "{2}{U}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Ice-Fang Coatl", "cost": "{U}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Snow-Covered Island; cast: Ice-Fang Coatl", "land": "Snow-Covered Island", "casts": ["Ice-Fang Coatl"], "actions": [{ "card": "Ice-Fang Coatl" }] },
+    { "index": 1, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 2, "summary": "land=Scrying Sheets; cast: (nothing)", "land": "Scrying Sheets", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Snow-Covered Island; cast: (nothing)", "land": "Snow-Covered Island", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 6, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 7, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 8, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Marit Lage's Slumber" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abominable Treefolk", "cost": "{2}{U}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 39, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Boreal Druid (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 11, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abominable Treefolk", "cost": "{2}{U}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 39, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Scrying Sheets" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abominable Treefolk", "cost": "{2}{U}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 39, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Scrying Sheets; cast: Abominable Treefolk", "land": "Scrying Sheets", "casts": ["Abominable Treefolk"], "actions": [{ "card": "Abominable Treefolk" }] },
+    { "index": 1, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 2, "summary": "land=none; cast: Marit Lage's Slumber", "land": null, "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 3, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 4, "summary": "land=Scrying Sheets; cast: (nothing)", "land": "Scrying Sheets", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 7, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 8, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 9, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 28, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 38, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Ice-Fang Coatl (1) — 1 to opponent (19→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "tapped": true, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 28, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 38, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 8, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Snow-Covered Island" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "is_land": true }], "vial_counters": [], "hand": [{ "num": 28, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 38, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }, { "num": 56, "name": "Snow-Covered Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 2, "summary": "land=Snow-Covered Island; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Island", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 4, "summary": "land=Snow-Covered Island; cast: Marit Lage's Slumber", "land": "Snow-Covered Island", "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 5, "summary": "land=none; cast: Marit Lage's Slumber", "land": null, "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 6, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 7, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 8, "summary": "land=Snow-Covered Island; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Island", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 10, "summary": "land=Scrying Sheets; cast: (nothing)", "land": "Scrying Sheets", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Snow-Covered Island; cast: (nothing)", "land": "Snow-Covered Island", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 14, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 15, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 16, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 17, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 18, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 19, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 20, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 21, "summary": "land=Snow-Covered Island; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Island", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 22, "summary": "land=Snow-Covered Island; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Island", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 23, "summary": "land=Snow-Covered Island; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Island", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 24, "summary": "land=Snow-Covered Island; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Island", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 25, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 26, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 27, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 28, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 29, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 30, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 31, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 32, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 33, "summary": "land=Snow-Covered Island; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Island", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 34, "summary": "land=Snow-Covered Island; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Island", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 35, "summary": "land=Snow-Covered Island; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Island", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 36, "summary": "land=Snow-Covered Island; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Snow-Covered Island", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 37, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 38, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 39, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 40, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "type": "dig",
+  "source": "Scrying Sheets",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "is_land": true }], "vial_counters": [], "hand": [{ "num": 28, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 38, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Marit Lage's Slumber" }],
+  "note": "reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "tutor", "text": "❄ Scrying Sheets: revealed Marit Lage's Slumber (snow) into hand" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "is_land": true }], "vial_counters": [], "hand": [{ "num": 28, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 30, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 38, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Marit Lage's Slumber", "land": null, "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "scry",
+  "source": "Marit Lage's Slumber",
+  "turn": 4,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 10, "num": 28, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 30, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 38, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "looked": [{ "name": "Scrying Sheets", "is_land": true }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Scrying Sheets"] }, { "index": 1, "label": "Top: Scrying Sheets", "shuffle": false, "top": ["Scrying Sheets"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 4, "source": "Marit Lage's Slumber", "cards": [{ "name": "Scrying Sheets", "disposition": "to the bottom" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 10, "num": 28, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 30, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 38, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Ice-Fang Coatl (1), Abominable Treefolk (8) — 9 to opponent (18→9)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "tapped": true, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "tapped": true, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "tapped": true, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 10, "num": 28, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 30, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 38, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 9, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Boreal Druid" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 10, "num": 28, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Boreal Druid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }, { "num": 38, "name": "Scrying Sheets", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Scrying Sheets; cast: Boreal Druid, Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Marit Lage's Slumber", "Scrying Sheets"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Scrying Sheets; cast: Boreal Druid, Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Marit Lage's Slumber", "Scrying Sheets"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 2, "summary": "land=Scrying Sheets; cast: Boreal Druid, Marit Lage's Slumber", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Marit Lage's Slumber"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }] },
+    { "index": 3, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 4, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 5, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 6, "summary": "land=none; cast: Boreal Druid, Marit Lage's Slumber", "land": null, "casts": ["Boreal Druid", "Marit Lage's Slumber"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }] },
+    { "index": 7, "summary": "land=none; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 8, "summary": "land=none; cast: Marit Lage's Slumber", "land": null, "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 9, "summary": "land=Scrying Sheets; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 10, "summary": "land=Scrying Sheets; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 11, "summary": "land=none; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 12, "summary": "land=Scrying Sheets; cast: Boreal Druid", "land": "Scrying Sheets", "casts": ["Boreal Druid"], "actions": [{ "card": "Boreal Druid" }] },
+    { "index": 13, "summary": "land=none; cast: Boreal Druid", "land": null, "casts": ["Boreal Druid"], "actions": [{ "card": "Boreal Druid" }] },
+    { "index": 14, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets", "Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 15, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 16, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 17, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 18, "summary": "land=Scrying Sheets; cast: (nothing)", "land": "Scrying Sheets", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=Scrying Sheets; cast: Boreal Druid, Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Marit Lage's Slumber", "Scrying Sheets"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 21, "summary": "land=Scrying Sheets; cast: Boreal Druid, Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Marit Lage's Slumber", "Scrying Sheets"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 22, "summary": "land=Scrying Sheets; cast: Boreal Druid, Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Marit Lage's Slumber", "Scrying Sheets"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 23, "summary": "land=Scrying Sheets; cast: Boreal Druid, Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Marit Lage's Slumber", "Scrying Sheets"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 24, "summary": "land=Scrying Sheets; cast: Boreal Druid, Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Marit Lage's Slumber", "Scrying Sheets"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 25, "summary": "land=Scrying Sheets; cast: Boreal Druid, Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Marit Lage's Slumber", "Scrying Sheets"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 26, "summary": "land=Scrying Sheets; cast: Boreal Druid, Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Marit Lage's Slumber", "Scrying Sheets"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 27, "summary": "land=Scrying Sheets; cast: Boreal Druid, Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Marit Lage's Slumber", "Scrying Sheets"], "cast_order_canonical": ["Boreal Druid", "Marit Lage's Slumber"], "actions": [{ "card": "Boreal Druid" }, { "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 28, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 29, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 30, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 31, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 32, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 33, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 34, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 35, "summary": "land=Scrying Sheets; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 36, "summary": "land=none; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 37, "summary": "land=none; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 38, "summary": "land=none; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 39, "summary": "land=none; cast: Marit Lage's Slumber, Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Marit Lage's Slumber", "Scrying Sheets"], "actions": [{ "card": "Marit Lage's Slumber" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 40, "summary": "land=Scrying Sheets; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 41, "summary": "land=Scrying Sheets; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 42, "summary": "land=Scrying Sheets; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 43, "summary": "land=Scrying Sheets; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 44, "summary": "land=Scrying Sheets; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 45, "summary": "land=Scrying Sheets; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 46, "summary": "land=Scrying Sheets; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 47, "summary": "land=Scrying Sheets; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 48, "summary": "land=none; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 49, "summary": "land=none; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 50, "summary": "land=none; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 51, "summary": "land=none; cast: Boreal Druid, Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Boreal Druid", "Scrying Sheets"], "actions": [{ "card": "Boreal Druid" }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 52, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets", "Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 53, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets", "Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 54, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets", "Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 55, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand, Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets", "Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }, { "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 56, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 57, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 58, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 59, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 60, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 61, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 62, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 63, "summary": "land=Scrying Sheets; cast: Scrying Sheets: look at top; put a snow card into hand", "land": "Scrying Sheets", "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 64, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 65, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 66, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] },
+    { "index": 67, "summary": "land=none; cast: Scrying Sheets: look at top; put a snow card into hand", "land": null, "casts": ["Scrying Sheets"], "actions": [{ "card": "Scrying Sheets", "activate": true, "x": 1 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 21,
+  "type": "scry",
+  "source": "Marit Lage's Slumber",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 10, "num": 28, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "is_land": true }, { "name": "Scrying Sheets", "idx": 11, "num": 38, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Boreal Druid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "looked": [{ "name": "Skred", "is_land": false }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Skred"] }, { "index": 1, "label": "Top: Skred", "shuffle": false, "top": ["Skred"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "type": "scry",
+  "source": "Marit Lage's Slumber",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Boreal Druid", "idx": 12, "num": 9, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 10, "num": 28, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "is_land": true }, { "name": "Scrying Sheets", "idx": 11, "num": 38, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "is_land": true }], "vial_counters": [], "hand": [{ "num": 30, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "looked": [{ "name": "Boreal Druid", "is_land": false }],
+  "heuristic_default": 1,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Boreal Druid"] }, { "index": 1, "label": "Top: Boreal Druid", "shuffle": false, "top": ["Boreal Druid"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 23,
+  "type": "dig",
+  "source": "Scrying Sheets",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Boreal Druid", "idx": 12, "num": 9, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 10, "num": 28, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Scrying Sheets", "idx": 11, "num": 38, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "is_land": true }], "vial_counters": [], "hand": [{ "num": 30, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Frost Augur" }],
+  "note": "reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 24,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 5, "source": "Marit Lage's Slumber", "cards": [{ "name": "Skred", "disposition": "to the bottom" }] }, { "turn": 5, "source": "Marit Lage's Slumber", "cards": [{ "name": "Boreal Druid", "disposition": "to the bottom" }] }],
+  "events": [{ "turn": 5, "kind": "tutor", "text": "❄ Scrying Sheets: revealed Frost Augur (snow) into hand" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Boreal Druid", "idx": 12, "num": 9, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 10, "num": 28, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Scrying Sheets", "idx": 11, "num": 38, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "is_land": true }], "vial_counters": [], "hand": [{ "num": 17, "name": "Frost Augur", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Marit Lage's Slumber", "land": null, "casts": ["Marit Lage's Slumber"], "actions": [{ "card": "Marit Lage's Slumber" }] },
+    { "index": 1, "summary": "land=none; cast: Frost Augur", "land": null, "casts": ["Frost Augur"], "actions": [{ "card": "Frost Augur" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 25,
+  "type": "scry",
+  "source": "Marit Lage's Slumber",
+  "turn": 5,
+  "away_zone": "bottom",
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Boreal Druid", "idx": 12, "num": 9, "is_land": false }, { "name": "Frost Augur", "idx": 13, "num": 17, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 10, "num": 28, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Scrying Sheets", "idx": 11, "num": 38, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 30, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "looked": [{ "name": "Snow-Covered Island", "is_land": true }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "All to bottom", "shuffle": false, "top": [], "away": ["Snow-Covered Island"] }, { "index": 1, "label": "Top: Snow-Covered Island", "shuffle": false, "top": ["Snow-Covered Island"], "away": [] }],
+  "note": "reply an option index. Kept cards stay on top (listed order); the rest go to the bottom."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 26,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 5, "source": "Marit Lage's Slumber", "cards": [{ "name": "Snow-Covered Island", "disposition": "to the bottom" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Abominable Treefolk", "idx": 8, "num": 4, "is_land": false }, { "name": "Boreal Druid", "idx": 2, "num": 11, "is_land": false }, { "name": "Boreal Druid", "idx": 12, "num": 9, "is_land": false }, { "name": "Frost Augur", "idx": 13, "num": 17, "is_land": false }, { "name": "Ice-Fang Coatl", "idx": 5, "num": 24, "is_land": false }, { "name": "Marit Lage's Slumber", "idx": 10, "num": 28, "is_land": false }, { "name": "Scrying Sheets", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Scrying Sheets", "idx": 11, "num": 38, "tapped": true, "is_land": true }, { "name": "Snow-Covered Forest", "idx": 1, "num": 45, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 4, "num": 50, "tapped": true, "is_land": true }, { "name": "Snow-Covered Island", "idx": 9, "num": 56, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 30, "name": "Marit Lage's Slumber", "cost": "{1}{U}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "tapped": true, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
