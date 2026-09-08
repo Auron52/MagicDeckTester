@@ -1923,3 +1923,21 @@ performance" is the user's call -- **melira is NOT re-added to the suite by this
 Open question for the user: re-add now (d0/d3/d5 cases would cost ~30 s + ~18 s + the d0
 canary at smoke scale), or first take the mulligan tail down (topk 5 -> 3 measured win-turn
 identical on gi32/gi47 but SLOWER on gi32 -- chaotic; stage-1 C(h,k) is the other half)?
+
+### Bottoming refine K (bottom_eval_topk) 5 vs 4 vs 3 -- REJECTED, K stays 5
+
+1000 games x d3/d5, seed 800000, per-game paired vs topk5 (one pooled batch, ~4 min):
+
+| arm | d3 avg / delta / better-worse / core-s | d5 avg / delta / better-worse / core-s |
+|---|---|---|
+| topk5 (shipped) | 4.8650 / -- / -- / 775 | 4.8460 / -- / -- / 1236 |
+| topk4 | 4.8700 / +0.005 (t 2.2) / 0-5 / 737 | 4.8490 / +0.003 (t 1.7) / 0-3 / 1072 |
+| topk3 | 4.8760 / +0.011 (t 3.3) / 0-11 / 644 | 4.8580 / +0.012 (t 3.5) / 0-12 / 908 |
+
+Lowering K only ever LOSES games (0 better at either K) for 5-26% of the cost: the refine is
+doing real work. The mulligan tail stays as it is; it is ~5-7 s on the worst 50-set game.
+
+Byte-identity bonus: this batch's topk5 arms reproduce batch 1's leaf0 digests exactly
+(d3 3ae70e58147fd761, d5 d099668502343bdb) across the tutor-fill skip + walk micro-opts --
+2000 games of byte-identical evidence on top of smoke + refs. (Their core-s are within batch
+noise of batch 1's -- the 5-9% gain is only visible on the solo 50-set scans.)
