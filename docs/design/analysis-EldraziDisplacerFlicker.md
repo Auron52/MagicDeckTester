@@ -3939,3 +3939,60 @@ at +15.6% summed game wall (7,721s -> 8,925s; realising the loop costs apply tim
 and every slow-game report in the run's first wave was in the OFF arm: going off also ENDS the
 fat games). ADOPTED default ON as the user-directed fix; the wall trade is disclosed above --
 `MTG_EDF_AUTOGOFF=0` is the hatch if it is ever unwanted.
+
+### CORRECTION: the human T3 line WAS (mostly) representable -- the library route (USER, 2026-09-08)
+
+USER: *"I don't get why the T3 line is not representable."* Right to object -- re-examined, two of
+the three links already existed:
+1. Wish -> cast the wished piece SAME TURN: exists (MTG_ACQ_RESOLVE, adopted default-ON
+   2026-08-19 -- a tutor-to-hand arms the deferred re-solve like a cantrip).
+2. Dig mid-loop, deploy the found wish -> finisher: exists in the APPLY
+   (SpendSurplusOnDrawSinks draws only-to-find; ComboFinishFromHand deploys it).
+3. The only missing link was PRICING: ScanHandSinks scanned hand + hand-wish->sideboard, never
+   the LIBRARY -- so with the second Living Wish still in the library, FlickerGoOffCount
+   returned 0, no kill-sized count was proposed, and the apply that could realise the dig was
+   never handed a loop to do it in.
+
+Shipped: the LIBRARY ROUTE in ScanHandSinks (rides the adopted MTG_EDF_COMBO_FINISH lever) --
+first wish/finisher in the known library at index i priced as (i+1) draws at the board's
+cheapest repeatable draw sink + wish + finisher (clairvoyant like every rollout read; depth cap
+20; search-only, never used to size a human count). Execution stays the arbiter: the loop's
+draws really pay and the finish deploys only what actually reached hand.
+
+Refs after: s1 BYTE-IDENTICAL (its T3 block is UPSTREAM -- the 20ms T2 solve's greedy tails
+never hold the wish for the T3 chain; the budget/value-leaf regime again), s5 same T5 on a
+changed line at HALF the wall (10.6s -> 5.6s: the search cashes loops earlier), s2/s3/s4/s7
+unchanged. Unit 938/938, scenarios 72/72. 100-game re-measure vs the auto-go-off numbers: below.
+
+### Reference repairs (USER, 2026-09-08: "There should be no broken references") -- BOTH REPAIRED, tool-side
+
+**claude_s2_gi1 (was play-drift, replay T7 vs recorded T4).** Bisect: broken by edd9c137's
+REMOVAL half -- deleting every non-winning ("banking") go-off from the human menu also deleted
+the STANDALONE sized bank blinks (the user's own 2026-09-05 multi-activate feature), and this
+recording's T4 kill runs through one: blink x23 (bank + pings), wish -> Infiltrator, cast it,
+blink x50. With only single blinks on the menu the replay banked too little and slid to T7. The
+seed-7 false-promise rationale (trial-vs-real sub-decision divergence) never applied to a
+standalone plan -- no sub-decision exists. Fix: the menu keeps the BIGGEST STANDALONE banking
+count when no verified win exists (at most one entry; combined plans and smaller variants stay
+deleted; only the verified winner says COMBO OFF). Replays to T4.
+
+**Fluctuator claude_s10_gi9 (was shuffle-dead-classified).** Not a shuffle and not an engine
+change: the checker's `--tap-pref` side-channel is derived from per-pair tapped-deltas but was
+keyed PER PHASE -- payment-blind. The recording tapped Canyon Slough for the Fluctuator and
+Fetid Pools only LATER for Unearth's {B}; the merged "prefer {1,3}" spent both on the first
+{2}, stranding the recorded Unearth so its plan was never enumerated. Fix, both sides: --tap-pref
+accepts an ORDINAL-scoped 4-field form "turn:phase:ordinal:idxs" (3-field stays as the
+phase-wide wildcard), AIEngine publishes g_play_cur_main_ordinal at the external-chooser
+decision so the chosen line's payments see their own ordinal, and the checker keys each pair's
+delta by its first frame's main_ordinal. Replays to its recorded T3.
+
+**Full sweep after both: 304 refs -- 15 ok, 289 repaired, 0 play-drift, 0 shuffle-dead,
+0 enum-gap, 0 contract-fail.** The corpus is whole.
+
+### Library route: DEFAULT OFF (measured negative as priced)
+
+The 200-game re-measure vs the auto-go-off baseline: s3001 5.72 -> 5.92, s3061 5.24 -> 5.38 --
+worse on both. Mechanism: the pricing counts MANA only, but Mariposa/investigate draws carry
+{T} (one draw per loop iteration), so a deep dig needs iterations the mana-only count never
+demands -- proposed loops stall mid-dig and waste the turn. Gated MTG_EDF_LIB_ROUTE (heurarm
+slot, default OFF). Representability stands; shipping needs iteration-aware sizing.
