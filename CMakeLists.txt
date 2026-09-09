@@ -52,18 +52,29 @@ if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config" AND NOT CMAKE_DEFAULT_BUILD_TYP
 endif()
 # Profile config flags, per toolchain. GCC/Clang spell "optimize + symbols" as -O3 -g; MSVC as
 # /O2 /Zi with /DEBUG on the link. An unguarded -O3 here made the whole Windows configure fail.
+#
+# FORCE IS LOAD-BEARING, NOT TIDINESS (2026-09-08). CMakePresets.json seeds
+# CMAKE_CONFIGURATION_TYPES (which lists Profile) as a CACHE variable, so by the time this file
+# runs, `project()` above has ALREADY created an EMPTY `CMAKE_CXX_FLAGS_PROFILE` cache entry for
+# the custom config -- and a plain `set(<var> <value> CACHE STRING ...)` never overwrites an
+# existing cache entry. The result was silent and total: `./build.sh profile` compiled with
+# `FLAGS = -std=gnu++20` -- i.e. -O0, no -g -- so every "faithful profile" taken through it was a
+# ~6x-slower UNOPTIMIZED binary whose hot symbols are non-inlined STL accessors
+# (std::__is_constant_evaluated, vector<Counter>::begin) that do not exist in the shipped build.
+# That is exactly the -O0 footgun the guard at the top of this file exists to prevent, one config
+# over. FORCE makes the intended flags win over the empty auto-created entry.
 if(MSVC)
-  set(CMAKE_CXX_FLAGS_PROFILE "/O2 /Zi /DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
-  set(CMAKE_C_FLAGS_PROFILE   "/O2 /Zi /DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
-  set(CMAKE_EXE_LINKER_FLAGS_PROFILE    "/DEBUG /INCREMENTAL:NO" CACHE STRING "")
-  set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "/DEBUG /INCREMENTAL:NO" CACHE STRING "")
+  set(CMAKE_CXX_FLAGS_PROFILE "/O2 /Zi /DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)" FORCE)
+  set(CMAKE_C_FLAGS_PROFILE   "/O2 /Zi /DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)" FORCE)
+  set(CMAKE_EXE_LINKER_FLAGS_PROFILE    "/DEBUG /INCREMENTAL:NO" CACHE STRING "" FORCE)
+  set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "/DEBUG /INCREMENTAL:NO" CACHE STRING "" FORCE)
 else()
-  set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
-  set(CMAKE_C_FLAGS_PROFILE   "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
-  set(CMAKE_EXE_LINKER_FLAGS_PROFILE    "" CACHE STRING "")
-  set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "" CACHE STRING "")
+  set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)" FORCE)
+  set(CMAKE_C_FLAGS_PROFILE   "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)" FORCE)
+  set(CMAKE_EXE_LINKER_FLAGS_PROFILE    "" CACHE STRING "" FORCE)
+  set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "" CACHE STRING "" FORCE)
 endif()
-set(CMAKE_STATIC_LINKER_FLAGS_PROFILE "" CACHE STRING "")
+set(CMAKE_STATIC_LINKER_FLAGS_PROFILE "" CACHE STRING "" FORCE)
 mark_as_advanced(CMAKE_CXX_FLAGS_PROFILE CMAKE_C_FLAGS_PROFILE
   CMAKE_EXE_LINKER_FLAGS_PROFILE CMAKE_SHARED_LINKER_FLAGS_PROFILE CMAKE_STATIC_LINKER_FLAGS_PROFILE)
 
