@@ -32145,7 +32145,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // misses double (12.6 vs 6.9) and each is a full re-search -- the entire reason a value
             // warm-up walked a bigger tree than the heuristic pass at the same depth.
             static const bool s_warm_orderfree = EnvOn("MTG_WARMUP_MEMO_ORDERFREE", true);
-            if (s_warm_orderfree && g_emul_warm_pass && g_force_value_leaf && !g_force_heuristic_leaf)
+            // ...and for EVERY pass under MTG_MEMO_WIN_ORDERFREE / per-job `memo_win_orderfree` (default
+            // OFF = byte-identical): the leaf-independent rule. A line reaching this node ends here,
+            // exactly as a line ends at a leaf; the engine re-searches past a line's end as always.
+            static const bool s_all_orderfree_env = EnvOn("MTG_MEMO_WIN_ORDERFREE");
+            const bool s_all_orderfree = (valuearm::t_arm.memo_win_orderfree >= 0)
+                                       ? (valuearm::t_arm.memo_win_orderfree != 0) : s_all_orderfree_env;
+            if (s_all_orderfree || (s_warm_orderfree && g_emul_warm_pass && g_force_value_leaf && !g_force_heuristic_leaf))
             {
                 ++g_fs_memo_win_hits;
                 return { it->second.line.win_turn, {} };

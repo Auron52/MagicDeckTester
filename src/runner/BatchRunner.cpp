@@ -611,6 +611,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("ladder_emulated")) { j.arm.ladder_emulated = jspec["ladder_emulated"].get<bool>() ? 1 : 0; }
     if (jspec.contains("ladder_emul_margin")) { j.arm.ladder_emul_margin = jspec["ladder_emul_margin"].get<double>(); }
     if (jspec.contains("ladder_emul_hfirst")) { j.arm.ladder_emul_hfirst = jspec["ladder_emul_hfirst"].get<int>(); }
+    if (jspec.contains("memo_win_orderfree")) { j.arm.memo_win_orderfree = jspec["memo_win_orderfree"].get<bool>() ? 1 : 0; }
     if (jspec.contains("trust_slack"))  { j.arm.trust_slack  = jspec["trust_slack"].get<double>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());
     // "flags": {"MTG_KE_ORDER": true, ...} -- per-job boolean lever overrides (see ai/HeuristicArm.h).

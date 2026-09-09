@@ -2576,7 +2576,33 @@ stop" (3de1efef, smoke 80/80, CI green ubuntu/windows/parity): 200 games avg 4.9
 25.86M units vs 22.19M live (1.17x), 831/1857 mispredicts — the reconstruction now under-estimates
 the heuristic pass (its tree is 1.25-1.54x the warm-up's at d3-d4), so the emulated ladder stays
 CLOSED until the order-free-win rule above is applied to every pass. The scout on the fixed binary
-passed the old crash point: 102,212 keep rollouts at 1200 s (100/s sustained).
+passed the old crash point: 102,212 keep rollouts at 1200 s (100/s sustained); stopped by me when
+the user decided to generate on the 12-thread machine (`fast` recipe); journal kept.
+
+### 2026-09-09g — order-free WIN reuse for EVERY pass (`MTG_MEMO_WIN_ORDERFREE` / job `memo_win_orderfree`, default OFF)
+
+Built as the leaf-independent rule; smoke 80/80 unchanged with it off. 200 games Melira d5/b20:
+
+| arm | units | avg | notes |
+|---|---|---|---|
+| heuristic ladder (shipped) | 22.19M | 5.010 | |
+| **heuristic ladder + order-free** | **20.03M (0.90x)** | 5.015 | commit depth mean 2.68 vs 2.64 (deeper for the same budget) |
+| emulated ladder + order-free | 22.44M (1.12x of the order-free live) | 4.995 | trees now near-identical: h/v leaves 0.99 / 0.94 / 1.05 at d2-d4, differing pairs 48/590, 12/249, 2/60 (were 161, 191, 36) |
+
+Two readings. (1) **For the shipped search it is a ~10% units cut at equal depth/budget** — the
+committing pass no longer re-searches order-mismatched transpositions (7-13 per pass). Play is not
+byte-identical (a line ends where a reused entry sits, exactly as at a leaf; the engine re-searches
+past it), so quality is the pooled A/B's question. (2) **For the emulated ladder the trees are now
+the same, and it is STILL 1.12x** with 804/1829 decisions mispredicting the committing depth. That
+residual is not reconstruction error any more: it is the PREDICTION itself — before running pass k
+the ladder must guess whether the gate will admit k+1, which depends on pass k's actual cost (the
+gate's growth ratio is ch[k]/ch[k-1]); the heuristic ladder never guesses, it runs k and then reads
+the gate. Each wrong "warm-up" guess costs a value pass (~21% of the heuristic pass at that depth),
+and with warm-ups worth 5-7% of the ladder here the guessing overhead outweighs the saving.
+
+Pooled A/B running (`logs/melira_vl_ab/orderfree_manifest.json` -> `ab10.out`, `wins10/*.units`):
+live / live+order-free / emulated+order-free, Melira + Fluctuator, d5/b20 + d3/b10, 8 x 1000, units
+dumped. The adoption question is (1); (2) is reported for the record.
 
 **Smoke under the adopted sidecar (binary with the emulated lever OFF):** 77/80 configs unchanged
 (byte-identical off, as required), melira d3 4.88 -> 4.84 (2 faster), melira d5 4.96 = 4.96 (play

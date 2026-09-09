@@ -49,6 +49,11 @@ struct Arm
     // Depths 1..N always play the heuristic (exact pass costs into the replayed gate, at the price of
     // their warm-up rollouts -- cheap where the ladder's growth is steep). -1 unset => env (default 0).
     int         ladder_emul_hfirst = -1;    // -1 unset | >=0 explicit     (MTG_LADDER_EMUL_HFIRST)
+    // ORDER-FREE WIN REUSE for every pass (MTG_MEMO_WIN_ORDERFREE): an FSLineCache WIN entry whose zone
+    // order differs yields its win turn with an empty continuation instead of a full re-search. Makes
+    // the tree leaf-independent (heuristic == value warm-up) and skips the committing pass's own
+    // order-miss re-searches; the line ends at that node (the engine re-searches past a line's end).
+    int         memo_win_orderfree = -1;    // -1 unset | 0 off | 1 on     (MTG_MEMO_WIN_ORDERFREE)
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).
     // "none"/"off"/"0" => explicitly NO sidecar, which is how an H-arm job asks for the pure
