@@ -31594,6 +31594,29 @@ inline bool TTNoWinCacheOn()
     return v;
 }
 
+// MTG_ROLLOUT_HORIZON's truncated tail publishes a leaf grade from a NON-cutoff-dependent branch,
+// which breaks the "a run at cutoff < max_turns always publishes kInvalid" argument the no-win
+// memo's replay rests on (see NoWinLeafMemoArmed). It needs a value model to fire at all, so this
+// is inert for every value-less deck; disarming on the ENV keeps the argument airtight rather
+// than conditional on a sidecar being absent. Value-carrying flag => raw getenv + parse.
+inline bool RollHorizonSet()
+{
+    static const bool v = []{ const char* e = std::getenv("MTG_ROLLOUT_HORIZON");
+                              return e && *e && std::atoi(e) >= 0; }();
+    return v;
+}
+
+// May the no-win half of the leaf table act at this call? Two independent arming routes:
+//   * MTG_TT_NOWIN_CACHE -- the pre-existing explicit global override, semantics unchanged.
+//   * MTG_UNBUDGETED_LEAF_MEMO (default ON) + the UNBUDGETED-PLAY latch raised by
+//     AIEngine::TakeTurn. See EngineFlags.h for why the latch, and not `budget->Unlimited()`,
+//     is the structural gate.
+inline bool NoWinLeafMemoArmed()
+{
+    if (RollHorizonSet()) { return false; }
+    return TTNoWinCacheOn() || (UnbudgetedLeafMemoOn() && g_unbudgeted_play > 0);
+}
+
 // M2 FIXPOINT mode-2 helpers (M2FixpointMode() == 2; EngineFlags.h). The re-solve's gate is
 // NEW-INFORMATION CONDEMNATION (USER direction 2026-09-06): the pre-draw solve already
 // adjudicated the old hand, so a post-draw re-solve is condemned unless a card DRAWN during
@@ -31949,6 +31972,9 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     ShuffleEvalGuard _seg(true);  // decoupling instrument: rollout shuffles use shuffle_salt_search
+    // Evaluated ONCE so the lookup and the store can never disagree about whether this call's
+    // no-win half is live (they read the same latch, and the latch unwinds with AIEngine::TakeTurn).
+    const bool nowin_armed = (tt != nullptr) && NoWinLeafMemoArmed();
     TranspositionTable::Key key;
     if (tt != nullptr)
     {
@@ -31989,11 +32015,41 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         }
         // Bound-qualified NO-WIN. The entry answers only "no win at turn <= bound", so a query asking
         // about a LATER turn than the refutation covered must re-roll. Cheap: one extra map probe on
-        // the miss path, and only when the flag is on.
-        if (TTNoWinCacheOn())
+        // the miss path, and only when armed.
+        //
+        // A hit must reproduce the body's SIDE EFFECTS, not just its return value -- see
+        // TranspositionTable::NoWinEntry. Two of them, and the argument for each:
+        //
+        //  1. THE GRADED LEAF QUANTITY (leafeval::t_tb / t_life), which ranks two equally-hopeless
+        //     candidates. It is CUTOFF-DEPENDENT, so it cannot simply be replayed onto any query the
+        //     bound admits. SimulateToEndImpl's loop is `while (turn <= max_turns)` with an abort at
+        //     `turn > cutoff_turn`, so a run with cutoff >= max_turns never aborts and reaches the
+        //     natural horizon exit (the ONLY site that publishes a quantity), while a run with
+        //     cutoff < max_turns always leaves through a site that publishes kInvalid. And since
+        //     bound == min(cutoff, max_turns+1), `bound >= max_turns` is exactly "the stored run was
+        //     a full run". So: a query with cutoff >= max_turns implies bound >= cutoff >= max_turns,
+        //     i.e. the entry IS a full run and its quantity is precisely what a fresh run would
+        //     publish; a narrower query publishes kInvalid, which is what its own fresh run does.
+        //  2. THE CONDEMNATION-DROP DELTA (g_condemn_drops), read by the escalation window as this
+        //     candidate's "filter-touched" flag. Replayed as a delta, exactly as enummemo::Entry and
+        //     solvememo::Entry replay theirs (audit §6.1).
+        //
+        // leafeval::t_inf is deliberately NOT replayed: its only consumer (the equal-win-turn
+        // inf-life preference) is guarded on `win_turn <= max_turns`, so a NO-WIN's stamp can never
+        // be read. The WIN half of this table has never replayed it either, and says so.
+        if (nowin_armed)
         {
-            const int* bound = tt->LookupNoWinBound(key);
-            if (bound != nullptr && cutoff_turn <= *bound) { PROF_INC(tt_nowin_hit); ++g_tt_hit_n; return max_turns + 1; }
+            const TranspositionTable::NoWinEntry* e = tt->LookupNoWin(key);
+            if (e != nullptr && cutoff_turn <= e->bound)
+            {
+                PROF_INC(tt_nowin_hit); ++g_tt_hit_n;
+                if (cutoff_turn >= max_turns && e->leaf_tb != leafeval::kInvalid)
+                { leafeval::Publish(e->leaf_tb); leafeval::PublishLife(e->leaf_life); }
+                else
+                { leafeval::Publish(leafeval::kInvalid); }
+                g_condemn_drops += e->condemn_drops;
+                return max_turns + 1;
+            }
         }
     }
 
@@ -32001,6 +32057,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     // g_fs_trunc_events at that site). Such a result is "I ran out", not "there is no win", and
     // storing it would poison the table with fabricated losses.
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
+    const unsigned long long drops_at_entry = g_condemn_drops;
 
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
 
@@ -32010,10 +32067,28 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         PROF_INC(tt_nowin);
         // The rollout aborts at `turn > cutoff_turn`, so the refutation covers exactly cutoff_turn --
         // clamped to max_turns+1, the widest question the search can ask, so an unbounded query hits.
-        if (TTNoWinCacheOn() && g_fs_trunc_events == trunc_at_entry)
+        //
+        // The one hole in the "every return point publishes" frame rule is the natural horizon exit,
+        // which publishes only when the leaf grade is live for this state. A full run that left
+        // through it WITHOUT publishing leaves t_tb holding whatever a sibling frame put there --
+        // not a function of this call's inputs, so it must not be stored. Mirror the exit's own
+        // condition (`state` is the rollout's END state here, which is what that site tested) and
+        // decline the store instead. A narrower run cannot reach that exit at all, so it is exempt.
+        // `nowin_armed` leads so that a BUDGETED search short-circuits before the provider lookup:
+        // with the mechanism disarmed this whole block is the single boolean test it always was.
+        const bool full_run = (cutoff_turn >= max_turns);
+        if (nowin_armed && g_fs_trunc_events == trunc_at_entry
+            && (!full_run || (leafeval::GradeNoWinEnabled()
+                              && (leafeval::ForceNoWin()
+                                  || ResolveProvider(state).GradesNoWinLeaf()))))
         {
             PROF_INC(tt_nowin_stored);
-            tt->StoreNoWin(key, std::min(cutoff_turn, max_turns + 1));
+            TranspositionTable::NoWinEntry e;
+            e.bound     = std::min(cutoff_turn, max_turns + 1);
+            e.leaf_tb   = full_run ? leafeval::t_tb   : leafeval::kInvalid;
+            e.leaf_life = full_run ? leafeval::t_life : leafeval::kInvalid;
+            e.condemn_drops = static_cast<unsigned>(g_condemn_drops - drops_at_entry);
+            tt->StoreNoWin(key, e);
         }
     }
     return result;
@@ -38545,6 +38620,49 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
     return plans[best];
 }
 
+// ---- CANDIDATE-COLLAPSE CENSUS (MTG_CAND_CENSUS; DIAGNOSTIC, DEFAULT OFF) --------------------
+//
+// The question the unbudgeted (depth-matrix) cost hunt has to answer before any dedup/prune is
+// built: of the N candidates a node scores, how many reach a DISTINCT post-apply state? The
+// search is an N-ary tree of depth `depth` with T turn-steps between levels, so the leaf greedy
+// count grows like N^depth -- a collapse factor c on N is worth c^depth, and a collapse factor of
+// 1.0 says the whole dedup family (this loop's reframe_seen, the TT's no-win half) can only ever
+// buy the constant. Keyed on BuildDedupKey, the engine's own order-exact 128-bit state identity,
+// so the census counts exactly what a LOSSLESS dedup could collapse -- never a name signature
+// (searched-decisions-purge-greedy: name-only plan dedup ate a tutor target).
+//
+// Off (default) the extra set is never touched and no key is ever built, so this is byte-identical
+// and costs one branch per candidate.
+namespace candcensus
+{
+    inline bool On() { static const bool v = EnvOn("MTG_CAND_CENSUS"); return v; }
+    // Indexed by sub_depth (the pass's rollout fidelity), clamped to 0..7.
+    inline std::atomic<std::uint64_t> g_nodes[8];
+    inline std::atomic<std::uint64_t> g_cands[8];
+    inline std::atomic<std::uint64_t> g_distinct[8];
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!On()) { return; }
+            for (int d = 0; d < 8; ++d)
+            {
+                const std::uint64_t n = g_nodes[d].load();
+                if (n == 0) { continue; }
+                const std::uint64_t c = g_cands[d].load(), u = g_distinct[d].load();
+                std::fprintf(stderr,
+                             "[cand-census] sub_depth=%d nodes=%llu cands=%llu distinct=%llu "
+                             "collapse=%.3fx (cands/node=%.1f)\n",
+                             d, (unsigned long long)n, (unsigned long long)c,
+                             (unsigned long long)u,
+                             u ? static_cast<double>(c) / static_cast<double>(u) : 0.0,
+                             n ? static_cast<double>(c) / static_cast<double>(n) : 0.0);
+            }
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 // ---- Public API ----
 
 TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_pre_combat,
@@ -38835,6 +38953,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // Per PASS, not per decision: every candidate in this loop reaches its boundary having
         // consumed the SAME draws, which is the comparability precondition. See the helper above.
         std::vector<dominance::DomSnap> dom_archive;
+        // Candidate-collapse census (MTG_CAND_CENSUS; diagnostic, off by default -- see the
+        // namespace). Per PASS, like every other set here.
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> census_seen;
+        const int census_slot = (sub_depth >= 0 && sub_depth < 8) ? sub_depth : 7;
+        if (candcensus::On())
+        { candcensus::g_nodes[census_slot].fetch_add(1, std::memory_order_relaxed); }
         for (const Plan& plan : candidates)
         {
             // --- Overrun guard: finish if almost done, else abort + roll back ---
@@ -38870,6 +38994,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (is_pre_combat)
             {
                 ApplyPlanDirect(copy, plan, true);
+                if (candcensus::On())
+                {
+                    candcensus::g_cands[census_slot].fetch_add(1, std::memory_order_relaxed);
+                    if (census_seen.insert(BuildDedupKey(copy)).second)
+                    { candcensus::g_distinct[census_slot].fetch_add(1, std::memory_order_relaxed); }
+                }
                 // Count-bounder: skip this candidate's rollout if its post-apply state was already scored
                 // by an earlier candidate this pass (a dominated/strand-equivalent line). Reframe-only.
                 if (DedupCensusOn())
@@ -38921,6 +39051,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // and DON'T re-simulate combat (that would be a phantom second one).
                 ApplyPlanDirect(copy, plan, false);
                 if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
+                if (candcensus::On())
+                {
+                    candcensus::g_cands[census_slot].fetch_add(1, std::memory_order_relaxed);
+                    if (census_seen.insert(BuildDedupKey(copy)).second)
+                    { candcensus::g_distinct[census_slot].fetch_add(1, std::memory_order_relaxed); }
+                }
                 // Count-bounder (post-combat main): dedup by post-apply state AFTER the win check so a
                 // unique winner is never skipped. Reframe-only. See the pre-combat branch above.
                 if (DedupCensusOn())
@@ -39540,6 +39676,67 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
     return plans;
 }
 
+// ---- SOLVE-KEY FRAGMENTATION CENSUS (MTG_SOLVEKEY_CENSUS; DIAGNOSTIC, DEFAULT OFF) ------------
+//
+// The greedy-Solve memo (solvememo) keys on BuildBreakpointKey, which is BuildSimKey PLUS a list
+// of mid-turn scalars/pins. On EldraziDisplacerFlicker's unbudgeted d3 regime MTG_CONSIDER_STATS
+// measured 869,798 SolveUncached calls over only 407,759 distinct BuildSimKey states -- a 2.1x
+// gap that is either (a) real mid-turn state the memo is right to separate, or (b) a fold that is
+// inert for this deck and is fragmenting the table for nothing. "Which fold" is the whole
+// question, and it is not answerable from the aggregate: this counts the LIVENESS of each
+// additional fold at the key's own call sites, plus the distinct-key counts with and without
+// them. Off (default) it costs one branch per key build.
+//
+// THE ANSWER (EDF seed 8008 gi=0, d3, --ignore-play-profile --max-turns 15), so nobody re-derives it:
+//   key_builds=968440 distinct_full=677892 distinct_base=677892 distinct_canon=299928
+//   midturn_frag=1.00x  order_frag=2.26x
+//   live folds: float=88640 storm=269626 casts_rem=0 mv_cast=0 pins=0 free_casts=0 m1_hand=0
+// (a) is REFUTED: the mid-turn scalars are live on 9%/28% of calls yet add ZERO distinct states,
+// so "deck-gate the storm fold" would buy nothing. What fragments the table is zone ORDER --
+// 677,892 order-exact states collapse to 299,928 order-insensitive ones. The memo cannot simply
+// take the canonical key (a Plan is index-encoded and greedy tie-breaks read vector order -- the
+// misindexed-replay class FSLineEntry::order_sig exists for), so 2.26x is a CEILING on a
+// remap-on-hit design, not a free win. See docs/design/unbudgeted-leaf-memo-and-edf-cost.md.
+namespace solvekeycensus
+{
+    inline bool On() { static const bool v = EnvOn("MTG_SOLVEKEY_CENSUS"); return v; }
+    inline std::atomic<std::uint64_t> g_calls{0};
+    inline std::atomic<std::uint64_t> g_float_live{0}, g_storm_live{0}, g_castsrem_live{0},
+                                      g_mv_live{0}, g_pins_live{0}, g_freecast_live{0},
+                                      g_m1hand_live{0};
+    inline std::mutex g_mu;
+    inline std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> g_full;
+    inline std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> g_base;
+    // ...and the ORDER-INSENSITIVE key (BuildSimKey under canon, FsOrderSig NOT folded). The gap
+    // between g_base and this is exactly how much of the memo's state space is zone PERMUTATION.
+    inline std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> g_canon;
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!On()) { return; }
+            std::lock_guard<std::mutex> lk(g_mu);
+            const std::uint64_t c = g_calls.load();
+            std::fprintf(stderr,
+                "[solvekey-census] key_builds=%llu distinct_full=%zu distinct_base=%zu "
+                "distinct_canon=%zu midturn_frag=%.2fx order_frag=%.2fx\n",
+                (unsigned long long)c, g_full.size(), g_base.size(), g_canon.size(),
+                g_base.empty() ? 0.0
+                               : static_cast<double>(g_full.size()) / static_cast<double>(g_base.size()),
+                g_canon.empty() ? 0.0
+                                : static_cast<double>(g_base.size()) / static_cast<double>(g_canon.size()));
+            std::fprintf(stderr,
+                "[solvekey-census] live folds: float=%llu storm=%llu casts_rem=%llu mv_cast=%llu "
+                "pins=%llu free_casts=%llu m1_hand=%llu\n",
+                (unsigned long long)g_float_live.load(), (unsigned long long)g_storm_live.load(),
+                (unsigned long long)g_castsrem_live.load(), (unsigned long long)g_mv_live.load(),
+                (unsigned long long)g_pins_live.load(), (unsigned long long)g_freecast_live.load(),
+                (unsigned long long)g_m1hand_live.load());
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 // MID-TURN-exact state key for the breakpoint enumeration memo. BuildSimKey alone is NOT sufficient:
 // it is a TURN-BOUNDARY key, and GameState documents that floating_mana / spells_cast_this_turn are
 // deliberately never folded into it because they are 0 at every boundary. Mid-turn they are exactly
@@ -39620,6 +39817,31 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         Fold(k, static_cast<uint64_t>(state.m1_hand_n));
         for (int i = 0; i < state.m1_hand_n; ++i)
         { Fold(k, static_cast<uint64_t>(state.m1_hand[i])); }
+    }
+    if (solvekeycensus::On())
+    {
+        const TranspositionTable::Key canon = BuildSimKey(state, 0, 0, is_pre_combat);
+        TranspositionTable::Key base = canon;
+        if (CanonSimKeyOn()) { Fold(base, FsOrderSig(state)); }
+        const ManaPool& fm = state.floating_mana;
+        const bool float_live = (fm.white || fm.blue || fm.black || fm.red || fm.green
+                                 || fm.colorless || fm.wild);
+        solvekeycensus::g_calls.fetch_add(1, std::memory_order_relaxed);
+        if (float_live)                          { solvekeycensus::g_float_live.fetch_add(1); }
+        if (state.spells_cast_this_turn != 0)    { solvekeycensus::g_storm_live.fetch_add(1); }
+        if (state.casts_remaining_this_turn >= 0){ solvekeycensus::g_castsrem_live.fetch_add(1); }
+        if (state.deck_reads_mv_cast)            { solvekeycensus::g_mv_live.fetch_add(1); }
+        if (g_scripted_top_choice >= 0 || g_scripted_etbdig_choice >= 0
+            || g_scripted_tutor_choice >= 0 || g_scripted_reorder_choice >= 0
+            || g_scripted_tapmode != 0 || g_scripted_freshmode != 0 || sac_pins_live)
+        { solvekeycensus::g_pins_live.fetch_add(1); }
+        if (state.free_casts_available > 0)      { solvekeycensus::g_freecast_live.fetch_add(1); }
+        if (state.m1_hand_n > 0 && state.m1_hand_turn == state.turn_number)
+        { solvekeycensus::g_m1hand_live.fetch_add(1); }
+        std::lock_guard<std::mutex> lk(solvekeycensus::g_mu);
+        solvekeycensus::g_full.insert(k);
+        solvekeycensus::g_base.insert(base);
+        solvekeycensus::g_canon.insert(canon);
     }
     return k;
 }

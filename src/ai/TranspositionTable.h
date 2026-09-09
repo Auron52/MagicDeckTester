@@ -82,6 +82,13 @@ public:
     // Peak entries in any single table (MTG_TT_STATS). The per-decision tables dominate RSS on
     // decision-dense decks (antilife escalation), so this shows the memory driver directly.
     static std::atomic<std::size_t>& PeakSize() { static std::atomic<std::size_t> v{0}; return v; }
+    // Same MTG_TT_STATS gate, for the NO-WIN half (see LookupNoWin/StoreNoWin). Lookups()/
+    // Hits() above only ever see the WIN map, so with the no-win cache armed the reported hit rate
+    // was a statement about a minority of the traffic -- and "what fraction of rollouts does the
+    // memo actually remove" is the whole question when deciding whether a state memo pays.
+    static std::atomic<unsigned long long>& NoWinLookups() { static std::atomic<unsigned long long> v{0}; return v; }
+    static std::atomic<unsigned long long>& NoWinHits()    { static std::atomic<unsigned long long> v{0}; return v; }
+    static std::atomic<unsigned long long>& NoWinStores()  { static std::atomic<unsigned long long> v{0}; return v; }
 
     // Result-NEUTRAL store cap (MTG_TT_CAP = max entries per table; 0/unset = unlimited = byte-identical).
     // The table is a pure memoization of SimulateToEnd (a miss just recomputes the same value), so refusing
@@ -133,20 +140,49 @@ public:
     // Store that cutoff alongside it and reuse the entry only for a query asking no more. Kept in a
     // SEPARATE map so the win path above is untouched -- with the flag off nothing here is ever
     // called and behaviour is byte-identical.
-    const int* LookupNoWinBound(const Key& k) const
+    // A no-win rollout leaves MORE behind than its return value, and a memo that replays only the
+    // return value is not the same function. Two side effects are load-bearing at the consumer:
+    //   * the GRADED LEAF QUANTITY (leafeval::t_tb / t_life). A no-win is the case the leaf grade
+    //     exists for -- it is what ranks two equally-hopeless candidates -- so dropping it on a hit
+    //     silently reorders the argmax (measured on EDF seed 8008: leaf-eval publishes 416 -> 343
+    //     and flips 15 -> 11 when the bound alone is replayed).
+    //   * the CONDEMNATION-DROP delta (g_condemn_drops), which the escalation window reads as this
+    //     candidate's "filter-touched" flag. Same class as enummemo::Entry / solvememo::Entry's
+    //     replayed side counters (audit §6.1) -- and solved the same way, by storing the delta.
+    // The engine's own types are not visible here, so the leaf grade is carried as two opaque
+    // long longs (leafeval::kInvalid is just a value) and the drop delta as a count.
+    struct NoWinEntry
     {
-        std::unordered_map<Key, int, KeyHash>::const_iterator it = m_nowin.find(k);
-        return (it != m_nowin.end()) ? &it->second : nullptr;
+        int       bound = 0;          // "no win at turn <= bound"
+        long long leaf_tb   = 0;      // leafeval::t_tb   as the memoized body left it
+        long long leaf_life = 0;      // leafeval::t_life as the memoized body left it
+        unsigned  condemn_drops = 0;  // g_condemn_drops delta over the memoized body
+    };
+
+    const NoWinEntry* LookupNoWin(const Key& k) const
+    {
+        std::unordered_map<Key, NoWinEntry, KeyHash>::const_iterator it = m_nowin.find(k);
+        const bool hit = (it != m_nowin.end());
+        if (StatsOn())
+        {
+            NoWinLookups().fetch_add(1, std::memory_order_relaxed);
+            if (hit) { NoWinHits().fetch_add(1, std::memory_order_relaxed); }
+        }
+        return hit ? &it->second : nullptr;
     }
 
-    // A wider refutation supersedes a narrower one; never narrows an existing bound.
-    void StoreNoWin(const Key& k, int bound)
+    // A wider refutation supersedes a narrower one; never narrows an existing bound. The whole
+    // entry moves together: the leaf grade a run publishes depends on how far that run got, so a
+    // wider bound's grade must not be spliced onto a narrower bound (see SimulateToEnd's
+    // full-run argument for which queries may read it at all).
+    void StoreNoWin(const Key& k, const NoWinEntry& e)
     {
         static const std::size_t cap = Cap();
         if (cap && m_nowin.size() >= cap) { return; }
-        std::unordered_map<Key, int, KeyHash>::iterator it = m_nowin.find(k);
-        if (it == m_nowin.end())      { m_nowin.emplace(k, bound); }
-        else if (it->second < bound)  { it->second = bound; }
+        if (StatsOn()) { NoWinStores().fetch_add(1, std::memory_order_relaxed); }
+        std::unordered_map<Key, NoWinEntry, KeyHash>::iterator it = m_nowin.find(k);
+        if (it == m_nowin.end())            { m_nowin.emplace(k, e); }
+        else if (it->second.bound < e.bound) { it->second = e; }
     }
 
     std::size_t Size() const { return m_map.size(); }
@@ -156,7 +192,8 @@ public:
 
 private:
     std::unordered_map<Key, int, KeyHash> m_map;
-    std::unordered_map<Key, int, KeyHash> m_nowin;   // key -> cutoff the refutation was proved under
+    // key -> the refutation (cutoff it was proved under + the body's replayable side effects)
+    std::unordered_map<Key, NoWinEntry, KeyHash> m_nowin;
 };
 
 // Print the aggregate lookup/hit totals once at exit when MTG_TT_STATS is set.
@@ -172,6 +209,16 @@ namespace tt_detail
             std::fprintf(stderr, "[tt-stats] lookups=%llu hits=%llu (%.2f%% hit) peak_entries=%zu cap=%zu\n",
                          l, h, l ? (100.0 * static_cast<double>(h) / static_cast<double>(l)) : 0.0,
                          TranspositionTable::PeakSize().load(), TranspositionTable::Cap());
+            const unsigned long long nl = TranspositionTable::NoWinLookups().load();
+            const unsigned long long nh = TranspositionTable::NoWinHits().load();
+            const unsigned long long ns = TranspositionTable::NoWinStores().load();
+            if (nl + ns > 0)
+            {
+                std::fprintf(stderr,
+                             "[tt-stats] nowin_lookups=%llu nowin_hits=%llu (%.2f%% hit) nowin_stores=%llu\n",
+                             nl, nh, nl ? (100.0 * static_cast<double>(nh) / static_cast<double>(nl)) : 0.0,
+                             ns);
+            }
         }
     };
     inline StatsReporter g_stats_reporter;

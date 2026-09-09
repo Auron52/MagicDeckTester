@@ -680,3 +680,49 @@ inline bool FrontlineTriggerFirst()
 }
 
 
+
+// ---- UNBUDGETED-PLAY SCOPE + the leaf memo it arms ------------------------------------------
+//
+// MTG_UNBUDGETED_LEAF_MEMO -- DEFAULT ON; =0 kill switch.
+//
+// WHAT IT ARMS. The leaf transposition table (SimulateToEnd's) memoizes only WINS: a no-win
+// result is discarded because it may be a branch-and-bound abort rather than a genuine no-win.
+// On a deck whose rollouts overwhelmingly do NOT win inside the horizon that throws away the
+// commonest result in the search, and every leaf re-rolls from scratch -- the same asymmetry
+// FSLineCache shed in 2026-08-05 and TTNoWinCacheOn has been parked on ("DEFAULT OFF pending
+// measurement") ever since. This flag turns the BOUND-QUALIFIED no-win half on, but ONLY where
+// it cannot touch a measured number: when the play search is genuinely unbudgeted.
+//
+// WHY THE GATE IS STRUCTURAL, NOT MERELY MEASURED. A memo hit skips a rollout, and skipping a
+// rollout skips its ConsumeAt() calls -- so the deterministic work-unit count MOVES, and with it
+// every budget-derived decision (the iterative-deepening start gate, the overrun guard, the
+// abandon ceiling) and the regression fingerprint that budgeted play feeds. Budgeted play must
+// therefore be UNREACHABLE, not "measured unchanged": the latch below can only be raised by a
+// frame that holds a play budget of 0 virtual ms, so with any real budget the whole mechanism is
+// dead code on that thread.
+//
+// WHERE THE LATCH IS RAISED. AIEngine::TakeTurn -- the one frame that owns the REAL play budget
+// (m_budget_ms). It is deliberately NOT `budget->Unlimited()` at the leaf: several sub-budgets
+// inside a BUDGETED search are default-constructed and therefore Unlimited (the escalation's
+// probe_cap_budget / esc_alloc_budget / meas_budget), so that test would arm inside budgeted play
+// -- exactly the failure the structural gate exists to prevent. It is also NOT
+// WinlessCertificateActive's `g_unbounded_label_search` arm: the label path
+// (EnumerateEarliestWins) is under separate active work and neither its cost nor its answers may
+// move underneath it.
+inline thread_local int g_unbudgeted_play = 0;
+
+// Scoped raise. Save/restore rather than a bare set: mulligan/bottoming re-enter the engine with
+// a temporarily different budget (BottomEvalScope), so the latch has to unwind with the frame.
+struct UnbudgetedPlayScope
+{
+    int saved;
+    explicit UnbudgetedPlayScope(bool unbudgeted)
+        : saved(g_unbudgeted_play) { g_unbudgeted_play = unbudgeted ? 1 : 0; }
+    ~UnbudgetedPlayScope() { g_unbudgeted_play = saved; }
+};
+
+inline bool UnbudgetedLeafMemoOn()
+{
+    static const bool v = EnvOn("MTG_UNBUDGETED_LEAF_MEMO", true);
+    return v;
+}
