@@ -42,6 +42,13 @@ public:
     }
 
     bool      Unlimited() const { return m_limit <= 0; }
+    // The limit with UNLIMITED spelled as the number it means. Limit() reports 0 for an unlimited
+    // budget -- fine as an Unlimited() sentinel, but poison for arithmetic: `k * Limit()` is 0, so
+    // any allowance derived from it COLLAPSES TO ZERO exactly where it should be infinite, and the
+    // caller has to bolt on an `if (!Unlimited())` arm to hide that. Use this instead wherever the
+    // budget's size is an input to a formula, and unlimited stops being a special case: it is just
+    // the value the formula tends to as the budget grows. See SatAdd/SatMulD.
+    long long EffectiveLimit() const { return Unlimited() ? LLONG_MAX : m_limit; }
     // Every unit also folds into the per-GAME meter. This is the one place that sees all of a
     // game's search work: budgets are per DECISION (a game has many, and a search builds sub-budgets
     // for its probe passes), so no single SearchBudget can bound a game. Counting here counts each
@@ -85,6 +92,27 @@ public:
         if (Unlimited()) { return LLONG_MAX; }
         long long r = m_limit - m_used;
         return r > 0 ? r : 0;
+    }
+
+    // ---- SATURATING ARITHMETIC ON UNIT COUNTS -------------------------------------------------
+    // UNLIMITED IS NOT A SPECIAL CASE -- it is the limit that increasing budgets converge toward
+    // (user directive, 2026-09-09). Remaining() already encodes "unlimited" as LLONG_MAX, which is
+    // the faithful numeric stand-in for that limit; these helpers keep it so under the arithmetic
+    // the overrun ceiling does to it. Without saturation, `2 * Remaining()` overflows to a NEGATIVE
+    // ceiling at unlimited and the guard fires immediately -- i.e. the discontinuity comes back as
+    // a wrap-around bug. With saturation the ceiling grows monotonically with the budget and simply
+    // stops being reachable in the limit, so callers need NO `if (Unlimited())` branch.
+    static long long SatAdd(long long a, long long b)
+    {
+        if (a > LLONG_MAX - b) { return LLONG_MAX; }
+        return a + b;
+    }
+    static long long SatMulD(double k, long long v)
+    {
+        if (k <= 0.0 || v <= 0) { return 0; }
+        const double r = k * static_cast<double>(v);
+        if (r >= static_cast<double>(LLONG_MAX)) { return LLONG_MAX; }
+        return static_cast<long long>(r);
     }
 
 private:

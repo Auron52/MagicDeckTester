@@ -305,6 +305,11 @@ static std::atomic<long long> g_iddepth_n{0}, g_iddepth_sum{0};
 // back (their partial result discarded). Pure loss -- the pass-cost predictor's miss, and the
 // direct target of a node-aware pass-cost estimate (node passes overshoot: the [bp-node] doc).
 static std::atomic<long long> g_idwaste_units{0}, g_idwaste_passes{0}, g_idpass_starts{0};
+// Of those aborted passes, how many had ALREADY PROVEN a strictly better win than the shallower
+// line the rollback commits -- i.e. how many discards are LOSSY rather than merely wasteful. Always
+// counted (not gated on MTG_ID_ANYTIME) so the control arm reports what the shipped path throws
+// away. See the anytime-commit block in FullSearchLine.
+static std::atomic<long long> g_idwaste_rescuable{0};
 
 // Record one top-level decision's committed ITERATIVE-DEEPENING depth. See g_iddepth_hist.
 static inline void RecordIdDepth(int d)
@@ -450,6 +455,7 @@ namespace
             {
                 std::cerr << "[rollout-stats] id_pass starts=" << g_idpass_starts.load()
                           << " aborted=" << g_idwaste_passes.load()
+                          << " rescuable=" << g_idwaste_rescuable.load()
                           << " waste_units=" << iw
                           << " waste_share=" << (site_tot ? static_cast<double>(iw) / site_tot : 0.0)
                           << "\n";
@@ -32985,6 +32991,143 @@ namespace
     // what generation makespan cares about.
     static const long long kOverrunFloor =
         static_cast<long long>(EnvInt("MTG_OVERRUN_FLOOR", 1000000));
+
+    // ---- PROPORTIONAL OVERRUN CEILING (MTG_OVERRUN_PROP) ------------------------------------
+    // USER DIRECTIVE 2026-09-09: the search must not GENERICALLY truncate at a finite budget, and
+    // "unlimited budget is not a special case, it is just the limit to which increasing budgets
+    // converge toward". The shipped ceiling violates both:
+    //
+    //   * It compares the wrong two quantities. SearchBudget.h states the guard's purpose as
+    //     catching "a pass whose real cost explodes far past the ESTIMATE" -- but the ceiling is
+    //     max(beta * Limit(), FLOOR), which never looks at the estimate. The start gate refuses to
+    //     begin a pass unless est <= alpha * remaining, so on Snow a started pass is predicted to
+    //     cost <= ~19,800 units and is then allowed to spend 1,000,000. It fires on the wrong
+    //     passes in BOTH directions: a well-predicted but genuinely large pass is cut, while a
+    //     pass mispredicted by 50x runs on unchecked.
+    //   * kOverrunFloor is an ABSOLUTE unit count, so ceiling/budget is not a function of the
+    //     budget at all -- it swings from 55x (18,000-unit play budget) down to 2x (>=556 virtual
+    //     ms). That is the discontinuity; unlimited then needs its own `if (!Unlimited())` arm to
+    //     stop the floor clamping infinity to 1e6.
+    //
+    // The fix keeps the shipped expression INTACT and adds one budget-proportional term to the max,
+    // so the allowance can only ever GROW relative to today:
+    //
+    //     ceiling = used_before + max(kOverrunBeta       * budget->EffectiveLimit(),   <- shipped
+    //                                 kOverrunFloor,                                   <- shipped
+    //                                 kOverrunBudgetMult * budget->EffectiveLimit())   <- new
+    //                                                                        (saturating)
+    //
+    // MONOTONE BY INSPECTION: both shipped terms are still in the max, so the ceiling is >= the
+    // shipped one at every budget and the guard can never truncate MORE than it does today. The
+    // beta term is subsumed by the new one (kOverrunBudgetMult > kOverrunBeta) and is kept only so
+    // that containment is visible at a glance rather than argued.
+    //
+    // "MONOTONE" MEANS IN THE ALLOWANCE, NOT IN QUALITY -- do not overstate this. A LOOSER ceiling
+    // still changes which line gets committed on a position where the guard used to fire, and
+    // heuristic evaluation is not monotone in search effort, so above the crossover a result can
+    // move either way. What the containment DOES guarantee is that no win is lost to truncation
+    // that survives today. Ship settings are unaffected because the crossover is placed above them.
+    //
+    // Properties, in the order they were asked for:
+    //   - CONTINUOUS IN THE BUDGET, AND CONVERGENT. ceiling/budget is now a CONSTANT rather than
+    //     swinging from 55x to 2x, so doubling the budget doubles the allowance. A pass's cost is a
+    //     property of the position, not of the budget, so as the budget grows every pass eventually
+    //     fits and truncation tends to zero -- which is the whole point: a large FINITE budget has
+    //     to behave like unlimited (user, 2026-09-09: unlimited is too costly to run because of
+    //     degenerate games, so a big finite budget is what quality runs actually use). Under the
+    //     shipped floor that is FALSE: the ceiling is pinned at 1e6 for every budget below ~556
+    //     virtual-ms while the start gate admits ever-bigger passes, so raising the budget makes
+    //     truncation MORE likely, not less.
+    //   - UNLIMITED FALLS OUT. EffectiveLimit() is LLONG_MAX when unlimited and the saturating
+    //     multiply pins the ceiling there, so the guard is unreachable in the limit rather than
+    //     switched off by an `if (!Unlimited())` arm. No unlimited-only code path remains here.
+    //   - IT RESPECTS THE LEVERS THAT DELIBERATELY OVERSPEND. MTG_VALUE_STARTGATE_ALPHA (8.0) and
+    //     the path-to-trust slack (2.0) exist precisely to admit a pass costing several times the
+    //     remaining budget; entitling the pass to kOverrunBeta x its OWN estimate is what stops
+    //     this guard cutting exactly those adopted passes.
+    //
+    // WHY IT IS ANCHORED ON Limit() AND NOT Remaining() -- measured, 2026-09-09. The first cut of
+    // this used max(Remaining(), estimate). Remaining() SHRINKS as the shallow passes spend budget,
+    // so the deepest and most valuable pass got the TIGHTEST ceiling. On 12 Snow games that fired
+    // 15 aborts (vs 0 shipped) for a byte-IDENTICAL digest and 2.03x the wall time: the truncations
+    // changed no play at all, they just made the executor re-search shallower and buy the same work
+    // twice. Anchoring on the whole decision budget is what makes the allowance grow with the
+    // budget instead of collapsing inside it.
+    //
+    // CALIBRATION of kOverrunBudgetMult: 55, chosen so the proportional term takes over EXACTLY at
+    // the ship budget and not below it. 55 x an 18,000-unit play budget is 990,000, just under
+    // kOverrunFloor, so at 20 virtual-ms and at every SMALLER budget the floor still binds and the
+    // ceiling is bit-for-bit the shipped one. Above ~20.2 virtual-ms the proportional term takes
+    // over and the allowance scales with the budget: 9.9M at 200 virtual-ms where the shipped floor
+    // would still say 1M. So the crossover is placed where it changes nothing we currently ship and
+    // everything about the large-budget regime the user actually wants to run.
+    //
+    // WHY THE CROSSOVER IS PLACED ABOVE SHIP SETTINGS RATHER THAN AT A "BETTER" TIGHTER VALUE.
+    // The first attempt used 11 with NO floor, calibrated to reproduce the 200,000 arm of the
+    // 2026-09-08 fixed-floor sweep (held-out: not one win turn changed, -3.2% wall). On Snow it
+    // looked ideal -- 300 games byte-identical to shipped, 7 aborts, 6 of them rescued by the
+    // anytime commit. THE SMOKE SUITE REFUTED IT: `fivecolour_smoke_d5_s1001` gi2 went 5 -> 6
+    // (avg 5.1333 -> 5.1467). A Snow-only argument would have shipped that; the cross-deck gate is
+    // what caught it.
+    //
+    // ATTRIBUTION, ISOLATED: that arm changed the ladder ceiling AND the two escalation ceilings at
+    // once (the latter were briefly anchored on Remaining(), which is TIGHTER than the shipped
+    // 2 x Limit()). Re-running smoke with the ladder ceiling tightened to 198,000
+    // (MTG_OVERRUN_FLOOR=198000 MTG_OVERRUN_MULT=11) but the escalation left at its shipped value
+    // gives 73/73 PASS. So the ESCALATION ANCHOR was the sole cause, and the tight ladder ceiling
+    // is cross-deck clean on smoke -- the opposite of the first, plausible-sounding read. Trace a
+    // mover before recording causality.
+    //
+    // CONSEQUENCE FOR A FUTURE TIGHTENING: a ladder ceiling of ~200,000 at ship settings (the
+    // 2026-09-08 sweep's measured-good value, worth ~3% wall and a shorter p99) now has smoke
+    // evidence behind it too. It is deliberately NOT taken here -- this change is scoped to be
+    // behaviour-neutral at ship settings -- and it remains the user's call, exactly as the
+    // 2026-09-08 floor sweep left it.
+    //
+    // ADOPTED 2026-09-09, default ON (MTG_OVERRUN_PROP=0 restores the legacy expression).
+    static const bool   s_overrun_prop = EnvOn("MTG_OVERRUN_PROP", true);
+    static const double kOverrunBudgetMult = []{
+        const char* e = std::getenv("MTG_OVERRUN_MULT");
+        return (e && *e) ? std::atof(e) : 55.0; }();
+
+    // ---- ANYTIME COMMIT (MTG_ID_ANYTIME) ----------------------------------------------------
+    // Do not discard what an aborted pass PROVED. On abort the shipped loop does
+    // `line = prev_line; break;` -- the attempt is thrown away regardless of its contents -- so a
+    // pass that had already found a win can be dropped and a shallower line committed instead.
+    // That is the generic-truncation shape the user's bar forbids.
+    //
+    // The aborted attempt is PESSIMISTIC-ONLY, which is what makes keeping it sound:
+    //   * every abort site returns `{max_turns + 1, {}}` (or breaks the child loop), and every
+    //     `best` update is a STRICT improvement test, so a poisoned child can never overwrite a
+    //     real one -- max_turns+1 < max_turns+1 is false;
+    //   * FSLineStoreNoWin is already truncation-aware (it only caches a no-win when
+    //     g_fs_trunc_events did not move beneath the node), so a poisoned no-win is not memoised.
+    // Therefore `attempt.win_turn <= max_turns` means some child chain genuinely reached that win
+    // with fully-computed work, and `attempt.phases` is the line that reached it. What the abort
+    // destroys is only the EXPLORATION of alternatives -- which can make the attempt WORSE than the
+    // completed shallower pass, never falsely better. So the anytime rule is a min, not a
+    // replacement: keep the attempt only when it strictly beats the last completed pass.
+    //
+    // ADOPTED 2026-09-09, default ON (MTG_ID_ANYTIME=0 restores the unconditional discard).
+    // Byte-identical at ship settings -- 300 Snow games (digest 43d00a181d6aa29b, matching the HEAD
+    // binary) and smoke 73/73 unchanged -- while still rescuing the 1 proven win the shipped path
+    // discarded on that Snow set: the rescue changed the committed depth and the unit count but not
+    // the immediate move, so the game came out the same. That is the common shape, because a deeper
+    // pass usually agrees on the move and only sees further.
+    //
+    // MEASURED INCIDENCE of a LOSSY discard (the `rescuable` counter): 1 of 1 aborts at ship
+    // settings, and 14 of 61 (23%) once the ceiling is forced tight enough to make aborts common.
+    // So "a pass that had already proven a win can be discarded" is an OBSERVED event, not a
+    // reading of the code. It is also load-bearing rather than decorative: at a 11x ceiling, 300
+    // Snow games diverged and scored WORSE without it (6.0900 / 3a7babe9803ea2e7) and returned to
+    // byte-identical with it (6.0867 / 43d00a181d6aa29b), recovering all 6 discarded wins.
+    //
+    // ITS LIMIT, STATED PLAINLY: it preserves only what the pass PROVED. A pass cut before it ever
+    // reached a better line has nothing to rescue, so this bounds the damage of a truncation, it
+    // does not abolish it. That is the standing reason the ceiling may only ever RISE, and closing
+    // the remaining gap needs resumable passes rather than a smarter rollback (see
+    // anytime-search-budget-prediction.md).
+    static const bool s_id_anytime = EnvOn("MTG_ID_ANYTIME", true);
 }
 
 TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int depth,
@@ -33128,11 +33271,23 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
         long long used_before = budget ? budget->Used() : 0;
         long long leaves_before = g_fs_leaf_evals;   // K-predictor: per-pass leaf-count delta (probe recording)
-        // Arm the OVERRUN guard: this pass may exceed its estimate, but if its real cost
-        // blows past kOverrunBeta x the whole decision budget it is pathological -- abort
-        // and keep the last completed pass. Normal passes finish far under this ceiling, so
-        // the guard never fires for them (parity preserved). Only for a limited budget.
-        if (budget != nullptr && !budget->Unlimited())
+        // Arm the OVERRUN guard: this pass may exceed its estimate, but if its real cost blows past
+        // the ceiling it is pathological -- abort and keep the best line we hold (see the anytime
+        // commit). Normal passes finish far under any sane ceiling, so the guard never fires for
+        // them. The PROPORTIONAL arm needs no "limited budget only" test; the LEGACY arm below does,
+        // because 2 * Limit() is 0 when unlimited and max(0, FLOOR) would clamp infinity to 1e6.
+        if (budget != nullptr && s_overrun_prop)
+        {
+            // PROPORTIONAL CEILING (see s_overrun_prop): the shipped shape with the absolute floor
+            // replaced by a multiple of the DECISION budget. No !Unlimited() arm -- EffectiveLimit()
+            // is LLONG_MAX when unlimited and the saturating multiply pins the ceiling there.
+            const long long allow = std::max({
+                SearchBudget::SatMulD(kOverrunBeta, budget->EffectiveLimit()),
+                SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()),
+                kOverrunFloor});
+            budget->SetOverrunLimit(SearchBudget::SatAdd(used_before, allow));
+        }
+        else if (budget != nullptr && !budget->Unlimited())
         {
             long long beta_ceiling = static_cast<long long>(
                 kOverrunBeta * static_cast<double>(budget->Limit()));
@@ -33146,16 +33301,26 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
         if (aborted)
         {
-            // Runaway pass: discard its partial result, commit the last completed pass.
+            // ANYTIME COMMIT (see s_id_anytime): the abort stops the pass EXPLORING, it must not
+            // make the search FORGET. The attempt is pessimistic-only, so a strictly better win
+            // turn in it was genuinely proven before the guard fired and is kept; anything else
+            // rolls back to the last completed pass exactly as before.
+            const bool rescued = s_id_anytime && attempt.win_turn < prev_line.win_turn;
             if (s_rollout_stats)
             {
                 g_idwaste_passes.fetch_add(1, std::memory_order_relaxed);
                 g_idwaste_units.fetch_add(budget->Used() - used_before, std::memory_order_relaxed);
+                // How often the discard was LOSSY -- counted regardless of s_id_anytime, so the
+                // control arm reports how many proven wins the shipped path throws away.
+                if (attempt.win_turn < prev_line.win_turn)
+                { g_idwaste_rescuable.fetch_add(1, std::memory_order_relaxed); }
             }
-            TRACE("search", "T%d pass=%d OVERRUN abort (used=%lld limit=%lld) -> commit depth=%d",
+            TRACE("search", "T%d pass=%d OVERRUN abort (used=%lld limit=%lld) -> commit depth=%d%s",
                   state.turn_number, pass_depth,
-                  budget ? budget->Used() : 0, budget ? budget->Limit() : 0, prev_committed);
-            line = prev_line; committed_depth = prev_committed;
+                  budget ? budget->Used() : 0, budget ? budget->Limit() : 0,
+                  rescued ? pass_depth : prev_committed, rescued ? " (anytime rescue)" : "");
+            if (rescued) { line = attempt;    committed_depth = pass_depth; }
+            else         { line = prev_line;  committed_depth = prev_committed; }
             break;
         }
 
@@ -34211,15 +34376,34 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             }
             for (; td >= 1; --td)
             {
-                if (esc_budget && !esc_budget->Unlimited())
+                if (esc_budget)
                 {
-                    const long long ub2 = esc_budget->Used();
-                    esc_budget->SetOverrunLimit(ub2 + std::max<long long>(2 * esc_budget->Limit(), 1));
+                    // ESCALATION CEILING = kOverrunBeta x the budget. Unlike the ladder's, this one
+                    // was ALREADY budget-proportional with no absolute floor, so it has none of the
+                    // non-convergence this session fixed and its VALUE is deliberately unchanged.
+                    // What changes is only that the `!Unlimited()` arm is gone: EffectiveLimit() is
+                    // LLONG_MAX when unlimited and the multiply saturates, so the ceiling becomes
+                    // unreachable in the limit instead of being skipped by a branch. Byte-identical
+                    // at every finite budget. (The old branch was load-bearing, not cosmetic:
+                    // 2 * Limit() is 0 when unlimited, so max(0,1) would have armed a ceiling of
+                    // used+1 and aborted the pass instantly -- the special case existed to hide
+                    // exactly that arithmetic.)
+                    esc_budget->SetOverrunLimit(SearchBudget::SatAdd(
+                        esc_budget->Used(),
+                        std::max<long long>(
+                            SearchBudget::SatMulD(kOverrunBeta, esc_budget->EffectiveLimit()), 1)));
                 }
                 const long long r_ub0 = esc_budget ? esc_budget->Used() : 0;
                 const long long r_lv0 = g_fs_leaf_evals;
                 hline = FSLineWin(state, td, max_turns, single_cut, second_main, single_tt, &single_cache, esc_budget);
                 aborted = (esc_budget && esc_budget->Overrun());
+                // NOT ANYTIME-RESCUED, deliberately. The retry one depth shallower overwrites
+                // hline, so a win the deeper attempt proved is lost -- but rescuing it here would
+                // be a no-op: a fully-aborted descent sets hcommitted = 0, and the take-decision
+                // below (`taken`) then discards hline wholesale in favour of the value-leaf line.
+                // Making the rescue reachable means asserting a committed depth that was never
+                // fully searched, which would also corrupt esc_verified. Left for the resumable-
+                // pass work; see anytime-search-budget-prediction.md.
                 if (!aborted && esc_budget) { c_last = esc_budget->Used() - r_ub0; }
                 if (g_hybrid_stats.enabled && aborted)
                 {
@@ -34318,20 +34502,31 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                     }
                     const double rem = static_cast<double>(std::max<long long>(0, esc_budget->Remaining()));
                     if (est_next > kStartGateAlpha * rem) { break; }
-                    const long long ub2 = esc_budget->Used();
-                    esc_budget->SetOverrunLimit(ub2 + std::max<long long>(2 * esc_budget->Limit(), 1));
+                    // Same ceiling, same reasoning, as the fallback loop above: value unchanged,
+                    // the !Unlimited() arm replaced by saturating arithmetic.
+                    esc_budget->SetOverrunLimit(SearchBudget::SatAdd(
+                        esc_budget->Used(),
+                        std::max<long long>(
+                            SearchBudget::SatMulD(kOverrunBeta, esc_budget->EffectiveLimit()), 1)));
                     const long long r_ub0 = esc_budget->Used();
                     if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
                     SearchLine up = FSLineWin(state, td + 1, max_turns, single_cut, second_main,
                                               single_tt, &single_cache, esc_budget);
                     if (esc_budget->Overrun())
                     {
-                        // Deeper pass did not fit => keep current line; its units are pure waste.
+                        // Deeper pass did not fit => keep current line. ANYTIME COMMIT: if the
+                        // aborted deeper pass nonetheless PROVED a better win than the line we are
+                        // about to keep, that win is real (pessimistic-only attempt -- see
+                        // s_id_anytime) and taking it is what stops the abort being lossy. `td` is
+                        // NOT advanced: the committed depth must stay the last one fully searched.
                         if (s_rollout_stats)
                         {
                             g_idwaste_passes.fetch_add(1, std::memory_order_relaxed);
                             g_idwaste_units.fetch_add(esc_budget->Used() - r_ub0, std::memory_order_relaxed);
+                            if (up.win_turn < hline.win_turn)
+                            { g_idwaste_rescuable.fetch_add(1, std::memory_order_relaxed); }
                         }
+                        if (s_id_anytime && up.win_turn < hline.win_turn) { hline = up; }
                         break;
                     }
                     c_prev_climb = static_cast<double>(c_last);
