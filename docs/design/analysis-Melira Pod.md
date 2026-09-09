@@ -2460,6 +2460,49 @@ bucket ruling exists until the user writes or accepts one**, and the K=28 hand s
 hands) is the deck's current generation shape. Pushed 73aae836; CI green (ubuntu, windows,
 Linux/Windows determinism parity).
 
+### 2026-09-09e — the user's bucketing rules, and what they leave
+
+User: *"I don't want to merge lands producing different colours, nor should we merge the bounceland
+with a different type."* Then: *"Carrion Feeder and Bloodthrone Vampire merged are not entirely
+ideal, so I would probably split them. If I had to choose I would merge Voice and Ooze and
+Reclamation Sage + Severance Priest as 2 and 3-drops that pretty much are just podded into something
+else. Unfortunately their colors are different, but it's still not entirely ideal."*
+
+Under the colour rule the T1 land group collapses to ONE colour-identical pair (Llanowar Wastes +
+Blooming Marsh, both B/G, painland + fastland); the Pathways commit to one colour on play, Basilica
+is out by the bounceland rule, Forest has no partner. Hand counts (the generator's counting):
+
+| ruling | K | hands | full gen, est. |
+|---|---|---|---|
+| none | 28 | 3,669,096 | ~44 days |
+| user's two merges (Voice+Ooze, Sage+Priest), outlets kept apart | 26 | 2,582,812 | ~31 days |
+| + Wastes+Marsh | 25 | 1,955,703 | ~23 days |
+| + Melira+Vizier (G vs W) | 24 | 1,553,932 | ~19 days |
+| + Hierarch+Birds (Birds makes W) | 23 | 1,164,547 | ~14 days |
+
+The hand space is the twelve pod-chain one-ofs, not the lands: cautious merges shave ~20% each and
+no cautious set makes the profile tractable on this box (est. rate 35 keep rollouts/s at the phase-F
+setting with the sidecar; x3 on the 12-thread machine). The levers beyond bucketing: the `fast`
+recipe (~a quarter to a third off), a cheaper labelling setting (d2/b3 rho 0.98 at 0.66x, d1/b3
+0.955 at 0.11x — below the 0.99 floor = a different policy), generating without the sidecar (2.6x
+cheaper, labels under a policy the deck no longer ships), or a ruling on the MV4 one-ofs.
+
+Then the user corrected the land reading — *"I thought we were also merging lands that produce the
+same colours? ... Except the bounceland which absolutely cannot be merged"* — and RULED: *"K=23 that
+you have is probably the safest set of merges and the others would be for if we need more"* (Melira +
+Vizier "a bit arguable", Hierarch + Birds "if we are desperate ... Ignoble is a little worse and it
+does come up").
+
+**INSTALLED (user ruling, a523b881): `decks/Melira Pod/Melira Pod.buckets.json`** — merge: {Llanowar
+Wastes, Blooming Marsh, Darkbore Pathway} (B/G), {Razorverge Thicket, Branchloft Pathway} (G/W),
+{Voice, Scavenging Ooze}, {Reclamation Sage, Severance Priest}; keep_apart (recorded so the fallbacks
+are explicit): {Orzhov Basilica, Caves of Koilos}, {Carrion Feeder, Bloodthrone Vampire}, {Melira,
+Vizier}, {Ignoble Hierarch, Birds of Paradise}. `expected_buckets=23`. Hand space 1,088,514 (the
+engine's count at the user's intermediate K=26 ruling, 2,582,812, matched the arithmetic exactly).
+Fallbacks if cost demands: + Melira/Vizier -> K=22, 849,374 hands; + Hierarch/Birds -> K=21, 618,732.
+The `recommend` scout is running under this ruling on the deck folder
+(`logs/Melira Pod_mullgen/scout_K23.log`) for the measured rate and projection.
+
 **Smoke under the adopted sidecar (binary with the emulated lever OFF):** 77/80 configs unchanged
 (byte-identical off, as required), melira d3 4.88 -> 4.84 (2 faster), melira d5 4.96 = 4.96 (play
 differs, score same), **melira2hg d3 5.04 -> 5.12 (2 slower of 25)** — the 2HG case runs the same
