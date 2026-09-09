@@ -216,6 +216,13 @@ struct Action
     // that this works." So interchangeability is a per-decision PROPERTY OF THE STATE, computed by
     // ActivationEquivTag, never an assumption from the card's identity.
     int         equiv_tag     = 0;
+    // This action's ordinal within its equivalence class (0-based, enumeration order), assigned by
+    // FinalizeFoldTags. The enumerator admits only the CANONICAL PREFIX of each class -- ords
+    // 0..k-1 -- so "which k of the n copies" stops being a decision while "how many" stays fully
+    // expressible. Stored rather than re-derived because the check runs per enumerated SUBSET:
+    // with the hand-cast half of the fold most candidates carry a tag, and rescanning every earlier
+    // candidate to find the class predecessors would cost more than the fold saves.
+    int         equiv_ord     = 0;
     ManaCost    cost;                  // effective mana cost (enumeration feasibility only)
     bool        sacrifice_land = false;// additional cost: sacrifice a land (e.g. Shard Volley)
     int         discard_lands  = 0;    // Retrace = 1; for DiscardToLandsEdge = lands to discard

@@ -161,6 +161,25 @@ inline std::map<std::string, long long> g_by_x;    // actions with chosen_x > 0,
 inline std::map<std::string, long long> g_by_kind; // every action, by "card|kind"
 inline std::map<std::string, std::set<int>> g_src_ids;   // card -> distinct physical sources seen
 inline std::map<std::string, long long> g_src_emits;     // card -> activation actions seen
+// FOLD ACCOUNTING (FinalizeFoldTags). Why a fold does not fire is otherwise invisible: the
+// enumeration simply stays the size it was, which reads exactly like "this deck has no duplicates".
+inline std::atomic<long long> g_fold_hand_seen{0};      // CastFromHand candidates offered to the tag
+inline std::atomic<long long> g_fold_hand_untagged{0};  // ...that the tag declined
+inline std::atomic<long long> g_fold_tagged{0};         // tags assigned, before validation
+inline std::atomic<long long> g_fold_drop_sig{0};       // class dropped: members not field-identical
+inline std::atomic<long long> g_fold_drop_src{0};       // class dropped: one source, two tagged actions
+inline std::atomic<long long> g_fold_drop_single{0};    // class dropped: nothing to collapse
+inline std::atomic<long long> g_fold_kept{0};           // classes kept
+inline std::atomic<long long> g_fold_kept_members{0};   // ...and how many actions they folded
+inline std::atomic<long long> g_fold_guard_seen{0};     // tagged actions the subset guard inspected
+inline std::atomic<long long> g_fold_guard_reject{0};   // subsets the canonical-prefix rule rejected
+inline std::atomic<long long> g_fold_reject_site[2];    // ...split by caller: 0 = greedy Solve, 1 = search
+// SUBSETS ACTUALLY SCORED, by site. THE work metric for this fold: units_total counts only the
+// SEARCH's scored candidates, and both odometers (the greedy rollout leaf and the nested
+// enumerations that run during scoring) are invisible to it -- which is why the first hand-cast
+// measurement read "units identical" while the guard was rejecting 456k subsets. Deterministic,
+// so unlike wall or CPU it is immune to a contended box.
+inline std::atomic<long long> g_subsets_scored[2];
 inline int Bucket(size_t n)
 {
     if (n <= 1) { return 0; }
@@ -566,6 +585,21 @@ namespace
                                   << " distinct_physical_sources=" << bfcensus::g_src_ids[kv.first].size()
                                   << "\n";
                     }
+                    std::cerr << "[rollout-stats]   bf_fold hand_seen=" << bfcensus::g_fold_hand_seen.load()
+                              << " hand_untagged=" << bfcensus::g_fold_hand_untagged.load()
+                              << " tagged=" << bfcensus::g_fold_tagged.load()
+                              << " kept_classes=" << bfcensus::g_fold_kept.load()
+                              << " kept_members=" << bfcensus::g_fold_kept_members.load()
+                              << " drop_sig=" << bfcensus::g_fold_drop_sig.load()
+                              << " drop_src=" << bfcensus::g_fold_drop_src.load()
+                              << " drop_single=" << bfcensus::g_fold_drop_single.load()
+                              << " guard_seen=" << bfcensus::g_fold_guard_seen.load()
+                              << " guard_reject=" << bfcensus::g_fold_guard_reject.load()
+                              << " (greedy=" << bfcensus::g_fold_reject_site[0].load()
+                              << " search=" << bfcensus::g_fold_reject_site[1].load() << ")\n";
+                    std::cerr << "[rollout-stats]   bf_scored greedy_subsets="
+                              << bfcensus::g_subsets_scored[0].load()
+                              << " search_subsets=" << bfcensus::g_subsets_scored[1].load() << "\n";
                 }
             }
             if (DedupCensusOn())
@@ -5528,6 +5562,359 @@ static bool FoldActSourcesOn()
     return on;
 }
 
+// HAND CASTS (MTG_FOLD_HAND_CASTS, the second half of the same fold). Two copies of one card in
+// hand are the same decision: "cast a Coldsteel Heart", not "cast the one in slot 3". The census
+// put cast_from_hand at 77.4% of Snow's candidate mass -- four times the activation slice the
+// first half folded -- because every duplicate hand slot is its own odometer digit, so n copies
+// cost 2^n subsets to express n+1 distinct counts.
+//
+// The soundness argument is the SAME one the user set for the activations ("they need to be
+// identical in all state"), applied to a Card instead of a Permanent, and it is enforced the same
+// way: content equality (see HandCardContentHash) rather than a name match.
+//
+// DEFAULT OFF, AWAITING THE DECK OWNER'S RULING -- and the reason is NOT doubt about the fold.
+// MEASURED 2026-09-09, Snow 60 games at play settings, deterministic work counters:
+//   greedy subsets scored   79,260,597 -> 66,443,718   (-16.2%)
+//   search subsets scored    4,861,933 ->  4,208,545   (-13.4%)
+//   avg 5.9833 and play digest 4d0ae0ea43f9ba15 IDENTICAL
+// The activation half of this fold was byte-identical across the whole suite, which is what made
+// adopting it on the spot defensible. This half is NOT: it moves 10 of 80 smoke keys, because
+// picking the canonical copy reorders same-named casts within a plan ("Sinew, Predatory, Sinew"
+// becomes "Sinew, Sinew, Predatory"). Every one of those 10 has an IDENTICAL average -- pure play
+// digest churn, no quality change anywhere -- but adopting it means rebaselining ground truth, and
+// a default flip that rewrites GT is the deck owner's call, not the agent's.
+static bool FoldHandCastsOn()
+{
+    static const bool on = EnvOn("MTG_FOLD_HAND_CASTS");
+    return on;
+}
+
+// The CONTENT of a hand card -- every field of Card except its identity (m_number) and the
+// memoized definition pointer derived from its name (m_def). Two hand cards with the same content
+// hash are, by the user's bar, "identical in all state".
+//
+// EXHAUSTIVE OVER A SMALL STRUCT, WHICH IS THE POINT. The permanent half of this fold could ask
+// "is every field at its DEFAULT" because a Permanent carries dozens of them; a Card carries
+// fifteen, all listed in core/Card.h, so the stronger question -- "are these two byte-equal where
+// it matters" -- is answerable directly and needs no reference form at all.
+//
+// AND A REFERENCE FORM WOULD HAVE BEEN WRONG. The first cut compared each hand card against its
+// CardDatabase definition, on the theory that a card not in printed form is distinguishable. It
+// rejected 767,406 of 767,406 hand casts: cards outside the battlefield are DeckLoader
+// PLACEHOLDERS carrying a name and nothing else (see CardDatabase.h's note -- "DeckLoader
+// placeholders have EMPTY masks"), so a placeholder never equals its own printed definition. The
+// fold silently did nothing, and only the accounting counters below said so.
+static void FoldMixCost(std::uint64_t& h, const ManaCost& c);   // defined with the fold sig below
+static std::uint64_t HandCardContentHash(const Card& c)
+{
+    std::uint64_t h = 1469598103934665603ull;
+    auto mix = [&h](std::uint64_t v)
+    { h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); };
+    mix(c.m_name_hash);
+    mix(c.m_is_staged ? 1u : 0u);
+    mix(static_cast<std::uint64_t>(c.m_staged_expiry));
+    mix(c.m_impulse_no_land ? 1u : 0u);
+    FoldMixCost(h, c.m_mana_cost);
+    mix(static_cast<std::uint64_t>(c.m_subtypes.size()));
+    for (std::size_t i = 0; i < c.m_subtypes.size(); ++i)
+    { mix(static_cast<std::uint64_t>(c.m_subtypes.IdAt(i))); }
+    mix(static_cast<std::uint64_t>(c.m_type_mask));
+    mix(static_cast<std::uint64_t>(c.m_supertype_mask));
+    mix(static_cast<std::uint64_t>(c.m_color_mask));
+    mix(static_cast<std::uint64_t>(c.m_keyword_mask));
+    mix(c.m_power     ? static_cast<std::uint64_t>(*c.m_power)     + 1 : 0);
+    mix(c.m_toughness ? static_cast<std::uint64_t>(*c.m_toughness) + 1 : 0);
+    return h;
+}
+
+// The tag two interchangeable HAND CASTS share: the card's content, plus the one piece of
+// GameState that singles a hand card out BY NUMBER.
+//
+// THE m1_hand CASE. GameState::m1_hand is the order-condemnation snapshot: the card NUMBERS held
+// at this turn's pre-combat main. A copy in that snapshot and a copy drawn since are NOT
+// interchangeable -- the condemnation filter reads membership by number, and BuildSimKey folds the
+// snapshot while it is live. So membership joins the tag: two copies fold only when they are on
+// the same side of it. (Stale/empty snapshot => the term is constant => every copy folds, which is
+// the common case.)
+static int HandCastEquivTag(const GameState& state, const Card& c)
+{
+    if (!FoldActSourcesOn() || !FoldHandCastsOn()) { return 0; }
+    std::uint64_t h = HandCardContentHash(c);
+    auto mix = [&h](std::uint64_t v)
+    { h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); };
+    if (state.m1_hand_n > 0 && state.m1_hand_turn == state.turn_number)
+    {
+        bool in_m1 = false;
+        for (int i = 0; i < state.m1_hand_n; ++i)
+        { if (state.m1_hand[i] == c.m_number) { in_m1 = true; break; } }
+        mix(in_m1 ? 0x9d1u : 0x2f7u);
+    }
+    const int t = static_cast<int>(h & 0x7fffffff);
+    return t == 0 ? 1 : t;   // never collide with "do not fold"
+}
+
+// ---- FOLD SOUNDNESS: the two conditions the canonical prefix actually needs -------------------
+//
+// The prefix rule keeps the k EARLIEST members of a class and rejects every other arrangement.
+// That is a faithful canonicalisation exactly when the class members are interchangeable
+// ONE-FOR-ONE. It stops being one the moment a single SOURCE contributes TWO different tagged
+// actions:
+//
+//   copy1 mode A (idx 0), copy1 mode B (idx 1), copy2 mode A (idx 2), copy2 mode B (idx 3)
+//   {idx0, idx3} = "copy1 in A, copy2 in B"  -> idx3's class-B predecessor idx1 is unselected: REJECT
+//   {idx1, idx2} = its mirror                -> idx2's class-A predecessor idx0 is unselected: REJECT
+//
+// ...so the MIXED combination becomes unreachable AT ANY BUDGET -- a lossy truncation, which the
+// standing bar forbids, and one no measurement on the current suite would have caught (no shipped
+// deck runs a duplicated multi-mode plain source; Scrying Sheets and Frost Augur have one mode
+// each). This pass is what stops it: a class folds only when every source contributes exactly ONE
+// tagged action AND every member is identical in every field. Both conditions are checked, not
+// assumed -- so a future card that breaks either simply stops folding.
+static inline void FoldMix(std::uint64_t& h, std::uint64_t v)
+{ h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); }
+
+static void FoldMixCost(std::uint64_t& h, const ManaCost& c)
+{
+    FoldMix(h, static_cast<std::uint64_t>(c.generic));
+    FoldMix(h, static_cast<std::uint64_t>(c.white));
+    FoldMix(h, static_cast<std::uint64_t>(c.blue));
+    FoldMix(h, static_cast<std::uint64_t>(c.black));
+    FoldMix(h, static_cast<std::uint64_t>(c.red));
+    FoldMix(h, static_cast<std::uint64_t>(c.green));
+    FoldMix(h, static_cast<std::uint64_t>(c.colorless));
+    FoldMix(h, static_cast<std::uint64_t>(c.has_x ? 1 : 0));
+    FoldMix(h, static_cast<std::uint64_t>(c.x_pips));
+    FoldMix(h, static_cast<std::uint64_t>(c.hybrid_count));
+    for (int i = 0; i < 4; ++i) { FoldMix(h, static_cast<std::uint64_t>(c.hybrid_pair[i])); }
+    FoldMix(h, static_cast<std::uint64_t>(c.phyrexian_count));
+    for (int i = 0; i < 2; ++i) { FoldMix(h, static_cast<std::uint64_t>(c.phyrexian_color[i])); }
+    FoldMix(h, static_cast<std::uint64_t>(c.snow_pips));
+}
+
+static void FoldMixPool(std::uint64_t& h, const ManaPool& p)
+{
+    FoldMix(h, static_cast<std::uint64_t>(p.white));
+    FoldMix(h, static_cast<std::uint64_t>(p.blue));
+    FoldMix(h, static_cast<std::uint64_t>(p.black));
+    FoldMix(h, static_cast<std::uint64_t>(p.red));
+    FoldMix(h, static_cast<std::uint64_t>(p.green));
+    FoldMix(h, static_cast<std::uint64_t>(p.colorless));
+    FoldMix(h, static_cast<std::uint64_t>(p.wild));
+    FoldMix(h, static_cast<std::uint64_t>(p.wild_c));
+    FoldMix(h, static_cast<std::uint64_t>(p.wild_phantom));
+    FoldMix(h, static_cast<std::uint64_t>(p.snow_units));
+}
+
+// EVERY Action field except this action's SOURCE KEY (the axis being folded -- hand_index for a
+// hand cast, sac_source_id for an activation) and equiv_tag/equiv_ord (this pass's own outputs).
+// Deliberately exhaustive rather than "the fields that plausibly matter": a missed field is the one
+// failure mode that makes the fold LOSSY, and the cost is a few dozen ALU ops on a cold-ish path.
+// If you add a field to Action, add it here.
+//
+// The source key MUST be excluded and only the source key: hashing sac_source_id for an activation
+// makes every class fail condition 1 by construction (the copies differ in exactly that field, which
+// is the point), and the fold silently stops firing -- caught here by the branching census reading
+// back the unfolded mean width, 75.96, to four significant figures.
+static std::uint64_t ActionFoldSig(const Action& a)
+{
+    const bool src_is_sac = (a.kind != Action::Kind::CastFromHand);
+    std::uint64_t h = 1469598103934665603ull;
+    FoldMix(h, static_cast<std::uint64_t>(a.kind));
+    // Interned names are canonical (NameRegistry.h: "pointer equality == string equality"), so the
+    // ADDRESS identifies the name and costs a load instead of a full string hash. Same determinism
+    // argument as `def` below: only compared within one call.
+    FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.card_name.str())));
+    FoldMixCost(h, a.cost);
+    FoldMix(h, a.sacrifice_land ? 1u : 0u);
+    FoldMix(h, static_cast<std::uint64_t>(a.discard_lands));
+    FoldMix(h, static_cast<std::uint64_t>(a.vial_bf_index));
+    FoldMix(h, a.dig_sacrifice ? 1u : 0u);
+    FoldMix(h, a.alt_cost ? 1u : 0u);
+    FoldMix(h, static_cast<std::uint64_t>(a.alt_lifegain));
+    FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.tutor_target.str())));
+    FoldMix(h, static_cast<std::uint64_t>(a.ability_mode));
+    FoldMix(h, static_cast<std::uint64_t>(a.ritual_float));
+    FoldMixPool(h, a.rock_mana);
+    FoldMix(h, static_cast<std::uint64_t>(a.chosen_x));
+    FoldMix(h, static_cast<std::uint64_t>(a.splice_count));
+    FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&a.chosen_float_color.str())));
+    if (!src_is_sac) { FoldMix(h, static_cast<std::uint64_t>(a.sac_source_id)); }
+    FoldMix(h, static_cast<std::uint64_t>(a.sac_victim_id));
+    FoldMix(h, static_cast<std::uint64_t>(a.sac_count));
+    FoldMix(h, static_cast<std::uint64_t>(a.gy_exile_mode));
+    FoldMix(h, static_cast<std::uint64_t>(a.loyalty_ability));
+    FoldMix(h, a.free_cast ? 1u : 0u);
+    FoldMix(h, static_cast<std::uint64_t>(a.phyrexian_life));
+    FoldMix(h, static_cast<std::uint64_t>(a.convoke_green));
+    FoldMix(h, static_cast<std::uint64_t>(a.convoke_other));
+    FoldMix(h, static_cast<std::uint64_t>(a.soulfire_own_targets));
+    FoldMix(h, static_cast<std::uint64_t>(a.crackle_targets));
+    FoldMix(h, static_cast<std::uint64_t>(a.max_casts_after));
+    FoldMix(h, static_cast<std::uint64_t>(a.enchant_target));
+    FoldMix(h, std::hash<std::string>{}(a.trick_hand_target));
+    FoldMix(h, a.evoke  ? 1u : 0u);
+    FoldMix(h, a.bestow ? 1u : 0u);
+    FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
+    FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
+    FoldMix(h, static_cast<std::uint64_t>(a.eval));
+    FoldMix(h, static_cast<std::uint64_t>(a.direct_damage));
+    FoldMix(h, a.is_noncreature ? 1u : 0u);
+    FoldMix(h, static_cast<std::uint64_t>(a.card_mv));
+    FoldMix(h, static_cast<std::uint64_t>(a.vial_attack_power));
+    FoldMix(h, static_cast<std::uint64_t>(a.haste_attack_power));
+    FoldMix(h, a.haste_prowess ? 1u : 0u);
+    FoldMix(h, a.is_draw ? 1u : 0u);
+    FoldMix(h, a.has_spectacle ? 1u : 0u);
+    FoldMix(h, a.is_draw_until_nonland ? 1u : 0u);
+    FoldMix(h, static_cast<std::uint64_t>(a.discard_land_damage));
+    // The def POINTER, not its contents: the CardDatabase is a lifetime singleton whose entries
+    // never move, so every action naming one card carries the identical pointer. The hash value
+    // varies run to run (ASLR) but this sig is only ever COMPARED to another sig computed in the
+    // same call, and that comparison is deterministic. It never reaches a game key or a log.
+    FoldMix(h, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(a.def)));
+    for (const Action& sub : a.breakpoint_casts) { FoldMix(h, ActionFoldSig(sub)); }
+    return h;
+}
+
+// Assign hand-cast tags, then VALIDATE every class and drop the ones the prefix rule cannot
+// canonicalise faithfully. Also numbers each surviving class member (equiv_ord), which turns the
+// enumerator's per-selection check from a scan over every earlier CANDIDATE into a scan over the
+// (tiny) SELECTION -- the hand-cast half tags far more actions than the activation half did, so
+// that scan would otherwise have become the cost it was meant to remove.
+static void FinalizeFoldTags(const GameState& state, std::vector<Action>& actions)
+{
+    // HUMAN PLAY IS NEVER FOLDED. The viewer's job is to offer the human every option, and a saved
+    // reference game replays by card NUMBER -- folding would both hide "tap the other Sheets" from
+    // the player and risk re-deciding which physical copy an old recording used. Costs nothing:
+    // human play is not a performance path. (references/ recordings are commit-only user work.)
+    const bool fold_on = FoldActSourcesOn() && !HumanPlayActive();
+
+    if (fold_on && FoldHandCastsOn())
+    {
+        const Player& ap = state.ActivePlayer();
+        const int hand_n = static_cast<int>(ap.hand.size());
+        // The tag is a property of the SLOT, not of the candidate: a card emitting several cast
+        // variants would hash identically for each. Compute it once per slot (lazily -- a hand
+        // slot with no castable action never pays), then stamp it on that slot's candidates.
+        static thread_local std::vector<int> slot_tag;
+        slot_tag.assign(static_cast<size_t>(hand_n), -1);
+        for (Action& a : actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.hand_index < 0 || a.hand_index >= hand_n) { continue; }
+            int& st = slot_tag[static_cast<size_t>(a.hand_index)];
+            if (st < 0) { st = HandCastEquivTag(state, ap.hand[a.hand_index]); }
+            a.equiv_tag = st;
+            if (BfCensusOn())
+            {
+                bfcensus::g_fold_hand_seen.fetch_add(1, std::memory_order_relaxed);
+                if (a.equiv_tag == 0)
+                { bfcensus::g_fold_hand_untagged.fetch_add(1, std::memory_order_relaxed); }
+            }
+        }
+    }
+
+    const int m = static_cast<int>(actions.size());
+    bool any_tag = false;
+    for (int i = 0; i < m; ++i) { if (actions[i].equiv_tag != 0) { any_tag = true; break; } }
+    if (!any_tag) { return; }
+    if (!fold_on)
+    {
+        for (Action& a : actions) { a.equiv_tag = 0; a.equiv_ord = 0; }
+        return;
+    }
+
+    // Classes are tiny (a playset at most) and most nodes have one or two, so linear scratch beats
+    // a hash map here. thread_local: CollectActions is a millions-of-calls path and this pass never
+    // re-enters itself.
+    // `sig` is computed LAZILY, when a class gets its second member: on the Snow-60 census 8.1M of
+    // 12.1M tagged actions were the only member of their class, and a singleton never needs one.
+    struct FoldClass { int tag; int members; int first; bool ok; std::uint64_t sig; };
+    static thread_local std::vector<FoldClass> classes;
+    static thread_local std::vector<int>       t_idx;     // tagged action indices
+    static thread_local std::vector<int>       t_class;   // ...their class index
+    static thread_local std::vector<int>       t_src;     // ...their SOURCE key
+    classes.clear(); t_idx.clear(); t_class.clear(); t_src.clear();
+
+    auto source_key = [](const Action& a)
+    { return a.kind == Action::Kind::CastFromHand ? a.hand_index : a.sac_source_id; };
+
+    for (int i = 0; i < m; ++i)
+    {
+        const Action& a = actions[i];
+        if (a.equiv_tag == 0) { continue; }
+        int ci = -1;
+        for (int c = 0; c < static_cast<int>(classes.size()); ++c)
+        { if (classes[c].tag == a.equiv_tag) { ci = c; break; } }
+        if (ci < 0)
+        {
+            classes.push_back({ a.equiv_tag, 0, i, true, 0ull });
+            ci = static_cast<int>(classes.size()) - 1;
+        }
+        FoldClass& fc = classes[ci];
+        ++fc.members;
+        // CONDITION 1 -- every member identical in every field but hand_index. A class whose
+        // members are not one-for-one substitutable is not a class.
+        if (fc.members == 2) { fc.sig = ActionFoldSig(actions[fc.first]); }
+        if (fc.members > 1 && ActionFoldSig(a) != fc.sig)
+        {
+            if (fc.ok && BfCensusOn())
+            { bfcensus::g_fold_drop_sig.fetch_add(1, std::memory_order_relaxed); }
+            fc.ok = false;
+        }
+        t_idx.push_back(i);
+        t_class.push_back(ci);
+        t_src.push_back(source_key(a));
+        if (BfCensusOn()) { bfcensus::g_fold_tagged.fetch_add(1, std::memory_order_relaxed); }
+    }
+
+    // CONDITION 2 -- ONE tagged action per SOURCE, counted ACROSS CLASSES. This is the condition
+    // that keeps mixed arrangements reachable: a source appearing in two classes is a source with
+    // a real choice between them, and the per-class prefix rule cannot express "copy 1 takes this
+    // class, copy 2 takes that one". Invalidate every class such a source touches.
+    const int t = static_cast<int>(t_idx.size());
+    for (int p = 0; p < t; ++p)
+    {
+        for (int q = p + 1; q < t; ++q)
+        {
+            if (t_src[p] != t_src[q]) { continue; }
+            if (BfCensusOn())
+            {
+                if (classes[t_class[p]].ok)
+                { bfcensus::g_fold_drop_src.fetch_add(1, std::memory_order_relaxed); }
+                if (t_class[q] != t_class[p] && classes[t_class[q]].ok)
+                { bfcensus::g_fold_drop_src.fetch_add(1, std::memory_order_relaxed); }
+            }
+            classes[t_class[p]].ok = false;
+            classes[t_class[q]].ok = false;
+        }
+    }
+    // A class of one collapses nothing; drop it so the enumerator never pays for it.
+    for (FoldClass& fc : classes)
+    {
+        if (fc.members < 2)
+        {
+            if (fc.ok && BfCensusOn())
+            { bfcensus::g_fold_drop_single.fetch_add(1, std::memory_order_relaxed); }
+            fc.ok = false;
+        }
+        else if (fc.ok && BfCensusOn())
+        {
+            bfcensus::g_fold_kept.fetch_add(1, std::memory_order_relaxed);
+            bfcensus::g_fold_kept_members.fetch_add(fc.members, std::memory_order_relaxed);
+        }
+        fc.members = 0;
+    }
+
+    for (int p = 0; p < t; ++p)
+    {
+        Action& a = actions[t_idx[p]];
+        FoldClass& fc = classes[t_class[p]];
+        if (!fc.ok) { a.equiv_tag = 0; a.equiv_ord = 0; continue; }
+        a.equiv_ord = fc.members++;
+    }
+}
+
 // The tag two interchangeable activations share. Deliberately excludes the SOURCE's identity (that
 // is the whole point) and includes everything that makes one activation differ from another.
 static int ActivationEquivTag(const GameState& state, const Permanent& src, const std::string& name,
@@ -5555,7 +5942,8 @@ static int ActivationEquivTag(const GameState& state, const Permanent& src, cons
     return t == 0 ? 1 : t;   // never collide with "do not fold"
 }
 
-static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel)
+static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                        int site = 0)
 {
     for (size_t a = 0; a < sel.size(); ++a)
     {
@@ -5636,16 +6024,25 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         // axis fully expressible: k selected actions still mean k activations, so nothing changes
         // in the apply and no distinct line is lost. Inert when the tag is 0, which is every action
         // on every deck until a source proves itself plain.
-        if (cands[sel[a]].equiv_tag != 0)
+        if (cands[sel[a]].equiv_tag != 0 && cands[sel[a]].equiv_ord > 0)
         {
-            const int tag = cands[sel[a]].equiv_tag;
-            for (int j = 0; j < sel[a]; ++j)
+            if (BfCensusOn()) { bfcensus::g_fold_guard_seen.fetch_add(1, std::memory_order_relaxed); }
+            const int tag  = cands[sel[a]].equiv_tag;
+            const int want = cands[sel[a]].equiv_ord - 1;
+            bool have_pred = false;
+            for (size_t q = 0; q < sel.size(); ++q)
             {
-                if (cands[j].equiv_tag != tag) { continue; }
-                bool earlier_selected = false;
-                for (size_t q = 0; q < sel.size(); ++q)
-                { if (sel[q] == j) { earlier_selected = true; break; } }
-                if (!earlier_selected) { return true; }   // non-canonical arrangement
+                if (cands[sel[q]].equiv_tag == tag && cands[sel[q]].equiv_ord == want)
+                { have_pred = true; break; }
+            }
+            if (!have_pred)
+            {
+                if (BfCensusOn())
+                {
+                    bfcensus::g_fold_guard_reject.fetch_add(1, std::memory_order_relaxed);
+                    bfcensus::g_fold_reject_site[site & 1].fetch_add(1, std::memory_order_relaxed);
+                }
+                return true;   // non-canonical arrangement
             }
         }
         // Birthing Pod: one activation per Pod per plan (the {T} cost).
@@ -5659,6 +6056,63 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         }
     }
     return false;
+}
+
+// The prefix rule canonicalises over the candidates the enumeration can ACTUALLY SELECT -- which
+// is not the same set CollectActions produced. Between the two, the group machinery can remove a
+// class member: CapGroupsBySituationalRank drops whole groups (a hand slot each), and
+// DropRitualGroupsIfNoPayoff removes ritual ones. If the dropped member happened to be ord 0, the
+// surviving ord 1 would be rejected as non-canonical with no predecessor left to select -- and
+// "cast one copy" would become unreachable in that enumeration. That is a lossy prune, so the ords
+// are re-derived here over the reachable set, once per enumeration (NOT per subset).
+//
+// Group WAVES re-enter the enumerator per tranche with a different group set, so each tranche gets
+// its own consistent numbering and canonicalises its own selection space -- every equivalence class
+// present in a tranche still gets exactly one representative there.
+static void RenumberFoldOrds(std::vector<Action>& cands,
+                             const std::vector<std::vector<int>>& groups,
+                             const std::vector<int>& independent,
+                             const std::vector<int>& auto_sel)
+{
+    const int m = static_cast<int>(cands.size());
+    bool any = false;
+    for (int i = 0; i < m; ++i) { if (cands[i].equiv_tag != 0) { any = true; break; } }
+    if (!any) { return; }
+
+    static thread_local std::vector<char> reach;
+    static thread_local std::vector<int>  tags, counts;
+    reach.assign(static_cast<size_t>(m), 0);
+    tags.clear(); counts.clear();
+    auto mark = [&](int j) { if (j >= 0 && j < m) { reach[static_cast<size_t>(j)] = 1; } };
+    for (const std::vector<int>& g : groups) { for (int j : g) { mark(j); } }
+    for (int j : independent) { mark(j); }
+    for (int j : auto_sel)    { mark(j); }
+
+    auto class_of = [&](int tag)
+    {
+        for (int c = 0; c < static_cast<int>(tags.size()); ++c)
+        { if (tags[c] == tag) { return c; } }
+        tags.push_back(tag); counts.push_back(0);
+        return static_cast<int>(tags.size()) - 1;
+    };
+    for (int i = 0; i < m; ++i)
+    {
+        Action& a = cands[i];
+        if (a.equiv_tag == 0) { continue; }
+        if (!reach[static_cast<size_t>(i)]) { a.equiv_tag = 0; a.equiv_ord = 0; continue; }
+        a.equiv_ord = counts[class_of(a.equiv_tag)]++;
+    }
+    for (int i = 0; i < m; ++i)
+    {
+        Action& a = cands[i];
+        if (a.equiv_tag == 0) { continue; }
+        for (int c = 0; c < static_cast<int>(tags.size()); ++c)
+        {
+            if (tags[c] != a.equiv_tag) { continue; }
+            if (counts[c] < 2) { a.equiv_tag = 0; a.equiv_ord = 0; }
+            break;
+        }
+    }
 }
 
 // Reject a plan that activates a CREATURE sac-for-mana outlet (Skirk Prospector, "Sacrifice a Goblin:
@@ -14415,6 +14869,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // LAST, after every post-pass that can append a variant (the phyrexian twins above are exactly
+    // such a case: a second tagged action for one hand slot, which must un-fold that slot's class).
+    FinalizeFoldTags(state, actions);
     return actions;
 }
 
@@ -17097,6 +17554,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         int sacrifice_count    = 0;
         int noncreature_count  = 0;
         int direct_dmg         = 0;
+        if (BfCensusOn()) { bfcensus::g_subsets_scored[0].fetch_add(1, std::memory_order_relaxed); }
         int total_eval         = 0;
         int self_damage        = 0;
         int vial_haste_atk     = 0;
@@ -18151,6 +18609,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
 
     if (EnumStatsOn()) { ReportEnumBound(cands, groups, independent); }
 
+    RenumberFoldOrds(cands, groups, independent, auto_sel);
     int num_groups = static_cast<int>(groups.size());
     int num_ind    = static_cast<int>(independent.size());
 
@@ -25409,6 +25868,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
     }
 
+    RenumberFoldOrds(cands, groups, independent, auto_sel);
     int num_groups = static_cast<int>(groups.size());
     int num_ind    = static_cast<int>(independent.size());
 
@@ -25504,7 +25964,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             && SubsetWastesAccelerant(cands, sel, /*storm_in_hand=*/false)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
-        if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
+        if (SubsetHasDuplicateSacSource(cands, sel, /*site=*/1)) { return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
         if (SubsetHasStrandedEquip(state, cands, sel)) { return; }
@@ -26457,6 +26917,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 [&](const Action& x, const Action& y)
                 { return IsAuraOnNewCreature(state, x) < IsAuraOnNewCreature(state, y); });
         }
+        if (BfCensusOn()) { bfcensus::g_subsets_scored[1].fetch_add(1, std::memory_order_relaxed); }
         plans.push_back(std::move(plan));
     };
 

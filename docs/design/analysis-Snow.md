@@ -611,6 +611,88 @@ genuinely from two; (2) `copy_FALSE` in the dedup census says the post-apply sta
 `m_number`, so a folded run will NOT be byte-identical — it must be judged on the suite's
 slower/faster verdict and the play-settings average, not on digest identity.
 
+## Hand-cast fold + a LOSSY hole in the shipped activation fold (2026-09-09, overnight)
+
+Follow-on to the interchangeable-activation-source fold (`61b3cfb7`). Two separable pieces landed
+here; they are deliberately shipped with different defaults.
+
+### 1. The activation fold as shipped was LOSSY. Fixed, default ON, byte-identical.
+
+The canonical-prefix rule keeps the k earliest members of an equivalence class and rejects every
+other arrangement. That is a faithful canonicalisation exactly when the members are interchangeable
+one-for-one. It stops being one as soon as a single SOURCE contributes two tagged actions -- two
+ability modes, or two `chosen_x` counts:
+
+```
+copy1 k=1 (idx0)  copy1 k=2 (idx1)  copy2 k=1 (idx2)  copy2 k=2 (idx3)
+{idx0, idx3} "copy1 at k=1, copy2 at k=2" -> idx3's class predecessor idx1 unselected: REJECT
+{idx1, idx2} its mirror                    -> idx2's class predecessor idx0 unselected: REJECT
+```
+
+...so the MIXED arrangement is unreachable **at any budget** -- a lossy truncation, which the
+standing bar forbids. **This was LIVE on Snow**, not hypothetical: `Rimefeather Owl`'s
+`{2}{S}: put an ice counter` has no `{T}`, so the K-count axis survives and each of the 2 Owls
+emits several tagged actions. The new accounting counter reads **47,702 class-drops per 60 games**
+from exactly this shape.
+
+The fix is two conditions, both *checked* rather than assumed, in `FinalizeFoldTags`:
+* **one tagged action per SOURCE, counted across classes** -- a source with a real choice between
+  classes cannot be canonicalised by a per-class prefix, so every class it touches un-folds;
+* **every class member identical in every Action field** but its source key (`ActionFoldSig`,
+  deliberately exhaustive over all 49 fields).
+
+Plus `RenumberFoldOrds`, which re-derives the ordinals over the candidates the enumeration can
+ACTUALLY select. `CapGroupsBySituationalRank` and `DropRitualGroupsIfNoPayoff` remove whole groups
+between `CollectActions` and the odometer; if the removed member happened to be ord 0, the
+surviving ord 1 would have been rejected with no predecessor left to select, and "cast one copy"
+would have gone unreachable in that enumeration.
+
+**Smoke 80/80 ALL PASS, zero churn** -- the lost arrangements never mattered to an outcome on the
+current suite, which is precisely why nothing caught this.
+
+### 2. The hand-cast fold: -16.2% of the greedy enumeration, DEFAULT OFF pending a ruling
+
+`MTG_FOLD_HAND_CASTS=1`. Same canonical prefix, applied to duplicate cards in hand -- the census
+put `cast_from_hand` at 77.4% of candidate mass against the activation slice already folded.
+
+| Snow 60 @ play, deterministic counters | fold off | fold on | delta |
+|---|---|---|---|
+| greedy subsets scored | 79,260,597 | 66,443,718 | **-16.2%** |
+| search subsets scored | 4,861,933 | 4,208,545 | **-13.4%** |
+| avg turn-to-win | 5.9833 | 5.9833 | identical |
+| play digest | 4d0ae0ea43f9ba15 | 4d0ae0ea43f9ba15 | identical |
+| `units_total` | 10,490,828 | 10,490,709 | **-0.001%** |
+
+**`units_total` IS BLIND TO THIS CHANGE, AND THAT IS THE REUSABLE LESSON.** `la_cand` charges one
+unit per candidate scored *at a top-level search decision*; both odometers this fold actually
+shrinks -- the greedy rollout leaf, and the nested enumerations that run during scoring -- are not
+unit-counted at all. The first measurement therefore read "units identical, candidate census
+identical" while the subset guard was rejecting 456,201 extra subsets per 5 games. This is the
+MIRROR of the trap recorded for the candidate dedup (there, units *flattered* a change that added
+hashing): units can equally **understate a change to zero**. The counters
+`bf_scored greedy_subsets/search_subsets` were added to settle it deterministically -- unlike wall
+or CPU they cannot be moved by a contended box.
+
+**Why it is not adopted.** It moves **10 of 80 smoke keys**, every one of them with an
+**identical average** -- picking the canonical copy reorders same-named casts inside a plan
+(`Sinew Sliver; Predatory Sliver; Sinew Sliver` becomes `Sinew Sliver; Sinew Sliver; Predatory
+Sliver`). That is pure play-digest churn with no quality change, but adopting it means rebaselining
+ground truth, and a default flip that rewrites GT is the deck owner's call.
+
+### The trap that cost the most time here
+
+The first cut of the hand-card test asked "is this card in its PRINTED form", comparing each hand
+card against its `CardDatabase` definition. It rejected **767,406 of 767,406** hand casts: cards
+outside the battlefield are DeckLoader PLACEHOLDERS carrying a name and nothing else, so a
+placeholder never equals its own printed definition. The fold silently did nothing and every gate
+still passed -- the same shape as the Coldsteel Heart `chosen_color` no-op recorded above, and the
+same placeholder-vs-definition confusion. The replacement compares the two CARDS to each other
+(`HandCardContentHash`, exhaustive over Card's 15 fields), which needs no reference form at all.
+A second, subtler instance of the same class: `ActionFoldSig` initially hashed `sac_source_id`,
+which is the very field two interchangeable copies differ in -- every activation class failed the
+identity check and the fold stopped firing, detected only because the branching census read back
+the unfolded mean width (75.96) to four significant figures.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. ~~`{S}` modelled as generic `{1}`~~ — **CLOSED 2026-09-06** by the real snow-mana model
