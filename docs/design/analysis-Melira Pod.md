@@ -2604,6 +2604,37 @@ Pooled A/B running (`logs/melira_vl_ab/orderfree_manifest.json` -> `ab10.out`, `
 live / live+order-free / emulated+order-free, Melira + Fluctuator, d5/b20 + d3/b10, 8 x 1000, units
 dumped. The adoption question is (1); (2) is reported for the record.
 
+**User: "It should be possible to get a small cost win." — where the residual goes.** Two
+hypotheses tested on the same 200 games (both order-free):
+
+* Leaf-rollout TT reuse (warm-up rollouts pre-paying the committing pass): **NO.** Committing-pass
+  TT hit rates are the same in both ladders — d2 17.3% vs 15.7%, d3 12.3% vs 12.1%, d4 5.4% vs
+  7.0% (live warm passes hit 22-37%). Not the mechanism.
+* The PREDICTOR's growth model: **YES.** Melira's pass cost grows ~26x into d2 (d1 ~350 units, d2
+  ~8-10k) and only ~1.1x into d3 (d3 ~8.9k per decision), while `predict_next_fits` extrapolated
+  with the gate's bootstrap default 6 before any measured ratio: at k=2 it asked "36 x ch1 fits?"
+  (yes), the real gate then asked "26 x 26 x ch1 fits?" (no), and the d2 value pass — the most
+  expensive warm-up — was wasted: 804/1829 mispredicts, ~1.8M of the 2.3M value units. Perfect
+  prediction would give ~live − (warm rollouts − value evals) ≈ 20.03M − (1.33M − 0.48M) ≈ 19.2M =
+  **0.96x**: the small win, and its ceiling at this budget.
+
+Fix: learn per-depth growth G[k] = ch[k]/ch[k-1] on the thread (EMA, like R) and predict with it
+(`est_k = ch[k-1] x G[k]`, `est_k1 = est_k x G[k]`, the gate's own extrapolation with the realized
+ratio). Re-measured, same 200 games (order-free live = 20.03M, avg 5.015):
+
+| emulated ladder | units | mispredicts | wasted value | value | calib+other | commit | avg |
+|---|---|---|---|---|---|---|---|
+| default-growth predictor | 22.44M (1.12x) | 804/1829 | 1.84M | 2.41M | 0.34M | 19.10M | 4.995 |
+| **learned-growth predictor** | **20.32M (1.015x)** | **351/1836** | 0.41M | 0.84M | 0.61M | 18.29M | 5.005 |
+
+The mispredicts halved-and-more and the waste fell 4.5x. What is left: ~0.5M of per-thread
+CALIBRATION passes (305 in a 200-game / 32-thread run: 3 heuristic re-runs per depth per thread —
+~1% in a 1000-game job, so ~0.99x amortised), 351 residual mispredicts (0.41M), and a commit-cost
+drift of +0.6M from committing slightly deeper (mean 2.696 vs 2.684: the reconstruction's R is a
+per-depth mean, the real rollout cost varies per position). The 0.96x ceiling stands; the pooled
+follow-up (`emulofg` arm, 32 jobs, `ab11.out`, queued behind ab10) measures it at 8 x 1000 where
+calibration is amortised.
+
 **Smoke under the adopted sidecar (binary with the emulated lever OFF):** 77/80 configs unchanged
 (byte-identical off, as required), melira d3 4.88 -> 4.84 (2 faster), melira d5 4.96 = 4.96 (play
 differs, score same), **melira2hg d3 5.04 -> 5.12 (2 slower of 25)** — the 2HG case runs the same

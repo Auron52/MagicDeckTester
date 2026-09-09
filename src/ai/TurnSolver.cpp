@@ -324,6 +324,7 @@ static std::array<std::atomic<long long>, 16> g_emul_commit_hist{};
 // is the price of committing on a leaf TT no heuristic pass warmed.
 static std::array<std::atomic<long long>, 16> g_lad_commit_n{}, g_lad_commit_units{}, g_lad_warm_units{};
 static std::array<std::atomic<long long>, 16> g_emul_cd_n{}, g_emul_cd_commit_units{}, g_emul_cd_v_units{}, g_emul_cd_hother_units{};
+static std::array<std::atomic<long long>, 16> g_emul_cd_ttlook{}, g_emul_cd_tthit{}, g_lad_cd_ttlook{}, g_lad_cd_tthit{}, g_lad_warm_ttlook{}, g_lad_warm_tthit{};
 // Same depth, both leaves (calibration / fallback re-runs): are the TREES the same? Leaves under the
 // heuristic vs leaves under the value leaf, and how often they differ at all.
 static std::array<std::atomic<long long>, 16> g_emul_tree_n{}, g_emul_tree_hleaves{}, g_emul_tree_vleaves{}, g_emul_tree_differ{};
@@ -493,6 +494,14 @@ namespace
                         tw += w; tc += c;
                         std::cerr << " d" << d << "=" << n << "/" << w << "/" << c << "/" << (w / n) << "/" << (c / n);
                     }
+                    std::cerr << "\n[rollout-stats]   heuristic-ladder leaf-TT by committed depth (commit pass: lookups/decision, hit rate; warm passes: lookups/decision, hit rate):";
+                    for (int d = 0; d < 16; ++d)
+                    {
+                        const long long n = g_lad_commit_n[d].load(); if (n == 0) { continue; }
+                        const double cl = static_cast<double>(g_lad_cd_ttlook[d].load()), chh = static_cast<double>(g_lad_cd_tthit[d].load());
+                        const double wl = static_cast<double>(g_lad_warm_ttlook[d].load()), wh = static_cast<double>(g_lad_warm_tthit[d].load());
+                        std::cerr << " d" << d << "=" << cl / n << "/" << (cl > 0 ? chh / cl : 0.0) << " " << wl / n << "/" << (wl > 0 ? wh / wl : 0.0);
+                    }
                     std::cerr << "\n[rollout-stats]   heuristic-ladder totals: decisions=" << ln << " warm=" << tw << " commit=" << tc
                               << " warm_share_of_ladder=" << (tw + tc ? static_cast<double>(tw) / static_cast<double>(tw + tc) : 0.0) << "\n";
                 }
@@ -507,6 +516,13 @@ namespace
                         const long long v = g_emul_cd_v_units[d].load(), h = g_emul_cd_hother_units[d].load(), c = g_emul_cd_commit_units[d].load();
                         tv += v; th += h; tc += c;
                         std::cerr << " d" << d << "=" << n << "/" << v << "/" << h << "/" << c << "/" << (v / n) << "/" << (h / n) << "/" << (c / n);
+                    }
+                    std::cerr << "\n[rollout-stats]   emulated-ladder leaf-TT by committed depth (commit pass: lookups/decision, hit rate):";
+                    for (int d = 0; d < 16; ++d)
+                    {
+                        const long long n = g_emul_cd_n[d].load(); if (n == 0) { continue; }
+                        const double cl = static_cast<double>(g_emul_cd_ttlook[d].load()), chh = static_cast<double>(g_emul_cd_tthit[d].load());
+                        std::cerr << " d" << d << "=" << cl / n << "/" << (cl > 0 ? chh / cl : 0.0);
                     }
                     std::cerr << "\n[rollout-stats]   emulated-ladder totals: decisions=" << en << " value=" << tv << " other_heuristic=" << th << " commit=" << tc << "\n";
                     std::cerr << "[rollout-stats]   emulated-ladder same-depth trees (n, heuristic leaves / value leaves, differ):";
@@ -7741,6 +7757,8 @@ static thread_local int g_fsline_nest = 0;
 // ANYWHERE in the subtree propagates up and suppresses the no-win store at every ancestor.
 // thread_local: each worker searches independently. Wins are unaffected (a win found is a win).
 inline thread_local unsigned long long g_fs_trunc_events = 0;
+// Leaf rollout TT traffic (SimulateToEnd): lookups and hits (win + bound no-win), per pass deltas.
+inline thread_local long long g_tt_look_n = 0, g_tt_hit_n = 0;
 // MTG_TRUNC_COMPLETE (default ON; =0 restores the pre-audit counting for the A/B). The
 // recoverability audit (docs/design/search-recoverability-audit.md §6.1/§6.2) found searched-
 // structure drops that never bumped the counter above, so the no-win stores cached FILTERED or
@@ -30584,11 +30602,11 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         // canon the multiset key must not share values across permuted states -- leaf-verify caught
         // cached=8/fresh=7 on mirrorwing gi=363 (a must-find win silently lost). Order-exact key.
         if (CanonSimKeyOn()) { Fold(key, FsOrderSig(state)); }
-        PROF_INC(tt_lookups);
+        PROF_INC(tt_lookups); ++g_tt_look_n;
         const int* cached = tt->Lookup(key);
         if (cached != nullptr)
         {
-            PROF_INC(tt_hits);
+            PROF_INC(tt_hits); ++g_tt_hit_n;
             // SOUNDNESS HARNESS (MTG_LEAF_VERIFY): recompute this hit fresh (loose cutoff, no tt/budget so it
             // fully resolves) and compare. A mismatch means two states shared a BuildSimKey but roll out
             // differently => the key omits some rollout-determining state. Counts mismatches + dumps the first.
@@ -30620,7 +30638,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         if (TTNoWinCacheOn())
         {
             const int* bound = tt->LookupNoWinBound(key);
-            if (bound != nullptr && cutoff_turn <= *bound) { PROF_INC(tt_nowin_hit); return max_turns + 1; }
+            if (bound != nullptr && cutoff_turn <= *bound) { PROF_INC(tt_nowin_hit); ++g_tt_hit_n; return max_turns + 1; }
         }
     }
 
@@ -31178,6 +31196,11 @@ inline thread_local int    g_emul_Rn[16]  = {0};    // samples per depth (calibr
 // The learned state belongs to ONE deck: a pooled batch reuses a worker thread across decks, so key it
 // on the job's value-profile path and reset on change (the minotaur d5 flake was exactly this leak).
 inline thread_local std::string g_emul_key;
+// Per-depth pass-cost GROWTH ch[k]/ch[k-1] (EMA), learned from every completed pass pair on this thread:
+// the predictor's extrapolation uses it instead of the gate's bootstrap default (6). Melira grows ~26x
+// into d2 and ~1.1x into d3, so the default mis-called nearly every d2 warm-up.
+inline thread_local double g_emul_G[16] = {0};
+inline thread_local int    g_emul_Gn[16] = {0};
 // AUDIT-only: the climb's per-depth MEASURED pass costs + start depth, for the lossy-case dump.
 inline thread_local double    g_climb_cmeas[16] = {0};
 inline thread_local int       g_climb_start = 0;
@@ -33423,7 +33446,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         {
             g_emul_key = valuearm::t_arm.value_profile;
             g_emul_R = 0.0;
-            for (int d = 0; d < 16; ++d) { g_emul_Rd[d] = 0.0; g_emul_Rn[d] = 0; }
+            for (int d = 0; d < 16; ++d) { g_emul_Rd[d] = 0.0; g_emul_Rn[d] = 0; g_emul_G[d] = 0.0; g_emul_Gn[d] = 0; }
         }
         if (g_emul_R <= 0.0) { g_emul_R = 120.0; }
         constexpr double kEmulRAlpha = 0.4;
@@ -33435,7 +33458,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         long long dec_v_units = 0, dec_h_units = 0;   // this decision's value / heuristic units (accounting)
         // Tree-shape deltas of the last pass at each depth, per leaf (accounting): B&B prunes,
         // in-horizon exits, leaf win-turn sum. Compared heuristic-vs-value at one depth in learn_R.
-        struct PassShape { long long cuts = 0, hexits = 0, wtsum = 0, mwin = 0, mnowin = 0, morder = 0, mstale = 0; };
+        struct PassShape { long long cuts = 0, hexits = 0, wtsum = 0, mwin = 0, mnowin = 0, morder = 0, mstale = 0, ttlook = 0, tthit = 0; };
         PassShape shape_v[17], shape_h[17];
         SearchLine lines[17];              // each completed pass's line (rollback target on overrun)
         double    spent_h = 0.0;           // what the heuristic ladder would have spent so far
@@ -33508,6 +33531,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             const long long leaves_before = g_fs_leaf_evals;
             const long long cuts0 = g_fs_cut_prunes, hex0 = g_fs_hexits, wt0 = g_fs_leaf_wt_sum;
             const long long mw0 = g_fs_memo_win_hits, mn0 = g_fs_memo_nowin_hits, mo0 = g_fs_memo_order_miss, ms0 = g_fs_memo_stale;
+            const long long tl0 = g_tt_look_n, th0 = g_tt_hit_n;
             if (bounded)
             {
                 const long long beta_ceiling = static_cast<long long>(kOverrunBeta * limit);
@@ -33525,6 +33549,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 PassShape& ps = heuristic ? shape_h[d] : shape_v[d];
                 ps.cuts = g_fs_cut_prunes - cuts0; ps.hexits = g_fs_hexits - hex0; ps.wtsum = g_fs_leaf_wt_sum - wt0;
                 ps.mwin = g_fs_memo_win_hits - mw0; ps.mnowin = g_fs_memo_nowin_hits - mn0; ps.morder = g_fs_memo_order_miss - mo0; ps.mstale = g_fs_memo_stale - ms0;
+                ps.ttlook = g_tt_look_n - tl0; ps.tthit = g_tt_hit_n - th0;
             }
             (heuristic ? g_emul_h_units : g_emul_v_units).fetch_add(cost, std::memory_order_relaxed);
             (heuristic ? dec_h_units : dec_v_units) += cost;
@@ -33573,15 +33598,26 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         {
             if (k + 1 > depth) { return false; }
             if (!bounded || k == 1) { return true; }   // pass 1 has no cost to extrapolate from: warm up
+            // Predicted cost of pass k: the LEARNED growth into k when this thread has seen it (the gate's
+            // own extrapolation is what we are trying to anticipate, and its ratio will be the realized
+            // ch[k]/ch[k-1]); else the gate's bootstrap rule. The gate at k+1 then extrapolates with the
+            // realized growth into k, so est_k1 = est_k * G[k].
             const double ratio  = (k >= 3 && ch[k - 2] > 0.0) ? ch[k - 1] / ch[k - 2] : kDefaultGrowth;
-            const double est_k  = ch[k - 1] * ratio;
-            const double est_k1 = est_k * ratio;
+            const double gk     = (k < 16 && g_emul_Gn[k] > 0) ? g_emul_G[k] : ratio;
+            const double est_k  = ch[k - 1] * gk;
+            const double est_k1 = est_k * gk;
             return est_k1 <= emul_margin * kStartGateAlpha * (rem_h() - est_k);
         };
         auto commit_pass = [&](int k, const SearchLine& att, bool heuristic, long long cost, long long leaves)
         {
             if (heuristic) { heur_mode = true; ran_h[k] = true; learn_R(k, cost, leaves); ch[k] = static_cast<double>(cost); }
             else           { cv[k] = cost; lv[k] = leaves; ch[k] = static_cast<double>(cost) + R_at(k) * static_cast<double>(leaves); }
+            if (k >= 2 && k < 16 && ch[k - 1] > 0.0 && ch[k] > 0.0)
+            {
+                const double g = ch[k] / ch[k - 1];
+                g_emul_G[k] = (g_emul_Gn[k] == 0) ? g : (1.0 - kEmulRAlpha) * g_emul_G[k] + kEmulRAlpha * g;
+                ++g_emul_Gn[k];
+            }
             spent_h += ch[k]; spent_real += static_cast<double>(cost);
             lines[k] = att;
             line = att; committed_depth = k; last_done = k;
@@ -33665,11 +33701,17 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 g_emul_cd_commit_units[hd].fetch_add(commit, std::memory_order_relaxed);
                 g_emul_cd_v_units[hd].fetch_add(dec_v_units, std::memory_order_relaxed);
                 g_emul_cd_hother_units[hd].fetch_add(dec_h_units - commit, std::memory_order_relaxed);
+                if (committed_depth >= 1 && committed_depth < 17 && ran_h[committed_depth])
+                {
+                    g_emul_cd_ttlook[hd].fetch_add(shape_h[committed_depth].ttlook, std::memory_order_relaxed);
+                    g_emul_cd_tthit[hd].fetch_add(shape_h[committed_depth].tthit, std::memory_order_relaxed);
+                }
             }
         }
     }
 
     long long lad_sum_units = 0, lad_last_units = 0;   // accounting: warm-up vs committing pass
+    long long lad_ttlook_sum = 0, lad_tthit_sum = 0, lad_ttlook_last = 0, lad_tthit_last = 0;
     for (int pass_depth = (depth >= 1 ? 1 : depth); !emul_done && pass_depth <= depth; ++pass_depth)
     {
         // Cheap leaf for every pass but the one that commits.
@@ -33712,6 +33754,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
         long long used_before = budget ? budget->Used() : 0;
         long long leaves_before = g_fs_leaf_evals;   // K-predictor: per-pass leaf-count delta (probe recording)
+        const long long lad_tl0 = g_tt_look_n, lad_th0 = g_tt_hit_n;
         // Arm the OVERRUN guard: this pass may exceed its estimate, but if its real cost blows past
         // the ceiling it is pathological -- abort and keep the best line we hold (see the anytime
         // commit). Normal passes finish far under any sane ceiling, so the guard never fires for
@@ -33771,6 +33814,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // reuses to predict its own affordable depth). Only while the probe records; index guarded.
         long long cost = (budget ? budget->Used() : 0) - used_before;
         lad_sum_units += cost; lad_last_units = cost;
+        lad_ttlook_last = g_tt_look_n - lad_tl0; lad_tthit_last = g_tt_hit_n - lad_th0; lad_ttlook_sum += lad_ttlook_last; lad_tthit_sum += lad_tthit_last;
         if (g_probe_recording && pass_depth >= 0 && pass_depth < 16)
         {
             g_probe_leaves[pass_depth] = g_fs_leaf_evals - leaves_before;
@@ -33825,6 +33869,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         g_lad_commit_n[hd].fetch_add(1, std::memory_order_relaxed);
         g_lad_commit_units[hd].fetch_add(lad_last_units, std::memory_order_relaxed);
         g_lad_warm_units[hd].fetch_add(lad_sum_units - lad_last_units, std::memory_order_relaxed);
+        g_lad_cd_ttlook[hd].fetch_add(lad_ttlook_last, std::memory_order_relaxed); g_lad_cd_tthit[hd].fetch_add(lad_tthit_last, std::memory_order_relaxed);
+        g_lad_warm_ttlook[hd].fetch_add(lad_ttlook_sum - lad_ttlook_last, std::memory_order_relaxed); g_lad_warm_tthit[hd].fetch_add(lad_tthit_sum - lad_tthit_last, std::memory_order_relaxed);
     }
     if (out_committed_depth != nullptr) { *out_committed_depth = committed_depth; }
 
