@@ -202,6 +202,13 @@ vigilance on Voice ... fix the Daxos + 2x Heliod case."
   Ajani's 0 (value gate), Heliod counter target as one resolution pick, `MTG_WALKER_CAST_ACTIVATE`
   OFF for other decks (site 9 now reaches those walkers anyway), UA's human target list omitting
   own permanents (Anti-Lifegain's card), Heliod prompt once per gain event.
+- Loyalty activations now WRITTEN TO THE GAME LOG (2026-09-09, user request): both executor sites
+  (the cast-carried activation and the standalone ActivateLoyalty action) emit an ABILITY line
+  `loyalty -2: create an Ajani's Pridemate (loyalty now 3)`, only when the activation actually
+  fired (watching loyalty_activated_this_turn flip; a walker erased by its own cost logs
+  `loyalty 0 -> graveyard`). LogAbility folds into the play digest, so the smoke + regression
+  digests of the two walker decks (fivecolour, critter) moved with every mean identical and
+  slower=0/faster=0 on both tiers; re-accepted.
 - Scenario-harness lesson (cost an hour): a fixture whose `max_turns` ends the game on the turn
   under test makes the search DECLINE a free land drop and a free 1-drop cast -- nothing after the
   horizon can value them, so they tie with doing nothing. Assert on a later win turn instead.
@@ -242,6 +249,67 @@ READ WITH THESE CAVEATS (the judgement the driver cannot make):
   route does not apply). With NO table on any arm the apparatus is symmetric by construction;
   the residual bias is the shared card-scores profile only.
 - Combining the top two (rc2 + cut_basilica) is untested; they touch disjoint slots.
+
+USER DECISION (2026-09-09): no deck modifications for now. **rc2 is NOT a useful comparison** --
+Unexpectedly Absent is a genuinely powerful card in real games and a do-nothing card here, so any
+arm that cuts it measures the wrong thing; do not re-propose it. The user may revisit
+**cut_basilica, serra4 and similar count/land changes inside modelled cards** later. The list on
+disk stays the original 60; value leaf / mulligan generation, if run, fit that list.
+
+## Site-9 cost on this deck (2026-09-09, idle box, 32 threads, seed 5001, shipped binary e9aeea67)
+`logs/critter/site9_cost/`. CPU = user seconds for the whole run; repeat runs of one arm differ ~2%.
+
+| config | arm | CPU s | avg | games differing vs shipped |
+|---|---|---|---|---|
+| d3 b10, 1000 games | shipped | 207.4 (repeat 210.7) | 4.9750 | -- |
+| | `MTG_POST_ENTRY_BP=0` | 189.9 | 4.9730 | 8 |
+| | `MTG_POST_ENTRY_BP=0 MTG_ACQ_RESOLVE=0` | 186.3 | 4.9800 | 18 |
+| d5 b20, 500 games | shipped | 191.1 | 4.9780 | -- |
+| | `MTG_POST_ENTRY_BP=0` | 168.2 (repeat 165.4) | 4.9800 | 2 |
+| | `MTG_POST_ENTRY_BP=0 MTG_ACQ_RESOLVE=0` | 168.3 | 4.9860 | 8 |
+
+Reading: site 9 costs ~9% CPU at d3 and ~14% at d5 on Critter (the wave-0 variant fan-out is the
+cost; a plan without a variant is free) and buys no win-turn here -- the cast-carried walker variant
+already covers Ajani, so site 9's Critter work is Heliod grants and sac-outlet timing, which rarely
+move a goldfish win turn. The tutor re-solve (`MTG_ACQ_RESOLVE` creature arm) is CPU-free and worth
+~0.006t. Suite-wide, the regression tier's searched CPU moved +2.0% and smoke +2.8% vs the
+pre-session full-tier logs (both inside pooled-run noise; Melira moved -35% and Minotaur +40% on
+single keys in the same comparison, so per-key ms is not a signal at that grain).
+
+## Search headroom + CPU profile (2026-09-09; user: "is there more headroom?")
+Ladder `logs/critter/headroom/ladder.json` -- ONE pooled batch, seed 6001, paired numbering, no keep
+table / value leaf (the deck ships neither), 500 games per searched arm (1000 at d0).
+
+| arm | avg | digest | CPU s (sum) |
+|---|---|---|---|
+| d0 | 5.1580 | 73db14d1 | 0 |
+| d3 b10 (suite) | 4.9080 | b58706b3 | 110 |
+| d3 b40 | 4.9080 | a5b43310 | 194 |
+| d5 b20 (suite) | 4.9080 | bbc443ea | 206 |
+| d5 b80 | 4.9080 | a5b43310 | 423 |
+| d5 b200 | 4.9080 | a5b43310 | 594 |
+| d7 b100 | 4.9080 | a5b43310 | 450 |
+
+**The search is converged on this deck.** Every searched arm has the same mean to four decimals and
+the same win-turn distribution (T4 25.7% / T5 62.2% / T6 9.6% / T7 2.0% / T8 0.4%, 2 unwon); d3 b40,
+d5 b80, d5 b200 and d7 b100 are BYTE-IDENTICAL play. d3 b10 and d5 b20 differ from that fixed point
+only in budget churn that never moves an outcome. So there is NO win-turn headroom in depth or
+budget: 10x the CPU buys nothing. What is left is (a) the mulligan (the deck has no keep table, so
+the keep/bottom decisions are the heuristic's -- the 5-Plains flood keeps in the suite are this),
+(b) modelling/heuristic gaps in the MOVE SET (a line the enumerator never offers cannot be searched
+into), and (c) the goldfish ceiling of the 60 itself. (a) is the next stage by design and waits on
+the user's references; (b) is what the claude-play sweep and hand-played references find.
+
+CPU profile (`perf record -g`, build/Profile, d5 b20, 320 games, `logs/critter/perf/d5.flat.txt`):
+FLAT. Top self-time: BuildSimKey 4.7% (memo key), CollectActions 3.5%, SolveUncached 3.2%,
+operator new/delete + vector/GameState copies ~7% combined, LookupCached ~3.7% (three clones),
+ResolveCombatDamage 1.7%, EffectiveSpellCost 1.7%, FireLifegainWatchers 0.8%. Nothing deck-specific
+is hot; the lifegain watchers are under 1%. A micro-optimisation pass (allocation, state copies)
+might buy 10-15% suite-wide -- and since the search is converged, faster search would buy Critter
+no play quality at all. Not pursued.
+
+Site-9 cost re-read against this: the ~9-14% it costs on Critter is real CPU for zero Critter
+win-turn, which is consistent with the ladder (nothing at any budget moves this deck).
 
 ## Open questions surfaced (non-blocking)
 (collected here and re-raised in the closing message)
