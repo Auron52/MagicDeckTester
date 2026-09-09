@@ -480,6 +480,7 @@ static std::atomic<long long> g_idwaste_rescuable{0};
 static std::atomic<long long> g_emul_decisions{0}, g_emul_vpasses{0}, g_emul_hpasses{0},
                               g_emul_fallbacks{0}, g_emul_overruns{0}, g_emul_no_heuristic{0}, g_emul_direct_commits{0},
                               g_emul_commit_model_decisions{0},
+                              g_nlv_decisions{0}, g_nlv_banked{0}, g_nlv_value_passes{0}, g_nlv_overruns{0}, g_nlv_to_heuristic{0}, g_nlv_value_units{0}, g_nlv_partial_kept{0},
                               g_emul_r_milli{0}, g_emul_r_n{0},
                               g_emul_v_units{0}, g_emul_h_units{0}, g_emul_waste_units{0},
                               g_emul_calib_passes{0};
@@ -802,6 +803,16 @@ namespace
                     }
                     std::cerr << "\n";
                 }
+            }
+            if (g_nlv_decisions.load() > 0)
+            {
+                std::cerr << "[rollout-stats] no-leaf escalation ladder decisions=" << g_nlv_decisions.load()
+                          << " banked(verified leaf-free)=" << g_nlv_banked.load()
+                          << " value_passes=" << g_nlv_value_passes.load()
+                          << " value_overruns=" << g_nlv_overruns.load()
+                          << " (partial line kept=" << g_nlv_partial_kept.load() << ")"
+                          << " to_heuristic(untrusted depth)=" << g_nlv_to_heuristic.load()
+                          << " value_units=" << g_nlv_value_units.load() << "\n";
             }
             if (g_emul_decisions.load() > 0)
             {
@@ -32203,6 +32214,10 @@ struct ForceValueLeafGuard
 // MidGameEvaluator::Constant() does -- no rollout, no feature extraction -- so a warm-up pass costs its
 // tree and nothing else. The committing pass clears it and the attached model scores as usual.
 inline thread_local bool g_force_constant_leaf = false;
+// RESERVE for the value pass at the last depth (the no-leaf escalation ladder, below): while set, the
+// ladder's start gate admits a pass only if the SAME cost again would still fit after it -- the value
+// pass at that depth costs the pass's tree once more (its leaf is unmetered) and must be affordable.
+inline thread_local bool g_reserve_value_pass = false;
 struct ForceConstantLeafGuard
 {
     bool prev;
@@ -34995,7 +35010,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                             : kDefaultGrowth;
             double estimate = static_cast<double>(c_prev) * ratio;
             const double remaining = static_cast<double>(budget->Remaining());
-            bool fits = (estimate <= gate_alpha * remaining);
+            bool fits = g_reserve_value_pass ? (estimate + estimate <= gate_alpha * remaining)
+                                             : (estimate <= gate_alpha * remaining);
             // PATH-TO-TRUST override (see kTrustPathSlack). Only when the value leaf is driving, a
             // trust depth is known, and this pass is still on the way to it: ask whether the WHOLE
             // path pass_depth..trust fits the remaining budget PLUS the escalation it would cancel.
@@ -35670,7 +35686,30 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                               ? (valuearm::t_arm.esc_to_trust != 0) : s_esc_to_trust_env;
     const bool trust_push = s_esc_to_trust && value_min_depth > 0 && value_min_depth <= depth;
     struct EmulDeckRGuard { double prev; EmulDeckRGuard(double r) : prev(g_emul_deck_R) { g_emul_deck_R = r; } ~EmulDeckRGuard() { g_emul_deck_R = prev; } } _edr(escalation_r);
+    // NO-LEAF ESCALATION LADDER (user design, 2026-09-09 night: "no-leaf -> choose between value leaf or
+    // heuristic leaf escalation. We would retain budget for the value-leaf at the last depth"). Shape:
+    // value_play {ladder "escalation", leaf "none", commit "model"} (arm: ladder_emul_warm_none +
+    // ladder_emul_commit_model without ladder_emulated). The PROBE runs the whole ladder with NO leaf, so
+    // every proven in-horizon win is banked leaf-free; its start gate reserves one more pass's worth at
+    // each depth (g_reserve_value_pass). An UNVERIFIED line at a TRUSTED depth then pays ONE value pass
+    // at that depth (fresh memo: the no-leaf pass's entries would mask the estimates) and that line goes
+    // through the hybrid unchanged; at an untrusted depth the heuristic escalation runs as it does today
+    // (the value line would only have been escalated). A value pass that overruns forces the escalation.
+    static const bool s_nl_commit_env    = EnvOn("MTG_LADDER_EMUL_COMMIT_MODEL");
+    static const bool s_nl_warm_none_env = EnvOn("MTG_LADDER_EMUL_WARM_NONE");
+    static const bool s_nl_emul_env      = EnvOn("MTG_LADDER_EMULATED");
+    const bool nl_emulated = (valuearm::t_arm.ladder_emulated >= 0) ? (valuearm::t_arm.ladder_emulated != 0)
+                                                                    : (valuearm::t_deck_ladder >= 1 || s_nl_emul_env);
+    const bool nl_commit   = (valuearm::t_arm.ladder_emul_commit >= 0) ? (valuearm::t_arm.ladder_emul_commit != 0)
+                                                                       : (valuearm::t_deck_commit_model != 0 || s_nl_commit_env);
+    const bool nl_warm     = (valuearm::t_arm.ladder_emul_warm_none >= 0) ? (valuearm::t_arm.ladder_emul_warm_none != 0)
+                                                                          : (valuearm::t_deck_warm_none != 0 || s_nl_warm_none_env);
+    const bool nl_esc = !nl_emulated && nl_commit && nl_warm && UseValueModel()
+                     && state.m_value_model && !state.m_value_model->empty() && !state.m_value_model->constant;
+    bool nl_force_escalate = false;
     {
+        ForceConstantLeafGuard _nlc(nl_esc);
+        struct ReserveGuard { bool prev; ReserveGuard(bool on) : prev(g_reserve_value_pass) { g_reserve_value_pass = on; } ~ReserveGuard() { g_reserve_value_pass = prev; } } _nlr(nl_esc);
         TrustPathGuard _tpg(trust_push ? value_min_depth : 0,
                             trust_push ? ((escalation_r > 0.0) ? escalation_r : 120.0) : 0.0);
         // MTG_CONDEMN_HONEST_PROBE (measurement lever, DEFAULT OFF): run the hybrid's PROBE with
@@ -35693,7 +35732,59 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // value-leaf-d(k) ~= heuristic-d(k-3)); so an unverified line committed below `value_min_depth` (the
     // per-model trust depth: knights/slivers stop at d5 where their leaf matches, others escalate up to the
     // user depth) is escalated to the exact heuristic leaf. See learned-d0-policy.md.
-    const bool verified = (line.win_turn <= state.turn_number + committed - 1);
+    bool verified = (line.win_turn <= state.turn_number + committed - 1);
+    if (nl_esc)
+    {
+        g_nlv_decisions.fetch_add(1, std::memory_order_relaxed);
+        if (verified) { g_nlv_banked.fetch_add(1, std::memory_order_relaxed); }
+        else if (value_min_depth > 0 && committed >= value_min_depth && committed >= 1)
+        {
+            // The value pass at the last depth, on the reserved budget (overrun-guarded like any pass).
+            ForceValueLeafGuard _fv(true);
+            FSLineCache vcache;
+            const long long used_before = budget ? budget->Used() : 0;
+            const bool bounded = budget != nullptr && !budget->Unlimited();
+            if (bounded)
+            {
+                budget->SetOverrunLimit(used_before + std::max(static_cast<long long>(kOverrunBeta * static_cast<double>(budget->Limit())), kOverrunFloor));
+            }
+            SearchLine vl = FSLineWin(state, committed, max_turns, max_turns + 1, second_main, tt, &vcache, budget);
+            if (!(bounded && budget->Overrun()) && vl.truncated)
+            {
+                g_orderfree_off = true;
+                const SearchLine full = FSLineWin(state, committed, max_turns, max_turns + 1, second_main, tt, &vcache, budget);
+                g_orderfree_off = false;
+                g_fillin_passes.fetch_add(1, std::memory_order_relaxed);
+                if (!(bounded && budget->Overrun())) { vl = full; }
+            }
+            const bool over = bounded && budget->Overrun();
+            if (budget != nullptr) { budget->SetOverrunLimit(0); }
+            g_nlv_value_units.fetch_add((budget ? budget->Used() : 0) - used_before, std::memory_order_relaxed);
+            if (over)
+            {
+                // User (2026-09-09 night): "we want the prioritization of the value-leaf on the final depth we
+                // are searching, but do not finish entirely." The ladder's ANYTIME rule applies: the partial
+                // pass is pessimistic-only, so a line it rated (win_turn below the no-leaf line's, which is
+                // max_turns+1 here) was genuinely reached and is kept; nothing rated => the heuristic escalation.
+                static const bool s_nl_anytime = EnvOn("MTG_ID_ANYTIME", true);
+                g_nlv_overruns.fetch_add(1, std::memory_order_relaxed);
+                if (s_nl_anytime && vl.win_turn < line.win_turn)
+                {
+                    g_nlv_partial_kept.fetch_add(1, std::memory_order_relaxed);
+                    line = vl;
+                    verified = (line.win_turn <= state.turn_number + committed - 1);
+                }
+                else { nl_force_escalate = true; }
+            }
+            else
+            {
+                g_nlv_value_passes.fetch_add(1, std::memory_order_relaxed);
+                line = vl;
+                verified = (line.win_turn <= state.turn_number + committed - 1);
+            }
+        }
+        else { g_nlv_to_heuristic.fetch_add(1, std::memory_order_relaxed); }
+    }
     // SINGLE HEURISTIC PASS AT THE COMMITTED DEPTH (MTG_ESC_SINGLE_AT_COMMITTED / per-job `esc_single`,
     // default OFF = byte-identical). The user's paradigm (2026-09-08): the value-leaf ladder decides the
     // depth D it can afford; then the heuristic rollout leaf plays exactly ONE pass at D, to completion
@@ -35729,7 +35820,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         RecordIdDepth(committed);
         return line;
     }
-    const bool escalate = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified);
+    const bool escalate = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified) || nl_force_escalate;
     if (g_hybrid_stats.enabled && value_active)
     {
         g_hybrid_stats.decisions.fetch_add(1);

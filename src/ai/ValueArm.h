@@ -82,6 +82,9 @@ inline thread_local Arm t_arm;
 // The per-job arm still wins over all of them (an A/B must be able to pin the shape on any deck).
 inline thread_local int         t_deck_ladder = 0;
 inline thread_local int         t_deck_warm_none = 0;
+// 1 = value_play.commit "model" (both ladders: the emulated ladder's committing pass, or the escalation
+// ladder's value pass at its last depth before the heuristic escalation).
+inline thread_local int         t_deck_commit_model = 0;
 inline thread_local std::string t_deck_key;
 
 // Reset to "use the env default for everything". Called by a worker before a job with no arm block,

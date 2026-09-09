@@ -2513,16 +2513,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // this decision so a pooled batch's next deck on this thread starts clean.
                     struct DeckShapeScope
                     {
-                        int prev_l, prev_w; std::string prev_k;
+                        int prev_l, prev_w, prev_c; std::string prev_k;
                         DeckShapeScope(const MulliganProfile& p)
-                            : prev_l(valuearm::t_deck_ladder), prev_w(valuearm::t_deck_warm_none), prev_k(valuearm::t_deck_key)
+                            : prev_l(valuearm::t_deck_ladder), prev_w(valuearm::t_deck_warm_none), prev_c(valuearm::t_deck_commit_model), prev_k(valuearm::t_deck_key)
                         {
                             valuearm::t_deck_ladder    = (p.value_play.ladder != "emulated") ? 0
                                                        : (p.value_play.commit == "model") ? 2 : 1;
                             valuearm::t_deck_warm_none = (p.value_play.leaf == "none") ? 1 : 0;
+                            valuearm::t_deck_commit_model = (p.value_play.commit == "model") ? 1 : 0;
                             valuearm::t_deck_key       = p.value_source;
                         }
-                        ~DeckShapeScope() { valuearm::t_deck_ladder = prev_l; valuearm::t_deck_warm_none = prev_w; valuearm::t_deck_key = prev_k; }
+                        ~DeckShapeScope() { valuearm::t_deck_ladder = prev_l; valuearm::t_deck_warm_none = prev_w; valuearm::t_deck_commit_model = prev_c; valuearm::t_deck_key = prev_k; }
                     } _shape(m_profile);
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
