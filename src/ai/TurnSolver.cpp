@@ -34520,6 +34520,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (seeded && winlesscert::StatsOn())
             { winlesscert::g_cseed_wins.fetch_add(1, std::memory_order_relaxed); }
         }
+        if (!seeded && at_edge && winlesscert::StatsOn())
+        {
+            // Neither certificate nor seed resolved this edge node: attribute it (round 6).
+            EdfCertNoteResidual();
+        }
         if (seeded)
         {
             if (winlesscert::StatsOn())
