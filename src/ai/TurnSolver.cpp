@@ -34880,7 +34880,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (!commit_call) { heur_mode = false; }         // a forced warm-up does not end the value warm-ups
             // CALIBRATION: this thread has too few R samples at depth k -- also play the heuristic here
             // (fresh memo, same keys) so R(k) is measured, and keep the heuristic's line and EXACT cost.
-            if (!heuristic && k < 16 && g_emul_Rn[k] < kEmulCalibN)
+            // (No calibration when the committing leaf is the model: its units per leaf are ~0 by
+            //  construction -- feature extraction is unmetered -- so a calibration pass would only replay
+            //  the warm-up on the same leaf. Measured 2026-09-09: 1.4-1.9x ship in units with it.)
+            if (!heuristic && !commit_model && k < 16 && g_emul_Rn[k] < kEmulCalibN)
             {
                 SearchLine hatt; long long hcost = 0, hleaves = 0;
                 FSLineCache calib_cache;
