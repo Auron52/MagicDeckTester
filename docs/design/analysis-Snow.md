@@ -451,6 +451,44 @@ Two consequences worth carrying:
   the profile is written before it starts, and on this deck it will occupy the whole box for an
   unbounded time. The run above was stopped for exactly that reason; the profile is unaffected.
 
+## Value leaf ATTEMPTED and DEFERRED 2026-09-09 — the degenerate tail makes phase A unaffordable
+
+`bash scripts/valueleaf.sh run decks/Snow` was started on frozen commit `a26d4632` / src
+`1233dc76` / play fingerprint `3b366eed8cf0` (queue `logs/vlq_snow`) and **cancelled by the user
+after ~2 h 40 m** because it would have owned the box for days. This is a measured verdict on the
+deck, not a pipeline failure — the run behaved exactly as designed.
+
+**What phase A actually achieved** (2500-game target, 10 pooled jobs, one queue, ~23/24 cores busy
+throughout — utilisation was never the problem):
+
+| elapsed | games finished | rows | workers blocked |
+|---|---|---|---|
+| 1 h 58 m | **140 / 2500** | 779 | **23 of 24**, each on a single game running **1.8 h+** |
+| at cancel (~2 h 40 m) | **171 / 2500** | 949 | — |
+
+~47 core-hours bought 140 games ⇒ **≈0.34 core-h/game ⇒ ≥35 h for phase A alone**, and that is the
+optimistic read: it credits the 23 unfinished tail games as free when they had already consumed
+~41 core-h between them. Instantaneous throughput at cancel was ≈0 — the pool had exhausted the
+cheap games and every worker was grinding the tail. Phase C (the H×V matrix) is normally the larger
+phase, so the full pipeline is multiple days, not an overnight.
+
+**Root cause is this deck's degenerate tail, compounded.** Phase A plays at shipped settings but
+attaches K=3 SEARCHED labels per position, which multiplies cost precisely on the games that were
+already worst. It is the same tail measured two hours earlier by the analyzer's unlimited-budget
+diagnostic (worst single game **19 minutes**, section above).
+
+**There is no supported lever for this.** `--abandon-units` (the per-game work ceiling) is a
+**phase C** flag on `valueleaf_depth_matrix.py`, is documented as uncalibrated and not for
+production runs, and **would not touch phase A**. The pipeline is deliberately knob-free, so the
+honest position is: *Snow's degenerate games must be made tractable before a value leaf is
+affordable here.* That is the prerequisite work, and it is also the higher-value work — the same
+tail is what makes every Snow measurement expensive.
+
+**State preserved for a resume** (nothing needs redoing): freeze intact, phase 0 marked done, and
+949 rows over 171 games on disk in `logs/vlq_snow`. Rows dedupe on `(seed, turn)`, so
+`bash scripts/valueleaf.sh run decks/Snow` RESUMES rather than restarts. Do **not** use `finish`
+(accept-rows-as-final) at this row count — 171 games is far too thin to train on.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. ~~`{S}` modelled as generic `{1}`~~ — **CLOSED 2026-09-06** by the real snow-mana model
