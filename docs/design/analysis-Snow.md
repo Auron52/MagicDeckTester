@@ -489,6 +489,60 @@ tail is what makes every Snow measurement expensive.
 `bash scripts/valueleaf.sh run decks/Snow` RESUMES rather than restarts. Do **not** use `finish`
 (accept-rows-as-final) at this row count — 171 games is far too thin to train on.
 
+## Optimisation attempt 2026-09-09 — candidate duplication measured; the cheap win is not available
+
+Target chosen from the perf characterisation above: with the value leaf deferred, `rollout_step +
+greedy_fallback` (49%) is unreachable, leaving the LOOKAHEAD sites. `la_cand` is the largest single
+site (34%) and charges **one unit per candidate scored**, so that share IS candidate count.
+
+**Finding 1 — 64% of scored candidates are redundant.** A census (`MTG_DEDUP_CENSUS`, default off,
+counts only) over 60 games: `seen=4,226,520 dup=2,702,295` — a candidate whose post-apply state an
+earlier sibling of the same pass already reached, whose rollout therefore recomputes a result
+already on the books. The skip for this already existed at both candidate sites but was bundled
+behind `MTG_COST_REFRAME`, an unrelated cost relaxation nothing ships. `MTG_CAND_DEDUP` unbundles it
+(`a5b02c66`).
+
+**Finding 2 — it is a QUALITY lever, not a speed one.** Adopted nothing; measured everything:
+
+| gate | result |
+|---|---|
+| regression tier | slower=0 **faster=5** play-changed=19 |
+| smoke | slower=0 **faster=7** play-changed=8 |
+| Snow 300 @ play settings | avg **6.0833 unchanged**, units 49,617,752 → 47,326,981 (−4.6%) |
+| Snow 300 **wall** | 108.4 s → 108.8 s; CPU ms 1,686,946 → 1,695,529 (medians of 3 interleaved reps) |
+
+**Wall-neutral.** It ships DEFAULT OFF: it clears the adoption bar on quality but does not do the
+job it was built for, and adopting it would move 17 GT keys for an unrelated benefit.
+
+**Finding 3 — a metric caveat that generalises.** Units and wall disagree here, and *units are the
+flattering one*. `units_total` counts SEARCH work; this change trades search work for **hashing**
+(`BuildDedupKey` on every candidate), which the unit counters cannot see. The saved rollouts and the
+added hashing nearly cancel. Do not price a change that adds NON-SEARCH work in units alone — this
+is the mirror image of the wall-vs-units trap, pointing the other way.
+
+**Finding 4 — the real prize is measured UNAVAILABLE, twice.** The win worth having is a skip that
+lands *before* the `GameState` copy and `ApplyPlanDirect`, not just before the rollout — and most
+duplicates look like pure copy permutations (same cards, same modes, different `Action::hand_index`;
+Snow runs multiples of Coldsteel Heart, Scrying Sheets and the snow basics), which are recognisable
+from the plan alone. That would skip ~60% of candidates outright. It is unsound:
+
+| signature | copy_perm | **copy_FALSE** |
+|---|---|---|
+| narrow (kind, name, x, alt, sac_land, dig_sac, discard, splice, float) | 2,531,634 | 949,427 |
+| widened: every mode-bearing Action field + `bp_choice`/`searched_order`/`atk_dork_release` | 1,808,436 | **853,079 (32%)** |
+
+`copy_FALSE` = candidates sharing a signature with an earlier sibling that land on a **different**
+post-apply state. Widening the signature barely moved it: the plan does not determine the state. A
+signature skip would delete ~a third of genuinely distinct lines — a lossy prune, refused by the
+standing no-lossy-truncation bar however a suite scores it. Re-check `copy_FALSE` before anyone
+retries this.
+
+**Where Snow's cost therefore still sits.** Unchanged from the characterisation above: no hotspot,
+cost spread across candidate volume (state copy + apply per candidate), rollouts, and the
+`la_bp_wave` price of the site-8 same-turn-playability directive. The deck's structural remedy is
+still the value leaf, which is itself blocked by the degenerate tail (section above) — so the tail
+remains the thing to attack, and it is now blocking two separate lines of work.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. ~~`{S}` modelled as generic `{1}`~~ — **CLOSED 2026-09-06** by the real snow-mana model
