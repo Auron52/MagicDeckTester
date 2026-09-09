@@ -608,6 +608,8 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     // what lets ONE pooled batch run the A/B instead of one invocation per arm.
     if (jspec.contains("esc_to_trust")) { j.arm.esc_to_trust = jspec["esc_to_trust"].get<bool>() ? 1 : 0; }
     if (jspec.contains("esc_single"))   { j.arm.esc_single   = jspec["esc_single"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("ladder_emulated")) { j.arm.ladder_emulated = jspec["ladder_emulated"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("ladder_emul_margin")) { j.arm.ladder_emul_margin = jspec["ladder_emul_margin"].get<double>(); }
     if (jspec.contains("trust_slack"))  { j.arm.trust_slack  = jspec["trust_slack"].get<double>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());
     // "flags": {"MTG_KE_ORDER": true, ...} -- per-job boolean lever overrides (see ai/HeuristicArm.h).

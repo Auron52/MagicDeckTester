@@ -40,6 +40,12 @@ struct Arm
     // and its line is always taken. No d1..D heuristic re-ladder, no crossover fall-back, no
     // starvation. User paradigm 2026-09-08 ("don't search further; heuristic at the final depth").
     int         esc_single        = -1;     // -1 unset | 0 off | 1 on     (MTG_ESC_SINGLE_AT_COMMITTED)
+    // EMULATED-GATE LADDER (MTG_LADDER_EMULATED): warm-up passes on the value leaf, the committing pass
+    // on the heuristic rollout, at the depth the FULL HEURISTIC ladder would have committed -- its start
+    // gate is replayed on reconstructed heuristic pass costs (value cost + R x leaves). User design
+    // 2026-09-09. Shape for an A/B: value_model=false + value_profile=<model> + ladder_emulated=true.
+    int         ladder_emulated   = -1;     // -1 unset | 0 off | 1 on     (MTG_LADDER_EMULATED)
+    double      ladder_emul_margin = -1.0;  // <=0 unset                   (MTG_LADDER_EMUL_MARGIN; <1 biases borderline passes to the heuristic)
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).
     // "none"/"off"/"0" => explicitly NO sidecar, which is how an H-arm job asks for the pure

@@ -310,6 +310,14 @@ static std::atomic<long long> g_idwaste_units{0}, g_idwaste_passes{0}, g_idpass_
 // counted (not gated on MTG_ID_ANYTIME) so the control arm reports what the shipped path throws
 // away. See the anytime-commit block in FullSearchLine.
 static std::atomic<long long> g_idwaste_rescuable{0};
+// Emulated-gate ladder telemetry (MTG_LADDER_EMULATED; printed under MTG_ROLLOUT_STATS).
+static std::atomic<long long> g_emul_decisions{0}, g_emul_vpasses{0}, g_emul_hpasses{0},
+                              g_emul_fallbacks{0}, g_emul_overruns{0}, g_emul_no_heuristic{0},
+                              g_emul_r_milli{0}, g_emul_r_n{0},
+                              g_emul_v_units{0}, g_emul_h_units{0}, g_emul_waste_units{0},
+                              g_emul_calib_passes{0};
+static std::array<std::atomic<long long>, 16> g_emul_rd_milli{}, g_emul_rd_n{}, g_emul_bias_milli{}, g_emul_bias_n{};
+static std::array<std::atomic<long long>, 16> g_emul_commit_hist{};
 
 // Record one top-level decision's committed ITERATIVE-DEEPENING depth. See g_iddepth_hist.
 static inline void RecordIdDepth(int d)
@@ -459,6 +467,31 @@ namespace
                           << " waste_units=" << iw
                           << " waste_share=" << (site_tot ? static_cast<double>(iw) / site_tot : 0.0)
                           << "\n";
+            }
+            if (g_emul_decisions.load() > 0)
+            {
+                std::cerr << "[rollout-stats] emulated-ladder decisions=" << g_emul_decisions.load()
+                          << " value_passes=" << g_emul_vpasses.load()
+                          << " heuristic_passes=" << g_emul_hpasses.load()
+                          << " fallbacks(mispredicted committing depth)=" << g_emul_fallbacks.load()
+                          << " overruns=" << g_emul_overruns.load()
+                          << " no_heuristic_line=" << g_emul_no_heuristic.load()
+                          << " units: value=" << g_emul_v_units.load() << " heuristic=" << g_emul_h_units.load()
+                          << " wasted_value=" << g_emul_waste_units.load()
+                          << " calib_passes=" << g_emul_calib_passes.load()
+                          << "\n[rollout-stats]   emul R by depth (units/leaf, n): ";
+                for (int d = 0; d < 16; ++d)
+                { if (g_emul_rd_n[d].load() > 0) { std::cerr << "d" << d << "=" << static_cast<double>(g_emul_rd_milli[d].load()) / (1000.0 * static_cast<double>(g_emul_rd_n[d].load())) << "(" << g_emul_rd_n[d].load() << ") "; } }
+                std::cerr << "\n[rollout-stats]   emul bias actual/reconstructed by depth: ";
+                for (int d = 0; d < 16; ++d)
+                { if (g_emul_bias_n[d].load() > 0) { std::cerr << "d" << d << "=" << static_cast<double>(g_emul_bias_milli[d].load()) / (1000.0 * static_cast<double>(g_emul_bias_n[d].load())) << "(" << g_emul_bias_n[d].load() << ") "; } }
+                std::cerr
+                          << " R_mean=" << (g_emul_r_n.load() ? static_cast<double>(g_emul_r_milli.load())
+                                                               / (1000.0 * static_cast<double>(g_emul_r_n.load())) : 0.0)
+                          << " committed hist=";
+                for (int d = 0; d < 16; ++d)
+                { if (g_emul_commit_hist[d].load() > 0) { std::cerr << d << ":" << g_emul_commit_hist[d].load() << " "; } }
+                std::cerr << "\n";
             }
             for (int i = 0; i < unitsite::kSiteCount; ++i)
             {
@@ -31048,6 +31081,16 @@ inline thread_local bool       g_hlad_recording = false;
 // FIXES the depth-decay bias -- R learned from DEEP committed passes reflects deep-leaf rollout cost (~125),
 // not the inflated d1 cost (~194). Seeded lazily on the first escalation. 0 = uninitialized.
 inline thread_local double g_esc_R = 0.0;
+// Emulated-gate ladder (MTG_LADDER_EMULATED): the deck's learned heuristic-rollout cost per leaf,
+// in work units, so a value-leaf pass's cost can be converted to the heuristic pass's cost at the
+// same depth (same tree; only the leaf differs). EMA over measured (value, heuristic) pairs at one
+// depth; the deck-agnostic prior matches the escalation predictor's.
+inline thread_local double g_emul_R = 0.0;          // depth-agnostic EMA (fallback prior)
+inline thread_local double g_emul_Rd[16]  = {0};    // per-depth EMA: rollout cost per leaf shrinks with depth
+inline thread_local int    g_emul_Rn[16]  = {0};    // samples per depth (calibration runs until >= kEmulCalibN)
+// The learned state belongs to ONE deck: a pooled batch reuses a worker thread across decks, so key it
+// on the job's value-profile path and reset on change (the minotaur d5 flake was exactly this leak).
+inline thread_local std::string g_emul_key;
 // AUDIT-only: the climb's per-depth MEASURED pass costs + start depth, for the lossy-case dump.
 inline thread_local double    g_climb_cmeas[16] = {0};
 inline thread_local int       g_climb_start = 0;
@@ -33228,7 +33271,231 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     const bool s_ladder_value_leaf = (valuearm::t_arm.ladder_value_leaf >= 0)
                                    ? (valuearm::t_arm.ladder_value_leaf != 0) : s_ladder_env;
 
-    for (int pass_depth = (depth >= 1 ? 1 : depth); pass_depth <= depth; ++pass_depth)
+    // EMULATED-GATE LADDER (MTG_LADDER_EMULATED / per-job `ladder_emulated`, default OFF = byte-identical).
+    //
+    // User design (2026-09-09): warm-up passes on the value leaf, the COMMITTING pass on the heuristic
+    // rollout, at the depth the full heuristic ladder would have committed -- so the line is the
+    // heuristic ladder's line (same tree, same leaf, same depth) and the cost is that ladder's cost
+    // minus the warm-ups' rollouts. MTG_LADDER_VALUE_LEAF fails this under a bounded budget because
+    // it feeds the CHEAP value costs into the start gate (which then admits a deeper pass the heuristic
+    // could not afford) and, on that pass's overrun, keeps a value-leaf warm-up line.
+    //
+    // The tricky point is the depth. The heuristic gate reads pass costs, and those are what the value
+    // warm-ups do not produce -- so they are RECONSTRUCTED: the tree of a pass is identical under both
+    // leaves, so heuristic cost(k) = value cost(k) + R x leaves(k), with R the deck's rollout cost per
+    // leaf (learned online from every (value, heuristic) pair measured at one depth; prior 120). The
+    // gate is then replayed exactly as the heuristic ladder runs it -- alpha 1.10 (never the value
+    // leniency), growth from the two previous reconstructed costs, remaining = limit minus the
+    // reconstructed heuristic SPEND (the heuristic ladder would have spent more than we did). A pass
+    // is played on the value leaf iff the replayed gate predicts the NEXT pass would also be admitted;
+    // the predicted last admitted pass is played on the heuristic. If the prediction is wrong (the gate
+    // rejects the next pass after a value pass, or a heuristic pass overruns), the heuristic is played
+    // at the depth the heuristic ladder would have committed -- one shallower each time -- so the
+    // committed line is heuristic in every case but total overrun. A verified in-horizon win is found
+    // by the tree, not the leaf, so the ladder stops on it exactly as before.
+    static const bool s_ladder_emul_env = EnvOn("MTG_LADDER_EMULATED");
+    const bool s_ladder_emul = (valuearm::t_arm.ladder_emulated >= 0)
+                             ? (valuearm::t_arm.ladder_emulated != 0) : s_ladder_emul_env;
+    bool emul_done = false;
+    if (s_ladder_emul && depth >= 1 && state.m_value_model && !state.m_value_model->empty())
+    {
+        emul_done = true;
+        g_emul_decisions.fetch_add(1, std::memory_order_relaxed);
+        if (g_emul_key != valuearm::t_arm.value_profile)
+        {
+            g_emul_key = valuearm::t_arm.value_profile;
+            g_emul_R = 0.0;
+            for (int d = 0; d < 16; ++d) { g_emul_Rd[d] = 0.0; g_emul_Rn[d] = 0; }
+        }
+        if (g_emul_R <= 0.0) { g_emul_R = 120.0; }
+        constexpr double kEmulRAlpha = 0.4;
+        double    ch[17] = {0};            // reconstructed (or exact) HEURISTIC cost per completed pass
+        long long cv[17] = {0};            // value-pass cost, where a value pass ran
+        long long lv[17] = {0};            // value-pass leaf count
+        bool      ran_h[17] = {false};     // pass k's line is the heuristic's
+        SearchLine lines[17];              // each completed pass's line (rollback target on overrun)
+        double    spent_h = 0.0;           // what the heuristic ladder would have spent so far
+        const bool   bounded = (budget != nullptr && !budget->Unlimited());
+        const double limit   = bounded ? static_cast<double>(budget->Limit()) : 0.0;
+        int  last_done = 0;                // deepest completed pass (either leaf)
+        bool heur_mode = false;            // once a heuristic pass ran, every later pass is heuristic
+        constexpr int kEmulCalibN = 3;     // per-thread samples per depth before that depth is trusted
+        auto R_at = [&](int d) -> double
+        {
+            if (d >= 0 && d < 16 && g_emul_Rn[d] > 0) { return g_emul_Rd[d]; }
+            for (int off = 1; off < 16; ++off)         // nearest learned depth
+            {
+                if (d - off >= 0 && g_emul_Rn[d - off] > 0) { return g_emul_Rd[d - off]; }
+                if (d + off < 16 && g_emul_Rn[d + off] > 0) { return g_emul_Rd[d + off]; }
+            }
+            return g_emul_R;
+        };
+        auto learn_R = [&](int k, long long hcost)
+        {
+            if (lv[k] > 0 && hcost > cv[k])
+            {
+                const double sample = std::max(1.0, static_cast<double>(hcost - cv[k]) / static_cast<double>(lv[k]));
+                g_emul_R = (1.0 - kEmulRAlpha) * g_emul_R + kEmulRAlpha * sample;
+                if (k >= 0 && k < 16)
+                {
+                    g_emul_Rd[k] = (g_emul_Rn[k] == 0) ? sample : (1.0 - kEmulRAlpha) * g_emul_Rd[k] + kEmulRAlpha * sample;
+                    ++g_emul_Rn[k];
+                    g_emul_rd_milli[k].fetch_add(static_cast<long long>(sample * 1000.0), std::memory_order_relaxed);
+                    g_emul_rd_n[k].fetch_add(1, std::memory_order_relaxed);
+                    if (ch[k] > 0.0)   // bias of the reconstruction this pass would have used
+                    {
+                        g_emul_bias_milli[k].fetch_add(static_cast<long long>(1000.0 * static_cast<double>(hcost) / ch[k]), std::memory_order_relaxed);
+                        g_emul_bias_n[k].fetch_add(1, std::memory_order_relaxed);
+                    }
+                }
+                g_emul_r_milli.fetch_add(static_cast<long long>(sample * 1000.0), std::memory_order_relaxed);
+                g_emul_r_n.fetch_add(1, std::memory_order_relaxed);
+            }
+        };
+        // One pass at depth d on the chosen leaf; false on overrun (partial result discarded).
+        // `cache`: the shared per-decision memo for passes at NEW depths (their keys cannot collide with
+        // any earlier pass: turn + remaining depth is a per-pass constant). A heuristic RE-RUN at a depth a
+        // value pass already searched must NOT see that pass's entries -- same keys, value-leaf win turns
+        // -- so the fallback path hands in a fresh cache (the same rule the hybrid's escalation obeys).
+        auto run_pass = [&](int d, bool heuristic, SearchLine& out, long long& cost, long long& leaves,
+                            FSLineCache* cache) -> bool
+        {
+            ForceValueLeafGuard     _v(!heuristic);
+            ForceHeuristicLeafGuard _h(heuristic);
+            const long long used_before   = budget ? budget->Used() : 0;
+            const long long leaves_before = g_fs_leaf_evals;
+            if (bounded)
+            {
+                const long long beta_ceiling = static_cast<long long>(kOverrunBeta * limit);
+                budget->SetOverrunLimit(used_before + std::max(beta_ceiling, kOverrunFloor));
+            }
+            if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
+            (heuristic ? g_emul_hpasses : g_emul_vpasses).fetch_add(1, std::memory_order_relaxed);
+            out = FSLineWin(state, d, max_turns, max_turns + 1, second_main, tt, cache, budget);
+            const bool over = bounded && budget->Overrun();
+            if (budget != nullptr) { budget->SetOverrunLimit(0); }
+            cost   = (budget ? budget->Used() : 0) - used_before;
+            leaves = g_fs_leaf_evals - leaves_before;
+            (heuristic ? g_emul_h_units : g_emul_v_units).fetch_add(cost, std::memory_order_relaxed);
+            if (over)
+            {
+                g_emul_overruns.fetch_add(1, std::memory_order_relaxed);
+                if (s_rollout_stats)
+                {
+                    g_idwaste_passes.fetch_add(1, std::memory_order_relaxed);
+                    g_idwaste_units.fetch_add(cost, std::memory_order_relaxed);
+                }
+            }
+            return !over;
+        };
+        // The heuristic ladder's start gate for pass k (k >= 2), replayed on reconstructed costs.
+        double spent_real = 0.0;           // what WE actually spent inside the ladder (units)
+        // The heuristic ladder's remaining budget = the real remaining (which also reflects work
+        // billed BEFORE the ladder) minus the extra the heuristic ladder would have spent so far.
+        auto rem_h = [&]() -> double
+        { return static_cast<double>(budget->Remaining()) - (spent_h - spent_real); };
+        auto gate_fits = [&](int k) -> bool
+        {
+            if (!bounded) { return true; }
+            const double ratio = (k >= 3 && ch[k - 2] > 0.0) ? ch[k - 1] / ch[k - 2] : kDefaultGrowth;
+            const double est   = ch[k - 1] * ratio;
+            return est <= kStartGateAlpha * rem_h();
+        };
+        // Before running pass k: would the heuristic ladder ALSO admit pass k+1 (so pass k is a warm-up)?
+        // BIAS (user, 2026-09-09): a wrong "warm-up" call wastes a value pass at the committing depth,
+        // while a wrong "committing" call merely plays one more heuristic pass the ladder would have
+        // played anyway -- so borderline cases should go heuristic. `margin` < 1 shrinks the allowance
+        // the extrapolated next pass must fit in before pass k is called a warm-up.
+        static const double s_emul_margin_env = []{ const char* e = std::getenv("MTG_LADDER_EMUL_MARGIN");
+                                                    return (e && *e) ? std::atof(e) : 1.0; }();
+        const double emul_margin = (valuearm::t_arm.ladder_emul_margin > 0.0)
+                                 ? valuearm::t_arm.ladder_emul_margin : s_emul_margin_env;
+        auto predict_next_fits = [&](int k) -> bool
+        {
+            if (k + 1 > depth) { return false; }
+            if (!bounded || k == 1) { return true; }   // pass 1 has no cost to extrapolate from: warm up
+            const double ratio  = (k >= 3 && ch[k - 2] > 0.0) ? ch[k - 1] / ch[k - 2] : kDefaultGrowth;
+            const double est_k  = ch[k - 1] * ratio;
+            const double est_k1 = est_k * ratio;
+            return est_k1 <= emul_margin * kStartGateAlpha * (rem_h() - est_k);
+        };
+        auto commit_pass = [&](int k, const SearchLine& att, bool heuristic, long long cost, long long leaves)
+        {
+            if (heuristic) { heur_mode = true; ran_h[k] = true; learn_R(k, cost); ch[k] = static_cast<double>(cost); }
+            else           { cv[k] = cost; lv[k] = leaves; ch[k] = static_cast<double>(cost) + R_at(k) * static_cast<double>(leaves); }
+            spent_h += ch[k]; spent_real += static_cast<double>(cost);
+            lines[k] = att;
+            line = att; committed_depth = k; last_done = k;
+            TRACE("search", "T%d emul pass=%d %s done win=%d cost=%lld leaves=%lld ch=%.0f",
+                  state.turn_number, k, heuristic ? "H" : "V", att.win_turn, cost, leaves, ch[k]);
+        };
+        bool verified = false;
+        for (int k = 1; k <= depth; ++k)
+        {
+            if (k >= 2 && !gate_fits(k)) { break; }          // the heuristic ladder stops before pass k
+            const bool heuristic = heur_mode || !predict_next_fits(k);
+            SearchLine att; long long cost = 0, leaves = 0;
+            if (!run_pass(k, heuristic, att, cost, leaves, &line_cache)) { break; }   // ladder would commit k-1
+            commit_pass(k, att, heuristic, cost, leaves);
+            // CALIBRATION: this thread has too few R samples at depth k -- also play the heuristic here
+            // (fresh memo, same keys) so R(k) is measured, and keep the heuristic's line and EXACT cost.
+            if (!heuristic && k < 16 && g_emul_Rn[k] < kEmulCalibN)
+            {
+                SearchLine hatt; long long hcost = 0, hleaves = 0;
+                FSLineCache calib_cache;
+                g_emul_calib_passes.fetch_add(1, std::memory_order_relaxed);
+                if (run_pass(k, true, hatt, hcost, hleaves, &calib_cache))
+                {
+                    spent_h -= ch[k]; spent_real += static_cast<double>(hcost);
+                    ran_h[k] = true; learn_R(k, hcost); ch[k] = static_cast<double>(hcost); spent_h += ch[k];
+                    lines[k] = hatt; line = hatt;
+                }
+            }
+            if (line.win_turn <= state.turn_number + k - 1) { verified = true; break; }
+        }
+        // The committed line must be the HEURISTIC's at the depth the heuristic ladder would have
+        // committed. A value line at last_done means the prediction was wrong (or a heuristic pass
+        // overran above it): play the heuristic there, stepping shallower on each further overrun.
+        // A verified value-pass win is a real in-horizon simulation and needs no replay.
+        while (!verified && last_done >= 1 && !ran_h[last_done])
+        {
+            g_emul_fallbacks.fetch_add(1, std::memory_order_relaxed);
+            const int k = last_done;
+            g_emul_waste_units.fetch_add(cv[k], std::memory_order_relaxed);   // the value pass at k was wasted
+            SearchLine att; long long cost = 0, leaves = 0;
+            FSLineCache fresh_cache;   // depth k was searched on the value leaf: its memo must not be read
+            if (run_pass(k, true, att, cost, leaves, &fresh_cache))
+            {
+                spent_h -= ch[k]; spent_real += static_cast<double>(cost);
+                ran_h[k] = true; learn_R(k, cost); ch[k] = static_cast<double>(cost); spent_h += ch[k];
+                lines[k] = att;
+                line = att; committed_depth = k; heur_mode = true;
+                // With the EXACT cost the heuristic ladder might still have admitted k+1: replay onward.
+                for (int n = k + 1; n <= depth && gate_fits(n); ++n)
+                {
+                    SearchLine att2; long long cost2 = 0, leaves2 = 0;
+                    if (!run_pass(n, true, att2, cost2, leaves2, &line_cache)) { break; }
+                    commit_pass(n, att2, true, cost2, leaves2);
+                    if (line.win_turn <= state.turn_number + n - 1) { break; }
+                }
+                break;
+            }
+            --last_done;                                        // overran: one shallower, as the ladder would
+            if (last_done >= 1 && ran_h[last_done]) { line = lines[last_done]; committed_depth = last_done; }
+        }
+        if (last_done < 1)
+        {
+            // Every heuristic attempt overran (pathological): nothing heuristic to commit. Keep the
+            // deepest completed value line if any pass completed at all; count it.
+            g_emul_no_heuristic.fetch_add(1, std::memory_order_relaxed);
+        }
+        {
+            const int hd = (committed_depth >= 0 && committed_depth < 16) ? committed_depth : 15;
+            g_emul_commit_hist[hd].fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+
+    for (int pass_depth = (depth >= 1 ? 1 : depth); !emul_done && pass_depth <= depth; ++pass_depth)
     {
         // Cheap leaf for every pass but the one that commits.
         ForceValueLeafGuard _lvl(s_ladder_value_leaf && pass_depth < depth);

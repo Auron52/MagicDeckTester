@@ -2245,3 +2245,54 @@ inefficiency (starved re-ladder + fall-back). Where the crossover is NOT the ide
 decks) the same mode should carry the leaf's cost advantage through to the committed line without
 the redo tax -- that is the deck class to test next (Fluctuator, then a V<<H deck such as hinata).
 Adoption for Melira: not proposed (no sidecar; budget is the simpler lever). Lever kept, default off.
+
+## SESSION 2026-09-09 — the EMULATED-GATE LADDER (user design): value warm-ups, heuristic commit at the heuristic's depth
+
+User: *"The idea I mentioned should have no extra cost (and should lean toward a lesser cost) on decks
+like Fluctuator or Melira if done properly. We would aim to use the heuristic rollout at the final
+depth we expect to process. The only slightly tricky point is ensuring that we indeed use the
+heuristic at the same level as it was used with a full heuristic ladder."* — and on the depth
+choice: *"I agree with the estimation approach ... We need something like that to avoid just blindly
+going to the next level."* Priority: *"make it a win and then figure out how much we can tune it."*
+
+**What there is to win (unbounded, byte-identical lines, 40 games/cell, logs/melira_vl_ab/warmup.out):**
+
+| deck | d3 | d4 | d5 |
+|---|---|---|---|
+| Melira | 1.22x | 1.11x | 1.22x |
+| Fluctuator | 1.26x | 2.44x | **4.07x** |
+
+**Built: `MTG_LADDER_EMULATED` / per-job `ladder_emulated` (+ `ladder_emul_margin`), default OFF,
+byte-identical off (smoke 80/80 configs changed 0).** In FullSearchLine's ladder: warm-up passes on the
+value leaf; the heuristic ladder's start gate is REPLAYED on reconstructed heuristic costs
+`ch(k) = value cost(k) + R(k) x leaves(k)` (same tree under both leaves, only the leaf differs), alpha
+1.10, growth from the two previous reconstructed costs, remaining = real remaining minus the extra the
+heuristic ladder would have spent; a pass is played on the value leaf iff the replayed gate predicts
+the NEXT pass is admitted, else on the heuristic; a wrong "warm-up" call (gate rejects k+1 after a
+value pass at k) replays the heuristic at k with a FRESH interior memo (the value pass's entries share
+its keys — the interior-reuse doc's trap, hit once here: "heuristic" fallbacks were reading value
+lines at zero cost until the fresh cache); overrun steps one shallower as the ladder would. R(k) is
+learned per depth on the thread from every (value, heuristic) pair at one depth, with a 3-sample
+per-depth calibration (both leaves played) and a per-deck reset keyed on the value-profile path.
+
+**Sanity, 50 games Melira d5/b20, seed 700000 (same games, MTG_ROLLOUT_STATS):**
+
+| ladder | digest | avg | units | committed hist |
+|---|---|---|---|---|
+| heuristic (live) | 0927226b5564d358 | 5.18 | 7.39M | 1:20 2:268 3:176 4:72 5:46 |
+| emulated, single R (first cut) | 5f6d8eef… | 5.12 | 11.46M | 2:157 3:238 … (gate too permissive) |
+| **emulated, per-depth R + real-remaining** | **0927226b5564d358 (IDENTICAL)** | 5.18 | 7.79M (1.05x) | ~same |
+
+So the depth is reproduced: identical play. Remaining overheads on Melira (where warm-ups are cheap
+greedy rollouts anyway): value passes 9% of units, fallback waste 5% (26% of decisions mispredict
+the committing depth), calibration passes (per thread, amortised in long jobs). Measured R(k):
+d1 6.1, d2 4.0, d3 4.1, d4 3.5 units/leaf — the reconstruction over-estimates at d1 (bias 0.49) and
+d2 (0.79), which is the conservative direction.
+
+First bounded A/B (before the per-depth fix; 8 seeds x 1000): slightly BETTER quality (-0.003..-0.014,
+significant) at 1.07-1.35x cost = the permissive gate committing deeper. Margin sweep (1.0 / 0.5 /
+0.25) on the fixed binary running (logs/melira_vl_ab/ab8.out).
+
+**Adoption caveat to resolve before any ship:** R is learned per THREAD, so committed depths depend
+on the game->thread schedule (the minotaur d5 flake mechanism). For shipping, R(k) must be a
+per-deck constant in the profile (measured offline, deterministic) or re-calibrated per game.
