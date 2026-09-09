@@ -1,4 +1,4 @@
-# Regression ground truth -- commit e9aeea67  date 2026-09-09
+# Regression ground truth -- commit df2b519e  date 2026-09-09
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -57,7 +57,7 @@ breaching_smoke_d3_s1001=3.1000/03766483807acbd5
 breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
 critter_smoke_d0_s1001=5.1260/5a3e7f6b86e728da
 critter_smoke_d3_s1001=4.8600/799bce6c483049ea
-critter_smoke_d5_s1001=4.8800/69362000eedec91a
+critter_smoke_d5_s1001=4.8800/1cca5150ee47a9c7
 melira_smoke_d0_s1001=6.4380/f6a846b11dadd30d
 melira_smoke_d3_s1001=4.8800/831846fb9b4061ee
 melira_smoke_d5_s1001=4.9600/a9c0656439be7fe4
@@ -173,7 +173,7 @@ breaching_regression_d5_s2002=3.1000/a253d99d6bb10df1
 breaching_regression_d5_s3003=3.0760/f1ed83ebe4cb9869
 critter_regression_d0_s2002=5.1420/2fd8c86dd6d58212
 critter_regression_d3_s2002=4.9033/c8d4bfcd833c985b
-critter_regression_d3_s3003=4.9033/0bf6676decf597eb
+critter_regression_d3_s3003=4.9033/caf2d9870deb11c0
 critter_regression_d5_s2002=4.9000/9ac5dc497156aee4
 critter_regression_d5_s3003=4.9160/f43124c1c6890b2b
 melira_regression_d0_s2002=6.4080/45c4a7ae0aaa2e79
