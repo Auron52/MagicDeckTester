@@ -1739,6 +1739,12 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
 bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const std::function<void(GameState&)>& resolve_stack)
 {
+    // UNBUDGETED-PLAY LATCH (EngineFlags.h). THE one frame that holds the real play budget, so it
+    // is the only honest place to decide "is this decision unbudgeted". Everything the latch arms
+    // (today: the leaf table's no-win half) is dead code whenever m_budget_ms > 0, which is what
+    // makes budgeted play structurally -- not merely measurably -- untouched. Scoped, because
+    // BottomEvalScope re-enters with a different budget.
+    UnbudgetedPlayScope _unbudgeted_play(m_budget_ms <= 0);
     // MTG_EDF_TURN_TRACE (diagnostic, no-op unless set): dump the blink loop as it stands on the
     // REAL board, before the search is entered. Taken here rather than inside the recognizer because
     // every call site it has is already under a RevealLogPause -- see EdfTurnTrace.
