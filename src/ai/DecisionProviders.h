@@ -1391,6 +1391,14 @@ public:
     bool ProjectsAlternateWin(const GameState& s,
                               const std::vector<const CardDefinition*>& casting) const override;
 
+    // "STUCK -- PASS THE TURN" CERTIFICATE (USER, 2026-09-08: "we have the combo for infinite
+    // mana, but no sink or sufficient sources of colourless. In those cases we need to be able to
+    // identify that we are stuck and pass the turn like a human does. Rather than searching deep
+    // uselessly."). Admissible: proves no line wins THIS turn, so the unbounded label/matrix
+    // search can drop the whole turn node instead of enumerating its cast/blink/breakpoint space.
+    // See the implementation's contract block in DecisionProviders.cpp.
+    bool ProvenWinlessThisTurn(const GameState& s, int controller) const override;
+
     // The wish pool is EIGHT cards and the default width is SIX, which would leave ranks 6-7 --
     // Essence Depleter and Dimensional Infiltrator, i.e. BOTH win conditions -- unreachable by the
     // search at every depth, in every game, forever. Candidates come back in zone order, and for a

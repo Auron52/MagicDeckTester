@@ -32411,6 +32411,151 @@ inline bool FSNoWinCacheOn()
     return v || g_force_nowin_cache;
 }
 
+// ---- "STUCK -- PASS THE TURN": the provably-winless-this-turn certificate --------------------
+//
+// USER, 2026-09-08: "we have the combo for infinite mana, but no sink or sufficient sources of
+// colourless. In those cases we need to be able to identify that we are stuck and pass the turn
+// like a human does. Rather than searching deep uselessly."
+//
+// WHERE IT BITES. Under the horizon ladder a pass `dd` searches with `cutoff = turn + dd`, so at a
+// node sitting ON that edge (`state.turn_number == cutoff`) the ONLY line that can still count is
+// one that kills THIS turn: the child at turn+1 is refused by the `turn > cutoff` guard before it
+// can search or even reach a leaf estimate, so the node's whole plan space exists to answer one
+// question. That edge turn is also the WIDEST layer of the pass (branching^dd nodes), and plan
+// enumeration alone is 33.8% self time on a monster EDF label game. Certifying the answer instead
+// of enumerating it therefore removes a whole factor of the branching from every pass.
+//
+// The reduction is exact, not approximate: at `turn == cutoff` a no-win node returns
+// `{max_turns+1, {}}` -- the same value, and the same empty line, this returns.
+//
+// WHY IT IS SCOPED TO UNBOUNDED SEARCH. Budgeted play measures its budget in deterministic WORK
+// UNITS. Pruning consumes none, so it changes what fits inside a budget and therefore changes the
+// line a budgeted search commits -- i.e. play and ground truth. So the certificate is armed ONLY
+// where the search has no budget to distort: inside EnumerateEarliestWins (the offline label
+// ladder -- an explicit scope, because its own budget is a 1e6-virtual-ms backstop rather than
+// literally unlimited) and under a genuinely Unlimited() budget (the depth matrix's `--budget 0`
+// cells). Every regression case runs at an explicit budget, so the suite is byte-identical BY
+// CONSTRUCTION, not by measurement.
+//
+// The proof obligation lives in the provider (DecisionProvider::ProvenWinlessThisTurn); default
+// is `false`, so every deck without an archetype implementation is unchanged.
+inline thread_local int g_unbounded_label_search = 0;
+struct UnboundedSearchScope
+{
+    UnboundedSearchScope()  { ++g_unbounded_label_search; }
+    ~UnboundedSearchScope() { --g_unbounded_label_search; }
+};
+namespace winlesscert
+{
+inline bool Enabled()
+{
+    static const bool v = EnvOn("MTG_WINLESS_CERT", true);
+    return v;
+}
+inline bool StatsOn() { static const bool v = EnvOn("MTG_WINLESS_STATS"); return v; }
+// MTG_WINLESS_DEVELOP -- REACHABLE-STATE CLOSURE on a stuck turn. DEFAULT ON; =0 restores the
+// full per-plan search. See WinlessDevelopActive.
+inline bool DevelopOn() { static const bool v = EnvOn("MTG_WINLESS_DEVELOP", true); return v; }
+inline std::atomic<unsigned long long> g_dev_nodes{0}, g_dev_collapsed{0}, g_dev_distinct{0};
+enum class Site { M1 = 0, M2 = 1 };
+inline std::atomic<unsigned long long> g_checks[2] = {}, g_fires[2] = {};
+// Where the search actually IS: FSLineWin entries and plans enumerated, split by whether the node
+// is inside the unbounded label scope (the only place the certificate may act) and whether it sits
+// on the horizon edge (the only place it CAN act).
+inline std::atomic<unsigned long long> g_nodes_all{0}, g_nodes_label{0}, g_nodes_edge{0};
+inline std::atomic<unsigned long long> g_plans_all{0}, g_plans_label{0}, g_plans_edge{0};
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!StatsOn()) { return; }
+        for (int i = 0; i < 2; ++i)
+        {
+            const unsigned long long c = g_checks[i].load(), f = g_fires[i].load();
+            std::fprintf(stderr, "=== WINLESS CERT[%s]: checks=%llu fired=%llu (%.1f%%) ===\n",
+                         i == 0 ? "m1" : "m2", c, f,
+                         c ? (100.0 * static_cast<double>(f) / static_cast<double>(c)) : 0.0);
+        }
+        std::fprintf(stderr,
+            "=== WINLESS CERT scope: fsw nodes all=%llu label=%llu edge=%llu | "
+            "plans all=%llu label=%llu edge=%llu ===\n",
+            g_nodes_all.load(), g_nodes_label.load(), g_nodes_edge.load(),
+            g_plans_all.load(), g_plans_label.load(), g_plans_edge.load());
+        const unsigned long long dd = g_dev_distinct.load(), dc = g_dev_collapsed.load();
+        std::fprintf(stderr,
+            "=== WINLESS DEVELOP: stuck nodes=%llu distinct end-states=%llu collapsed=%llu "
+            "(%.1f%% of boundaries) ===\n",
+            g_dev_nodes.load(), dd, dc,
+            (dd + dc) ? (100.0 * static_cast<double>(dc) / static_cast<double>(dd + dc)) : 0.0);
+    }
+};
+inline Dumper g_dumper;
+}
+// True when this node's horizon ends on THIS turn and the deck's provider can PROVE no line wins
+// it. Ordered cheapest-test-first: the turn compare, then the scope, then the flag, then the scan.
+static inline bool WinlessCertificateActive(const GameState& s, int cutoff,
+                                            const SearchBudget* budget, winlesscert::Site site)
+{
+    if (s.turn_number < cutoff) { return false; }   // later turns are still inside the horizon
+    if (g_unbounded_label_search == 0
+        && !(budget != nullptr && budget->Unlimited())) { return false; }
+    if (!winlesscert::Enabled()) { return false; }
+    const int si = static_cast<int>(site);
+    if (winlesscert::StatsOn())
+    { winlesscert::g_checks[si].fetch_add(1, std::memory_order_relaxed); }
+    const bool proven = ResolveProvider(s).ProvenWinlessThisTurn(s, s.active_player_index);
+    if (proven && winlesscert::StatsOn())
+    { winlesscert::g_fires[si].fetch_add(1, std::memory_order_relaxed); }
+    return proven;
+}
+
+// ---- REACHABLE-STATE CLOSURE ON A STUCK TURN (MTG_WINLESS_DEVELOP) ---------------------------
+//
+// USER, 2026-09-09, generalising the EDF case into the rule: "If we cannot do anything that
+// creates a new state (hand, field, life totals, maybe graveyard etc.) then we are done and just
+// have to run the leaf for each state." And on the combo bucket specifically: "the infinite mana
+// cases are one of the examples we cannot search exhaustively so we have no choice but to bucket
+// them in 'go off' and 'stuck' cases using provable measurements... Maybe even better would be to
+// search among possible end-turn states."
+//
+// The certificate above deletes the HORIZON-EDGE passes. A deeper pass still enumerates a stuck
+// turn's whole plan space -- and on a turn PROVEN winless none of those plans can score a kill:
+// they differ only in the STATE they leave for later turns. So what is actually being searched is
+// the set of DISTINCT END-OF-TURN STATES the lines reach, which on an infinite-mana board is far
+// smaller than the line count (mana empties at cleanup, lands untap, summoning sickness clears --
+// so tap order, activation counts and most cast orders collapse onto one state).
+//
+// IDENTITY IS THE FULL STATE, deliberately. This reuses BuildDedupKey -- the engine's own
+// order-exact 128-bit state key (BuildSimKey folded with FsOrderSig), which covers hand,
+// battlefield with tapped/counters, life, graveyard, energy and floating mana -- rather than any
+// plan/name signature. The repo has already paid for the alternative once: name-only plan dedup
+// ate a tutor target (searched-decisions-purge-greedy). Two lines sharing this key have identical
+// futures, so searching the second is a re-run of the first: LOSSLESS up to a 128-bit collision.
+//
+// GENERALITY. The mechanism here is deck-agnostic -- it asks the search's own state identity, not
+// anything about Eldrazi. What is deck-specific is the PROOF that arms it, and that lives behind
+// DecisionProvider::ProvenWinlessThisTurn. Any archetype that can prove a turn winless gets this
+// for free; today only EldraziDisplacerFlicker implements the proof.
+//
+// WHAT IT IS NOT, yet: the user's rule says to STOP GENERATING once no action yields an unseen
+// state. This collapses the enumeration's RESULTS rather than terminating the generator, so the
+// enumeration itself is still paid (33.8% self time on a monster label game); what it saves is
+// everything downstream of a duplicate -- the apply's tail, the recursion, the subtree.
+//
+// Same scoping as the certificate (unbounded/label search only). It can only fire at INTERIOR
+// nodes: an edge node has already returned via the certificate before this is consulted.
+static inline bool WinlessDevelopActive(const GameState& s, const SearchBudget* budget)
+{
+    if (!winlesscert::DevelopOn()) { return false; }
+    if (g_unbounded_label_search == 0
+        && !(budget != nullptr && budget->Unlimited())) { return false; }
+    if (!winlesscert::Enabled()) { return false; }
+    const bool proven = ResolveProvider(s).ProvenWinlessThisTurn(s, s.active_player_index);
+    if (proven && winlesscert::StatsOn())
+    { winlesscert::g_dev_nodes.fetch_add(1, std::memory_order_relaxed); }
+    return proven;
+}
+
 // Store a WIN: final and cutoff-independent, so it supersedes any bounded no-win a looser earlier
 // query left behind. With the no-win cache off no such entry can exist, so only the emplace branch
 // is ever reached == the old `lc->emplace(key, line)` exactly.
@@ -33000,16 +33145,31 @@ static bool FsHorizonExitOn()
     return (valuearm::t_arm.fs_horizon_exit >= 0) ? (valuearm::t_arm.fs_horizon_exit != 0) : on;
 }
 
+// `eot_seen` (STUCK-TURN STATE CLOSURE, see WinlessDevelopActive): the caller's set of end-of-turn
+// states already searched at this decision. nullptr -- every caller but the stuck-node plan loop --
+// disables the collapse entirely.
+using EotStateSet = std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash>;
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
                                          FSLineCache* lc, SearchBudget* budget,
-                                         std::vector<dominance::DomSnap>* dom_arch = nullptr)
+                                         std::vector<dominance::DomSnap>* dom_arch = nullptr,
+                                         EotStateSet* eot_seen = nullptr)
 {
     // Mid-pass overrun guard (see FSLineWin): abort the runaway pass.
     if (budget && budget->Overrun()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
     GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     if (second_main)
     {
+        // "STUCK -- PASS THE TURN", the second-main half. At `turn == cutoff` the post-combat main
+        // is the last thing in the horizon: every plan here either kills now or hands to FSLineWin
+        // at turn+1, which the `turn > cutoff` guard refuses outright. A proven-winless turn
+        // therefore makes this whole m2 enumeration answer-preserving waste. Same scoping as the
+        // m1 site. INSIDE the second_main branch deliberately: on a SINGLE-main deck the tail below
+        // only advances the turn into a node the cutoff guard rejects anyway, so checking there
+        // bought nothing and cost a board scan per plan of every edge node -- measured as 184k of
+        // 184k fires with a ~0 saving on EldraziDisplacerFlicker, which is single-main.
+        if (WinlessCertificateActive(state, cutoff, budget, winlesscert::Site::M2))
+        { return { max_turns + 1, {} }; }
         // With the main-2 land drop open (Main2DropEnabled, EngineFlags.h) the second main's
         // enumeration folds the still-unused drop exactly like the first main's -- this is the
         // search-side half of the rules fix (the executor's greedy main-2 land play was suppressed
@@ -33448,6 +33608,18 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
             if (!SimulateEndAndStartNextTurn(s2)) { continue; }
             ExpireStagedCards(s2);
+            // STATE CLOSURE (WinlessDevelopActive): a sibling already searched this exact
+            // end-of-turn state, so this line's future IS that line's future.
+            if (eot_seen != nullptr)
+            {
+                const bool fresh = eot_seen->insert(BuildDedupKey(s2)).second;
+                if (winlesscert::StatsOn())
+                {
+                    (fresh ? winlesscert::g_dev_distinct
+                           : winlesscert::g_dev_collapsed).fetch_add(1, std::memory_order_relaxed);
+                }
+                if (!fresh) { continue; }
+            }
             // EOT dominance on the caller's frontier. Every (pre-combat x second-main) combination
             // reaching here came from the SAME node with the SAME draws consumed, so they are all
             // siblings in the sense the comparability argument needs.
@@ -33725,6 +33897,17 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     GameState s = state;
     if (!SimulateEndAndStartNextTurn(s)) { return { max_turns + 1, {} }; }
     ExpireStagedCards(s);
+    // STATE CLOSURE -- the SINGLE-MAIN boundary, which is the one EldraziDisplacerFlicker uses.
+    if (eot_seen != nullptr)
+    {
+        const bool fresh = eot_seen->insert(BuildDedupKey(s)).second;
+        if (winlesscert::StatsOn())
+        {
+            (fresh ? winlesscert::g_dev_distinct
+                   : winlesscert::g_dev_collapsed).fetch_add(1, std::memory_order_relaxed);
+        }
+        if (!fresh) { return { max_turns + 1, {} }; }
+    }
     // Single-main decks reach the boundary here instead of the `post` loop above; this is where
     // their pre-combat siblings actually become comparable.
     domin::Probe dprobe;
@@ -34032,6 +34215,23 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         else if (it != lc->end()) { ++g_fs_memo_stale; }   // no-win entry too weak for this cutoff
         }   // end !s_split_keys
     }
+    // "STUCK -- PASS THE TURN" (UnboundedSearchScope / WinlessCertificateActive above). This node
+    // sits on the horizon edge, so the only line that can score is one that kills THIS turn; if the
+    // provider can PROVE none exists, the whole pre-combat plan space below is answer-preserving
+    // waste. Placed after the memo probe (a cached answer is cheaper still) and before the
+    // enumeration, which is the 33.8%-self-time step this exists to skip. Never armed under a real
+    // budget -> the suite is byte-identical.
+    if (WinlessCertificateActive(state, cutoff, budget, winlesscert::Site::M1))
+    {
+        // Memoise it exactly as a searched refutation would be: "no win at turn <= cutoff", which
+        // for this node is "no win this turn" -- what the certificate actually proved. The probe
+        // above runs BEFORE the certificate, so a transposed sibling now answers from the memo
+        // instead of re-walking the board. (lc == nullptr -> no store, as everywhere else.)
+        const TurnSolver::SearchLine nw{ max_turns + 1, {} };
+        if (lc != nullptr && FSNoWinCacheOn()) { FSLineStoreNoWin(lc, key, nw, cutoff); }
+        return nw;
+    }
+
     // Truncation watermark for this node's own exploration (see g_fs_trunc_events).
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
     // What this node's search COSTS, in the same deterministic work units the budget is denominated
@@ -34070,6 +34270,22 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         g_fresh_axis_enum = fresh_prev;
         g_bp_root_enum = false;
         MoveOrderPlans(pre);   // lethal-looking / higher-value plans first -> earlier B&B cutoff
+        if (winlesscert::StatsOn())
+        {
+            const unsigned long long np = pre.size();
+            winlesscert::g_nodes_all.fetch_add(1, std::memory_order_relaxed);
+            winlesscert::g_plans_all.fetch_add(np, std::memory_order_relaxed);
+            if (g_unbounded_label_search > 0)
+            {
+                winlesscert::g_nodes_label.fetch_add(1, std::memory_order_relaxed);
+                winlesscert::g_plans_label.fetch_add(np, std::memory_order_relaxed);
+                if (state.turn_number >= cutoff)
+                {
+                    winlesscert::g_nodes_edge.fetch_add(1, std::memory_order_relaxed);
+                    winlesscert::g_plans_edge.fetch_add(np, std::memory_order_relaxed);
+                }
+            }
+        }
     }
     // Groups the breadth cap dropped from THIS node's enumeration (max over the per-land inner
     // calls) -- the group-wave phase below walks one tranche per dropped group.
@@ -34169,6 +34385,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // construction (the doc's preferred sibling-frontier form). The boundary itself is inside
     // FSLineTail, hence the threading. Off (both flags unset) -> never touched.
     std::vector<dominance::DomSnap> dom_arch;
+    // STUCK-TURN STATE CLOSURE (WinlessDevelopActive): on a turn PROVEN winless, no plan here can
+    // score a kill, so the siblings differ only in the end-of-turn STATE they leave behind. Search
+    // each distinct state once. `nullptr` -- every node not proven stuck, and every run outside the
+    // unbounded label/matrix scope -- leaves this loop byte-identical.
+    EotStateSet  eot_seen;
+    EotStateSet* eot_ptr = WinlessDevelopActive(state, budget) ? &eot_seen : nullptr;
     // Per-plan scratch board, hoisted so each plan reuses the previous plan's heap capacity
     // (see LoadPlanState). Nothing in the body stores a pointer/reference to it past its
     // iteration, and it is never moved from, so reuse cannot alias.
@@ -34329,7 +34551,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     }
                     TurnSolver::SearchLine tail =
                         FSLineTail(s3, depth - 1, max_turns, std::min(cutoff, best.win_turn),
-                                   second_main, tt, lc, budget);
+                                   second_main, tt, lc, budget, nullptr, eot_ptr);
                     if (bp_root && FsRootDumpTurn() == state.turn_number)
                     { FsDumpPlan("bp-child", v, tail.win_turn); }
                     if (tail.win_turn < node_best_val) { node_best_val = tail.win_turn; }
@@ -34436,7 +34658,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         int chose_release = -1;   // -1 not contested / 0 natural / 1 release / 2 hold
         TurnSolver::SearchLine tail =
             FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget,
-                       &dom_arch);
+                       &dom_arch, eot_ptr);
         if (dork_contested)
         {
             chose_release = 0;
@@ -34455,7 +34677,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             TurnSolver::SearchLine tail_rel =
                 FSLineTail(s_rel, depth - 1, max_turns,
                            std::min(cutoff, std::min(best.win_turn, tail.win_turn)),
-                           second_main, tt, lc, budget, &dom_arch);
+                           second_main, tt, lc, budget, &dom_arch, eot_ptr);
             // RELEASE WINS TIES (<=, not <): the hold's only possible payoff is within THIS
             // turn -- every source untaps next turn (the hold rule's own premise) -- so a tail
             // tie means the held mana demonstrably bought nothing the search could see, while
@@ -34663,7 +34885,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
                 TurnSolver::SearchLine tail =
                     FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
-                               tt, lc, budget);
+                               tt, lc, budget, nullptr, eot_ptr);
                 if (tail.win_turn < best.win_turn)
                 {
                     if (BpWaveProbeOn()) { g_bp_wave_probe.improved.fetch_add(1); }
@@ -34778,7 +35000,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
                 TurnSolver::SearchLine tail =
                     FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
-                               tt, lc, budget);
+                               tt, lc, budget, nullptr, eot_ptr);
                 // FRESH-SPEND admissibility (mirror of wave 0's check): a freshmode variant is
                 // admitted only when its line realizes a WIN within the horizon; a this-turn kill
                 // took the won_now return above. See the wave-0 comment for the doctrine.
@@ -37431,6 +37653,11 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
     // in every arm (unbounded budget => freed budget changes nothing). See
     // docs/design/label-horizon-ladder.md.
     ForceNoWinCacheGuard _nwc(EnvOn("MTG_LABEL_NOWIN_CACHE", true));
+    // Arms the provably-winless-this-turn certificate for everything under this call (see
+    // WinlessCertificateActive). This is the "unbounded" signal for the LABEL path specifically:
+    // the budget below is a 1e6-virtual-ms backstop, not literally Unlimited(), so a budget test
+    // alone would leave the labeller -- the hot path this exists for -- unarmed.
+    UnboundedSearchScope _ubs;
     // Full-strength honest teacher: decouple the rollout continuation's per-turn lookahead from the
     // real draw order (see g_honest_teacher). Only meaningful with a depth>0 rollout label.
     HonestTeacherGuard _htg(honest && rollout_label && rollout_depth > 0);
