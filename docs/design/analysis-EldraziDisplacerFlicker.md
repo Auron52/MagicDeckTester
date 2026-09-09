@@ -4072,3 +4072,58 @@ extrapolation, exact-vs-estimated separated in logs/cert/extrap.py):
   WEAKEST lever now; the arithmetic-changers are bounded labels, multi-box phase A, or the
   rollout/greedy-fallback project; accepting ~22.5 h is defensible where 27.3 h with zero
   banked rows was not.
+
+### Session 10: the go-off cuts -- phase A leaves the 20-hour class (2026-09-09)
+
+USER REDIRECT: the 22.5 h verdict was rejected -- *"keep working to figure out ways to make this
+more tolerable"*, sharpened to: **phase A + phase C should fit an overnight, ~8 h preferred,
+<=12 h acceptable**, with explicit authorization to prune go-off situations aggressively
+("technically we could even dominance prune those cases"). It turned out no dominance
+approximation was needed: four LOSSLESS cuts on the label path did it.
+
+**The insight**: EnumerateEarliestWins' value-row path (earliest_only) reads report.earliest
+ALONE, and a win on the current turn is that number's unbeatable floor -- yet the ladder ran the
+full FSLineTail sweep over every candidate even after the floor was achieved. The horizon-edge
+plan explosion (95.3% of all enumerated plans) lived exactly in those provably-pointless sweeps.
+
+**The four cuts** (TurnSolver.cpp, all default ON, all gated to the earliest_only label path so
+budgeted play is structurally untouched):
+1. `MTG_LABEL_GOFF` cut 1 -- go-off SEED PREEMPTION: execute WinlessSeedWins/WinlessCastSeedWins
+   at the label root BEFORE EnumeratePlansWithLand; an observed kill IS the label.
+2. Cut 2 -- FLOOR SHORT-CIRCUIT: a combat-pre-pass win at the floor skips the ladder outright.
+3. Cut 3 -- IN-PASS FIRST-WIN BREAK: every pass-dd win sits at one shared horizon edge, so the
+   first settles the minimum; stop the pass there.
+4. `MTG_LABEL_LADDER_DEDUP` cut 4 -- ladder-pass STATE DEDUP by BuildDedupKey: same-key
+   candidates inherit refutations within a pass (22.5% inherit on the yardstick, 47.4% on
+   monsters; wall ~1.07x -- marginal because the tail memo already eats duplicates -- kept as a
+   free lossless win).
+
+**Verification**: paired concurrent A/Bs (7+7 threads) over the yardstick -- play digests
+IDENTICAL, label rows IDENTICAL both times (the one diff was cut 1-3's ON arm RECOVERING a row
+the OFF arm dropped at the label budget ceiling: gi116 turn 1, OFF burned the whole 1e6-virtual-ms
+ceiling and aborted). No new refutation mechanism was added (seeds only observe wins; dedup
+inherits from actual searches), so certificate soundness is unchanged; the standing
+MTG_WINLESS_AUDIT=1 pass still gates generation.
+
+**Measured** (quiet box):
+* Yardstick sum 2233.5 s -> 870.0 s (**2.57x**); gi116 13.4x, gi19 5.4x; gi28 (rollout-class) 1.14x.
+* The three MONSTERS (killed run's worst, ~5 h each contended): gi22 678.6 s, gi56 2156.6 s,
+  gi122 2957.4 s -- sum 96.5 min. Old-binary quiet single-arm gi122 (cert agent's box-quiet
+  control) was still running past 202 CPU-min at last check => the honest per-binary factor on
+  the deepest monster is >4.1x.
+* Residual is now ONE class: dig-inf = 99.7% of yardstick residual, 99.4% of monster residual
+  (loop source majority hand+library) -- the dig-executing-seed / dig-aware-cert build from the
+  session-9b ledger is where the next in-mechanism factor lives.
+* Phase A projection: ~2-5 h wall (the pipeline run itself is the cheap definitive measurement).
+
+**Phase C reality check** (user's catch): the depth matrix is UNBUDGETED play ("All UNBOUNDED
+(budget 0)"), and EDF H3 cells measure 272-1020 s/game quiet -- H rows are never condemned (the
+intractable-median guard only ever applies to V6-V8), so phase C would dwarf the fixed phase A.
+MTG_ROLLOUT_STATS on the 1020 s game: rollout_step 39.1% + greedy_fallback 38.7% + la_cand 21.8%
+= ~78% in the leaf-rollout layer (602,720 rollout calls, 1.2M candidates scored); the certificate
+class (fs_pre) is 0.5% -- the campaign's cert cannot rescue phase C. The winless STATE CLOSURE
+does fire in this mode (629 stuck turns, 47.5% boundary collapse). In flight: state-keyed rollout
+MEMOISATION (BuildDedupKey), gated to genuinely-unbudgeted play exactly like the certificate --
+identical states are rolled out once; same scores => same argmax => digest-identical. Open
+methodology question surfaced to the user (nothing blocked on it): if EDF H cells stay expensive,
+should the H baseline run at the PRODUCTION budget instead of unbudgeted nominal depth?

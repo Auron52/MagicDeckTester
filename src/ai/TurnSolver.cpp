@@ -30449,6 +30449,26 @@ inline bool AuditOn() { static const bool v = EnvOn("MTG_WINLESS_AUDIT"); return
 // null seed. MTG_WINLESS_CASTSEED_MAX caps the constructed set (default 6).
 inline bool CastSeedOn() { static const bool v = EnvOn("MTG_WINLESS_CASTSEED", true); return v; }
 inline int  CastSeedMax() { static const int v = EnvInt("MTG_WINLESS_CASTSEED_MAX", 6); return v; }
+// MTG_LABEL_GOFF -- label-ROOT go-off short-circuits, active ONLY on EnumerateEarliestWins'
+// earliest_only path (the value-row label, which reads report.earliest alone). Three cuts, each
+// exact for that reader because NOTHING can beat a win on the current turn and every pass-dd win
+// sits at one shared horizon edge: (1) execute the canonical go-off seeds before paying for plan
+// enumeration -- an observed kill IS the label; (2) if the combat pre-pass already won the floor,
+// skip the ladder outright; (3) stop a ladder pass at its first win. User-directed (2026-09-09):
+// go-off turns are the bucket we may prune aggressively -- these are the exact-cut subset.
+// DEFAULT ON; =0 restores the full ladder.
+inline bool LabelGoffOn() { static const bool v = EnvOn("MTG_LABEL_GOFF", true); return v; }
+inline std::atomic<unsigned long long> g_lgoff_roots{0}, g_lgoff_seedwins{0}, g_lgoff_floor{0},
+                                       g_lgoff_passbreaks{0};
+// MTG_LABEL_LADDER_DEDUP -- ladder-pass STATE dedup on the same earliest_only path. Candidates
+// whose post-apply end states are IDENTICAL (BuildDedupKey: BuildSimKey folded with FsOrderSig,
+// the full order-exact identity) get identical FSLineTail answers at every horizon, so a pass
+// searches each distinct STATE once and later same-key candidates inherit the refutation. On an
+// infinite-mana board thousands of order-variant plans collapse onto few states -- the same
+// collapse MTG_WINLESS_DEVELOP exploits inside a stuck plan loop, applied at the ladder root.
+// Lossless by state identity. DEFAULT ON; =0 searches every candidate.
+inline bool LadderDedupOn() { static const bool v = EnvOn("MTG_LABEL_LADDER_DEDUP", true); return v; }
+inline std::atomic<unsigned long long> g_ldd_searched{0}, g_ldd_inherited{0};
 inline std::atomic<unsigned long long> g_cseed_tries{0}, g_cseed_wins{0}, g_cseed_plans{0};
 inline std::atomic<unsigned long long> g_seed_tries{0}, g_seed_wins{0}, g_seed_edge_tries{0},
                                        g_seed_edge_wins{0}, g_audit_violations{0},
@@ -30513,6 +30533,20 @@ struct Dumper
                     "node was won by the canonical go-off -- the bound is UNSOUND) ===\n",
                     g_audit_violations.load());
             }
+        }
+        if (g_lgoff_roots.load() != 0)
+        {
+            std::fprintf(stderr,
+                "=== LABEL GO-OFF: roots=%llu seed-wins=%llu floor-wins=%llu pass-breaks=%llu ===\n",
+                g_lgoff_roots.load(), g_lgoff_seedwins.load(), g_lgoff_floor.load(),
+                g_lgoff_passbreaks.load());
+        }
+        if (g_ldd_searched.load() + g_ldd_inherited.load() != 0)
+        {
+            const unsigned long long ls = g_ldd_searched.load(), li = g_ldd_inherited.load();
+            std::fprintf(stderr,
+                "=== LABEL LADDER DEDUP: searched=%llu inherited=%llu (%.1f%% of pass-candidates) ===\n",
+                ls, li, (ls + li) ? (100.0 * static_cast<double>(li) / static_cast<double>(ls + li)) : 0.0);
         }
         const unsigned long long dd = g_dev_distinct.load(), dc = g_dev_collapsed.load();
         std::fprintf(stderr,
@@ -34500,6 +34534,27 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
     report.earliest = max_turns + 1;
     report.bounded_candidates = earliest_only;
 
+    // ---- GO-OFF SEED PREEMPTION (MTG_LABEL_GOFF cut 1) ------------------------------------------
+    // earliest_only reads report.earliest alone, and a win on the CURRENT turn is that number's
+    // floor. So before paying for plan enumeration at all, EXECUTE the canonical go-off seeds --
+    // real applies whose payments the engine's own machinery arbitrates (a refused cast is a wasted
+    // apply, never a phantom win). An observed kill is therefore the exact label, and the whole
+    // ladder -- including EnumeratePlansWithLand itself, which explodes on the same infinite-mana
+    // boards the seeds resolve -- is skipped.
+    const bool lgoff = earliest_only && winlesscert::LabelGoffOn();
+    if (lgoff)
+    {
+        winlesscert::g_lgoff_roots.fetch_add(1, std::memory_order_relaxed);
+        TurnSolver::Plan gseed;
+        if (WinlessSeedWins(state, gseed)
+            || (winlesscert::CastSeedOn() && WinlessCastSeedWins(state, gseed)))
+        {
+            winlesscert::g_lgoff_seedwins.fetch_add(1, std::memory_order_relaxed);
+            report.earliest = state.turn_number;
+            return report;
+        }
+    }
+
     // Same candidate set the search ranks (cast ORDERINGS included iff MTG_SEARCH_ORDER /
     // MTG_UNPRUNED is set -- EnumeratePlansWithLand expands them there).
     std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
@@ -34577,6 +34632,12 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         ladder_wt.assign(pre.size(), max_turns + 1);
         std::vector<char> settled(pre.size(), 0);
         std::size_t unsettled = 0;
+        // LADDER-PASS STATE DEDUP (MTG_LABEL_LADDER_DEDUP): capture each unsettled candidate's
+        // post-apply end-state key once, here in the pre-pass (which applies every plan anyway).
+        // The pass loop below then refutes each DISTINCT state once per horizon.
+        const bool ldedup = earliest_only && winlesscert::LadderDedupOn();
+        std::vector<TranspositionTable::Key> ckey;
+        if (ldedup) { ckey.resize(pre.size()); }
         // Pass 0: the cases that need no search at all -- a plan that kills us via its own on-cast
         // triggers, and a plan that wins this turn (the floor; no later pass can beat it).
         // Hoisted scratch board -- see LoadPlanState (capacity reuse across plans).
@@ -34591,7 +34652,23 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
             AnimateLandsShared(s, nullptr);
             ActivateTapTokensShared(s, nullptr);
             SimulateCombat(s);
-            if (OpponentHasLost(s)) { ladder_wt[i] = state.turn_number; settled[i] = 1; continue; }
+            if (OpponentHasLost(s))
+            {
+                ladder_wt[i] = state.turn_number; settled[i] = 1;
+                // FLOOR SHORT-CIRCUIT (MTG_LABEL_GOFF cut 2): a this-turn win is unbeatable, so
+                // under earliest_only every remaining pass -- FSLineTail over every other
+                // candidate -- proves nothing the caller reads. Zero out unsettled to skip the
+                // ladder. (Without lgoff the pass loop still ran ALL unsettled candidates at
+                // dd=0 before the post-pass break could fire.)
+                if (lgoff)
+                {
+                    winlesscert::g_lgoff_floor.fetch_add(1, std::memory_order_relaxed);
+                    unsettled = 0;
+                    break;
+                }
+                continue;
+            }
+            if (ldedup) { ckey[i] = BuildDedupKey(s); }
             ++unsettled;
         }
         // dd STARTS AT 0, not 1. Pass 0 is `FSLineTail(s, 0)`, which with second_main enumerates
@@ -34608,9 +34685,18 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         {
             const int cut = state.turn_number + dd;
             bool any_new = false;
+            // Distinct end states already refuted AT THIS HORIZON: a same-key candidate inherits
+            // the refutation without paying for its own FSLineTail. Per-pass, because a deeper
+            // pass genuinely re-asks the question.
+            std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> pass_refuted;
             for (std::size_t i = 0; i < pre.size(); ++i)
             {
                 if (settled[i]) { continue; }
+                if (ldedup && pass_refuted.count(ckey[i]) != 0)
+                {
+                    winlesscert::g_ldd_inherited.fetch_add(1, std::memory_order_relaxed);
+                    continue;
+                }
                 TranspositionTable  tt_cold;
                 FSLineCache         lc_cold;
                 TranspositionTable& tt_use = s_cold_cache ? tt_cold : tt;
@@ -34628,10 +34714,28 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 SimulateCombat(s);
                 const TurnSolver::SearchLine tail =
                     FSLineTail(s, dd, max_turns, cut, second_main, &tt_use, &lc_use, &budget);
+                if (ldedup)
+                {
+                    winlesscert::g_ldd_searched.fetch_add(1, std::memory_order_relaxed);
+                    if (tail.win_turn > cut) { pass_refuted.insert(ckey[i]); }
+                }
                 // Exact BECAUSE every shallower pass refuted this candidate: the win is at the
                 // horizon edge, so it is this candidate's earliest. A no-win is just "not yet".
                 if (tail.win_turn <= cut)
-                { ladder_wt[i] = tail.win_turn; settled[i] = 1; --unsettled; any_new = true; }
+                {
+                    ladder_wt[i] = tail.win_turn; settled[i] = 1; --unsettled; any_new = true;
+                    // IN-PASS FIRST-WIN BREAK (MTG_LABEL_GOFF cut 3): every pass-dd win sits at
+                    // the SAME horizon edge (each unsettled candidate was completely refuted by
+                    // every shallower pass), so the first one is already the minimum over the
+                    // whole candidate set -- the rest of the pass proves nothing earliest_only
+                    // reads. This halves the winning pass in expectation; the horizon-edge
+                    // explosion lives exactly there.
+                    if (lgoff)
+                    {
+                        winlesscert::g_lgoff_passbreaks.fetch_add(1, std::memory_order_relaxed);
+                        break;
+                    }
+                }
             }
             // earliest_only: the caller reads report.earliest alone, and the first pass to produce
             // ANY win has produced the minimum over all candidates. Everything still unsettled is a
