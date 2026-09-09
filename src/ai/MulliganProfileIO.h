@@ -1180,9 +1180,11 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
     // value_play.leaf == "none" (per deck) => swap whatever model the sidecar carried for the NO-LEAF
     // stand-in; trust depth 0 so nothing unverified is ever kept. The sidecar's other blocks (value_play,
     // expected_buckets, mull_gen settings, the table) stay as parsed.
+    // ... unless the emulated ladder COMMITS on the model (commit "model"): then the model stays, with its
+    // trust depth, and only the warm-ups run leafless (valuearm::t_deck_warm_none, set per decision).
     auto apply_leaf_policy = [&]()
     {
-        if (profile.value_play.leaf == "none")
+        if (profile.value_play.leaf == "none" && profile.value_play.commit != "model")
         { profile.value_model = MidGameEvaluator::Constant(); profile.value_trust_depth = 0; }
     };
 
@@ -1252,10 +1254,11 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
             if (vp.is_object() && (vp.contains("target_depth") || vp.contains("mull_gen_depth")
                                    || vp.contains("mull_gen_budget_ms")
                                    || vp.contains("expected_buckets")
-                                   || vp.contains("ladder") || vp.contains("leaf")))
+                                   || vp.contains("ladder") || vp.contains("leaf") || vp.contains("commit")))
             {
                 profile.value_play.ladder       = vp.value("ladder", std::string(""));
                 profile.value_play.leaf         = vp.value("leaf", std::string(""));
+                profile.value_play.commit       = vp.value("commit", std::string(""));
                 profile.value_play.target_depth = vp.value("target_depth", 0);
                 profile.value_play.budget_ms    = vp.value("budget_ms", 0);
                 profile.value_play.enabled      = vp.value("enabled", false);

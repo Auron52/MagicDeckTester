@@ -479,6 +479,7 @@ static std::atomic<long long> g_idwaste_rescuable{0};
 // Emulated-gate ladder telemetry (MTG_LADDER_EMULATED; printed under MTG_ROLLOUT_STATS).
 static std::atomic<long long> g_emul_decisions{0}, g_emul_vpasses{0}, g_emul_hpasses{0},
                               g_emul_fallbacks{0}, g_emul_overruns{0}, g_emul_no_heuristic{0}, g_emul_direct_commits{0},
+                              g_emul_commit_model_decisions{0},
                               g_emul_r_milli{0}, g_emul_r_n{0},
                               g_emul_v_units{0}, g_emul_h_units{0}, g_emul_waste_units{0},
                               g_emul_calib_passes{0};
@@ -808,6 +809,7 @@ namespace
                           << " value_passes=" << g_emul_vpasses.load()
                           << " heuristic_passes=" << g_emul_hpasses.load()
                           << " direct_commits(verified warm-up, no replay)=" << g_emul_direct_commits.load()
+                          << " commit_model_decisions=" << g_emul_commit_model_decisions.load()
                           << " fallbacks(mispredicted committing depth)=" << g_emul_fallbacks.load()
                           << " overruns=" << g_emul_overruns.load()
                           << " no_heuristic_line=" << g_emul_no_heuristic.load()
@@ -32196,6 +32198,17 @@ struct ForceValueLeafGuard
     explicit ForceValueLeafGuard(bool v) : prev(g_force_value_leaf) { g_force_value_leaf = v; }
     ~ForceValueLeafGuard() { g_force_value_leaf = prev; }
 };
+// NO-LEAF warm-ups on a deck that keeps its model for the COMMITTING pass (emulated ladder,
+// value_play.leaf "none" + commit "model"): while set, the leaf site answers max_turns+1 exactly as
+// MidGameEvaluator::Constant() does -- no rollout, no feature extraction -- so a warm-up pass costs its
+// tree and nothing else. The committing pass clears it and the attached model scores as usual.
+inline thread_local bool g_force_constant_leaf = false;
+struct ForceConstantLeafGuard
+{
+    bool prev;
+    explicit ForceConstantLeafGuard(bool v) : prev(g_force_constant_leaf) { g_force_constant_leaf = v; }
+    ~ForceConstantLeafGuard() { g_force_constant_leaf = prev; }
+};
 
 // fd-oracle diagnostic (MTG_FD_ORACLE only): the smallest WIN-CLAIMING estimate (w <= max_turns) the
 // VALUE leaf returned during the current top-level decision. The commit-only-verified doctrine reads
@@ -32304,6 +32317,9 @@ inline thread_local int    g_emul_Rn[16]  = {0};    // samples per depth (calibr
 // The learned state belongs to ONE deck: a pooled batch reuses a worker thread across decks, so key it
 // on the job's value-profile path and reset on change (the minotaur d5 flake was exactly this leak).
 inline thread_local std::string g_emul_key;
+// The deck's frozen units-per-leaf prior for a fresh game's R (value_play.escalation_r), set by the
+// hybrid around the probe; <= 0 => the deck-agnostic 120.
+inline thread_local double g_emul_deck_R = 0.0;
 // Per-depth pass-cost GROWTH ch[k]/ch[k-1] (EMA), learned from every completed pass pair on this thread:
 // the predictor's extrapolation uses it instead of the gate's bootstrap default (6). Melira grows ~26x
 // into d2 and ~1.1x into d3, so the default mis-called nearly every d2 warm-up.
@@ -33208,7 +33224,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const MidGameEvaluator* vm = (!g_force_heuristic_leaf && (UseValueModel() || g_force_value_leaf)
                                       && state.m_value_model && !state.m_value_model->empty())
                                    ? state.m_value_model : nullptr;
-        if (vm && vm->constant)
+        if (vm && (vm->constant || g_force_constant_leaf))
         {
             // NO-LEAF: never a win here; the search commits only what it proves inside the horizon.
             g_fs_leaf_wt_sum += max_turns + 1;
@@ -34583,26 +34599,63 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                              : (valuearm::t_deck_ladder >= 1 || s_ladder_emul_env);   // per-deck value_play.ladder
     // DIRECT COMMIT of a verified warm-up win (no heuristic replay). Default ON for the no-leaf stand-in
     // (its verified win IS a simulation result and the replay would only re-prove it), OFF otherwise.
+    // COMMITTING LEAF (user design, 2026-09-09 evening: "retain enough budget to do the value-leaf first
+    // when escalation is needed"). Default: the heuristic rollout (the original emulated ladder). With
+    // `commit: "model"` (per-deck value_play.commit / arm ladder_emul_commit=1 / MTG_LADDER_EMUL_COMMIT_MODEL)
+    // the committing pass runs on the deck's VALUE leaf at the depth the VALUE ladder would commit -- its
+    // gate replayed on reconstructed value costs (warm-up cost + R_v x leaves, R_v learned like R) with the
+    // value ladder's own alpha and path-to-trust rescue -- and the line then goes through the hybrid's trust
+    // escalation exactly as the shipped value ladder's line does. Needs a real model (not the stand-in).
+    // WARM-UP LEAF: `leaf: "none"` (arm ladder_emul_warm_none=1) plays the warm-ups with NO leaf at all
+    // (ForceConstantLeafGuard) while the model stays attached for the committing pass; verified warm-up
+    // wins are committed directly (the direct default follows the warm-up leaf being the stand-in).
+    static const bool s_emul_commit_env = EnvOn("MTG_LADDER_EMUL_COMMIT_MODEL");
+    const bool have_real_model = state.m_value_model && !state.m_value_model->empty() && !state.m_value_model->constant;
+    const bool commit_model = have_real_model
+                           && ((valuearm::t_arm.ladder_emul_commit >= 0) ? (valuearm::t_arm.ladder_emul_commit != 0)
+                                                                        : (valuearm::t_deck_ladder == 2 || s_emul_commit_env));
+    static const bool s_emul_warm_none_env = EnvOn("MTG_LADDER_EMUL_WARM_NONE");
+    const bool warm_none = (state.m_value_model && state.m_value_model->constant)
+                        || ((valuearm::t_arm.ladder_emul_warm_none >= 0) ? (valuearm::t_arm.ladder_emul_warm_none != 0)
+                                                                        : (valuearm::t_deck_warm_none != 0 || s_emul_warm_none_env));
     static const bool s_emul_direct_env = EnvOn("MTG_LADDER_EMUL_DIRECT");
     const bool emul_direct = (valuearm::t_arm.ladder_emul_direct >= 0)
                            ? (valuearm::t_arm.ladder_emul_direct != 0)
-                           : (s_emul_direct_env || (state.m_value_model && state.m_value_model->constant));
+                           : (s_emul_direct_env || warm_none);
     bool emul_done = false;
     if (s_ladder_emul && depth >= 1 && state.m_value_model && !state.m_value_model->empty())
     {
         emul_done = true;
         g_emul_decisions.fetch_add(1, std::memory_order_relaxed);
+        if (commit_model) { g_emul_commit_model_decisions.fetch_add(1, std::memory_order_relaxed); }
         // Learned R/G are PER DECK: key on the deck's profile identity plus the arm's model override, so
-        // a pooled batch (many decks, one process) never carries one deck's R into another's.
-        const std::string emul_key = valuearm::t_deck_key + '|' + valuearm::t_arm.value_profile;
+        // a pooled batch (many decks, one process) never carries one deck's R into another's. The
+        // committing leaf is part of the key: R is units per leaf of THAT leaf (rollout vs value).
+        // ... and PER GAME (game_seed in the key): the learned R/G must be a pure function of this game.
+        // Without it a batch worker carried one game's R into the next game of the same deck, so a job's
+        // play depended on which jobs had shared its thread -- the g_probe_leaves contamination all over
+        // again (docs/design/minotaur-d5-regression-flake.md), caught 2026-09-09 when a re-run of one
+        // emulnl job under an identical engine produced a different digest. The prior each game starts
+        // from is the deck's FROZEN escalation_r where the sidecar ships one (the same units-per-leaf
+        // quantity the hybrid's predictor freezes for exactly this reason), else the 120 prior.
+        const std::string emul_key = valuearm::t_deck_key + '|' + valuearm::t_arm.value_profile
+                                   + (commit_model ? "|M" : "|H") + (warm_none ? "N" : "V")
+                                   + '|' + std::to_string(state.game_seed);
         if (g_emul_key != emul_key)
         {
             g_emul_key = emul_key;
             g_emul_R = 0.0;
             for (int d = 0; d < 16; ++d) { g_emul_Rd[d] = 0.0; g_emul_Rn[d] = 0; g_emul_G[d] = 0.0; g_emul_Gn[d] = 0; }
         }
-        if (g_emul_R <= 0.0) { g_emul_R = 120.0; }
+        // Prior units per leaf of the committing leaf: the rollout's deck-agnostic 120; the value leaf
+        // charges no units of its own (feature extraction is unmetered), so its prior is ~0 and the
+        // reconstructed value-ladder cost is the warm-up's tree cost. Learned from every measured pair.
+        if (g_emul_R <= 0.0) { g_emul_R = commit_model ? 1.0 : ((g_emul_deck_R > 0.0) ? g_emul_deck_R : 120.0); }
         constexpr double kEmulRAlpha = 0.4;
+        // The gate being replayed is the COMMITTING leaf's ladder: the heuristic ladder's alpha 1.10, or
+        // the value ladder's relaxed alpha (gate_alpha, MTG_VALUE_STARTGATE_ALPHA x 1.10) with its
+        // path-to-trust rescue -- so the committing depth is the depth THAT ladder would have reached.
+        const double replay_alpha = commit_model ? gate_alpha : kStartGateAlpha;
         double    ch[17] = {0};            // reconstructed (or exact) HEURISTIC cost per completed pass
         long long cv[17] = {0};            // value-pass cost, where a value pass ran
         long long lv[17] = {0};            // value-pass leaf count
@@ -34619,7 +34672,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         const double limit   = bounded ? static_cast<double>(budget->Limit()) : 0.0;
         int  last_done = 0;                // deepest completed pass (either leaf)
         bool heur_mode = false;            // once a heuristic pass ran, every later pass is heuristic
-        constexpr int kEmulCalibN = 3;     // per-thread samples per depth before that depth is trusted
+        constexpr int kEmulCalibN = 2;     // per-GAME samples per depth before that depth is trusted (was 3 per thread)
         auto R_at = [&](int d) -> double
         {
             if (d >= 0 && d < 16 && g_emul_Rn[d] > 0) { return g_emul_Rd[d]; }
@@ -34649,9 +34702,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 g_emul_tree_hmo[k].fetch_add(shape_h[k].morder, std::memory_order_relaxed); g_emul_tree_vmo[k].fetch_add(shape_v[k].morder, std::memory_order_relaxed);
                 g_emul_tree_hms[k].fetch_add(shape_h[k].mstale, std::memory_order_relaxed); g_emul_tree_vms[k].fetch_add(shape_v[k].mstale, std::memory_order_relaxed);
             }
-            if (lv[k] > 0 && hcost > cv[k])
+            // A value committing leaf costs ~0 units per leaf, so its pair may not satisfy hcost > cv:
+            // the sample is then 0, and it still COUNTS (else calibration would re-run at every depth
+            // of every decision, i.e. play the whole value ladder on top of the warm-ups).
+            if (lv[k] > 0 && (hcost > cv[k] || commit_model))
             {
-                const double sample = std::max(1.0, static_cast<double>(hcost - cv[k]) / static_cast<double>(lv[k]));
+                const double sample = std::max(commit_model ? 0.0 : 1.0,
+                                               static_cast<double>(hcost - cv[k]) / static_cast<double>(lv[k]));
                 g_emul_R = (1.0 - kEmulRAlpha) * g_emul_R + kEmulRAlpha * sample;
                 if (k >= 0 && k < 16)
                 {
@@ -34677,8 +34734,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         auto run_pass = [&](int d, bool heuristic, SearchLine& out, long long& cost, long long& leaves,
                             FSLineCache* cache) -> bool
         {
-            ForceValueLeafGuard     _v(!heuristic);
-            ForceHeuristicLeafGuard _h(heuristic);
+            // `heuristic` == "this is the COMMITTING pass": on the rollout leaf, or on the value leaf under
+            // commit_model. A warm-up runs on the value leaf, or on no leaf at all under warm_none.
+            ForceValueLeafGuard     _v(!heuristic || commit_model);
+            ForceHeuristicLeafGuard _h(heuristic && !commit_model);
+            ForceConstantLeafGuard  _c(!heuristic && warm_none);
             struct WarmFlag { bool prev; WarmFlag(bool on) : prev(g_emul_warm_pass) { g_emul_warm_pass = on; } ~WarmFlag() { g_emul_warm_pass = prev; } } _wf(!heuristic);
             const long long used_before   = budget ? budget->Used() : 0;
             const long long leaves_before = g_fs_leaf_evals;
@@ -34741,7 +34801,22 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (!bounded) { return true; }
             const double ratio = (k >= 3 && ch[k - 2] > 0.0) ? ch[k - 1] / ch[k - 2] : kDefaultGrowth;
             const double est   = ch[k - 1] * ratio;
-            return est <= kStartGateAlpha * rem_h();
+            bool fits = est <= replay_alpha * rem_h();
+            // The value ladder's PATH-TO-TRUST rescue (see FullSearchLine's gate), replayed verbatim on the
+            // reconstructed costs: reach the trust depth here rather than stop short and pay an escalation.
+            // `avoided` reads g_probe_leaves[k-1] exactly as the ladder does (0 unless the probe records).
+            if (!fits && commit_model && g_trust_target >= k && k <= depth)
+            {
+                double path = 0.0, e = est;
+                for (int d = k; d <= g_trust_target; ++d) { path += e; e *= ratio; }
+                const int    lastd  = k - 1;
+                const double leaves = (lastd >= 0 && lastd < 16)
+                                    ? static_cast<double>(std::max<long long>(0, g_probe_leaves[lastd])) : 0.0;
+                const double avoided = g_trust_R * leaves;
+                const double slack = (valuearm::t_arm.trust_slack > 0.0) ? valuearm::t_arm.trust_slack : kTrustPathSlack;
+                if (path <= slack * (rem_h() + avoided)) { fits = true; }
+            }
+            return fits;
         };
         // Before running pass k: would the heuristic ladder ALSO admit pass k+1 (so pass k is a warm-up)?
         // BIAS (user, 2026-09-09): a wrong "warm-up" call wastes a value pass at the committing depth,
@@ -34771,7 +34846,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             const double gk     = (k < 16 && g_emul_Gn[k] > 0) ? g_emul_G[k] : ratio;
             const double est_k  = ch[k - 1] * gk;
             const double est_k1 = est_k * gk;
-            return est_k1 <= emul_margin * kStartGateAlpha * (rem_h() - est_k);
+            return est_k1 <= emul_margin * replay_alpha * (rem_h() - est_k);
         };
         auto commit_pass = [&](int k, const SearchLine& att, bool heuristic, long long cost, long long leaves)
         {
@@ -34786,6 +34861,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             spent_h += ch[k]; spent_real += static_cast<double>(cost);
             lines[k] = att;
             line = att; committed_depth = k; last_done = k;
+            // The hybrid's K-predictor / path-to-trust read the PROBE's per-depth structure; this ladder
+            // IS the probe under a per-deck shape, so record it as FullSearchLine's ladder would.
+            if (g_probe_recording && k >= 0 && k < 16) { g_probe_leaves[k] = leaves; g_probe_cost[k] = cost; }
             TRACE("search", "T%d emul pass=%d %s done win=%d cost=%lld leaves=%lld ch=%.0f",
                   state.turn_number, k, heuristic ? "H" : "V", att.win_turn, cost, leaves, ch[k]);
         };
@@ -35588,6 +35666,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     const bool s_esc_to_trust = (valuearm::t_arm.esc_to_trust >= 0)
                               ? (valuearm::t_arm.esc_to_trust != 0) : s_esc_to_trust_env;
     const bool trust_push = s_esc_to_trust && value_min_depth > 0 && value_min_depth <= depth;
+    struct EmulDeckRGuard { double prev; EmulDeckRGuard(double r) : prev(g_emul_deck_R) { g_emul_deck_R = r; } ~EmulDeckRGuard() { g_emul_deck_R = prev; } } _edr(escalation_r);
     {
         TrustPathGuard _tpg(trust_push ? value_min_depth : 0,
                             trust_push ? ((escalation_r > 0.0) ? escalation_r : 120.0) : 0.0);

@@ -47,8 +47,14 @@ struct ValuePlay
     //   leaf:   "" | "model"      => the deck's learned value model;
     //           "none"            => MidGameEvaluator::Constant(): never claims a win, so the search commits
     //                                only proven in-horizon wins and otherwise escalates / warms up for free.
+    //   commit: "" | "heuristic"   => the emulated ladder's committing pass is the rollout leaf;
+    //           "model"            => the committing pass is the value model at the depth the VALUE ladder
+    //                                would commit, then the hybrid's trust escalation (user design,
+    //                                2026-09-09: no-leaf warm-ups, "the value-leaf first when escalation is
+    //                                needed"). With leaf "none" the model stays attached for that pass.
     std::string ladder;
     std::string leaf;
+    std::string commit;
     bool   enabled      = false;          // true => the ADOPTED policy: drives + locks play. false => recorded
                                           //         recommendation only (does NOT affect play; byte-identical).
     double escalation_fresh_frac = -1.0;  // budget renewal, per-deck; -1 = off (legacy shared budget)

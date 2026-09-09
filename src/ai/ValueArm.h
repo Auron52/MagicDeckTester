@@ -48,6 +48,12 @@ struct Arm
     // Commit a VERIFIED warm-up win directly (filled in if truncated) instead of replaying it on the
     // heuristic. -1 unset => ON for a no-leaf (constant) model, OFF otherwise (MTG_LADDER_EMUL_DIRECT).
     int         ladder_emul_direct = -1;
+    // COMMITTING leaf of the emulated ladder: -1 unset (deck shape / env) | 0 heuristic rollout | 1 the
+    // deck's value model at the depth the VALUE ladder would commit, then the hybrid's trust escalation
+    // (MTG_LADDER_EMUL_COMMIT_MODEL). WARM-UP leaf: -1 unset | 0 the model | 1 no leaf at all
+    // (MTG_LADDER_EMUL_WARM_NONE) -- the model stays attached for the committing pass.
+    int         ladder_emul_commit    = -1;
+    int         ladder_emul_warm_none = -1;
     double      ladder_emul_margin = -1.0;  // <=0 unset                   (MTG_LADDER_EMUL_MARGIN; <1 biases borderline passes to the heuristic)
     // Depths 1..N always play the heuristic (exact pass costs into the replayed gate, at the price of
     // their warm-up rollouts -- cheap where the ladder's growth is steep). -1 unset => env (default 0).
@@ -68,10 +74,14 @@ struct Arm
 
 inline thread_local Arm t_arm;
 // PER-DECK search shape from the sidecar's value_play (set by AIEngine around each decision, RAII):
-//   t_deck_ladder 0 = escalation (the hybrid) | 1 = emulated-gate ladder.
-//   t_deck_key    the profile identity (MulliganProfile::value_source) keying per-deck learned state.
-// The per-job arm still wins over both (an A/B must be able to pin the shape on any deck).
+//   t_deck_ladder    0 = escalation (the hybrid) | 1 = emulated ladder committing on the heuristic
+//                    | 2 = emulated ladder committing on the value model (then the hybrid's trust escalation).
+//   t_deck_warm_none 1 = the ladder's warm-up passes run with no leaf (value_play.leaf "none" while the
+//                    model stays attached for the committing pass).
+//   t_deck_key       the profile identity (MulliganProfile::value_source) keying per-deck learned state.
+// The per-job arm still wins over all of them (an A/B must be able to pin the shape on any deck).
 inline thread_local int         t_deck_ladder = 0;
+inline thread_local int         t_deck_warm_none = 0;
 inline thread_local std::string t_deck_key;
 
 // Reset to "use the env default for everything". Called by a worker before a job with no arm block,

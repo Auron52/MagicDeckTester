@@ -610,6 +610,8 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("esc_single"))   { j.arm.esc_single   = jspec["esc_single"].get<bool>() ? 1 : 0; }
     if (jspec.contains("ladder_emulated")) { j.arm.ladder_emulated = jspec["ladder_emulated"].get<bool>() ? 1 : 0; }
     if (jspec.contains("ladder_emul_direct")) { j.arm.ladder_emul_direct = jspec["ladder_emul_direct"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("ladder_emul_commit_model")) { j.arm.ladder_emul_commit = jspec["ladder_emul_commit_model"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("ladder_emul_warm_none")) { j.arm.ladder_emul_warm_none = jspec["ladder_emul_warm_none"].get<bool>() ? 1 : 0; }
     if (jspec.contains("ladder_emul_margin")) { j.arm.ladder_emul_margin = jspec["ladder_emul_margin"].get<double>(); }
     if (jspec.contains("ladder_emul_hfirst")) { j.arm.ladder_emul_hfirst = jspec["ladder_emul_hfirst"].get<int>(); }
     if (jspec.contains("memo_win_orderfree")) { j.arm.memo_win_orderfree = jspec["memo_win_orderfree"].get<bool>() ? 1 : 0; }
