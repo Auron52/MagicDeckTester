@@ -4019,3 +4019,27 @@ so an affordable kill projection is replaced by an unstartable one and the turn 
 off. Reviving it needs a redesign (never displace the fallback; bank-then-deploy startability),
 worth attempting only after the value leaf moves the deck's horizon. The route's comment in
 ScanHandSinks carries the full record.
+
+## Session 9b (2026-09-08/09, overnight): generation-tractability campaign
+
+The EDF value-leaf launch was killed by the user at 6.4 h into phase A (166/2500 games, ~55
+core-min/game, projected ~4 days for A alone; monster label games to 5.1 h EACH). Bar set by the
+user: phase A in ~1-2 h, the whole leaf in one overnight. Root cause: phase A labels every
+position with K=3 UNBOUNDED earliest-win searches, and on combo-adjacent boards that search
+proves "no win this turn" the expensive way -- 323M payment probes/game, 95.3% of enumerated
+plans at horizon-edge nodes, EnumeratePlans 33.8% self in monster games.
+
+Shipped, all byte-identical for budgeted play (each commit's log carries the measurements):
+* 011e4899 compact payment snapshots; 153cea6e fail-fast payment bound + one-walk cache-key
+  (-13.6% label yardstick); dbfcdb1c PayScratch warm-state pool (-5% Ir); cumulative payment
+  track -26.2% Ir (callgrind, deterministic).
+* 4e9ff45a: ./build.sh profile compiled at -O0 (CMakePresets cache seeding) -- every prior
+  Profile-based attribution suspect; FORCEd.
+* 9e6b0cdb: the WINLESS-TURN CERTIFICATE + state closure (user doctrine: bucket infinite-mana
+  turns go-off/stuck by provable measurement; stuck turns close over end-turn STATES). 1.2-2.6x
+  on label games at 42-85% fire, labels identical, unbounded-search-only gating.
+
+In flight: round 4 -- seed horizon-edge nodes by EXECUTING the canonical go-off line once
+(observed win = exact this-turn label; feeds the first-win/B&B cutoff), aimed at the ~95% of
+certificate misses where the deck genuinely can win and the search burns millions of plans
+finding the dig. Yardstick: logs/edf_optbench/run_labbench.sh (7 games, baseline sum 1643 s).
