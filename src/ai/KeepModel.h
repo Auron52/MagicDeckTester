@@ -524,8 +524,14 @@ struct MidGameEvaluator
     std::vector<long long>                    coefs;          // per MidGameFeature index, fixed-point
     long long                                 intercept = 0;
     std::vector<std::vector<MidGameTreeNode>> trees;          // GBDT ensemble (each: node vector, root=0)
+    // NO-LEAF stand-in (user design, 2026-09-09): a leaf that never claims a win. Score() is the
+    // constant `intercept` (set beyond any horizon), so the search commits only wins it PROVES inside
+    // its horizon and otherwise escalates / warms up with zero leaf cost -- no rollout, no model, no
+    // feature extraction. Non-empty on purpose: every presence gate treats it as an attached model.
+    bool constant = false;
+    static MidGameEvaluator Constant() { MidGameEvaluator m; m.constant = true; m.intercept = 99 * 1000; return m; }
 
-    bool empty() const { return coefs.empty() && trees.empty(); }
+    bool empty() const { return !constant && coefs.empty() && trees.empty(); }
 
     static long long EvalTree(const std::vector<MidGameTreeNode>& tree, const std::vector<int>& feats)
     {
@@ -610,6 +616,7 @@ struct MidGameEvaluator
 
     long long Score(const std::vector<int>& feats) const
     {
+        if (constant) { return intercept; }
         long long s = intercept;
         const int n = std::min(static_cast<int>(feats.size()), static_cast<int>(coefs.size()));
         for (int i = 0; i < n; ++i) { s += coefs[i] * static_cast<long long>(feats[i]); }

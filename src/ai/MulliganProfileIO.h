@@ -1175,7 +1175,16 @@ inline void AttachEvalSidecar(MulliganProfile& profile, const std::filesystem::p
 // (same schema); the value model's coefs/trees predict a WIN TURN. See docs/design/learned-d0-policy.md.
 inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::path& profile_path)
 {
+    profile.value_source = profile_path.string();
     if (!profile.value_model.empty()) { return; }
+    // value_play.leaf == "none" (per deck) => swap whatever model the sidecar carried for the NO-LEAF
+    // stand-in; trust depth 0 so nothing unverified is ever kept. The sidecar's other blocks (value_play,
+    // expected_buckets, mull_gen settings, the table) stay as parsed.
+    auto apply_leaf_policy = [&]()
+    {
+        if (profile.value_play.leaf == "none")
+        { profile.value_model = MidGameEvaluator::Constant(); profile.value_trust_depth = 0; }
+    };
 
     auto load_from = [&](const std::filesystem::path& p)
     {
@@ -1242,8 +1251,11 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
             // over. Caught on Mirrorwing 2026-08-22.
             if (vp.is_object() && (vp.contains("target_depth") || vp.contains("mull_gen_depth")
                                    || vp.contains("mull_gen_budget_ms")
-                                   || vp.contains("expected_buckets")))
+                                   || vp.contains("expected_buckets")
+                                   || vp.contains("ladder") || vp.contains("leaf")))
             {
+                profile.value_play.ladder       = vp.value("ladder", std::string(""));
+                profile.value_play.leaf         = vp.value("leaf", std::string(""));
                 profile.value_play.target_depth = vp.value("target_depth", 0);
                 profile.value_play.budget_ms    = vp.value("budget_ms", 0);
                 profile.value_play.enabled      = vp.value("enabled", false);
@@ -1282,7 +1294,10 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
     {
         const std::string v = arm_ov ? valuearm::t_arm.value_profile : std::string(env_ov);
         if (v.empty() || v == "none" || v == "off" || v == "0") { return; }
+        // "noleaf": attach the NO-LEAF stand-in with no sidecar at all (A/B arm / env hatch).
+        if (v == "noleaf") { profile.value_model = MidGameEvaluator::Constant(); profile.value_trust_depth = 0; return; }
         load_from(v);
+        apply_leaf_policy();
         return;
     }
 
@@ -1292,5 +1307,5 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
     { return; }
     const std::string stem = fn.substr(0, fn.size() - suffix.size());
     const std::filesystem::path cand = profile_path.parent_path() / (stem + ".value.json");
-    if (std::filesystem::exists(cand)) { load_from(cand); }
+    if (std::filesystem::exists(cand)) { load_from(cand); apply_leaf_policy(); }
 }

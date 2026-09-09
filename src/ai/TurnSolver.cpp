@@ -452,7 +452,7 @@ static std::atomic<long long> g_fillin_passes{0}, g_fillin_units{0}, g_fillin_st
 static std::atomic<long long> g_idwaste_rescuable{0};
 // Emulated-gate ladder telemetry (MTG_LADDER_EMULATED; printed under MTG_ROLLOUT_STATS).
 static std::atomic<long long> g_emul_decisions{0}, g_emul_vpasses{0}, g_emul_hpasses{0},
-                              g_emul_fallbacks{0}, g_emul_overruns{0}, g_emul_no_heuristic{0},
+                              g_emul_fallbacks{0}, g_emul_overruns{0}, g_emul_no_heuristic{0}, g_emul_direct_commits{0},
                               g_emul_r_milli{0}, g_emul_r_n{0},
                               g_emul_v_units{0}, g_emul_h_units{0}, g_emul_waste_units{0},
                               g_emul_calib_passes{0};
@@ -764,6 +764,7 @@ namespace
                 std::cerr << "[rollout-stats] emulated-ladder decisions=" << g_emul_decisions.load()
                           << " value_passes=" << g_emul_vpasses.load()
                           << " heuristic_passes=" << g_emul_hpasses.load()
+                          << " direct_commits(verified warm-up, no replay)=" << g_emul_direct_commits.load()
                           << " fallbacks(mispredicted committing depth)=" << g_emul_fallbacks.load()
                           << " overruns=" << g_emul_overruns.load()
                           << " no_heuristic_line=" << g_emul_no_heuristic.load()
@@ -32361,6 +32362,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const MidGameEvaluator* vm = (!g_force_heuristic_leaf && (UseValueModel() || g_force_value_leaf)
                                       && state.m_value_model && !state.m_value_model->empty())
                                    ? state.m_value_model : nullptr;
+        if (vm && vm->constant)
+        {
+            // NO-LEAF: never a win here; the search commits only what it proves inside the horizon.
+            g_fs_leaf_wt_sum += max_turns + 1;
+            return { max_turns + 1, {} };
+        }
         if (vm)
         {
             const std::vector<int> feats = ExtractMidGameFeatures(state, MidGamePlanSummary{});
@@ -33726,15 +33733,25 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // by the tree, not the leaf, so the ladder stops on it exactly as before.
     static const bool s_ladder_emul_env = EnvOn("MTG_LADDER_EMULATED");
     const bool s_ladder_emul = (valuearm::t_arm.ladder_emulated >= 0)
-                             ? (valuearm::t_arm.ladder_emulated != 0) : s_ladder_emul_env;
+                             ? (valuearm::t_arm.ladder_emulated != 0)
+                             : (valuearm::t_deck_ladder >= 1 || s_ladder_emul_env);   // per-deck value_play.ladder
+    // DIRECT COMMIT of a verified warm-up win (no heuristic replay). Default ON for the no-leaf stand-in
+    // (its verified win IS a simulation result and the replay would only re-prove it), OFF otherwise.
+    static const bool s_emul_direct_env = EnvOn("MTG_LADDER_EMUL_DIRECT");
+    const bool emul_direct = (valuearm::t_arm.ladder_emul_direct >= 0)
+                           ? (valuearm::t_arm.ladder_emul_direct != 0)
+                           : (s_emul_direct_env || (state.m_value_model && state.m_value_model->constant));
     bool emul_done = false;
     if (s_ladder_emul && depth >= 1 && state.m_value_model && !state.m_value_model->empty())
     {
         emul_done = true;
         g_emul_decisions.fetch_add(1, std::memory_order_relaxed);
-        if (g_emul_key != valuearm::t_arm.value_profile)
+        // Learned R/G are PER DECK: key on the deck's profile identity plus the arm's model override, so
+        // a pooled batch (many decks, one process) never carries one deck's R into another's.
+        const std::string emul_key = valuearm::t_deck_key + '|' + valuearm::t_arm.value_profile;
+        if (g_emul_key != emul_key)
         {
-            g_emul_key = valuearm::t_arm.value_profile;
+            g_emul_key = emul_key;
             g_emul_R = 0.0;
             for (int d = 0; d < 16; ++d) { g_emul_Rd[d] = 0.0; g_emul_Rn[d] = 0; g_emul_G[d] = 0.0; g_emul_Gn[d] = 0; }
         }
@@ -33957,9 +33974,32 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // committed. A value line at last_done means the prediction was wrong (or a heuristic pass
         // overran above it): play the heuristic there, stepping shallower on each further overrun.
         // A verified value-pass win is a real in-horizon simulation and needs no replay.
-        (void)verified;   // a verified value-pass win no longer exempts the replay (see below)
-        // (A verified win found by a VALUE pass is replayed too: its line may be truncated by the warm-up
-        //  memo shortcut, and the heuristic pass at that depth finds the same in-horizon win.)
+        // (A verified win found by a VALUE pass is replayed by default: its line may be truncated by the
+        //  warm-up memo shortcut, and the heuristic pass at that depth finds the same in-horizon win.)
+        // DIRECT COMMIT (emul_direct): the verified warm-up win is a simulation result, so instead of the
+        // replay, fill its line in (re-search the same depth with the shortcut off; the interior memo is
+        // warm) and commit it. Falls through to the replay only if the fill-in cannot complete it.
+        if (verified && emul_direct && last_done >= 1 && !ran_h[last_done])
+        {
+            const int k = last_done;
+            SearchLine dl = lines[k];
+            if (dl.truncated)
+            {
+                SearchLine att; long long cost = 0, leaves = 0;
+                g_orderfree_off = true;
+                const bool ok = run_pass(k, false, att, cost, leaves, &line_cache);
+                g_orderfree_off = false;
+                g_fillin_passes.fetch_add(1, std::memory_order_relaxed);
+                g_fillin_units.fetch_add(cost, std::memory_order_relaxed);
+                if (ok && !att.truncated && att.win_turn <= state.turn_number + k - 1) { dl = att; }
+                else { g_fillin_still_truncated.fetch_add(1, std::memory_order_relaxed); dl.truncated = true; }
+            }
+            if (!dl.truncated)
+            {
+                lines[k] = dl; line = dl; committed_depth = k; ran_h[k] = true;
+                g_emul_direct_commits.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
         while (last_done >= 1 && !ran_h[last_done])
         {
             g_emul_fallbacks.fetch_add(1, std::memory_order_relaxed);

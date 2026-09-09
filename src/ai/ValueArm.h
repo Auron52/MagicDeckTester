@@ -45,6 +45,9 @@ struct Arm
     // gate is replayed on reconstructed heuristic pass costs (value cost + R x leaves). User design
     // 2026-09-09. Shape for an A/B: value_model=false + value_profile=<model> + ladder_emulated=true.
     int         ladder_emulated   = -1;     // -1 unset | 0 off | 1 on     (MTG_LADDER_EMULATED)
+    // Commit a VERIFIED warm-up win directly (filled in if truncated) instead of replaying it on the
+    // heuristic. -1 unset => ON for a no-leaf (constant) model, OFF otherwise (MTG_LADDER_EMUL_DIRECT).
+    int         ladder_emul_direct = -1;
     double      ladder_emul_margin = -1.0;  // <=0 unset                   (MTG_LADDER_EMUL_MARGIN; <1 biases borderline passes to the heuristic)
     // Depths 1..N always play the heuristic (exact pass costs into the replayed gate, at the price of
     // their warm-up rollouts -- cheap where the ladder's growth is steep). -1 unset => env (default 0).
@@ -64,6 +67,12 @@ struct Arm
 };
 
 inline thread_local Arm t_arm;
+// PER-DECK search shape from the sidecar's value_play (set by AIEngine around each decision, RAII):
+//   t_deck_ladder 0 = escalation (the hybrid) | 1 = emulated-gate ladder.
+//   t_deck_key    the profile identity (MulliganProfile::value_source) keying per-deck learned state.
+// The per-job arm still wins over both (an A/B must be able to pin the shape on any deck).
+inline thread_local int         t_deck_ladder = 0;
+inline thread_local std::string t_deck_key;
 
 // Reset to "use the env default for everything". Called by a worker before a job with no arm block,
 // so a previous job's arm cannot leak into it through the reused thread.

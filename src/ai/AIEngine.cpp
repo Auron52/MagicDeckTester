@@ -2509,6 +2509,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // thread inherit it, which is the point -- the leaf IS the rollout.
                     TurnSolver::SearchLeafDepthScope _sld(m_profile.search_leaf_depth,
                                                           m_profile.search_leaf_first_turn_depth);
+                    // Per-deck search shape (sidecar value_play.ladder / .leaf, see ValuePlay): scoped to
+                    // this decision so a pooled batch's next deck on this thread starts clean.
+                    struct DeckShapeScope
+                    {
+                        int prev_l; std::string prev_k;
+                        DeckShapeScope(const MulliganProfile& p)
+                            : prev_l(valuearm::t_deck_ladder), prev_k(valuearm::t_deck_key)
+                        {
+                            valuearm::t_deck_ladder = (p.value_play.ladder == "emulated") ? 1 : 0;
+                            valuearm::t_deck_key    = p.value_source;
+                        }
+                        ~DeckShapeScope() { valuearm::t_deck_ladder = prev_l; valuearm::t_deck_key = prev_k; }
+                    } _shape(m_profile);
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,
                         fd_tt, &budget, &searched_depth, escalate_below, m_budget_ms,

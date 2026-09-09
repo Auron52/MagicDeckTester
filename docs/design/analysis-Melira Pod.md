@@ -2712,3 +2712,145 @@ carry `heurof0` (order-free off) and `heurver` (verified-only) so the three orde
 measured in the same batch. User's question: is the emulated ladder worth using instead of escalation
 for any other deck (their expectation: no — escalation reaches searched wins faster on decks without
 Melira's front-loaded growth). Projection ~1.5-2.5 h from the regression tier's throughput.
+
+**Tiers on the final binary (all entries + fill-in, verified-only OFF):** smoke 15 changed / 65
+unchanged (searched: 5 faster, 0 slower; the same 14 digests as the flip alone plus mirrorwing d5
+play-changed at the same score = the fill-in's whole footprint on the suite), regression 32 changed /
+76 unchanged (searched: 27 faster, 6 slower; each slower game explained by the audit as a divergent
+physical game — fetch/shuffle or mulligan divergence). Both ACCEPTED (gt_logs 456/456 consistent),
+committed as d71b4157 (rebased over origin's census commits 41e1e8c6/f3039fee — the replayed engine
+change widens `PlanCopySig`, which is called only inside `DedupCensusOn()` (default OFF), so the
+rebased binary is play-identical to the one the GT was measured on; byte-identity smoke to follow
+once the screen releases the build output). Overnight tier chained behind the screen + regression
+tier by PID (`logs/melira_gt/overnight_chain.pid` -> `overnight_final.out`), to be inspected and
+accepted separately. CI: the push's own run was cancelled by a later push to the branch
+(bb847162, another census instrument); the Windows result is read from that run.
+
+**Fluctuator joins the emulated screen (user, 2026-09-09):** *"We should trust Fluctuator then with the
+new mode"* — its model was rejected as a PLAY leaf (`.value.DISABLED.json`), but an emulated-ladder
+warm-up needs only a rough guide (the committing pass is always heuristic), so `fluct_emul_*` runs
+with the DISABLED sidecar as `value_profile` (`manifest_fluct.json`, 16 jobs, same seeds as the
+screen's `heur`/`heurof0`/`heurver` arms; `run_fluct.out`, folded into `report.py`). Prior read
+(ab11, without fill-in): d5/b20 1.001x at +0.0001 t, d3/b10 1.472x at -0.0124 t (131 better / 35
+worse) — a quality gain bought at budget-raise prices, to be compared with a plain budget raise if it
+repeats. Trust is not what makes escalation cheap: Anti-Lifegain, Dragons and Dragonstorm have NO
+trust depth yet ship 2.7-3.7x under the heuristic ladder; the saving is the value pass's candidate
+line verifying first time. USER CORRECTION on the Melira/Fluctuator reading: the shallow paired
+gap is NOT a sign the model is wrong — a value leaf always loses to rollouts in the early turns, on
+every deck. What set Melira and Fluctuator apart is that going DEEPER with the leaf (where it
+converges) was itself costly, and that cost is why both had the leaf disabled in play; Melira's
+1.48x hybrid is that same cost showing up. So the screen's question per deck is "does the value
+search converge at a depth that is still cheap?", and the decks to watch (Mirrorwing, Stompy,
+Creature Giving) are those whose convergence depth is deep, not those with a large shallow gap.
+
+### 2026-09-09i — per-deck search shape + the NO-LEAF stand-in (user design)
+
+User, in order: *"there is never a reason to have it fully disabled. We choose either escalation or this
+new approach"* → *"maybe even ... the new approach with no leaf whatsoever? ... a third option"* →
+*"just letting search do its thing and only using the heuristic when we find nothing might be
+sufficient"* → *"Technically it is even an alternative under escalation. Since you could just escalate
+always if you don't find a win. But bank the win from not doing the leaf."* → *"we probably should
+play with this option just to make sure we aren't wasting unnecessary time with the value-leaf."*
+
+**Built (unlinked until the screen releases the binary):**
+- `MidGameEvaluator::Constant()` — a NO-LEAF stand-in: `constant=true`, Score() = 99 turns, `empty()`
+  false so every presence gate sees an attached model. The leaf site returns `max_turns+1` for it
+  with no rollout, no feature extraction. So the search commits only wins it PROVES in-horizon and
+  otherwise escalates (trust depth forced 0) / warms up for free.
+- Per-deck shape in the sidecar's `value_play`: `ladder: "escalation" | "emulated"` and
+  `leaf: "model" | "none"`, read whether or not the block is `enabled`. `leaf: "none"` swaps the
+  loaded model for the stand-in (`apply_leaf_policy` in AttachValueSidecar); the DISABLED-file
+  convention is superseded — a deck always ships a live sidecar and picks a shape.
+  `ladder: "emulated"` sets `valuearm::t_deck_ladder` (RAII per decision in AIEngine); UseValueModel()
+  returns false under it (the model is warm-up-only), and the emulated switch reads it.
+  The emulated ladder's learned R/G are now keyed on `MulliganProfile::value_source` (the profile path)
+  + the arm's model override — a pooled batch never mixes decks (it did before: key = arm path only).
+- Arm/env: `value_profile: "noleaf"` attaches the stand-in with no sidecar. `ladder_emul_direct` /
+  `MTG_LADDER_EMUL_DIRECT`: commit a VERIFIED warm-up win directly (fill-in with the shortcut off if
+  truncated) instead of replaying it on the heuristic; default ON for the stand-in, OFF for a model.
+  Counter `direct_commits` in the `[rollout-stats]` emulated line.
+- Screen 2 (`logs/emul_screen/manifest_noleaf.json`, 640 jobs): `escnl` (hybrid + stand-in) and
+  `emulnl` (emulated ladder + stand-in) on every deck, same seeds/configs as screen 1, so `report.py`
+  lines them up against `ship` / `heur` / `emul`. The question per deck: does the learned leaf beat
+  "search, then escalate" by enough to pay for its generation? Runs after screen 1, on the rebuilt
+  binary (byte-identity smoke first: no deck sets a shape, so play must not move).
+
+**Pipeline uses of the no-leaf stand-in (user, 2026-09-09):** *"we could use it from the start prior to
+even having an existing value-leaf. Even if we decide a value-leaf is worthwhile we may be able to use
+no-leaf for part of the chain or to help generate parts of the value-leaf."* Candidates, to be judged
+against screen 2 (each is a place the chain currently runs either the heuristic ladder or the hybrid):
+1. **Day-one play for a new deck** — ship `<deck>.value.json` with `leaf: "none"` + a ladder from the
+   analyze-deck stage, so "no sidecar" stops being a state (kills the presence-gating traps: hybrid
+   activation by file existence, the H-cell ladder's 1.35-84.8x cliff on a missing model).
+2. **Play validation / claude-play sweeps** (analyze-deck stage 5) — cheaper searched play, exact
+   wherever a win is proven.
+3. **Value-leaf phase A (row dump)** — the labelling search: no-leaf escalation commits proven wins and
+   escalates the rest, so labels are the heuristic's where it matters at a fraction of the cost.
+4. **Value-leaf phase C (H-depth cells)** — the expensive H cells run on escalation-with-stand-in rather
+   than the plain heuristic ladder; the V cells are unaffected (they are what is being fitted).
+5. **Mulligan generation rollouts** — `mull_gen_depth`/`budget` rollouts on the stand-in hybrid instead
+   of the model hybrid; sidecar-presence ordering (value leaf BEFORE mulligan) would then be a quality
+   choice, not a correctness dependency.
+Ordering caveat that stays: any artifact fitted to play (value leaf, keep table) is fitted to the shape
+in force when it was generated; switching a deck's shape afterwards is a regeneration trigger exactly as
+a play-logic change is.
+
+### 2026-09-09j — screen 1 read: escalation wins everywhere the leaf converges; order-free default stays ALL entries
+
+Screen 1 (`logs/emul_screen/report_vs_ship.txt`, `report_vs_heur.txt`): 20 decks × {d5b20, d3b10} × 8 seeds ×
+500 games, arms `heur` (heuristic ladder), `ship` (the deck's shipped shape), `emul` (emulated ladder on the
+shipped model), plus `heurof0` / `heurver` on Melira and Fluctuator. Units are deterministic search work.
+
+**(1) The order-free default (all entries, ON since d71b4157) is the clean win and stays.**
+
+| deck / cfg | heur (all entries) | heurof0 (off) | heurver (verified only) |
+|---|---|---|---|
+| melira d5b20 | 1.000, avg 4.8300 | 1.107, +0.0017 t (net -7) | 1.107, +0.0017 t (net -7) |
+| melira d3b10 | 1.000, avg 4.8570 | 1.100, +0.0000 | 1.100, +0.0000 |
+| fluct d5b20 | 1.000, avg 3.6240 | 1.039, byte-identical | 1.039, byte-identical |
+| fluct d3b10 | 1.000, avg 3.6398 | 1.017, byte-identical | 1.017, byte-identical |
+
+All-entries is cheapest on every cell and never worse in quality (the 3/16000 Fluctuator losses of 09h did
+not recur on these 8000 games; on Melira it is the 0.0017 t BETTER arm). Verified-only buys exactness at
+1.10x on Melira for no quality — not adopted. Nothing to flip; the shipped default is confirmed.
+
+**(2) Emulated ladder vs escalation, per deck (u/ship = units relative to the shipped shape; d_avg > 0 is worse):**
+
+| deck | d5b20 heur | d5b20 emul | d3b10 heur | d3b10 emul | verdict |
+|---|---|---|---|---|---|
+| antilife | 3.72x +0.001 | 4.39x +0.000 | 1.31x -0.001 | 1.59x -0.005 | escalation |
+| auras | 7.66x +0.004 | 9.71x +0.004 | 1.70x +0.003 | 3.30x -0.002 | escalation |
+| breaching | 18.8x +0.000 | 4.72x +0.000 | 5.89x +0.000 | 1.67x +0.000 | escalation |
+| critter | 14.4x -0.000 | 13.9x -0.000 | 1.17x +0.000 | 1.19x +0.000 | escalation |
+| dragons | 2.79x +0.003 | 2.78x +0.003 | 1.18x +0.000 | 1.25x -0.001 | escalation |
+| dragonstorm | 2.73x +0.003 | 3.25x +0.002 | 1.16x -0.002 | 1.39x -0.006 | escalation |
+| fivecolour | 1.79x +0.009 | 2.82x -0.002 | 1.42x +0.013 | 2.96x -0.006 | escalation (emul buys quality at 3x) |
+| goblins | 4.80x +0.004 | 6.35x +0.002 | 1.67x +0.005 | 2.40x +0.001 | escalation |
+| hinata | 1.27x +0.020 | 1.64x +0.009 | 1.12x +0.006 | 1.79x -0.017 | escalation |
+| kitty | 2.99x +0.008 | 5.52x +0.002 | 1.49x +0.008 | 3.38x +0.001 | escalation |
+| knights | 13.3x +0.001 | 13.8x +0.001 | 1.38x +0.001 | 1.47x -0.001 | escalation |
+| melira | 0.71x +0.023 | 0.66x +0.029 | 0.78x +0.011 | 0.78x +0.012 | ship (leaf) is the QUALITY arm here |
+| minotaur | 6.34x +0.003 | 6.25x +0.004 | 1.30x +0.001 | 1.34x -0.001 | escalation |
+| mirrorwing | 3.50x +0.010 | 3.97x +0.011 | 1.45x +0.015 | 2.14x +0.009 | escalation |
+| stompy | 4.13x +0.018 | 6.18x +0.012 | 1.35x +0.007 | 3.02x -0.011 | escalation |
+| burn | 4.27x +0.002 | 4.45x +0.001 | 1.27x +0.002 | 2.11x +0.000 | escalation |
+| slivers | 13.4x +0.001 | 13.7x +0.001 | 1.53x -0.001 | 1.95x -0.002 | escalation |
+| th | 3.86x +0.015 | 3.50x +0.012 | 1.71x +0.006 | 2.38x +0.002 | escalation |
+| fluct (vs heur) | 1.00 | 1.01x -0.000 | 1.00 | 1.46x -0.014 | heuristic ladder (no model) |
+
+The user's prediction holds: the emulated ladder costs what the heuristic ladder costs (its committing
+pass IS the heuristic's), so wherever the leaf converges cheaply — 17 of 18 modelled decks — escalation
+wins by 1.2-19x at equal quality. Melira is the one deck where the shipped model is the quality arm
+(ship -0.0225 t vs heur at 1.40x), which is the 09c adoption. Fluctuator, with no model, gets nothing from
+the emulated ladder at d5 and pays 1.46x for -0.014 t at d3 (the heuristic ladder there is budget-bound).
+
+**(3) What this leaves for the no-leaf work (user, 2026-09-09 evening).** The emulated ladder's virtue is
+structural, not its leaf: warm-ups on a cheap leaf, ONE committing pass on the expensive one at the depth
+that ladder would commit, verified wins banked at warm-up depth. The user's refinement: *"If you have
+value-leaf it may still reduce the need to check the leaf until we get near the escalation stage.
+Technically we know the node cost of value-leaf, so we could retain enough budget to do the value-leaf
+first when escalation is needed."* That is the emulated ladder with the COMMITTING leaf = the model:
+warm-ups on the stand-in (no leaf cost at all), the committing pass on the value leaf at the depth the
+VALUE ladder would commit (its gate replayed on reconstructed value costs = stand-in cost + R_v × leaves,
+R_v learned exactly as R is), then the hybrid's trust escalation on that line as today. No re-run at the
+committing depth, verified warm-up wins banked directly. Built next as `value_play.commit: "model"`.

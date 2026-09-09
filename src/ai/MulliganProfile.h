@@ -40,6 +40,15 @@ struct ValuePlay
 {
     int    target_depth = 0;              // 0 => absent (present()==false)
     int    budget_ms    = 0;
+    // PER-DECK SEARCH SHAPE (user design, 2026-09-09: "We choose either escalation or this new approach"
+    // -- never a disabled leaf). Read whether or not the block is `enabled`.
+    //   ladder: "" | "escalation" => the value hybrid (value pass, escalate unverified lines);
+    //           "emulated"        => the emulated-gate ladder (warm-ups on the leaf, committing pass heuristic).
+    //   leaf:   "" | "model"      => the deck's learned value model;
+    //           "none"            => MidGameEvaluator::Constant(): never claims a win, so the search commits
+    //                                only proven in-horizon wins and otherwise escalates / warms up for free.
+    std::string ladder;
+    std::string leaf;
     bool   enabled      = false;          // true => the ADOPTED policy: drives + locks play. false => recorded
                                           //         recommendation only (does NOT affect play; byte-identical).
     double escalation_fresh_frac = -1.0;  // budget renewal, per-deck; -1 = off (legacy shared budget)
@@ -210,6 +219,9 @@ struct MulliganProfile
     // per-deck value sidecar (decks/<name>.value.json) via AttachValueSidecar; gated by MTG_VALUE_MODEL.
     // Empty => the exact rollout (byte-identical). Its Score() is a WIN TURN (lower = better).
     MidGameEvaluator value_model;
+    // Identity of the profile this model was attached for (the .profile.json path): keys per-deck learned
+    // state (the emulated ladder's R/G) so a pooled batch never mixes decks. Set by AttachValueSidecar.
+    std::string value_source;
 
     // Per-model "trust depth" for the value leaf (from the `value_trust_depth` key in <deck>.value.json).
     // The raw value leaf is a WEAK-but-cheap evaluator: measured, it reaches converged-heuristic quality only
