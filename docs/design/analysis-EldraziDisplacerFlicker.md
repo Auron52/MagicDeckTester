@@ -4159,6 +4159,45 @@ EACH; H rows are exempt from the intractable-median guard) while FD=0 measured q
 on 32 paired games (12/15 + 14/17 identical, means 5.00 vs 5.12 favoring FD=0) at ~70x less
 cost. Treasure Hunt remains the counterexample -- per-deck evidence only, default absent.
 
+### Session 11 (overnight 2026-09-09): s1_gi0 tool repair + viewer interactive mode
+
+**s1_gi0 replay-tool repair — DONE, T3 reproduces.** Root cause pinned by replaying the walk: the
+current engine DOES verify the finish at the recorded final frame (a `combo_off` plan, count x8
+where the recording says x4 — the payment-order change legitimately moved the required count), but
+`find_plan`'s content key `(land=None, casts=[Emiel])` matches EVERY Emiel activation, the x4-vs-x8
+action mismatch made the payload narrowing a no-op, and `hits[0]` executed "blink Cloud of
+Faeries" instead of the win — T3 slid to T5 with 5 trailing frames defaulted to pass. Fix
+(tool-only, `test/viewer_protocol_check.py`): (1) a COMBO-OFF CONTENT ANCHOR tier in `find_plan` —
+a recorded `combo_off` pick anchors to the frame's `combo_off` plan(s) (count ignored; blink-target
+name preferred); (2) `blink_target_name` added to `action_sig`, so blink-Faeries and blink-Drake
+stop being indistinguishable to the narrowing. A symmetric filter ("a non-combo pick never takes a
+finisher") was tried and WITHDRAWN the same night: `combo_off` absent covers every
+pre-combo_off-era recording of a manual go-off, and the filter regressed s2_gi1 (its recorded
+"blink Drake x23/x50" ARE that game's win-now blinks) from repaired-T4 to drift-T7 — verified
+against the pristine tool, then removed. Final EDF corpus (all 8 refs): s1_gi0 repaired T3,
+s2_gi1 repaired T4, the rest ok/repaired at their recorded turns — zero drift; full 306-ref sweep
+re-running for the record. The recording-contract-versioning backstop was NOT needed and is
+not implemented (recorded intent survives content anchoring; add versioning only if a future
+contract change defeats it).
+
+**Viewer interactive mode (`--interactive`) — the prefix-cache, IMPLEMENTED on branch
+`edf-night-fixes`** (worktree; lands on the main branch after the pipeline frees the box —
+building the main checkout under the frozen run was not an option). Persistent `--claude-play`
+child: emit decision, block on stdin for the next picks, continue the same game — per-step cost
+becomes the current frame only, killing the quadratic slowdown (user's seed-8 report). Parity:
+default-driven AND s1_gi0-stream-driven games, every frame and terminal byte-compared interactive
+vs stateless — PASS. See `docs/design/viewer-interactive-prefix-cache.md`. Before landing:
+scenarios + smoke + regression on the merged branch (structurally inert without the flag, but the
+gates are cheap once the box frees).
+
+**s9_gi8_t4 rejection re-adjudicated: the engine was RIGHT.** The attempted line (Overgrowth,
+Faeries, Emiel {2}{W}{W}) is genuinely unpayable on that board: Conservatory is the ONLY {W}
+source (Kitchen G/U, Mariposa {C}, both auras add {G} only), one tap = one {W}, and the hand's
+second Conservatory enters tapped — {W}{W} cannot exist that turn. So the open "EffectiveProduces
+land-aura colours" item is NOT "make s9_gi8 legal"; whatever residual the 10b session saw needs a
+fresh post-pipeline re-diagnosis (start from `--validate-line` on the rejection artifacts) before
+any GT-moving engine change is written.
+
 **LAUNCH** (12:41, alone on the box, frozen at HEAD 2a913b0b / HEAD:src 030115fa):
 `MTG_MATRIX_FD_LEAF_DEPTH=0 bash scripts/valueleaf.sh run decks/EldraziDisplacerFlicker`.
 Play digests verified UNCHANGED by the script itself -- all 770 banked rows kept; phase A is 22
