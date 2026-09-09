@@ -4175,8 +4175,9 @@ finisher") was tried and WITHDRAWN the same night: `combo_off` absent covers eve
 pre-combo_off-era recording of a manual go-off, and the filter regressed s2_gi1 (its recorded
 "blink Drake x23/x50" ARE that game's win-now blinks) from repaired-T4 to drift-T7 — verified
 against the pristine tool, then removed. Final EDF corpus (all 8 refs): s1_gi0 repaired T3,
-s2_gi1 repaired T4, the rest ok/repaired at their recorded turns — zero drift; full 306-ref sweep
-re-running for the record. The recording-contract-versioning backstop was NOT needed and is
+s2_gi1 repaired T4, the rest ok/repaired at their recorded turns — zero drift. Full 306-ref sweep
+CONFIRMED: 15 ok, 291 repaired, 0 play-drift / enum-gap / contract-fail — the reference gate is
+green corpus-wide for the first time since the 58ef6fc7/4784796b viewer batch. The recording-contract-versioning backstop was NOT needed and is
 not implemented (recorded intent survives content anchoring; add versioning only if a future
 contract change defeats it).
 
