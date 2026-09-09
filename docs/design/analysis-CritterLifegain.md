@@ -337,6 +337,26 @@ user (a one-line profile edit + critter GT re-accept). In-game decision usage fr
 Ajani -2 217x vs +1 22x (the +1 IS reachable), Heliod's lifelink grant 85 activations over 156
 casts, Ranger-Captain cast 77x. The 0 ability (value gate) stays unreachable (deferred).
 
+## References + value leaf (2026-09-09)
+- **10 user-played references** (`references/CritterLifegain/claude_s1..s10`, committed 3ffd5d42).
+  `scripts/ref_bench.py`: search 4.600 vs human 4.600, **10/10 same win turn, 0 short**;
+  `viewer_protocol_check.py --strict`: 10/10 ok (whole corpus 313 refs: 0 drift / 0 enum-gap).
+- **Value leaf ADOPTED** (`decks/CritterLifegain/CritterLifegain.value.json`, first model), frozen
+  at df2b519e, whole pipeline 11 minutes (this deck is cheap). 12,351 rows from 2,500 games, held-out
+  RMSE 0.463. Matrix (400 games x 4 seeds, unbounded): H1 4.9231, **H2..H5 4.9200 flat** (converged
+  from H2, matching the ladder above); V1 5.0138, V2 4.9550, V3 4.9369, V4 4.9212, **V5..V8 4.9200**
+  at 84 ms/game vs H5's 728 ms. Trust d5 accepted but never engages (arms byte-identical: no leaf
+  line is ever committed at d>=5, i.e. everything stays escalation-eligible, the safe side).
+  Phase E A/B (8 held-out seeds x 1000, staged vs NO sidecar): **+0.00012 t, 7/8 seeds identical
+  avg, 1 seed one game one turn later, 0.39x core time** -- the Breaching shape, adopted per the
+  clean-win directive. Play-profile sweep: d4 -0.0005 (t -1.0), d5/d6 not engaging -> no play
+  policy written (the sidecar carries no `enabled` block; presence alone runs the hybrid).
+- Phase F mullgen contract set by measurement: **d1 b3** (rho 0.9973 >= 0.990, 0.51x play cost),
+  **K = 13** buckets (Soul Warden / Soul's Attendant merge) -> ~78k distinct hands, cheap.
+- Gate: smoke + regression on the adopted sidecar (results in the adoption commit message).
+- NEXT: mulligan profile (`mullgen.sh run decks/CritterLifegain`) -- it will subsume the
+  max_lands-4 finding above; user to say when.
+
 ## Open questions surfaced (non-blocking)
 (collected here and re-raised in the closing message)
 
