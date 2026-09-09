@@ -419,6 +419,38 @@ cross-deck inert (smoke 0 configs changed). **Still NOT adopted — that is the 
 the honest pitch is "3% and a slightly shorter tail", not a fix for Snow's cost. Snow's cost is
 structural: the 49% of units in rollout+greedy that the VALUE LEAF replaces.
 
+## Profile regenerated 2026-09-09, and what the attempt measured by accident
+
+The profile was refit after this session's play changes (Scrying Sheets tap-hold, Coldsteel Heart's
+ETB colour lock, the overrun ceiling) on frozen commit `49ab7e85` / src `1233dc76`, seed pinned
+20260909. All 17 cards moved; the structure (same cards, same breakpoint counts) did not. The
+notable mover is **Coldsteel Heart's second breakpoint, +0.0379 -> -0.2065** — i.e. once the Heart
+is modelled as a colour-LOCKED source, the second copy is worth markedly less, which is the
+direction the model change predicts.
+
+**SNOW AT UNLIMITED BUDGET IS INTRACTABLE, and now there are numbers for it.** `analyze_deck.py`'s
+optional reframe A/B diagnostic runs 200 games per condition at `depth=3, budget=0ms` — unlimited.
+In ~25 minutes on 24 cores it did not finish its FIRST condition, and its slow-game tail escalated
+monotonically:
+
+| ms | 36,783 | 63,370 | 110,086 | 129,232 | 187,549 | 304,856 | 314,066 | 477,913 | 573,054 | 734,012 | 1,144,721 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| gi | 28 | 14 | 19 | 13 | 31 | 22 | 43 | 25 | 6 | 11 | 21 |
+| win turn | 5 | 6 | 5 | 6 | 5 | 6 | 6 | 6 | 6 | 6 | **7** |
+
+Twelve games over the 30 s threshold inside the first ~44 game-indices, worst **19 minutes for one
+game**, and cost rises with win turn (the 5s cluster low, the lone wt=7 at the top). Repro for the
+worst: `--seed 90022 --game-index 21 --games 1 --depth 3` with `--ignore-play-profile`.
+
+Two consequences worth carrying:
+- **This is the user's stated rationale for the anti-truncation work, measured on this deck** — an
+  unlimited-budget run over many games reliably hits degenerate cases and becomes unboundable. It is
+  the concrete case for a LARGE FINITE budget that truncates almost nothing (see
+  `anytime-search-budget-prediction.md`).
+- **Run the profile regen with `--no-cost-diagnostic` on Snow.** The diagnostic is informational,
+  the profile is written before it starts, and on this deck it will occupy the whole box for an
+  unbounded time. The run above was stopped for exactly that reason; the profile is unaffected.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. ~~`{S}` modelled as generic `{1}`~~ — **CLOSED 2026-09-06** by the real snow-mana model
