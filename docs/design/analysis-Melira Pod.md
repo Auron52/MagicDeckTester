@@ -2571,6 +2571,13 @@ so commit-the-line re-searches at that decision instead of replaying — play ca
 budget at the re-search). Needs the standing gate (smoke + regression + per-game diff) and an
 explicit go.
 
+Final state of the lever after the memo fix + "replay a verified value pass on the heuristic, then
+stop" (3de1efef, smoke 80/80, CI green ubuntu/windows/parity): 200 games avg 4.995 (live 5.010),
+25.86M units vs 22.19M live (1.17x), 831/1857 mispredicts — the reconstruction now under-estimates
+the heuristic pass (its tree is 1.25-1.54x the warm-up's at d3-d4), so the emulated ladder stays
+CLOSED until the order-free-win rule above is applied to every pass. The scout on the fixed binary
+passed the old crash point: 102,212 keep rollouts at 1200 s (100/s sustained).
+
 **Smoke under the adopted sidecar (binary with the emulated lever OFF):** 77/80 configs unchanged
 (byte-identical off, as required), melira d3 4.88 -> 4.84 (2 faster), melira d5 4.96 = 4.96 (play
 differs, score same), **melira2hg d3 5.04 -> 5.12 (2 slower of 25)** — the 2HG case runs the same
