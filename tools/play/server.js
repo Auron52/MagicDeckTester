@@ -215,6 +215,102 @@ function runStep(p, logDir) {
   return runStepRaw(p, logDir, false);
 }
 
+// ---- INTERACTIVE PREFIX-CACHE: one persistent --interactive child per game ----
+//
+// The stateless protocol re-simulates the whole --choices prefix on every step, so step N pays for
+// re-enumerating all N-1 earlier plan fans -- on a long manual combo turn (EDF seed 8, USER
+// 2026-09-09: "it becomes progressively slower for some reason") each click costs more than the
+// last. With --interactive the engine blocks on stdin after emitting a decision instead of exiting
+// 70, and continues the SAME in-process game when the next picks arrive: each step costs only its
+// own frame. The child runs the identical chooser code path, so decisions are byte-identical to a
+// stateless replay of the same prefix (parity-checked by test/interactive_parity_check.py).
+//
+// The stateless respawn remains the source of truth and the fallback for EVERYTHING unusual:
+// rewind/undo (choices no longer extend the child's stream), changed side-channel args (they are
+// argv-baked, so the session key covers them), a validate/save step (those keep their own spawns),
+// a side-channel PROMPT frame (firebreathe/jitte/storage-hold still exit 70 by design), child
+// death, malformed output, or a step timeout. Opt out with PLAY_INTERACTIVE=0.
+const INTERACTIVE = process.env.PLAY_INTERACTIVE !== '0';
+let isession = null;   // single-user tool: at most ONE live child { key, child, sent, buf, dead, busy }
+
+function killIsession() {
+  if (isession) { try { isession.child.kill('SIGKILL'); } catch (e) {} isession = null; }
+}
+
+// Scan `sess.buf` from `start` for one complete decision block; null until it arrives.
+function scanDecision(sess, start) {
+  const end = sess.buf.indexOf('<<<END_DECISION>>>', start);
+  if (end < 0) return null;
+  const begin = sess.buf.indexOf('<<<CLAUDE_DECISION>>>', start);
+  if (begin < 0 || begin > end) return { kind: 'error', error: 'interactive: unpaired decision markers' };
+  const raw = sess.buf.slice(begin + '<<<CLAUDE_DECISION>>>'.length, end).trim();
+  try { return { kind: 'decision', decision: JSON.parse(raw) }; }
+  catch (e) { return { kind: 'error', error: 'interactive: bad decision JSON: ' + e.message }; }
+}
+
+// Wait on the session until a decision block lands after `start`, or the child exits (game over ->
+// parse the result), or the step timeout. Resolves null on anything that should trigger the
+// stateless fallback.
+function awaitIsession(sess, start) {
+  return new Promise((resolve) => {
+    let timer = null;
+    const settle = (v) => { if (timer) clearTimeout(timer); sess.wake = null; sess.busy = false; resolve(v); };
+    const check = () => {
+      const dec = scanDecision(sess, start);
+      if (dec) return settle(dec.kind === 'decision' ? dec : null);
+      if (sess.dead) {
+        const resultRaw = extractBlock(sess.buf, '<<<CLAUDE_RESULT>>>', '<<<END_RESULT>>>');
+        if (resultRaw) { try { return settle({ kind: 'result', result: JSON.parse(resultRaw) }); } catch (e) {} }
+        return settle(null);
+      }
+    };
+    timer = setTimeout(() => settle(null), STEP_TIMEOUT_MS);
+    sess.wake = check;
+    check();
+  });
+}
+
+// Split buildArgs' argv into (everything-but-choices, choices[]) -- the former is the session key.
+function argsAndChoices(p, logDir) {
+  const args = buildArgs(p, logDir, null, false);
+  const i = args.indexOf('--choices');
+  return { rest: args.slice(0, i).concat(args.slice(i + 2)),
+           choices: args[i + 1] ? args[i + 1].split(',') : [] };
+}
+
+async function runStepCached(p, logDir) {
+  if (!INTERACTIVE || logDir) return runStep(p, logDir);
+  const { rest, choices } = argsAndChoices(p, logDir);
+  const key = JSON.stringify(rest);
+  const s = isession;
+  if (s && !s.dead && !s.busy && s.key === key &&
+      choices.length > s.sent.length && s.sent.every((c, i) => c === choices[i])) {
+    // Fast path: this step extends the live child's stream -- feed it only the delta.
+    s.busy = true;
+    const start = s.buf.length;
+    try { s.child.stdin.write(choices.slice(s.sent.length).join(',') + '\n'); }
+    catch (e) { s.busy = false; killIsession(); return runStep(p, logDir); }
+    const r = await awaitIsession(s, start);
+    if (r) { s.sent = choices; if (r.kind === 'result') killIsession(); return r; }
+    killIsession();
+    return runStep(p, logDir);   // stateless fallback decides what this step really is
+  }
+  // (Re)spawn: new game, rewind, changed side-channel args, or a busy/dead child.
+  killIsession();
+  const child = spawn(BIN, rest.concat(['--choices', choices.join(','), '--interactive']),
+                      { cwd: ROOT });
+  const ns = { key, child, sent: choices, buf: '', dead: false, busy: true, wake: null };
+  child.stdout.on('data', (d) => { ns.buf += d; if (ns.wake) ns.wake(); });
+  child.stderr.on('data', () => {});   // [play] chatter; the stateless fallback surfaces real errors
+  child.on('error', () => { ns.dead = true; if (ns.wake) ns.wake(); });
+  child.on('close', () => { ns.dead = true; if (ns.wake) ns.wake(); });
+  isession = ns;
+  const r = await awaitIsession(ns, 0);
+  if (r) { if (r.kind === 'result') killIsession(); return r; }
+  killIsession();
+  return runStep(p, logDir);
+}
+
 // Spawn the binary ASYNCHRONOUSLY (child_process.spawn, not spawnSync) so the up-to-tens-of-seconds
 // sidecar parse does NOT freeze Node's single-threaded event loop -- otherwise a spawnSync here would
 // block EVERY other request (including the fast /api/step for the next mulligan dialog) until it
@@ -722,7 +818,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/step') {
       const p = await readBody(req);
-      return sendJson(res, 200, runStep(p, null));
+      return sendJson(res, 200, await runStepCached(p, null));
     }
     if (req.method === 'POST' && url.pathname === '/api/ai-hint') {
       // Async deep-search hint for the current decision (see runAiHint). Genuinely non-blocking now: the
