@@ -183,14 +183,25 @@ static bool DedupCensusOn()
 // Snow. Do not price a change that adds NON-SEARCH work in units alone; that is the mirror image of
 // the wall-vs-units trap, and it points the opposite way.
 //
-// DO NOT "OPTIMISE" THIS BY DEDUPING ON THE PLAN INSTEAD OF THE STATE -- MEASURED UNSOUND.
-// 93.7% of the duplicates are pure copy permutations (same cards, same modes, different
-// Action::hand_index), which is tempting because a plan signature is computable BEFORE the
-// GameState copy and ApplyPlanDirect that the state key needs -- it would skip ~60% of candidates
-// outright rather than just their rollouts. But the census's safety counter says 949,427 candidates
-// share a copy signature with an earlier sibling and land on a DIFFERENT state: a signature skip
-// would delete ~27% of genuinely distinct lines. Arm MTG_DEDUP_CENSUS and read `copy_FALSE` before
-// re-litigating this.
+// DO NOT "OPTIMISE" THIS BY DEDUPING ON THE PLAN INSTEAD OF THE STATE -- MEASURED UNSOUND, TWICE.
+// Most duplicates are pure copy permutations (same cards, same modes, different Action::hand_index),
+// which is tempting because a plan signature is computable BEFORE the GameState copy and
+// ApplyPlanDirect that the state key needs -- it would skip ~60% of candidates outright rather than
+// just their rollouts, which is where a real speed win would come from. It is not available:
+//
+//   narrow signature (kind, name, x, alt, sac_land, dig_sac, discard, splice, float):
+//       copy_perm 2,531,634   copy_FALSE   949,427
+//   WIDENED to every mode-bearing Action field (tutor_target, chosen_float_color, sac_source_id,
+//   sac_victim_id, sac_count, gy_exile_mode, loyalty_ability, vial_bf_index, alt_lifegain,
+//   free_cast) PLUS the plan-level discriminators (bp_choice, searched_order, atk_dork_release):
+//       copy_perm 1,808,436   copy_FALSE   853,079      <-- still a 32% FALSE rate
+//
+// `copy_FALSE` counts candidates sharing a signature with an earlier sibling that land on a
+// DIFFERENT post-apply state. Widening the signature barely moved it, which is the point: the plan
+// does not determine the state, so no amount of extra fields rescues the approach. Skipping on it
+// would delete ~a third of genuinely distinct lines -- a LOSSY PRUNE, refused by the standing
+// no-lossy-truncation bar no matter how a suite happens to score. Arm MTG_DEDUP_CENSUS and read
+// `copy_FALSE` before re-litigating this.
 static bool CostReframeEnabled();   // defined below; the legacy carrier of this same skip
 static bool CandDedupOn()
 {
@@ -30808,7 +30819,12 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
 static std::string PlanCopySig(const TurnSolver::Plan& plan)
 {
     std::string s;
-    s.reserve(plan.actions.size() * 24);
+    s.reserve(plan.actions.size() * 40);
+    // Plan-level discriminators: these change what the plan MEANS, not which copy performs it.
+    s += std::to_string(plan.bp_choice);
+    s += static_cast<char>('0' + (plan.searched_order ? 1 : 0));
+    s += std::to_string(plan.atk_dork_release);
+    s += '#';
     for (const Action& a : plan.actions)
     {
         s += std::to_string(static_cast<int>(a.kind));
@@ -30824,6 +30840,25 @@ static std::string PlanCopySig(const TurnSolver::Plan& plan)
         s += std::to_string(a.splice_count);
         s += ':';
         s += std::to_string(a.ritual_float);
+        s += ':';
+        s += std::to_string(a.alt_lifegain);
+        s += ':';
+        s += static_cast<const std::string&>(a.tutor_target);
+        s += ':';
+        s += static_cast<const std::string&>(a.chosen_float_color);
+        s += ':';
+        s += std::to_string(a.sac_source_id);
+        s += ':';
+        s += std::to_string(a.sac_victim_id);
+        s += ':';
+        s += std::to_string(a.sac_count);
+        s += ':';
+        s += std::to_string(a.gy_exile_mode);
+        s += ':';
+        s += std::to_string(a.loyalty_ability);
+        s += ':';
+        s += std::to_string(a.vial_bf_index);
+        s += static_cast<char>('0' + (a.free_cast ? 1 : 0));
         s += ';';
     }
     return s;
