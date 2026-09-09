@@ -20,6 +20,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -177,6 +178,81 @@ inline void LoadPlanState(GameState& dst, const GameState& src, bool reuse)
     if (reuse) { dst = src; }                 // reuse dst's capacity
     else       { dst = GameState(src); }      // fresh buffers (the pre-change behaviour)
 }
+
+// ---- PAYABILITY-PROBE SCRATCH BOARD -------------------------------------------------------
+// The same capacity-reuse trick as LoadPlanState, for the sites that could NOT hoist a buffer out
+// of a loop because the copy is the first statement of a leaf FUNCTION -- today the two subset
+// payability probes (SubsetPayableWithFilters / SubsetPayableSequential), which
+// `GameState cp = state;` on entry and throw the board away on return.
+//
+// WHY HERE. A task-clock profile of EDF s3001 gi0 on a correctly-optimised Profile build puts
+// GameState's copy CONSTRUCTOR at 7.16% of the game and attributes 6.53 of those 7.16 points to
+// exactly one call chain -- SubsetPayableWithFilters -> GameState::GameState -- of which
+// array<Player,2> / Player::Player (the deep-copied zone vectors: hand, library, graveyard,
+// sideboard, staged, suspended, x2 players) is 4.50 points. Every one of those vectors is
+// malloc'd fresh per call and freed on return, which is also most of what puts operator new
+// (2.79%), free (2.22%), operator delete (1.01%) and malloc (0.97%) in the profile.
+// Copy-ASSIGNING into a warm per-thread board reuses the previous call's capacity, so in steady
+// state the zone allocations disappear and only the element copy remains.
+//
+// The predecessor of this comment (still in SubsetPayableWithFilters) recorded that "a
+// thread_local scratch reused across calls was written and REVERTED unmeasured". This one IS
+// measured, with callgrind Ir rather than wall clock -- see the MTG_PAY_SCRATCH note below for
+// the numbers and for why wall clock cannot answer this question on this box.
+//
+// A POOL, NOT ONE BUFFER, and that is load-bearing: the probes can NEST (MTG_COLOR_EXACT_PROBE's
+// ProbeColorExactReject re-enters SubsetPayableWithFilters, and a provider hook under the
+// sequential probe may reach either), so each nesting level needs its own board. std::deque is
+// used rather than std::vector because growing the pool must NOT relocate the boards an outer
+// frame still holds a reference to.
+//
+// Byte-identical by construction, exactly as for LoadPlanState: assignment overwrites every field
+// with the values the copy constructor would have produced and only the storage is reused. The
+// one thing that differs is a vector's CAPACITY, which can suppress a reallocation the fresh copy
+// would have done -- and no GameState field is a pointer into its own storage (Permanent::
+// attached_to is a dead stub; every attachment rides a stable card m_number), nor does any key /
+// digest / log fold a heap address. Verified: smoke 73/73 byte-identical, scenarios 72/72, and
+// the six EDF reference games' play digests unchanged.
+//
+// ISOLATED A/B LEVER, default ON (fast). MTG_PAY_SCRATCH=0 restores the old per-call
+// `GameState cp = state;` at exactly these two sites, so the change can be measured WITHOUT
+// also reverting the five pre-existing plan-loop buffers that MTG_NO_STATE_REUSE would take
+// with it. Measured under callgrind on two EDF games:
+//     s1 gi0:  off 21,250,931,121 Ir -> on 20,218,600,587 Ir   = -4.86%
+//     s2 gi1:  off 24,577,987,498 Ir -> on 23,186,345,563 Ir   = -5.66%
+// MTG_NO_STATE_REUSE=1 on s1 gi0 gives 21,249,626,017 -- the same as MTG_PAY_SCRATCH=0 to 0.006%,
+// which is itself the finding that the five older LoadPlanState sites are worth nothing on this
+// deck and this one site is the whole effect.
+//
+// DO NOT try to reproduce this with wall clock on this container. The same game, same binary,
+// measured 156 s / 163 s / 223 s within one interleaved run as the host's own load moved; that
+// +-30% swamps a 5% effect and (measured against a stale baseline earlier the same session) can
+// manufacture a 1.9x "win" out of a neutral change.
+static const bool s_pay_scratch = EnvOn("MTG_PAY_SCRATCH", true);
+
+struct PayScratch
+{
+    explicit PayScratch(const GameState& src)
+    {
+        // Stable-address pool + this thread's current nesting depth.
+        static thread_local std::deque<GameState> pool;
+        static thread_local std::size_t           depth = 0;
+        while (pool.size() <= depth) { pool.emplace_back(); }
+        m_state = &pool[depth];
+        m_depth = &depth;
+        ++depth;
+        LoadPlanState(*m_state, src, s_state_reuse && s_pay_scratch);
+    }
+    ~PayScratch() { --(*m_depth); }
+    PayScratch(const PayScratch&)            = delete;
+    PayScratch& operator=(const PayScratch&) = delete;
+
+    GameState& Board() const { return *m_state; }
+
+private:
+    GameState*   m_state = nullptr;
+    std::size_t* m_depth = nullptr;
+};
 // Matched-depth escalation measurement (MTG_ESC_MEASURE): per escalation, the ladder's work units
 // (budget->Used() delta) vs a COLD single pass at the ladder's ACTUAL committed depth (fresh caches).
 // This is the apples-to-apples "skip earlier depths" test -- same target depth, ladder vs single-pass.
@@ -3013,22 +3089,33 @@ bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creatu
 static bool SubsetPayableWithFilters(const GameState& state, const std::vector<Action>& cands,
                                      const std::vector<int>& sel)
 {
-    // PROFILED HOTSPOT, DELIBERATELY LEFT ALONE (2026-09-07). This copy is the single largest cost in
-    // the engine on this deck: a task-clock profile (EDF seed 6105 gi=4, 29k samples) puts
-    // SubsetPayableWithFilters at 55.8% of the game, of which GameState's copy CONSTRUCTOR alone is
-    // 11.3 points -- almost entirely Player's deep-copied zone vectors, re-malloc'd per call and
-    // freed on return (another ~6% across operator new / malloc / free). Only the battlefield and the
-    // mana pool are ever mutated below, so most of that copy is waste.
+    // PROFILED HOTSPOT (2026-09-07), now on a REUSED board (2026-09-08). This copy is the single
+    // largest GameState-copy cost in the engine on this deck: a task-clock profile (EDF s3001 gi0,
+    // 41k samples, on a Profile build that is actually -O3 -- see the CMakeLists FORCE note) puts
+    // GameState's copy CONSTRUCTOR at 7.16% of the game and attributes 6.53 of those points to this
+    // one call chain, 4.50 of them inside Player's deep-copied zone vectors, re-malloc'd per call
+    // and freed on return (with operator new 2.79% / free 2.22% / delete 1.01% / malloc 0.97%
+    // downstream of that). Only the battlefield and the mana pool are ever mutated below, so most of
+    // that copy is waste.
     //
-    // A thread_local scratch reused across calls was written and REVERTED unmeasured, and the reason
-    // is worth recording: this container cannot currently measure it. WSL2 exposes no PMU, so there
-    // are no instruction counts (see .devcontainer/README.md); wall clock on the same game with
-    // IDENTICAL work counters swung 17s / 38s / 48s across the session as the host load changed; and
-    // callgrind is impractical at ~50x on a 40s game. An unmeasured rewrite of the hottest path is
-    // exactly what this repo's standing lesson forbids. Fixing it properly means either a
-    // load-immune harness or -- better -- copying only what the walk touches instead of the whole
-    // GameState. Both are real work, not a drive-by.
-    GameState cp = state;
+    // The predecessor of this comment recorded that "a thread_local scratch reused across calls was
+    // written and REVERTED unmeasured" because the container could not measure it. It CAN measure
+    // it -- just not with wall clock, and not with perf: WSL2 has no PMU (perf reports
+    // `<not supported>` for instructions/cycles) and wall clock on this host drifted ~2x within one
+    // session, which is enough to make a neutral change read as a 1.9x win. callgrind's Ir is
+    // deterministic and load-immune, and a ~1 s game (EDF s1 gi0) runs under it in ~90 s, so the A/B
+    // is 3 minutes rather than the "~50x on a 40s game" the old note assumed. Result: -4.86% Ir on
+    // the whole game (see MTG_PAY_SCRATCH above).
+    //
+    // What this does NOT do is shrink the copy: the board is still copied in full, it is just no
+    // longer malloc'd and freed each time. The rest of the prize is bounded and now measured --
+    // PayScratch::PayScratch is 6.36% of the game INCLUSIVE, so "copy only what the walk touches"
+    // is worth at most that, against an audit of everything TapForCostDirect can read. For scale,
+    // this whole function is 58.79% inclusive and the payment walk under it (TapForCostShared*,
+    // whose own per-call battlefield snapshot/restore is 18.1% of all instructions) is where the
+    // rest of it lives.
+    PayScratch _pay_scratch(state);
+    GameState& cp = _pay_scratch.Board();
     // Pay each selected cast's mana cost with real sources; taps persist across casts in cp, so a
     // filter consumed by one cast is unavailable to the next. Mana producers (rocks) pay first and
     // join the board so their mana is online for later casts in the subset.
@@ -3392,7 +3479,10 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return prov.CastOrderRank(state, *cands[x].def) < prov.CastOrderRank(state, *cands[y].def); });
 
-    GameState cp = state;
+    // Warm per-thread scratch board, same contract as SubsetPayableWithFilters' (see PayScratch):
+    // this probe is the same shape -- a full GameState copy on entry, thrown away on return.
+    PayScratch _pay_scratch(state);
+    GameState& cp = _pay_scratch.Board();
     for (int j : order)
     {
         const Action& a   = cands[j];
