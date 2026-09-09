@@ -390,6 +390,8 @@ static std::atomic<long long> g_iddepth_n{0}, g_iddepth_sum{0};
 // back (their partial result discarded). Pure loss -- the pass-cost predictor's miss, and the
 // direct target of a node-aware pass-cost estimate (node passes overshoot: the [bp-node] doc).
 static std::atomic<long long> g_idwaste_units{0}, g_idwaste_passes{0}, g_idpass_starts{0};
+// Committed lines that ended at an order-free memo reuse and were re-searched to completion (fill-in).
+static std::atomic<long long> g_fillin_passes{0}, g_fillin_units{0}, g_fillin_still_truncated{0};
 // Of those aborted passes, how many had ALREADY PROVEN a strictly better win than the shallower
 // line the rollback commits -- i.e. how many discards are LOSSY rather than merely wasteful. Always
 // counted (not gated on MTG_ID_ANYTIME) so the control arm reports what the shipped path throws
@@ -569,6 +571,11 @@ namespace
                 }
             }
             const long long iw = g_idwaste_units.load();
+            if (g_fillin_passes.load() > 0)
+            {
+                std::cerr << "[rollout-stats] orderfree fill-in: committed lines re-searched=" << g_fillin_passes.load()
+                          << " units=" << g_fillin_units.load() << " still_truncated=" << g_fillin_still_truncated.load() << "\n";
+            }
             if (g_idpass_starts.load() > 0)
             {
                 std::cerr << "[rollout-stats] id_pass starts=" << g_idpass_starts.load()
@@ -31185,7 +31192,8 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
         lc->charged_kb += kb;
         lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max(), sig });
     }
-    else if (it->second.nowin_bound != std::numeric_limits<int>::max())
+    else if (it->second.nowin_bound != std::numeric_limits<int>::max()
+             || (it->second.line.truncated && !line.truncated))   // fill-in: complete line supersedes a truncated one
     {
         const long long oldkb = static_cast<long long>(ApproxFslKb(it->second.line));
         it->second = FSLineEntry{ line, std::numeric_limits<int>::max(), sig };
@@ -31273,6 +31281,9 @@ inline thread_local long long g_fs_memo_win_hits = 0, g_fs_memo_nowin_hits = 0, 
 // warm-up that finds a verified win is replayed on the heuristic at that depth). MTG_LADDER_VALUE_LEAF's
 // warm-ups also force the value leaf but CAN commit a verified warm-up line, so they do not set this.
 inline thread_local bool g_emul_warm_pass = false;
+// FILL-IN re-search: set while a committed line that ended at an order-free reuse is re-searched
+// with the shortcut off, so the replayed line is complete.
+inline thread_local bool g_orderfree_off = false;
 // ESCALATION BEAM (value-guided frontier pruning): when > 0, FSLineWin / FSLineTail expand only the top
 // `g_esc_beam_width` MoveOrderPlans-ranked plans per node. The escalation re-search then visits only the
 // probe's top value-ranked lines (a W^depth frontier) and pays for exactly that many heuristic rollouts --
@@ -31819,7 +31830,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         TurnSolver::Plan q_rec = std::move(v);
                         q_rec.breakpoint_actions = std::move(bp3);
                         best.phases.push_back({ false, std::move(q_rec) });
-                        best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
+                        best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
                         // First VERIFIED win -- the m2 loop's own shortcut, same horizon edge.
                         if (sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
                     }
@@ -31916,6 +31927,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                             best.phases.push_back({ false, std::move(q_rec) });
                             best.phases.insert(best.phases.end(),
                                                cont.phases.begin(), cont.phases.end());
+                            best.truncated = best.truncated || cont.truncated;
                             if (cont.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
                         }
                         continue;   // the recursion scored the empty continuation == the plain tail
@@ -31949,7 +31961,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 TurnSolver::Plan q_rec = q;
                 q_rec.breakpoint_actions = std::move(bp);
                 best.phases.push_back({ false, std::move(q_rec) });
-                best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
+                best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
 
                 // Stop at the first VERIFIED win (within horizon) -- the pass minimum.
                 // Same reasoning as FSLineWin; the second-main FSLineWin runs at turn+1
@@ -32026,7 +32038,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         TurnSolver::Plan q_rec = v;
                         q_rec.breakpoint_actions = std::move(bp);
                         best.phases.push_back({ false, std::move(q_rec) });
-                        best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
+                        best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
                         // Same horizon edge as the base loop's first-verified-win shortcut.
                         if (sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
                     }
@@ -32185,7 +32197,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         TurnSolver::Plan q_rec = q;
                         q_rec.breakpoint_actions = std::move(bp);
                         best.phases.push_back({ false, std::move(q_rec) });
-                        best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
+                        best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
                         if (sub.win_turn <= state.turn_number + depth)
                         {
                             ++g_fs_hexits;
@@ -32306,9 +32318,18 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 || it->second.order_sig == 0
                 || it->second.order_sig == FsOrderSig(state))
             {
-                if (it->second.nowin_bound == std::numeric_limits<int>::max()) { ++g_fs_memo_win_hits; } else { ++g_fs_memo_nowin_hits; }
-                return it->second.line;
+                // FILL-IN: a WIN entry whose stored line itself ends at an order-free reuse (an ancestor
+                // of the truncation point on the pass that produced it) must be re-searched, not replayed,
+                // while the shortcut is off; FSLineStoreWin then overwrites it with the complete line.
+                if (!(g_orderfree_off && it->second.nowin_bound == std::numeric_limits<int>::max()
+                      && it->second.line.truncated))
+                {
+                    if (it->second.nowin_bound == std::numeric_limits<int>::max()) { ++g_fs_memo_win_hits; } else { ++g_fs_memo_nowin_hits; }
+                    return it->second.line;
+                }
             }
+            else
+            {
             // WARM-UP PASS: its line is discarded (only the committing heuristic pass's line is
             // played), so the order-mismatched WIN entry's win turn is all it needs -- take it
             // without the line. Measured 2026-09-09 (Melira d3, per pass): the heuristic's
@@ -32320,15 +32341,34 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // ...and for EVERY pass under MTG_MEMO_WIN_ORDERFREE / per-job `memo_win_orderfree` (default
             // OFF = byte-identical): the leaf-independent rule. A line reaching this node ends here,
             // exactly as a line ends at a leaf; the engine re-searches past a line's end as always.
-            static const bool s_all_orderfree_env = EnvOn("MTG_MEMO_WIN_ORDERFREE");
+            // DEFAULT ON since 2026-09-09 (pooled 8 x 1000 per cell, deterministic units, same batch):
+            //   Melira d5/b20 0.903x units at -0.0010 t, d3/b10 0.906x at -0.0001 (1 game of 8000 differs);
+            //   Fluctuator d5/b20 0.963x at +0.0002 (6/8 seeds byte-identical), d3/b10 0.983x at +0.0001.
+            // No axis regressed; MTG_MEMO_WIN_ORDERFREE=0 restores the order-sensitive replay.
+            static const bool s_all_orderfree_env = EnvOn("MTG_MEMO_WIN_ORDERFREE", true);
             const bool s_all_orderfree = (valuearm::t_arm.memo_win_orderfree >= 0)
                                        ? (valuearm::t_arm.memo_win_orderfree != 0) : s_all_orderfree_env;
-            if (s_all_orderfree || (s_warm_orderfree && g_emul_warm_pass && g_force_value_leaf && !g_force_heuristic_leaf))
+            // VERIFIED ONLY (MTG_MEMO_ORDERFREE_VERIFIED_ONLY / job `memo_orderfree_verified_only`, default OFF =
+            // all entries): a WIN entry is stored for any win_turn <= max_turns, so it also
+            // carries a LEAF ESTIMATE when the win lies beyond the node's horizon -- and the greedy rollout
+            // is not order-invariant, so a permuted state's estimate is not this state's. Reusing those
+            // order-free lost 3 of 16000 Fluctuator games (seed 702739: the turn-3 cycling kill judged a
+            // turn worse at a permuted node). A win INSIDE the horizon was proven by simulation and holds
+            // for every permutation. Warm-up passes keep reusing estimates: their lines are discarded.
+            static const bool s_of_verified_only_env = EnvOn("MTG_MEMO_ORDERFREE_VERIFIED_ONLY", false);
+            const bool s_of_verified_only = (valuearm::t_arm.memo_orderfree_verified_only >= 0)
+                                          ? (valuearm::t_arm.memo_orderfree_verified_only != 0) : s_of_verified_only_env;
+            const bool verified = it->second.line.win_turn <= state.turn_number + depth - 1;
+            const bool warm_of  = s_warm_orderfree && g_emul_warm_pass && g_force_value_leaf && !g_force_heuristic_leaf;
+            if (!g_orderfree_off
+                && ((s_all_orderfree && (verified || !s_of_verified_only)) || warm_of))
             {
                 ++g_fs_memo_win_hits;
-                return { it->second.line.win_turn, {} };
+                TurnSolver::SearchLine cut; cut.win_turn = it->second.line.win_turn; cut.truncated = true;
+                return cut;
             }
             ++g_fs_memo_order_miss;   // a WIN entry this node could not replay (zone order differs)
+            }
         }
         else if (it != lc->end()) { ++g_fs_memo_stale; }   // no-win entry too weak for this cutoff
     }
@@ -32626,7 +32666,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         TurnSolver::Plan p_rec = std::move(v);
                         p_rec.breakpoint_actions = std::move(bp3);
                         best.phases.push_back({ true, std::move(p_rec) });
-                        best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
+                        best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end()); best.truncated = best.truncated || tail.truncated;
                         // In-horizon win: same COMPLETE-NODES deferral as the main loop below.
                         if (tail.win_turn <= state.turn_number + depth - 1)
                         {
@@ -32825,7 +32865,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             p_rec.atk_dork_release = chose_release;   // searched combat variant -> executor pin
             p_rec.breakpoint_actions = std::move(bp);
             best.phases.push_back({ true, std::move(p_rec) });
-            best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
+            best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end()); best.truncated = best.truncated || tail.truncated;
 
             // Stop at the first VERIFIED win (within this node's horizon, found by real
             // simulation -- not the greedy leaf). Under the iterative-deepening caller
@@ -32948,7 +32988,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     TurnSolver::Plan p_rec = v;
                     p_rec.breakpoint_actions = std::move(bp);
                     best.phases.push_back({ true, std::move(p_rec) });
-                    best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
+                    best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end()); best.truncated = best.truncated || tail.truncated;
                     // Same reasoning as the main loop: with COMPLETE NODES on we keep walking the
                     // remaining ranks rather than stopping at the first in-horizon win, so the node
                     // answers with the minimum over every rank it could afford. The walk still ends
@@ -33067,7 +33107,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     TurnSolver::Plan p_rec = v;
                     p_rec.breakpoint_actions = bp_out;
                     best.phases.push_back({ true, std::move(p_rec) });
-                    best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
+                    best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end()); best.truncated = best.truncated || tail.truncated;
                 }
                 return true;
             };
@@ -33689,6 +33729,18 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
             (heuristic ? g_emul_hpasses : g_emul_vpasses).fetch_add(1, std::memory_order_relaxed);
             out = FSLineWin(state, d, max_turns, max_turns + 1, second_main, tt, cache, budget);
+            if (heuristic && out.truncated && !(bounded && budget->Overrun()))
+            {
+                // A heuristic pass's line may be committed: fill it in (see the ladder's fill-in).
+                const long long fi0 = budget ? budget->Used() : 0;
+                g_orderfree_off = true;
+                SearchLine full = FSLineWin(state, d, max_turns, max_turns + 1, second_main, tt, cache, budget);
+                g_orderfree_off = false;
+                g_fillin_passes.fetch_add(1, std::memory_order_relaxed);
+                g_fillin_units.fetch_add((budget ? budget->Used() : 0) - fi0, std::memory_order_relaxed);
+                if (full.truncated) { g_fillin_still_truncated.fetch_add(1, std::memory_order_relaxed); }
+                if (!(bounded && budget->Overrun())) { out = full; }
+            }
             const bool over = bounded && budget->Overrun();
             if (budget != nullptr) { budget->SetOverrunLimit(0); }
             cost   = (budget ? budget->Used() : 0) - used_before;
@@ -33956,6 +34008,20 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             break;
         }
 
+        if (attempt.truncated)
+        {
+            // The line we are about to commit ends at an order-free reuse: re-search this pass with the
+            // shortcut OFF (the interior memo is warm, so only the order-mismatched subtrees on the way
+            // are actually re-searched) and commit the complete line. Same budget accounting as the pass.
+            const long long fi0 = budget ? budget->Used() : 0;
+            g_orderfree_off = true;
+            SearchLine full = FSLineWin(state, pass_depth, max_turns, max_turns + 1, second_main, tt, &line_cache, budget);
+            g_orderfree_off = false;
+            g_fillin_passes.fetch_add(1, std::memory_order_relaxed);
+            g_fillin_units.fetch_add((budget ? budget->Used() : 0) - fi0, std::memory_order_relaxed);
+            if (full.truncated) { g_fillin_still_truncated.fetch_add(1, std::memory_order_relaxed); }
+            if (!(budget != nullptr && budget->Overrun())) { attempt = full; }
+        }
         line = attempt;
         committed_depth = pass_depth;
         prev_line = line; prev_committed = committed_depth;   // this pass completed
@@ -34333,6 +34399,27 @@ namespace
 }
 
 
+// FSLineWin whose line may be COMMITTED: if it ended at an order-free memo reuse, re-search with the
+// shortcut off (warm interior memo) so the replayed line is complete. See the ladder's fill-in.
+static TurnSolver::SearchLine FSLineWinComplete(const GameState& state, int depth, int max_turns, int cutoff,
+                                                bool second_main, TranspositionTable* tt, FSLineCache* lc,
+                                                SearchBudget* budget)
+{
+    TurnSolver::SearchLine out = FSLineWin(state, depth, max_turns, cutoff, second_main, tt, lc, budget);
+    if (out.truncated && !(budget && budget->Overrun()))
+    {
+        const long long fi0 = budget ? budget->Used() : 0;
+        g_orderfree_off = true;
+        TurnSolver::SearchLine full = FSLineWin(state, depth, max_turns, cutoff, second_main, tt, lc, budget);
+        g_orderfree_off = false;
+        g_fillin_passes.fetch_add(1, std::memory_order_relaxed);
+        g_fillin_units.fetch_add((budget ? budget->Used() : 0) - fi0, std::memory_order_relaxed);
+        if (full.truncated) { g_fillin_still_truncated.fetch_add(1, std::memory_order_relaxed); }
+        if (!(budget && budget->Overrun())) { out = full; }
+    }
+    return out;
+}
+
 TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, int depth,
                                                         int max_turns, bool second_main,
                                                         TranspositionTable* tt, SearchBudget* budget,
@@ -34557,8 +34644,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         TranspositionTable* single_tt1 = (tt != nullptr) ? tt : &single_tt1_local;
         SearchBudget        single_budget1;   // unlimited: the pass at D must complete
         const int d1 = std::max(1, committed);
-        const SearchLine hl = FSLineWin(state, d1, max_turns, max_turns + 1, second_main,
-                                        single_tt1, &single_cache1, &single_budget1);
+        const SearchLine hl = FSLineWinComplete(state, d1, max_turns, max_turns + 1, second_main,
+                                                single_tt1, &single_cache1, &single_budget1);
         if (g_hybrid_stats.enabled)
         {
             g_hybrid_stats.decisions.fetch_add(1);
@@ -35038,7 +35125,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 }
                 const long long r_ub0 = esc_budget ? esc_budget->Used() : 0;
                 const long long r_lv0 = g_fs_leaf_evals;
-                hline = FSLineWin(state, td, max_turns, single_cut, second_main, single_tt, &single_cache, esc_budget);
+                hline = FSLineWinComplete(state, td, max_turns, single_cut, second_main, single_tt, &single_cache, esc_budget);
                 aborted = (esc_budget && esc_budget->Overrun());
                 // NOT ANYTIME-RESCUED, deliberately. The retry one depth shallower overwrites
                 // hline, so a win the deeper attempt proved is lost -- but rescuing it here would
@@ -35153,8 +35240,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                             SearchBudget::SatMulD(kOverrunBeta, esc_budget->EffectiveLimit()), 1)));
                     const long long r_ub0 = esc_budget->Used();
                     if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
-                    SearchLine up = FSLineWin(state, td + 1, max_turns, single_cut, second_main,
-                                              single_tt, &single_cache, esc_budget);
+                    SearchLine up = FSLineWinComplete(state, td + 1, max_turns, single_cut, second_main,
+                                                      single_tt, &single_cache, esc_budget);
                     if (esc_budget->Overrun())
                     {
                         // Deeper pass did not fit => keep current line. ANYTIME COMMIT: if the

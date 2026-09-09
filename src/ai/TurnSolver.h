@@ -1326,6 +1326,10 @@ public:
     {
         int win_turn = 0;
         std::vector<PhasePlan> phases;
+        // The line ENDS at an order-free memo reuse (win turn taken from a permuted state's entry, no
+        // replayable continuation). Propagated up through every adoption; a committed line carrying it
+        // is re-searched with the shortcut off so play always replays a complete line.
+        bool truncated = false;
     };
 
     // fd-oracle diagnostic (MTG_FD_ORACLE only, inert otherwise): the smallest WIN-CLAIMING estimate

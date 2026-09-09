@@ -2635,6 +2635,23 @@ per-depth mean, the real rollout cost varies per position). The 0.96x ceiling st
 follow-up (`emulofg` arm, 32 jobs, `ab11.out`, queued behind ab10) measures it at 8 x 1000 where
 calibration is amortised.
 
+**Pooled A/B landed (ab10, 8 seeds x 1000 per cell, deterministic units, same batch):**
+
+| cell | heuristic + order-free: quality | units | play | emulated (default predictor) + order-free: quality | units |
+|---|---|---|---|---|---|
+| Melira d5/b20 | -0.0010 (10 better / 2 worse) | **0.903x** | 99.8% same score | -0.0040 (51/19) | 0.968x |
+| Melira d3/b10 | -0.0001 (1 / 0) | **0.906x** | 1 game of 8000 differs | -0.0056 (86/42) | 1.098x |
+| Fluctuator d5/b20 | +0.0002 (0 / 2) | **0.963x** | 6/8 seeds byte-identical | -0.0017 (42/30) | 1.102x |
+| Fluctuator d3/b10 | +0.0001 (0 / 1) | **0.983x** | 7/8 seeds byte-identical | -0.0128 (135/36) | 1.498x |
+
+Order-free WIN reuse for every pass is a CLEAN WIN for the shipped search on both decks: 2-10% fewer
+units, no quality axis moved, play almost untouched (the lines it shortens are almost never the
+committed ones). Under the clean-win rule it is ADOPTED: default ON (`MTG_MEMO_WIN_ORDERFREE=0`
+restores the old replay), gated by smoke + regression across every deck with the per-game diff
+inspected before accept. Note the emulated ladder on Melira d5/b20 is now cheaper AND better than
+the plain heuristic ladder even with the default predictor (0.968x, -0.004 t, 51/19); the learned-
+growth arm is in ab11.
+
 **Smoke under the adopted sidecar (binary with the emulated lever OFF):** 77/80 configs unchanged
 (byte-identical off, as required), melira d3 4.88 -> 4.84 (2 faster), melira d5 4.96 = 4.96 (play
 differs, score same), **melira2hg d3 5.04 -> 5.12 (2 slower of 25)** — the 2HG case runs the same
@@ -2650,3 +2667,48 @@ reads (-0.002 t d3, -0.0033..-0.0055 t d5) are the evidence, and adoption is the
 4.815, 4.875 -> 4.840, 4.785 -> 4.750; d5 4.840 -> 4.807, 4.807 -> 4.780, 4.860 -> 4.813, 4.773 =
 4.773 — 80 games faster / 48 slower, every d5 seed better or equal. All three tiers ACCEPTED under the
 adopted sidecar (GT logs 456/456 consistent).
+
+### 2026-09-09h — learned-growth arm landed; order-free reuse: fill-in built, the Fluctuator losses root-caused
+
+**ab11 (`emulofg` = emulated ladder + order-free + learned per-depth growth), 8 x 1000 per cell,
+same batch as ab10, vs the plain heuristic ladder (`live`) and vs order-free alone (`liveof`):**
+
+| cell | emulofg units / live | / liveof | d_avg vs live | better/worse vs live |
+|---|---|---|---|---|
+| Melira d5/b20 | **0.834x** | 0.924x | +0.0016 | 41 / 55 |
+| Melira d3/b10 | 0.908x | 1.002x | +0.0011 | 76 / 85 |
+| Fluctuator d5/b20 | 1.001x | 1.040x | +0.0001 | 29 / 32 |
+| Fluctuator d3/b10 | 1.472x | 1.497x | -0.0124 | 131 / 35 |
+
+The learned growth fixed the predictor (Melira d5/b20 0.968x -> 0.834x) but the residual over order-free
+alone is ~8% at d5/b20 and nothing at d3/b10, with the per-game score count slightly negative. Not a
+clean win on its own; the multi-deck screen below asks the user's wider question.
+
+**Fill-in built.** Two gaps the pre-compaction draft missed: (1) the ancestors of a truncation point
+are memoized with truncated lines under EXACT order signatures, so the re-search would replay them —
+the lookup now skips a truncated WIN entry while the shortcut is off; (2) `FSLineStoreWin` used
+`emplace`, so the complete line would never overwrite — a complete line now supersedes a truncated
+one. Measured (200 Melira games, d5/b20, `MTG_ROLLOUT_STATS`): 17 committed lines re-searched, 0.46M
+units (2.3%), none still truncated; units 20.45M vs 22.19M old = **0.92x** (0.90x without fill-in).
+
+**The Fluctuator losses were NOT truncation.** Seed 702739 still wins on turn 4 with fill-in. Root
+cause: `FSLineStoreWin` stores any `win_turn <= max_turns`, so WIN entries also carry the LEAF
+ESTIMATE of a win beyond the node's horizon — and the greedy rollout is not order-invariant, so a
+permuted state's estimate is not this state's. Reusing those substitutes one estimate for another;
+in 702739 the turn-3 cycling kill is judged a turn worse at a permuted node and the ladder commits a
+line that stops after four cycles. Restricting the order-free shortcut to VERIFIED entries
+(`win_turn <= turn + depth - 1`) wins 702739 on turn 3 again — but the 200-game cost is **0.99x**
+(21.96M): the saving lives almost entirely in the estimate entries. So the lever is a HEURISTIC one
+(a permuted-state rollout as this state's estimate; measured neutral over 32000 games at 2-10%),
+not a pure memo. Exposed as `MTG_MEMO_ORDERFREE_VERIFIED_ONLY` / job `memo_orderfree_verified_only`
+(default OFF = all entries, the measured lever); the true fix would be an order-invariant rollout,
+which would make estimate reuse exact — deferred, it changes play everywhere.
+
+**Multi-deck screen launched** (`logs/emul_screen/`, 992 jobs, 8 x 500 per cell, 32 threads,
+deterministic units): for every deck with a live value leaf (19), arms `ship` (sibling sidecar =
+value hybrid + escalation), `heur` (no sidecar: the plain heuristic ladder, order-free all + fill-in),
+`emul` (emulated ladder, sidecar for warm-ups only) at d5/b20 and d3/b10; Melira and Fluctuator also
+carry `heurof0` (order-free off) and `heurver` (verified-only) so the three order-free variants are
+measured in the same batch. User's question: is the emulated ladder worth using instead of escalation
+for any other deck (their expectation: no — escalation reaches searched wins faster on decks without
+Melira's front-loaded growth). Projection ~1.5-2.5 h from the regression tier's throughput.

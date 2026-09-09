@@ -54,6 +54,7 @@ struct Arm
     // the tree leaf-independent (heuristic == value warm-up) and skips the committing pass's own
     // order-miss re-searches; the line ends at that node (the engine re-searches past a line's end).
     int         memo_win_orderfree = -1;    // -1 unset | 0 off | 1 on     (MTG_MEMO_WIN_ORDERFREE)
+    int         memo_orderfree_verified_only = -1;   // -1 unset | 0 all entries | 1 verified wins only (MTG_MEMO_ORDERFREE_VERIFIED_ONLY)
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).
     // "none"/"off"/"0" => explicitly NO sidecar, which is how an H-arm job asks for the pure
