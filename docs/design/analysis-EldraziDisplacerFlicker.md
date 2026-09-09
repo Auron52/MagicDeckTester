@@ -4048,3 +4048,27 @@ In flight: round 4 -- seed horizon-edge nodes by EXECUTING the canonical go-off 
 (observed win = exact this-turn label; feeds the first-win/B&B cutoff), aimed at the ~95% of
 certificate misses where the deck genuinely can win and the search burns millions of plans
 finding the dig. Yardstick: logs/edf_optbench/run_labbench.sh (7 games, baseline sum 1643 s).
+
+### Session 9b closeout: the campaign's honest ledger (2026-09-09)
+
+Eight verified certificate rounds + the payment track, all merged, all byte-identical for
+budgeted play. DEFINITIVE post-campaign numbers (round 8's decision package; size-bucketed
+extrapolation, exact-vs-estimated separated in logs/cert/extrap.py):
+
+* Phase A: ~655 core-h (~27.3 h wall/24 cores) pre-campaign -> **~541 core-h (~22.5 h wall)**;
+  tail game 5.1+ h -> ~4.2 h. Population speedup 1.21x -- speedup FALLS with game size (2.9x at
+  14 s, ~1.0-1.2x at 550-665 s), because the tail's wall is ~47% rollouts/greedy-fallback that
+  no enumeration-side mechanism touches.
+* The certificate is SOUND (execution-audit: 281,829 certified nodes x both seed families, 0
+  violations post-fix) and fire rates ended at 40-83%. MTG_WINLESS_AUDIT=1 is the standing
+  pre-generation gate -- it is the only check that ever caught a real defect here (the
+  sequencing-soundness bug).
+* THE ONE PROBLEM, TWO MOTIVATIONS: the residual's genuine-win class (node 3: investigate ->
+  crack Clue -> cast the DRAWN Living Wish -> cast the FETCHED payload -> loop) is a chain
+  neither the enumerator nor any seed can construct -- the SAME expressibility class as the
+  user's s1_gi0 T3 reference line. A dig-executing seed / bank-then-deploy construction would
+  serve both the label quality and the reference gap. Future build.
+* Verdict on the four options (agent's, endorsed): more enumeration-side engine work is the
+  WEAKEST lever now; the arithmetic-changers are bounded labels, multi-box phase A, or the
+  rollout/greedy-fallback project; accepting ~22.5 h is defensible where 27.3 h with zero
+  banked rows was not.
