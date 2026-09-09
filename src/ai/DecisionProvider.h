@@ -562,6 +562,32 @@ public:
                                       const std::vector<const CardDefinition*>& casting) const
     { (void)s; (void)casting; return false; }
 
+    // ProvenWinlessThisTurn -- an ADMISSIBLE PRUNING CERTIFICATE, and the only hook on this
+    // interface whose contract is a PROOF rather than a judgement.
+    //
+    // Returns true ONLY when NO legal sequence of plays available to `controller` this turn can
+    // win the game from `s` -- no combat total, no activation count, no cast order, no cast/blink
+    // /breakpoint interleaving. "Unlikely", "the heuristic would not find it" and "the search
+    // never plays that" are all WRONG answers here: the caller deletes the entire subtree, so a
+    // false positive silently converts a win into a loss. When in doubt the answer is FALSE.
+    //
+    // Contrast with ExtraLethalDamage / ProjectsAlternateWin above, which are optimistic
+    // PROJECTIONS an execution later arbitrates. This one is never arbitrated, so it points the
+    // other way: over-estimate the player's reach everywhere, and decline the moment any route --
+    // or any card in a reachable zone -- falls outside what the implementation can bound.
+    //
+    // Callers must apply it ONLY where the search is UNBOUNDED (the offline label ladder, the
+    // unbounded depth-matrix cells). Pruning consumes no work units, so under a real budget it
+    // would change what fits in that budget and therefore change play; see TurnSolver's
+    // WinlessCertificateActive.
+    //
+    // Deliberately NOT implemented generically: a sound generic bound has to prove "nothing else
+    // in this deck can move the opponent's life total or library", and CardParams carries 419
+    // fields, ~90 of them damage/life/mill/pump-shaped -- so the claim is only auditable per
+    // archetype, against a known card pool. Generic = false (no certificate, today's behaviour).
+    virtual bool ProvenWinlessThisTurn(const GameState& s, int controller) const
+    { (void)s; (void)controller; return false; }
+
     // ArchetypeCardValue -- archetype-specific per-card VALUE for the candidate-ordering heuristic
     // (TurnSolver's EvalCard), for cards whose worth is a combo / clairvoyant assumption rather
     // than a generic single-card estimate. The Treasure Hunt provider values a Treasure Hunt

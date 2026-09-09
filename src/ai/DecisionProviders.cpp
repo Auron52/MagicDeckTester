@@ -13,6 +13,7 @@
 #include <algorithm>   // std::stable_sort (OrderEntriesByEtbValue payoff-ordering primitive)
 #include <tuple>       // std::make_tuple (CombatCheatCandidates ranking key)
 #include <set>         // MTG_TUTOR_RANK_DUMP situation dedupe (diagnostic only)
+#include <unordered_map>  // ProvenWinlessThisTurn's per-definition pool memo
 #include "DecisionProviders.h"
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
@@ -14829,6 +14830,908 @@ bool EdfAutoGoOffAfterCasts(GameState& s, int controller)
     return done > 0;
 }
 
+// =============== "STUCK -- PASS THE TURN" CERTIFICATE (ProvenWinlessThisTurn) ===============
+//
+// USER, 2026-09-08: "we have the combo for infinite mana, but no sink or sufficient sources of
+// colourless. In those cases we need to be able to identify that we are stuck and pass the turn
+// like a human does. Rather than searching deep uselessly."
+//
+// WHAT IT IS. An ADMISSIBLE certificate: true only when no legal line wins THIS turn. The
+// unbounded label / depth-matrix search calls it at a node whose horizon ends on this turn, and
+// on true it drops the node WITHOUT enumerating -- which is the point, because plan enumeration
+// is 33.8% self time on a monster label game and the horizon-edge turn is the widest layer of
+// every ladder pass. See TurnSolver's WinlessCertificateActive for the scoping (never under a
+// real budget: pruning consumes no work units, so it would change what fits in one).
+//
+// THE DIRECTION OF ERROR IS NOT SYMMETRIC. Every other projection in this file is optimistic and
+// arbitrated later by execution (ExtraLethalDamage's "an over-claim costs a mis-ranked plan,
+// never a phantom win"). Nothing arbitrates this one: a false positive deletes a real win and
+// silently corrupts the label. So every quantity below is an UPPER bound on what the player can
+// do, every "is this reachable?" question is answered YES on doubt, and any card, zone or route
+// the analysis does not cover returns false (no certificate -- today's search, unchanged).
+//
+// THE COMPLETENESS CLAIM, and why it is anchored to a card pool. Soundness needs "combat damage,
+// Shivan Gorge, Essence Depleter's drain and Dimensional Infiltrator's exile are the ONLY ways
+// the opponent's life total or library can move, and nothing can raise an attacker's power".
+// That cannot be read off CardParams -- 419 fields, ~90 of them damage/life/mill/pump-shaped --
+// so it is checked where it IS auditable: EdfCertKnownDef below lists the pool the argument was
+// written against, and one card outside it disables the certificate. A decklist change therefore
+// makes this SLOWER, never WRONG.
+//
+// WHY COMBAT IS A CLOSED SUM OVER THE CURRENT BOARD. In this pool nothing grants haste, animates a
+// land, equips, enchants a creature, or is a lord, so no attacker can be ADDED this turn: a
+// creature cast now is summoning sick (CR 302.6) and a blinked one is a new object and sick too.
+// Emiel's counters land on the creature that ENTERS ("put a +1/+1 counter on it"), i.e. on that
+// same sick object -- which is exactly why FlickerGoOffCount sizes the counter kill for NEXT turn.
+// So max combat = sum of EffectivePower over creatures that can attack right now.
+//
+// WHY THE MANA BOUND IS A FIXPOINT. Mana bounds reachability (can I draw? can I wish?) and
+// reachability bounds mana (a Peregrine Drake off the top untaps five lands). Iterating a
+// monotonically GROWING pair until it stops growing gives a value that dominates any real line;
+// stopping early would not, so a run that fails to settle declines instead.
+//
+// THE {C} HALF is the user's own case. Generic mana can be unbounded while COLOURLESS is not: no
+// coloured mana pays a {C} pip (CR 107.4c) and no card here converts generic into {C}, so {C}
+// comes only from taps of {C}-capable LANDS. An Eldrazi Displacer loop spends one {C} per
+// iteration and refreshes at most min(untaps, {C}-lands) -- with a single colourless source that
+// balance is zero, so the loop banks unbounded generic mana that can never feed a {1}{C} sink.
+// An Emiel loop spends none, so one {C} land makes it unbounded; the test is per (outlet,payload).
+namespace {
+
+// The pool the completeness argument covers (see above). Memoised per definition POINTER, so the
+// string compare happens once per card per thread and every later call is a hash probe -- this
+// runs at every horizon-edge node.
+inline void CertPoolName(const char* zone, const Card& c)
+{
+    static const bool s_dbg = EnvOn("MTG_WINLESS_DEBUG");
+    if (s_dbg)
+    { std::fprintf(stderr, "[winless] POOL MISS in %s: '%s'\n", zone, c.m_name.str().c_str()); }
+}
+
+bool EdfCertKnownDef(const CardDefinition* d)
+{
+    if (d == nullptr)
+    {
+        static const bool s_dbg0 = EnvOn("MTG_WINLESS_DEBUG");
+        if (s_dbg0) { std::fprintf(stderr, "[winless] POOL MISS: <null definition>\n"); }
+        return false;
+    }
+    static thread_local std::unordered_map<const CardDefinition*, char> memo;
+    const auto it = memo.find(d);
+    if (it != memo.end()) { return it->second != 0; }
+    static const std::set<std::string> kPool = {
+        // main deck
+        "Eldrazi Displacer", "Emiel the Blessed", "Cloud of Faeries", "Peregrine Drake",
+        "Wild Growth", "Overgrowth", "Fertile Ground", "Trace of Abundance",
+        "Brushland", "Yavimaya Coast", "Adarkar Wastes", "Mariposa Military Base",
+        "Conservatory", "Kitchen", "Shivan Gorge", "Training Grounds",
+        "Living Wish", "Eladamri's Call", "Aether Hub",
+        // sideboard (the Living Wish pool)
+        "Azorius Chancery", "Vexing Shusher", "Essence Depleter", "Dimensional Infiltrator",
+        // the only token this pool creates
+        "Clue Token",
+    };
+    const bool ok = kPool.count(d->card.m_name.str()) != 0;
+    if (!ok)
+    {
+        static const bool s_dbg = EnvOn("MTG_WINLESS_DEBUG");
+        if (s_dbg)
+        { std::fprintf(stderr, "[winless] POOL MISS: '%s'\n", d->card.m_name.str().c_str()); }
+    }
+    memo.emplace(d, ok ? char(1) : char(0));
+    return ok;
+}
+
+// One card the player might get to use this turn, with the mana it costs to GET THERE.
+//
+// `deploy` is a LOWER bound on that price -- 0 on the battlefield, its own mana cost from hand,
+// and from the library or sideboard the cheapest DIG or WISH that could produce it plus its own
+// cost. Pricing those two zones at 0 (the first draft) made every card in a 60-card deck free,
+// so a Shivan Gorge buried in the library read as "reachable" and the certificate declined on
+// 99.6% of nodes. `needs_drop` marks a card that can only arrive via the ONE land drop.
+struct CertCard
+{
+    const CardDefinition* d          = nullptr;
+    int                   deploy     = 0;
+    bool                  on_board   = false;
+    bool                  needs_drop = false;
+    bool                  from_lib   = false;   // deploy still needs the dig price added
+    bool                  from_side  = false;   // ... the wish entry price
+    bool                  tutor_only = false;   // reached by NAMING it, not by digging to it
+    int                   lib_index  = 0;       // how many draws down (0 = top of library)
+};
+
+constexpr long long kCertInf = (1LL << 40);   // stands in for "unbounded" in the arithmetic
+
+// This pool's only library tutor (Eladamri's Call) finds CREATURES. Conservative: a card whose
+// type the tutor cannot name still has to be dug for.
+inline bool CertTutorCanFind(const CardDefinition* d)
+{ return d != nullptr && d->card.IsCreature(); }
+
+// A cost this analysis will not reason about in COLOUR terms. Hybrid and Phyrexian pips are
+// stored with one side baked into the flat colour ints (see ManaCost), so summing two such costs
+// and asking CanPay would test a STRICTER cost than the card really has -- and a false "cannot
+// pay" is the one error that corrupts a label. {X} and {S} are out for the same reason. On any of
+// these the colour test stands down and the pair is treated as payable.
+inline bool CertExoticCost(const ManaCost& c)
+{
+    return c.hybrid_count != 0 || c.phyrexian_count != 0 || c.has_x || c.snow_pips != 0;
+}
+
+// Add `b` into `a`, flat pips only (guarded by CertExoticCost at every call site).
+inline void CertAddCost(ManaCost& a, const ManaCost& b)
+{
+    a.generic += b.generic; a.white += b.white; a.blue  += b.blue;  a.black += b.black;
+    a.red     += b.red;     a.green += b.green; a.colorless += b.colorless;
+}
+
+// MTG_WINLESS_STATS: WHY a board declined the certificate. Without this the fire rate is one
+// number with no lead attached to it -- the first build fired on 0.1% of nodes and the reason was
+// not guessable from the outside.
+enum class CertWhy { Fired = 0, AlreadyWon, OppDeckThin, Zones, UnknownCard, OppPermanent,
+                     CombatLethal, NoSettle, GorgeInf, DrainInf, DrainDmg, MillDone, DigInf,
+                     ManaInfNoDig, DigInfRealLoop, DigInfNoLoop, Count };
+inline std::atomic<unsigned long long> g_cert_why[static_cast<int>(CertWhy::Count)] = {};
+inline bool CertStatsOn() { static const bool v = EnvOn("MTG_WINLESS_STATS"); return v; }
+inline bool CertNote(CertWhy w, bool ret)
+{
+    if (CertStatsOn())
+    { g_cert_why[static_cast<int>(w)].fetch_add(1, std::memory_order_relaxed); }
+    return ret;
+}
+struct CertWhyDumper
+{
+    ~CertWhyDumper()
+    {
+        if (!CertStatsOn()) { return; }
+        static const char* kName[] = { "fired", "already-won", "opp-deck-thin", "zones",
+                                       "unknown-card", "opp-permanent", "combat-lethal",
+                                       "no-settle", "gorge-inf", "drain-inf", "drain-dmg",
+                                       "mill-done", "dig-inf", "mana-inf-nodig",
+                                       "dig-inf/REAL-LOOP", "dig-inf/NO-LOOP" };
+        std::fprintf(stderr, "=== WINLESS CERT reasons:");
+        for (int i = 0; i < static_cast<int>(CertWhy::Count); ++i)
+        {
+            const unsigned long long v = g_cert_why[i].load();
+            if (v) { std::fprintf(stderr, " %s=%llu", kName[i], v); }
+        }
+        std::fprintf(stderr, " ===\n");
+    }
+};
+inline CertWhyDumper g_cert_why_dumper;
+
+}  // namespace
+
+bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
+{
+    if (me < 0 || me > 1) { return false; }
+    const Player& ap  = s.players[me];
+    const Player& opp = s.players[1 - me];
+
+    // Never claim a winless turn on a board the caller is about to score as a win, and never
+    // claim one where the opponent's OWN end-of-turn draw could deck them without a play of ours.
+    if (opp.life <= 0 || s.opponent_decked)                  { return CertNote(CertWhy::AlreadyWon, false); }
+    if (opp.poison_counters > 0)                             { return CertNote(CertWhy::AlreadyWon, false); }
+    if (s.opponent_library_dealt && opp.library.size() <= 1)  { return CertNote(CertWhy::OppDeckThin, false); }
+    // Zones the analysis does not model at all.
+    if (!ap.staged_cards.empty() || !ap.suspended_cards.empty()) { return CertNote(CertWhy::Zones, false); }
+    for (const Card& c : ap.graveyard)
+    {
+        // No card in the pool can be used from a graveyard -- but that is a property of the pool,
+        // so it still has to be audited.
+        if (!EdfCertKnownDef(CardDatabase::Instance().LookupCached(c)))
+        { return CertNote(CertWhy::UnknownCard, false); }
+    }
+
+    // ---------------------------------------------------------------- battlefield ------------
+    long long combat        = 0;    // max combat damage this turn
+    long long untapped_mana = 0;    // mana from lands already untapped
+    int  c_lands = 0, c_now = 0;    // {C} a land tap can make: over all lands / untapped ones
+    int  max_land_in_hand   = 0;    // best land drop (mana), 0 if no drop or no land in hand
+    int  c_land_in_hand     = 0;    // {C} that land drop could add
+
+    std::vector<CertCard> cards;
+    cards.reserve(48);
+
+    // COLOUR POOL for the loop-assemblability test (see the block that consumes it). Deliberately
+    // OVER-CREDITED: it counts every land we control at its full yield whether tapped or not,
+    // because a payload's ETB untap can refresh a tapped land mid-sequence. Over-crediting is the
+    // safe direction here -- the pool is only ever used to REFUSE, and refusing wrongly would
+    // delete a real win. What it still catches is the thing mana value cannot: a manabase that
+    // physically cannot produce {W}{W} for Emiel, {U} for a Drake, or the {C} pip an Eldrazi
+    // Displacer activation needs (CR 107.4c -- no colour pays {C}).
+    ManaPool board_pool;
+
+    for (const Permanent& p : s.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (p.controller_index != me)
+        {
+            // The OPPONENT's side. The profile materialises passive blockers as bare P/T tokens
+            // ("1/1 Creature") with no CardDefinition at all, so they have no parameters and can
+            // do nothing; and anything the opponent controls can only ever REDUCE our damage,
+            // which is the safe direction for an upper bound. A definition-carrying opponent
+            // permanent outside the pool is still a decline -- that one could do something.
+            if (d != nullptr && !EdfCertKnownDef(d))
+            { CertPoolName("opp-battlefield", p.card); return CertNote(CertWhy::OppPermanent, false); }
+            continue;
+        }
+        if (!EdfCertKnownDef(d))
+        { CertPoolName("battlefield", p.card); return CertNote(CertWhy::UnknownCard, false); }
+        cards.push_back(CertCard{ d, 0, true, false, false, false, false, 0 });
+        if (p.card.IsCreature() || p.is_animated)
+        {
+            if (CanAttackFull(p, s.battlefield, me))
+            { combat += std::max(0, p.EffectivePower()); }
+        }
+        if (p.card.IsLand())
+        {
+            const int y = PermanentManaYield(s, p, *d);
+            const std::vector<Color>& prod = EffectiveProduces(s, me, *d, /*in_hand=*/false);
+            bool c_cap = false;
+            for (const Color col : prod)
+            { if (col == Color::Colorless) { c_cap = true; break; } }
+            const int c_units = c_cap ? std::max(1, d->params.produces_amount) : 0;
+            c_lands += c_units;
+            if (!p.tapped) { untapped_mana += y; c_now += c_units; }
+            // ... and the same source, per COLOUR, into the pool. A single-mode land credits its
+            // own colour; a multi-mode land credits `wild` (one tap, choice of output -- the same
+            // representation AvailableManaPool uses), and `wild_c` too when {C} is one of the
+            // modes. A Land Aura's bonus is credited as wild ("any colour"), which over-credits
+            // Wild Growth's and Overgrowth's green -- safe, and it keeps the aura's colour out of
+            // a test that must never under-credit.
+            const int base = std::min(y, std::max(1, d->params.produces_amount));
+            const int aura = std::max(0, y - base);
+            if (prod.size() == 1) { board_pool.Add(prod[0], base); }
+            else if (!prod.empty())
+            { board_pool.wild += base; if (c_cap) { board_pool.wild_c += base; } }
+            if (aura > 0) { board_pool.wild += aura; }
+        }
+    }
+    board_pool.AddPool(s.floating_mana);
+    untapped_mana += s.floating_mana.Total();
+    c_now         += s.floating_mana.colorless + std::min(s.floating_mana.wild_c, s.floating_mana.wild);
+
+    // A board that can already swing for lethal is not a winless board.
+    if (combat >= opp.life) { return CertNote(CertWhy::CombatLethal, false); }
+
+    // ---------------------------------------------------------------- hand --------------------
+    const bool land_drop_open = (ap.lands_played_this_turn < 1 + ap.bonus_land_drops_this_turn);
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!EdfCertKnownDef(d))
+        { CertPoolName("hand", c); return CertNote(CertWhy::UnknownCard, false); }
+        const bool is_land = d->card.IsLand();
+        cards.push_back(CertCard{ d, d->card.m_mana_cost.ManaValue(), false, is_land,
+                                  false, false, false, 0 });
+        if (land_drop_open && is_land)
+        {
+            max_land_in_hand = std::max(max_land_in_hand, std::max(1, d->params.produces_amount));
+            for (const Color col : EffectiveProduces(s, me, *d, /*in_hand=*/true))
+            { if (col == Color::Colorless) { c_land_in_hand = std::max(1, d->params.produces_amount); break; } }
+        }
+    }
+
+    // ------------------------------------------------- the monotone reachability fixpoint -----
+    // Everything below only ever grows; the loop exits when nothing grew, and a run that fails to
+    // settle DECLINES rather than ship a bound that might be too low.
+    bool      mana_inf   = false;
+    long long mana       = 0;
+    int       lib_seen   = 0;         // library indices already priced into `cards`
+    bool      tutor_added = false;    // the tutor's named candidates are in `cards`
+    bool      side_added = false;
+    // DIGGING, split by REPEATABILITY -- the distinction decides whether unbounded mana can see
+    // the whole deck. A {T} draw LAND is one draw per untap, so a blink loop makes it unlimited;
+    // a cycling card in hand or a Clue token on the board is ONE draw and then it is gone.
+    // Conflating them (the first build priced cycling as a repeatable dig) made "infinite mana"
+    // read as "draws the whole library" on every board holding a spare Cloud of Faeries.
+    int       dig_price   = INT_MAX;  // cheapest mana per draw, REPEATABLE ({T} draw land)
+    int       once_price  = INT_MAX;  // cheapest mana per draw, ONE-SHOT (cycling / a Clue)
+    int       once_n      = 0;        // how many one-shot draws are affordable
+    int       dig_lands   = 0;        // repeatable {T} draw lands we could be using
+    int       tutor_price = INT_MAX;  // cheapest library tutor (reaches its types at any depth)
+    int       n_tutors    = 0;        // how many of them are live -- each fetches ONE card
+    int       wish_entry = INT_MAX;   // cheapest mana to open the sideboard
+    int       n_rounds   = 0;
+    // Settled values the route arithmetic below needs.
+    int  best_cost = INT_MAX, best_c_pips = INT_MAX, best_untaps = 0;
+    long long untap_events = 0;
+
+    auto known_zone = [&](const std::vector<Card>& z) -> bool
+    {
+        for (const Card& c : z)
+        { if (!EdfCertKnownDef(CardDatabase::Instance().LookupCached(c))) { return false; } }
+        return true;
+    };
+    (void)known_zone;
+
+    for (;;)
+    {
+        if (++n_rounds > 16) { return CertNote(CertWhy::NoSettle, false); }   // did not settle
+        bool grew = false;
+
+        // A card is LIVE when we could both pay for it and legally put it where it works. A land
+        // outside play needs the one land drop; everything else needs its deploy price.
+        // A card `i` deep in the library takes i+1 DRAWS to see, not one -- the same pricing
+        // ScanHandSinks' library route uses. Charging one dig for anything anywhere in the deck
+        // (the first draft) is what made a single Shivan Gorge read as always-available.
+        // A library TUTOR short-circuits the dig for the types it can find (Eladamri's Call).
+        auto price_of = [&](const CertCard& cc) -> long long
+        {
+            long long d = cc.deploy;
+            if (cc.tutor_only)
+            { d += (tutor_price == INT_MAX ? kCertInf : tutor_price); }
+            else if (cc.from_lib)
+            {
+                const int per = std::min(dig_price, once_price);
+                long long dig = kCertInf;
+                if (per != INT_MAX)
+                { dig = static_cast<long long>(per) * (cc.lib_index + 1); }
+                if (tutor_price != INT_MAX && CertTutorCanFind(cc.d))
+                { dig = std::min<long long>(dig, tutor_price); }
+                d += dig;
+            }
+            if (cc.from_side) { d += (wish_entry == INT_MAX ? kCertInf : wish_entry); }
+            return d;
+        };
+        auto live_of = [&](const CertCard& cc) -> bool
+        {
+            if (cc.needs_drop && !land_drop_open) { return false; }
+            if (cc.on_board) { return true; }
+            const long long d = price_of(cc);
+            return mana_inf ? (d < kCertInf) : (d <= mana);
+        };
+
+        // Training Grounds-style activation reducers and Land Auras we could have out. BOTH have
+        // to be paid for, and summing every reachable copy regardless of price is the leak that
+        // made the first tightened build still decline 84% of nodes: four Overgrowths in the
+        // library read as +8 refund for free, which passed the net-positive loop test on boards
+        // that could not cast one of them. So spend a copy of the mana bound on them, cheapest
+        // first, and take only what it buys (rounded generously upward per bucket).
+        constexpr int kBuckets = 16;
+        int aura_n[kBuckets + 1] = {0}, aura_max[kBuckets + 1] = {0};   // consumed below
+        int tg_n[kBuckets + 1]   = {0}, tg_max[kBuckets + 1]   = {0};
+        for (const CertCard& cc : cards)
+        {
+            if (!live_of(cc)) { continue; }
+            const long long pay = cc.on_board ? 0 : price_of(cc);
+            const int b = static_cast<int>(std::min<long long>(pay, kBuckets));
+            if (cc.d->params.reduces_creature_activation > 0)
+            {
+                ++tg_n[b];
+                tg_max[b] = std::max(tg_max[b], cc.d->params.reduces_creature_activation);
+            }
+            // A Land Aura raises every FUTURE tap of its host, so unlike this turn's mana total it
+            // does raise the loop's per-iteration refund.
+            if (cc.d->params.is_land_aura)
+            {
+                ++aura_n[b];
+                aura_max[b] = std::max(aura_max[b], cc.d->params.land_aura_extra_mana);
+            }
+        }
+        auto afford_sum = [&](const int* n, const int* mx, long long& budget) -> int
+        {
+            if (mana_inf)
+            {
+                long long t = 0;
+                for (int b = 0; b <= kBuckets; ++b) { t += static_cast<long long>(n[b]) * mx[b]; }
+                return static_cast<int>(std::min<long long>(t, 1 << 20));
+            }
+            long long total = 0;
+            for (int b = 0; b <= kBuckets && budget > 0; ++b)
+            {
+                if (n[b] == 0) { continue; }
+                const long long unit = std::max(1, b);
+                const long long k    = std::min<long long>(n[b], budget / unit);
+                total  += k * mx[b];
+                budget -= k * unit;
+            }
+            return static_cast<int>(std::min<long long>(total, 1 << 20));
+        };
+        // Each gets the WHOLE bound. Sharing one budget between them looks tighter but is the
+        // UNSOUND direction: it can under-credit the Auras (Training Grounds eats the budget
+        // first), which under-states the loop's refund and so under-states what the player can
+        // do. Over-claiming both is safe; only the AURA spend is charged back below, because an
+        // ETB-untap refund that leans on an Aura really does have to pay for the Aura.
+        long long tg_budget   = mana_inf ? kCertInf : mana;
+        long long aura_budget = mana_inf ? kCertInf : mana;
+        const int tg         = afford_sum(tg_n,   tg_max,  tg_budget);
+        const int aura_extra = afford_sum(aura_n, aura_max, aura_budget);
+        const long long boost_spend = mana_inf ? 0 : (mana - aura_budget);
+        // The land drop is not limited to a land already in hand: one we can dig to or wish for
+        // is just as playable, and under-counting it would under-state the loop's refund -- the
+        // unsound direction. Take the best LIVE land in any zone we can reach.
+        int drop_bonus = max_land_in_hand;
+        int drop_c     = c_land_in_hand;
+        if (land_drop_open)
+        {
+            for (const CertCard& cc : cards)
+            {
+                if (cc.on_board || !cc.needs_drop || !live_of(cc)) { continue; }
+                const int y = std::max(1, cc.d->params.produces_amount);
+                drop_bonus = std::max(drop_bonus, y);
+                for (const Color col : cc.d->params.produces)
+                { if (col == Color::Colorless) { drop_c = std::max(drop_c, y); break; } }
+            }
+        }
+
+        // The loop's PIECES, one candidate per definition (cheapest instance of each), because
+        // the colour test below needs a concrete pair: a cost is payable or not as a whole, and
+        // minimising outlet price and payload price independently can name two cards no single
+        // manabase can cast together.
+        struct PieceCand
+        { const CardDefinition* d = nullptr; long long pay = 0; int slot = 0; bool on_board = false; };
+        constexpr int kMaxPieces = 8;
+        PieceCand outs[kMaxPieces], pays[kMaxPieces];
+        int n_out = 0, n_pay = 0;
+        bool piece_overflow = false;
+        auto note_piece = [&](PieceCand* arr, int& n, const CertCard& cc, long long pay, int slot)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                if (arr[i].d != cc.d) { continue; }
+                if (pay < arr[i].pay) { arr[i].pay = pay; arr[i].slot = slot; arr[i].on_board = cc.on_board; }
+                return;
+            }
+            if (n >= kMaxPieces) { piece_overflow = true; return; }
+            arr[n].d = cc.d; arr[n].pay = pay; arr[n].slot = slot; arr[n].on_board = cc.on_board;
+            ++n;
+        };
+        int  n_creature_instances = 0;
+        best_cost = INT_MAX; best_c_pips = INT_MAX; best_untaps = 0;
+        for (const CertCard& cc : cards)
+        {
+            if (!live_of(cc)) { continue; }
+            if (cc.d->card.IsCreature()) { ++n_creature_instances; }
+            const long long pay = cc.on_board ? 0 : price_of(cc);
+            // Is this instance only affordable BECAUSE a tutor can name it?
+            const int slot = cc.tutor_only ? 1 : 0;
+            if (cc.d->params.blink_cost.has_value())
+            {
+                const ManaCost& bc = cc.d->params.blink_cost.value();
+                best_cost   = std::min(best_cost,   std::max(1, bc.ManaValue() - tg));
+                best_c_pips = std::min(best_c_pips, static_cast<int>(bc.colorless));
+                note_piece(outs, n_out, cc, pay, slot);
+            }
+            if (cc.d->params.etb_untap_lands > 0)
+            {
+                best_untaps = std::max(best_untaps, cc.d->params.etb_untap_lands);
+                note_piece(pays, n_pay, cc, pay, slot);
+            }
+        }
+        auto refund_ub = [&](int n) -> int
+        {
+            if (n <= 0) { return 0; }
+            return FlickerTopLandYields(s, me, n) + drop_bonus + aura_extra;
+        };
+        // The refund WITHOUT any aura we would still have to cast -- the honest starting point for
+        // the loop-start test, which then buys auras one at a time and pays for each.
+        auto refund_free = [&](int n) -> int
+        { return n <= 0 ? 0 : FlickerTopLandYields(s, me, n) + drop_bonus; };
+
+        // A net-positive blink pair makes generic mana UNBOUNDED -- but only if the turn can
+        // actually START it. Three necessary conditions, each checked against a bound that
+        // over-states what the player has, so a FAILED pair is genuinely unstartable:
+        //   (1) both pieces in play and one activation paid, in MANA VALUE;
+        //   (2) the payload's untap refunding more than the outlet's activation costs, after
+        //       buying whatever Land Auras that refund leans on out of the same bound;
+        //   (3) COLOUR -- the manabase can actually pay the two casts plus the activation, pips
+        //       and all. That is the half this used to skip entirely, and it is where the deck's
+        //       real constraint lives: Emiel wants {W}{W}, a Drake wants {U}, and an Eldrazi
+        //       Displacer activation wants a {C} that no coloured source can supply.
+        // Per PAIR rather than per role, because a cost is payable as a whole: minimising the
+        // outlet's price and the payload's price independently can name two cards together that
+        // no single manabase can cast.
+        if (!mana_inf && n_creature_instances >= 2 && best_untaps > 0 && n_out > 0 && n_pay > 0)
+        {
+            // The pool the casts are paid from: the board's colours, every land drop still
+            // available (credited as wild -- any colour, and {C}-capable), and -- crucially -- one
+            // EXTRA tap of the whole manabase per ETB-untap payload we could deploy.
+            //
+            // That last term is a soundness fix, not a refinement. A land can be tapped again once
+            // an untap refreshes it: with two lands, Cloud of Faeries is cast off both, its ETB
+            // untaps them, and they pay the blink. A pool crediting each land ONE tap calls that
+            // sequence unpayable -- and a false "cannot pay" here deletes a real win, which is the
+            // one error this whole function may not make. Multiplying the pool over-credits (the
+            // untap is up to N lands, not all of them, and an on-board payload needs a blink
+            // first), which is the safe direction; what survives is the part that actually binds:
+            // a manabase with no white source cannot pay {W}{W} however often it untaps.
+            int untap_deployables = 0;
+            for (const CertCard& cc : cards)
+            {
+                if (cc.d->params.etb_untap_lands > 0 && live_of(cc))
+                { if (++untap_deployables >= 8) { break; } }
+            }
+            ManaPool pool = board_pool;
+            for (int r = 0; r < untap_deployables; ++r) { pool.AddPool(board_pool); }
+            const int drops_left = land_drop_open
+                ? std::max(0, 1 + ap.bonus_land_drops_this_turn - ap.lands_played_this_turn) : 0;
+            if (drops_left > 0 && drop_bonus > 0)
+            {
+                const int extra = drops_left * drop_bonus * (1 + untap_deployables);
+                pool.wild += extra; pool.wild_c += extra;
+            }
+
+            for (int oi = 0; oi < n_out && !mana_inf; ++oi)
+            {
+                for (int pi = 0; pi < n_pay && !mana_inf; ++pi)
+                {
+                    const PieceCand& o = outs[oi];
+                    const PieceCand& q = pays[pi];
+                    // "another target creature": a card that is BOTH outlet and payload would
+                    // need a second copy, which this does not track -- so rather than skip such a
+                    // pair (which could refuse a real loop) it stands down entirely below.
+                    if (o.d == q.d) { continue; }
+                    if (o.slot + q.slot > n_tutors) { continue; }  // one Call, one fetch
+                    const ManaCost& bc = o.d->params.blink_cost.value();
+                    const int cost = std::max(1, bc.ManaValue() - tg);
+
+                    // (1) + (2): buy Auras cheapest-first until the refund clears the activation,
+                    // paying for each out of the same bound. Own copy of the bucket counts -- the
+                    // purchase is per pair.
+                    int an[kBuckets + 1];
+                    for (int b = 0; b <= kBuckets; ++b) { an[b] = aura_n[b]; }
+                    long long spend = o.pay + q.pay + cost;
+                    int       ref   = refund_free(q.d->params.etb_untap_lands);
+                    int       ai    = 0;
+                    while (ref <= cost && spend <= mana && ai <= kBuckets)
+                    {
+                        while (ai <= kBuckets && an[ai] == 0) { ++ai; }
+                        if (ai > kBuckets) { break; }
+                        --an[ai];
+                        ref   += aura_max[ai];
+                        spend += std::max(1, ai);
+                    }
+                    if (!(ref > cost && spend <= mana)) { continue; }
+
+                    // (3) COLOUR. Training Grounds reduces the GENERIC part only ({2}{C} -> {C}),
+                    // and using the fully-reduced generic here over-credits (the printed floor is
+                    // one mana), which is the safe direction.
+                    bool colour_ok = true;
+                    if (CertExoticCost(bc)
+                        || (!o.on_board && CertExoticCost(o.d->card.m_mana_cost))
+                        || (!q.on_board && CertExoticCost(q.d->card.m_mana_cost)))
+                    {
+                        colour_ok = true;   // not reasoned about -> treated as payable
+                    }
+                    else
+                    {
+                        ManaCost need;
+                        need.generic   = std::max(0, bc.generic - tg);
+                        need.white     = bc.white;  need.blue  = bc.blue;  need.black = bc.black;
+                        need.red       = bc.red;    need.green = bc.green;
+                        need.colorless = bc.colorless;
+                        if (!o.on_board) { CertAddCost(need, o.d->card.m_mana_cost); }
+                        if (!q.on_board) { CertAddCost(need, q.d->card.m_mana_cost); }
+                        colour_ok = pool.CanPay(need);
+                    }
+                    if (!colour_ok) { continue; }
+                    mana_inf = true; grew = true;
+                }
+            }
+            // Two cases we may not REFUSE on: more distinct pieces than the arrays hold, and a
+            // card that is simultaneously an outlet and a payload (it could loop off two copies,
+            // which the pair scan above skipped). Neither exists in the audited pool; both stand
+            // down rather than risk a false refusal.
+            bool self_pair = false;
+            for (int oi = 0; oi < n_out && !self_pair; ++oi)
+            { for (int pi = 0; pi < n_pay; ++pi) { if (outs[oi].d == pays[pi].d) { self_pair = true; break; } } }
+            if (!mana_inf && (piece_overflow || self_pair)) { mana_inf = true; grew = true; }
+        }
+
+        // Bounded case: every blink is mana-non-positive (that is what the test above just
+        // failed), so only an ETB-untap from a CAST can add mana, at most refund - price each.
+        long long untap_gain = 0, untap_gain_free = 0;
+        untap_events = 0;
+        if (!mana_inf)
+        {
+            for (const CertCard& cc : cards)
+            {
+                if (cc.on_board || cc.d->params.etb_untap_lands <= 0) { continue; }
+                if (!live_of(cc)) { continue; }
+                ++untap_events;
+                const int n = cc.d->params.etb_untap_lands;
+                untap_gain      += std::max(0LL, refund_ub(n)   - price_of(cc));
+                untap_gain_free += std::max(0LL, refund_free(n) - price_of(cc));
+            }
+            // ... plus however many blinks the bounded pool can pay for. Worth no mana here (the
+            // pair test failed), but each re-triggers an ETB, which refreshes {C} lands.
+            if (best_cost != INT_MAX && best_untaps > 0 && n_creature_instances >= 2)
+            { untap_events += mana / std::max(1, best_cost); }
+        }
+        // NOTE: aura_extra is deliberately NOT in this sum. Every Land Aura in the pool costs at
+        // least as much as it adds (Wild Growth {G} for +{G}, Overgrowth {2}{G} for +{G}{G}), and
+        // its host taps once, so casting one cannot raise THIS turn's total. It raises the loop's
+        // per-ITERATION refund, which is where refund_ub above spends it.
+        // Two valid bounds, take the larger: the refunds WITHOUT any Aura, or the refunds WITH
+        // them minus what buying them cost.
+        const long long mana_new = mana_inf
+            ? kCertInf
+            : (untapped_mana + drop_bonus
+               + std::max(untap_gain_free, untap_gain - boost_spend));
+        if (mana_new > mana) { mana = mana_new; grew = true; }
+
+        // What does one new card off the library cost? The cheapest repeatable draw we can pay
+        // for. (A {T} draw land also has to be untapped; assumed, conservatively.)
+        int dig_new = INT_MAX, tutor_new = INT_MAX, once_new = INT_MAX;
+        int dig_lands_new = 0, once_n_new = 0, n_tutors_new = 0;
+        bool can_tutor_lib = false, can_wish = false;
+        int  wish_new = INT_MAX;
+        for (const CertCard& cc : cards)
+        {
+            if (!live_of(cc)) { continue; }
+            const CardParams& pp = cc.d->params;
+            const long long pay = cc.on_board ? 0 : price_of(cc);
+            int act = INT_MAX;
+            bool repeatable = false;
+            if (pp.tap_draw_cost.has_value())
+            {
+                act = pp.tap_draw_cost.value().ManaValue();
+                if (pp.tap_draw_cost_less_per_rad) { act = std::max(0, act - ap.rad_counters); }
+                repeatable = true;
+            }
+            else if (pp.tap_investigate_cost.has_value())
+            { act = pp.tap_investigate_cost.value().ManaValue() + 2; repeatable = true; }
+            else if (pp.sac_draw_cost.has_value())
+            { act = pp.sac_draw_cost.value().ManaValue(); }              // a Clue: one draw, gone
+            else if (pp.cycling_cost.has_value())
+            { act = pp.cycling_cost.value().ManaValue(); }               // one draw, from hand
+            // A {T} ability needs the source untapped, so a land that ENTERS TAPPED is not a draw
+            // source on the turn it is played.
+            if (repeatable && !cc.on_board && cc.d->params.enters_tapped) { act = INT_MAX; }
+            if (act != INT_MAX)
+            {
+                const long long total = pay + act;
+                if (mana_inf || total <= mana)
+                {
+                    if (repeatable)
+                    { dig_new = static_cast<int>(std::min<long long>(dig_new, act)); ++dig_lands_new; }
+                    else
+                    { once_new = static_cast<int>(std::min<long long>(once_new, act)); ++once_n_new; }
+                }
+            }
+            if (pp.tutor_to_hand && pp.wish_from_sideboard)
+            {
+                if (mana_inf || pay <= mana)
+                { can_wish = true; wish_new = static_cast<int>(std::min<long long>(wish_new, pay)); }
+            }
+            else if (pp.tutor_to_hand)
+            {
+                // A library tutor puts its card straight in hand at any depth -- so it prices the
+                // types it can find, but it is NOT a repeatable dig.
+                if (mana_inf || pay <= mana)
+                {
+                    can_tutor_lib = true; ++n_tutors_new;
+                    tutor_new = static_cast<int>(std::min<long long>(tutor_new, pay));
+                }
+            }
+        }
+        if (dig_new   < dig_price)   { dig_price   = dig_new;   grew = true; }
+        if (once_new  < once_price)  { once_price  = once_new;  grew = true; }
+        if (dig_lands_new > dig_lands) { dig_lands = dig_lands_new; grew = true; }
+        if (once_n_new    > once_n)    { once_n    = once_n_new;    grew = true; }
+        if (tutor_new < tutor_price) { tutor_price = tutor_new; grew = true; }
+        if (n_tutors_new > n_tutors) { n_tutors = n_tutors_new; grew = true; }
+        if (wish_new  < wish_entry)  { wish_entry  = wish_new;  grew = true; }
+
+        // The LIBRARY, but only the part of it the mana bound can pay to see. Copying and
+        // auditing all ~50 cards per node was the single most expensive thing this function did,
+        // and it was almost all waste: at a bounded dig price only the top few indices are
+        // payable, and a card that cannot be reached cannot damage anyone, so it needs no audit.
+        // A library TUTOR is the exception -- it reaches its types at any depth, so when one is
+        // live the whole library is walked (one card in the deck, so this is rare).
+        // How many cards can we actually SEE this turn? One-shot digs are counted individually;
+        // a repeatable {T} draw land gives one per untap of it, and the loop untaps lands -- so
+        // unbounded mana plus a repeatable draw land digs the whole deck (a real win: it reaches
+        // every sink the deck holds), and that is worth declining without paying for the scan.
+        const int lib_max = static_cast<int>(ap.library.size());
+        long long draws_ub = once_n;
+        if (dig_lands > 0)
+        {
+            if (mana_inf)
+            {
+                // DIAGNOSTIC (MTG_WINLESS_STATS): is this an over-claim? Split the decline by
+                // whether the engine's OWN recognizer already sees a live self-funding loop on
+                // this board. A decline with no recognised loop means the bound believed in a
+                // loop the deck cannot actually run.
+                if (CertStatsOn())
+                {
+                    const FlickerLoop rl = RecogniseFlickerLoop(s, me);
+                    const bool real = rl.ok && rl.net > 0;
+                    CertNote(real ? CertWhy::DigInfRealLoop : CertWhy::DigInfNoLoop, false);
+                    static const bool s_dbg = EnvOn("MTG_WINLESS_DEBUG");
+                    static std::atomic<int> s_n{0};
+                    if (s_dbg && !real && s_n.fetch_add(1, std::memory_order_relaxed) < 25)
+                    {
+                        std::fprintf(stderr,
+                            "[winless] t%d NO-LOOP: mana=%lld untapped=%lld drop=%d aura=%d tg=%d "
+                            "outlet(cost=%d n=%d cpips=%d) payload(N=%d n=%d) creatures=%d "
+                            "pool(W%d U%d B%d R%d G%d C%d wild%d wc%d) "
+                            "diglands=%d once=%d hand=%zu bf=%zu libseen=%d\n",
+                            s.turn_number, mana, untapped_mana, drop_bonus, aura_extra, tg,
+                            best_cost == INT_MAX ? -1 : best_cost, n_out,
+                            best_c_pips == INT_MAX ? -1 : best_c_pips,
+                            best_untaps, n_pay,
+                            n_creature_instances,
+                            board_pool.white, board_pool.blue, board_pool.black, board_pool.red,
+                            board_pool.green, board_pool.colorless, board_pool.wild,
+                            board_pool.wild_c,
+                            dig_lands, once_n,
+                            ap.hand.size(), s.battlefield.size(), lib_seen);
+                    }
+                }
+                return CertNote(CertWhy::DigInf, false);
+            }
+            const long long per_land = 1 + untap_events;
+            const int per = (dig_price > 0) ? dig_price : 1;
+            draws_ub += std::min<long long>(static_cast<long long>(dig_lands) * per_land,
+                                            mana / per);
+        }
+        // A tutor fetches ONE card, so it does NOT open the library the way a repeatable dig
+        // does -- but it can reach any depth, so the cards it could name still have to be
+        // considered. They are walked here and charged the tutor price; `n_tutors` then caps how
+        // many of them a single line may use (see the loop-start test). Opening the whole library
+        // at tutor price was the dominant over-claim: 3251 of 3274 declines on the cheap game were
+        // boards with no recognised loop at all, assembled out of library cards one Eladamri's
+        // Call was paying for several times over.
+        const int want_lib = static_cast<int>(std::min<long long>(lib_max, draws_ub));
+        if (want_lib > lib_seen)
+        {
+            for (int i = lib_seen; i < want_lib; ++i)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+                if (!EdfCertKnownDef(d))
+                { CertPoolName("library", ap.library[i]); return CertNote(CertWhy::UnknownCard, false); }
+                cards.push_back(CertCard{ d, d->card.m_mana_cost.ManaValue(), false,
+                                          d->card.IsLand(), true, false, false, i });
+            }
+            lib_seen = want_lib; grew = true;
+        }
+        // The TUTOR, done properly: it names ONE card at any depth, so it does not open the deck
+        // -- it makes the single best candidate for each role available, and n_tutors caps how
+        // many of those one line may actually take. Opening the whole library at tutor price was
+        // the dominant over-claim (19 "live" creatures off a 4-permanent board), because it also
+        // handed the refund every Land Aura and every Training Grounds in the deck.
+        if (!tutor_added && tutor_price != INT_MAX && (mana_inf || tutor_price <= mana))
+        {
+            int bi_outlet = -1, bi_payload = -1, bi_sink = -1;
+            for (int i = 0; i < lib_max; ++i)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+                if (!EdfCertKnownDef(d))
+                { CertPoolName("library/tutor", ap.library[i]); return CertNote(CertWhy::UnknownCard, false); }
+                if (!CertTutorCanFind(d)) { continue; }
+                if (d->params.blink_cost.has_value())
+                {
+                    if (bi_outlet < 0
+                        || d->card.m_mana_cost.ManaValue()
+                           < CardDatabase::Instance().LookupCached(ap.library[bi_outlet])
+                                 ->card.m_mana_cost.ManaValue())
+                    { bi_outlet = i; }
+                }
+                if (d->params.etb_untap_lands > 0)
+                {
+                    if (bi_payload < 0
+                        || d->params.etb_untap_lands
+                           > CardDatabase::Instance().LookupCached(ap.library[bi_payload])
+                                 ->params.etb_untap_lands)
+                    { bi_payload = i; }
+                }
+                if (bi_sink < 0
+                    && (d->params.drain_amount > 0 || d->params.exile_opponent_top_cost.has_value()
+                        || d->params.tap_damage_each_opponent > 0))
+                { bi_sink = i; }
+            }
+            for (int idx : { bi_outlet, bi_payload, bi_sink })
+            {
+                if (idx < 0) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[idx]);
+                CertCard cc;
+                cc.d = d; cc.deploy = d->card.m_mana_cost.ManaValue();
+                cc.from_lib = true; cc.tutor_only = true; cc.needs_drop = d->card.IsLand();
+                cards.push_back(cc);
+            }
+            tutor_added = true; grew = true;
+        }
+        if (can_wish && wish_entry != INT_MAX && !side_added)
+        {
+            if (!known_zone(ap.sideboard)) { return CertNote(CertWhy::UnknownCard, false); }
+            for (const Card& c : ap.sideboard)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                cards.push_back(CertCard{ d, d->card.m_mana_cost.ManaValue(), false,
+                                          d->card.IsLand(), false, true, false, 0 });
+            }
+            side_added = true; grew = true;
+        }
+
+        if (grew) { continue; }
+
+        // -------------------------------------------------------- settled: bound the routes ---
+        // {C}: only a {C}-capable LAND tap makes it (no card here converts generic into {C}, and
+        // CR 107.4c means no colour can pay the pip), so it is bounded whenever the loop cannot
+        // refresh more {C} per iteration than an outlet's own {C} pips consume.
+        const int c_total = c_lands + drop_c;
+        bool      c_inf   = false;
+        long long c_ub    = c_now;
+        if (best_untaps > 0 && c_total > 0)
+        {
+            const int per_iter = std::min(best_untaps, c_total)
+                               - ((best_c_pips == INT_MAX) ? 0 : best_c_pips);
+            if (mana_inf && per_iter > 0) { c_inf = true; }
+            if (!mana_inf)
+            { c_ub += untap_events * static_cast<long long>(std::min(best_untaps, c_total)); }
+        }
+
+        // Routes. Each is priced against the WHOLE mana bound and then SUMMED, i.e. as if every
+        // route had the pool to itself -- deliberately generous.
+        long long extra = 0;
+        const long long heads = std::max(1, gamesetup::OpponentHeads());
+        // Red for the Gorge: a land that makes {R}, or an "any colour" Land Aura bonus.
+        bool red = false;
+        for (const CertCard& q : cards)
+        {
+            if (!live_of(q)) { continue; }
+            if (q.d->params.is_land_aura && q.d->params.land_aura_produces.empty()
+                && q.d->params.land_aura_extra_mana > 0)
+            { red = true; break; }
+            for (const Color col : q.d->params.produces)
+            { if (col == Color::Red) { red = true; break; } }
+            if (red) { break; }
+        }
+
+        for (const CertCard& cc : cards)
+        {
+            const CardParams& pp = cc.d->params;
+            if (!live_of(cc)) { continue; }
+
+            // (a) Shivan Gorge: {T} in the cost, so one activation per untap of the land.
+            if (pp.tap_damage_cost.has_value() && pp.tap_damage_each_opponent > 0 && red)
+            {
+                if (mana_inf) { return CertNote(CertWhy::GorgeInf, false); }   // a loop untaps it
+                const int cost = std::max(1, pp.tap_damage_cost.value().ManaValue());
+                long long acts = (cc.on_board ? 1 : 0) + untap_events;
+                acts = std::min(acts, mana / cost);
+                extra += acts * pp.tap_damage_each_opponent * heads;
+            }
+
+            // (b) Essence Depleter's drain -- no {T} in the cost, so it is pure mana (and {C}).
+            if (pp.drain_cost.has_value() && pp.drain_amount > 0)
+            {
+                const ManaCost& dc = pp.drain_cost.value();
+                const int cost   = std::max(1, dc.ManaValue());
+                const int c_pips = dc.colorless;
+                const long long pay = cc.on_board ? 0 : price_of(cc);
+                long long by_mana = mana_inf ? kCertInf : std::max(0LL, (mana - pay) / cost);
+                long long by_c    = kCertInf;
+                if (c_pips > 0) { by_c = c_inf ? kCertInf : (c_ub / c_pips); }
+                const long long acts = std::min(by_mana, by_c);
+                if (acts >= kCertInf) { return CertNote(CertWhy::DrainInf, false); }
+                extra += acts * pp.drain_amount * heads;
+            }
+
+            // (c) Dimensional Infiltrator's exile -- a DECK-OUT, not damage (CR 104.3c).
+            if (pp.exile_opponent_top_cost.has_value() && s.opponent_library_dealt)
+            {
+                const ManaCost& ec = pp.exile_opponent_top_cost.value();
+                const int cost   = std::max(1, ec.ManaValue());
+                const int c_pips = ec.colorless;
+                const long long pay = cc.on_board ? 0 : price_of(cc);
+                long long by_mana = mana_inf ? kCertInf : std::max(0LL, (mana - pay) / cost);
+                long long by_c    = kCertInf;
+                if (c_pips > 0) { by_c = c_inf ? kCertInf : (c_ub / c_pips); }
+                const long long acts = std::min(by_mana, by_c);
+                if (acts >= static_cast<long long>(opp.library.size()))
+                { return CertNote(CertWhy::MillDone, false); }
+            }
+
+            if (extra + combat >= opp.life) { return CertNote(CertWhy::DrainDmg, false); }
+        }
+
+        return CertNote(CertWhy::Fired, true);
+    }
+}
 
 // WHICH creature to blink. Unnarrowed this is "every creature on the board", and across two or
 // three outlets that product is a large part of the 1.38e9. Only two targets can matter:
