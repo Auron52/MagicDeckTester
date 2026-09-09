@@ -2854,3 +2854,54 @@ warm-ups on the stand-in (no leaf cost at all), the committing pass on the value
 VALUE ladder would commit (its gate replayed on reconstructed value costs = stand-in cost + R_v × leaves,
 R_v learned exactly as R is), then the hybrid's trust escalation on that line as today. No re-run at the
 committing depth, verified warm-up wins banked directly. Built next as `value_play.commit: "model"`.
+
+### 2026-09-09k — the OOM restart, a determinism defect in the emulated ladder, and COMMIT-ON-MODEL built
+
+**What broke.** ~13:00 the container OOMed (23 GB box): the chained overnight tier (all cores), screen 2
+(32 threads) and a `./build.sh profile` were running at once; the user had to restart the machine by hand
+and is asleep from here. Standing rule from now on (memory `oom-one-heavy-process-at-a-time`): ONE heavy
+process at a time, never a build beside a batch, a `MemAvailable` watchdog on every batch I start (it kills
+by PID). Measured: this screen's arms are memory-heavy -- the no-leaf ladders build large per-decision
+memos -- 32 workers reached ~20 GB, 16 workers 14.6 GB; the re-launch runs 12 workers (~7-9 GB).
+The overnight tier (112 jobs in) and screen 2 (92 in) both died; screen 2's remainder is pooled with
+screen 3 below; the overnight tier is NOT re-run tonight (it cannot share the box) -- it is the one open
+item for the morning.
+
+**Determinism defect (found by the re-run, fixed in 5e4bb2a3).** Re-running one finished screen-2 job on
+the rebuilt binary: `antilife_escnl` identical, `antilife_emulnl` a DIFFERENT digest. Cause: the emulated
+ladder's learned R(k)/G(k) are thread-local and were keyed on deck+arm, so they persisted across GAMES on a
+batch worker -- a job's play depended on which jobs had shared its thread. The g_probe_leaves contamination
+of the Minotaur flake, one level up. Fix: the key now carries `game_seed` (state per game, a pure function
+of the game), each game starts from the deck's FROZEN `escalation_r` (the same units-per-leaf quantity the
+hybrid's predictor freezes for exactly this reason) else 120, and calibration is 2 samples per depth per
+game. Consequence for the record: every emulated-ladder number measured before this fix (screen 1's `emul`
+column in 09j, screen 2's first 46 `emulnl` jobs, ab11's emulofg) was history-dependent. The 09j verdict
+stands qualitatively (1.2-19x is far outside what R drift moves) but those cells are not reproducible;
+everything from here is measured on the per-game build, with two same-job-twice determinism checks in the
+batch (`_rep`).
+
+**Built: the committing pass on the MODEL (user design, 2026-09-09 evening).** Sidecar
+`value_play.commit: "model"` (arm `ladder_emul_commit_model`, env `MTG_LADDER_EMUL_COMMIT_MODEL`): the
+emulated ladder's warm-ups run on the stand-in (`leaf: "none"` keeps the model attached now; arm
+`ladder_emul_warm_none`) or on the model, and the committing pass runs on the VALUE leaf at the depth the
+VALUE ladder would commit -- its gate replayed with the value ladder's relaxed alpha and path-to-trust
+rescue on reconstructed costs (R_v learned like R; ~0 in units because feature extraction is unmetered).
+The line then goes through the hybrid's trust escalation exactly as the shipped ladder's line does
+(t_deck_ladder 2; UseValueModel true). No re-run at the committing depth; verified warm-up wins committed
+directly. Smoke byte-identical (no deck sets a shape).
+- `emulv` (model warm-ups) is the fidelity control: same tree, same leaf, same depth as `ship` -- it should
+  track ship closely, and any gap is the gate replay's error.
+- `emulnlv` (leafless warm-ups) is the shape under test: ship minus the warm-ups' feature extraction. In
+  UNITS that saving is invisible (the value leaf charges none), so the units comparison shows only the
+  tree/commit-depth differences; the wall saving needs a CPU-time measurement, done after the batch.
+
+**Leaf-usefulness predictor (user: "a cheaper approach to figure out when it is useful").** Arm
+`probeonly` = the no-leaf hybrid with escalation off (`value_min_depth 0`): its units are the constant
+ladder's own cost. `ceiling = probeonly / escnl` is what a leaf trusted at every depth would leave of the
+no-leaf shape's cost; validated against the realized `ship / escnl` on the 19 modelled decks. If it
+predicts, a new deck's leaf decision is one cheap no-leaf batch (which is the deck's day-one shape anyway).
+
+Queue tonight, strictly serial: pooled screen (screen-2 remainder + `emulv` + `emulnlv`, 1194 jobs, 12
+workers) -> `probeonly` (320 cheap jobs) -> read -> adopt clean wins per deck via the sidecar's shape ->
+smoke + regression -> commit/push. Not tonight: the overnight tier; the rebase onto the Snow agent's
+61b3cfb7 (a default-ON play change that will move GT -- their rebaseline, not mine to fold in blind).
