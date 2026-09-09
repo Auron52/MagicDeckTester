@@ -357,6 +357,26 @@ casts, Ranger-Captain cast 77x. The 0 ability (value gate) stays unreachable (de
 - NEXT: mulligan profile (`mullgen.sh run decks/CritterLifegain`) -- it will subsume the
   max_lands-4 finding above; user to say when.
 
+## Mulligan profile ADOPTED (2026-09-09)
+`bash scripts/mullgen.sh run decks/CritterLifegain` (recipe complete, R40), frozen at 886bdd56, at the
+phase-F contract d1/b3, K=13 (cache hit, matches `expected_buckets`). 54,613 distinct hands
+(size-7 33,565), generation 22 min on 32 threads, slowest rollout 0.7 s, no degenerate cells. Table's
+own read: static over-keeps ~40% of hands by draw-probability at a projected 0.2t cost (the flood
+keeps found above; the max_lands-4 probe recovered 0.04 of it, the table recovers the rest).
+Hard gates (16 seeds x 1000 games, budget 20 ms, value_play owns depth), both decisive:
+
+| gate | delta | seeds | mean/se |
+|---|---|---|---|
+| keep: exhaustive vs static | **-0.2184 t** (4.9441 -> 4.7257) | 16/16 | -33.0 |
+| bottoming: blind vs lookahead, CONFOUNDED | **-0.0355 t** (4.8211 -> 4.7856) | 16/16 | -15.6 |
+
+Suite (driver's critter-only visibility run): d0 5.142 -> 4.938, d3 4.903 -> 4.747 / 4.903 -> 4.740,
+d5 4.900 -> 4.752 / 4.916 -> 4.760; searched games faster=226 / slower=85 (the per-game mix is the
+expected shape of a mulligan-policy change -- a different kept hand is a different game).
+Artifacts: `CritterLifegain.keepmodel.exhaustive.profile.json.gz` + `.raw.json.gz` committed (the
+uncompressed pair stays local, gitignored). GT re-accepted -- see the adoption commit for the tiers.
+With this the pipeline for the deck is complete: profile -> value leaf -> mulligan.
+
 ## Open questions surfaced (non-blocking)
 (collected here and re-raised in the closing message)
 

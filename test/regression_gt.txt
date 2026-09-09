@@ -1,4 +1,4 @@
-# Regression ground truth -- commit df2b519e  date 2026-09-09
+# Regression ground truth -- commit 886bdd56  date 2026-09-09
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -55,9 +55,9 @@ dragons_smoke_d5_s1001=5.5867/b7981a8bf9dbc75a
 breaching_smoke_d0_s1001=4.8460/8c8e7d2fb5fd0181
 breaching_smoke_d3_s1001=3.1000/03766483807acbd5
 breaching_smoke_d5_s1001=3.0933/171d8a8be213fc39
-critter_smoke_d0_s1001=5.1260/5a3e7f6b86e728da
-critter_smoke_d3_s1001=4.8600/799bce6c483049ea
-critter_smoke_d5_s1001=4.8800/1cca5150ee47a9c7
+critter_smoke_d0_s1001=4.9470/35f2bf9336169479
+critter_smoke_d3_s1001=4.6667/8ee0a82cda9e6599
+critter_smoke_d5_s1001=4.6800/3b1bb34a2248ac51
 melira_smoke_d0_s1001=6.4380/f6a846b11dadd30d
 melira_smoke_d3_s1001=4.8800/831846fb9b4061ee
 melira_smoke_d5_s1001=4.9600/a9c0656439be7fe4
@@ -79,7 +79,7 @@ stompy2hg_smoke_d3_s1001=5.0000/73d0994752ca4e51
 kitty2hg_smoke_d3_s1001=4.9400/436f255dcee200b0
 dragons2hg_smoke_d3_s1001=6.3000/43872dc33fccb094
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
-critter2hg_smoke_d3_s1001=5.3200/19bcfde42e8427bc
+critter2hg_smoke_d3_s1001=5.2000/4e1d2b89c377cd77
 melira2hg_smoke_d3_s1001=5.0400/440bba3ad8b65659
 fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
 fluctuator_smoke_d3_s1001=3.6733/99a13d053719f360
@@ -171,11 +171,11 @@ breaching_regression_d3_s2002=3.0933/754d6fb14d56c14f
 breaching_regression_d3_s3003=3.0833/8d3103f293ae7026
 breaching_regression_d5_s2002=3.1000/a253d99d6bb10df1
 breaching_regression_d5_s3003=3.0760/f1ed83ebe4cb9869
-critter_regression_d0_s2002=5.1420/2fd8c86dd6d58212
-critter_regression_d3_s2002=4.9033/c8d4bfcd833c985b
-critter_regression_d3_s3003=4.9033/caf2d9870deb11c0
-critter_regression_d5_s2002=4.9000/9ac5dc497156aee4
-critter_regression_d5_s3003=4.9160/f43124c1c6890b2b
+critter_regression_d0_s2002=4.9380/54c26ad9697d3ca2
+critter_regression_d3_s2002=4.7467/d9c3919455b0f9be
+critter_regression_d3_s3003=4.7400/bf23343e1526354d
+critter_regression_d5_s2002=4.7520/f7b51e2fec5264d0
+critter_regression_d5_s3003=4.7600/ec6462efa8ef5304
 melira_regression_d0_s2002=6.4080/45c4a7ae0aaa2e79
 melira_regression_d3_s2002=4.8000/b1b01c449aca59ea
 melira_regression_d3_s3003=4.7867/eb5343d2edfec330
