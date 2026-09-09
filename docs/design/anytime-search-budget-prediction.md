@@ -275,6 +275,12 @@ budget routinely spent 1,000,000 units on a single pass.
 
 ### ADOPTED 2026-09-09 — both default ON, hatches kept
 
+> **THE TABLE IN THIS SECTION IS PRE-REBASE AND ITS MULTIPLIER (11) WAS SUPERSEDED THE SAME DAY.**
+> It records what was measured on the pre-rebase engine and is kept for the method, not the numbers.
+> The shipped value is **`kOverrunBudgetMult = 25`** and the FiveColour quality win below **does not
+> exist** under the rebased engine. See *"Re-derived after the 2026-09-09 rebase"* further down
+> before citing anything here.
+
 **COST IS REPORTED IN DETERMINISTIC UNITS, NOT WALL** (user, 2026-09-09: *"there is some contention,
 so we shouldn't rely just on wall numbers"*). `units_total` from `MTG_ROLLOUT_STATS` is exact for a
 fixed binary + config — a repeated FiveColour control reproduced 19,895,566 to the unit — whereas
@@ -312,6 +318,62 @@ An earlier arm proved the anytime commit is load-bearing rather than decoration:
 300 Snow games diverged and scored WORSE without it (6.0900 / `3a7babe9803ea2e7`, 6 proven wins
 discarded) and returned to byte-identical with it (6.0867 / `43d00a181d6aa29b`).
 
+### Re-derived after the 2026-09-09 rebase — the multiplier is 25, not 11
+
+The branch rebased onto 47 upstream commits that (a) restored **Melira Pod** to the suite
+(`26817e0c`) and (b) changed the engine under every measurement above (site-9 breakpoints, per-deck
+`search_leaf_depth`, `bottom_eval`, greedy-walk opts). Both matter, and re-running the gates on the
+rebased binary refuted two things:
+
+**1. `11` was calibrated at one budget scale, and a second scale refuted it.** The 2026-09-08 sweep
+varied an ABSOLUTE floor at the ship budget only, so it could not distinguish *"200,000 units"* from
+*"11x the budget"* — at a single budget those are the same point. Melira's smoke cases run a **10 ms
+= 9,000-unit** budget, so `11x` hands them **99,000**: half the validated allowance, on the stretch
+of the curve that same sweep showed turning down (50,000 measured "far worse"). The result was the
+only quality regression this change has produced:
+
+| case | GT | at `mult=11` | at `mult>=20` |
+|---|---|---|---|
+| `melira_smoke_d3_s1001` | 4.8800 | 4.9000 (worse) | 4.8800 byte-identical |
+| `melira2hg_smoke_d3_s1001` | 5.0400 | 5.0800 (worse) | 5.0400 byte-identical |
+
+Isolated to the ceiling, not the anytime commit: with `MTG_OVERRUN_PROP=0` and the anytime commit
+still ON, Melira is byte-identical to GT. **`25` is set so the smallest budget in use (9,000 units)
+still clears the validated ~200,000 allowance** (25 x 9,000 = 225,000). The expression stays a pure
+multiple — the tuned number is the multiplier, never a term in the formula.
+
+**2. The FiveColour quality win is gone — do not re-cite it.** Under the rebased engine every arm
+scores **4.8000** on that 100-game run, so the pre-rebase "4.8300 -> 4.8200 / −18.9% units" reflects
+an engine that no longer exists. What survives is cost at equal play.
+
+| arm (rebased binary) | avg | digest | aborts | **units** |
+|---|---|---|---|---|
+| FiveColour 100, legacy (`PROP=0`) | 4.8000 | `f9761a2a6a3d2f26` | 6 | 18,358,498 |
+| FiveColour 100, `mult=11` | 4.8000 | `986d0769d840107e` | 16 | 15,715,383 (−14.4%) |
+| **FiveColour 100, `mult=25` (SHIPPED)** | 4.8000 | `f9761a2a6a3d2f26` | 7 | **17,629,877 (−4.0%)** |
+| FiveColour 100, `mult=35` | 4.8000 | `f9761a2a6a3d2f26` | 7 | 17,989,856 (−2.0%) |
+
+`mult=11` is the cheapest arm and is still not adoptable: it buys 14.4% by changing play, and that
+play change is what costs the two Melira games. `25` is byte-identical to the legacy ceiling
+everywhere measured and still 4% cheaper — the extra abort lands only where the committed line does
+not move.
+
+**3. The convergence property — the actual point of the change — now holds.** Snow, 40 games at each
+budget, one pooled batch per arm:
+
+| arm | b20 | b60 | b200 | aborts | waste units |
+|---|---|---|---|---|---|
+| legacy ceiling | 6.0500 | 6.0500 | 6.0250 | **1** | 1,000,353 (the 1e6 floor, burned whole) |
+| **`mult=25`** | 6.0500 | 6.0500 | 6.0250 | **0** | 0 |
+
+Identical digests at every rung; the abort legacy suffers **at the largest budget** — the
+non-convergence that motivated this work — is gone. Units +0.30%, the correct direction: the pass
+that used to be truncated now completes.
+
+**Gates at `mult=25`, rebased binary:** smoke **80/80 configs unchanged**, regression **108/108
+unchanged**, unit 86/86, scenarios 78/78, `check_gt_logs` 456 consistent / 0 stale. Byte-identical
+to upstream's accepted GT, so no rebaseline was required.
+
 ### Still open after this change
 
 - **The residual truncation is bounded, not abolished.** The anytime commit preserves only what a
@@ -320,10 +382,16 @@ discarded) and returned to byte-identical with it (6.0867 / `43d00a181d6aa29b`).
   quantify how much of an aborted pass is actually re-done before assuming a resume buys anything.
 - **Candidate fix (2), the predictor, is untouched.** It remains the strictly-better lever: a pass
   never started unaffordably loses nothing at all.
-- ~~A ~200,000 ladder ceiling at ship settings~~ — **TAKEN**, as `kOverrunBudgetMult = 11`, once the
-  user's gate ("only for budget reasons", "okay if the results are better") was met: 1 game better,
-  0 worse across the suite, −2.26%/−18.9% units. Expressed as a multiple of the budget, never as the
-  absolute constant the 2026-09-08 sweep used.
+- ~~A ~200,000 ladder ceiling at ship settings~~ — **TAKEN**, as `kOverrunBudgetMult = 25` (11 was
+  shipped for a few hours and re-calibrated the same day; see the re-derivation section). The user's
+  gate ("only for budget reasons", "okay if the results are better") is met structurally — the
+  expression carries no absolute term — and the suite is byte-identical at 25 with a 4% cost saving
+  on FiveColour. Expressed as a multiple of the budget, never as the absolute constant the
+  2026-09-08 sweep used.
+- **The multiplier still has only two budget scales behind it** (9,000 and 18,000 units). It is a
+  tuned constant, and a third scale could move it again — the principled replacement is candidate
+  fix (2): a ceiling anchored on the pass's own ESTIMATE, which is scale-free and needs no
+  multiplier calibration at all. That is what the guard's own docstring always claimed it did.
 - **The depth-fallback escalation path is not anytime-rescued** — see the comment at its abort site:
   a fully-aborted descent sets `hcommitted = 0` and the take-decision discards `hline` wholesale, so
   a rescue there would be a no-op without also asserting a committed depth that was never searched.

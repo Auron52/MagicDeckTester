@@ -33049,29 +33049,45 @@ namespace
     // on the whole decision budget is what makes the allowance grow with the budget instead of
     // collapsing inside it.
     //
-    // CALIBRATION of kOverrunBudgetMult = 11: 11 x an 18,000-unit ship budget is 198,000, i.e. the
-    // 200,000 arm of the 2026-09-08 fixed-floor sweep -- the one value with a held-out measurement
-    // behind it (1,200 games, not one win turn changed). 50,000 (~2.8x) measured far worse, so the
-    // curve turns below this; the multiplier must NOT be lowered on the assumption that a tighter
-    // guard is cheaper. What is new is that the number now SCALES with the budget instead of being
-    // frozen, which is what makes the same constant correct at 20 and at 200 virtual-ms.
+    // CALIBRATION of kOverrunBudgetMult = 25. The multiplier is the ONE tuned number here; the
+    // EXPRESSION stays a pure multiple of the budget (no absolute term), which is what makes
+    // "budget reasons only" structural. Its value is set so that THE SMALLEST BUDGET ACTUALLY IN
+    // USE still receives at least the one allowance with a held-out measurement behind it:
     //
-    // MEASURED, ON DETERMINISTIC UNITS -- NOT WALL. The box has contention, so ms is not evidence
-    // (user, 2026-09-09); units_total is exact (a repeated FiveColour control reproduced
-    // 19,895,566 to the unit). Quality is judged on paired per-game movers.
-    //   regression suite   98 unchanged, 1 BETTER, 0 worse  (fivecolour_regression_d5_s2002 4.8300
-    //                      -> 4.8200; gi57 wins on T5 instead of T6)
-    //   smoke              73/73, 0 configs changed
-    //   Snow 300 @ ship    digest 43d00a181d6aa29b IDENTICAL to control, units -2.26%
-    //   FiveColour 100     1 game better, units -18.9% (19,895,566 -> 16,134,474)
-    // FiveColour is also where the discarded-proven-win defect bites hardest: its control run
-    // discards 3 proven wins per 100 games (`rescuable`), against 1 per 300 on Snow.
+    //   * The 2026-09-08 fixed-floor sweep validated ~200,000 units at the 18,000-unit ship budget
+    //     (1,200 games, not one win turn changed) and measured 50,000 (~2.8x) FAR WORSE. So the
+    //     quality curve turns down somewhere between; the multiplier must NOT be lowered on the
+    //     assumption that a tighter guard is merely cheaper.
+    //   * That sweep varied an ABSOLUTE floor at a SINGLE budget, so it could not distinguish
+    //     "200,000 units" from "11x the budget" -- at one budget scale they are the same point.
+    //   * The suite's smallest searched budget is 10 ms = 9,000 units (the d3 cases). 25 x 9,000 =
+    //     225,000, i.e. every budget in use clears the validated allowance with margin. 11x would
+    //     hand those cases 99,000 -- half the validated figure, on the part of the curve the sweep
+    //     showed turning down.
+    //
+    // WHY 11 WAS WRONG, measured 2026-09-09. 11 was calibrated at the ship budget alone and shipped
+    // before Melira Pod was restored to the suite (upstream 26817e0c, arriving here in the same-day
+    // rebase). Melira is a SECOND budget scale, and it refutes the ratio reading: at 11x its d3
+    // cases lose two games (melira_smoke_d3_s1001 4.8800 -> 4.9000 and the melira2hg canary 5.0400
+    // -> 5.0800), and they return to byte-identical GT at 20x and above. A constant fitted at one
+    // budget scale is not a proportional law -- it needs a second scale to be one.
+    //
+    // MEASURED AT 25x, ON DETERMINISTIC UNITS -- NOT WALL. The box has contention, so ms is not
+    // evidence (user, 2026-09-09); units_total is exact. Quality is judged on paired per-game
+    // movers, against the legacy arm (MTG_OVERRUN_PROP=0) on the SAME rebased binary.
+    //   smoke              80/80 configs unchanged (byte-identical to the legacy ceiling)
+    //   FiveColour 100     digest f9761a2a6a3d2f26 IDENTICAL to legacy, units -4.0%
+    //                      (18,358,498 -> 17,629,877); the extra aborts land only where the
+    //                      committed line does not move
+    // DO NOT re-cite the pre-rebase "1 BETTER / -18.9% units" FiveColour result: under the rebased
+    // engine every arm scores 4.8000 there, so that quality win no longer exists. The case for this
+    // change is now STRUCTURAL (convergence + no magic constant) plus a cost saving at equal play.
     //
     // ADOPTED 2026-09-09, default ON (MTG_OVERRUN_PROP=0 restores the legacy expression).
     static const bool   s_overrun_prop = EnvOn("MTG_OVERRUN_PROP", true);
     static const double kOverrunBudgetMult = []{
         const char* e = std::getenv("MTG_OVERRUN_MULT");
-        return (e && *e) ? std::atof(e) : 11.0; }();
+        return (e && *e) ? std::atof(e) : 25.0; }();
 
     // ---- ANYTIME COMMIT (MTG_ID_ANYTIME) ----------------------------------------------------
     // Do not discard what an aborted pass PROVED. On abort the shipped loop does
