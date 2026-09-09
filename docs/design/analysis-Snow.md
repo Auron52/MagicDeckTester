@@ -509,10 +509,23 @@ behind `MTG_COST_REFRAME`, an unrelated cost relaxation nothing ships. `MTG_CAND
 | regression tier | slower=0 **faster=5** play-changed=19 |
 | smoke | slower=0 **faster=7** play-changed=8 |
 | Snow 300 @ play settings | avg **6.0833 unchanged**, units 49,617,752 → 47,326,981 (−4.6%) |
-| Snow 300 **wall** | 108.4 s → 108.8 s; CPU ms 1,686,946 → 1,695,529 (medians of 3 interleaved reps) |
+| Snow 300 **total cost** | **NOT RESOLVED** — see below |
 
-**Wall-neutral.** It ships DEFAULT OFF: it clears the adoption bar on quality but does not do the
-job it was built for, and adopting it would move 17 GT keys for an unrelated benefit.
+**The total-cost question is open, and an earlier "wall-neutral" claim here was withdrawn.** Wall is
+unreliable on this box (it is shared with other agents), so the arms were re-measured on process CPU
+time (user+sys), which counts the hashing that units cannot see and is far less contention-sensitive
+than elapsed. Four interleaved reps per arm:
+
+| arm | median | min–max | within-arm spread |
+|---|---|---|---|
+| control | 1821 s | 1643–1909 | **16.2%** |
+| dedup | 1837 s | 1765–1925 | 9.1% |
+
+The spread *within* each arm swamps the 0.8% *between* them. So the honest statement is that units
+say −4.6% while total cost is unresolved — not that the change is neutral. Settling it needs a
+low-noise instrument (single-threaded deterministic runs, or instruction counts), not more reps of
+the same kind. It ships DEFAULT OFF: it clears the adoption bar on quality, there is no evidence it
+does the job it was built for, and adopting it would move 17 GT keys for an unrelated benefit.
 
 **Finding 3 — a metric caveat that generalises.** Units and wall disagree here, and *units are the
 flattering one*. `units_total` counts SEARCH work; this change trades search work for **hashing**
@@ -542,6 +555,61 @@ cost spread across candidate volume (state copy + apply per candidate), rollouts
 `la_bp_wave` price of the site-8 same-turn-playability directive. The deck's structural remedy is
 still the value leaf, which is itself blocked by the degenerate tail (section above) — so the tail
 remains the thing to attack, and it is now blocking two separate lines of work.
+
+## Branching-factor census 2026-09-09 — WHERE the width is, and the one lever worth building
+
+`MTG_BF_CENSUS` (default off, counts only) answers "which effects cause notable branching factors".
+60 Snow games: **57,734 decisions, 4,370,356 candidates, mean width 75.7, max width 2,688.**
+
+**The mass sits in wide decisions**, so a lever that only touches narrow ones is worthless:
+
+| width | decisions | candidate mass | share |
+|---|---|---|---|
+| 1–32 | 24,606 (43%) | 329,605 | 7.5% |
+| 33–64 | 10,453 | 494,297 | 11.3% |
+| 65–128 | 14,608 | 1,376,951 | **31.5%** |
+| 129–256 | 5,211 | 912,408 | 20.9% |
+| 257–512 | 2,161 | 783,386 | 17.9% |
+| 513+ | **695 (1.2%)** | 473,709 | **10.8%** |
+
+Decisions ≥257 wide are **4.9% of decisions but 28.7% of the mass**.
+
+**What generates it: the DIG SOURCES, and it is a copy-count problem.**
+
+| card | activation actions | distinct physical sources |
+|---|---|---|
+| Scrying Sheets | 2,940,620 | **4** |
+| Frost Augur | 2,383,807 | **4** |
+| Rimefeather Owl | 63,434 | 2 |
+
+5.32M activation actions across 4.37M candidates — more than one per candidate. `play_land`,
+`dig_draw`, `searched_order` and `alt_cost` contribute **zero**; `bp_variant` rides along on 42.2%
+(the site-8 same-turn-playability re-solve, as the perf section predicted).
+
+*(Read `chosen_x` here carefully: `PermAbilityTaps(TapDraw)` is true, so the K-axis at the
+`counts` block is skipped and `chosen_x` is always 1. Its 78.5% share means "most candidates contain
+a dig activation", NOT that an X range is being enumerated. An earlier reading of this census made
+that mistake.)*
+
+**THE LEVER: fold interchangeable activation SOURCES into a COUNT.** Each untapped Scrying Sheets is
+emitted as its own `ActivatePermAbility` action, so subset enumeration explores which *copies* to
+tap. With 4 Sheets + 4 Augurs that is up to 2^4 x 2^4 = **256 dig-only combinations**, of which only
+**5 x 5 = 25** are distinct decisions — "activate K Sheets and J Augurs". Everything else is a copy
+permutation, which is why the dedup census sees 64% duplicates. A fold would be a **~10x cut in the
+dig dimension**, on the deck's dominant branching axis.
+
+It is sound in principle *and has an in-repo precedent*: the ETB-blink target fold already collapses
+targets by an equivalence key — "same name + tapped-state + sick-state + counter count are
+interchangeable in every modelled respect" (`TurnSolver.cpp`, the `etb_blink_permanent` block),
+described there as **lossless dominated-action removal, not heuristic narrowing**. Four untapped
+copies of one Sheets are interchangeable by exactly that standard; what must be preserved is HOW
+MANY are activated, not WHICH.
+
+Two things to verify before building it, because the earlier plan-signature attempt failed on
+exactly this ground: (1) the fold must keep the count axis, since one look at the top card differs
+genuinely from two; (2) `copy_FALSE` in the dedup census says the post-apply state key distinguishes
+`m_number`, so a folded run will NOT be byte-identical — it must be judged on the suite's
+slower/faster verdict and the play-settings average, not on digest identity.
 
 ## Open questions for the user (surfaced, not blocking)
 

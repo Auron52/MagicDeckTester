@@ -30,6 +30,7 @@
 #include <sstream>
 #include <fstream>
 #include <map>
+#include <set>
 #include <mutex>
 #include <cmath>
 #include <unordered_map>
@@ -136,6 +137,50 @@ static std::atomic<long long> g_cand_scored{0};
 // both sites but is bundled behind MTG_COST_REFRAME, a different feature Snow does not run.
 // Keys come from BuildDedupKey (order-signature-folded), the same key the live dedup uses, so the
 // census cannot over-promise what the skip would collect.
+// --- BRANCHING-FACTOR CENSUS (MTG_BF_CENSUS, default OFF = zero cost) -------------------------
+// "Which effects are causing notable branching factors?" -- the candidate loop's branching factor
+// IS candidates.size(), and la_cand charges one unit per candidate, so this census localises the
+// deck's dominant cost to the mechanics that generate it. Buckets record BOTH the number of
+// decisions in a bucket and the CANDIDATE MASS they contribute, because the mass is what costs:
+// a handful of 500-wide decisions outweighs thousands of 4-wide ones.
+// Per-shape counters attribute mass to the mechanic that produced the plan.
+namespace bfcensus
+{
+enum { kBuckets = 10 };
+inline const char* kEdge[kBuckets] = {"1","2-4","5-8","9-16","17-32","33-64","65-128","129-256",
+                                      "257-512","513+"};
+inline std::atomic<long long> g_calls[kBuckets];
+inline std::atomic<long long> g_mass[kBuckets];
+inline std::atomic<long long> g_decisions{0}, g_total{0}, g_max{0};
+// mass by plan shape (a plan can carry several, so these overlap deliberately)
+inline std::atomic<long long> g_sh_dig{0}, g_sh_land{0}, g_sh_bp{0}, g_sh_order{0},
+                              g_sh_cast{0}, g_sh_x{0}, g_sh_alt{0}, g_sh_empty{0};
+// Which CARD carries the branching dimension -- the actionable half of the census.
+inline std::mutex g_mu;
+inline std::map<std::string, long long> g_by_x;    // actions with chosen_x > 0, by card
+inline std::map<std::string, long long> g_by_kind; // every action, by "card|kind"
+inline std::map<std::string, std::set<int>> g_src_ids;   // card -> distinct physical sources seen
+inline std::map<std::string, long long> g_src_emits;     // card -> activation actions seen
+inline int Bucket(size_t n)
+{
+    if (n <= 1) { return 0; }
+    if (n <= 4) { return 1; }
+    if (n <= 8) { return 2; }
+    if (n <= 16) { return 3; }
+    if (n <= 32) { return 4; }
+    if (n <= 64) { return 5; }
+    if (n <= 128) { return 6; }
+    if (n <= 256) { return 7; }
+    if (n <= 512) { return 8; }
+    return 9;
+}
+}   // namespace bfcensus
+static bool BfCensusOn()
+{
+    static const bool on = EnvOn("MTG_BF_CENSUS");
+    return on;
+}
+
 static std::atomic<long long> g_dedup_seen{0}, g_dedup_dup{0};
 // ...and how many of those duplicates are pure COPY PERMUTATIONS: same cards, same modes, differing
 // only in which physical copy (Action::hand_index) was used. Snow runs multiples of Coldsteel Heart,
@@ -171,17 +216,25 @@ static bool DedupCensusOn()
 //   regression tier   slower=0  faster=5   play-changed=19
 //   smoke             slower=0  faster=7   play-changed=8
 //   Snow 300 @ play   avg 6.0833 UNCHANGED, units 49,617,752 -> 47,326,981 (-4.6%)
-//   Snow 300 WALL     108.4 s -> 108.8 s, CPU ms 1,686,946 -> 1,695,529  (medians of 3 interleaved
-//                     reps) -- i.e. NEUTRAL, not the -4.6% the units suggest
+//   Snow 300 TOTAL COST -- **NOT RESOLVED**. 4 interleaved reps per arm of process CPU (user+sys),
+//                     which unlike wall counts the hashing and unlike units is contention-resistant:
+//                       ctrl  median 1821 s (1643-1909, spread 16.2%)
+//                       dedup median 1837 s (1765-1925, spread  9.1%)
+//                     The WITHIN-arm spread swamps the 0.8% between-arm difference. This box is
+//                     shared with other agents, so neither wall nor CPU time can resolve an effect
+//                     this small. An earlier "wall-neutral" claim here was NOT supported and has
+//                     been withdrawn; settling it needs a low-noise instrument (single-threaded
+//                     deterministic runs, or instruction counts), not more reps of the same kind.
 // Nothing regressed anywhere, so it clears the adoption bar on QUALITY. It is left OFF because it
-// was built to make Snow faster and it does not: adopting it would move 17 GT keys for a benefit
-// unrelated to the task that motivated it. Turn it on deliberately, on the quality evidence.
+// was built to make Snow faster and there is no evidence that it does: adopting it would move 17 GT
+// keys for a benefit unrelated to the task that motivated it. Turn it on deliberately, on the
+// quality evidence.
 //
-// WHY UNITS AND WALL DISAGREE, and the caveat to carry: `units_total` counts search work, and this
+// WHY UNITS CANNOT SETTLE IT, and the caveat to carry: `units_total` counts SEARCH work, and this
 // change TRADES search work for hashing -- BuildDedupKey runs on every candidate, and its cost is
-// invisible to the unit counters. The saved rollouts and the added hashing very nearly cancel on
-// Snow. Do not price a change that adds NON-SEARCH work in units alone; that is the mirror image of
-// the wall-vs-units trap, and it points the opposite way.
+// invisible to the unit counters. So the -4.6% is real but is an accounting of one side only. Do
+// not price a change that adds NON-SEARCH work in units alone; that is the mirror image of the
+// wall-vs-units trap, and it points the opposite way.
 //
 // DO NOT "OPTIMISE" THIS BY DEDUPING ON THE PLAN INSTEAD OF THE STATE -- MEASURED UNSOUND, TWICE.
 // Most duplicates are pure copy permutations (same cards, same modes, different Action::hand_index),
@@ -467,6 +520,54 @@ namespace
                       << " esc_share=" << (in ? static_cast<double>(ine) / in : 0.0)
                       << " (interior nodes re-traversed by the heuristic escalation)\n";
             const long long dt = g_condemn_drops_total.load(), dg = g_condemn_drops_greedy.load();
+            if (BfCensusOn())
+            {
+                const long long dec = bfcensus::g_decisions.load();
+                const long long tot = bfcensus::g_total.load();
+                std::cerr << "[rollout-stats] bf_census decisions=" << dec
+                          << " candidates=" << tot
+                          << " mean_width=" << (dec ? static_cast<double>(tot) / dec : 0.0)
+                          << " max_width=" << bfcensus::g_max.load() << "\n";
+                for (int i = 0; i < bfcensus::kBuckets; ++i)
+                {
+                    const long long c = bfcensus::g_calls[i].load(), m = bfcensus::g_mass[i].load();
+                    if (c == 0) { continue; }
+                    std::cerr << "[rollout-stats]   bf[" << bfcensus::kEdge[i] << "] decisions=" << c
+                              << " mass=" << m
+                              << " mass_share=" << (tot ? static_cast<double>(m) / tot : 0.0) << "\n";
+                }
+                auto shape = [&](const char* n, long long v) {
+                    std::cerr << "[rollout-stats]   bf_shape " << n << "=" << v
+                              << " share=" << (tot ? static_cast<double>(v) / tot : 0.0) << "\n"; };
+                shape("cast_from_hand", bfcensus::g_sh_cast.load());
+                shape("play_land     ", bfcensus::g_sh_land.load());
+                shape("dig_draw      ", bfcensus::g_sh_dig.load());
+                shape("bp_variant    ", bfcensus::g_sh_bp.load());
+                shape("searched_order", bfcensus::g_sh_order.load());
+                shape("chosen_x      ", bfcensus::g_sh_x.load());
+                shape("alt_cost      ", bfcensus::g_sh_alt.load());
+                shape("empty_plan    ", bfcensus::g_sh_empty.load());
+                {
+                    std::lock_guard<std::mutex> lk(bfcensus::g_mu);
+                    std::vector<std::pair<long long,std::string>> v;
+                    for (auto& kv : bfcensus::g_by_x) { v.push_back({kv.second, kv.first}); }
+                    std::sort(v.rbegin(), v.rend());
+                    for (size_t i = 0; i < v.size() && i < 8; ++i)
+                    { std::cerr << "[rollout-stats]   bf_x_by_card " << v[i].second << "=" << v[i].first << "\n"; }
+                    std::vector<std::pair<long long,std::string>> w;
+                    for (auto& kv : bfcensus::g_by_kind) { w.push_back({kv.second, kv.first}); }
+                    std::sort(w.rbegin(), w.rend());
+                    for (size_t i = 0; i < w.size() && i < 12; ++i)
+                    { std::cerr << "[rollout-stats]   bf_action " << w[i].second << "=" << w[i].first << "\n"; }
+                    for (auto& kv : bfcensus::g_src_emits)
+                    {
+                        std::cerr << "[rollout-stats]   bf_src " << kv.first
+                                  << " activations=" << kv.second
+                                  << " distinct_physical_sources=" << bfcensus::g_src_ids[kv.first].size()
+                                  << "\n";
+                    }
+                }
+            }
             if (DedupCensusOn())
             {
                 const long long ds = g_dedup_seen.load(), dd = g_dedup_dup.load();
@@ -36018,6 +36119,59 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                       << (enforce_budget ? " top-level" : " rollout")
                       << " sub_depth=" << sub_depth
                       << "  candidates=" << candidates.size() << "\n";
+        }
+
+        // Branching-factor census (MTG_BF_CENSUS): record this decision's width and attribute its
+        // candidate MASS to the mechanics present in its plans. Counting only; no behaviour change.
+        if (BfCensusOn())
+        {
+            const size_t n = candidates.size();
+            const int b = bfcensus::Bucket(n);
+            bfcensus::g_calls[b].fetch_add(1, std::memory_order_relaxed);
+            bfcensus::g_mass[b].fetch_add(static_cast<long long>(n), std::memory_order_relaxed);
+            bfcensus::g_decisions.fetch_add(1, std::memory_order_relaxed);
+            bfcensus::g_total.fetch_add(static_cast<long long>(n), std::memory_order_relaxed);
+            long long prev = bfcensus::g_max.load(std::memory_order_relaxed);
+            while (static_cast<long long>(n) > prev
+                   && !bfcensus::g_max.compare_exchange_weak(prev, static_cast<long long>(n))) {}
+            for (const Plan& q : candidates)
+            {
+                if (q.actions.empty()) { bfcensus::g_sh_empty.fetch_add(1, std::memory_order_relaxed); }
+                if (q.bp_choice >= 0)  { bfcensus::g_sh_bp.fetch_add(1, std::memory_order_relaxed); }
+                if (q.searched_order)  { bfcensus::g_sh_order.fetch_add(1, std::memory_order_relaxed); }
+                bool dig=false, land=false, cast=false, xx=false, alt=false;
+                for (const Action& a : q.actions)
+                {
+                    switch (a.kind)
+                    {
+                        case Action::Kind::DigDraw:      dig  = true; break;
+                        case Action::Kind::PlayLand:     land = true; break;
+                        case Action::Kind::CastFromHand: cast = true; break;
+                        default: break;
+                    }
+                    if (a.chosen_x > 0) { xx = true; }
+                    if (a.alt_cost)     { alt = true; }
+                }
+                if (dig)  { bfcensus::g_sh_dig.fetch_add(1, std::memory_order_relaxed); }
+                if (land) { bfcensus::g_sh_land.fetch_add(1, std::memory_order_relaxed); }
+                if (cast) { bfcensus::g_sh_cast.fetch_add(1, std::memory_order_relaxed); }
+                if (xx)   { bfcensus::g_sh_x.fetch_add(1, std::memory_order_relaxed); }
+                {
+                    std::lock_guard<std::mutex> lk(bfcensus::g_mu);
+                    for (const Action& a : q.actions)
+                    {
+                        const std::string nm = static_cast<const std::string&>(a.card_name);
+                        if (a.chosen_x > 0) { ++bfcensus::g_by_x[nm]; }
+                        if (a.kind == Action::Kind::ActivatePermAbility)
+                        {
+                            bfcensus::g_src_ids[nm].insert(a.sac_source_id);
+                            ++bfcensus::g_src_emits[nm];
+                        }
+                        ++bfcensus::g_by_kind[nm + "|" + std::to_string(static_cast<int>(a.kind))];
+                    }
+                }
+                if (alt)  { bfcensus::g_sh_alt.fetch_add(1, std::memory_order_relaxed); }
+            }
         }
 
         // Cost-reframe count-bounder (dominance / resulting-state dedup): the over-optimistic relaxation
