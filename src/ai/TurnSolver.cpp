@@ -30438,6 +30438,16 @@ inline bool StatsOn() { static const bool v = EnvOn("MTG_WINLESS_STATS"); return
 // full per-plan search. See WinlessDevelopActive.
 inline bool DevelopOn() { static const bool v = EnvOn("MTG_WINLESS_DEVELOP", true); return v; }
 inline std::atomic<unsigned long long> g_dev_nodes{0}, g_dev_collapsed{0}, g_dev_distinct{0};
+// MTG_WINLESS_SEED -- the CANONICAL GO-OFF SEED. DEFAULT ON; =0 restores the full search.
+inline bool SeedOn() { static const bool v = EnvOn("MTG_WINLESS_SEED", true); return v; }
+// MTG_WINLESS_AUDIT (default OFF) -- run the seed even where the CERTIFICATE fired. A seeded win
+// there would mean the certificate refuted a turn the engine's own machinery can actually win,
+// i.e. the bound is UNSOUND. Prints loudly and counts; costs one apply per certified node, so it
+// is a deliberate audit run, not a default.
+inline bool AuditOn() { static const bool v = EnvOn("MTG_WINLESS_AUDIT"); return v; }
+inline std::atomic<unsigned long long> g_seed_tries{0}, g_seed_wins{0}, g_seed_edge_tries{0},
+                                       g_seed_edge_wins{0}, g_audit_violations{0},
+                                       g_audit_probes{0};
 enum class Site { M1 = 0, M2 = 1 };
 inline std::atomic<unsigned long long> g_checks[2] = {}, g_fires[2] = {};
 // Where the search actually IS: FSLineWin entries and plans enumerated, split by whether the node
@@ -30462,6 +30472,37 @@ struct Dumper
             "plans all=%llu label=%llu edge=%llu ===\n",
             g_nodes_all.load(), g_nodes_label.load(), g_nodes_edge.load(),
             g_plans_all.load(), g_plans_label.load(), g_plans_edge.load());
+        {
+            const unsigned long long st = g_seed_tries.load(), sw = g_seed_wins.load();
+            const unsigned long long et = g_seed_edge_tries.load(), ew = g_seed_edge_wins.load();
+            const unsigned long long ec = g_fires[0].load(), en = g_checks[0].load();
+            std::fprintf(stderr,
+                "=== WINLESS SEED: tries=%llu wins=%llu (%.1f%%) | edge tries=%llu wins=%llu ===\n",
+                st, sw, st ? (100.0 * static_cast<double>(sw) / static_cast<double>(st)) : 0.0,
+                et, ew);
+            // THE ROADMAP NUMBER: horizon-edge nodes that NEITHER the certificate refuted NOR the
+            // seed resolved -- the class that still pays a full search.
+            const unsigned long long residual = (et > ew) ? (et - ew) : 0;
+            std::fprintf(stderr,
+                "=== WINLESS RESIDUAL: %llu of %llu edge nodes (%.1f%%) resolved by neither "
+                "(certificate refuted %llu) ===\n",
+                residual, en, en ? (100.0 * static_cast<double>(residual) / static_cast<double>(en)) : 0.0,
+                ec);
+            if (g_audit_probes.load() != 0 || g_audit_violations.load() != 0)
+            {
+                std::fprintf(stderr,
+                    "=== WINLESS AUDIT: probed %llu certified-winless nodes with the canonical "
+                    "go-off, violations=%llu ===\n",
+                    g_audit_probes.load(), g_audit_violations.load());
+            }
+            if (g_audit_violations.load() != 0)
+            {
+                std::fprintf(stderr,
+                    "=== WINLESS AUDIT: *** %llu CERTIFICATE VIOLATIONS *** (a certified-winless "
+                    "node was won by the canonical go-off -- the bound is UNSOUND) ===\n",
+                    g_audit_violations.load());
+            }
+        }
         const unsigned long long dd = g_dev_distinct.load(), dc = g_dev_collapsed.load();
         std::fprintf(stderr,
             "=== WINLESS DEVELOP: stuck nodes=%llu distinct end-states=%llu collapsed=%llu "
@@ -30535,6 +30576,55 @@ static inline bool WinlessDevelopActive(const GameState& s, const SearchBudget* 
     if (proven && winlesscert::StatsOn())
     { winlesscert::g_dev_nodes.fetch_add(1, std::memory_order_relaxed); }
     return proven;
+}
+
+// ---- CANONICAL GO-OFF SEED (MTG_WINLESS_SEED) ------------------------------------------------
+//
+// The certificate proves a turn CANNOT be won. Its mirror -- proving a turn CAN be -- would need
+// every inequality flipped to under-credit, a whole second soundness argument, and its failure
+// mode is FABRICATING a win, which is far worse than failing to prune one. So this does not prove
+// anything. It EXECUTES.
+//
+// On a stuck-looking board the deck's real kill is "run the loop, bank the mana, deploy the
+// finisher, drain them out" -- a line the plan enumerator will never construct, because it is a
+// forty-card dig, and the class where that line exists is ~95% of the certificate's misses
+// (dig-inf/NO-LOOP). But the engine ALREADY HAS that line: EdfAutoGoOffAfterCasts, which
+// ApplyPlanDirect runs at its tail for any plan carrying no explicit blink, recognises the loop,
+// sizes it with FlickerGoOffCount, runs ApplyBlinkLoop and deploys the finisher through
+// ComboFinishFromHand -- and the executor calls the same helper at its own matching point, so it
+// is lockstep with real play.
+//
+// So: apply ONE canonical seed plan on a scratch board and LOOK. If the opponent is dead, the
+// node's earliest win is THIS turn, which is exact by definition -- a this-turn win is the minimum
+// achievable, there is no bound to argue and nothing to be optimistic about. Feed it back as the
+// node's answer and the whole plan space below is redundant.
+//
+// The seed is the NULL plan (cast nothing). It is deliberately the cheapest possible probe: no
+// enumeration at all, one apply plus one combat, so a node where it does not fire pays about one
+// plan's worth of work against the ~70 the enumeration was going to do anyway. Casting an outlet
+// or payload out of hand would widen the class it catches, but every such plan has to be
+// CONSTRUCTED rather than enumerated, and a hand-built plan that the payment layer would refuse is
+// exactly the kind of phantom this design is trying not to introduce.
+//
+// Scoping is the certificate's. The returned line carries the seed plan itself, so a caller that
+// replays it re-runs the same apply and the same go-off.
+static bool WinlessSeedWins(const GameState& state, TurnSolver::Plan& out)
+{
+    TurnSolver::Plan seed;                 // cast nothing; the apply's tail runs the go-off
+    GameState s = state;
+    std::vector<Action> bp;
+    ApplyPlanDirect(s, seed, true, &bp);
+    if (s.ActivePlayer().life <= 0) { return false; }   // killed ourselves getting there
+    if (!OpponentHasLost(s))
+    {
+        AnimateLandsShared(s, nullptr);
+        ActivateTapTokensShared(s, nullptr);
+        SimulateCombat(s);
+        if (!OpponentHasLost(s)) { return false; }
+    }
+    out = std::move(seed);
+    out.breakpoint_actions = std::move(bp);
+    return true;
 }
 
 // Store a WIN: final and cutoff-independent, so it supersedes any bounded no-win a looser earlier
@@ -31704,8 +31794,26 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // waste. Placed after the memo probe (a cached answer is cheaper still) and before the
     // enumeration, which is the 33.8%-self-time step this exists to skip. Never armed under a real
     // budget -> the suite is byte-identical.
-    if (WinlessCertificateActive(state, cutoff, budget, winlesscert::Site::M1))
+    const bool cert_scope = (g_unbounded_label_search > 0
+                             || (budget != nullptr && budget->Unlimited()));
+    const bool certified = WinlessCertificateActive(state, cutoff, budget, winlesscert::Site::M1);
+    if (certified)
     {
+        // AUDIT (MTG_WINLESS_AUDIT, default off): the certificate says this turn cannot be won --
+        // so the engine's own go-off must not be able to win it. Running both and comparing is the
+        // only end-to-end check the bound's soundness has; a hit is a bug, loudly.
+        if (winlesscert::AuditOn())
+        {
+            TurnSolver::Plan probe;
+            winlesscert::g_audit_probes.fetch_add(1, std::memory_order_relaxed);
+            if (WinlessSeedWins(state, probe))
+            {
+                winlesscert::g_audit_violations.fetch_add(1, std::memory_order_relaxed);
+                std::fprintf(stderr,
+                    "[winless] *** CERTIFICATE VIOLATION t%d: certified winless, but the canonical "
+                    "go-off KILLED. The bound is unsound. ***\n", state.turn_number);
+            }
+        }
         // Memoise it exactly as a searched refutation would be: "no win at turn <= cutoff", which
         // for this node is "no win this turn" -- what the certificate actually proved. The probe
         // above runs BEFORE the certificate, so a transposed sibling now answers from the memo
@@ -31713,6 +31821,31 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const TurnSolver::SearchLine nw{ max_turns + 1, {} };
         if (lc != nullptr && FSNoWinCacheOn()) { FSLineStoreNoWin(lc, key, nw, cutoff); }
         return nw;
+    }
+
+    // CANONICAL GO-OFF SEED (see WinlessSeedWins). Not a bound -- an execution. If the deck's own
+    // go-off machinery kills from here, this turn IS the node's earliest win (a this-turn win is
+    // the minimum), so the plan space below cannot improve on it and is skipped outright.
+    if (cert_scope && winlesscert::SeedOn() && winlesscert::Enabled())
+    {
+        const bool at_edge = (state.turn_number >= cutoff);
+        if (winlesscert::StatsOn())
+        {
+            winlesscert::g_seed_tries.fetch_add(1, std::memory_order_relaxed);
+            if (at_edge) { winlesscert::g_seed_edge_tries.fetch_add(1, std::memory_order_relaxed); }
+        }
+        TurnSolver::Plan seed_plan;
+        if (WinlessSeedWins(state, seed_plan))
+        {
+            if (winlesscert::StatsOn())
+            {
+                winlesscert::g_seed_wins.fetch_add(1, std::memory_order_relaxed);
+                if (at_edge) { winlesscert::g_seed_edge_wins.fetch_add(1, std::memory_order_relaxed); }
+            }
+            TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(seed_plan) } } };
+            FSLineStoreWin(lc, key, win, state);
+            return win;
+        }
     }
 
     // Truncation watermark for this node's own exploration (see g_fs_trunc_events).
