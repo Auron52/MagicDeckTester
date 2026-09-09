@@ -4141,7 +4141,13 @@ tuning); CheckLine models etb_untap_lands (MTG_CHECKLINE_ETB_UNTAP); aura host I
 (linebuild always encodes *<count>); auto-cash removed (single blink no longer fires the drain
 sink; MTG_HUMAN_AUTOCASH=1 restores). KNOWN COST: claude_s1_gi0 replays T3->T5 (its recording
 depended on the auto-cash bug AND the old spend order) -- the ONLY play-drift across 306
-references; regression-mode's strict gate is red on exactly that until the user re-saves.
+references; regression-mode's strict gate is red on exactly that. USER RULING (2026-09-09):
+T3 IS STILL CORRECT and the user should NOT need to re-play it -- repair the TOOL, not the file.
+The recording is fully explicit (Depleter cast at decision 38; the final choice IS the combo-off
+plan), so the replay layer must re-anchor recorded choices onto the new engine's equivalent
+verified plans (content-anchored combo-off matching + line-aware replay payment), with
+recording-contract versioning as backstop. QUEUED as the first post-pipeline task; bar = T3
+reproduced, 305/305 others unchanged.
 OPEN (designed, not landed): viewer prefix-cache for the quadratic step slowdown (~74x);
 EffectiveProduces land-aura colours (shared engine, GT-moving); demand-aware ETB untap choice.
 
