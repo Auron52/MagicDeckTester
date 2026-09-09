@@ -205,6 +205,17 @@ struct Action
     Kind        kind           = Kind::CastFromHand;
     InternedName card_name;            // source card (creature name for ActivateVial)
     int         hand_index     = -1;   // hand index of the source/creature at enumeration time
+    // INTERCHANGEABLE-SOURCE FOLD (MTG_FOLD_ACT_SOURCES). Nonzero = this activation's source was
+    // PROVED at enumeration time to be indistinguishable from any other source carrying the same
+    // tag, so the subset enumerator may treat "which copy taps" as settled and explore only how
+    // MANY tap. 0 = never fold (the default, and what every action that is not a proved-plain
+    // ActivatePermAbility carries). USER 2026-09-09: "It doesn't matter whether you tap Scrying
+    // Sheets 1, 2, 3 or 4 first. They are interchangeable" -- AND the constraint that makes it a
+    // TAG rather than a name match: "in other decks they may not be interchangeable due to land
+    // auras or other effects. It is because there are none of those in the lands or in the deck
+    // that this works." So interchangeability is a per-decision PROPERTY OF THE STATE, computed by
+    // ActivationEquivTag, never an assumption from the card's identity.
+    int         equiv_tag     = 0;
     ManaCost    cost;                  // effective mana cost (enumeration feasibility only)
     bool        sacrifice_land = false;// additional cost: sacrifice a land (e.g. Shard Volley)
     int         discard_lands  = 0;    // Retrace = 1; for DiscardToLandsEdge = lands to discard

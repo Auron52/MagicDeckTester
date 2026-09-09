@@ -5465,6 +5465,96 @@ std::vector<int> TurnSolver::ManaUnlockColorReserve(const GameState& state,
 // mutually exclusive -- a given Lotus can be tapped+sacrificed for exactly one colour, once). The
 // colour variants are enumerated as independent actions, so this is the analogue of the Vial per-charge
 // capacity cap. Inert (returns false) for every deck without a SacForMana action -> byte-identical.
+// --- INTERCHANGEABLE ACTIVATION SOURCES (MTG_FOLD_ACT_SOURCES) ---------------------------------
+// USER RULING 2026-09-09: "It doesn't matter whether you tap Scrying Sheets 1, 2, 3 or 4 first.
+// They are interchangeable. Same with the Frost Augurs." -- WITH the constraint that makes this a
+// state test rather than a name test: "in other decks they may not be interchangeable due to land
+// auras or other effects. It is because there are none of those in the lands or in the deck that
+// this works."
+//
+// So a source is foldable only when it is PROVABLY PLAIN: every differentiating field of the
+// Permanent at its default, AND nothing on the battlefield attached to it. The second half is the
+// user's case and is the one a name-based check would miss -- an Aura or Equipment is a DIFFERENT
+// permanent pointing at this one, so it is invisible from the source's own fields.
+//
+// Conservative by construction: anything unrecognised or non-default returns false, which yields
+// tag 0 = never folded = today's behaviour. A deck that attaches anything to its dig sources simply
+// stops folding them, automatically, with no per-deck configuration.
+static bool PermIsPlainForFold(const GameState& state, const Permanent& p)
+{
+    if (p.damage != 0 || p.pending_death_trigger != 0 || !p.counters.empty()) { return false; }
+    // SUMMONING SICKNESS (user, 2026-09-09): "summoning sick Augur 2 may not be able to tap while
+    // 1 can" -- a creature's {T} is gated by it, so two Augurs differing here are NOT
+    // interchangeable. Rejected outright rather than reasoned about per card type: for a LAND like
+    // Scrying Sheets the flag does not gate tapping (the user noted this), but the bar is
+    // "identical in all state", and entered_this_turn is state that other effects read. The cost of
+    // the strict form is negligible -- at most one land enters per turn, so at most one copy is
+    // excluded.
+    if (p.entered_this_turn || p.gained_control_this_turn) { return false; }
+    if (p.aura_attached_to != 0 || p.equipped_to != 0) { return false; }
+    if (p.marked_for_destruction) { return false; }
+    if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0) { return false; }
+    if (p.charge_counters != 0 || p.verse_counters != 0 || p.storage_counters != 0) { return false; }
+    if (p.storage_hold_this_turn) { return false; }
+    if (p.garth_chosen_mask != 0) { return false; }
+    if (p.loyalty != 0 || p.loyalty_activated_this_turn) { return false; }
+    if (p.colored_cast_lifegain_used_this_turn) { return false; }
+    if (p.chosen_color != -1) { return false; }
+    if (p.ice_counters != 0 || p.age_counters != 0) { return false; }
+    if (p.temp_haste || p.temp_lifelink || p.exile_at_end) { return false; }
+    if (p.chosen_subtype_id != 0) { return false; }
+    if (p.is_animated || p.is_token || p.echo_resolved) { return false; }
+    // A copy effect can make two same-named permanents differ, and a token is never plain above.
+    if (!static_cast<const std::string&>(p.copy_printed_name).empty()) { return false; }
+    // ...and nothing ATTACHED TO it. This is the "land auras" case: the attachment lives on the
+    // OTHER permanent, so it cannot be seen from p's own fields.
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.aura_attached_to == p.card.m_number) { return false; }
+        if (q.equipped_to      == p.card.m_number) { return false; }
+    }
+    return true;
+}
+
+// ADOPTED 2026-09-09, DEFAULT ON (MTG_FOLD_ACT_SOURCES=0 restores the unfolded enumeration).
+// Suite is BYTE-IDENTICAL with it on -- smoke 80/80 and regression 108/108 configs unchanged,
+// play-changed=0 -- so adoption moves no ground truth at all. Snow, 300 games at play settings,
+// 3 interleaved reps: avg 6.0833 -> 6.0800 (better), units -6.0%, process CPU -6.4% with every
+// fold rep below every control rep. Units and CPU AGREE here, unlike the candidate dedup, because
+// this removes work instead of trading it for hashing.
+static bool FoldActSourcesOn()
+{
+    static const bool on = EnvOn("MTG_FOLD_ACT_SOURCES", true);
+    return on;
+}
+
+// The tag two interchangeable activations share. Deliberately excludes the SOURCE's identity (that
+// is the whole point) and includes everything that makes one activation differ from another.
+static int ActivationEquivTag(const GameState& state, const Permanent& src, const std::string& name,
+                              int mode, const ManaCost& cost, int chosen_x)
+{
+    if (!FoldActSourcesOn())            { return 0; }
+    if (!PermIsPlainForFold(state, src)) { return 0; }
+    std::uint64_t h = 1469598103934665603ull;
+    auto mix = [&h](std::uint64_t v)
+    { h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); };
+    for (unsigned char c : name) { mix(c); }
+    mix(static_cast<std::uint64_t>(mode));
+    mix(static_cast<std::uint64_t>(chosen_x));
+    mix(static_cast<std::uint64_t>(cost.generic));
+    mix(static_cast<std::uint64_t>(cost.white));
+    mix(static_cast<std::uint64_t>(cost.blue));
+    mix(static_cast<std::uint64_t>(cost.black));
+    mix(static_cast<std::uint64_t>(cost.red));
+    mix(static_cast<std::uint64_t>(cost.green));
+    mix(static_cast<std::uint64_t>(cost.colorless));
+    mix(static_cast<std::uint64_t>(cost.has_x ? 1 : 0));
+    mix(static_cast<std::uint64_t>(cost.x_pips));
+    mix(static_cast<std::uint64_t>(src.tapped ? 1 : 0));
+    const int t = static_cast<int>(h & 0x7fffffff);
+    return t == 0 ? 1 : t;   // never collide with "do not fold"
+}
+
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel)
 {
     for (size_t a = 0; a < sel.size(); ++a)
@@ -5536,6 +5626,26 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             {
                 if (cands[sel[b]].kind == Action::Kind::ActivatePermAbility
                     && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+            }
+        }
+        // INTERCHANGEABLE SOURCES -> CANONICAL PREFIX. Among activations sharing a nonzero
+        // equiv_tag the sources were PROVED indistinguishable, so "which k of the n copies" is not
+        // a real decision -- only "how many". Keep exactly one representative per size by admitting
+        // only the PREFIX selection (the k earliest in candidate order) and rejecting every other
+        // arrangement. This collapses 2^n arrangements per class to n+1 while leaving the COUNT
+        // axis fully expressible: k selected actions still mean k activations, so nothing changes
+        // in the apply and no distinct line is lost. Inert when the tag is 0, which is every action
+        // on every deck until a source proves itself plain.
+        if (cands[sel[a]].equiv_tag != 0)
+        {
+            const int tag = cands[sel[a]].equiv_tag;
+            for (int j = 0; j < sel[a]; ++j)
+            {
+                if (cands[j].equiv_tag != tag) { continue; }
+                bool earlier_selected = false;
+                for (size_t q = 0; q < sel.size(); ++q)
+                { if (sel[q] == j) { earlier_selected = true; break; } }
+                if (!earlier_selected) { return true; }   // non-canonical arrangement
             }
         }
         // Birthing Pod: one activation per Pod per plan (the {T} cost).
@@ -13284,6 +13394,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.sac_source_id  = src.card.m_number;
                         a.ability_mode   = m.mode;
                         a.chosen_x       = k;
+                        // Interchangeable-source fold: proved from THIS state, not from the name.
+                        a.equiv_tag      = ActivationEquivTag(
+                            state, src, static_cast<const std::string&>(src.card.m_name),
+                            static_cast<int>(m.mode), cost, k);
                         // ONE activation on the subset's books, like ActivateBlink: the rest are
                         // paid inside the apply loop out of whatever the turn actually produces.
                         a.cost           = cost;
