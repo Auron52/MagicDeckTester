@@ -1,0 +1,63 @@
+{
+ "merge": [
+  {
+   "cards": [
+    "Llanowar Wastes",
+    "Blooming Marsh",
+    "Darkbore Pathway"
+   ],
+   "why": "USER RULING 2026-09-09: lands producing the same colours merge (all three produce B/G; painland, fastland, and the B-or-G Pathway)."
+  },
+  {
+   "cards": [
+    "Razorverge Thicket",
+    "Branchloft Pathway"
+   ],
+   "why": "USER RULING 2026-09-09: lands producing the same colours merge (both produce G/W)."
+  },
+  {
+   "cards": [
+    "Voice of Resurgence",
+    "Scavenging Ooze"
+   ],
+   "why": "USER RULING 2026-09-09: two-drop pod pieces that are pretty much just podded into something else (colours differ; accepted as not entirely ideal)."
+  },
+  {
+   "cards": [
+    "Reclamation Sage",
+    "Severance Priest"
+   ],
+   "why": "USER RULING 2026-09-09: three-drop pod pieces that are pretty much just podded into something else (colours differ; accepted as not entirely ideal)."
+  }
+ ],
+ "keep_apart": [
+  {
+   "cards": [
+    "Orzhov Basilica",
+    "Caves of Koilos"
+   ],
+   "why": "USER RULING 2026-09-09: the bounceland absolutely cannot be merged with a different land type, even at the same colours."
+  },
+  {
+   "cards": [
+    "Carrion Feeder",
+    "Bloodthrone Vampire"
+   ],
+   "why": "USER RULING 2026-09-09: merging the two sac outlets is not entirely ideal -- keep them split."
+  },
+  {
+   "cards": [
+    "Melira, Sylvok Outcast",
+    "Vizier of Remedies"
+   ],
+   "why": "USER 2026-09-09: arguable merge, held back as a fallback if generation cost demands it (K=23 is the safest set)."
+  },
+  {
+   "cards": [
+    "Ignoble Hierarch",
+    "Birds of Paradise"
+   ],
+   "why": "USER 2026-09-09: Ignoble is a little worse and it does come up -- fallback merge only if desperate."
+  }
+ ]
+}
