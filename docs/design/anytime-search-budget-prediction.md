@@ -215,13 +215,16 @@ stops being a sentinel 0 that collapses every allowance derived from it to zero 
 `if (!Unlimited())` arm. With saturating arithmetic the ceiling becomes unreachable in the limit —
 **unlimited falls out of the formula and the special case is deleted.**
 
-`kOverrunBudgetMult` = 55 places the crossover just ABOVE ship settings: 55 x 18,000 = 990,000, a
-shade under `kOverrunFloor`, so at 20 virtual-ms and every smaller budget the shipped floor still
-binds and behaviour is bit-for-bit unchanged; above ~20.2 virtual-ms the proportional term takes
-over (9.9M at 200 virtual-ms, where the frozen floor would still say 1M). **"Monotone" here means in
-the ALLOWANCE, not in quality** — a looser ceiling still changes which line is committed where the
-guard used to fire, and heuristic evaluation is not monotone in search effort. What containment
-guarantees is that no win is lost to a truncation that survives today.
+`kOverrunBudgetMult` = 11 reproduces the 200,000 arm of the 2026-09-08 fixed-floor sweep at ship
+settings (11 x 18,000 = 198,000) — the one value with a held-out measurement behind it — while now
+SCALING with the budget instead of being frozen. **`kOverrunFloor` is deliberately absent from this
+expression**, not merely defaulted to zero: deleting the constant is what makes "truncation for
+budget reasons only" structural rather than a setting someone can flip. It survives only in the
+legacy `MTG_OVERRUN_PROP=0` arm.
+
+**This is NOT monotone in quality and must not be claimed as such** — a ceiling change moves which
+line is committed wherever the guard fires, and heuristic evaluation is not monotone in search
+effort. The justification is measurement (1 better, 0 worse across the suite), not containment.
 
 The two ESCALATION ceilings were already `2 x Limit()` with no absolute floor, i.e. they never had
 the non-convergence defect. Their value is deliberately unchanged; only their `!Unlimited()` arm is
@@ -243,32 +246,71 @@ replaced by saturating arithmetic.
    the anytime commit cannot recover what was never computed" — was WRONG. Trace a mover before
    recording causality.
 
+### THE AUDIT: is truncation only ever for BUDGET reasons? (user gate, 2026-09-09)
+
+> *"we absolutely need to ensure that truncation is done only for budget reasons."*
+
+Three mechanisms can cut the search short. Only one of them is the subject of this document, and
+before this change it FAILED the gate.
+
+| mechanism | where | budget-derived? |
+|---|---|---|
+| **Exhaustion** (`used >= Limit()`) | `BpWavesHere`/`GroupWavesHere` skip a deferred-rank wave phase; the second-main scan breaks its candidate loop | **YES** — "the budget is spent, stop adding optional work" |
+| **Overrun ceiling** (aborts a whole running pass) | `FullSearchLine`'s ID loop | **WAS NO.** `max(2 x Limit(), 1,000,000)`: at ship settings `2 x Limit()` is 36,000, so the **1,000,000 constant was the only binding term**. A magic number, the same shape as the `guard++ < 16` correctness ceiling. **Now YES** — a pure multiple of the budget, no constant in the expression at all |
+| **Beam width / enumeration caps** | value-guided beam (`_beam_i >= g_esc_beam_width`, escalation-only, near-leaf only, `0 = unlimited`); enumeration caps recorded under `TruncCompleteEnabled()` | **NO, and deliberately so** — these are adopted PRUNING heuristics with their own levers and A/Bs, not this guard. A separate arc |
+
+`gamework::Abandoned()` is also folded into `Overrun()`, but it is **disarmed by default** and exists
+only for unbounded value-leaf matrix generation ("this game is VOID"), so it is not a play-path
+truncation.
+
+**Mechanically, when does a truncation actually happen?** A decision runs iterative deepening under a
+per-decision budget (ship: 20 virtual-ms x 900 = 18,000 units; one unit = one simulated turn-step in
+a rollout, or one interior node with a plan applied). Before each pass a START GATE estimates
+`cost(k-1) x growth` and refuses to begin pass k if that exceeds `1.1 x remaining` — **that is not a
+truncation**, it stops holding a complete answer. If the pass does begin, the overrun ceiling is
+armed and `budget->Overrun()` is polled in five places (entry to `FSLineWin` and `FSLineTail`, the
+rollout's per-turn-step loop, and two breakpoint child loops). The non-obvious part: **`Limit()`
+never stops a running pass** — it is consulted only by the start gate — which is why an 18,000-unit
+budget routinely spent 1,000,000 units on a single pass.
+
 ### ADOPTED 2026-09-09 — both default ON, hatches kept
 
-Measured on Snow (`--depth 5`, seed 5500001) and the smoke suite:
+**COST IS REPORTED IN DETERMINISTIC UNITS, NOT WALL** (user, 2026-09-09: *"there is some contention,
+so we shouldn't rely just on wall numbers"*). `units_total` from `MTG_ROLLOUT_STATS` is exact for a
+fixed binary + config — a repeated FiveColour control reproduced 19,895,566 to the unit — whereas
+wall on this box is not evidence. Quality is judged on paired per-game movers from the suite's
+`.wins` audit. (Caveat, recorded rather than glossed: ACROSS BUILDS a ~1e-7 drift was seen — Snow
+49,649,736 vs 49,649,741 for the same effective ceiling and an identical digest. Unexplained; far
+below any effect claimed here, but do not assert bit-exact cross-build unit reproducibility.)
 
-| arm | avg | digest | aborts | rescuable | wall |
+| arm | avg | digest | aborts | rescuable | **units** |
 |---|---|---|---|---|---|
-| HEAD binary, ship settings, 300 games | 6.0867 | `43d00a181d6aa29b` | 1 | — | 1,602,534 ms |
-| new binary, flags OFF | 6.0867 | `43d00a181d6aa29b` | 1 | 1 | 1,617,597 ms |
-| anytime only | 6.0867 | `43d00a181d6aa29b` | 1 | 1 | 1,587,267 ms |
-| **ADOPTED (both, defaults)** | 6.0867 | `43d00a181d6aa29b` | 1 | 1 | 1,658,069 ms |
-| control @ 200 virtual-ms, 40 games | 6.0250 | `777dec0a8ae7451f` | 1 | 0 | 1,143,789 ms |
-| **ADOPTED @ 200 virtual-ms** | 6.0250 | `777dec0a8ae7451f` | **0** | 0 | 1,119,727 ms |
+| Snow 300, HEAD binary | 6.0867 | `43d00a181d6aa29b` | 1 | — | 50,798,060 |
+| Snow 300, new binary flags OFF | 6.0867 | `43d00a181d6aa29b` | 1 | 1 | 50,798,104 |
+| Snow 300, anytime only | 6.0867 | `43d00a181d6aa29b` | 1 | 1 | 50,782,403 |
+| **Snow 300, ADOPTED** | 6.0867 | `43d00a181d6aa29b` | 7 | 6 | **49,649,736 (−2.26%)** |
+| FiveColour 100 @ d6/b20, control | 4.8300 | `67d0fb2007aa1b97` | 9 | **3** | 19,895,566 |
+| **FiveColour 100, ADOPTED** | **4.8200** | `5e67f60de1b901e3` | 26 | 2 | **16,134,474 (−18.9%)** |
+| Snow 40 @ 200 virtual-ms, control | 6.0250 | `777dec0a8ae7451f` | 1 | 0 | 46,202,057 |
+| **Snow 40 @ 200 virtual-ms, ADOPTED** | 6.0250 | `777dec0a8ae7451f` | **0** | 0 | 46,420,331 (+0.47%) |
 
-- **Parity holds**: the HEAD binary reproduces the flags-off digest at 300 games, and smoke is
-  73/73 with 0 configs changed.
-- **Ship settings are untouched** by construction (the crossover sits above them), so this carries
-  no adoption risk at any setting currently in use.
-- **The regime it exists for works**: at 200 virtual-ms the truncation disappears (1 -> 0) with an
-  identical digest. That is convergence — a larger budget now truncates *less*, where before it
-  truncated *more*.
-- Unit 74/74, scenarios 74/74.
+- **Quality is better, never worse.** Full regression suite: **98 unchanged, 1 BETTER, 0 worse** —
+  `fivecolour_regression_d5_s2002` 4.8300 -> 4.8200, i.e. gi57 wins on T5 instead of T6. Smoke
+  73/73, 0 configs changed. Unit 74/74, scenarios 74/74. Snow is byte-identical.
+- **Cost falls where the budget is small** (−2.26% Snow, −18.9% FiveColour) because the ceiling is
+  now tighter than the old fixed 1e6 there, so the engine stops burning 55 budgets on a doomed pass.
+- **Cost RISES slightly where the budget is large** (+0.47% at 200 virtual-ms) because the pass that
+  used to be truncated now runs to completion. **That is the change working as intended, and it
+  corrects an earlier claim in this session of "−2.1% wall" at b200 — the opposite sign. That number
+  was contention, which is exactly why wall was dropped as evidence.**
+- **One rule serves both regimes** precisely because it is proportional: 198,000 at a 20 virtual-ms
+  ship budget (tighter than 1e6) but 1.98M at 200 virtual-ms (looser than 1e6).
+- **FiveColour is where the discarded-proven-win defect bites hardest**: its control discards 3
+  proven wins per 100 games, against 1 per 300 on Snow.
 
-An earlier arm proved the anytime commit is load-bearing rather than decoration: with the ladder
-ceiling at 11x and NO floor, 300 Snow games diverged and scored WORSE without it
-(6.0900 / `3a7babe9803ea2e7`, 6 proven wins discarded) and returned to byte-identical with it
-(6.0867 / `43d00a181d6aa29b`).
+An earlier arm proved the anytime commit is load-bearing rather than decoration: at the same ceiling,
+300 Snow games diverged and scored WORSE without it (6.0900 / `3a7babe9803ea2e7`, 6 proven wins
+discarded) and returned to byte-identical with it (6.0867 / `43d00a181d6aa29b`).
 
 ### Still open after this change
 
@@ -278,9 +320,10 @@ ceiling at 11x and NO floor, 300 Snow games diverged and scored WORSE without it
   quantify how much of an aborted pass is actually re-done before assuming a resume buys anything.
 - **Candidate fix (2), the predictor, is untouched.** It remains the strictly-better lever: a pass
   never started unaffordably loses nothing at all.
-- **A ~200,000 ladder ceiling at ship settings** (worth ~3% wall and a shorter p99 on the
-  2026-09-08 held-out sample) now has smoke evidence too, and is deliberately not taken here. Still
-  the user's call.
+- ~~A ~200,000 ladder ceiling at ship settings~~ — **TAKEN**, as `kOverrunBudgetMult = 11`, once the
+  user's gate ("only for budget reasons", "okay if the results are better") was met: 1 game better,
+  0 worse across the suite, −2.26%/−18.9% units. Expressed as a multiple of the budget, never as the
+  absolute constant the 2026-09-08 sweep used.
 - **The depth-fallback escalation path is not anytime-rescued** — see the comment at its abort site:
   a fully-aborted descent sets `hcommitted = 0` and the take-decision discards `hline` wholesale, so
   a rescue there would be a no-op without also asserting a committed depth that was never searched.

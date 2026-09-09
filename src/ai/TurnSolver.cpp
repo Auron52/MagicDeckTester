@@ -33009,86 +33009,69 @@ namespace
     //     ms). That is the discontinuity; unlimited then needs its own `if (!Unlimited())` arm to
     //     stop the floor clamping infinity to 1e6.
     //
-    // The fix keeps the shipped expression INTACT and adds one budget-proportional term to the max,
-    // so the allowance can only ever GROW relative to today:
+    // THE FIX: the ceiling becomes a PURE MULTIPLE OF THE BUDGET, with no absolute constant at all.
     //
-    //     ceiling = used_before + max(kOverrunBeta       * budget->EffectiveLimit(),   <- shipped
-    //                                 kOverrunFloor,                                   <- shipped
-    //                                 kOverrunBudgetMult * budget->EffectiveLimit())   <- new
-    //                                                                        (saturating)
+    //     ceiling = used_before + kOverrunBudgetMult * budget->EffectiveLimit()      (saturating)
     //
-    // MONOTONE BY INSPECTION: both shipped terms are still in the max, so the ceiling is >= the
-    // shipped one at every budget and the guard can never truncate MORE than it does today. The
-    // beta term is subsumed by the new one (kOverrunBudgetMult > kOverrunBeta) and is kept only so
-    // that containment is visible at a glance rather than argued.
-    //
-    // "MONOTONE" MEANS IN THE ALLOWANCE, NOT IN QUALITY -- do not overstate this. A LOOSER ceiling
-    // still changes which line gets committed on a position where the guard used to fire, and
-    // heuristic evaluation is not monotone in search effort, so above the crossover a result can
-    // move either way. What the containment DOES guarantee is that no win is lost to truncation
-    // that survives today. Ship settings are unaffected because the crossover is placed above them.
+    // USER GATE (2026-09-09): *"we absolutely need to ensure that truncation is done only for budget
+    // reasons."* kOverrunFloor is deliberately NOT a term here -- an absolute unit count is not a
+    // budget reason, it is a magic number, the same shape as the `guard++ < 16` constant that once
+    // capped a Fluctuator kill at 16 damage against 20 life. Deleting it from the expression (rather
+    // than defaulting it to 0) is what makes "budget reasons only" STRUCTURAL instead of a setting.
+    // It survives solely in the legacy MTG_OVERRUN_PROP=0 arm.
     //
     // Properties, in the order they were asked for:
-    //   - CONTINUOUS IN THE BUDGET, AND CONVERGENT. ceiling/budget is now a CONSTANT rather than
-    //     swinging from 55x to 2x, so doubling the budget doubles the allowance. A pass's cost is a
-    //     property of the position, not of the budget, so as the budget grows every pass eventually
-    //     fits and truncation tends to zero -- which is the whole point: a large FINITE budget has
-    //     to behave like unlimited (user, 2026-09-09: unlimited is too costly to run because of
-    //     degenerate games, so a big finite budget is what quality runs actually use). Under the
-    //     shipped floor that is FALSE: the ceiling is pinned at 1e6 for every budget below ~556
-    //     virtual-ms while the start gate admits ever-bigger passes, so raising the budget makes
-    //     truncation MORE likely, not less.
+    //   - CONTINUOUS AND CONVERGENT. ceiling/budget is a CONSTANT rather than swinging from 55x to
+    //     2x, so doubling the budget doubles the allowance. A pass's cost is a property of the
+    //     position, not of the budget, so as the budget grows every pass eventually fits and
+    //     truncation tends to zero -- the whole point: a large FINITE budget must behave like
+    //     unlimited (unlimited is too costly to run because of degenerate games, so a big finite
+    //     budget is what quality runs actually use). Under the shipped floor that is FALSE -- the
+    //     ceiling is pinned at 1e6 for every budget below ~556 virtual-ms while the start gate
+    //     admits ever-bigger passes, so raising the budget made truncation MORE likely, not less.
+    //   - IT IS TIGHTER WHERE THE BUDGET IS SMALL AND LOOSER WHERE IT IS LARGE -- automatically, and
+    //     this is the property that makes one rule serve both regimes. Against the old fixed 1e6:
+    //     198,000 at a 20 virtual-ms ship budget (tighter -> stops burning 55 budgets on a doomed
+    //     pass) but 1.98M at 200 virtual-ms (looser -> the pass completes and is not truncated).
     //   - UNLIMITED FALLS OUT. EffectiveLimit() is LLONG_MAX when unlimited and the saturating
     //     multiply pins the ceiling there, so the guard is unreachable in the limit rather than
     //     switched off by an `if (!Unlimited())` arm. No unlimited-only code path remains here.
-    //   - IT RESPECTS THE LEVERS THAT DELIBERATELY OVERSPEND. MTG_VALUE_STARTGATE_ALPHA (8.0) and
-    //     the path-to-trust slack (2.0) exist precisely to admit a pass costing several times the
-    //     remaining budget; entitling the pass to kOverrunBeta x its OWN estimate is what stops
-    //     this guard cutting exactly those adopted passes.
     //
-    // WHY IT IS ANCHORED ON Limit() AND NOT Remaining() -- measured, 2026-09-09. The first cut of
-    // this used max(Remaining(), estimate). Remaining() SHRINKS as the shallow passes spend budget,
-    // so the deepest and most valuable pass got the TIGHTEST ceiling. On 12 Snow games that fired
-    // 15 aborts (vs 0 shipped) for a byte-IDENTICAL digest and 2.03x the wall time: the truncations
-    // changed no play at all, they just made the executor re-search shallower and buy the same work
-    // twice. Anchoring on the whole decision budget is what makes the allowance grow with the
-    // budget instead of collapsing inside it.
+    // NOT MONOTONE IN QUALITY, and do not claim otherwise. A ceiling change moves which line gets
+    // committed wherever the guard fires, and heuristic evaluation is not monotone in search effort,
+    // so a result can move either way. The justification below is MEASUREMENT, not containment.
     //
-    // CALIBRATION of kOverrunBudgetMult: 55, chosen so the proportional term takes over EXACTLY at
-    // the ship budget and not below it. 55 x an 18,000-unit play budget is 990,000, just under
-    // kOverrunFloor, so at 20 virtual-ms and at every SMALLER budget the floor still binds and the
-    // ceiling is bit-for-bit the shipped one. Above ~20.2 virtual-ms the proportional term takes
-    // over and the allowance scales with the budget: 9.9M at 200 virtual-ms where the shipped floor
-    // would still say 1M. So the crossover is placed where it changes nothing we currently ship and
-    // everything about the large-budget regime the user actually wants to run.
+    // WHY IT IS ANCHORED ON Limit() AND NOT Remaining() -- measured, 2026-09-09. The first cut used
+    // max(Remaining(), estimate). Remaining() SHRINKS as the shallow passes spend budget, so the
+    // deepest and most valuable pass got the TIGHTEST ceiling. On 12 Snow games that fired 15 aborts
+    // (vs 0 shipped) for a byte-IDENTICAL digest and 2.03x the work: the truncations changed no play
+    // at all, they just made the executor re-search shallower and buy the same work twice. Anchoring
+    // on the whole decision budget is what makes the allowance grow with the budget instead of
+    // collapsing inside it.
     //
-    // WHY THE CROSSOVER IS PLACED ABOVE SHIP SETTINGS RATHER THAN AT A "BETTER" TIGHTER VALUE.
-    // The first attempt used 11 with NO floor, calibrated to reproduce the 200,000 arm of the
-    // 2026-09-08 fixed-floor sweep (held-out: not one win turn changed, -3.2% wall). On Snow it
-    // looked ideal -- 300 games byte-identical to shipped, 7 aborts, 6 of them rescued by the
-    // anytime commit. THE SMOKE SUITE REFUTED IT: `fivecolour_smoke_d5_s1001` gi2 went 5 -> 6
-    // (avg 5.1333 -> 5.1467). A Snow-only argument would have shipped that; the cross-deck gate is
-    // what caught it.
+    // CALIBRATION of kOverrunBudgetMult = 11: 11 x an 18,000-unit ship budget is 198,000, i.e. the
+    // 200,000 arm of the 2026-09-08 fixed-floor sweep -- the one value with a held-out measurement
+    // behind it (1,200 games, not one win turn changed). 50,000 (~2.8x) measured far worse, so the
+    // curve turns below this; the multiplier must NOT be lowered on the assumption that a tighter
+    // guard is cheaper. What is new is that the number now SCALES with the budget instead of being
+    // frozen, which is what makes the same constant correct at 20 and at 200 virtual-ms.
     //
-    // ATTRIBUTION, ISOLATED: that arm changed the ladder ceiling AND the two escalation ceilings at
-    // once (the latter were briefly anchored on Remaining(), which is TIGHTER than the shipped
-    // 2 x Limit()). Re-running smoke with the ladder ceiling tightened to 198,000
-    // (MTG_OVERRUN_FLOOR=198000 MTG_OVERRUN_MULT=11) but the escalation left at its shipped value
-    // gives 73/73 PASS. So the ESCALATION ANCHOR was the sole cause, and the tight ladder ceiling
-    // is cross-deck clean on smoke -- the opposite of the first, plausible-sounding read. Trace a
-    // mover before recording causality.
-    //
-    // CONSEQUENCE FOR A FUTURE TIGHTENING: a ladder ceiling of ~200,000 at ship settings (the
-    // 2026-09-08 sweep's measured-good value, worth ~3% wall and a shorter p99) now has smoke
-    // evidence behind it too. It is deliberately NOT taken here -- this change is scoped to be
-    // behaviour-neutral at ship settings -- and it remains the user's call, exactly as the
-    // 2026-09-08 floor sweep left it.
+    // MEASURED, ON DETERMINISTIC UNITS -- NOT WALL. The box has contention, so ms is not evidence
+    // (user, 2026-09-09); units_total is exact (a repeated FiveColour control reproduced
+    // 19,895,566 to the unit). Quality is judged on paired per-game movers.
+    //   regression suite   98 unchanged, 1 BETTER, 0 worse  (fivecolour_regression_d5_s2002 4.8300
+    //                      -> 4.8200; gi57 wins on T5 instead of T6)
+    //   smoke              73/73, 0 configs changed
+    //   Snow 300 @ ship    digest 43d00a181d6aa29b IDENTICAL to control, units -2.26%
+    //   FiveColour 100     1 game better, units -18.9% (19,895,566 -> 16,134,474)
+    // FiveColour is also where the discarded-proven-win defect bites hardest: its control run
+    // discards 3 proven wins per 100 games (`rescuable`), against 1 per 300 on Snow.
     //
     // ADOPTED 2026-09-09, default ON (MTG_OVERRUN_PROP=0 restores the legacy expression).
     static const bool   s_overrun_prop = EnvOn("MTG_OVERRUN_PROP", true);
     static const double kOverrunBudgetMult = []{
         const char* e = std::getenv("MTG_OVERRUN_MULT");
-        return (e && *e) ? std::atof(e) : 55.0; }();
+        return (e && *e) ? std::atof(e) : 11.0; }();
 
     // ---- ANYTIME COMMIT (MTG_ID_ANYTIME) ----------------------------------------------------
     // Do not discard what an aborted pass PROVED. On abort the shipped loop does
@@ -33278,14 +33261,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // because 2 * Limit() is 0 when unlimited and max(0, FLOOR) would clamp infinity to 1e6.
         if (budget != nullptr && s_overrun_prop)
         {
-            // PROPORTIONAL CEILING (see s_overrun_prop): the shipped shape with the absolute floor
-            // replaced by a multiple of the DECISION budget. No !Unlimited() arm -- EffectiveLimit()
-            // is LLONG_MAX when unlimited and the saturating multiply pins the ceiling there.
-            const long long allow = std::max({
-                SearchBudget::SatMulD(kOverrunBeta, budget->EffectiveLimit()),
-                SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()),
-                kOverrunFloor});
-            budget->SetOverrunLimit(SearchBudget::SatAdd(used_before, allow));
+            // PROPORTIONAL CEILING (see s_overrun_prop). ONE term, and deliberately so: a pure
+            // multiple of the decision budget, with no absolute constant anywhere, so a truncation
+            // here can only ever be for a BUDGET reason. No !Unlimited() arm -- EffectiveLimit() is
+            // LLONG_MAX when unlimited and the saturating multiply pins the ceiling there.
+            budget->SetOverrunLimit(SearchBudget::SatAdd(
+                used_before,
+                SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit())));
         }
         else if (budget != nullptr && !budget->Unlimited())
         {
