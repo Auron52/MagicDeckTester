@@ -15314,22 +15314,36 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
         const int tg         = afford_sum(tg_n,   tg_max,  tg_budget);
         const int aura_extra = afford_sum(aura_n, aura_max, aura_budget);
         const long long boost_spend = mana_inf ? 0 : (mana - aura_budget);
-        // The land drop is not limited to a land already in hand: one we can dig to or wish for
-        // is just as playable, and under-counting it would under-state the loop's refund -- the
-        // unsound direction. Take the best LIVE land in any zone we can reach.
-        int drop_bonus = max_land_in_hand;
-        int drop_c     = c_land_in_hand;
+        // THE LAND DROP, in two different currencies -- the round-7 node-1 diagnosis.
+        //
+        // `drop_refund` is what a land is worth to the LOOP: after an ETB untap refreshes it, its
+        // full yield is available however it entered and whatever it cost to fetch. Uncharged and
+        // uncapped on purpose (over-credit, safe), and it is the term refund_free/refund_ub use.
+        //
+        // `drop_mana_now` is what it is worth to THIS TURN'S POOL, and that is a much smaller
+        // number: a land that ENTERS TAPPED produces nothing until something untaps it (and the
+        // untap path is already priced through drop_refund), and a land that has to be FETCHED
+        // costs the fetch first. Crediting a sideboard Azorius Chancery's 2 mana -- untapped and
+        // free -- was the over-credit that let g37 seed 900037 turn 2 read as loop-capable off a
+        // one-land board (max real mana 4, the line it believed in needed 8).
+        int drop_refund   = max_land_in_hand;
+        int drop_mana_now = max_land_in_hand;
+        int drop_c        = c_land_in_hand;
         if (land_drop_open)
         {
             for (const CertCard& cc : cards)
             {
                 if (cc.on_board || !cc.needs_drop || !live_of(cc)) { continue; }
                 const int y = std::max(1, cc.d->params.produces_amount);
-                drop_bonus = std::max(drop_bonus, y);
+                drop_refund = std::max(drop_refund, y);
+                const long long acq = price_of(cc);            // wish entry / dig price
+                const long long now = cc.d->params.enters_tapped ? 0 : (y - acq);
+                drop_mana_now = static_cast<int>(std::max<long long>(drop_mana_now, now));
                 for (const Color col : cc.d->params.produces)
                 { if (col == Color::Colorless) { drop_c = std::max(drop_c, y); break; } }
             }
         }
+        const int drop_bonus = drop_refund;   // refund currency (refund_free / refund_ub / {C})
 
         // The loop's PIECES, one candidate per definition (cheapest instance of each), because
         // the colour test below needs a concrete pair: a cost is payable or not as a whole, and
@@ -15590,7 +15604,7 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
         // them minus what buying them cost.
         const long long mana_new = mana_inf
             ? kCertInf
-            : (untapped_mana + drop_bonus
+            : (untapped_mana + drop_mana_now
                + std::max(untap_gain_free, untap_gain - boost_spend));
         if (mana_new > mana) { mana = mana_new; grew = true; }
 
