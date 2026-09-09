@@ -42168,7 +42168,38 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // its bonus is supply the flat pool above cannot hold, and whether it arrives depends on which
     // sources paid the Aura itself. Without it the EDF turn-3 line "Mariposa; Trace of Abundance;
     // Peregrine Drake {4}{U}" reads as one mana short of a board that pays it exactly.
-    if (remaining > 0 && (AnyUntappedFilterSource(s) || PendingLandAuraColorMask(s) != 0))
+    //
+    // An ETB LAND-UNTAPPER in the line reaches it too, and for the third instance of the same
+    // reason: Cloud of Faeries ("untap up to two lands") and Peregrine Drake ("up to five") make a
+    // land's mana available TWICE in one main phase, which no flat pool can express -- the flat
+    // AvailableManaPool counts each land once, so the second tap does not exist for it at all.
+    // USER, EDF seed 9 gi=8 T4 (2026-09-09), rejected as "can't pay {2}{W}{W} for 'Emiel the
+    // Blessed'": board Conservatory(+Wild Growth), Kitchen, Mariposa(+Overgrowth); line
+    // [Overgrowth -> Conservatory; Cloud of Faeries; Emiel]. Conservatory is the board's ONLY white
+    // source, so {W}{W} is reachable only by tapping it on both sides of Cloud's untap -- pay
+    // Cloud's generic {1} out of Conservatory's post-Aura {W}{G}{G}{G} and BANK the {W} (CR 500.4:
+    // the pool survives to the next cast in the same phase), untap Conservatory + Mariposa, tap
+    // Conservatory again for the second {W}. Rules-legal, and the verdict blamed the human's
+    // arithmetic ("illegal") rather than the search's enumeration ("legal, not enumerated").
+    //
+    // The retry below already carries float across casts (TapForCostShared commits its leftover to
+    // state.floating_mana), so the only missing piece was the untap itself, applied at the point
+    // the cast RESOLVES -- see the EtbUntapLands call in the walk. CheckLine is viewer-only (sole
+    // callers --validate-line and the scenario harness), so this cannot move autonomous play; it
+    // only ever ACCEPTS more, like the declared-order walk above.
+    // MTG_CHECKLINE_ETB_UNTAP=0 restores the old (untap-blind) simulation.
+    static const bool s_checkline_etb_untap = EnvOn("MTG_CHECKLINE_ETB_UNTAP", true);
+    bool pending_etb_untap = false;
+    if (s_checkline_etb_untap)
+    {
+        for (const PendingCast& pc : pending)
+        {
+            if (pc.def && !pc.board_act && pc.def->params.etb_untap_lands > 0)
+            { pending_etb_untap = true; break; }
+        }
+    }
+    if (remaining > 0 && (AnyUntappedFilterSource(s) || PendingLandAuraColorMask(s) != 0
+                          || pending_etb_untap))
     {
         // WHICH LAND CARRIES THE AURA IS PART OF THE LINE, and this simulation used to guess it --
         // "the first untapped land" -- which is how a legal line came back as ILLEGAL rather than
@@ -42302,6 +42333,20 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                         ap.owner_index      = cp.active_player_index;
                         ap.aura_attached_to = host;
                         cp.battlefield.push_back(ap);
+                    }
+                    // THE CAST RESOLVES HERE, so an ETB "untap up to N lands" fires now -- before
+                    // the next pending cast is paid, and after this one's own payment, which is
+                    // exactly the real ordering (Cloud of Faeries cannot untap the lands that pay
+                    // for Cloud of Faeries). Untapping is pure supply: it can only make the rest of
+                    // the line MORE payable, never less, so it cannot turn an accepted line into a
+                    // rejected one. Same yield-ordered pick as the real effect (EtbUntapLands), and
+                    // ledger-silent because this is a hypothetical copy, not the played game.
+                    if (s_checkline_etb_untap && pending[k].def && !pending[k].board_act
+                        && pending[k].def->params.etb_untap_lands > 0)
+                    {
+                        EtbUntapLands(cp, cp.active_player_index,
+                                      pending[k].def->params.etb_untap_lands,
+                                      /*log_ledger=*/false);
                     }
                     if (deals_opponent_damage(*pending[k].def)) { spec = true; }
                     paid[k] = true; --left; prog = true; break;

@@ -190,6 +190,81 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         ~SnowStrictScope() { g_snow_pay_strict = prev; }
     } _snow_strict_scope(snow_strict);
 
+    // HOLD THE COLOURLESS BANK FOR THE BOARD'S {C} SINK (human play only; MTG_HOLD_C_FOR_SINK=0
+    // restores). USER, EDF seed 8 (2026-09-09): *"the mana spending is so poor... I want to retain
+    // my colourless in this deck."*
+    //
+    // MEASURED, not assumed. MTG_FLOAT_TRACE over the user's own hand-driven blink line shows the
+    // loop banking colourless CORRECTLY -- the float climbs {g44,c22} in lockstep, +2 green +1
+    // colourless per Drake blink, and the refloat counters read committed C=54023 vs G=18525, so
+    // the tap-ahead is not the defect. The bank then falls off a cliff in multi-mana steps
+    // (c22 -> c18 -> c13 -> c11 ... -> c0) while FORTY-SIX GREEN sits untouched, and the line dies
+    // one {C} short of the next Eldrazi Displacer activation.
+    //
+    // The cliff is the GENERIC-ONLY costs this deck spends its bank on: the Clue token's {2}, the
+    // Conservatory's {4} investigate, Mariposa's {5} draw. `SpendFloatingTowardCost` drains generic
+    // pips wild -> COLOURLESS -> W/U/B/R/G, so each of those ate 2-5 colourless off the top with a
+    // mountain of green available to pay them instead.
+    //
+    // Session 5b's MTG_HOLD_C_FOR_PIPS already fixed the neighbouring case -- a cost with a {C} pip
+    // OF ITS OWN holds colourless back from its own generic portion -- but its trigger is the COST,
+    // and a Clue sacrifice has no {C} pip at all. The demand signal is not this cost, it is the
+    // BOARD: while we control a permanent whose activation carries a {C} pip (Eldrazi Displacer's
+    // {2}{C} blink, Essence Depleter's {1}{C} drain, Dimensional Infiltrator's {1}{C}), colourless
+    // is the scarcest thing in the pool and no generic pip should touch it while a colour can pay.
+    // Locally free in the same sense as 5b: paying generic from a colour instead is never worse
+    // when the colour is there, and when it is NOT there the drain still falls through to
+    // colourless (hold_c only REORDERS, it never refuses -- see SpendFloatingTowardCost).
+    //
+    // HUMAN PLAY ONLY, per the human-line-vs-AI-average rule and the FilterCFirst / HUMAN_TAP_DEMAND
+    // precedents directly below: the search pays a whole plan as one batch and its ordering is
+    // measured, while a human builds a phase as a sequence of separate activations this payment
+    // cannot see past. HumanPlayActive() is false in rollouts (HumanPlaySuppress) and in every
+    // autonomous run, so GT/scenarios/smoke are byte-identical by construction.
+    // THE KNOWN COST, stated up front: this hold changes `references/EldraziDisplacerFlicker/
+    // claude_s1_gi0` from its recorded turn-3 win to a turn-4 one (viewer_protocol_check reports it
+    // as the sweep's ONE play-drift; 304 of 305 references are unaffected, and smoke / the six
+    // autonomous reference digests are byte-identical because none of this runs outside human
+    // play). It is a deliberate trade, reported rather than hidden -- the same call session 5c made
+    // when the cast-site painland fix cost claude_s2_gi1 -- because the bug it fixes is the user's
+    // stated worst: *"The worst is the poor colourless usage that makes Displacer almost useless."*
+    // MTG_HOLD_C_FOR_SINK=0 reverts in one binary if the user judges the trade the other way.
+    //
+    // TWO NARROWINGS WERE TRIED AND BOTH FAILED TO SEPARATE THE CASES -- recorded so the next
+    // attempt does not repeat them:
+    //   (a) the per-colour surplus BUDGET below. It is kept (it is right on its own terms), but it
+    //       does not rescue s1_gi0: that is a go-off turn, and the demand model cannot see the
+    //       cards the turn is about to WISH FOR or DRAW, so a colour that scores as surplus now is
+    //       spent and a later fetched cast strands.
+    //   (b) the user's own "once we have a STOCK of other mana" as a literal float threshold
+    //       (>= 8, then >= 20 non-colourless floating). Both still drift s1_gi0 and neither
+    //       loosened the seed-8 fix, because s1_gi0's turn 3 is ALSO a go-off with a fat float --
+    //       pool size is simply not the axis that distinguishes the two.
+    // What would settle it is a measured sweep (heuristic-optimization), not another hand-picked
+    // constant; the honest state today is one decisive user-reported fix against one reference.
+    static const bool s_hold_c_sink = EnvOn("MTG_HOLD_C_FOR_SINK", true);
+    const bool board_c_sink = s_hold_c_sink && HumanPlayActive()
+                           && state.floating_mana.colorless > 0
+                           && BoardHasColorlessPipSink(state, active);
+    // ...AND THE HOLD IS BUDGETED, which is what stops it trading one stranding for another. Only a
+    // colour we hold MORE of than the rest of the turn still wants may pay a generic pip ahead of
+    // the bank; a colour at or under its demand is scarcer than the colourless and keeps its place
+    // behind it. Demand = the hand's coloured pips plus the board's repeatable activations, i.e.
+    // exactly ComputeRefloatDemand, the same model the ETB tap-ahead commits its colours by --
+    // one demand notion for the whole human-play mana policy rather than two that can disagree.
+    // Unbudgeted, the hold cost references/EldraziDisplacerFlicker/claude_s1_gi0 its recorded T3.
+    int c_budget[5] = { 0, 0, 0, 0, 0 };
+    if (board_c_sink)
+    {
+        int demand[6] = { 0, 0, 0, 0, 0, 0 };
+        ComputeRefloatDemand(state, active, demand);
+        const ManaPool& f = state.floating_mana;
+        const int have[5] = { f.white, f.blue, f.black, f.red, f.green };
+        for (int i = 0; i < 5; ++i) { c_budget[i] = std::max(0, have[i] - demand[i]); }
+    }
+    HoldColorlessScope _hcs_sink(board_c_sink ? true : g_hold_colorless_for_pips);
+    GenericSpendBudgetScope _gsb_sink(board_c_sink ? c_budget : nullptr);
+
     // Spend any turn-scoped RESERVE mana (a ritual's floating output) before tapping. No-op when
     // empty -> byte-identical for non-ritual decks. Restored if the whole payment fails below.
     const ManaPool reserve_pre = state.floating_mana;

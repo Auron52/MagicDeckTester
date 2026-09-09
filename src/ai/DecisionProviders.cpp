@@ -2117,6 +2117,44 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // are all deliberately held back and are returned before this point.
     bool any_colored = false;
     for (Color c : prod) { if (c != Color::Colorless) { any_colored = true; break; } }
+    // ...UNLESS A {C} SINK IS LIVE ON OUR BOARD, in which case rank 5 is exactly backwards and the
+    // {C}-only source taps LAST OF THE LANDS instead (59). The rung above rests on one premise,
+    // stated in its own words: "no card in any deck has a {C} pip". That premise is FALSE for this
+    // deck -- Eldrazi Displacer activates for {2}{C}, Essence Depleter drains for {1}{C},
+    // Dimensional Infiltrator exiles for {1}{C} -- and where it fails, so does everything built on
+    // it. A {C}-only land is not "the least flexible mana on the board" there; it is the ONLY mana
+    // that can pay the pip the deck's whole engine runs on (CR 107.4c), which makes it the most
+    // precious source, not the most disposable. Spending it first on a generic pip a Forest could
+    // have covered is the source-side twin of the float-side drain fixed in ManaPayment.cpp's
+    // MTG_HOLD_C_FOR_SINK -- same defect, one layer up.
+    //
+    // USER (2026-09-09), on the EDF viewer batch: *"I want to retain my colourless in this deck"*,
+    // and closing the session: *"The worst is the poor colourless usage that makes Displacer almost
+    // useless."*
+    //
+    // 59 is "last of the LANDS": past every plain-land tier (mono 10 / dual 20 / tri 30 / rainbow
+    // 50 and their +1 nudges) and deliberately BEFORE the reserve tiers (manland 60, scaled 61,
+    // storage 62, sole-colour/burst 63, creatures 64+), whose own holds are measured and must keep
+    // outranking this one. It is the same rung the clamp below already uses for a colour-producing
+    // land, so no new tier is introduced.
+    //
+    // Rank is ORDERING, NEVER EXCLUSION: a cost that genuinely needs the {C} (or a board with
+    // nothing else untapped) still taps it -- the scarcity loop takes the best available candidate,
+    // and this only decides which of several is best. So the "cost of the reserve" failure mode
+    // documented for the manland tier cannot bite the same way: there the reserve could strand a
+    // COLOUR, here it can only strand a generic pip that any colour pays.
+    //
+    // HUMAN PLAY ONLY, and gated on a live sink -- two independent reasons nothing else can move.
+    // HumanPlayActive() is false in rollouts (HumanPlaySuppress) and in every autonomous game, so
+    // GT / smoke / scenarios are byte-identical by construction; and BoardHasColorlessPipSink is
+    // param-keyed on {C}-pip activations, which only this deck has. The StompySurprise s9 T2 trace
+    // that motivated rank 5 (a Wirewood Lodge {C} that had to pay Sol Ring's generic so the Forest
+    // could make {G}) is therefore untouched -- that board has no {C} sink at all.
+    // MTG_C_SOURCE_HOLD=0 restores rank 5 everywhere (one-binary A/B).
+    static const bool s_c_source_hold = EnvOn("MTG_C_SOURCE_HOLD", true);
+    if (!prod.empty() && !any_colored && s_c_source_hold && HumanPlayActive()
+        && BoardHasColorlessPipSink(s, active))
+    { return 59; }
     int rank = (!prod.empty() && !any_colored) ? 5                    // {C}-only: least flexible
              : (ncol <= 1 ? 10 : ncol * 10);                          // mono=10 dual=20 tri=30 rainbow=50
     // A COLOUR-producing land must not sit in the colourless-manland RESERVE tier (60): its {C} mode

@@ -810,6 +810,10 @@ inline void EtbUntapLands(GameState&, int controller, int count, bool log_ledger
 inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count,
                                       int reserve_color_mask = 0);                           // defined below
 inline int  EtbUntapLandsCredit(const GameState&, int count);                                // defined below
+// Live {C}-pip activation sink on our board + a source's own (unfed) colours -- both defined below,
+// both read by EtbUntapLands's human-play tie-break above their definitions.
+inline bool BoardHasColorlessPipSink(const GameState&, int controller);                      // defined below
+inline const std::vector<Color>& UnconditionalProduces(const CardDefinition&);               // defined below
 // `keep_flexible` (see the definition): spend the LEAST flexible mana on a generic pip and retain
 // the wild, instead of the default wild-first order. For the leftover computation only.
 inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost,
@@ -829,6 +833,33 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost,
 // SIMULTANEOUSLY, and a board with three {C} sources cannot produce twelve in one untap. Not set for
 // the drain, which therefore keeps the payment order its measurement was taken under.
 inline thread_local bool g_hold_colorless_for_pips = false;
+
+// PER-COLOUR GENERIC-SPEND BUDGET (null = unlimited, the historical behaviour). While non-null it
+// points at 5 ints indexed W,U,B,R,G: how many units of that colour this payment may spend on
+// GENERIC pips before the drain moves on. It exists only to make `g_hold_colorless_for_pips`
+// SAFE.
+//
+// The hold on its own says "pay generic from a colour, not from the bank", and that is right until
+// the colour it reaches for is itself the last of its kind -- then the hold has merely moved the
+// stranding from the colourless pip to a coloured one. Measured, not hypothesised: holding
+// unconditionally cost `references/EldraziDisplacerFlicker/claude_s1_gi0` its recorded turn-3 win
+// (replayed T4), and that reference is a go-off turn whose later casts each want a specific pip.
+// The budget is what distinguishes "green we have 40 of" from "the only blue on the board".
+//
+// Ordering with a budget live: SURPLUS colours -> colourless -> everything else. The last tier is
+// a genuine fall-through, so a cost that can only be paid by dipping past every budget still gets
+// paid; the budget is a PREFERENCE, never a refusal (same doctrine as ManaSourceRank).
+inline thread_local const int* g_generic_spend_budget = nullptr;
+
+struct GenericSpendBudgetScope
+{
+    const int* prev;
+    explicit GenericSpendBudgetScope(const int* b)
+        : prev(g_generic_spend_budget) { g_generic_spend_budget = b; }
+    ~GenericSpendBudgetScope() { g_generic_spend_budget = prev; }
+    GenericSpendBudgetScope(const GenericSpendBudgetScope&)            = delete;
+    GenericSpendBudgetScope& operator=(const GenericSpendBudgetScope&) = delete;
+};
 
 // STRICT SNOW PAYMENT is in effect for the current payment: the cost carries {S} pips AND the
 // paying player's manabase is MIXED (some mana source is not snow), so snow pips must tap real
@@ -3309,7 +3340,27 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
     // point in the resolution. That is a RESOLUTION heuristic, not a searched branch -- disclosed
     // in Stage 6a. Paid straight out of the turn-scoped float when it is there (the blink loop's
     // tap-ahead leaves it there), else by tapping a source.
-    for (std::size_t wi = 0; wi < state.battlefield.size(); ++wi)
+    //
+    // ...EXCEPT IN HUMAN PLAY, where the default is now NOT to pay (MTG_HUMAN_ETB_COUNTER_PAY=1
+    // opts back in for a whole session). USER, EDF seed 11 (2026-09-09): *"We seem to always pay
+    // the green on Emiel for extra counters, but realistically most of the time you shouldn't
+    // bother with that."* The "nothing else the mana could be held for" premise above is exactly
+    // what a hand-driven blink line falsifies: every iteration re-enters the payload, so the
+    // always-pay rule silently spends ONE {G/W}-payable mana PER BLINK out of the very bank the
+    // human is trying to build -- on a board whose real bottleneck is the next {2}{C} activation,
+    // not the payload's power. The counter is monotone-good only in a vacuum; priced against a
+    // mana it is a trade the player should be making, and mid-combo they almost never want it.
+    //
+    // A per-blink dialog is NOT the answer (the user is separately, explicitly against
+    // per-activation prompts), so this is a default rather than a decision: default-no, with the
+    // env opt-in as the deliberate affordance for the one line that wants it (pumping toward
+    // lethal combat). SEARCH/ROLLOUT PLAY IS UNCHANGED -- HumanPlayActive() is false in rollouts
+    // (HumanPlaySuppress) and in every autonomous game, so GT, scenarios and smoke are
+    // byte-identical. Whether the ALWAYS-PAY default is right for the search is a separate,
+    // measurable question (heuristic-optimization workflow); it is deliberately not answered here.
+    static const bool s_human_etb_counter_pay = EnvOn("MTG_HUMAN_ETB_COUNTER_PAY");
+    const bool skip_optional_etb_counter = HumanPlayActive() && !s_human_etb_counter_pay;
+    for (std::size_t wi = 0; wi < state.battlefield.size() && !skip_optional_etb_counter; ++wi)
     {
         const int watcher_ctrl = state.battlefield[wi].controller_index;
         if (watcher_ctrl != entered_controller) { continue; }
@@ -12588,6 +12639,10 @@ inline ManaCost EffectiveActivationCost(const GameState& state, int controller,
 inline void EtbUntapLands(GameState& state, int controller, int count, bool log_ledger)
 {
     if (count <= 0) { return; }
+    // Computed ONCE per untap, not per land: the sink is a property of the board, and the scan is
+    // O(battlefield). HumanPlayActive() first, so an autonomous game pays a single bool. See the
+    // tie-break inside the loop.
+    const bool c_sink_live = HumanPlayActive() && BoardHasColorlessPipSink(state, controller);
     std::vector<std::pair<int, int>> tapped;   // (sort key, battlefield index)
     for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
     {
@@ -12601,6 +12656,32 @@ inline void EtbUntapLands(GameState& state, int controller, int count, bool log_
         // non-priority land ranked by yield below the whole set.
         const int rank = EtbUntapPriorityRank(p.card.m_number);
         if (rank >= 0) { key += 1000000 - 1000 * rank; }
+        // {C}-CAPABLE LAND WINS A TIE (human play, live {C} sink only; MTG_UNTAP_C_FIRST=0 restores).
+        // USER, 2026-09-09: *"With displacer and flickering we need to be super aggressive about
+        // getting and keeping colourless once we have a stock of other mana."* The untap is a real
+        // CHOICE ("untap up to five lands") and the yield ordering above prices every land in raw
+        // mana -- but the loop's currency is not mana, it is PAYABLE {2}{C} ACTIVATIONS, and the
+        // generic half of that cost is the easy half. Two lands of equal yield are NOT equal when
+        // one of them can make the pip and the other cannot.
+        //
+        // A TIE-BREAK, deliberately, not a re-ranking: `key` is doubled and the {C}-capable land
+        // takes the +1, so the yield order is preserved EXACTLY and only previously-arbitrary ties
+        // move. That makes it strictly free -- it can never hand back less mana than before, which
+        // the aggressive version (untap a 1-yield {C} land ahead of a 3-yield colour land) very much
+        // can. That stronger form is a real candidate but it TRADES mana for pip type, so it needs
+        // measuring rather than asserting; recorded as unmeasured, not shipped.
+        //
+        // Reads the land's own modes (UnconditionalProduces): an aura bonus rides the tap in the
+        // AURA's colour and cannot make {C}, so a Wild Growth does not turn a Forest into a {C}
+        // source. Human-play + live-sink gated, so autonomous play and every non-Eldrazi deck are
+        // byte-identical.
+        static const bool s_untap_c_first = EnvOn("MTG_UNTAP_C_FIRST", true);
+        key *= 2;
+        if (s_untap_c_first && c_sink_live)
+        {
+            for (Color pc : UnconditionalProduces(*d))
+            { if (pc == Color::Colorless) { key += 1; break; } }
+        }
         tapped.emplace_back(key, bi);
     }
     std::stable_sort(tapped.begin(), tapped.end(),
@@ -12734,6 +12815,45 @@ inline void AddCostToRefloatDemand(int* need, const ManaCost& mc)
     need[static_cast<int>(Color::Red)]       += mc.red;
     need[static_cast<int>(Color::Green)]     += mc.green;
     need[static_cast<int>(Color::Colorless)] += mc.colorless;
+}
+
+// IS THERE A LIVE {C} SINK ON OUR BOARD? -- i.e. do we control a permanent whose REPEATABLE
+// activated ability carries a real colourless pip (Eldrazi Displacer's {2}{C} blink, Essence
+// Depleter's {1}{C} drain, Dimensional Infiltrator's {1}{C} exile)?
+//
+// This is the demand signal for "colourless is the scarcest thing in this pool". CR 107.4c: a {C}
+// pip is payable ONLY by colourless mana -- no colour, and no "one mana of any colour", can ever
+// pay it -- so on a board with such a sink the colourless bank is not interchangeable with the
+// rest of the pool, and every generic pip that eats it destroys an activation. Costs are priced
+// through EffectiveActivationCost, exactly as the payment will price them, so a Training Grounds
+// reduction is seen (Displacer's {2}{C} becomes {C}: the generic half goes, the PIP remains).
+//
+// Deliberately NOT hand cards: an Eldrazi Displacer in HAND costs {2}{W} and has no {C} pip; its
+// sink only exists once it has resolved. Deliberately NOT the one-shot tap abilities either
+// (tap_investigate / tap_draw / sac_draw): those are the costs this predicate exists to keep OFF
+// the bank, so counting them would be circular.
+//
+// Param-keyed, so it is false for every deck in the repo without an Eldrazi-style {C} activation
+// -- i.e. all of them but this one.
+inline bool BoardHasColorlessPipSink(const GameState& state, int controller)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& q = d->params;
+        const std::optional<ManaCost>* acts[] = {
+            &q.blink_cost, &q.drain_cost, &q.exile_opponent_top_cost, &q.tap_damage_cost,
+        };
+        for (const std::optional<ManaCost>* c : acts)
+        {
+            if (!c->has_value()) { continue; }
+            if (EffectiveActivationCost(state, controller, p.card, c->value()).colorless > 0)
+            { return true; }
+        }
+    }
+    return false;
 }
 
 // Per-colour pip demand: the hand's casts PLUS the repeatable activated abilities already on the
@@ -14918,6 +15038,22 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     static const bool s_hold_c_own = EnvOn("MTG_HOLD_C_FOR_PIPS", true);
     const bool hold_c = g_hold_colorless_for_pips || (s_hold_c_own && _own_c);
     if (!hold_c) { drain(cost.generic, reserve.colorless); }
+    // BUDGETED FIRST PASS (see g_generic_spend_budget): while a budget is live, each colour may pay
+    // generic pips only out of its SURPLUS, and the colourless bank sits between that surplus and
+    // the scarce remainder. Null budget (every caller but the human-play {C}-sink one) skips the
+    // pass entirely and the drain below is the historical order, unit for unit.
+    if (hold_c && g_generic_spend_budget != nullptr)
+    {
+        const int* b = g_generic_spend_budget;
+        int* pool[5] = { &reserve.white, &reserve.blue, &reserve.black,
+                         &reserve.red,   &reserve.green };
+        for (int i = 0; i < 5; ++i)
+        {
+            int allow = std::min(b[i], *pool[i]);
+            while (cost.generic > 0 && allow > 0) { --cost.generic; --*pool[i]; --allow; }
+        }
+        drain(cost.generic, reserve.colorless);
+    }
     drain(cost.generic, reserve.white);
     drain(cost.generic, reserve.blue);
     drain(cost.generic, reserve.black);
