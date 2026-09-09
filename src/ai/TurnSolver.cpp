@@ -33629,6 +33629,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 ran_h[k] = true; learn_R(k, cost, leaves); ch[k] = static_cast<double>(cost); spent_h += ch[k];
                 lines[k] = att;
                 line = att; committed_depth = k; heur_mode = true;
+                if (line.win_turn <= state.turn_number + k - 1) { break; }   // verified here: the ladder stops
                 // With the EXACT cost the heuristic ladder might still have admitted k+1: replay onward.
                 for (int n = k + 1; n <= depth && gate_fits(n); ++n)
                 {
