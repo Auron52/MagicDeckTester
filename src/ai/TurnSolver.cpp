@@ -318,6 +318,15 @@ static std::atomic<long long> g_emul_decisions{0}, g_emul_vpasses{0}, g_emul_hpa
                               g_emul_calib_passes{0};
 static std::array<std::atomic<long long>, 16> g_emul_rd_milli{}, g_emul_rd_n{}, g_emul_bias_milli{}, g_emul_bias_n{};
 static std::array<std::atomic<long long>, 16> g_emul_commit_hist{};
+// LADDER ACCOUNTING (MTG_ROLLOUT_STATS), keyed by the depth the decision COMMITTED at: units of the
+// committing pass vs everything before it. The heuristic ladder's "warm" bucket is the saving the
+// emulated ladder is after; the emulated ladder's "commit" bucket vs the heuristic's at the same depth
+// is the price of committing on a leaf TT no heuristic pass warmed.
+static std::array<std::atomic<long long>, 16> g_lad_commit_n{}, g_lad_commit_units{}, g_lad_warm_units{};
+static std::array<std::atomic<long long>, 16> g_emul_cd_n{}, g_emul_cd_commit_units{}, g_emul_cd_v_units{}, g_emul_cd_hother_units{};
+// Same depth, both leaves (calibration / fallback re-runs): are the TREES the same? Leaves under the
+// heuristic vs leaves under the value leaf, and how often they differ at all.
+static std::array<std::atomic<long long>, 16> g_emul_tree_n{}, g_emul_tree_hleaves{}, g_emul_tree_vleaves{}, g_emul_tree_differ{};
 
 // Record one top-level decision's committed ITERATIVE-DEEPENING depth. See g_iddepth_hist.
 static inline void RecordIdDepth(int d)
@@ -467,6 +476,45 @@ namespace
                           << " waste_units=" << iw
                           << " waste_share=" << (site_tot ? static_cast<double>(iw) / site_tot : 0.0)
                           << "\n";
+            }
+            {
+                long long ln = 0; for (int d = 0; d < 16; ++d) { ln += g_lad_commit_n[d].load(); }
+                if (ln > 0)
+                {
+                    long long tw = 0, tc = 0;
+                    std::cerr << "[rollout-stats] heuristic-ladder by committed depth (n, warm units, commit units, per-decision warm/commit):";
+                    for (int d = 0; d < 16; ++d)
+                    {
+                        const long long n = g_lad_commit_n[d].load(); if (n == 0) { continue; }
+                        const long long w = g_lad_warm_units[d].load(), c = g_lad_commit_units[d].load();
+                        tw += w; tc += c;
+                        std::cerr << " d" << d << "=" << n << "/" << w << "/" << c << "/" << (w / n) << "/" << (c / n);
+                    }
+                    std::cerr << "\n[rollout-stats]   heuristic-ladder totals: decisions=" << ln << " warm=" << tw << " commit=" << tc
+                              << " warm_share_of_ladder=" << (tw + tc ? static_cast<double>(tw) / static_cast<double>(tw + tc) : 0.0) << "\n";
+                }
+                long long en = 0; for (int d = 0; d < 16; ++d) { en += g_emul_cd_n[d].load(); }
+                if (en > 0)
+                {
+                    long long tv = 0, tc = 0, th = 0;
+                    std::cerr << "[rollout-stats] emulated-ladder by committed depth (n, value units, other-heuristic units, commit units, per-decision value/other/commit):";
+                    for (int d = 0; d < 16; ++d)
+                    {
+                        const long long n = g_emul_cd_n[d].load(); if (n == 0) { continue; }
+                        const long long v = g_emul_cd_v_units[d].load(), h = g_emul_cd_hother_units[d].load(), c = g_emul_cd_commit_units[d].load();
+                        tv += v; th += h; tc += c;
+                        std::cerr << " d" << d << "=" << n << "/" << v << "/" << h << "/" << c << "/" << (v / n) << "/" << (h / n) << "/" << (c / n);
+                    }
+                    std::cerr << "\n[rollout-stats]   emulated-ladder totals: decisions=" << en << " value=" << tv << " other_heuristic=" << th << " commit=" << tc << "\n";
+                    std::cerr << "[rollout-stats]   emulated-ladder same-depth trees (n, heuristic leaves / value leaves, differ):";
+                    for (int d = 0; d < 16; ++d)
+                    {
+                        const long long n = g_emul_tree_n[d].load(); if (n == 0) { continue; }
+                        std::cerr << " d" << d << "=" << n << "/" << static_cast<double>(g_emul_tree_hleaves[d].load()) / static_cast<double>(std::max(1LL, g_emul_tree_vleaves[d].load()))
+                                  << "/" << g_emul_tree_differ[d].load();
+                    }
+                    std::cerr << "\n";
+                }
             }
             if (g_emul_decisions.load() > 0)
             {
@@ -33313,6 +33361,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         long long cv[17] = {0};            // value-pass cost, where a value pass ran
         long long lv[17] = {0};            // value-pass leaf count
         bool      ran_h[17] = {false};     // pass k's line is the heuristic's
+        long long hc[17] = {0};            // exact units of the heuristic pass at k (accounting)
+        long long dec_v_units = 0, dec_h_units = 0;   // this decision's value / heuristic units (accounting)
         SearchLine lines[17];              // each completed pass's line (rollback target on overrun)
         double    spent_h = 0.0;           // what the heuristic ladder would have spent so far
         const bool   bounded = (budget != nullptr && !budget->Unlimited());
@@ -33330,8 +33380,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             }
             return g_emul_R;
         };
-        auto learn_R = [&](int k, long long hcost)
+        auto learn_R = [&](int k, long long hcost, long long hleaves)
         {
+            if (lv[k] > 0 && k >= 0 && k < 16)
+            {
+                g_emul_tree_n[k].fetch_add(1, std::memory_order_relaxed);
+                g_emul_tree_hleaves[k].fetch_add(hleaves, std::memory_order_relaxed);
+                g_emul_tree_vleaves[k].fetch_add(lv[k], std::memory_order_relaxed);
+                if (hleaves != lv[k]) { g_emul_tree_differ[k].fetch_add(1, std::memory_order_relaxed); }
+            }
             if (lv[k] > 0 && hcost > cv[k])
             {
                 const double sample = std::max(1.0, static_cast<double>(hcost - cv[k]) / static_cast<double>(lv[k]));
@@ -33377,6 +33434,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             cost   = (budget ? budget->Used() : 0) - used_before;
             leaves = g_fs_leaf_evals - leaves_before;
             (heuristic ? g_emul_h_units : g_emul_v_units).fetch_add(cost, std::memory_order_relaxed);
+            (heuristic ? dec_h_units : dec_v_units) += cost;
+            if (heuristic && !over && d >= 0 && d < 17) { hc[d] = cost; }
             if (over)
             {
                 g_emul_overruns.fetch_add(1, std::memory_order_relaxed);
@@ -33410,6 +33469,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                                                     return (e && *e) ? std::atof(e) : 1.0; }();
         const double emul_margin = (valuearm::t_arm.ladder_emul_margin > 0.0)
                                  ? valuearm::t_arm.ladder_emul_margin : s_emul_margin_env;
+        // Depths 1..hfirst always play the heuristic: their EXACT cost feeds the replayed gate (the
+        // reconstruction error at d1 is squared into the d3 estimate), and where the ladder's growth
+        // is steep (Melira: d1 is ~4% of d2) their warm-up rollouts cost next to nothing.
+        static const int s_emul_hfirst_env = []{ const char* e = std::getenv("MTG_LADDER_EMUL_HFIRST");
+                                                 return (e && *e) ? std::atoi(e) : 0; }();
+        const int emul_hfirst = (valuearm::t_arm.ladder_emul_hfirst >= 0)
+                              ? valuearm::t_arm.ladder_emul_hfirst : s_emul_hfirst_env;
         auto predict_next_fits = [&](int k) -> bool
         {
             if (k + 1 > depth) { return false; }
@@ -33421,7 +33487,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         };
         auto commit_pass = [&](int k, const SearchLine& att, bool heuristic, long long cost, long long leaves)
         {
-            if (heuristic) { heur_mode = true; ran_h[k] = true; learn_R(k, cost); ch[k] = static_cast<double>(cost); }
+            if (heuristic) { heur_mode = true; ran_h[k] = true; learn_R(k, cost, leaves); ch[k] = static_cast<double>(cost); }
             else           { cv[k] = cost; lv[k] = leaves; ch[k] = static_cast<double>(cost) + R_at(k) * static_cast<double>(leaves); }
             spent_h += ch[k]; spent_real += static_cast<double>(cost);
             lines[k] = att;
@@ -33433,10 +33499,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         for (int k = 1; k <= depth; ++k)
         {
             if (k >= 2 && !gate_fits(k)) { break; }          // the heuristic ladder stops before pass k
-            const bool heuristic = heur_mode || !predict_next_fits(k);
+            const bool commit_call = heur_mode || !predict_next_fits(k);   // "this is the committing pass"
+            const bool forced      = (k <= emul_hfirst);                   // heuristic warm-up by policy
+            const bool heuristic   = commit_call || forced;
             SearchLine att; long long cost = 0, leaves = 0;
             if (!run_pass(k, heuristic, att, cost, leaves, &line_cache)) { break; }   // ladder would commit k-1
             commit_pass(k, att, heuristic, cost, leaves);
+            if (!commit_call) { heur_mode = false; }         // a forced warm-up does not end the value warm-ups
             // CALIBRATION: this thread has too few R samples at depth k -- also play the heuristic here
             // (fresh memo, same keys) so R(k) is measured, and keep the heuristic's line and EXACT cost.
             if (!heuristic && k < 16 && g_emul_Rn[k] < kEmulCalibN)
@@ -33447,7 +33516,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 if (run_pass(k, true, hatt, hcost, hleaves, &calib_cache))
                 {
                     spent_h -= ch[k]; spent_real += static_cast<double>(hcost);
-                    ran_h[k] = true; learn_R(k, hcost); ch[k] = static_cast<double>(hcost); spent_h += ch[k];
+                    ran_h[k] = true; learn_R(k, hcost, hleaves); ch[k] = static_cast<double>(hcost); spent_h += ch[k];
                     lines[k] = hatt; line = hatt;
                 }
             }
@@ -33467,7 +33536,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (run_pass(k, true, att, cost, leaves, &fresh_cache))
             {
                 spent_h -= ch[k]; spent_real += static_cast<double>(cost);
-                ran_h[k] = true; learn_R(k, cost); ch[k] = static_cast<double>(cost); spent_h += ch[k];
+                ran_h[k] = true; learn_R(k, cost, leaves); ch[k] = static_cast<double>(cost); spent_h += ch[k];
                 lines[k] = att;
                 line = att; committed_depth = k; heur_mode = true;
                 // With the EXACT cost the heuristic ladder might still have admitted k+1: replay onward.
@@ -33492,9 +33561,18 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         {
             const int hd = (committed_depth >= 0 && committed_depth < 16) ? committed_depth : 15;
             g_emul_commit_hist[hd].fetch_add(1, std::memory_order_relaxed);
+            if (s_rollout_stats)
+            {
+                const long long commit = (committed_depth >= 1 && committed_depth < 17 && ran_h[committed_depth]) ? hc[committed_depth] : 0;
+                g_emul_cd_n[hd].fetch_add(1, std::memory_order_relaxed);
+                g_emul_cd_commit_units[hd].fetch_add(commit, std::memory_order_relaxed);
+                g_emul_cd_v_units[hd].fetch_add(dec_v_units, std::memory_order_relaxed);
+                g_emul_cd_hother_units[hd].fetch_add(dec_h_units - commit, std::memory_order_relaxed);
+            }
         }
     }
 
+    long long lad_sum_units = 0, lad_last_units = 0;   // accounting: warm-up vs committing pass
     for (int pass_depth = (depth >= 1 ? 1 : depth); !emul_done && pass_depth <= depth; ++pass_depth)
     {
         // Cheap leaf for every pass but the one that commits.
@@ -33595,6 +33673,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // K-predictor: record the PROBE's leaf count at this depth (leaf-independent structure the escalation
         // reuses to predict its own affordable depth). Only while the probe records; index guarded.
         long long cost = (budget ? budget->Used() : 0) - used_before;
+        lad_sum_units += cost; lad_last_units = cost;
         if (g_probe_recording && pass_depth >= 0 && pass_depth < 16)
         {
             g_probe_leaves[pass_depth] = g_fs_leaf_evals - leaves_before;
@@ -33642,6 +33721,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // order line). A win turn BEYOND the horizon is a greedy-tail estimate, so we
         // keep deepening to verify or beat it (until the start gate / `depth` stops).
         if (line.win_turn <= state.turn_number + pass_depth - 1) { break; }
+    }
+    if (s_rollout_stats && !emul_done && depth >= 1 && committed_depth >= 1 && lad_sum_units > 0)
+    {
+        const int hd = committed_depth < 16 ? committed_depth : 15;
+        g_lad_commit_n[hd].fetch_add(1, std::memory_order_relaxed);
+        g_lad_commit_units[hd].fetch_add(lad_last_units, std::memory_order_relaxed);
+        g_lad_warm_units[hd].fetch_add(lad_sum_units - lad_last_units, std::memory_order_relaxed);
     }
     if (out_committed_depth != nullptr) { *out_committed_depth = committed_depth; }
 

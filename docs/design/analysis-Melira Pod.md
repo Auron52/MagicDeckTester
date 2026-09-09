@@ -2296,3 +2296,171 @@ significant) at 1.07-1.35x cost = the permissive gate committing deeper. Margin 
 **Adoption caveat to resolve before any ship:** R is learned per THREAD, so committed depths depend
 on the game->thread schedule (the minotaur d5 flake mechanism). For shipping, R(k) must be a
 per-deck constant in the profile (measured offline, deterministic) or re-calibrated per game.
+
+### 2026-09-09b — margin sweep read, then the accounting that closes the question
+
+**Margin sweep (fixed binary; 8 seeds x 1000 games per cell; vs the heuristic-ladder arms of the
+previous batch, so cost is contended wall-ms across batches — indicative only):**
+
+| cell | arm | d_avg vs heuristic | same-score games | ms / heuristic |
+|---|---|---|---|---|
+| Fluctuator d5/b20 | margin 1.0 / 0.5 / 0.25 | -0.001 / -0.001 / -0.000 | 99.3% | 1.04 / 1.05 / 0.98 |
+| Fluctuator d3/b10 | margin 1.0 / 0.5 | **-0.014 / -0.014** (better) | 98.1% | **1.31 / 1.28** |
+| Melira d5/b20 | margin 1.0 / 0.5 / 0.25 | -0.002 / -0.002 / +0.000 | 99.0-99.2% | 1.00 / 0.99 / 0.93 |
+| Melira d3/b10 | margin 1.0 / 0.5 | -0.005 / -0.003 | 98.3% | 1.04 / 1.01 |
+
+Quality is the heuristic ladder's everywhere but Fluctuator d3/b10, where the emulated ladder commits
+DEEPER (better play at 1.3x) — the replayed gate is not the heuristic's gate there. Cost is neutral.
+Not a win. So: exact accounting of WHERE a warm-up saving could come from, `MTG_ROLLOUT_STATS`
+now prints per-ladder units keyed by committed depth (`heuristic-ladder by committed depth`,
+`emulated-ladder by committed depth`; 200 games, seed 700000, `logs/melira_vl_ab/acct/`).
+
+**1. The warm-ups are nearly free at bounded budgets — the ceiling is tiny.** Units of the passes
+BEFORE the committing one, as a share of the whole ladder (the most the design can save):
+
+| deck | d5/b20 | d3/b10 | d3/b3 (mulligan gen) |
+|---|---|---|---|
+| Melira | **5.5%** | 5.0% | 4.4% |
+| Fluctuator | 15.0% | 13.8% | 4.4% |
+
+Per decision on Melira d5/b20: a d2 commit spends 350 warm / 9155 commit; d3 714 / 10257; d4
+1643 / 22821. The d1->d2 growth is ~26x, not the gate's assumed 6x — the shallow passes are a
+rounding error next to the committing enumeration. On Fluctuator the whole 15% is the d1 pass
+(d2 commit: 1070 warm / 6733 commit), which is the one pass the design cannot predict (nothing to
+extrapolate from). The 4.07x "warm-up share" that motivated this is real only UNBOUNDED, where
+every pass d1..d5 runs to completion — and there `MTG_LADDER_VALUE_LEAF` (2026-08-05) already
+delivers byte-identical lines at 1.2-4.1x (table above); the matrix uses it.
+
+**2. Where the emulated ladder's cost actually goes (Melira d5/b20, 200 games):** heuristic ladder
+22.19M units; emulated 24.92M (1.12x): value passes 2.72M of which **2.01M wasted** (739 of 1860
+decisions mispredict the committing depth), committing passes 21.33M vs 20.42M — the emulated
+ladder commits d3 on 687 decisions vs 576 (d2 860 vs 972), and the decisions it moves deeper are
+exactly the expensive ones the heuristic gate had rejected. A value pass at d2 costs 1917 units per
+decision against 9155 for the heuristic pass — 21%, not "free": enumeration units dominate the pass.
+Forcing d1 onto the heuristic (`ladder_emul_hfirst=1`, `MTG_LADDER_EMUL_HFIRST`) so the d2 gate is
+exact: Fluctuator reproduces the heuristic ladder's play EXACTLY (digest 646668908e794918, both)
+at 0.998x — because it leaves nothing to warm up; Melira gets WORSE (27.28M, 1.23x): the d3 gate is
+still replayed on a reconstructed d2.
+
+**3. Why the replay cannot be made exact — the premise was wrong.** The design assumes the tree of
+a pass is the same under both leaves, so `heuristic cost = value cost + R x leaves`. Measured on the
+same-depth pairs (calibration + fallback re-runs, Melira d5/b20):
+
+| depth | pairs | heuristic leaves / value leaves | pairs whose leaf count differs |
+|---|---|---|---|
+| d1 | 154 | 1.00 | 0 |
+| d2 | 556 | 0.97 | 104 (19%) |
+| d3 | 289 | **0.81** | 213 (74%) |
+| d4 | 56 | **0.72** | 38 (68%) |
+
+Leaf values drive the search's cutoffs (verified-win exits, best-so-far bounds), so from d2 on a
+value pass walks a DIFFERENT, larger tree than the heuristic pass at the same depth. No R and no
+growth model recovers the heuristic pass's cost from it; the depth mismatch (and the 1.3x on
+Fluctuator d3/b10) is structural.
+
+**Verdict: the emulated-gate ladder cannot be a cost win at bounded budgets on either deck** — the
+ceiling is 4-15% of ladder units, the value passes cost 21% of a heuristic pass, and the gate replay
+is inexact by construction. It stays in the tree as an opt-in A/B lever (default OFF, byte-identical
+off), documented here so it is not re-derived. What DOES pay on these decks: pure heuristic ladder at
+play, `MTG_LADDER_VALUE_LEAF` unbounded (1.2-4.1x, exact).
+
+Same-batch UNITS sweep (`MTG_DUMP_UNITS=1`, `logs/melira_vl_ab/ab9.out` + `wins9/*.units`): STOPPED
+by me at 50/160 jobs (my own probe of a lever already closed above; the user redirected the box to
+adoption + mulligan). The one complete cell, Fluctuator d5/b20, 8 seeds x 1000, deterministic units
+vs the heuristic ladder in the SAME batch:
+
+| arm | d_avg | units | same-score | identical digests |
+|---|---|---|---|---|
+| emulated, margin 1.0 | -0.002 | 1.116x | 99.2% | 0/8 |
+| emulated, margin 0.25 | -0.000 | 0.982x | 99.3% | 0/8 |
+| heuristic-first + margin 1.0 / 0.25 | 0.000 | **1.000x** | 100% | 7/8, 8/8 |
+
+The best bounded case anywhere is 1.8% at 99.3% play agreement. Closed.
+
+### 2026-09-09c — user redirect: faster settings, ADOPT the value leaf in some fashion, then mulligan settings
+
+User: *"We should use faster run settings for Melira. I'm trying to get the value-leaf adopted in some
+fashion and then move on to calculating the best mulligan settings."*
+
+**Adopted: the STAGED model as the live sidecar, presence-only** (`decks/Melira Pod/Melira Pod.value.json`
+= `logs/eval/Melira Pod.value.STAGED.json`, provenance 98170986, no `value_play` block). Of the forms
+measured, it is the only shippable one: the emulated ladder is neutral and schedule-dependent (learned
+R), `esc_single` is a budget wash. Its cost is a d5/b20 effect: at the suite's d3/b10 the sidecar
+measured -0.0020 t at **1.04x** (2026-09-08d), at d5/b20 -0.0033..-0.0055 t at 1.48x. Consequences:
+melira GT moves in every tier that searches (smoke d3/d5, regression d3/d5, overnight d3/d5; the d0
+greedy cases are untouched) — re-run + accept queued behind phase F; phase F can now run and write
+the generation contract (`mull_gen_depth`/`mull_gen_budget_ms`, `expected_buckets`).
+
+"Faster run settings" taken as: derive the mulligan-generation setting by measurement (phase F picks
+the CHEAPEST candidate at rho >= 0.99 — by-hand probe without the sidecar: d2/b3 0.21x, d3/b3 0.24x,
+d1/b3 0.04x at rho 0.981), measure Melira A/Bs at d3/b10 from here on, and leave the suite's melira
+cases as they are (counts already trimmed to 50/25 in smoke). If the intent was to change the suite's
+melira configs (drop the d5/b20 case, or b10 there), that is a GT-moving user call — raised, not
+taken.
+
+### 2026-09-09d — phase F under the adopted sidecar, and the mulligan settings arithmetic
+
+**Phase F (`mullgen_finalize.py --write`, 48 openers x R24 vs the d5/b20 hybrid reference):**
+
+| candidate | rho | units/rollout | cost vs play |
+|---|---|---|---|
+| d1 b3 | 0.9550 | 3,316 | 0.029x |
+| d2 b3 | 0.9819 | 19,909 | 0.176x |
+| **d3 b3** | **0.9907** | **30,078** | **0.266x** (PICK, cheapest >= 0.99) |
+| d3 b20 | 0.9987 | 64,551 | 0.570x |
+| d5 b20 (play) | 1 | 113,260 | 1x |
+
+Written: `value_play.mull_gen_depth=3, mull_gen_budget_ms=3, expected_buckets=28` (K confirmed by
+discovery at play settings; the user is to confirm the number — that is the guard's contract).
+
+**The sidecar makes each generation rollout ~2.3x MORE expensive, not less.** Same script without
+the sidecar (2026-09-08 by-hand probe): d3/b3 13,243 units/rollout at rho 0.992, d2/b3 11,682 at
+0.991, d1/b3 2,420 at 0.981; the d5/b20 reference itself is 55,803 vs 113,260 with the hybrid. A
+profile fitted to the SHIPPED play must be labelled under the shipped play, so with the sidecar
+adopted the generation runs at 30k units/rollout; generating without it (2.6x cheaper at d2/b3)
+would label hands under a policy the deck no longer plays. Recorded so the choice is visible.
+
+**Hand space and projections.** K=28 (14 one-ofs) gives 3,669,096 distinct hands (the counting
+below reproduces the generator's number exactly). The lever is the per-deck bucket ruling
+`<stem>.buckets.json` (`BucketPolicy.h`: human-written `merge`/`keep_apart` groups with a `why`;
+no tool writes it). Three tiers, cumulative:
+
+* **T1 — functional identities for a keep decision** (INSTALLED as `Melira Pod.buckets.json`, PROPOSED,
+  confirm before the full gen): green-producing lands as one class {Llanowar Wastes, Razorverge
+  Thicket, Blooming Marsh, Branchloft Pathway, Darkbore Pathway, Forest}; W/B-only lands {Caves of
+  Koilos, Orzhov Basilica}; free sac outlets {Carrion Feeder, Bloodthrone Vampire}; persist enablers
+  {Melira, Vizier of Remedies}; one-drop dorks {Ignoble Hierarch, Birds of Paradise}. K=19.
+* **T2** — + the four-mana pod pieces {Ravenous Chupacabra, Ranger of Eos, Felidar Guardian, Celes}
+  as one "MV4 chain piece". K=16.
+* **T3** — + MV3 pieces {Severance Priest, Recruiter of the Guard, Reclamation Sage} and MV2 pieces
+  {Voice of Resurgence, Scavenging Ooze}. K=13.
+
+Projected on this box (32 threads), rollout rate scaled from the 2026-09-08 scout (~18-20 keep
+rollouts/s at 55.8k units) by units/rollout — ESTIMATES until the T1 scout prints its own:
+
+| ruling | K | hands | scout (1 rollout/cell) | full gen (~36 rollouts/hand, complete R40) |
+|---|---|---|---|---|
+| none | 28 | 3,669,096 | ~58 h | **~44 days** |
+| T1 | 19 | 289,560 | ~4.6 h | ~3.4 days |
+| T2 | 16 | 130,977 | ~2.1 h | ~1.6 days |
+| T3 | 13 | 62,352 | ~1.0 h | ~0.7 days |
+
+(Without the sidecar at d2/b3 every row is ~2.6x cheaper; at d1/b3 ~12x, at rho 0.955.) On the
+user's 12-thread machine multiply by ~3. The T1 `recommend` scout is queued behind the GT chain,
+alone on the box, to replace the estimate with a measured projection and the slowest cells.
+
+**Smoke under the adopted sidecar (binary with the emulated lever OFF):** 77/80 configs unchanged
+(byte-identical off, as required), melira d3 4.88 -> 4.84 (2 faster), melira d5 4.96 = 4.96 (play
+differs, score same), **melira2hg d3 5.04 -> 5.12 (2 slower of 25)** — the 2HG case runs the same
+folder, so it picks up a model fitted to 1v1 goldfish at 20 life. Sized with a 4 x 1000 paired 2HG
+A/B (sidecar vs none, d3/b10, `logs/melira_2hg/`): sidecar +0.0053 t (226 games better / 199 worse
+of 4000, se ~0.005, 1 of 4 seeds better) — noise-level, no harness change.
+
+**Regression tier:** 104/108 unchanged; the four melira cases moved d3 s2002 4.800 -> 4.813, d3 s3003
+4.787 -> 4.827, d5 s2002 4.750 -> 4.775, d5 s3003 4.750 -> 4.725 (8 slower / 7 faster over 230
+games, incl. s2002 gi22 T7 -> unwon at both depths). Small-sample; the 8 x 1000 phase-E / paradigm
+reads (-0.002 t d3, -0.0033..-0.0055 t d5) are the evidence, and adoption is the user's direction.
+**Overnight tier (melira per-deck, 1400 searched games):** d3 s4004..s7007 4.865 -> 4.875, 4.805 ->
+4.815, 4.875 -> 4.840, 4.785 -> 4.750; d5 4.840 -> 4.807, 4.807 -> 4.780, 4.860 -> 4.813, 4.773 =
+4.773 — 80 games faster / 48 slower, every d5 seed better or equal. All three tiers ACCEPTED under the
+adopted sidecar (GT logs 456/456 consistent).

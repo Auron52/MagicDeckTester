@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 7ffe7dbd  date 2026-09-09
+# Regression ground truth -- commit d37ab017  date 2026-09-09
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -59,8 +59,8 @@ critter_smoke_d0_s1001=4.9470/35f2bf9336169479
 critter_smoke_d3_s1001=4.6667/8ee0a82cda9e6599
 critter_smoke_d5_s1001=4.6800/3b1bb34a2248ac51
 melira_smoke_d0_s1001=6.4380/f6a846b11dadd30d
-melira_smoke_d3_s1001=4.8800/831846fb9b4061ee
-melira_smoke_d5_s1001=4.9600/a9c0656439be7fe4
+melira_smoke_d3_s1001=4.8400/20a9af735acc2574
+melira_smoke_d5_s1001=4.9600/9b52c061a0b778ca
 hinata2hg_smoke_d3_s1001=5.6667/a6d272170a895fe5
 antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
 minotaur2hg_smoke_d3_s1001=5.3500/d6096734765b010a
@@ -80,7 +80,7 @@ kitty2hg_smoke_d3_s1001=4.9400/436f255dcee200b0
 dragons2hg_smoke_d3_s1001=6.3000/43872dc33fccb094
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
 critter2hg_smoke_d3_s1001=5.2000/4e1d2b89c377cd77
-melira2hg_smoke_d3_s1001=5.0400/440bba3ad8b65659
+melira2hg_smoke_d3_s1001=5.1200/87491d70572fd6e1
 fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
 fluctuator_smoke_d3_s1001=3.6733/99a13d053719f360
 fluctuator_smoke_d5_s1001=3.6400/c820ea4107b14c39
@@ -177,10 +177,10 @@ critter_regression_d3_s3003=4.7400/bf23343e1526354d
 critter_regression_d5_s2002=4.7520/f7b51e2fec5264d0
 critter_regression_d5_s3003=4.7600/ec6462efa8ef5304
 melira_regression_d0_s2002=6.4080/45c4a7ae0aaa2e79
-melira_regression_d3_s2002=4.8000/b1b01c449aca59ea
-melira_regression_d3_s3003=4.7867/eb5343d2edfec330
-melira_regression_d5_s2002=4.7500/6872e14c158b5972
-melira_regression_d5_s3003=4.7500/989607ca734902e5
+melira_regression_d3_s2002=4.8133/d000c20861453a7a
+melira_regression_d3_s3003=4.8267/1170ab3ccc88b61d
+melira_regression_d5_s2002=4.7750/8ec32cb7fa54888c
+melira_regression_d5_s3003=4.7250/6d8f53cdd32605f0
 hinata2hg_regression_d3_s2002=5.5700/bdfbe1dbf3924799
 hinata2hg_regression_d5_s2002=5.5200/8e4550595e890cae
 antilife2hg_regression_d3_s2002=4.3133/88cdae0a53b9a7f6
@@ -416,14 +416,14 @@ melira_overnight_d0_s4004=6.4005/378146e34a0357dc
 melira_overnight_d0_s6006=6.4395/7f731ac698c12cc3
 melira_overnight_d0_s8008=6.4035/016a7157a050256c
 melira_overnight_d0_s10010=6.3790/95683dfc141d0938
-melira_overnight_d3_s4004=4.8650/bbd3cda60cf8329d
-melira_overnight_d3_s5005=4.8050/f2b8b1b9d2340aa7
-melira_overnight_d3_s6006=4.8750/b3c65b12c7a5226c
-melira_overnight_d3_s7007=4.7850/455ea9e46f90ca3e
-melira_overnight_d5_s4004=4.8400/655078a33f5f88c8
-melira_overnight_d5_s5005=4.8067/0a6e91540474e95e
-melira_overnight_d5_s6006=4.8600/f735edd61382c888
-melira_overnight_d5_s7007=4.7733/042726b1080230f3
+melira_overnight_d3_s4004=4.8750/dc34f0812488e319
+melira_overnight_d3_s5005=4.8150/fce0e14fbd5f0e6e
+melira_overnight_d3_s6006=4.8400/338b49a9b2309f03
+melira_overnight_d3_s7007=4.7500/8590c0274d63b93f
+melira_overnight_d5_s4004=4.8067/bc84f6d4eddb85c5
+melira_overnight_d5_s5005=4.7800/f8041223721d8354
+melira_overnight_d5_s6006=4.8133/7199f3dfd0d9dee9
+melira_overnight_d5_s7007=4.7733/9773f262731c4f54
 hinata2hg_overnight_d5_s4004=5.5100/e802e803371b8bcd
 hinata2hg_overnight_d5_s5005=5.3800/29a0c4ac53837808
 hinata2hg_overnight_d5_s6006=5.7700/fd92c315180059e4

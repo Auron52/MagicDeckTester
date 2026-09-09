@@ -46,6 +46,9 @@ struct Arm
     // 2026-09-09. Shape for an A/B: value_model=false + value_profile=<model> + ladder_emulated=true.
     int         ladder_emulated   = -1;     // -1 unset | 0 off | 1 on     (MTG_LADDER_EMULATED)
     double      ladder_emul_margin = -1.0;  // <=0 unset                   (MTG_LADDER_EMUL_MARGIN; <1 biases borderline passes to the heuristic)
+    // Depths 1..N always play the heuristic (exact pass costs into the replayed gate, at the price of
+    // their warm-up rollouts -- cheap where the ladder's growth is steep). -1 unset => env (default 0).
+    int         ladder_emul_hfirst = -1;    // -1 unset | >=0 explicit     (MTG_LADDER_EMUL_HFIRST)
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).
     // "none"/"off"/"0" => explicitly NO sidecar, which is how an H-arm job asks for the pure
