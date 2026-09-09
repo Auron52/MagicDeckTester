@@ -4036,8 +4036,13 @@ Shipped, all byte-identical for budgeted play (each commit's log carries the mea
 * 4e9ff45a: ./build.sh profile compiled at -O0 (CMakePresets cache seeding) -- every prior
   Profile-based attribution suspect; FORCEd.
 * 9e6b0cdb: the WINLESS-TURN CERTIFICATE + state closure (user doctrine: bucket infinite-mana
-  turns go-off/stuck by provable measurement; stuck turns close over end-turn STATES). 1.2-2.6x
-  on label games at 42-85% fire, labels identical, unbounded-search-only gating.
+  turns go-off/stuck by provable measurement; stuck turns close over end-turn STATES); 02766400
+  the go-off SEED + execution AUDIT; 45585e75 round-5 cast seeds + the SEQUENCING-SOUNDNESS FIX.
+  CORRECTED post-fix numbers (the pre-fix bound over-pruned, inflating early reads): cert stack
+  1.08-2.16x on label games, monster PAIRED 1.21x; labels byte-identical; audit 273k certified
+  nodes x both seed families, 0 violations POST-fix. MTG_WINLESS_AUDIT=1 is the standing
+  pre-generation gate -- it is the only check that caught the real soundness defect (casts
+  charged as simultaneous, missing the mid-sequence ETB-untap refund).
 
 In flight: round 4 -- seed horizon-edge nodes by EXECUTING the canonical go-off line once
 (observed win = exact this-turn label; feeds the first-win/B&B cutoff), aimed at the ~95% of
