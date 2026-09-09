@@ -5868,11 +5868,46 @@ static void FinalizeFoldTags(const GameState& state, std::vector<Action>& action
         if (BfCensusOn()) { bfcensus::g_fold_tagged.fetch_add(1, std::memory_order_relaxed); }
     }
 
-    // CONDITION 2 -- ONE tagged action per SOURCE, counted ACROSS CLASSES. This is the condition
-    // that keeps mixed arrangements reachable: a source appearing in two classes is a source with
-    // a real choice between them, and the per-class prefix rule cannot express "copy 1 takes this
-    // class, copy 2 takes that one". Invalidate every class such a source touches.
+    // CONDITION 2 -- a class member's SOURCE must offer nothing but that one action. Substituting
+    // ord k for ord 0 is only faithful if ord 0's source is otherwise free; if that source carries
+    // ANY other action, the twin can collide with an action the selection already holds, and the
+    // rejected arrangement has no twin at all.
+    //
+    // MEASURED, and it took a full trace to see: knights_regression_d0_s2002 gi497 lost a turn-4
+    // kill. The selection was {Marshal of Zhalfir cast from slot 1, Marshal of Zhalfir VIALED from
+    // slot 0} -- two Marshals, exact lethal. Its canonical twin is {cast from slot 0, vial from
+    // slot 0}, which is the SAME HAND SLOT TWICE and therefore never enumerated. An Aether Vial
+    // deploy is a second action on a hand slot and is not a CastFromHand, so counting only TAGGED
+    // actions per source (the first form of this condition) could not see it.
+    //
+    // The count is over EVERY action sharing the source key, tagged or not -- that key is what
+    // PlanGroupKey buckets on, and same-group actions are mutually exclusive by construction.
+    static thread_local std::vector<int> src_all, src_cnt;
+    src_all.clear(); src_cnt.clear();
+    for (const Action& a : actions)
+    {
+        // Mirrors PlanGroupKey: anything carrying a hand_index occupies that HAND SLOT (a Vial
+        // deploy as much as a cast); otherwise the source is the permanent.
+        if (a.hand_index < 0 && a.sac_source_id == 0) { continue; }   // no source to collide on
+        const int k = (a.hand_index >= 0) ? a.hand_index : a.sac_source_id;
+        int ci = -1;
+        for (int c = 0; c < static_cast<int>(src_all.size()); ++c)
+        { if (src_all[c] == k) { ci = c; break; } }
+        if (ci < 0) { src_all.push_back(k); src_cnt.push_back(1); }
+        else        { ++src_cnt[ci]; }
+    }
     const int t = static_cast<int>(t_idx.size());
+    for (int p = 0; p < t; ++p)
+    {
+        for (int c = 0; c < static_cast<int>(src_all.size()); ++c)
+        {
+            if (src_all[c] != t_src[p] || src_cnt[c] <= 1) { continue; }
+            if (BfCensusOn() && classes[t_class[p]].ok)
+            { bfcensus::g_fold_drop_src.fetch_add(1, std::memory_order_relaxed); }
+            classes[t_class[p]].ok = false;
+            break;
+        }
+    }
     for (int p = 0; p < t; ++p)
     {
         for (int q = p + 1; q < t; ++q)
@@ -5942,8 +5977,31 @@ static int ActivationEquivTag(const GameState& state, const Permanent& src, cons
     return t == 0 ? 1 : t;   // never collide with "do not fold"
 }
 
+// WHICH CALLER BUILT THIS SELECTION. The canonical-prefix rule is a rule about a POWERSET: it drops
+// a non-canonical arrangement because an equivalent twin is enumerated ALONGSIDE it. That premise
+// holds for the odometer and for nothing else. The greedy also feeds `consider` a handful of
+// HAND-CONSTRUCTED lines -- the lethal combo, the Dragonstorm/Apex go-off, the persist loop, the
+// attack-only subset -- each a single specific selection with no twin generated anywhere. Applying
+// the prefix rule to those DELETES the line outright.
+//
+// MEASURED, and it is why this exists: knights_regression_d0_s2002 gi497 lost a turn-4 kill
+// ("Marshal of Zhalfir; Marshal of Zhalfir" for exact lethal) because the constructed lethal line
+// happened to name a non-canonical copy. Six rejects in the entire game, five of them harmless, one
+// fatal -- so the symptom was a single changed game and the cause was invisible in the aggregate.
+// The same hole was present in the ALREADY-SHIPPED activation fold; no suite deck happened to hit
+// it there.
+//
+// Consume-once semantics keep nesting honest: the walker sets the flag immediately before emit, and
+// the receiving consider()/eval_and_push() TAKES it at entry (clearing it), so a constructed line
+// evaluated inside a nested rollout sees false rather than inheriting its caller's true.
+namespace foldsel
+{
+inline thread_local bool g_from_odometer = false;
+inline bool Take() { const bool b = g_from_odometer; g_from_odometer = false; return b; }
+}   // namespace foldsel
+
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
-                                        int site = 0)
+                                        int site = 0, bool from_odometer = false)
 {
     for (size_t a = 0; a < sel.size(); ++a)
     {
@@ -6024,7 +6082,7 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         // axis fully expressible: k selected actions still mean k activations, so nothing changes
         // in the apply and no distinct line is lost. Inert when the tag is 0, which is every action
         // on every deck until a source proves itself plain.
-        if (cands[sel[a]].equiv_tag != 0 && cands[sel[a]].equiv_ord > 0)
+        if (from_odometer && cands[sel[a]].equiv_tag != 0 && cands[sel[a]].equiv_ord > 0)
         {
             if (BfCensusOn()) { bfcensus::g_fold_guard_seen.fetch_add(1, std::memory_order_relaxed); }
             const int tag  = cands[sel[a]].equiv_tag;
@@ -6037,6 +6095,33 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             }
             if (!have_pred)
             {
+                static const bool s_ftrace = EnvOn("MTG_FOLD_TRACE");
+                if (s_ftrace)
+                {
+                    std::string so, members;
+                    int csz = 0;
+                    for (size_t q = 0; q < cands.size(); ++q)
+                    {
+                        if (cands[q].equiv_tag != tag) { continue; }
+                        ++csz;
+                        members += cands[q].card_name.str() + "#" + std::to_string(q)
+                                 + "/hi" + std::to_string(cands[q].hand_index)
+                                 + "/o" + std::to_string(cands[q].equiv_ord) + " ";
+                    }
+                    std::string selnames;
+                    for (size_t q = 0; q < sel.size(); ++q)
+                    { selnames += cands[sel[q]].card_name.str() + "#" + std::to_string(sel[q]) + " "; }
+                    for (size_t q = 0; q < sel.size(); ++q)
+                    {
+                        if (cands[sel[q]].equiv_tag != tag) { continue; }
+                        so += std::to_string(cands[sel[q]].equiv_ord) + ",";
+                    }
+                    std::cerr << "[fold-reject] " << cands[sel[a]].card_name.str()
+                              << " ord=" << cands[sel[a]].equiv_ord
+                              << " class_size=" << csz
+                              << " selected_ords=[" << so << "] sel=[" << selnames
+                              << "] class=[" << members << "]\n";
+                }
                 if (BfCensusOn())
                 {
                     bfcensus::g_fold_guard_reject.fetch_add(1, std::memory_order_relaxed);
@@ -6733,9 +6818,23 @@ static inline bool NonPrefixAccelViolated(const std::vector<int>& accel_order, c
 // `entered_this_turn` go in the SIGNATURE rather than the refusal, so a freshly-cast copy simply
 // pairs with another freshly-cast copy instead of blocking the collapse.
 //
-// Hand CASTS are not collapsed here even though two copies of one card in hand are equally fungible:
-// casting from a different hand slot leaves a different hand ORDER, which a later discard or reveal
-// can read. That case needs its own argument, not this one.
+// Hand CASTS are not collapsed HERE, but they now have their own collapse -- MTG_FOLD_HAND_CASTS,
+// the canonical-prefix fold in FinalizeFoldTags -- and its argument is the one this comment asked
+// for. Recorded here because the objection this comment raised is real and was checked rather than
+// waved away: "casting from a different hand slot leaves a different hand ORDER, which a later
+// discard or reveal can read."
+//
+// What the check found. Removing the copy at slot i rather than slot j leaves the same hand
+// MULTISET but a different SEQUENCE, so the objection stands for any rule that reads a hand
+// POSITION blind to what is in it. The engine has one such read --
+// AIEngine::ChooseDiscard's `if (heur < 0) { return &ap.hand[0]; }` -- and it is UNREACHABLE:
+// CleanupDiscardRanking returns early only on an empty hand, so a hand at the 8-card limit always
+// yields at least one candidate. Every other discard/reveal path ranks by CONTENT (mana value,
+// required-piece protection, spare-copy banding) and breaks ties by index, and a tie between two
+// identical copies therefore names a card of identical CONTENT either way. What can still differ
+// is the surviving copy's m_number -- which is exactly what "interchangeable copies" means, and is
+// why the fold moves play digests while leaving averages alone (10 of 80 smoke keys, every average
+// identical; 188 suite configs, slower=0 faster=0).
 //
 // NOT byte-identical, and gated accordingly (MTG_EQUIP_COPY_COLLAPSE): the surviving representative
 // can put a different PHYSICAL copy on the host than today's tie-break picks, so card numbers -- and
@@ -16522,7 +16621,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                         { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
                         for (int b = 0; b < num_ind; ++b)
                         { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
-                        if (!sel.empty() && extra_ok(sel)) { emit(sel); }
+                        if (!sel.empty() && extra_ok(sel)) { foldsel::g_from_odometer = true; emit(sel); }
                     }
                 }
                 int t = 0;
@@ -16703,7 +16802,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
         for (int b = 0; b < num_ind; ++b)
         { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
-        if (!sel.empty() && extra_ok(sel)) { emit(sel); }
+        if (!sel.empty() && extra_ok(sel)) { foldsel::g_from_odometer = true; emit(sel); }
     }
 }
 
@@ -17483,6 +17582,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // ~6% of a Melira game). Temporaries at the short-circuit sites are named locals now.
     auto consider = [&](std::vector<int>& sel)
     {
+        // Provenance for the fold's canonical-prefix rule, TAKEN (and cleared) at entry so a
+        // constructed line evaluated inside a nested rollout cannot inherit this frame's value.
+        const bool fold_from_odometer = foldsel::Take();
         // Greedy-walk budget charge (MTG_SOLVE_CHARGE; see GreedyChargeGuard above the function):
         // one unit per subset visit, walk stops (keeping best-so-far) when the rollout budget is
         // spent. g_greedy_charge_budget is null unless the flag is on AND a budgeted rollout host
@@ -17520,7 +17622,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             && SubsetWastesAccelerant(cands, sel, storm_in_hand)) { return; }
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
-        if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
+        if (SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer)) { return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
         if (SubsetHasStrandedEquip(state, cands, sel)) { return; }
@@ -18795,7 +18897,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                            + ManaGateTriangular(mgy + pgy))
                     : (mcost + pcost <= mana_bound);
                 if (!ok) { continue; }
-                if (vial_ok(sel)) { consider(sel); }
+                if (vial_ok(sel)) { foldsel::g_from_odometer = true; consider(sel); }
             }
             int g = 0;
             for (; g < num_groups; ++g)
@@ -25906,6 +26008,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     auto eval_and_push = [&](const std::vector<int>& sel)
     {
+        const bool fold_from_odometer = foldsel::Take();   // see foldsel / consider()
         // MTG_DBG_MULTI=<turn> -- see the reject dump further down. Logged at ENTRY too, because the
         // two answers are different questions: "was the subset ever considered" (here) and "which
         // gate dropped it" (there). A subset the odometer never emits shows up as silence in both,
@@ -25964,7 +26067,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             && SubsetWastesAccelerant(cands, sel, /*storm_in_hand=*/false)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
-        if (SubsetHasDuplicateSacSource(cands, sel, /*site=*/1)) { return; }
+        if (SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer)) { return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
         if (SubsetHasStrandedEquip(state, cands, sel)) { return; }

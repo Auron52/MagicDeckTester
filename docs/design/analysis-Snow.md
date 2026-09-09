@@ -650,34 +650,97 @@ would have gone unreachable in that enumeration.
 **Smoke 80/80 ALL PASS, zero churn** -- the lost arrangements never mattered to an outcome on the
 current suite, which is precisely why nothing caught this.
 
-### 2. The hand-cast fold: -16.2% of the greedy enumeration, DEFAULT OFF pending a ruling
+### 2. The hand-cast fold: -15.7% of the greedy enumeration, DEFAULT OFF pending a ruling
 
-`MTG_FOLD_HAND_CASTS=1`. Same canonical prefix, applied to duplicate cards in hand -- the census
-put `cast_from_hand` at 77.4% of candidate mass against the activation slice already folded.
+`MTG_FOLD_HAND_CASTS=1`. Same canonical prefix, applied to duplicate cards in hand -- the census put
+`cast_from_hand` at 77.4% of candidate mass against the activation slice already folded.
 
 | Snow 60 @ play, deterministic counters | fold off | fold on | delta |
 |---|---|---|---|
-| greedy subsets scored | 79,260,597 | 66,443,718 | **-16.2%** |
-| search subsets scored | 4,861,933 | 4,208,545 | **-13.4%** |
+| greedy subsets scored | 72,474,369 | 61,068,943 | **-15.7%** |
+| search subsets scored | 6,203,369 | 6,181,471 | -0.35% |
 | avg turn-to-win | 5.9833 | 5.9833 | identical |
 | play digest | 4d0ae0ea43f9ba15 | 4d0ae0ea43f9ba15 | identical |
-| `units_total` | 10,490,828 | 10,490,709 | **-0.001%** |
+| `units_total` | 11,811,112 | 11,811,070 | **-0.0004%** |
+
+Suite quality, audited per game (`audit_changed_games.py`):
+
+| | keys changed | averages moved | searched | d0 |
+|---|---|---|---|---|
+| smoke | 3 of 80 | 0 | slower=0 faster=0 play-changed=0 | slower=0 |
+| regression | 3 of 108 | 1 (fivecolour d0 5.8360 -> **5.8350**, better) | slower=0 faster=0 play-changed=0 | slower=0 **faster=1** |
+
+So: **nothing worse anywhere, one game strictly better, and the searched depths are untouched
+entirely.** The residue is 6 keys of d0 play-digest churn at identical scores. It is still default
+OFF because adopting it rebaselines ground truth, which is the deck owner's call.
 
 **`units_total` IS BLIND TO THIS CHANGE, AND THAT IS THE REUSABLE LESSON.** `la_cand` charges one
-unit per candidate scored *at a top-level search decision*; both odometers this fold actually
-shrinks -- the greedy rollout leaf, and the nested enumerations that run during scoring -- are not
-unit-counted at all. The first measurement therefore read "units identical, candidate census
-identical" while the subset guard was rejecting 456,201 extra subsets per 5 games. This is the
-MIRROR of the trap recorded for the candidate dedup (there, units *flattered* a change that added
-hashing): units can equally **understate a change to zero**. The counters
-`bf_scored greedy_subsets/search_subsets` were added to settle it deterministically -- unlike wall
-or CPU they cannot be moved by a contended box.
+unit per candidate scored *at a top-level search decision*; the greedy rollout leaf -- which is what
+this fold actually shrinks -- is not unit-counted at all. The first measurement read "units
+identical, candidate census identical" while the subset guard was rejecting 456,201 extra subsets
+per 5 games. This is the MIRROR of the trap recorded for the candidate dedup (there, units
+*flattered* a change that added hashing): units can equally **understate a change to zero**. The
+counters `bf_scored greedy_subsets/search_subsets` were added to settle it deterministically --
+unlike wall or CPU they cannot be moved by a contended box, and this box could not resolve it: three
+interleaved CPU reps gave -7.0%, +27.7%, -2.8% with a within-arm spread of ~49%.
 
-**Why it is not adopted.** It moves **10 of 80 smoke keys**, every one of them with an
-**identical average** -- picking the canonical copy reorders same-named casts inside a plan
-(`Sinew Sliver; Predatory Sliver; Sinew Sliver` becomes `Sinew Sliver; Sinew Sliver; Predatory
-Sliver`). That is pure play-digest churn with no quality change, but adopting it means rebaselining
-ground truth, and a default flip that rewrites GT is the deck owner's call.
+### 3. TWO ways the canonical prefix was unsound, both found by root-causing ONE changed game
+
+The first cut of the hand fold cost `knights_regression_d0_s2002` gi497 a turn-4 kill. Root-causing
+that single game (`explain_game.py`, then a per-reject trace) found two independent holes -- and the
+FIRST of them was already present in the SHIPPED activation fold.
+
+**(a) The prefix rule is a statement about a POWERSET, and not every caller is one.** It drops a
+non-canonical arrangement because an equivalent twin is enumerated alongside it. That premise holds
+for the odometer and for nothing else: the greedy also feeds `consider` hand-CONSTRUCTED lines --
+the lethal combo, the Dragonstorm/Apex go-off, the persist loop, the attack-only subset -- each a
+single specific selection with no twin generated anywhere. Applying the rule there deletes the line
+outright. Fixed with consume-once provenance (`foldsel::Take()`): the walker marks its emit, the
+receiving `consider`/`eval_and_push` takes and clears it, so a constructed line evaluated inside a
+nested rollout cannot inherit its caller's value.
+
+**(b) A class member's SOURCE must offer nothing but that one action -- counting UNTAGGED actions
+too.** The fatal selection was `{Marshal of Zhalfir cast from slot 1, Marshal of Zhalfir VIALED from
+slot 0}` -- two Marshals, exact lethal. Its canonical twin is `{cast from slot 0, vial from slot 0}`,
+which is **the same hand slot twice** and therefore never enumerated. An Aether Vial deploy is a
+second action on a hand slot and is not a `CastFromHand`, so the original form of the condition --
+which counted only TAGGED actions per source -- could not see it. The count now spans every action
+sharing the source key, tagged or not, because that key is what `PlanGroupKey` buckets on and
+same-group actions are mutually exclusive by construction.
+
+**The method is the transferable part.** The aggregate said "net 0.0000, one better one worse" --
+which reads like noise and would have been accepted as such. Six rejects existed in the entire
+losing game, five harmless and one fatal, so nothing short of dumping the rejected selection **with
+the names of its class members** would have shown it. The standing "root-cause every worse game" bar
+is what turned a plausible-looking wash into two real defects, one of them in already-shipped
+default-ON code.
+
+### The hand-ORDER objection, checked (it was already written down in the tree)
+
+`BuildFungibleEquipClasses` -- the pre-existing group-level fungible-copy collapse for Equipment
+(`MTG_EQUIP_COPY_COLLAPSE`, also default off, also for digest reasons) -- carried a comment
+objecting to exactly this: *"Hand CASTS are not collapsed here even though two copies of one card
+in hand are equally fungible: casting from a different hand slot leaves a different hand ORDER,
+which a later discard or reveal can read. That case needs its own argument, not this one."*
+
+The objection is real and is narrower than it reads. Removing the copy at slot i rather than slot j
+leaves the same hand MULTISET but a different SEQUENCE -- `[A,B,X,C,X,D]` becomes `[A,B,C,X,D]` or
+`[A,B,X,C,D]` -- so it bites for any rule that reads a hand POSITION *blind to what is in it*. The
+engine has exactly one such read, `AIEngine::ChooseDiscard`'s `if (heur < 0) { return &ap.hand[0]; }`,
+and **it is unreachable**: `CleanupDiscardRanking` returns early only on an empty hand, so a hand at
+the 8-card limit always produces at least one candidate. Every other discard/reveal path ranks by
+CONTENT (mana value, required-piece protection, spare-copy banding) and breaks ties by index, so a
+tie between two identical copies names a card of identical CONTENT either way.
+
+What genuinely can differ is the surviving copy's `m_number`. That is not a leak in the argument --
+it IS what "interchangeable copies" means -- but it is why the fold moves play digests: 10 of 80
+smoke keys, every average identical, and across all 188 suite configs slower=0 / faster=0. The
+comment has been updated in place rather than left contradicting the code.
+
+Two further consequences of the same m_number point, already handled: the fold is disabled under
+`HumanPlayActive()` (a saved `references/` game replays by card number, and the viewer must keep
+offering the human every copy), and `m1_hand` membership -- the order-condemnation snapshot, which
+is keyed by number -- joins the equivalence tag so a condemned copy never folds with a fresh one.
 
 ### The trap that cost the most time here
 
