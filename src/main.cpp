@@ -2925,6 +2925,13 @@ struct ClaudePlayHarness
     int         reveal_count   = 0;
     std::size_t cursor         = 0;         // next unconsumed --choices index
     int         decisions_made = 0;
+    // --interactive (the viewer's persistent-child mode): instead of exiting 70 after emitting a
+    // decision, the process blocks for the NEXT picks on stdin and continues the same game. This
+    // is what removes the viewer's quadratic step cost: the stateless protocol re-spawns and
+    // re-simulates the whole choice prefix on every step, so step N pays for re-enumerating all
+    // N-1 earlier plan fans; a persistent child pays only for its own frame. Same code path as a
+    // continuous game -- the choosers just loop back into their consume branch instead of exiting.
+    bool        interactive    = false;
     // #10: ordinal of the current main-phase decision among all main-phase decisions (the external
     // chooser is called once per main-phase decision, exactly mirroring AIEngine::m_ext_main_ordinal).
     // Emitted in the decision JSON so the viewer keys --cast-order by it. Post-incremented per call.
@@ -2989,6 +2996,31 @@ struct ClaudePlayHarness
 
     void Install(AIEngine& ai);
 
+    // --interactive: after a chooser emits its decision block, block for ONE stdin line of
+    // comma-separated picks, append them to the --choices stream, and return true -- the caller
+    // jumps back to its consume branch (the claude_retry label). Stateless mode returns false
+    // immediately, so every emission site still exits 70 exactly as before. EOF, a blank line or
+    // an unparseable token also return false: the server treats the child as dead and falls back
+    // to a full stateless respawn. The three side-channel PROMPT frames (firebreathe / jitte /
+    // storage-hold) deliberately keep their unconditional exit(70): their answers arrive as keyed
+    // args (--firebreathe "turn:count", never a --choices slot), so a respawn is the only way to
+    // deliver them -- they are rare, and the fallback is exactly today's behaviour.
+    bool AwaitMoreChoices()
+    {
+        if (!interactive) { return false; }
+        std::string line;
+        if (!std::getline(std::cin, line)) { return false; }
+        const std::size_t before = choices.size();
+        std::stringstream ss(line);
+        std::string tok;
+        while (std::getline(ss, tok, ','))
+        {
+            try { choices.push_back(std::stoi(tok)); }
+            catch (...) { return false; }
+        }
+        return choices.size() > before;
+    }
+
   private:
     // Install() in five parts, grouped by how a chooser gets its answer. Member functions, so
     // each chooser still captures only `this`.
@@ -3031,6 +3063,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
             // every later decision and misfile the cast-order pins a saved reference replays by
             // ordinal. -1 => WriteDecisionJson omits the field, which is what "carries no pin" means.
             const int this_main_ordinal = g_play_frame_no_ordinal ? -1 : main_ordinal++;
+        claude_retry_1:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3136,6 +3169,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
             WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_1; }
             std::exit(70);   // distinct code: "more input needed"
         });
 
@@ -3147,6 +3181,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
         [this](const GameState& s, const Permanent& vial, bool heuristic) -> bool
         {
             int di = static_cast<int>(cursor);
+        claude_retry_2:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3165,6 +3200,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
             WriteVialDecisionJson(std::cout, s, vial, di, heuristic);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_2; }
             std::exit(70);
         });
 
@@ -3179,6 +3215,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
             const CardDefinition* d = CardDatabase::Instance().LookupCached(creature.card);
             if (d && d->params.echo_cost) { echo_cost = d->params.echo_cost->ToString(); }
             int di = static_cast<int>(cursor);
+        claude_retry_3:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3197,6 +3234,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
             WriteEchoDecisionJson(std::cout, s, creature, echo_cost, di, heuristic);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_3; }
             std::exit(70);
         });
 
@@ -3207,6 +3245,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
         [this](const std::vector<Card>& hand, int mull_count, bool on_play, bool ai_keep) -> bool
         {
             int di = static_cast<int>(cursor);
+        claude_retry_4:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3225,6 +3264,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
             WriteMulliganDecisionJson(std::cout, hand, mull_count, on_play, ai_keep, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_4; }
             std::exit(70);
         });
 
@@ -3241,6 +3281,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
             std::vector<int> ai_set = ExhaustiveBottomSet(
                 hand, profile->exhaustive_keep ? *profile->exhaustive_keep : kNoExhaustive,
                 total, state->on_the_play);
+        claude_retry_5:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3259,6 +3300,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
             WriteBottomDecisionJson(std::cout, hand, ai_pick, win_opt, step, total, di, ai_set);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_5; }
             std::exit(70);
         });
 }
@@ -3284,6 +3326,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 if (opts[i].disp.shuffle == hd.shuffle && opts[i].disp.top_order == hd.top_order) { def = static_cast<int>(i); break; }
             }
             int di = static_cast<int>(cursor);
+        claude_retry_6:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3303,6 +3346,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             WriteTopDecisionJson(std::cout, s, source, looked, kind, opts, def, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_6; }
             std::exit(70);
         };
     g_play_top_chooser = &top_chooser;
@@ -3417,6 +3461,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 defaults[0] = total;   // legal[0] is the opponent face (CollectDamageTargets order)
                 std::vector<ChosenTarget> heur_alloc = { legal[0] }; heur_alloc[0].amount = total;
                 int di = static_cast<int>(cursor);
+            claude_retry_7:  // --interactive: new picks arrived on stdin; re-test the consume branch
                 if (cursor + need <= static_cast<int>(choices.size()))
                 {
                     std::vector<int> amts(need);
@@ -3443,6 +3488,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 WriteDivideDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, total, defaults, di);
                 std::cout << "<<<END_DECISION>>>\n";
                 std::cout.flush();
+                if (AwaitMoreChoices()) { goto claude_retry_7; }
                 std::exit(70);
             }
 
@@ -3469,6 +3515,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             int def_idx = 0;
             for (size_t i = 0; i < opts.size(); ++i) { if (same(opts[i].targets, heuristic)) { def_idx = static_cast<int>(i); break; } }
             int di = static_cast<int>(cursor);
+        claude_retry_8:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3488,6 +3535,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_8; }
             std::exit(70);
         };
     g_play_target_chooser = &target_chooser;
@@ -3506,6 +3554,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_9:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3525,6 +3574,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteBounceDecisionJson(std::cout, s, source, legal, heuristic_pick, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_9; }
             std::exit(70);
         };
     g_play_bounce_chooser = &bounce_chooser;
@@ -3538,6 +3588,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_10:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3557,6 +3608,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteBounceDecisionJson(std::cout, s, source, legal, heuristic_pick, di, /*sacrifice=*/true);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_10; }
             std::exit(70);
         };
     g_play_sacrifice_chooser = &sacrifice_chooser;
@@ -3570,6 +3622,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_11:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3591,6 +3644,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteDigDecisionJson(std::cout, s, source, examined, legal, heuristic_pick, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_11; }
             std::exit(70);
         };
     g_play_dig_chooser = &dig_chooser;
@@ -3604,6 +3658,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_12:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3625,6 +3680,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteLightPawsDecisionJson(std::cout, s, source, pool, legal, heuristic_pick, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_12; }
             std::exit(70);
         };
     g_play_lightpaws_chooser = &lightpaws_chooser;
@@ -3639,6 +3695,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_13:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3660,6 +3717,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteLackeyDecisionJson(std::cout, s, source, candidates, heuristic_index, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_13; }
             std::exit(70);
         };
     g_play_lackey_chooser = &lackey_chooser;
@@ -3673,6 +3731,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_14:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3698,6 +3757,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteFreeCastDecisionJson(std::cout, s, source, candidates, heuristic_index, di, walked, reveal_log);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_14; }
             std::exit(70);
         };
     g_play_free_cast_chooser = &free_cast_chooser;
@@ -3710,6 +3770,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_15:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3731,6 +3792,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteDemonstrateDecisionJson(std::cout, s, spell.m_name.str(), heuristic_default, di, reveal_log);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_15; }
             std::exit(70);
         };
     g_play_demonstrate_chooser = &demonstrate_chooser;
@@ -3745,6 +3807,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_16:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3766,6 +3829,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteTutorDecisionJson(std::cout, s, source, candidates, heuristic_index, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_16; }
             std::exit(70);
         };
     g_play_tutor_chooser = &tutor_chooser;
@@ -3783,6 +3847,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             (void)controller;
             int di = static_cast<int>(cursor);
             const int need = static_cast<int>(candidates.size());
+        claude_retry_17:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor + need <= static_cast<int>(choices.size()))
             {
                 std::vector<int> flags(need);
@@ -3807,6 +3872,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteDragonDecisionJson(std::cout, s, source, candidates, max_puts, heuristic_subset, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_17; }
             std::exit(70);
         };
     g_play_dragon_chooser = &dragon_chooser;
@@ -3822,6 +3888,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             (void)controller;
             int di = static_cast<int>(cursor);
             const int need = static_cast<int>(candidates.size());
+        claude_retry_18:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor + need <= static_cast<int>(choices.size()))
             {
                 std::vector<int> flags(need);
@@ -3846,6 +3913,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteSacTutorDecisionJson(std::cout, s, source, candidates, max_puts, heuristic_subset, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_18; }
             std::exit(70);
         };
     g_play_sac_tutor_chooser = &sac_tutor_chooser;
@@ -3861,6 +3929,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             (void)controller;
             int di = static_cast<int>(cursor);
             const int need = static_cast<int>(candidates.size());
+        claude_retry_19:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor + need <= static_cast<int>(choices.size()))
             {
                 std::vector<int> flags(need);
@@ -3885,6 +3954,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteReviveDecisionJson(std::cout, s, source, candidates, max_puts, heuristic_subset, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_19; }
             std::exit(70);
         };
     g_play_revive_chooser = &revive_chooser;
@@ -3898,6 +3968,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_20:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3917,6 +3988,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteFlickerDecisionJson(std::cout, s, source, legal, heuristic_pick, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_20; }
             std::exit(70);
         };
     g_play_flicker_chooser = &flicker_chooser;
@@ -3931,6 +4003,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             (void)controller;
             int di = static_cast<int>(cursor);
             const int need = static_cast<int>(candidates.size());
+        claude_retry_21:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor + need <= static_cast<int>(choices.size()))
             {
                 std::vector<int> flags(need);
@@ -3955,6 +4028,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteRummageDecisionJson(std::cout, s, source, candidates, max_puts, heuristic_subset, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_21; }
             std::exit(70);
         };
     g_play_rummage_chooser = &rummage_chooser;
@@ -3966,6 +4040,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_22:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -3987,6 +4062,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteDiscardDecisionJson(std::cout, s, hand_indices, heuristic_pick, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_22; }
             std::exit(70);
         };
     g_play_discard_chooser = &discard_chooser;
@@ -4003,6 +4079,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             for (size_t oi = 0; oi < asg.size(); ++oi)
             { if (asg[oi].first == heur_hand && asg[oi].second == heur_exile) { heur_option = static_cast<int>(oi); break; } }
             int di = static_cast<int>(cursor);
+        claude_retry_23:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -4022,6 +4099,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteEIDecisionJson(std::cout, s, looked, heur_option, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_23; }
             std::exit(70);
         };
     g_play_ei_chooser = &ei_chooser;
@@ -4035,6 +4113,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_24:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -4056,6 +4135,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteRetraceDiscardDecisionJson(std::cout, s, source, lands, heuristic_pick, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_24; }
             std::exit(70);
         };
     g_play_retrace_chooser = &retrace_chooser;
@@ -4068,6 +4148,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_25:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -4087,6 +4168,7 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             WriteReplicateDecisionJson(std::cout, s, source, max_count, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_25; }
             std::exit(70);
         };
     g_play_replicate_chooser = &replicate_chooser;
@@ -4173,6 +4255,7 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_26:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -4193,6 +4276,7 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
             WriteAttachHostDecisionJson(std::cout, s, source, legal, heuristic_pick, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_26; }
             std::exit(70);
         };
     g_play_attach_host_chooser = &attach_host_chooser;
@@ -4237,6 +4321,7 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
             const int def_idx = (heuristic_pick >= 0 && heuristic_pick < static_cast<int>(opts.size()))
                               ? heuristic_pick : 0;
             int di = static_cast<int>(cursor);
+        claude_retry_27:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -4258,6 +4343,7 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
                                     def_idx, di, "", "", 1, false, prompt);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_27; }
             std::exit(70);
         };
     g_play_loyalty_chooser = &loyalty_chooser;
@@ -4357,6 +4443,7 @@ void ClaudePlayHarness::InstallLandAndSoulfireChoosers(AIEngine& ai)
         {
             (void)controller;
             int di = static_cast<int>(cursor);
+        claude_retry_28:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor < choices.size())
             {
                 int chosen = choices[cursor++];
@@ -4376,6 +4463,7 @@ void ClaudePlayHarness::InstallLandAndSoulfireChoosers(AIEngine& ai)
             WriteLandEntryDecisionJson(std::cout, s, source, pay_life, reveal_types, heuristic_untapped, di);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_28; }
             std::exit(70);
         };
     g_play_land_entry_chooser = &land_entry_chooser;
@@ -4432,6 +4520,7 @@ void ClaudePlayHarness::InstallLandAndSoulfireChoosers(AIEngine& ai)
             // safe: no saved reference casts Soulfire (all replay Crackle single-target). This chooser is
             // human-play only (nulled for the search), so batch ground truth is unaffected.
             const int need = static_cast<int>(legal_ct.size());
+        claude_retry_29:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor + need <= static_cast<int>(choices.size()))
             {
                 std::vector<int> flags(need);
@@ -4457,6 +4546,7 @@ void ClaudePlayHarness::InstallLandAndSoulfireChoosers(AIEngine& ai)
             WriteTargetDecisionJson(std::cout, s, source, legal_ct, legal_labels, opts, 0, max_targets, heur_option, di, "", "", min_targets, /*random_damage=*/true);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_29; }
             std::exit(70);
         };
     g_play_soulfire_chooser = &soulfire_chooser;
@@ -4476,7 +4566,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          const std::string& jitte_spec = "",
                          bool jitte_prompt = false,
                          const std::string& force_attackers_spec = "",
-                         const std::string& tap_pref_spec = "")
+                         const std::string& tap_pref_spec = "",
+                         bool interactive = false)
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     state.vial_target_mv = profile.vial_target_mv;
@@ -4516,6 +4607,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     h.jitte_prompt         = jitte_prompt;
     h.attackers_by_turn    = ParseForceAttackersSpec(force_attackers_spec);
     h.tap_pref_by_phase    = ParseTapPrefSpec(tap_pref_spec);
+    h.interactive          = interactive;
     // Belt-and-braces (see g_play_hooks_installed): this process drives human choosers, so it must
     // never take the pause fast path even if a future chooser is installed outside Install().
     g_play_hooks_installed = true;
@@ -5608,6 +5700,7 @@ int main(int argc, char* argv[])
     bool        force_exhaustive_keep = false;  // --exhaustive-keep: load the exhaustive keep sidecar
                                                 // even under claude-play (which skips it by default)
     std::string choices_str;          // comma-separated plan indices for --claude-play
+    bool        play_interactive = false;   // --interactive: viewer persistent-child mode
     std::string firebreathe_str;      // #4: "turn:count,..." firebreathe-amount side-channel (turn-keyed)
     bool firebreathe_prompt = false;  // #4: --firebreathe-prompt -> exit-70 to ask when a turn is unanswered
     std::string jitte_str;            // Umezawa's Jitte: "turn:count,..." counter-spend side-channel
@@ -5639,6 +5732,7 @@ int main(int argc, char* argv[])
         if (flag == "--diag-depth")          { diag_depth = true; continue; }
         if (flag == "--trace")               { trace_t1 = true; continue; }
         if (flag == "--claude-play")         { claude_play = true; continue; }
+        if (flag == "--interactive")         { play_interactive = true; continue; }   // viewer persistent-child mode (value-less; see ClaudePlayHarness::AwaitMoreChoices)
         if (flag == "--exhaustive-keep")     { force_exhaustive_keep = true; continue; }
         if (flag == "--ignore-play-profile") { ignore_play_profile = true; continue; }
         if (flag == "--eval-draw")           { eval_on_play = false; continue; }
@@ -5905,7 +5999,8 @@ int main(int argc, char* argv[])
                                  lookahead_depth, timeout_ms, choices, reveal_count, log_dir,
                                  validate_line, force_mulligan, firebreathe_str, firebreathe_prompt,
                                  cast_order_str, storage_hold_str, storage_hold_prompt,
-                                 jitte_str, jitte_prompt, force_attackers_str, tap_pref_str);
+                                 jitte_str, jitte_prompt, force_attackers_str, tap_pref_str,
+                                 play_interactive);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded
