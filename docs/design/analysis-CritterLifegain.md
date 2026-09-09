@@ -311,6 +311,32 @@ no play quality at all. Not pursued.
 Site-9 cost re-read against this: the ~9-14% it costs on Critter is real CPU for zero Critter
 win-turn, which is consistent with the ladder (nothing at any budget moves this deck).
 
+## Decision-space headroom (2026-09-09; user: "any headroom in the decision space?")
+Suite comparison (regression tier, s2002): Critter's d5 mean 4.900 ranks 19th of 22 single-head
+decks (next to Minotaur 4.904 and FiveColour 4.800; the fastest is Breaching 3.10, the slowest
+Hinata 5.68). Its d0->d5 gain is 0.242 -- the second-smallest in the suite after Burn (0.085): the
+deck is linear (curve out, attack), so greedy already plays it nearly as well as the search.
+
+Where the win-turn tail lives (500 logged d5 games, seed 6001): the kept hand's land count is the
+dominant predictor -- 2 lands 4.73 (n=190), 3 lands 4.83 (180), 4 lands 5.11 (103), **5 lands 5.87
+(23)**. Land development by T3/T4 is flat across win turns (~2.6/3.3), so the slow games are not
+mana-screw but flood keeps and thin hands. The two unwon games are both **Basilica-only keeps** (2
+Basilica + 0 Plains; 1 Basilica after two mulligans): the keep heuristic counts a karoo as a land,
+the hand can never develop (Basilica bounces itself forever -- correct modelling), lands@T3 = 0.
+
+Keep-heuristic probe (`logs/critter/keepprobe/`, ONE batch, 3000 paired games each, d3 b10):
+| variant | delta vs shipped (min_lands 1 / max_lands 5) | se | t |
+|---|---|---|---|
+| max_lands 4 (mulligan 5-landers) | **-0.0413** | 0.0064 | -6.4 |
+| min_lands 2 | -0.0007 | 0.0024 | -0.3 |
+| min 2 + max 4 | -0.0407 | 0.0070 | -5.8 |
+
+So the mulligan IS the headroom: ~0.04t from one knob, before any exhaustive table (which will
+also learn the Basilica-only rule and the 4-land/no-1-drop cases). NOT adopted -- surfaced for the
+user (a one-line profile edit + critter GT re-accept). In-game decision usage from the same logs:
+Ajani -2 217x vs +1 22x (the +1 IS reachable), Heliod's lifelink grant 85 activations over 156
+casts, Ranger-Captain cast 77x. The 0 ability (value gate) stays unreachable (deferred).
+
 ## Open questions surfaced (non-blocking)
 (collected here and re-raised in the closing message)
 
