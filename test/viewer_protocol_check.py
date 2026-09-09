@@ -411,7 +411,7 @@ def action_sig(a):
         ("card", ""), ("x", 0), ("tutor_target", ""), ("phyrexian_life", 0),
         ("pod_victim", 0), ("activate", False), ("verb", ""), ("sacout", False),
         ("enchant_target", ""), ("bestow", False), ("evoke", False),
-        ("landsedge", 0), ("dig", False)))
+        ("landsedge", 0), ("dig", False), ("blink_target_name", "")))
 
 
 def actions_key(p):
@@ -469,6 +469,31 @@ def find_plan(recorded, plans, recorded_index=None, prefer=None):
             hits = [i for i, p in enumerate(plans) if plan_key(p) == want]
     if not hits:
         return None
+    # COMBO-OFF CONTENT ANCHOR (USER ruling 2026-09-09, EDF s1_gi0: "T3 is still correct... repair
+    # the TOOL"). A `combo_off` plan is the engine's VERIFIED this-turn finisher; its repetition
+    # count (the "x4" in summary and actions) is computed by the verifier from the current board,
+    # not chosen by the human -- a payment-order change legitimately moves it (the recorded x4
+    # became x8) while the recorded INTENT, "execute the verified finish on this target", is
+    # unchanged. So a recorded combo_off pick anchors to the frame's combo_off plan(s), count
+    # ignored (target name preferred below via action narrowing where it can). Without this tier
+    # the recorded finisher's summary matches nothing, the (land, casts) key matches EVERY
+    # activation of the same permanent, and hits[0] executed "blink Cloud of Faeries" instead of
+    # the win -- the T3->T5 play-drift this exists to repair.
+    #
+    # DELIBERATELY ASYMMETRIC: a recorded pick WITHOUT combo_off is NOT steered away from a
+    # current combo_off plan. `combo_off` absent means "not recorded as a finisher", which covers
+    # every pre-combo_off-era recording of a manual go-off -- EDF s2_gi1's "blink Peregrine Drake
+    # x23"/"x50" ARE that game's win-now blinks, and the symmetric filter (tried 2026-09-09)
+    # regressed it T4->T7 by refusing to re-anchor them onto today's verified finisher. Measured,
+    # not hypothetical: the filter prevented no real failure and caused that one.
+    if recorded.get("combo_off"):
+        co = [i for i in hits if plans[i].get("combo_off")]
+        if co:
+            want_t = next((a.get("blink_target_name") for a in (recorded.get("actions") or [])
+                           if a.get("blink_target_name")), None)
+            same_t = [i for i in co if want_t and any(
+                a.get("blink_target_name") == want_t for a in (plans[i].get("actions") or []))]
+            hits = same_t or co
     # ACTION-PAYLOAD NARROWING (USER 2026-09-05, Melira s1_gi0): identical-summary hits can be
     # DIFFERENT plans -- the summary hides X, the tutor target and the pod victim, so eleven
     # "Chord of Calling + pod (pay 2 life)" twins matched and hits[0] realised a Chord that
