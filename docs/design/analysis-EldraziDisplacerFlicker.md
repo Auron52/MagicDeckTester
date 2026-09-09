@@ -4127,3 +4127,35 @@ MEMOISATION (BuildDedupKey), gated to genuinely-unbudgeted play exactly like the
 identical states are rolled out once; same scores => same argmax => digest-identical. Open
 methodology question surfaced to the user (nothing blocked on it): if EDF H cells stay expensive,
 should the H baseline run at the PRODUCTION budget instead of unbudgeted nominal depth?
+
+### Session 10b: viewer batch, phase-C mechanism, and the LAUNCH (2026-09-09 12:41)
+
+**Viewer/payment batch** (user-reported, two agent fan-outs, merged as 4784796b + 58ef6fc7):
+colourless acquisition+retention for {C}-sink boards (MTG_HOLD_C_FOR_SINK /
+MTG_C_SOURCE_HOLD / MTG_UNTAP_C_FIRST, all HumanPlayActive-gated; the user's seed-8 frame goes
+{G:46,C:0}->{G:19,C:26} and the rejected Displacer blink flips to accept); Emiel optional {G/W}
+auto-pay declined in human play (MTG_HUMAN_ETB_COUNTER_PAY, search side flagged for measured
+tuning); CheckLine models etb_untap_lands (MTG_CHECKLINE_ETB_UNTAP); aura host INSTANCE choice
+(SubChoiceAuraHostLabel + enchant_target_label + new scenario fixture); COMBO OFF verified-finish
+(Plan::combo_off_verified + symmetric ComboOffFinishScope); phantom "Emiel X?" dialog killed
+(linebuild always encodes *<count>); auto-cash removed (single blink no longer fires the drain
+sink; MTG_HUMAN_AUTOCASH=1 restores). KNOWN COST: claude_s1_gi0 replays T3->T5 (its recording
+depended on the auto-cash bug AND the old spend order) -- the ONLY play-drift across 306
+references; regression-mode's strict gate is red on exactly that until the user re-saves.
+OPEN (designed, not landed): viewer prefix-cache for the quadratic step slowdown (~74x);
+EffectiveProduces land-aura colours (shared engine, GT-moving); demand-aware ETB untap choice.
+
+**Phase-C mechanism**: MTG_UNBUDGETED_LEAF_MEMO (072939d5, no-win leaf memo, structurally gated
+to unbudgeted play, 1.17x) + the decisive one: MTG_MATRIX_FD_LEAF_DEPTH (2a913b0b) -- matrix-run-
+scoped override of the beyond-horizon leaf fidelity. Evidence: FD=1 H cells are INFEASIBLE on
+this deck (~98% of wall in the per-simulated-turn 1-ply lookahead; H4/H5 monster games >1.3 h
+EACH; H rows are exempt from the intractable-median guard) while FD=0 measured quality-neutral
+on 32 paired games (12/15 + 14/17 identical, means 5.00 vs 5.12 favoring FD=0) at ~70x less
+cost. Treasure Hunt remains the counterexample -- per-deck evidence only, default absent.
+
+**LAUNCH** (12:41, alone on the box, frozen at HEAD 2a913b0b / HEAD:src 030115fa):
+`MTG_MATRIX_FD_LEAF_DEPTH=0 bash scripts/valueleaf.sh run decks/EldraziDisplacerFlicker`.
+Play digests verified UNCHANGED by the script itself -- all 770 banked rows kept; phase A is 22
+remaining jobs. Gate state at launch: smoke 73/73, regression 99/99 GT-identical with the ONE
+documented reference-gate red (s1_gi0), scenarios 73/73 (incl. new aura fixture), winless audit
+0/183,306, six-ref digests identical. DO-NOT-PUSH hold still in force (45 local commits).
