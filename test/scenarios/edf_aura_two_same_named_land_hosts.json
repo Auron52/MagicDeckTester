@@ -1,0 +1,21 @@
+{
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 2,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Brushland", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Brushland", "Fertile Ground"],
+  "library_filler": "Conservatory",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 200,
+  "max_turns": 6,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "land=Brushland;cast=Fertile Ground",
+  "expect_verdict": "choose",
+  "expect_variants": 2,
+  "comment": "TWO SAME-NAMED LAND HOSTS, ONE OF THEM STILL IN HAND -- the Aura half of the Kor Duelist defect guarded by kitty_equip_two_same_named_hosts.json, and the reason it needed its own fixture. An 'Enchant land' Aura's legal hosts span the lands in play AND the land being PLAYED this turn, which is in HAND at enumeration; SubChoiceHostLabel counted BATTLEFIELD permanents only, so with one Brushland in play and one in hand it saw a total of 1, added no ' #k' suffix, and returned \"\" outright for the in-hand host. Both variants' `enchant` sub then carried the identical choice string 'Brushland', they shared a dedup signature, and the SECOND was silently deleted -- the user dragged Fertile Ground onto the land they had just played and it attached to the OLD one instead, with no viewer-side fix possible because the variant no longer existed (EDF seed 10 T2, user-reported 2026-09-09: plans 2 and 3 both read 'land=Brushland; cast: Fertile Ground -> Brushland' with enchant_target 6 vs 7, and --validate-line returned ONE variant, num 6). Both halves are pinned: the verdict must be `choose` (the variants survive at all) and there must be exactly TWO (each host separately reachable) -- asserting only `choose` would still pass with one of the two dropped. SubChoiceAuraHostLabel supplies the disambiguation; the viewer's drag independently stamps the host m_number, so the label is belt-and-braces rather than the whole fix. A constructed board because a duplicate-name land board with the second copy in hand is not reliably reached by seed-driven play. MTG_HUMAN_PLAY is on because CheckLine is a human-play-only path -- without it the fixture would be vacuous."
+}

@@ -236,6 +236,51 @@ static std::string EnchantTargetName(const GameState& s, int m_number)
     return "#" + std::to_string(m_number);
 }
 
+// The host's name DISAMBIGUATED by a " #k" ordinal whenever the active player has more than one
+// candidate host of that name, counted over the battlefield AND the hand (in that order, 1-based).
+//
+// WHY THE HAND IS PART OF THE COUNT, and why this is a bug fix rather than cosmetics. An "Enchant
+// land" Aura's legal hosts span the lands already in play AND the land being PLAYED this turn --
+// which is still in HAND at enumeration time. EnchantTargetName resolves both to the bare card
+// name, so with two copies of one land the two plan variants read as identical twins:
+//
+//   EDF seed 10 T2 (user-reported 2026-09-09), hand holds Brushland #7, battlefield holds Brushland #6:
+//     idx 2 | land=Brushland; cast: Fertile Ground -> Brushland      (enchant_target 6, the OLD land)
+//     idx 3 | land=Brushland; cast: Fertile Ground -> Brushland      (enchant_target 7, the NEW land)
+//
+// That is already the "a decision menu must never hold identical twins" defect the rad-mode note
+// below was written for. But the same collapse also reaches CheckLine, where the `enchant` sub's
+// CHOICE STRING is what the variant dedup keys on: two subs reading "Brushland" share a signature
+// and the second variant is silently DELETED, so no viewer-side fix can recover it (the human drags
+// the Aura onto the new land, the only surviving variant names the old one, and the Aura lands on
+// the wrong host). TurnSolver's SubChoiceHostLabel could not catch this because it counts
+// BATTLEFIELD permanents only: with one Brushland in play and one in hand its total is 1, so it
+// adds no suffix at all and then returns "" for the in-hand host.
+//
+// Counting by NAME over battlefield+hand may occasionally suffix a host that was never actually a
+// second candidate (a spare copy sitting in hand). That direction is safe on purpose: an extra
+// ordinal is cosmetic, whereas a MISSING one merges two genuinely different hosts and costs the
+// player the choice. Ordering is battlefield order then hand order, stable within one decision.
+static std::string AuraHostLabel(const GameState& s, int m_number)
+{
+    const std::string name = EnchantTargetName(s, m_number);
+    if (name.empty() || name[0] == '#') { return name; }   // unresolved -> already unambiguous
+    int total = 0, ordinal = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.card.m_name.str() != name) { continue; }
+        ++total;
+        if (p.card.m_number == m_number) { ordinal = total; }
+    }
+    for (const Card& c : s.ActivePlayer().hand)
+    {
+        if (c.m_name.str() != name) { continue; }
+        ++total;
+        if (c.m_number == m_number) { ordinal = total; }
+    }
+    return (total <= 1 || ordinal == 0) ? name : (name + " #" + std::to_string(ordinal));
+}
+
 static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& s)
 {
     std::ostringstream os;
@@ -270,7 +315,9 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         {
             case Action::Kind::CastFromHand:
                 tag = a.card_name;
-                if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + EnchantTargetName(s, a.enchant_target); }
+                // AuraHostLabel, not EnchantTargetName: two same-named candidate hosts (one in play,
+                // one being played this turn) otherwise render this plan and its sibling identically.
+                if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + AuraHostLabel(s, a.enchant_target); }
                 // The no-own-creature "cash the cantrip off their body" variant (kTrickOpponentTarget).
                 else if (a.enchant_target == kTrickOpponentTarget)
                 { tag += " \xE2\x86\x92 opponent's creature"; }
@@ -388,11 +435,18 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 tag = a.card_name + ": blink " + EnchantTargetName(s, a.sac_victim_id);
                 const int bk = std::max(1, a.chosen_x);
                 if (bk > 1) { tag += " x" + std::to_string(bk); }
-                // COMBO OFF: past the EnumerateMainPlans gate, a human-menu blink count > 3 exists
-                // ONLY as the verified-win standalone plan ("either you win or you do each action"),
-                // so the summary can promise the win outright. The GUI keys on blink_count, not on
-                // this text; claude-play agents read it.
-                if (bk > 3) { tag += " -- COMBO OFF: wins this turn"; }
+                // COMBO OFF vs BANK. A human-menu blink count > 3 reaches the menu as EITHER the
+                // verified-win standalone plan OR the deliberately-retained biggest banking count,
+                // and ONLY the first may promise a win. Keying this on `bk > 3` alone (as it did)
+                // labelled the bank a winner: EDF seed 10 T4's "blink Peregrine Drake x9" ran its
+                // nine blinks and left the opponent on 20, because the verify never ran at all --
+                // the provider's cheap projection cannot see the in-hand Living Wish -> Essence
+                // Depleter route the count was sized on, so `plausible` is false on a sink-less
+                // board and the trial apply is skipped. Say what is actually true of each.
+                // The GUI keys on blink_count / combo_off, not on this text; claude-play agents
+                // read it.
+                if (bk > 3)
+                { tag += plan.combo_off_verified ? " -- COMBO OFF: wins this turn" : " (bank)"; }
                 break;
             }
             case Action::Kind::ActivatePermAbility:
@@ -1002,9 +1056,25 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     {
         std::unordered_set<std::string> seen_sets;
         std::vector<char> taken(plans.size(), 0);
+        // THE VERIFIED COMBO OFF PLAN IS NEVER CAPPED OUT. The gate APPENDS it (so every other plan
+        // keeps the index it would have had), which puts it at plans.size()-1 -- the worst possible
+        // position for a cap that fills in INDEX order. On any menu past the cap it was therefore
+        // never emitted, and since the viewer finds the button with
+        // `(d.plans||[]).find(p => p.combo_off)` over the EMITTED slice, the "⚡ Combo Off — win now"
+        // button simply did not appear on exactly the boards big enough to need it (EDF mid-go-off
+        // frames run to 1,400-208,392 plans). The same miss made renderChooseDialog's combo_off
+        // filter fail open, which is half of the phantom "X=1 / X=6" dialog.
+        //
+        // Same precedent and same reason as emit_chosen_extra below: a plan the UI must be able to
+        // act on has to survive a display cap. One slot, taken before the diversity pass.
+        for (size_t i = 0; i < plans.size(); ++i)
+        {
+            if (!plans[i].combo_off_verified || hide_bundle[i]) { continue; }
+            emit_order.push_back(i); taken[i] = 1; break;
+        }
         for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
         {
-            if (hide_bundle[i]) { continue; }
+            if (hide_bundle[i] || taken[i]) { continue; }
             std::string key = plans[i].land_to_play + "|" + plans[i].land_face + "#";
             std::vector<std::string> nm;
             nm.reserve(plans[i].actions.size());
@@ -1063,14 +1133,17 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // side-panel button rather than as one of the source card's activations -- USER 2026-09-07:
         // "go off should just be a specific button that appears on the right, not part of a card
         // activation ... You either win or let the user do each required action." Structured rather
-        // than sniffed from the summary text, and emitted from the same ">3 == recognised" rule the
-        // gate keys on, so the button cannot appear on an ordinary activation.
-        {
-            bool combo_off = false;
-            for (const Action& ac : p.actions)
-            { if (ac.kind == Action::Kind::ActivateBlink && ac.chosen_x > 3) { combo_off = true; } }
-            if (combo_off) { os << ", \"combo_off\": true"; }
-        }
+        // than sniffed from the summary text.
+        //
+        // KEYED ON THE VERIFY, NOT ON THE COUNT. The old ">3 == recognised" rule is the rule the
+        // ENUMERATOR uses to spot a candidate; it does not mean the candidate won. A count > 3 also
+        // reaches the menu as the retained BANK, and stamping the gold button on that promised the
+        // user a kill the apply cannot deliver (EDF seed 10 T4 "blink x9": nine blinks, opponent
+        // still on 20 -- the trial apply never ran, because `plausible` is false on a sink-less
+        // board). combo_off_verified is set only on the branch where ApplyPlanDirect actually ran
+        // and OpponentHasLost was actually true, so the button now means what it says. A bank still
+        // reaches the menu, just as an ordinary sized activation labelled "(bank)".
+        if (p.combo_off_verified) { os << ", \"combo_off\": true"; }
         // Plain name list (used for the land+cast multiset match). Land's Edge activations
         // are NOT casts -- they are surfaced via the action's "landsedge" count below and the
         // top-level "lands_edge" object, so the GUI's cast match doesn't treat them as spells.
@@ -1354,10 +1427,22 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (ac.replicate_count >= 0)  { os << ", \"replicate_count\": " << ac.replicate_count; }
             // Aura enchant target: the creature (m_number + resolved name) this Aura attaches to, so
             // the GUI shows WHICH creature when several plans cast the same aura on different targets.
+            //
+            // TWO fields, and the split is deliberate. `enchant_target_name` stays the CLEAN card
+            // name because the viewer feeds it to the art lookup (a "Brushland #2" is not a card and
+            // comes back as broken art). `enchant_target_label` carries the disambiguated form for
+            // anything that must tell two same-named hosts APART -- which is the whole defect here:
+            // with a Brushland in play and a second being played this turn, both variants' name is
+            // "Brushland". This mirrors the engine's own addSub, which already passes a disambiguated
+            // `choice` next to a clean `art`. Emitted only when it actually differs, so every
+            // single-host deck's payload is byte-identical.
             if (ac.enchant_target > 0)
             {
+                const std::string etn = EnchantTargetName(s, ac.enchant_target);
+                const std::string etl = AuraHostLabel(s, ac.enchant_target);
                 os << ", \"enchant_target\": " << ac.enchant_target
-                   << ", \"enchant_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.enchant_target));
+                   << ", \"enchant_target_name\": "; JsonStr(os, etn);
+                if (etl != etn) { os << ", \"enchant_target_label\": "; JsonStr(os, etl); }
             }
             // Blink: the target's m_number + resolved name, and the activation count, so the GUI
             // and the claude-play protocol can tell "blink Peregrine Drake" (the mana-positive loop)

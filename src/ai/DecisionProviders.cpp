@@ -14387,7 +14387,11 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
     // human's own multi-blink (USER, 2026-09-05: "I would like to be able to multi-activate the
     // displacer. There isn't much reason to have to do one at a time."). The human still deploys
     // the wish/finisher themselves; only the offered iteration count reads the route.
-    if (HumanPlayActive() && !for_human_count_sizing) { return; }
+    // ...and it stands down again inside the COMBO OFF verify/apply, where the human HAS asked for
+    // the deploy. Without this the projection that gates the trial apply cannot see the very route
+    // the count was sized on, so a winnable go-off is never verified and ships as a mislabelled bank
+    // (EDF seed 10 T4). ComboOffFinishActive() is reachable only under human play -- see the scope.
+    if (HumanPlayActive() && !for_human_count_sizing && !ComboOffFinishActive()) { return; }
     if (best->drain_amount > 0 || best->exile_cost_mv > 0) { return; }   // already on the board
     static const bool s_on = EnvOn("MTG_EDF_COMBO_FINISH", true);
     if (!heurarm::Flag(heurarm::EDF_COMBO_FINISH, s_on)) { return; }

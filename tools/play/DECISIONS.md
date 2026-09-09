@@ -589,3 +589,70 @@ The count joins the blink line token (`blink=<outlet>@<target>*<count>`) and the
 because without it the two plans are the same verb on the same target: they would collapse to one
 entry, and CheckLine would hand back the wrong index — the exact bug class `d1698c5d` fixed. A missing
 count reads as the wildcard, so every saved reference keeps matching.
+
+## Four viewer-mechanics repairs on EldraziDisplacerFlicker (2026-09-09)
+
+Four user reports from one session. They look unrelated and are not: three of them are the same
+mistake in different clothes — **a decision was collapsed away, or taken on the user's behalf,
+because some identifier was not specific enough.**
+
+**1. An Aura landed on the wrong land (seed 10 T2).** The user played a second Brushland and dragged
+Fertile Ground onto it; the Aura attached to the *first* Brushland. The engine had enumerated both
+hosts correctly (plans 2 and 3, `enchant_target` 6 vs 7) — but both rendered as
+`Fertile Ground → Brushland`, and the `enchant` sub's CHOICE STRING is what CheckLine's variant dedup
+keys on. Identical strings, shared signature, second variant deleted: `--validate-line` returned
+**one** variant, so no viewer-side fix could have recovered the user's pick.
+
+`SubChoiceHostLabel` was supposed to prevent exactly this (it appends ` #k` to same-named hosts —
+the Kor Duelist equipment fix) but it counts **battlefield** permanents only. A land Aura's legal
+hosts include *the land being played this turn*, which is still in HAND at enumeration, so it saw one
+Brushland, added no suffix, and returned `""` for the in-hand host. New `SubChoiceAuraHostLabel`
+counts battlefield + hand; `main.cpp`'s `AuraHostLabel` does the same for the plan summary, and the
+decision JSON now carries `enchant_target_label` (disambiguated) *beside* `enchant_target_name`
+(clean, because the viewer feeds that one to the art lookup). Guarded by
+`test/scenarios/edf_aura_two_same_named_land_hosts.json` — verdict `choose` **and** exactly 2
+variants, the same two-part assertion the equipment fixture makes.
+
+**2. COMBO OFF announced a win it did not deliver (seed 10 T4).** `EnumerateMainPlans` verifies a
+go-off by trial-applying it and checking `OpponentHasLost` — but `verified` was a **local that never
+left the function**, so both label sites keyed on the action alone (`chosen_x > 3`). That is not a
+corner case: the expensive verify is skipped whenever the provider's cheap projection says a kill is
+out of reach, and on a sink-less board it always does, because `ScanHandSinks` is human-play-gated
+and cannot see the in-hand Living Wish → Essence Depleter route **that the blink count was sized
+on**. So the plan that reached the menu was the deliberately-retained *bank*, wearing a winner's
+label. Nine blinks, opponent still on 20.
+
+`Plan::combo_off_verified` now carries the verify to both label sites, so a bank reads `(bank)` and
+only a proved kill says "wins this turn". And `ComboOffFinishScope` (human-play only, entered from
+the gate itself) opens the two finish gates **symmetrically** — around the projection, the trial
+apply, and the real apply. Symmetry is the whole point: a verify that simulates something the apply
+will not do is how the false promise happened. Pressing the button now runs 9 blinks → combo finish
+deploys Essence Depleter → 20 drains → attack → opponent −3, `won: true`, in one click.
+
+**3. Every Emiel activation asked "X?" (seed 11 T6).** Emiel has no `{X}` (`blink_cost: "{3}"`); the
+X was an internal batching artifact. Under human play the enumerator deliberately offers *two* blink
+actions — the single activation and one sized FINISH count — while `BlinkAssign` treats a **missing
+count as a wildcard**. The section above already specifies `blink=<outlet>@<target>*<count>`, but
+`linebuild.js` emitted the tail only for `count > 1`, so an ordinary click sent the countless form,
+matched BOTH plans, and got `choose`. Now it always writes the count (`*1` included) and an ordinary
+click accepts straight through. The engine's wildcard is untouched, so saved references still match.
+`ActivateBlink` also joins the `activations` sub branch, so a genuinely ambiguous blink reads `×6`
+rather than `X=6`.
+
+**4. Essence Depleter fired 16 times unasked (seed 11).** The section above promises "blink once and
+nothing fires". It was not true: `cash_sinks` had grown a `combo_live` disjunct
+(`payload_untaps && have_sink`) that is true on **every** ordinary single blink once a sink is on the
+board — it says nothing about the human having asked. Measured on the user's own `claude_s1_gi0`:
+one bare blink, `blink_count: 1`, no drain action in the plan, **two** drains executed and both `{C}`
+sources tapped. Worse, it then *removed the human's own drain from the next menu* (20 plans → 16),
+because an unpayable cost is an unenumerated action — which is the "you cannot activate it yourself"
+half of the same report. The disjunct is gone; `iterations > 1` stays, so ★ FINISH / COMBO OFF still
+runs the whole package.
+
+**The one cost, and it is the user's call.** `claude_s1_gi0`'s recorded turn-3 line *depended* on
+those uninvited drains (six bare blinks took the opponent 20 → 8). With them gone the same clicks no
+longer reproduce that win, and from 20 life the x8 finish is correctly a `(bank)`, not a kill. The
+deck's shipped strength is untouched — that hand's autonomous digest is byte-identical — so this is a
+recorded human line that needs re-playing, not a regression. References are commit-only: it was not
+touched. Re-play and re-save it in the viewer, or set `MTG_HUMAN_AUTOCASH=1` to restore the old
+behaviour without a rebuild.
