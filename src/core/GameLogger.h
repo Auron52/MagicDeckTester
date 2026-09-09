@@ -1102,3 +1102,37 @@ struct HumanPlaySuppress
     HumanPlaySuppress(const HumanPlaySuppress&)            = delete;
     HumanPlaySuppress& operator=(const HumanPlaySuppress&) = delete;
 };
+
+// ---- COMBO OFF finish scope (human play only) -------------------------------------------------
+// Live only while the COMBO OFF plan is being VERIFIED or APPLIED. Inside it, the two "the engine
+// must not cast out of a human's hand" gates stand down, because pressing COMBO OFF is precisely the
+// human saying "spend what you must and win this turn" (USER 2026-09-07: "You either win or let the
+// user do each required action").
+//
+// WHY IT IS NEEDED AT ALL. The finish route is human-play-gated in BOTH the verify and the apply, so
+// on a sink-less board the projection cannot see the in-hand Living Wish -> Essence Depleter line the
+// blink COUNT was sized on. `plausible` is therefore false, the trial apply is skipped, and the plan
+// survives only as a BANK -- which then wore a "wins this turn" label and ran nine blinks for nothing
+// (EDF seed 10 T4, user-reported 2026-09-09). Opening the gate on BOTH sides restores the gate's own
+// stated discipline: the verify must simulate exactly what the apply will do, or the promise is a lie.
+// Installing it on only one side is worse than not installing it at all.
+//
+// SCOPE IS THE WHOLE POINT. It never widens ordinary human play: it is entered only from code already
+// inside `HumanPlayActive() && s_combo_off`, or on a plan carrying combo_off_verified, which only that
+// same block sets. A plain cast or a hand-driven activation never enters it, so the engine still does
+// not reach into the player's hand uninvited. And because every gate it relaxes reads
+// `HumanPlayActive() && !ComboOffFinishActive()`, and HumanPlayActive() is already false in every
+// autonomous run and every rollout, the added conjunct cannot change a search decision: budgeted play,
+// GT and rollouts stay byte-identical. thread_local for the same reason HumanPlaySuppress is.
+extern thread_local bool g_combo_off_finish;
+
+inline bool ComboOffFinishActive() { return g_combo_off_finish; }
+
+struct ComboOffFinishScope
+{
+    bool saved;
+    ComboOffFinishScope() : saved(g_combo_off_finish) { g_combo_off_finish = true; }
+    ~ComboOffFinishScope() { g_combo_off_finish = saved; }
+    ComboOffFinishScope(const ComboOffFinishScope&)            = delete;
+    ComboOffFinishScope& operator=(const ComboOffFinishScope&) = delete;
+};

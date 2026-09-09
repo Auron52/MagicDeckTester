@@ -35958,6 +35958,13 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
         bool plausible = true;
         if (best_any >= 0 && s_co_project)
         {
+            // SEE THE ROUTE THE COUNT WAS SIZED ON. The blink count is sized through ScanHandSinks'
+            // human bypass (the Living Wish -> Essence Depleter deploy), but the provider's lethal
+            // projection is NOT -- so on a sink-less board it answered "no kill in reach", `plausible`
+            // came back false, the trial apply never ran, and the go-off shipped as a mislabelled
+            // bank. The scope makes the projection read the same board the apply will build. It must
+            // match the one on the trial apply below: an asymmetric pair is what makes a verify lie.
+            ComboOffFinishScope co_finish;
             const DecisionProvider& prov = ResolveProvider(state);
             plausible = false;
             if (prov.HasExtraLethalModel())
@@ -35980,6 +35987,10 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             for (int cand : (plausible ? std::vector<int>{ best_alone } : std::vector<int>{}))
             {
                 if (cand < 0) { continue; }
+                // The APPLY half of the symmetric pair opened around the projection above: the trial
+                // must deploy the finisher exactly as the real apply will, or "wins this turn" is an
+                // assertion about a line nobody runs.
+                ComboOffFinishScope co_finish;
                 RevealLogPause pause;      // trial apply: no viewer events / draw log / reveal spam
                 // ...and RevealLogPause is NOT enough on its own. It nulls the 26 CHOOSERS, but the
                 // scripted pins are separate one-shot ints that a resolution CONSUMES (reads, then
@@ -36035,7 +36046,15 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             {
                 if (goff_of(plans[i]) == 0)          { kept.push_back(std::move(plans[i])); }
                 else if ((i == best && verified) || i == best_bank)
-                { combo = std::move(plans[i]); have_combo = true; }
+                {
+                    combo = std::move(plans[i]); have_combo = true;
+                    // STAMP THE VERIFY ONTO THE PLAN. `verified` is a local, and without this the
+                    // label sites downstream can only see the ACTION (chosen_x > 3) -- which is how
+                    // a retained BANK came to announce "COMBO OFF: wins this turn". The two arms of
+                    // this branch are exactly "the trial apply won" and "the trial apply did not run
+                    // or did not win", so the flag is precisely the distinction the label needs.
+                    combo.combo_off_verified = (i == best && verified);
+                }
             }
             if (have_combo) { kept.push_back(std::move(combo)); }
             plans = std::move(kept);
@@ -37000,6 +37019,58 @@ static std::string SubChoiceHostLabel(const GameState& s, int num)
     return total <= 1 ? name : (name + " #" + std::to_string(ordinal));
 }
 
+// SubChoiceHostLabel's HAND-AWARE sibling, used by the AURA (`enchant`) sub only.
+//
+// WHY A SECOND FUNCTION. The one above counts BATTLEFIELD permanents, which is right for an Equip /
+// sacrifice / soulfire host (those are always already in play) but wrong for an Aura: an "Enchant
+// land" Aura may legally take the land being PLAYED this turn, and that land is still in HAND at
+// enumeration. So with one Brushland in play and a second in hand the function above sees a total of
+// 1, adds no suffix, and returns "" outright for the in-hand host -- both variants' `enchant` sub
+// then carries the choice string "Brushland", they share a dedup signature, and the SECOND variant
+// is silently deleted. The human drags the Aura onto the new land, only the old-land variant
+// survives, and the Aura attaches to the wrong host with no way for the viewer to recover it
+// (EDF seed 10 T2, user-reported 2026-09-09: plans 2 and 3 both read "Fertile Ground -> Brushland",
+// enchant_target 6 vs 7; --validate-line returned ONE variant, num 6).
+//
+// Counting hand copies can occasionally suffix a host whose "rival" was a spare copy that is not
+// really a candidate. That direction is deliberate: a surplus ordinal is cosmetic, a missing one
+// merges two genuinely different hosts and costs the player the decision. Mirrors main.cpp's
+// AuraHostLabel so the plan summary and the choose dialog read the same way.
+static std::string SubChoiceAuraHostLabel(const GameState& s, int num)
+{
+    const Permanent* hit = nullptr;
+    for (const Permanent& p : s.battlefield)
+    { if (p.card.m_number == num) { hit = &p; break; } }
+    std::string name;
+    int controller = s.active_player_index;
+    if (hit) { name = hit->card.m_name.str(); controller = hit->controller_index; }
+    else
+    {
+        for (const Card& c : s.ActivePlayer().hand)
+            if (c.m_number == num) { name = c.m_name.str(); break; }
+    }
+    if (name.empty()) { return {}; }
+    int total = 0, ordinal = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_name.str() != name) { continue; }
+        ++total;
+        if (p.card.m_number == num) { ordinal = total; }
+    }
+    // Only the ACTIVE player's hand can supply a same-turn host, so an opponent-controlled host
+    // (a trick's target) keeps exactly the battlefield-only count it had before.
+    if (controller == s.active_player_index)
+    {
+        for (const Card& c : s.ActivePlayer().hand)
+        {
+            if (c.m_name.str() != name) { continue; }
+            ++total;
+            if (c.m_number == num) { ordinal = total; }
+        }
+    }
+    return (total <= 1 || ordinal == 0) ? name : (name + " #" + std::to_string(ordinal));
+}
+
 // Backtracking assignment behind EquipsMatch: can want[i..] each be paired with a distinct unused
 // have[j]? Exhaustive rather than greedy because a WILDCARD spec entry (a legacy `equip=<name>` with
 // no m_numbers) can be satisfied by several actions, and first-fit would then reject a matchable
@@ -37617,18 +37688,23 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             // the HOST to any permanent, and keep loyalty OUT of this path entirely.
             if (a.enchant_target > 0 && !is_trick && a.kind != Action::Kind::ActivateLoyalty)
             {
-                std::string etn, art;
+                std::string art;
                 for (const Permanent& perm : state.battlefield)
                     if (perm.card.m_number == a.enchant_target)
                     { art = perm.card.m_name.str(); break; }
+                // A same-turn target (a creature cast this turn to carry the Aura, or the LAND being
+                // played this turn) is still in hand here; resolve its name from hand so the choose
+                // grid offers it (else the sub is dropped). `art` stays the CLEAN card name -- it is
+                // what the dialog feeds to the art lookup.
+                if (art.empty())
+                    for (const Card& hc : state.ActivePlayer().hand)
+                        if (hc.m_number == a.enchant_target) { art = hc.m_name.str(); break; }
                 // Two same-named hosts need distinct CHOICE strings or the dedup drops one of them --
                 // the equipment defect, which an Aura on a board of two Kor Duelists has verbatim.
-                if (!art.empty()) { etn = SubChoiceHostLabel(state, a.enchant_target); }
-                // A same-turn creature target (AppendCreatureTargetAuraCandidates) is still in hand here;
-                // resolve its name from hand so the choose grid offers it (else the sub is dropped).
-                if (etn.empty())
-                    for (const Card& hc : state.ActivePlayer().hand)
-                        if (hc.m_number == a.enchant_target) { etn = art = hc.m_name.str(); break; }
+                // HAND-AWARE (SubChoiceAuraHostLabel, not SubChoiceHostLabel): for a land Aura the
+                // rival host can be the land being played this turn, which the battlefield-only count
+                // cannot see -- that miss is what collapsed EDF seed 10 T2's two Brushland variants.
+                const std::string etn = SubChoiceAuraHostLabel(state, a.enchant_target);
                 if (!etn.empty())
                     addSub(a.card_name + " \xE2\x86\x92 " + etn, a.card_name + " \xE2\x86\x92", etn, art, "enchant",
                             a.enchant_target);
@@ -37656,7 +37732,16 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             // Burning-Fist / Sethron's pumps). That is a count of activations, not an {X} in a cost, so
             // the generic branch below labelled it "X=2" -- meaningless on a card with no {X}. Give it
             // its own sub so the human picks "activate twice" from a readable list.
+            // ActivateBlink belongs here for exactly the reason this branch exists, and was simply
+            // never added: a blink count is a number of activations, not an {X}. Emiel the Blessed's
+            // cost is "{3}" and Eldrazi Displacer's is "{2}{C}" -- neither has an {X} to choose -- yet
+            // the fallback below rendered the pair as "Emiel the Blessed X? / X=1 / X=6", a dialog
+            // asking the player about an internal batching artifact (USER, seed 11 T6: "spammed by
+            // dialogs that shouldn't exist"). The dialog should not normally appear at all now that a
+            // committed line states its own count (linebuild.js writes "*1"), but when a blink line IS
+            // genuinely ambiguous the label must read "×6" rather than "X=6".
             else if ((a.kind == Action::Kind::ActivateRevealTop || a.kind == Action::Kind::ActivatePump
+                      || a.kind == Action::Kind::ActivateBlink    // blink count, not an {X} in a cost
                       || a.kind == Action::Kind::JitteModeAbility)   // Jitte +N/+N: how many counters
                      && a.chosen_x > 0)
             {

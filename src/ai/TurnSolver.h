@@ -459,6 +459,25 @@ public:
         int  value          = -1;   // -1 = nothing castable
         bool wins_this_turn = false;
 
+        // COMBO OFF (human menu only): this plan is the standalone go-off whose TRIAL APPLY was
+        // actually run and actually won (EnumerateMainPlans' `verified` branch -- ApplyPlanDirect
+        // then OpponentHasLost). It is the ONLY thing entitled to say "wins this turn".
+        //
+        // WHY IT EXISTS. `verified` used to be a local that never left the enumerator, so both
+        // label sites keyed on the ACTION alone (`chosen_x > 3`) and cheerfully stamped
+        // "-- COMBO OFF: wins this turn" onto a plan whose trial apply had never run. That is not
+        // a corner case: the verify is skipped whenever the provider's cheap projection says a kill
+        // is out of reach (`plausible == false`), and on a sink-less board it always does, because
+        // ScanHandSinks is human-play-gated and so the projection cannot see the Living Wish ->
+        // Essence Depleter route the COUNT was sized on. The surviving plan is then the deliberately
+        // retained BANK (the 2026-09-08 best_bank branch) wearing a winner's label -- EDF seed 10 T4
+        // "blink Peregrine Drake x9 -- COMBO OFF: wins this turn" ran its nine blinks and left the
+        // opponent on 20 (user-reported 2026-09-09), and seed 2's x23 bank says it too.
+        //
+        // Default false, set only on the verified branch, read only by --claude-play output. The
+        // search never reads it and no digest keys on it, so autonomous play is byte-identical.
+        bool combo_off_verified = false;
+
         // Pump-waste tie-break flag (SubsetPumpWasted): this plan casts a target_own_creature
         // alt payload (Invigorate) whose pump cannot be used -- no ready attacker, or the
         // plan's own payment must tap the pump's target. Consequence is ORDERING ONLY:

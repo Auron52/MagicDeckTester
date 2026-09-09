@@ -2164,7 +2164,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 std::vector<std::string> ord = (*g_play_cast_order_chooser)(this_main_ordinal);
                 ReorderPlanCasts(chosen, ord);
             }
-            TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main);
+            // THE REAL APPLY HALF of the COMBO OFF verify/apply pair. A plan carrying
+            // combo_off_verified was proved a kill by a trial ApplyPlanDirect run inside a
+            // ComboOffFinishScope; applying it WITHOUT that scope re-closes the finish gates, so the
+            // blinks run, the finisher is never deployed, and the "wins this turn" the player pressed
+            // does not happen (EDF seed 10 T4: nine blinks, opponent still on 20). The flag is set
+            // only on the verified branch of the human-play COMBO OFF gate, so no other plan and no
+            // autonomous run can enter this scope.
+            if (chosen.combo_off_verified)
+            {
+                ComboOffFinishScope co_finish;
+                TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main);
+            }
+            else { TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main); }
             // The opponent is DEAD -- stop asking. Under the commit-the-line rule the loop would
             // otherwise re-enumerate and keep prompting inside an already-won turn (the Dragons
             // sweep saw three Scourge ETB pings take the opponent to -1 and then still be offered a

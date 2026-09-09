@@ -10962,7 +10962,11 @@ inline bool DeployCreatureFromHand(GameState& state, int controller, int hand_id
 inline bool ComboFinishFromHand(GameState& state, int controller,
                                 const std::function<bool(const ManaCost&)>& pay)
 {
-    if (!ComboFinishOn() || HumanPlayActive()) { return false; }
+    // ...EXCEPT inside the COMBO OFF verify/apply. Pressing that button is the human asking for the
+    // win outright, so deploying the finisher out of their hand is exactly what they consented to --
+    // and the verify must run the same deploy the apply will, or its "wins this turn" is a guess.
+    // Ordinary human play is untouched: ComboOffFinishActive() is false everywhere else.
+    if (!ComboFinishOn() || (HumanPlayActive() && !ComboOffFinishActive())) { return false; }
     if (state.players[1 - controller].life <= 0) { return false; }
     if (finishstats::On()) { finishstats::g_fin_call.fetch_add(1, std::memory_order_relaxed); }
 
@@ -11746,36 +11750,43 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     // drain enumerable, the viewer shows ◇ vs ◇C and energy, and the ladder banks the pips the loop
     // actually needs), so the action is restored rather than the complaint re-litigated.
     //
-    // SCOPED, not restored wholesale. It fires only for a LIVE loop -- blinking a payload that
-    // untaps lands, with a sink on the board to cash into. That is the user's "once we have the
-    // pieces on the field and are untapping". Blink some other creature for value and nothing
-    // touches your float, which is the half of the original report that was always right.
+    // THE "LIVE LOOP" WIDENING IS REMOVED (USER, 2026-09-09). It was scoped to a live loop --
+    // blinking a land-untapping payload with a sink on the board -- on the reading that this was the
+    // user's "once we have the pieces on the field and are untapping". That reading was wrong, and
+    // the predicate it produced was true on EVERY ORDINARY SINGLE BLINK once the sink had landed:
+    // `payload_untaps && have_sink` says nothing about the human having asked for anything. So the
+    // iteration-count contract stated at the top of this comment -- "blink once and nothing fires" --
+    // was never actually delivered; `iterations > 1` was not the gate, it was one disjunct of four.
     //
-    // MTG_HUMAN_AUTOCASH=1 forces it on unconditionally (isolation against a saved reference
-    // without a rebuild); =0 is not an off switch for the scoped path, which is deliberate -- see
-    // the reference above for what turning it off costs.
-    bool payload_untaps = false;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.card.m_number != target_id) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        payload_untaps = (d != nullptr && d->params.etb_untap_lands > 0);
-        break;
-    }
-    bool have_sink = false;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != controller) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d == nullptr) { continue; }
-        const CardParams& q = d->params;
-        if (q.drain_cost.has_value() || q.exile_opponent_top_cost.has_value()
-            || (q.tap_damage_cost.has_value() && q.tap_damage_each_opponent > 0))
-        { have_sink = true; break; }
-    }
+    // The user reported the consequence twice. 2026-09-04: "I was losing mana every time Peregrine
+    // Drake was untapped because it was also activating Essence Depleter", and again 2026-09-09:
+    // "The viewer randomly activated Essence Depleter 16 times automatically when I played it."
+    // Measured on their own saved reference (claude_s1_gi0, turn 3): committing ONE bare
+    // `blink Peregrine Drake` -- blink_count 1, no drain action anywhere in the plan -- executed two
+    // unrequested drains and tapped both of the board's {C} sources. It also DELETED the human's own
+    // drain from the next menu (20 plans down to 16, with no Essence Depleter activation among them),
+    // because an unpayable cost is an unenumerated action -- which is the other half of that same
+    // report, "It seems you cannot activate Essence Depleter yourself". The auto-cash was the cause
+    // of both halves.
+    //
+    // WHAT THE WIDENING WAS FOR IS KEPT. It was added because the flat !HumanPlayActive() form also
+    // killed the FINISH path (it had no `iterations > 1` term), and the user's turn-3 reference then
+    // replayed as a turn-5 win. `iterations > 1` stays, so the explicit COMBO OFF / FINISH plan still
+    // runs the whole package -- the shortcut asked for in that same 2026-09-04 message -- and that
+    // route now genuinely wins, because the COMBO OFF verify/apply pair was repaired alongside this
+    // (see ComboOffFinishScope). The per-blink drain is not out of reach either: the enumerator
+    // already offers combined "blink X, Essence Depleter: target opponent loses life" plans, so the
+    // human takes the action by choosing it. That is what user-initiated means.
+    //
+    // MTG_HUMAN_AUTOCASH=1 still forces it on unconditionally (isolation against a saved reference
+    // without a rebuild).
+    //
+    // BYTE-IDENTICAL FOR THE SEARCH, by short-circuit: HumanPlayActive() is false in every autonomous
+    // run and inside every rollout (HumanPlaySuppress), so `!HumanPlayActive()` is true there and the
+    // removed term was never evaluated. The -0.0812 drain measurement, GT, the value leaf and the
+    // keep tables all stand untouched.
     static const bool s_human_autocash = EnvOn("MTG_HUMAN_AUTOCASH");
-    const bool combo_live = payload_untaps && have_sink;
-    const bool cash_sinks = !HumanPlayActive() || iterations > 1 || combo_live || s_human_autocash;
+    const bool cash_sinks = !HumanPlayActive() || iterations > 1 || s_human_autocash;
     // DRAW ONLY TO FIND -- see SpendSurplusOnDrawSinks. Evaluated once here and re-evaluated only
     // after a draw actually lands, because nothing else in the loop can change the answer.
     bool want_draw = LoopDrawSinkOn() && !ComboFinisherReachable(state, controller);

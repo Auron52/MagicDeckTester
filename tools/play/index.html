@@ -633,7 +633,11 @@ function enchantTargetsFor(name) {
   d.plans.forEach(pl => (pl.actions||[]).forEach(a => {
     // Solo-target tricks (a.trick) choose their target at RESOLUTION via the board-click
     // prompt — no queue-time enchant dialog for them (viewer feedback 2026-08-12 #2).
-    if (a.card===name && a.enchant_target>0 && !a.trick) out[a.enchant_target] = a.enchant_target_name || ('#'+a.enchant_target);
+    // Prefer the DISAMBIGUATED label: this map's value becomes the queued entry's `targetName`,
+    // which is both the plan-chip text and `attachPrefFor`'s name fallback. With two same-named
+    // hosts the bare name makes the chip read "→ Brushland" for either one, and the fallback
+    // cannot tell them apart (the num match is what saves it — this keeps the TEXT honest too).
+    if (a.card===name && a.enchant_target>0 && !a.trick) out[a.enchant_target] = a.enchant_target_label || a.enchant_target_name || ('#'+a.enchant_target);
   }));
   return out;
 }
@@ -1996,7 +2000,12 @@ function renderChooseDialog(v, line){
       if (!a || a.trick || !(a.enchant_target>0) || !a.enchant_target_name || !a.card) return;
       const key=a.card+' →';
       if ((x.subs||[]).some(s=>s.key===key)) return;   // the engine named it -- keep ITS label ("#2" disambiguation)
-      (x.subs=x.subs||[]).push({ key, choice:a.enchant_target_name, card:a.enchant_target_name,
+      // `choice` must be the DISAMBIGUATED label and `card` the clean name: two same-named hosts
+      // (a Brushland in play and the one being played this turn) otherwise produce an identical
+      // choice string, which is the collapse this whole pass exists to avoid — while the art lookup
+      // needs the real card name, since "Brushland #2" resolves to nothing.
+      (x.subs=x.subs||[]).push({ key, choice:a.enchant_target_label||a.enchant_target_name,
+                                 card:a.enchant_target_name,
                                  kind:'enchant', num:a.enchant_target });
     });
   });

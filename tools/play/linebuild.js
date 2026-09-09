@@ -163,11 +163,30 @@
   // matches whichever variant sorted first and the human's pick is silently discarded. Omitted (read
   // as "any") when the viewer somehow has no target, which keeps a legacy line parsing.
   // ...and a "*<count>" tail for the FINISH plan (the go-off: run the loop N times and cash the
-  // sinks). Emitted only for count > 1, so an ordinary one-shot blink writes the identical token it
-  // always did and every saved reference keeps matching. No MTG card name contains '*'.
+  // sinks). No MTG card name contains '*'.
+  //
+  // THE COUNT IS EMITTED FOR *EVERY* BLINK, INCLUDING 1 -- it used to be written only for count > 1,
+  // and that omission is what produced the phantom "pick one of 2" dialog on every single Emiel /
+  // Displacer activation (USER, seed 11 T6: "spammed by dialogs that shouldn't exist ...
+  // Emiel the Blessed X? / X=1 / X=6"). The chain: under human play the enumerator deliberately
+  // offers TWO blink actions -- the single activation and one sized FINISH count (TurnSolver.cpp's
+  // fold_fanout / MTG_PLAY_FINISH_PLAN) -- while CheckLine's BlinkAssign treats a count of 0 as a
+  // WILDCARD. A countless `blink=Emiel the Blessed@42` therefore matched BOTH plans, CheckLine
+  // returned `choose`, and the viewer rendered the pair as an X question. Emiel has no {X} in its
+  // cost at all (`blink_cost: "{3}"`), so that dialog asked about an internal batching artifact --
+  // exactly what the play-viewer decision principle says must never interrupt the player.
+  //
+  // Saying "*1" makes an ordinary click UNAMBIGUOUS, so it accepts straight through with no dialog,
+  // and the bulk affordance stays exactly where the user wants it: the explicit COMBO OFF button,
+  // which encodes its own "*N". Nothing is lost by being explicit -- multi-activation is expressed
+  // by clicking K times (segmentParts splits those into K one-blink segments, each now writing
+  // "*1"), not by this token. Engine-side back-compat is untouched: BlinkAssign's 0 == wildcard
+  // still stands, so every saved reference's countless `blink=` string keeps matching what it
+  // always matched. This file is loaded only by the play viewer, so no engine or search path can
+  // reach it -- budgeted search play is byte-identical by construction.
   function blinkIds(p) {
     return (p.blinkTarget ? '@' + p.blinkTarget : '')
-         + (p.blinkCount > 1 ? '*' + p.blinkCount : '');
+         + (p.blinkCount > 0 ? '*' + p.blinkCount : '');
   }
 
   function encodeLine(plan) {
