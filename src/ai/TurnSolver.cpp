@@ -32464,6 +32464,11 @@ inline bool SeedOn() { static const bool v = EnvOn("MTG_WINLESS_SEED", true); re
 // i.e. the bound is UNSOUND. Prints loudly and counts; costs one apply per certified node, so it
 // is a deliberate audit run, not a default.
 inline bool AuditOn() { static const bool v = EnvOn("MTG_WINLESS_AUDIT"); return v; }
+// MTG_WINLESS_CASTSEED -- the CONSTRUCTED cast seeds (round 5). DEFAULT ON; =0 leaves only the
+// null seed. MTG_WINLESS_CASTSEED_MAX caps the constructed set (default 6).
+inline bool CastSeedOn() { static const bool v = EnvOn("MTG_WINLESS_CASTSEED", true); return v; }
+inline int  CastSeedMax() { static const int v = EnvInt("MTG_WINLESS_CASTSEED_MAX", 6); return v; }
+inline std::atomic<unsigned long long> g_cseed_tries{0}, g_cseed_wins{0}, g_cseed_plans{0};
 inline std::atomic<unsigned long long> g_seed_tries{0}, g_seed_wins{0}, g_seed_edge_tries{0},
                                        g_seed_edge_wins{0}, g_audit_violations{0},
                                        g_audit_probes{0};
@@ -32499,9 +32504,15 @@ struct Dumper
                 "=== WINLESS SEED: tries=%llu wins=%llu (%.1f%%) | edge tries=%llu wins=%llu ===\n",
                 st, sw, st ? (100.0 * static_cast<double>(sw) / static_cast<double>(st)) : 0.0,
                 et, ew);
+            const unsigned long long ct = g_cseed_tries.load(), cw = g_cseed_wins.load();
+            std::fprintf(stderr,
+                "=== WINLESS CAST-SEED: tries=%llu wins=%llu (%.1f%%) plans-applied=%llu ===\n",
+                ct, cw, ct ? (100.0 * static_cast<double>(cw) / static_cast<double>(ct)) : 0.0,
+                g_cseed_plans.load());
             // THE ROADMAP NUMBER: horizon-edge nodes that NEITHER the certificate refuted NOR the
             // seed resolved -- the class that still pays a full search.
-            const unsigned long long residual = (et > ew) ? (et - ew) : 0;
+            const unsigned long long resolved = ew + g_cseed_wins.load();
+            const unsigned long long residual = (et > resolved) ? (et - resolved) : 0;
             std::fprintf(stderr,
                 "=== WINLESS RESIDUAL: %llu of %llu edge nodes (%.1f%%) resolved by neither "
                 "(certificate refuted %llu) ===\n",
@@ -32627,9 +32638,10 @@ static inline bool WinlessDevelopActive(const GameState& s, const SearchBudget* 
 //
 // Scoping is the certificate's. The returned line carries the seed plan itself, so a caller that
 // replays it re-runs the same apply and the same go-off.
-static bool WinlessSeedWins(const GameState& state, TurnSolver::Plan& out)
+// Apply ONE seed plan on scratch and report whether it killed. Shared by the null seed and the
+// constructed ones so both observe a kill by exactly the same route the plan loop does.
+static bool WinlessSeedApplyWins(const GameState& state, TurnSolver::Plan& seed)
 {
-    TurnSolver::Plan seed;                 // cast nothing; the apply's tail runs the go-off
     GameState s = state;
     std::vector<Action> bp;
     ApplyPlanDirect(s, seed, true, &bp);
@@ -32641,9 +32653,115 @@ static bool WinlessSeedWins(const GameState& state, TurnSolver::Plan& out)
         SimulateCombat(s);
         if (!OpponentHasLost(s)) { return false; }
     }
-    out = std::move(seed);
-    out.breakpoint_actions = std::move(bp);
+    seed.breakpoint_actions = std::move(bp);
     return true;
+}
+
+// CONSTRUCTED CAST SEEDS (MTG_WINLESS_CASTSEED). The null seed can only fire where the loop is
+// ALREADY live on the battlefield -- measured at ~1% of the certificate's misses, because the
+// residual is dominated by boards holding a piece in HAND. This builds the missing half: a tiny
+// deterministic set of plans that cast the outlet, the payload, or both, and lets the apply decide.
+//
+// WHY HAND-BUILDING IS SAFE HERE, where it would not be in a bound. Nothing is claimed: the plan is
+// APPLIED, and ApplyPlanDirect pays with the engine's own payment machinery. If the payment layer
+// refuses the cast, no kill is observed and we fall through to the full search -- the failure mode
+// is a wasted apply, never a phantom win. The actions themselves come from CollectActions, the
+// enumerator's own builder, so no field is hand-populated.
+//
+// DETERMINISM: candidates are deduped by name and ordered by card number, the set is capped, and
+// the land pick is the highest-yield non-bounce land in hand by the same key -- so the seed set is
+// a function of the state alone and is machine-invariant.
+//
+// NOT covered this round: a piece still in the LIBRARY. Reaching it needs the dig executed inside
+// the seed, which is a different (and much larger) construction; those nodes stay full-search.
+static bool WinlessCastSeedWins(const GameState& state, TurnSolver::Plan& out)
+{
+    const Player& ap = state.ActivePlayer();
+    // Cheap gate first: is a loop piece even in hand? Without this every node pays a CollectActions.
+    bool piece_in_hand = false;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && (d->params.blink_cost.has_value() || d->params.etb_untap_lands > 0))
+        { piece_in_hand = true; break; }
+    }
+    if (!piece_in_hand) { return false; }
+
+    const std::vector<Action> acts = CollectActions(state, /*is_pre_combat=*/true);
+    std::vector<const Action*> outlets, payloads;
+    std::vector<std::string>   seen_o, seen_p;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def
+                                        : CardDatabase::Instance().Lookup(a.card_name.str());
+        if (d == nullptr) { continue; }
+        const std::string nm = d->card.m_name.str();
+        if (d->params.blink_cost.has_value()
+            && std::find(seen_o.begin(), seen_o.end(), nm) == seen_o.end())
+        { seen_o.push_back(nm); outlets.push_back(&a); }
+        if (d->params.etb_untap_lands > 0
+            && std::find(seen_p.begin(), seen_p.end(), nm) == seen_p.end())
+        { seen_p.push_back(nm); payloads.push_back(&a); }
+    }
+    if (outlets.empty() && payloads.empty()) { return false; }
+    auto by_number = [](const Action* x, const Action* y)
+    {
+        const CardDefinition* dx = x->def ? x->def : CardDatabase::Instance().Lookup(x->card_name.str());
+        const CardDefinition* dy = y->def ? y->def : CardDatabase::Instance().Lookup(y->card_name.str());
+        if (dx == nullptr || dy == nullptr) { return dx != nullptr; }
+        return dx->card.m_number < dy->card.m_number;
+    };
+    std::stable_sort(outlets.begin(),  outlets.end(),  by_number);
+    std::stable_sort(payloads.begin(), payloads.end(), by_number);
+
+    // The land drop, if one is pending: highest-yield land in hand that does NOT bounce one of
+    // ours (a Karoo would hand back a land and could cost the very mana the go-off needs).
+    std::string land;
+    if (ap.lands_played_this_turn < 1 + ap.bonus_land_drops_this_turn)
+    {
+        int best_y = -1; int best_num = 0;
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->card.IsLand()) { continue; }
+            if (d->params.etb_bounce_land) { continue; }
+            const int y = std::max(1, d->params.produces_amount)
+                        - (d->params.enters_tapped ? 1 : 0);   // usable-this-turn preference
+            if (y > best_y || (y == best_y && d->card.m_number < best_num))
+            { best_y = y; best_num = d->card.m_number; land = d->card.m_name.str(); }
+        }
+    }
+
+    const int cap = std::max(1, winlesscert::CastSeedMax());
+    int built = 0;
+    auto try_plan = [&](std::initializer_list<const Action*> chosen) -> bool
+    {
+        if (built >= cap) { return false; }
+        ++built;
+        TurnSolver::Plan seed;
+        seed.land_to_play = land;
+        for (const Action* a : chosen) { if (a != nullptr) { seed.actions.push_back(*a); } }
+        if (winlesscert::StatsOn())
+        { winlesscert::g_cseed_plans.fetch_add(1, std::memory_order_relaxed); }
+        if (WinlessSeedApplyWins(state, seed)) { out = std::move(seed); return true; }
+        return false;
+    };
+
+    const std::size_t no = outlets.size(), np = payloads.size();
+    if (no > 0 && np > 0 && try_plan({ outlets[0], payloads[0] })) { return true; }
+    for (std::size_t i = 0; i < no && i < 2; ++i) { if (try_plan({ outlets[i] }))  { return true; } }
+    for (std::size_t i = 0; i < np && i < 2; ++i) { if (try_plan({ payloads[i] })) { return true; } }
+    if (no > 1 && np > 0 && try_plan({ outlets[1], payloads[0] })) { return true; }
+    if (no > 0 && np > 1 && try_plan({ outlets[0], payloads[1] })) { return true; }
+    return false;
+}
+
+static bool WinlessSeedWins(const GameState& state, TurnSolver::Plan& out)
+{
+    TurnSolver::Plan seed;                 // cast nothing; the apply's tail runs the go-off
+    if (WinlessSeedApplyWins(state, seed)) { out = std::move(seed); return true; }
+    return false;
 }
 
 // Store a WIN: final and cutoff-independent, so it supersedes any bounded no-win a looser earlier
@@ -34323,12 +34441,50 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         {
             TurnSolver::Plan probe;
             winlesscert::g_audit_probes.fetch_add(1, std::memory_order_relaxed);
-            if (WinlessSeedWins(state, probe))
+            // BOTH seed families, not just the null one: a certified-winless node that the
+            // CONSTRUCTED cast seeds can kill is exactly as much a violation, and it probes the
+            // piece-in-hand class the null seed cannot reach.
+            const bool null_win = WinlessSeedWins(state, probe);
+            const bool cast_win  = !null_win && WinlessCastSeedWins(state, probe);
+            if (null_win || cast_win)
             {
                 winlesscert::g_audit_violations.fetch_add(1, std::memory_order_relaxed);
+                const Player& vap = state.ActivePlayer();
+                std::string cast_names;
+                for (const Action& va : probe.actions)
+                { cast_names += va.card_name.str(); cast_names += ","; }
+                int vlands = 0, vcre = 0;
+                for (const Permanent& vp : state.battlefield)
+                {
+                    if (vp.controller_index != state.active_player_index) { continue; }
+                    if (vp.card.IsLand()) { ++vlands; }
+                    if (vp.card.IsCreature()) { ++vcre; }
+                }
+                std::string hand_names;
+                for (const Card& hc : vap.hand) { hand_names += hc.m_name.str(); hand_names += ","; }
+                // Re-apply the very same seed and report what the board LOOKS like afterwards,
+                // so the mechanism is observed rather than inferred.
+                GameState vs = state;
+                std::vector<Action> vbp;
+                const std::uint64_t drops_before = g_dropped_cast_count;
+                ApplyPlanDirect(vs, probe, true, &vbp);
+                const std::uint64_t dropped = g_dropped_cast_count - drops_before;
+                std::string bf_after;
+                for (const Permanent& vp : vs.battlefield)
+                {
+                    if (vp.controller_index != vs.active_player_index) { continue; }
+                    bf_after += vp.card.m_name.str(); bf_after += vp.tapped ? "(T)," : ",";
+                }
                 std::fprintf(stderr,
-                    "[winless] *** CERTIFICATE VIOLATION t%d: certified winless, but the canonical "
-                    "go-off KILLED. The bound is unsound. ***\n", state.turn_number);
+                    "[winless] *** CERTIFICATE VIOLATION t%d via %s: opp_life=%d lands=%d creatures=%d "
+                    "land=%s casts=[%s] hand=[%s] || AFTER: opp_life=%d decked=%d my_life=%d "
+                    "dropped_casts=%llu bf=[%s] ***\n",
+                    state.turn_number, null_win ? "NULL-seed" : "CAST-seed",
+                    state.players[1 - state.active_player_index].life, vlands, vcre,
+                    probe.land_to_play.c_str(), cast_names.c_str(), hand_names.c_str(),
+                    vs.players[1 - vs.active_player_index].life, vs.opponent_decked ? 1 : 0,
+                    vs.ActivePlayer().life, static_cast<unsigned long long>(dropped),
+                    bf_after.c_str());
             }
         }
         // Memoise it exactly as a searched refutation would be: "no win at turn <= cutoff", which
@@ -34352,7 +34508,19 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (at_edge) { winlesscert::g_seed_edge_tries.fetch_add(1, std::memory_order_relaxed); }
         }
         TurnSolver::Plan seed_plan;
-        if (WinlessSeedWins(state, seed_plan))
+        bool seeded = WinlessSeedWins(state, seed_plan);
+        // Constructed cast seeds: only where the null seed missed, and only when a loop piece is
+        // actually in hand (the helper's own cheap gate), so a board with nothing to cast pays a
+        // hand scan and nothing else.
+        if (!seeded && winlesscert::CastSeedOn())
+        {
+            if (winlesscert::StatsOn())
+            { winlesscert::g_cseed_tries.fetch_add(1, std::memory_order_relaxed); }
+            seeded = WinlessCastSeedWins(state, seed_plan);
+            if (seeded && winlesscert::StatsOn())
+            { winlesscert::g_cseed_wins.fetch_add(1, std::memory_order_relaxed); }
+        }
+        if (seeded)
         {
             if (winlesscert::StatsOn())
             {
