@@ -15372,7 +15372,20 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
                     // purchase is per pair.
                     int an[kBuckets + 1];
                     for (int b = 0; b <= kBuckets; ++b) { an[b] = aura_n[b]; }
-                    long long spend = o.pay + q.pay + cost;
+                    // SEQUENCING: the payload's ETB untap REFUNDS mana between the two casts, so
+                    // the peak requirement is not the sum. Cast the payload first, take the untap,
+                    // and the outlet plus one activation are paid out of the refreshed pool -- the
+                    // real line is "Drake for 5, untap 5, Displacer for 3" on a board that never
+                    // holds 8 at once.
+                    //
+                    // THIS WAS AN UNSOUNDNESS BUG, found by the round-5 cast-seed audit: charging
+                    // the naive sum made the certificate refute EldraziDisplacerFlicker seed 900001
+                    // turn 4, a board that genuinely kills that turn. Under-charging here is the
+                    // safe direction -- it declares MORE unbounded mana and so issues FEWER
+                    // certificates.
+                    const int q_refund = q.on_board ? 0 : refund_free(q.d->params.etb_untap_lands);
+                    long long spend = std::max<long long>(
+                        q.pay, o.pay + q.pay + cost - q_refund);
                     int       ref   = refund_free(q.d->params.etb_untap_lands);
                     int       ai    = 0;
                     while (ref <= cost && spend <= mana && ai <= kBuckets)
