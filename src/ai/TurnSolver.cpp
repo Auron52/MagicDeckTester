@@ -32007,6 +32007,56 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         {
             // Neither certificate nor seed resolved this edge node: attribute it (round 6).
             EdfCertNoteResidual();
+            // ROUND 7 DIAGNOSIS (MTG_WINLESS_DUMPNODE=<n>): dump the first n residual nodes in
+            // full, so the position can be hand-analysed as an MTG problem instead of argued
+            // about. Prints everything the analysis needs, including the top of the library --
+            // the label search is clairvoyant, so a line may legitimately rely on known draws.
+            static const int s_dumpn = EnvInt("MTG_WINLESS_DUMPNODE", 0);
+            static std::atomic<int> s_dumped{0};
+            if (s_dumpn > 0 && s_dumped.fetch_add(1, std::memory_order_relaxed) < s_dumpn)
+            {
+                const Player& dap = state.ActivePlayer();
+                const Player& dop = state.players[1 - state.active_player_index];
+                std::fprintf(stderr, "\n[NODE] ===== residual edge node, turn %d =====\n",
+                             state.turn_number);
+                std::fprintf(stderr, "[NODE] my_life=%d opp_life=%d opp_lib=%zu energy=%d rad=%d "
+                             "lands_played=%d floating=%u\n",
+                             dap.life, dop.life, dop.library.size(), dap.energy_counters,
+                             dap.rad_counters, dap.lands_played_this_turn,
+                             state.floating_mana.Total());
+                for (const Permanent& dp : state.battlefield)
+                {
+                    if (dp.controller_index != state.active_player_index) { continue; }
+                    const CardDefinition* dd = CardDatabase::Instance().LookupCached(dp.card);
+                    std::string ctr;
+                    for (const Counter& c : dp.counters)
+                    { ctr += "+" + std::to_string(c.count); }
+                    std::fprintf(stderr, "[NODE]   BF %-26s %s%s%s num=%d%s%s\n",
+                                 dp.card.m_name.str().c_str(),
+                                 dp.tapped ? "TAPPED " : "untapped ",
+                                 dp.entered_this_turn ? "SICK " : "",
+                                 ctr.c_str(), dp.card.m_number,
+                                 dp.aura_attached_to ? "  aura_on=" : "",
+                                 dp.aura_attached_to ? std::to_string(dp.aura_attached_to).c_str() : "");
+                    if (dd && dp.card.IsLand())
+                    {
+                        std::fprintf(stderr, "[NODE]        yield=%d\n",
+                                     PermanentManaYield(state, dp, *dd));
+                    }
+                }
+                for (const Card& hc : dap.hand)
+                { std::fprintf(stderr, "[NODE]   HAND %s\n", hc.m_name.str().c_str()); }
+                const std::size_t topn = std::min<std::size_t>(15, dap.library.size());
+                for (std::size_t li = 0; li < topn; ++li)
+                { std::fprintf(stderr, "[NODE]   LIB[%zu] %s\n", li, dap.library[li].m_name.str().c_str()); }
+                for (const Card& sc : dap.sideboard)
+                { std::fprintf(stderr, "[NODE]   SIDE %s\n", sc.m_name.str().c_str()); }
+                const ManaPool dpool = AvailableManaPool(state);
+                std::fprintf(stderr, "[NODE]   POOL W%d U%d B%d R%d G%d C%d wild%d wild_c%d total%d\n",
+                             dpool.white, dpool.blue, dpool.black, dpool.red, dpool.green,
+                             dpool.colorless, dpool.wild, dpool.wild_c, dpool.Total());
+                std::fprintf(stderr, "[NODE] ===== end =====\n");
+            }
         }
         if (seeded)
         {

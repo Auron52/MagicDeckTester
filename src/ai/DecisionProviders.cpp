@@ -14813,6 +14813,21 @@ bool EdfAutoGoOffAfterCasts(GameState& s, int controller)
     if (HumanPlayActive()) { return false; }
     if (s.players[1 - controller].life <= 0) { return false; }   // already over
     const FlickerLoop loop = RecogniseFlickerLoop(s, controller);
+    // ROUND 7 (MTG_EDF_GOFF_TRACE): where does the go-off chain break on a board the certificate
+    // could not refute? Bounded output; diagnosis only, never branches game logic.
+    static const bool s_gtrace = EnvOn("MTG_EDF_GOFF_TRACE");
+    static std::atomic<int> s_gt_n{0};
+    const bool gt = s_gtrace && s_gt_n.fetch_add(1, std::memory_order_relaxed) < 40;
+    if (gt)
+    {
+        std::fprintf(stderr,
+            "[goff] t%d ok=%d net=%d refund=%d cost=%d untaps=%d net_c=%d(c_ref=%d c_cost=%d) "
+            "gorge=%d/%d drain=%d/%d exile=%d setup=%d dig=%d -> count=%d\n",
+            s.turn_number, loop.ok ? 1 : 0, loop.net, loop.refund, loop.cost_mv, loop.untaps,
+            loop.net_c, loop.c_refund, loop.c_cost, loop.gorge_dmg, loop.gorge_cost_mv,
+            loop.drain_amount, loop.drain_cost_mv, loop.exile_cost_mv, loop.hand_setup_mv,
+            loop.dig_draws, loop.ok ? FlickerGoOffCount(s, loop) : 0);
+    }
     if (!loop.ok) { return false; }
     const int n = FlickerGoOffCount(s, loop);
     if (n <= 0) { return false; }
@@ -15084,6 +15099,16 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
     // physically cannot produce {W}{W} for Emiel, {U} for a Drake, or the {C} pip an Eldrazi
     // Displacer activation needs (CR 107.4c -- no colour pays {C}).
     ManaPool board_pool;
+    // PER-COLOUR CAPABILITY (round 7). ManaPool stores a multi-mode land in `wild`, and
+    // CanPayFlat lets a wild unit pay ANY pip -- so a board of Yavimaya Coasts (G/U/C) read as
+    // able to cast an Eldrazi Displacer's {2}{W}. That is the engine's deliberate
+    // enumerate-optimistic convention (the payer is the exact gate), but a BOUND that may only
+    // refuse cannot inherit it. cap[c] counts mana units whose source can actually produce c;
+    // the test below is the necessary condition "every pip has enough capable sources", which a
+    // genuinely unpayable cost must fail. Diagnosed on g37 seed 900037 turn 3: zero white
+    // sources in play, Displacer uncastable, yet the certificate declined.
+    int cap[6] = {0, 0, 0, 0, 0, 0};   // indexed by Color
+    int cap_total = 0;
 
     for (const Permanent& p : s.battlefield)
     {
@@ -15129,6 +15154,13 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
             else if (!prod.empty())
             { board_pool.wild += base; if (c_cap) { board_pool.wild_c += base; } }
             if (aura > 0) { board_pool.wild += aura; }
+            for (const Color col : prod)
+            { cap[static_cast<int>(col)] += base; }
+            cap_total += base;
+            // A Land Aura's bonus is "any colour" for Fertile Ground / Trace, and green for Wild
+            // Growth / Overgrowth. Credited to EVERY colour: over-crediting is the safe direction.
+            if (aura > 0)
+            { for (int ci = 0; ci < 6; ++ci) { cap[ci] += aura; } cap_total += aura; }
         }
     }
     board_pool.AddPool(s.floating_mana);
@@ -15387,6 +15419,8 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
                 { if (++untap_deployables >= 8) { break; } }
             }
             ManaPool pool = board_pool;
+            int cap_eff[6]; int cap_total_eff = cap_total * (1 + untap_deployables);
+            for (int ci = 0; ci < 6; ++ci) { cap_eff[ci] = cap[ci] * (1 + untap_deployables); }
             for (int r = 0; r < untap_deployables; ++r) { pool.AddPool(board_pool); }
             const int drops_left = land_drop_open
                 ? std::max(0, 1 + ap.bonus_land_drops_this_turn - ap.lands_played_this_turn) : 0;
@@ -15394,6 +15428,15 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
             {
                 const int extra = drops_left * drop_bonus * (1 + untap_deployables);
                 pool.wild += extra; pool.wild_c += extra;
+                // The drop's colours: credit every colour ANY live drop-eligible land can make
+                // (over-credit, safe), so a white land still in hand keeps {W} payable.
+                for (const CertCard& cc : cards)
+                {
+                    if (cc.on_board || !cc.needs_drop || !live_of(cc)) { continue; }
+                    for (const Color col : cc.d->params.produces)
+                    { cap_eff[static_cast<int>(col)] += extra; }
+                }
+                cap_total_eff += extra;
             }
 
             for (int oi = 0; oi < n_out && !mana_inf; ++oi)
@@ -15460,7 +15503,19 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
                         need.colorless = bc.colorless;
                         if (!o.on_board) { CertAddCost(need, o.d->card.m_mana_cost); }
                         if (!q.on_board) { CertAddCost(need, q.d->card.m_mana_cost); }
+                        // Amount, as before (ManaPool's own check, wild and all).
                         colour_ok = pool.CanPay(need);
+                        // ... AND per-colour capability: no amount of Yavimaya Coast pays {W}.
+                        // Necessary condition only (it ignores that one source pays one pip), so
+                        // failing it proves the cost unpayable -- which is all a refusal needs.
+                        if (colour_ok)
+                        {
+                            const int want[6] = { need.white, need.blue, need.black,
+                                                  need.red, need.green, need.colorless };
+                            for (int ci = 0; ci < 6 && colour_ok; ++ci)
+                            { if (want[ci] > cap_eff[ci]) { colour_ok = false; } }
+                            if (need.ManaValue() > cap_total_eff) { colour_ok = false; }
+                        }
                     }
                     if (!colour_ok) { continue; }
                     // {C} SUSTAINABILITY OF THE LOOP ITSELF (round 6). The colour test above asks
