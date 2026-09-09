@@ -60,6 +60,18 @@
    "shortfalls": [],
    "src": "cc810c4300b96a6e172c8dbd1eab3e2deb4589c6"
   },
+  "critterlifegain": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.6,
+   "max_turns": 8,
+   "n": 10,
+   "policy": "committed value_play",
+   "search": 4.6,
+   "short": 0,
+   "shortfalls": [],
+   "src": "cc810c4300b96a6e172c8dbd1eab3e2deb4589c6"
+  },
   "dragons": {
    "hand_mismatch": 0,
    "hand_mismatch_games": [],
