@@ -79,6 +79,19 @@ def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_dep
     for k in ("MTG_EVAL_MODEL","MTG_EVAL_PROFILE","MTG_VALUE_MODEL","MTG_VALUE_PROFILE",
               "MTG_NC_SEARCH","MTG_VALUE_MIN_DEPTH","MTG_VALUE_REDO_MODE","MTG_VALUE_STARTGATE_ALPHA"):
         env.pop(k, None)
+    # MTG_MATRIX_FD_LEAF_DEPTH (default ABSENT = byte-identical): per-RUN override of the engine's
+    # beyond-horizon leaf fidelity (MTG_FD_LEAF_DEPTH), applied uniformly to every cell of every arm
+    # of THIS matrix run and to nothing else -- the point is to scope the override to the matrix, so
+    # a caller exporting it around `valueleaf.sh run` cannot leak it into phase A's played label
+    # games (which must match shipped play). Motivation (EDF, 2026-09-09): at the default leaf depth
+    # 1 the matrix's unbudgeted H cells are INFEASIBLE on flicker-combo boards (~98% of wall in the
+    # per-simulated-turn 1-ply lookahead; single H5 games measured >1.2 h), while depth 0 measured
+    # quality-neutral on 32 paired EDF games (agent 15-pair + main 17-pair, means within 0.12t,
+    # large deviations favoring depth 0). CAUTION: depth 1 is the documented Treasure Hunt fix
+    # (greedy leaf mis-ranks combo setup, ~turn-19 vs turn-5) -- this override is per-deck evidence
+    # only; validate before using it on any other deck.
+    if os.environ.get("MTG_MATRIX_FD_LEAF_DEPTH"):
+        env["MTG_FD_LEAF_DEPTH"] = os.environ["MTG_MATRIX_FD_LEAF_DEPTH"]
     if value_on:
         env["MTG_VALUE_MODEL"]="1"; env["MTG_VALUE_PROFILE"]=prof
         env["MTG_VALUE_MIN_DEPTH"]=str(value_min_depth); env["MTG_VALUE_STARTGATE_ALPHA"]="8"
