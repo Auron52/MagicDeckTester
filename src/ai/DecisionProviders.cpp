@@ -14972,9 +14972,21 @@ enum class CertWhy { Fired = 0, AlreadyWon, OppDeckThin, Zones, UnknownCard, Opp
                      CombatLethal, NoSettle, GorgeInf, DrainInf, DrainDmg, MillDone, DigInf,
                      ManaInfNoDig, DigInfRealLoop, DigInfNoLoop, Count };
 inline std::atomic<unsigned long long> g_cert_why[static_cast<int>(CertWhy::Count)] = {};
+// RESIDUAL attribution (round 6): a decline only matters if the SEED then also missed, and the
+// certificate runs first -- so remember this node's decline reason and re-attribute it from the
+// search once the seed has had its turn. thread_local: one node at a time per worker.
+inline thread_local int g_cert_last_why = -1;
+inline std::atomic<unsigned long long> g_cert_residual[static_cast<int>(CertWhy::Count)] = {};
+// Where the pieces of the loop that made mana_inf true actually came from. This is the conjunct
+// most likely to over-credit: a library-sourced pair means the bound believes we can dig to both
+// halves of the combo, which is a far bigger claim than "they are already in hand".
+enum class LoopSrc { None = 0, Board, Hand, Lib, Tutor, Count };
+inline thread_local int g_cert_loop_src = 0;
+inline std::atomic<unsigned long long> g_cert_res_src[static_cast<int>(LoopSrc::Count)] = {};
 inline bool CertStatsOn() { static const bool v = EnvOn("MTG_WINLESS_STATS"); return v; }
 inline bool CertNote(CertWhy w, bool ret)
 {
+    g_cert_last_why = static_cast<int>(w);
     if (CertStatsOn())
     { g_cert_why[static_cast<int>(w)].fetch_add(1, std::memory_order_relaxed); }
     return ret;
@@ -14996,15 +15008,46 @@ struct CertWhyDumper
             if (v) { std::fprintf(stderr, " %s=%llu", kName[i], v); }
         }
         std::fprintf(stderr, " ===\n");
+        // The roadmap breakdown: of the nodes that neither the certificate nor a seed resolved,
+        // WHICH conjunct of the bound gave up, and where the loop it believed in came from.
+        std::fprintf(stderr, "=== WINLESS RESIDUAL by reason:");
+        for (int i = 0; i < static_cast<int>(CertWhy::Count); ++i)
+        {
+            const unsigned long long v = g_cert_residual[i].load();
+            if (v) { std::fprintf(stderr, " %s=%llu", kName[i], v); }
+        }
+        std::fprintf(stderr, " ===\n");
+        static const char* kSrc[] = { "none", "board", "hand", "library", "tutor" };
+        std::fprintf(stderr, "=== WINLESS RESIDUAL loop source:");
+        for (int i = 0; i < static_cast<int>(LoopSrc::Count); ++i)
+        {
+            const unsigned long long v = g_cert_res_src[i].load();
+            if (v) { std::fprintf(stderr, " %s=%llu", kSrc[i], v); }
+        }
+        std::fprintf(stderr, " ===\n");
     }
 };
 inline CertWhyDumper g_cert_why_dumper;
 
 }  // namespace
 
+// Round-6 residual attribution, called by the search when a node was neither certified nor
+// seeded. Reads the thread-local reason/provenance the last ProvenWinlessThisTurn call left.
+void EdfCertNoteResidual()
+{
+    if (!CertStatsOn()) { return; }
+    const int w = g_cert_last_why;
+    if (w >= 0 && w < static_cast<int>(CertWhy::Count))
+    { g_cert_residual[w].fetch_add(1, std::memory_order_relaxed); }
+    const int ssrc = g_cert_loop_src;
+    if (ssrc >= 0 && ssrc < static_cast<int>(LoopSrc::Count))
+    { g_cert_res_src[ssrc].fetch_add(1, std::memory_order_relaxed); }
+}
+
 bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 {
     if (me < 0 || me > 1) { return false; }
+    g_cert_loop_src = static_cast<int>(LoopSrc::None);
     const Player& ap  = s.players[me];
     const Player& opp = s.players[1 - me];
 
@@ -15420,6 +15463,37 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
                         colour_ok = pool.CanPay(need);
                     }
                     if (!colour_ok) { continue; }
+                    // {C} SUSTAINABILITY OF THE LOOP ITSELF (round 6). The colour test above asks
+                    // whether the loop can be STARTED; this asks whether it can be RUN. An Eldrazi
+                    // Displacer blink costs a {C} pip EVERY iteration, and {C} comes only from a
+                    // {C}-capable land tap (CR 107.4c -- no colour pays it, and nothing in this
+                    // pool converts generic into {C}). So the loop is unbounded only if each
+                    // iteration refreshes at least as many {C}-capable lands as its own pips
+                    // consume; otherwise it runs at most as many times as the current {C} supply
+                    // allows and the mana is NOT infinite. This is the user's own "no sufficient
+                    // sources of colourless", applied to the engine rather than to the sink.
+                    // Emiel ({3}, no pip) is unaffected, which is why the test is per PAIR.
+                    const int o_pips = static_cast<int>(bc.colorless);
+                    if (o_pips > 0)
+                    {
+                        const int refreshed = std::min(q.d->params.etb_untap_lands,
+                                                       c_lands + drop_c);
+                        if (refreshed < o_pips) { continue; }   // cannot sustain its own {C}
+                    }
+                    // Provenance of the pair the bound just believed in (round-6 attribution).
+                    if (o.on_board && q.on_board)            { g_cert_loop_src = static_cast<int>(LoopSrc::Board); }
+                    else if (o.slot == 1 || q.slot == 1)      { g_cert_loop_src = static_cast<int>(LoopSrc::Tutor); }
+                    else
+                    {
+                        bool lib = false;
+                        for (const CertCard& cc : cards)
+                        {
+                            if (!cc.from_lib) { continue; }
+                            if (cc.d == o.d && !o.on_board) { lib = true; break; }
+                            if (cc.d == q.d && !q.on_board) { lib = true; break; }
+                        }
+                        g_cert_loop_src = static_cast<int>(lib ? LoopSrc::Lib : LoopSrc::Hand);
+                    }
                     mana_inf = true; grew = true;
                 }
             }

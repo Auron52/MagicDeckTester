@@ -1498,6 +1498,12 @@ int DorkAtkContestedKind(const GameState& s);
 // branches game logic.
 void EdfTurnTrace(const GameState& s, int controller);
 
+// Round-6 residual attribution (MTG_WINLESS_STATS only): called by the search when a horizon-edge
+// node was resolved by NEITHER the winless certificate NOR a go-off seed. Attributes that node to
+// the certificate's last decline reason and to where the loop it believed in came from, so the
+// remaining full-search class can be read by CONJUNCT instead of guessed at. No-op without stats.
+void EdfCertNoteResidual();
+
 // SAME-MAIN GO-OFF (MTG_EDF_AUTOGOFF, default ON; USER 2026-09-08 "no extra mains to search"):
 // after a main's casts have been applied, if the board now holds a live self-funding blink loop
 // whose go-off count prices to lethal, run the loop as part of realising the plan -- the fix for
