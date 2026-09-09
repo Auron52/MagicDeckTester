@@ -2500,8 +2500,76 @@ are explicit): {Orzhov Basilica, Caves of Koilos}, {Carrion Feeder, Bloodthrone 
 Vizier}, {Ignoble Hierarch, Birds of Paradise}. `expected_buckets=23`. Hand space 1,088,514 (the
 engine's count at the user's intermediate K=26 ruling, 2,582,812, matched the arithmetic exactly).
 Fallbacks if cost demands: + Melira/Vizier -> K=22, 849,374 hands; + Hierarch/Birds -> K=21, 618,732.
-The `recommend` scout is running under this ruling on the deck folder
-(`logs/Melira Pod_mullgen/scout_K23.log`) for the measured rate and projection.
+The `recommend` scout ran under this ruling on the deck folder (`logs/Melira Pod_mullgen/scout_K23.log`):
+discovery 28 raw -> **23 buckets, 1,088,514 hands (engine == arithmetic)**; floor phase on 32
+threads at a SUSTAINED **~115 keep rollouts/s** (47,166 in 900 s; 42/s in the first 600 s while the
+slow cells front-load) — 3.3x the 35/s estimate used above. Re-projected at 115/s: scout (1 rollout x
+1.58M size-7+draw cells + 600k fused sub-table batches) ~5 h; **full `complete` gen ~1,088,514 x ~36
+/ 115/s ≈ 4 days** on this box, ~12 on the 12-thread machine; fallbacks K=22 ≈ 3.1 d, K=21 ≈ 2.3 d.
+
+**Then it CRASHED at 900 s: exit 139, SIGSEGV** (`dmesg`: "segfault at 4 ... in mtg-analyze", i.e. a
+null + 4 read), symbolised in the exact Release binary to `CapGroupsBySituationalRank(...) + 0x3d0`
+(TurnSolver.cpp, the situational-rank group cap shared by EnumeratePlans / the plan-space cap of
+2026-09-06). Not seen on the 2026-09-08 K=28 scout without the sidecar (hours). Reproduced under
+`build/RelWithDebInfo` with `ulimit -c unlimited` in 3 minutes (core.3405805, gdb): frame 0
+`CapGroupsBySituationalRank(greedy=true)` from `SolveUncached` <- `SolveSecondMainInSearch` <-
+`SimulateToEndImpl` (a rollout's greedy second-main solve), locals `ranked = {}` (empty),
+`keep_n = 1`, `keep = {}`, `i = 0` -> `keep[ranked[0].second]` reads `.second` of a null element =
+address 4. **Root cause:** the call arrives with NO groups but `2^num_independent` alone above the
+greedy plan-space cap (`SolveSpaceCap`, the 2026-09-06 Melira product cap), so the "product too
+big" branch falls through the empty-groups case, `keep_n = max(1, ...)` floors to 1 ("always keep
+the top group"), and the loop indexes an empty ranking. **Fix:** `if (groups.empty()) return;` at
+the top of the function (nothing to cap; the walker bounds the product) — byte-identical in every
+case that did not crash. Needs many independent actions with zero groups in a rollout, which is
+why it surfaced in Melira's generation rollouts and not in the suite.
+
+### 2026-09-09f — the tree difference, root-caused: it is the MEMO, not pruning (user: "that seems like a bug")
+
+User: *"The way I see it in my mind we are just replacing the cost of the rollouts when they are not
+needed. It seems like you are doing something completely different if there are added costs."* Right.
+Instrumented the same-depth heuristic-vs-value pairs (200 games, Melira d5/b20):
+
+| per pass, h / v | d2 | d3 | d4 |
+|---|---|---|---|
+| B&B prunes at FSLineWin entry | 0 / 0 | 0 / 0 | 0 / 0 |
+| in-horizon early exits | 0.012 / 0.012 | 0 / 0 | 0 / 0 |
+| mean leaf win turn | 8.31 / 5.70 | 8.30 / 5.80 | 8.69 / 6.54 |
+| memo WIN hits | 4.4 / 6.4 | 6.4 / 12.2 | 6.0 / 14.6 |
+| memo NO-WIN hits | **1.9 / 0** | **10.9 / 0.02** | **19.3 / 0.8** |
+| memo win-entry ORDER MISSES (full re-search) | 1.3 / 1.7 | **6.9 / 12.6** | **8.3 / 25.4** |
+
+Pruning and early exits are identical. The difference is memo reuse: `FSLineCache` NO-WIN entries
+are order-free, WIN entries carry an index-encoded line and replay only when `FsOrderSig` matches
+(canon keys admit permuted states). The heuristic rollout says "no win by turn 8" from most leaves
+(mean 8.3), so its transpositions are answered by order-free no-win entries; the value model says
+~5.7, so nearly every subtree becomes a WIN entry, and every order-mismatched re-entry is a full
+re-search. So a value warm-up was NOT "the heuristic pass minus rollouts": it re-searched what the
+heuristic pass memoized. That is why the trees differed and why the gate replay drifted.
+
+**Fix (`MTG_WARMUP_MEMO_ORDERFREE`, default ON, byte-identical off the warm-up path):** an
+emulated-ladder warm-up pass (its line is discarded by construction; a warm-up that finds a verified
+win is now replayed on the heuristic at that depth) takes an order-mismatched WIN entry's win turn
+without the line. Re-measured (same 200 games):
+
+| per pass, h / v | d2 | d3 | d4 |
+|---|---|---|---|
+| heuristic leaves / value leaves | 1.06 | **1.30** | **1.45** |
+| memo win-entry order misses | 1.1 / 0 | 7.4 / 0 | 12.8 / 0 |
+| memo no-win hits | 2.0 / 0 | 10.8 / 0.02 | 24.7 / 0.6 |
+
+The value warm-up now walks the SMALLER tree; what is left is the heuristic pass's OWN order-miss
+re-searches (7-13 per pass), which the shipped search pays on every committing pass. Emulated
+ladder totals moved from 24.92M to 24.08M units (live 22.19M) — the reconstruction is now biased the
+other way (heuristic tree bigger), so mispredicts did not fall (731/1851).
+
+**The leaf-independent rule, and a perf lever for the shipped search (PROPOSED, user's call — it is
+play-affecting):** order-free WIN reuse for EVERY pass, i.e. on an order-mismatched win entry return
+the win turn with an empty continuation. Trees become identical under both leaves (then heuristic
+cost = value cost + rollouts exactly, up to per-position rollout-cost variance) AND the committing
+pass skips 7-13 full re-searches per pass. The cost: a line reaching such a node is truncated there,
+so commit-the-line re-searches at that decision instead of replaying — play can change (a fresh
+budget at the re-search). Needs the standing gate (smoke + regression + per-game diff) and an
+explicit go.
 
 **Smoke under the adopted sidecar (binary with the emulated lever OFF):** 77/80 configs unchanged
 (byte-identical off, as required), melira d3 4.88 -> 4.84 (2 faster), melira d5 4.96 = 4.96 (play

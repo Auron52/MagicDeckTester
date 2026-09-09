@@ -327,6 +327,9 @@ static std::array<std::atomic<long long>, 16> g_emul_cd_n{}, g_emul_cd_commit_un
 // Same depth, both leaves (calibration / fallback re-runs): are the TREES the same? Leaves under the
 // heuristic vs leaves under the value leaf, and how often they differ at all.
 static std::array<std::atomic<long long>, 16> g_emul_tree_n{}, g_emul_tree_hleaves{}, g_emul_tree_vleaves{}, g_emul_tree_differ{};
+// ...and WHY they differ: B&B prunes, in-horizon exits and leaf win-turn sums under each leaf.
+static std::array<std::atomic<long long>, 16> g_emul_tree_hcuts{}, g_emul_tree_vcuts{}, g_emul_tree_hhex{}, g_emul_tree_vhex{}, g_emul_tree_hwt{}, g_emul_tree_vwt{};
+static std::array<std::atomic<long long>, 16> g_emul_tree_hmw{}, g_emul_tree_vmw{}, g_emul_tree_hmn{}, g_emul_tree_vmn{}, g_emul_tree_hmo{}, g_emul_tree_vmo{}, g_emul_tree_hms{}, g_emul_tree_vms{};
 
 // Record one top-level decision's committed ITERATIVE-DEEPENING depth. See g_iddepth_hist.
 static inline void RecordIdDepth(int d)
@@ -512,6 +515,25 @@ namespace
                         const long long n = g_emul_tree_n[d].load(); if (n == 0) { continue; }
                         std::cerr << " d" << d << "=" << n << "/" << static_cast<double>(g_emul_tree_hleaves[d].load()) / static_cast<double>(std::max(1LL, g_emul_tree_vleaves[d].load()))
                                   << "/" << g_emul_tree_differ[d].load();
+                    }
+                    std::cerr << "\n[rollout-stats]   emulated-ladder same-depth tree shape, heuristic vs value per pass (B&B prunes h/v, in-horizon exits h/v, mean leaf win turn h/v):";
+                    for (int d = 0; d < 16; ++d)
+                    {
+                        const long long n = g_emul_tree_n[d].load(); if (n == 0) { continue; }
+                        const double hl = static_cast<double>(std::max(1LL, g_emul_tree_hleaves[d].load()));
+                        const double vl = static_cast<double>(std::max(1LL, g_emul_tree_vleaves[d].load()));
+                        std::cerr << " d" << d << "=" << static_cast<double>(g_emul_tree_hcuts[d].load()) / n << "/" << static_cast<double>(g_emul_tree_vcuts[d].load()) / n
+                                  << " " << static_cast<double>(g_emul_tree_hhex[d].load()) / n << "/" << static_cast<double>(g_emul_tree_vhex[d].load()) / n
+                                  << " " << static_cast<double>(g_emul_tree_hwt[d].load()) / hl << "/" << static_cast<double>(g_emul_tree_vwt[d].load()) / vl;
+                    }
+                    std::cerr << "\n[rollout-stats]   emulated-ladder same-depth MEMO per pass, heuristic/value (win hits, no-win hits, win-entry order misses, stale no-win):";
+                    for (int d = 0; d < 16; ++d)
+                    {
+                        const long long n = g_emul_tree_n[d].load(); if (n == 0) { continue; }
+                        std::cerr << " d" << d << "=" << static_cast<double>(g_emul_tree_hmw[d].load()) / n << "/" << static_cast<double>(g_emul_tree_vmw[d].load()) / n
+                                  << " " << static_cast<double>(g_emul_tree_hmn[d].load()) / n << "/" << static_cast<double>(g_emul_tree_vmn[d].load()) / n
+                                  << " " << static_cast<double>(g_emul_tree_hmo[d].load()) / n << "/" << static_cast<double>(g_emul_tree_vmo[d].load()) / n
+                                  << " " << static_cast<double>(g_emul_tree_hms[d].load()) / n << "/" << static_cast<double>(g_emul_tree_vms[d].load()) / n;
                     }
                     std::cerr << "\n";
                 }
@@ -14456,6 +14478,12 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
 {
     groupwave::g_state.call_active = false;   // set true below iff this call has a rank-R group
     if (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap)) { return; }
+    // Nothing to cap. Without this, a call with NO groups but 2^num_independent alone above the
+    // plan-space cap fell through the product check, keep_n was floored to 1 ("always keep the top
+    // group"), and `ranked[0]` was read from an empty vector: SIGSEGV at address 4 in a Melira
+    // mulligan-gen rollout's greedy second-main solve (2026-09-09, core.3405805: ranked={}, keep_n=1).
+    // The product a cap cannot shrink is not this function's business; the walker bounds it.
+    if (groups.empty()) { return; }
     const int cap = EffectiveGroupCap(state);
     const int R   = groupwave::g_state.tranche_rank;   // -1 = normal (capped) mode
     if (R < 0 && static_cast<int>(groups.size()) <= cap)
@@ -31067,6 +31095,17 @@ unsigned long long TurnSolver::TruncEvents() { return g_fs_trunc_events; }
 // current decision's search (deterministic). g_fs_leaf_evals is a running counter; per-pass deltas are the
 // per-depth leaf counts, snapshotted by FullSearchLine into g_probe_leaves while g_probe_recording is set.
 inline thread_local long long g_fs_leaf_evals   = 0;
+// Tree-shape diagnostics (same running-counter convention): branch-and-bound prunes at FSLineWin's
+// entry, in-horizon early exits, and the sum of leaf win turns -- what the leaf VALUE feeds back into
+// the tree's shape. Per-pass deltas, read by the emulated ladder's same-depth comparison.
+inline thread_local long long g_fs_cut_prunes   = 0;
+inline thread_local long long g_fs_hexits       = 0;
+inline thread_local long long g_fs_leaf_wt_sum  = 0;
+inline thread_local long long g_fs_memo_win_hits = 0, g_fs_memo_nowin_hits = 0, g_fs_memo_order_miss = 0, g_fs_memo_stale = 0;
+// True only inside an EMULATED-LADDER value warm-up pass, whose line is discarded by construction (a
+// warm-up that finds a verified win is replayed on the heuristic at that depth). MTG_LADDER_VALUE_LEAF's
+// warm-ups also force the value leaf but CAN commit a verified warm-up line, so they do not set this.
+inline thread_local bool g_emul_warm_pass = false;
 // ESCALATION BEAM (value-guided frontier pruning): when > 0, FSLineWin / FSLineTail expand only the top
 // `g_esc_beam_width` MoveOrderPlans-ranked plans per node. The escalation re-search then visits only the
 // probe's top value-ranked lines (a W^depth frontier) and pays for exactly that many heuristic rollouts --
@@ -31610,7 +31649,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         best.phases.push_back({ false, std::move(q_rec) });
                         best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
                         // First VERIFIED win -- the m2 loop's own shortcut, same horizon edge.
-                        if (sub.win_turn <= state.turn_number + depth) { return best; }
+                        if (sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
                     }
                 }
                 continue;   // the pending base plan itself is never scored -- its children were
@@ -31705,7 +31744,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                             best.phases.push_back({ false, std::move(q_rec) });
                             best.phases.insert(best.phases.end(),
                                                cont.phases.begin(), cont.phases.end());
-                            if (cont.win_turn <= state.turn_number + depth) { return best; }
+                            if (cont.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
                         }
                         continue;   // the recursion scored the empty continuation == the plain tail
                     }
@@ -31745,6 +31784,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 // with `depth` more turns, so its horizon edge is state.turn_number+depth.
                 if (sub.win_turn <= state.turn_number + depth)
                 {
+                    ++g_fs_hexits;
                     return best;
                 }
             }
@@ -31816,7 +31856,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         best.phases.push_back({ false, std::move(q_rec) });
                         best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
                         // Same horizon edge as the base loop's first-verified-win shortcut.
-                        if (sub.win_turn <= state.turn_number + depth) { return best; }
+                        if (sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
                     }
                 }
             }
@@ -31976,6 +32016,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
                         if (sub.win_turn <= state.turn_number + depth)
                         {
+                            ++g_fs_hexits;
                             return best;
                         }
                     }
@@ -32011,7 +32052,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                                         FSLineCache* lc, SearchBudget* budget)
 {
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
-    if (state.turn_number > cutoff)    { return { max_turns + 1, {} }; }  // can't beat incumbent
+    if (state.turn_number > cutoff)    { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }  // can't beat incumbent
     GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
 #ifdef MTG_PROFILE
     if (state.turn_number >= 0 && state.turn_number < 12) { PROF_INC(fsw_by_turn[state.turn_number]); }
@@ -32052,6 +32093,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // fd-oracle diagnostic only (see g_vleaf_min_est): remember the best win this leaf GUESSED.
             static const bool s_fd_leafest = EnvOn("MTG_FD_ORACLE");
             if (s_fd_leafest && w <= max_turns && w < g_vleaf_min_est) { g_vleaf_min_est = w; }
+            g_fs_leaf_wt_sum += w;
             return { w, {} };
         }
         // Tail estimate beyond the horizon: roll out to game end at s_fd_leaf_depth
@@ -32061,6 +32103,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // never truncates -- the start gate alone reads the budget, between passes.
         GameState leaf = state;
         int w = SimulateToEnd(std::move(leaf), EffectiveFdLeafDepth(), max_turns, budget, cutoff, second_main, tt);
+        g_fs_leaf_wt_sum += w;
         return { w, {} };
     }
 
@@ -32090,8 +32133,26 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (it->second.nowin_bound != std::numeric_limits<int>::max()
                 || it->second.order_sig == 0
                 || it->second.order_sig == FsOrderSig(state))
-            { return it->second.line; }
+            {
+                if (it->second.nowin_bound == std::numeric_limits<int>::max()) { ++g_fs_memo_win_hits; } else { ++g_fs_memo_nowin_hits; }
+                return it->second.line;
+            }
+            // WARM-UP PASS: its line is discarded (only the committing heuristic pass's line is
+            // played), so the order-mismatched WIN entry's win turn is all it needs -- take it
+            // without the line. Measured 2026-09-09 (Melira d3, per pass): the heuristic's
+            // transpositions are answered by order-FREE no-win entries 10.9x, the value leaf's
+            // 0.02x, because its estimates make nearly every subtree a "win" entry; its order
+            // misses double (12.6 vs 6.9) and each is a full re-search -- the entire reason a value
+            // warm-up walked a bigger tree than the heuristic pass at the same depth.
+            static const bool s_warm_orderfree = EnvOn("MTG_WARMUP_MEMO_ORDERFREE", true);
+            if (s_warm_orderfree && g_emul_warm_pass && g_force_value_leaf && !g_force_heuristic_leaf)
+            {
+                ++g_fs_memo_win_hits;
+                return { it->second.line.win_turn, {} };
+            }
+            ++g_fs_memo_order_miss;   // a WIN entry this node could not replay (zone order differs)
         }
+        else if (it != lc->end()) { ++g_fs_memo_stale; }   // no-win entry too weak for this cutoff
     }
     // Truncation watermark for this node's own exploration (see g_fs_trunc_events).
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
@@ -32391,6 +32452,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         // In-horizon win: same COMPLETE-NODES deferral as the main loop below.
                         if (tail.win_turn <= state.turn_number + depth - 1)
                         {
+                            ++g_fs_hexits;
                             if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
                             FSLineStoreWin(lc, key, best, state);
                             return best;
@@ -32601,6 +32663,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // standalone earliest-win finder.
             if (tail.win_turn <= state.turn_number + depth - 1)
             {
+                ++g_fs_hexits;
                 // COMPLETE NODES: this win is only known-optimal if every shallower pass was a
                 // complete refutation, which a budget-truncated wave phase cannot promise. Break
                 // instead of returning so this node's own deferred ranks get a chance to beat it.
@@ -32714,6 +32777,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     // on its own when the slots retire or the budget runs out.
                     if (!BpWaveCompleteNodes() && tail.win_turn <= state.turn_number + depth - 1)
                     {
+                        ++g_fs_hexits;
                         FSLineStoreWin(lc, key, best, state);
                         return best;
                     }
@@ -33363,6 +33427,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         bool      ran_h[17] = {false};     // pass k's line is the heuristic's
         long long hc[17] = {0};            // exact units of the heuristic pass at k (accounting)
         long long dec_v_units = 0, dec_h_units = 0;   // this decision's value / heuristic units (accounting)
+        // Tree-shape deltas of the last pass at each depth, per leaf (accounting): B&B prunes,
+        // in-horizon exits, leaf win-turn sum. Compared heuristic-vs-value at one depth in learn_R.
+        struct PassShape { long long cuts = 0, hexits = 0, wtsum = 0, mwin = 0, mnowin = 0, morder = 0, mstale = 0; };
+        PassShape shape_v[17], shape_h[17];
         SearchLine lines[17];              // each completed pass's line (rollback target on overrun)
         double    spent_h = 0.0;           // what the heuristic ladder would have spent so far
         const bool   bounded = (budget != nullptr && !budget->Unlimited());
@@ -33388,6 +33456,16 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 g_emul_tree_hleaves[k].fetch_add(hleaves, std::memory_order_relaxed);
                 g_emul_tree_vleaves[k].fetch_add(lv[k], std::memory_order_relaxed);
                 if (hleaves != lv[k]) { g_emul_tree_differ[k].fetch_add(1, std::memory_order_relaxed); }
+                g_emul_tree_hcuts[k].fetch_add(shape_h[k].cuts,   std::memory_order_relaxed);
+                g_emul_tree_vcuts[k].fetch_add(shape_v[k].cuts,   std::memory_order_relaxed);
+                g_emul_tree_hhex[k].fetch_add(shape_h[k].hexits,  std::memory_order_relaxed);
+                g_emul_tree_vhex[k].fetch_add(shape_v[k].hexits,  std::memory_order_relaxed);
+                g_emul_tree_hwt[k].fetch_add(shape_h[k].wtsum,    std::memory_order_relaxed);
+                g_emul_tree_vwt[k].fetch_add(shape_v[k].wtsum,    std::memory_order_relaxed);
+                g_emul_tree_hmw[k].fetch_add(shape_h[k].mwin, std::memory_order_relaxed);   g_emul_tree_vmw[k].fetch_add(shape_v[k].mwin, std::memory_order_relaxed);
+                g_emul_tree_hmn[k].fetch_add(shape_h[k].mnowin, std::memory_order_relaxed); g_emul_tree_vmn[k].fetch_add(shape_v[k].mnowin, std::memory_order_relaxed);
+                g_emul_tree_hmo[k].fetch_add(shape_h[k].morder, std::memory_order_relaxed); g_emul_tree_vmo[k].fetch_add(shape_v[k].morder, std::memory_order_relaxed);
+                g_emul_tree_hms[k].fetch_add(shape_h[k].mstale, std::memory_order_relaxed); g_emul_tree_vms[k].fetch_add(shape_v[k].mstale, std::memory_order_relaxed);
             }
             if (lv[k] > 0 && hcost > cv[k])
             {
@@ -33419,8 +33497,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         {
             ForceValueLeafGuard     _v(!heuristic);
             ForceHeuristicLeafGuard _h(heuristic);
+            struct WarmFlag { bool prev; WarmFlag(bool on) : prev(g_emul_warm_pass) { g_emul_warm_pass = on; } ~WarmFlag() { g_emul_warm_pass = prev; } } _wf(!heuristic);
             const long long used_before   = budget ? budget->Used() : 0;
             const long long leaves_before = g_fs_leaf_evals;
+            const long long cuts0 = g_fs_cut_prunes, hex0 = g_fs_hexits, wt0 = g_fs_leaf_wt_sum;
+            const long long mw0 = g_fs_memo_win_hits, mn0 = g_fs_memo_nowin_hits, mo0 = g_fs_memo_order_miss, ms0 = g_fs_memo_stale;
             if (bounded)
             {
                 const long long beta_ceiling = static_cast<long long>(kOverrunBeta * limit);
@@ -33433,6 +33514,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (budget != nullptr) { budget->SetOverrunLimit(0); }
             cost   = (budget ? budget->Used() : 0) - used_before;
             leaves = g_fs_leaf_evals - leaves_before;
+            if (!over && d >= 0 && d < 17)
+            {
+                PassShape& ps = heuristic ? shape_h[d] : shape_v[d];
+                ps.cuts = g_fs_cut_prunes - cuts0; ps.hexits = g_fs_hexits - hex0; ps.wtsum = g_fs_leaf_wt_sum - wt0;
+                ps.mwin = g_fs_memo_win_hits - mw0; ps.mnowin = g_fs_memo_nowin_hits - mn0; ps.morder = g_fs_memo_order_miss - mo0; ps.mstale = g_fs_memo_stale - ms0;
+            }
             (heuristic ? g_emul_h_units : g_emul_v_units).fetch_add(cost, std::memory_order_relaxed);
             (heuristic ? dec_h_units : dec_v_units) += cost;
             if (heuristic && !over && d >= 0 && d < 17) { hc[d] = cost; }
@@ -33526,7 +33613,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // committed. A value line at last_done means the prediction was wrong (or a heuristic pass
         // overran above it): play the heuristic there, stepping shallower on each further overrun.
         // A verified value-pass win is a real in-horizon simulation and needs no replay.
-        while (!verified && last_done >= 1 && !ran_h[last_done])
+        (void)verified;   // a verified value-pass win no longer exempts the replay (see below)
+        // (A verified win found by a VALUE pass is replayed too: its line may be truncated by the warm-up
+        //  memo shortcut, and the heuristic pass at that depth finds the same in-horizon win.)
+        while (last_done >= 1 && !ran_h[last_done])
         {
             g_emul_fallbacks.fetch_add(1, std::memory_order_relaxed);
             const int k = last_done;
