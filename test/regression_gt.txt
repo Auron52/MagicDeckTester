@@ -1,4 +1,4 @@
-# Regression ground truth -- commit d37ab017  date 2026-09-09
+# Regression ground truth -- commit e75ac8ba  date 2026-09-09
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -59,7 +59,7 @@ critter_smoke_d0_s1001=4.9470/35f2bf9336169479
 critter_smoke_d3_s1001=4.6667/8ee0a82cda9e6599
 critter_smoke_d5_s1001=4.6800/3b1bb34a2248ac51
 melira_smoke_d0_s1001=6.4380/f6a846b11dadd30d
-melira_smoke_d3_s1001=4.8400/20a9af735acc2574
+melira_smoke_d3_s1001=4.8400/de3c8370b1b53794
 melira_smoke_d5_s1001=4.9600/9b52c061a0b778ca
 hinata2hg_smoke_d3_s1001=5.6667/a6d272170a895fe5
 antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
@@ -416,11 +416,11 @@ melira_overnight_d0_s4004=6.4005/378146e34a0357dc
 melira_overnight_d0_s6006=6.4395/7f731ac698c12cc3
 melira_overnight_d0_s8008=6.4035/016a7157a050256c
 melira_overnight_d0_s10010=6.3790/95683dfc141d0938
-melira_overnight_d3_s4004=4.8750/dc34f0812488e319
+melira_overnight_d3_s4004=4.8750/177580307345925a
 melira_overnight_d3_s5005=4.8150/fce0e14fbd5f0e6e
 melira_overnight_d3_s6006=4.8400/338b49a9b2309f03
-melira_overnight_d3_s7007=4.7500/8590c0274d63b93f
-melira_overnight_d5_s4004=4.8067/bc84f6d4eddb85c5
+melira_overnight_d3_s7007=4.7500/dbd08741915d4311
+melira_overnight_d5_s4004=4.8067/7cce3a977312c737
 melira_overnight_d5_s5005=4.7800/f8041223721d8354
 melira_overnight_d5_s6006=4.8133/7199f3dfd0d9dee9
 melira_overnight_d5_s7007=4.7733/9773f262731c4f54
