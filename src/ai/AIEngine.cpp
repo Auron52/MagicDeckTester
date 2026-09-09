@@ -2977,11 +2977,55 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // "cast Ajani + -2" line realises the token the search scored (the 5d sweep's gi=5 idle
     // walker; the missing executor half showed as [fd-diverge] on every such line). By name:
     // the cast went through the stack, so the surviving copy is looked up on the battlefield.
+    // Game-log visibility (USER 2026-09-09): a loyalty activation was the one remaining
+    // battlefield activation with no LogAbility line, so a walker's +1/-2 never appeared in a
+    // saved reference or the viewer's action list (the Garth precedent below). Logged ONLY when
+    // the activation fired -- ApplyLoyaltyAbility is a silent no-op for a stranded duplicate or an
+    // unpayable cost -- by watching the walker's loyalty_activated_this_turn flip. The label is
+    // the same LoyaltyAbilityText the plan summary uses, plus the loyalty the walker is left at.
+    auto find_walker = [&](int number, const std::string& name) -> const Permanent*
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            if (number > 0 ? p.card.m_number == number
+                           : (p.card.m_name.str() == name && p.loyalty > 0
+                              && !p.loyalty_activated_this_turn))
+            { return &p; }
+        }
+        return nullptr;
+    };
+    // Snapshot taken BEFORE the apply (number 0 = no eligible walker, so nothing to log). Not a
+    // pointer: the apply can erase the walker (a cost that takes it to 0 loyalty), and then the
+    // absence itself is the evidence that the activation fired.
+    struct WalkerBefore { int number = 0; std::string name; bool was_active = true; };
+    auto walker_before = [&](int number, const std::string& name) -> WalkerBefore
+    {
+        const Permanent* w = find_walker(number, name);
+        if (!w) { return {}; }
+        return { w->card.m_number, w->card.m_name.str(), w->loyalty_activated_this_turn };
+    };
+    auto log_loyalty_if_fired = [&](const WalkerBefore& b, int ability_index)
+    {
+        if (!m_logger || b.number == 0 || b.was_active) { return; }
+        const Permanent* after = find_walker(b.number, "");
+        if (after != nullptr && !after->loyalty_activated_this_turn) { return; }   // did not fire
+        const CardDefinition* d = CardDatabase::Instance().Lookup(b.name);
+        std::string text = "loyalty";
+        if (d && ability_index >= 0
+            && ability_index < static_cast<int>(d->params.loyalty_abilities.size()))
+        { text = "loyalty " + LoyaltyAbilityText(d->params.loyalty_abilities[ability_index]); }
+        text += after ? " (loyalty now " + std::to_string(after->loyalty) + ")"
+                      : " (loyalty 0 -> graveyard)";
+        m_logger->LogAbility(b.number, b.name, text);
+    };
     auto walker_cast_activation = [&](const Action& a)
     {
         if (a.kind != Action::Kind::CastFromHand || a.loyalty_ability < 0) { return; }
+        const WalkerBefore b = walker_before(0, a.card_name.str());
         ApplyCastLoyaltyActivation(state, state.active_player_index, -1, a.card_name.str(),
                                    a.loyalty_ability);
+        log_loyalty_if_fired(b, a.loyalty_ability);
     };
     auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
                             int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,
@@ -4534,8 +4578,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::ActivateLoyalty)
         {
             // Planeswalker loyalty (executor mirror; no mana cost).
+            const WalkerBefore b = walker_before(a.sac_source_id, "");
             ApplyLoyaltyAbility(state, state.active_player_index, a.sac_source_id, a.loyalty_ability,
                                 a.enchant_target);   // Oko +1: the searched Elk target (lockstep)
+            log_loyalty_if_fired(b, a.loyalty_ability);
         }
         else if (a.kind == Action::Kind::GarthActivate)
         {
