@@ -124,6 +124,80 @@ static std::atomic<long long> g_interior_nodes_esc{0};   // interior nodes done 
 // the first DOWN by deleting actions; if drops rise while cand_scored does not fall, the filter is
 // firing somewhere that has no plan space to prune. See the 2026-08-21 bisect.
 static std::atomic<long long> g_cand_scored{0};
+
+// --- CANDIDATE DEDUP CENSUS (MTG_DEDUP_CENSUS, default OFF = zero cost) -----------------------
+// How many scored candidates apply to a post-apply state an EARLIER candidate of the same pass
+// already reached? Such a candidate's rollout is a bit-for-bit repeat of one already paid for, so
+// it is pure waste -- and on Snow the candidate loop (la_cand) is 33.5% of all units, with the
+// rollouts it feeds (rollout_step) another 25%.
+//
+// This only COUNTS; it never skips, so an armed run stays byte-identical to a disarmed one and the
+// number is the size of the prize rather than a claim about it. The real skip already exists at
+// both sites but is bundled behind MTG_COST_REFRAME, a different feature Snow does not run.
+// Keys come from BuildDedupKey (order-signature-folded), the same key the live dedup uses, so the
+// census cannot over-promise what the skip would collect.
+static std::atomic<long long> g_dedup_seen{0}, g_dedup_dup{0};
+// ...and how many of those duplicates are pure COPY PERMUTATIONS: same cards, same modes, differing
+// only in which physical copy (Action::hand_index) was used. Snow runs multiples of Coldsteel Heart,
+// Scrying Sheets and the snow basics, so "cast Heart #1" and "cast Heart #2" are distinct plans that
+// reach an identical state. If this rate tracks dup_rate, the duplicates can be recognised from the
+// PLAN ALONE -- before the GameState copy and ApplyPlanDirect that the post-apply key needs.
+static std::atomic<long long> g_dedup_namedup{0};
+// THE SAFETY NUMBER. Candidates whose copy-signature was already seen but whose post-apply STATE was
+// NOT: two plans that differ only in which copy they used, yet land somewhere different. Every one of
+// these is a line a signature-based dedup would wrongly delete. It must be 0 before the signature can
+// be used as a skip rather than a diagnostic.
+static std::atomic<long long> g_dedup_namefalse{0};
+static bool DedupCensusOn()
+{
+    static const bool on = EnvOn("MTG_DEDUP_CENSUS");
+    return on;
+}
+
+// --- CANDIDATE DEDUP (MTG_CAND_DEDUP) --------------------------------------------------------
+// Skip a candidate whose post-apply state an EARLIER sibling of the same pass already reached.
+// Its rollout would recompute, step for step, a result already on the books, so this removes
+// REPEATED WORK -- it is not a prune and it is not a truncation: no distinct line is dropped and
+// nothing is cut for budget reasons. The census (MTG_DEDUP_CENSUS) measured the rate at
+// **64% of scored candidates on Snow** (2,702,295 of 4,226,520 over 60 games).
+//
+// The mechanism is not new -- both sites below already carried this exact skip, but bundled behind
+// MTG_COST_REFRAME, a DIFFERENT feature (an over-optimistic cost relaxation). Duplicates do not
+// need that relaxation to arise: the base candidate set is "all 2^m feasible hand subsets", and
+// on a deck of cheap interchangeable permanents many subsets converge on one state. Bundling made
+// a general saving reachable only via a feature nobody runs.
+//
+// MEASURED VERDICT 2026-09-09 -- IT IS A QUALITY LEVER, NOT A SPEED ONE. DEFAULT OFF.
+//   regression tier   slower=0  faster=5   play-changed=19
+//   smoke             slower=0  faster=7   play-changed=8
+//   Snow 300 @ play   avg 6.0833 UNCHANGED, units 49,617,752 -> 47,326,981 (-4.6%)
+//   Snow 300 WALL     108.4 s -> 108.8 s, CPU ms 1,686,946 -> 1,695,529  (medians of 3 interleaved
+//                     reps) -- i.e. NEUTRAL, not the -4.6% the units suggest
+// Nothing regressed anywhere, so it clears the adoption bar on QUALITY. It is left OFF because it
+// was built to make Snow faster and it does not: adopting it would move 17 GT keys for a benefit
+// unrelated to the task that motivated it. Turn it on deliberately, on the quality evidence.
+//
+// WHY UNITS AND WALL DISAGREE, and the caveat to carry: `units_total` counts search work, and this
+// change TRADES search work for hashing -- BuildDedupKey runs on every candidate, and its cost is
+// invisible to the unit counters. The saved rollouts and the added hashing very nearly cancel on
+// Snow. Do not price a change that adds NON-SEARCH work in units alone; that is the mirror image of
+// the wall-vs-units trap, and it points the opposite way.
+//
+// DO NOT "OPTIMISE" THIS BY DEDUPING ON THE PLAN INSTEAD OF THE STATE -- MEASURED UNSOUND.
+// 93.7% of the duplicates are pure copy permutations (same cards, same modes, different
+// Action::hand_index), which is tempting because a plan signature is computable BEFORE the
+// GameState copy and ApplyPlanDirect that the state key needs -- it would skip ~60% of candidates
+// outright rather than just their rollouts. But the census's safety counter says 949,427 candidates
+// share a copy signature with an earlier sibling and land on a DIFFERENT state: a signature skip
+// would delete ~27% of genuinely distinct lines. Arm MTG_DEDUP_CENSUS and read `copy_FALSE` before
+// re-litigating this.
+static bool CostReframeEnabled();   // defined below; the legacy carrier of this same skip
+static bool CandDedupOn()
+{
+    static const bool on = EnvOn("MTG_CAND_DEDUP");
+    return on;
+}
+static bool CandDedupActive() { return CandDedupOn() || CostReframeEnabled(); }
 static std::atomic<long long> g_condemn_drops_total{0};
 // ...and SPLIT by which action collector was running. SolveUncached is the GREEDY path ("d0
 // decision + every rollout leaf"); EnumeratePlans is the SEARCHED path. A drop in the searched
@@ -380,6 +454,18 @@ namespace
                       << " esc_share=" << (in ? static_cast<double>(ine) / in : 0.0)
                       << " (interior nodes re-traversed by the heuristic escalation)\n";
             const long long dt = g_condemn_drops_total.load(), dg = g_condemn_drops_greedy.load();
+            if (DedupCensusOn())
+            {
+                const long long ds = g_dedup_seen.load(), dd = g_dedup_dup.load();
+                const long long dn = g_dedup_namedup.load();
+                std::cerr << "[rollout-stats] dedup_census seen=" << ds << " dup=" << dd
+                          << " dup_rate=" << (ds ? static_cast<double>(dd) / ds : 0.0)
+                          << " copy_perm=" << dn
+                          << " copy_share_of_dup=" << (dd ? static_cast<double>(dn) / dd : 0.0)
+                          << " copy_FALSE=" << g_dedup_namefalse.load()
+                          << " (dup = post-apply state a sibling already reached; copy_perm = of"
+                             " those, the ones recognisable from the PLAN alone)\n";
+            }
             std::cerr << "[rollout-stats] cand_scored=" << g_cand_scored.load()
                       << " condemn_drops=" << dt
                       << " (greedy=" << dg << " searched=" << (dt - dg)
@@ -30715,6 +30801,34 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
     return k;
 }
 
+// Copy-permutation signature (MTG_DEDUP_CENSUS only). The plan's actions in order, carrying every
+// field that changes WHAT is done but NOT which physical copy does it -- hand_index and the other
+// instance handles are deliberately omitted. Two plans sharing this string differ only in which
+// copy of an identical card they picked, so they must reach the same state.
+static std::string PlanCopySig(const TurnSolver::Plan& plan)
+{
+    std::string s;
+    s.reserve(plan.actions.size() * 24);
+    for (const Action& a : plan.actions)
+    {
+        s += std::to_string(static_cast<int>(a.kind));
+        s += '|';
+        s += static_cast<const std::string&>(a.card_name);
+        s += '|';
+        s += std::to_string(a.chosen_x);
+        s += static_cast<char>('0' + (a.alt_cost ? 1 : 0));
+        s += static_cast<char>('0' + (a.sacrifice_land ? 1 : 0));
+        s += static_cast<char>('0' + (a.dig_sacrifice ? 1 : 0));
+        s += std::to_string(a.discard_lands);
+        s += ':';
+        s += std::to_string(a.splice_count);
+        s += ':';
+        s += std::to_string(a.ritual_float);
+        s += ';';
+    }
+    return s;
+}
+
 // --- EOT DOMINANCE (docs/design/eot-dominance-pruning.md) -------------------------------------
 // The sibling-frontier application point for state dominance: at the candidate loop's end-of-turn
 // boundary, every new state is compared against the siblings of the SAME decision -- same consumed
@@ -35791,6 +35905,12 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // node budget. Reuses the apply already done below (no extra apply). Off (default) -> set never
         // consulted -> byte-identical. Per sub_depth pass. See docs/design/enumeration-feasibility-via-executor.md.
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> reframe_seen;
+        // Measurement twin of reframe_seen (MTG_DEDUP_CENSUS). Separate set so the census observes
+        // the FULL duplicate rate even on a run where the live dedup is off and therefore never
+        // populated reframe_seen. Untouched when disarmed.
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> census_seen;
+        // Copy-permutation census: the same plan with hand_index (and only hand_index) erased.
+        std::unordered_set<std::string> census_names;
         // Searched-breakpoint variant dedup -- see the identical guard in FSLineWin. Records every
         // candidate's post-apply state but only SKIPS a bp_choice variant, so runs without variants
         // (and MTG_BP_SEARCH=0) never enter it and stay byte-identical.
@@ -35838,7 +35958,26 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 ApplyPlanDirect(copy, plan, true);
                 // Count-bounder: skip this candidate's rollout if its post-apply state was already scored
                 // by an earlier candidate this pass (a dominated/strand-equivalent line). Reframe-only.
-                if (CostReframeEnabled() && !reframe_seen.insert(BuildDedupKey(copy)).second) { continue; }
+                if (DedupCensusOn())
+                {
+                    g_dedup_seen.fetch_add(1, std::memory_order_relaxed);
+                    const bool name_dup = !census_names.insert(PlanCopySig(plan)).second;
+                    if (!census_seen.insert(BuildDedupKey(copy)).second)
+                    {
+                        g_dedup_dup.fetch_add(1, std::memory_order_relaxed);
+                        if (name_dup) { g_dedup_namedup.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                    else if (name_dup)
+                    { g_dedup_namefalse.fetch_add(1, std::memory_order_relaxed); }
+                }
+                // ++candidates_done, unlike the pre-2026-09-09 reframe-only form: the APPLY above was
+                // paid for, so the overrun guard's avg_per_cand must see this candidate. Omitting it
+                // divided the pass's real cost by only the SURVIVORS -- at Snow's 64% duplicate rate
+                // that inflates the per-candidate average ~2.8x, which feeds `projected` and makes the
+                // guard abort passes it should have finished. A dedup that silently bought truncation
+                // would defeat its own purpose. (Same reasoning as the dominance prune below.)
+                if (CandDedupActive() && !reframe_seen.insert(BuildDedupKey(copy)).second)
+                { ++candidates_done; continue; }
                 if (bp_variants_here
                     && !bp_seen_states.insert(BuildDedupKey(copy)).second
                     && plan.bp_choice >= 0)
@@ -35870,7 +36009,20 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
                 // Count-bounder (post-combat main): dedup by post-apply state AFTER the win check so a
                 // unique winner is never skipped. Reframe-only. See the pre-combat branch above.
-                if (CostReframeEnabled() && !reframe_seen.insert(BuildDedupKey(copy)).second) { continue; }
+                if (DedupCensusOn())
+                {
+                    g_dedup_seen.fetch_add(1, std::memory_order_relaxed);
+                    const bool name_dup = !census_names.insert(PlanCopySig(plan)).second;
+                    if (!census_seen.insert(BuildDedupKey(copy)).second)
+                    {
+                        g_dedup_dup.fetch_add(1, std::memory_order_relaxed);
+                        if (name_dup) { g_dedup_namedup.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                    else if (name_dup)
+                    { g_dedup_namefalse.fetch_add(1, std::memory_order_relaxed); }
+                }
+                if (CandDedupActive() && !reframe_seen.insert(BuildDedupKey(copy)).second)
+                { ++candidates_done; continue; }
                 if (bp_variants_here
                     && !bp_seen_states.insert(BuildDedupKey(copy)).second
                     && plan.bp_choice >= 0)
