@@ -1,0 +1,19 @@
+{
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "battlefield": [
+    { "name": "Kitchen", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Cloud of Faeries"],
+  "library_filler": "Conservatory",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "tap=Kitchen#0:R;cast=Cloud of Faeries",
+  "expect_verdict": "illegal",
+  "comment": "MANUAL TAP/PAY, the rejecting side (docs/design/viewer-manual-tap-pay.md). Kitchen makes {G} or {U} and the human asked for {R}, so the line is ILLEGAL with the reason \"'Kitchen' cannot produce {R} (it makes {GU})\" -- it is NOT silently repaired into a legal tap. That distinction is the whole point of the fallback: an engine that quietly fixes an awkward hand-forced tap hands the allocation straight back to the allocator the human was overriding, and passes every outcome-based test while doing so. Note the line is otherwise perfectly playable (its accepting twin edf_manual_tap_dictates_the_face.json is the same board and the same cast), so the verdict here can only be the tap. Same wildcard-id and MTG_HUMAN_PLAY notes as that twin."
+}

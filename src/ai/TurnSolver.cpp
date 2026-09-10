@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
+#include <climits>   // INT_MAX (the human pre-tap "flush the rest" sentinel)
 #include <limits>
 #include <memory>
 #include <iostream>
@@ -21156,6 +21157,51 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                      state.turn_number, human_seq ? 1 : 0, what, a.card_name.c_str());
     };
 
+    // ---- HUMAN PRE-TAPS, at their declared positions (docs/design/viewer-manual-tap-pay.md) -----
+    // `Plan::human_pre_taps` carries, per tap, the number of declared ordered entries that must run
+    // BEFORE it. The ordered cast/activation loop below counts those entries as it dispatches them
+    // and flushes each tap the moment its position is reached, so "crack the Clue, THEN tap Kitchen
+    // for {G}, THEN blink" is one line rather than three committed ones -- the same reason
+    // human_action_order exists, applied to the payment side.
+    //
+    // The taps go into state.floating_mana, and every payment path drains the float BEFORE it taps
+    // anything (TapForCostSharedOnce's SpendFloatingTowardCost), so a pre-tapped source is what the
+    // next payment spends. Sources the human did NOT pre-tap are still the engine's to choose --
+    // this overrides an allocation, it never replaces the allocator.
+    //
+    // A pre-tap that turns out to be impossible at its position (the human tapped that land earlier
+    // in the same line) is DROPPED where it stands and reported, exactly as a mis-positioned
+    // activation is -- "It's up to me to make sure the order is correct" (USER 2026-09-10).
+    // `pre_taps_armed` mirrors `human_seq_inline`: armed for the TOP-LEVEL committed plan only, so
+    // a continuation re-entering this lambda (a pod / snow chain) can never re-run the taps. Empty
+    // for every search apply -> rollouts, autonomous play and GT are byte-identical.
+    std::vector<TurnSolver::PreTap> pre_taps;
+    if (s_human_play && HumanPreTapEnabled()) { pre_taps = plan.human_pre_taps; }
+    std::size_t pre_tap_next = 0;      // index of the next unflushed tap
+    int         pre_tap_slot = 0;      // declared ordered entries dispatched so far
+    bool        pre_taps_armed = false;
+    auto flush_pre_taps = [&](int upto)
+    {
+        while (pre_tap_next < pre_taps.size() && pre_taps[pre_tap_next].position <= upto)
+        {
+            const TurnSolver::PreTap& t = pre_taps[pre_tap_next++];
+            const std::string why = ApplyHumanPreTap(state, t);
+            if (g_play_event_sink != nullptr && g_real_resolution)
+            {
+                // The human's forced taps are REPORTED, per the "still be able to give good
+                // feedback on the mana usage by the engine" half of the request: every tap the
+                // history does NOT name this way was the engine's own choice, so the two are
+                // tellable apart after the fact instead of both just reading as "tapped".
+                EmitPlayEvent(state.turn_number, "mana",
+                              why.empty()
+                                  ? ("manual tap: " + t.name + " for {"
+                                     + std::string(1, "WUBRGC"[t.color < 0 || t.color > 5 ? 5 : t.color])
+                                     + "}")
+                                  : ("manual tap SKIPPED: " + why));
+            }
+        }
+    };
+
     // Play a revealed land as the turn's land drop inside a staged-draw breakpoint
     // (pre-combat only), mirroring the real engine's draw-engine second pass
     // (AIEngine::TryPlayLand). A Light Up the Stage land revealed by the draw frees
@@ -23563,6 +23609,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ~SeqScope() { flag = saved; }
             } _seq(human_seq_inline);
             const bool inline_acts = _seq.saved;
+            // ...and the same arm-once discipline for the human's PRE-TAPS: consumed here so a
+            // continuation re-entering this lambda cannot tap the sources a second time.
+            struct TapScope
+            {
+                bool& flag; const bool saved;
+                explicit TapScope(bool& f) : flag(f), saved(f) { f = false; }
+                ~TapScope() { flag = saved; }
+            } _tap(pre_taps_armed);
+            const bool inline_taps = _tap.saved;
+            // Taps the human declared AHEAD of their first queued entry (the ordinary case: "tap
+            // these lands, then cast") go in before anything is paid for.
+            if (inline_taps) { flush_pre_taps(0); }
             // Cast-ordering search: play the non-sacrifice hand casts in the EXACT vector
             // order the search chose (no enabler-first bucketing), so interleavings the
             // canonical order batches wrong are reachable. See Plan::searched_order.
@@ -23570,6 +23628,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
+                    if (inline_taps) { flush_pre_taps(pre_tap_slot++); }
                     line_order_trace("cast", a);
                     prep_free(a);
                     cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
@@ -23594,10 +23653,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // drops. Left as its own piece of work rather than shipped as false red banners.
                 else if (inline_acts && TurnSolver::IsTrailingActivation(a.kind))
                 {
+                    if (inline_taps) { flush_pre_taps(pre_tap_slot++); }
                     line_order_trace("activate", a);
                     apply_trailing_activations(std::vector<Action>{ a });
                 }
             }
+            // Taps declared AFTER the last queued entry (a deliberate float for the next segment --
+            // the phase's floating mana survives to the next committed line, CR 500.4).
+            if (inline_taps) { flush_pre_taps(INT_MAX); }
         }
         else
         {
@@ -24471,7 +24534,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         std::fprintf(stderr, "\n");
     }
     human_seq_inline = human_seq;                       // armed for the TOP-LEVEL plan only
+    // A plan with no explicit order has no ordered walk to interleave against, so every declared
+    // tap simply goes in up front -- which is what "tap these, then play the line" means anyway.
+    // (ReorderPlanCasts always sets searched_order when it recorded taps, so this is the
+    // belt-and-braces branch, not the live one.)
+    if (!plan.searched_order) { flush_pre_taps(INT_MAX); }
+    // ...and the interleave is armed only for the route that HAS one. Arming it on the canonical
+    // route would leave the flag set for a continuation's own (ordered) re-entry, which is where a
+    // tap could be performed inside a sub-plan instead of the line -- moot today, since the branch
+    // above has already drained them, but the invariant should not depend on that.
+    pre_taps_armed = plan.searched_order;
     apply_plan_actions(plan.actions, plan.searched_order);
+    pre_taps_armed   = false;
     human_seq_inline = false;
 
     // Krenko, Mob Boss taps AFTER the main casts, so X = Goblins you control counts this turn's
@@ -41589,12 +41663,47 @@ static bool BlinksMatch(const std::vector<TurnSolver::LineSpec::BlinkSpec>& want
     return BlinkAssign(want, have, used, 0);
 }
 
-TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_combat,
+TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_pre_combat,
                                             const LineSpec& spec,
                                             const std::vector<Plan>* menu)
 {
     using V = LineCheck::Verdict;
     LineCheck out;
+
+    // --- -1) HUMAN PRE-TAPS: perform them, then grade the line on the board they produce -------
+    // The MANUAL TAP/PAY fallback (docs/design/viewer-manual-tap-pay.md). A `tap=` token is not a
+    // play, it is a PAYMENT INSTRUCTION, so it takes part in no match test below -- but it does
+    // change what the line can afford, and CheckLine is monotone-accepting: a verdict must be
+    // reached on the board the line will really be paid from, never on an optimistic model of it.
+    // So the taps are performed FOR REAL, through the same ApplyHumanPreTap the executor calls, on
+    // a copy this function owns; `state` then shadows the parameter and the whole body below reads
+    // the pre-tapped board without a single further change. Empty pre_taps (every line ever
+    // written before this feature, and every line that leaves allocation to the engine) rebinds
+    // `state` straight back to the parameter -> byte-identical.
+    //
+    // An IMPOSSIBLE tap is Illegal with the reason verbatim, and that is the whole point: the
+    // alternative -- dropping the tap and grading the line as if the human had not asked for it --
+    // silently hands the allocation back to the engine, which is the behaviour this exists to
+    // override.
+    GameState        pre_tapped;
+    const GameState* state_p = &state_in;
+    if (!spec.pre_taps.empty() && HumanPreTapEnabled() && HumanPlayActive())
+    {
+        pre_tapped = state_in;
+        for (const PreTap& t : spec.pre_taps)
+        {
+            const std::string why = ApplyHumanPreTap(pre_tapped, t);
+            if (!why.empty())
+            {
+                out.verdict = V::Illegal;
+                out.failed_action = "tap=" + t.name;
+                out.reason = "can't tap as asked: " + why;
+                return out;
+            }
+        }
+        state_p = &pre_tapped;
+    }
+    const GameState& state = *state_p;
 
     // --- 0) Pass / cast-nothing maps to the engine's "idx < 0" pass ------------
     // A line that only activates Land's Edge / deploys via Vial / retraces (no land, no hand

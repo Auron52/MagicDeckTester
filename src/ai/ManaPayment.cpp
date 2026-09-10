@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>   // std::strchr -- the pre-tap colour alphabet lookup
 #include <functional>
 #include <vector>
 
@@ -135,6 +136,152 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         if (a.is_animated != b.is_animated)           { fail(i, "is_animated"); }
         if (a.is_token != b.is_token)                 { fail(i, "is_token"); }
         if (a.echo_resolved != b.echo_resolved)       { fail(i, "echo_resolved"); }
+    }
+}
+
+// Tap one non-filter source, producing `amt` of colour `col`, applying depletion
+// decrement and pain. Mirrors the accounting in BuildAvailableMana (AddSourceToPool).
+//
+// EXTRACTED from TapForCostSharedOnce's `tap_source` lambda -- a pure code move (every branch,
+// comment and side effect verbatim; the four captures became parameters) so the HUMAN PRE-TAP
+// (ApplyHumanPreTap) can tap a source through THE SAME mechanic the payment uses. A second
+// implementation of "tap this land" is how a painland stops taking its damage, an Aether Hub stops
+// spending its {E}, a storage land stops bursting all its counters and an enchanted land stops
+// paying its Aura's bonus: four rules bugs for the price of one copy-paste.
+//
+// `available` is the executor's turn-scoped accounting pool, decremented as the source taps;
+// nullptr for callers that keep no such pool (the rollout, and the pre-tap).
+void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDefinition& def,
+                        Color col, ManaPool& floating, ManaPool* available, bool for_creature)
+{
+    CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
+    // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): every real tap with source, colour and energy.
+    { static const bool s_tapdbg = EnvOn("MTG_TAPDBG");
+      if (s_tapdbg && g_real_resolution)
+      { std::fprintf(stderr, "[tapdbg] tap %s col=%d energy=%d\n",
+                     def.card.m_name.str().c_str(), (int)col,
+                     state.players[active].energy_counters); } }
+    p.tapped = true;
+    DecrementDepletionOnTap(p);
+    // Aether Hub: "{T}, Pay {E}: Add one mana of any color." Energy is part of the ACTIVATION
+    // cost, so it is spent here beside the depletion counter. Only the COLOURED mode costs it --
+    // the separate free "{T}: Add {C}" ability does not -- which is the same Colorless guard the
+    // painland damage below uses, and is what keeps a spent-out Hub a live {C} source for
+    // Eldrazi Displacer's {2}{C} pip.
+    if (def.params.energy_per_colored_tap > 0 && col != Color::Colorless)
+    { state.players[active].energy_counters -= def.params.energy_per_colored_tap; }
+    // Deathrite Shaman ability 1: the mana tap exiles a graveyard land (usable() guaranteed
+    // one exists). A failed payment restores the graveyard from gy_pre below.
+    if (def.params.gy_land_exile_mana) { ExileGraveyardLandForMana(state, active); }
+    // Painland ({T}: Add {C}. / {T}: Add {W} or {U}. This land deals 1 damage to you.) -- the
+    // two are SEPARATE abilities and only the coloured one hurts, so a Colorless tap of a land
+    // that actually has a {C} mode is painless. Exactly the shape of the Grove drip guard
+    // above. The `produces contains Colorless` half is load-bearing for byte-identity: a
+    // painland with no {C} mode (how every painland was modelled before this deck) can still
+    // be handed Color::Colorless for a GENERIC pip, and must keep taking its damage there.
+    if (def.params.tap_self_damage > 0)
+    {
+        // ONE EffectiveProduces call: it returns a reference into a thread_local buffer that
+        // the next call overwrites (see RitualTapAheadIntoFloat's note).
+        bool has_c_mode = false;
+        for (Color pc : EffectiveProducesFor(state, active, def, &p))
+        { if (pc == Color::Colorless) { has_c_mode = true; break; } }
+        if (!(col == Color::Colorless && has_c_mode))
+        { state.players[active].life -= def.params.tap_self_damage; }
+    }
+    // Grove of the Burnwillows: the COLOURED tap ({R}/{G}) makes the opponent gain 1 (-> 1 damage
+    // with Tainted Remedy out). A `col == Colorless` tap is the painless "{T}: Add {C}" mode --
+    // no drip (see DripLandAnyPipColor: a generic pip absent a Remedy routes here as Colorless).
+    if (def.params.tap_opponent_lifegain > 0 && col != Color::Colorless)
+    {
+        // Grove: "each opponent gains 1" -- once per head (2HG = x2, shared pool).
+        OpponentGainsLife(state, active,
+                          def.params.tap_opponent_lifegain * gamesetup::OpponentHeads(),
+                          def.card.m_name.str());
+    }
+    // Karoo bounce land ({U}{R} from one tap): produce one mana of EACH colour it makes, so a
+    // lone Izzet Boilerworks can pay a two-colour cost (Expressive Iteration {U}{R}) the planner
+    // promised. Crediting `amt` of the single matched colour would lose the second colour --
+    // the spell was enumerated but unpayable, a silent no-op. AddSourceToPool credits such a
+    // land as `amt` wild, so the executor decrements `available.wild`. Single-colour sources
+    // keep `amt` of the matched colour (byte-identical).
+    //
+    // `amt` = mana produced into floating; `consumed` = mana removed from this-turn's `available`
+    // pool. For a STORAGE-COUNTER land (Dwarven Hold / Mercadian Bazaar) a single tap now BURSTS
+    // ALL live counters (amt == consumed == had): the land is committed for the turn, and the
+    // planner already credits it its full PermanentManaYield (= counters) and marks the whole count
+    // consumed on tap. The old per-spell PARTIAL burst (amt = min(had, cost - produced_total)) set
+    // consumed = had but floated LESS, so the executor delivered fewer red than the planner
+    // promised -- silently dropping a legal cast on a tight multi-spell plan when an earlier spell
+    // under-burst and stranded a counter (burst amount shifted with irrelevant cast order). See
+    // docs/design/dragonstorm-plan-execution-fidelity-bug.md. Bank-the-rest is via the RESERVE (an
+    // unneeded storage land is held untapped), not a partial burst. ManaSourceRank taps storage
+    // LAST. Non-storage sources keep amt == consumed == the static per-tap yield -> byte-identical
+    // for every non-storage deck.
+    int amt, consumed;
+    if (def.params.storage_land)
+    {
+        amt = consumed = p.storage_counters;   // burst ALL counters on tap
+        p.storage_counters = 0;
+    }
+    else if (def.params.domain_mana)
+    {
+        // Faeburrow / Bloom Tender: one mana of EACH colour among controlled permanents.
+        amt = consumed = static_cast<int>(EffectiveProducesFor(state, active, def, &p).size());
+    }
+    else if (IsScaledManaDork(def))
+    {
+        // Priest of Titania / Elvish Archdruid: one tap bursts the LIVE Elf count of {G}.
+        amt = consumed = ScaledDorkCount(state, active, def);
+    }
+    else { amt = consumed = ManaProducedPerTap(def); }
+    // Per-PERMANENT: a locked etb_choose_color rock produces its ONE colour here, so it takes
+    // the single-colour path below instead of the multi-colour `wild` accounting -- which is
+    // what makes the executor's tap match the pool credit AddSourceToPool made for it.
+    const std::vector<Color>& prod = EffectiveProducesFor(state, active, def, &p);
+    // A multi-mode source that could have made {C} stops being able to once it is tapped, so
+    // retire its share of ManaPool::wild_c alongside its `wild` -- otherwise the projection keeps
+    // promising a {C} the board can no longer produce. Only ever nonzero for a source whose
+    // produces list includes Colorless, so every other deck's accounting is untouched.
+    const bool made_c = std::find(prod.begin(), prod.end(), Color::Colorless) != prod.end();
+    auto retire_wild_c = [&](int n)
+    { if (available && made_c) { available->wild_c = std::max(0, available->wild_c - n); } };
+    if (amt > 1 && prod.size() > 1)
+    {
+        for (Color c : prod) { floating.Add(c, 1); }
+        if (available) { available->wild -= consumed; }
+        retire_wild_c(consumed);
+    }
+    else
+    {
+        floating.Add(col, amt);
+        if (available) { available->Add(col, -consumed); }
+        if (prod.size() > 1) { retire_wild_c(consumed); }
+    }
+    // "Whenever enchanted land is tapped for mana, its controller adds an additional <X>" --
+    // the land Aura's mana arrives on THIS tap, in the AURA's colour (Wild Growth {G},
+    // Overgrowth {G}{G}, Fertile Ground any). AvailableManaPool credited it the same way via
+    // AddSourceToPool, so retire the same units from `available`. No-op with no aura attached.
+    // Per-tap half of MTG_FLOAT_TRACE. NOTE it covers only the GREEDY path: TapForCostBacktrack
+    // has its own tapping, so a cast paid by the backtracker prints a `cost=` line with no `tap`
+    // lines above it. That absence is itself the useful signal (it says which solver paid).
+    if (g_float_trace && !AllPlayHooksNull())
+    { std::fprintf(stderr, "[float]   tap %s as col=%d amt=%d -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
+                   def.card.m_name.str().c_str(), (int)col, amt,
+                   floating.white, floating.blue, floating.black, floating.red,
+                   floating.green, floating.colorless, floating.wild); }
+    if (LandAuraBonus(state, p) > 0)
+    {
+        ManaPool bonus;
+        LandAuraAddToPool(bonus, state, p);
+        floating.AddPool(bonus);
+        if (available)
+        {
+            available->white -= bonus.white; available->blue      -= bonus.blue;
+            available->black -= bonus.black; available->red       -= bonus.red;
+            available->green -= bonus.green; available->colorless -= bonus.colorless;
+            available->wild  -= bonus.wild;
+        }
     }
 }
 
@@ -323,140 +470,10 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         return true;
     };
 
-    // Tap one non-filter source, producing `amt` of colour `col`, applying depletion
-    // decrement and pain. Mirrors the accounting in BuildAvailableMana (AddSourceToPool).
+    // Tap one non-filter source: THE shared mechanic (TapSourceIntoFloat above), which the
+    // human pre-tap calls too so the two can never drift.
     auto tap_source = [&](Permanent& p, const CardDefinition& def, Color col)
-    {
-        CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
-        // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): every real tap with source, colour and energy.
-        { static const bool s_tapdbg = EnvOn("MTG_TAPDBG");
-          if (s_tapdbg && g_real_resolution)
-          { std::fprintf(stderr, "[tapdbg] tap %s col=%d energy=%d\n",
-                         def.card.m_name.str().c_str(), (int)col,
-                         state.players[active].energy_counters); } }
-        p.tapped = true;
-        DecrementDepletionOnTap(p);
-        // Aether Hub: "{T}, Pay {E}: Add one mana of any color." Energy is part of the ACTIVATION
-        // cost, so it is spent here beside the depletion counter. Only the COLOURED mode costs it --
-        // the separate free "{T}: Add {C}" ability does not -- which is the same Colorless guard the
-        // painland damage below uses, and is what keeps a spent-out Hub a live {C} source for
-        // Eldrazi Displacer's {2}{C} pip.
-        if (def.params.energy_per_colored_tap > 0 && col != Color::Colorless)
-        { state.players[active].energy_counters -= def.params.energy_per_colored_tap; }
-        // Deathrite Shaman ability 1: the mana tap exiles a graveyard land (usable() guaranteed
-        // one exists). A failed payment restores the graveyard from gy_pre below.
-        if (def.params.gy_land_exile_mana) { ExileGraveyardLandForMana(state, active); }
-        // Painland ({T}: Add {C}. / {T}: Add {W} or {U}. This land deals 1 damage to you.) -- the
-        // two are SEPARATE abilities and only the coloured one hurts, so a Colorless tap of a land
-        // that actually has a {C} mode is painless. Exactly the shape of the Grove drip guard
-        // above. The `produces contains Colorless` half is load-bearing for byte-identity: a
-        // painland with no {C} mode (how every painland was modelled before this deck) can still
-        // be handed Color::Colorless for a GENERIC pip, and must keep taking its damage there.
-        if (def.params.tap_self_damage > 0)
-        {
-            // ONE EffectiveProduces call: it returns a reference into a thread_local buffer that
-            // the next call overwrites (see RitualTapAheadIntoFloat's note).
-            bool has_c_mode = false;
-            for (Color pc : EffectiveProducesFor(state, active, def, &p))
-            { if (pc == Color::Colorless) { has_c_mode = true; break; } }
-            if (!(col == Color::Colorless && has_c_mode))
-            { state.players[active].life -= def.params.tap_self_damage; }
-        }
-        // Grove of the Burnwillows: the COLOURED tap ({R}/{G}) makes the opponent gain 1 (-> 1 damage
-        // with Tainted Remedy out). A `col == Colorless` tap is the painless "{T}: Add {C}" mode --
-        // no drip (see DripLandAnyPipColor: a generic pip absent a Remedy routes here as Colorless).
-        if (def.params.tap_opponent_lifegain > 0 && col != Color::Colorless)
-        {
-            // Grove: "each opponent gains 1" -- once per head (2HG = x2, shared pool).
-            OpponentGainsLife(state, active,
-                              def.params.tap_opponent_lifegain * gamesetup::OpponentHeads(),
-                              def.card.m_name.str());
-        }
-        // Karoo bounce land ({U}{R} from one tap): produce one mana of EACH colour it makes, so a
-        // lone Izzet Boilerworks can pay a two-colour cost (Expressive Iteration {U}{R}) the planner
-        // promised. Crediting `amt` of the single matched colour would lose the second colour --
-        // the spell was enumerated but unpayable, a silent no-op. AddSourceToPool credits such a
-        // land as `amt` wild, so the executor decrements `available.wild`. Single-colour sources
-        // keep `amt` of the matched colour (byte-identical).
-        //
-        // `amt` = mana produced into floating; `consumed` = mana removed from this-turn's `available`
-        // pool. For a STORAGE-COUNTER land (Dwarven Hold / Mercadian Bazaar) a single tap now BURSTS
-        // ALL live counters (amt == consumed == had): the land is committed for the turn, and the
-        // planner already credits it its full PermanentManaYield (= counters) and marks the whole count
-        // consumed on tap. The old per-spell PARTIAL burst (amt = min(had, cost - produced_total)) set
-        // consumed = had but floated LESS, so the executor delivered fewer red than the planner
-        // promised -- silently dropping a legal cast on a tight multi-spell plan when an earlier spell
-        // under-burst and stranded a counter (burst amount shifted with irrelevant cast order). See
-        // docs/design/dragonstorm-plan-execution-fidelity-bug.md. Bank-the-rest is via the RESERVE (an
-        // unneeded storage land is held untapped), not a partial burst. ManaSourceRank taps storage
-        // LAST. Non-storage sources keep amt == consumed == the static per-tap yield -> byte-identical
-        // for every non-storage deck.
-        int amt, consumed;
-        if (def.params.storage_land)
-        {
-            amt = consumed = p.storage_counters;   // burst ALL counters on tap
-            p.storage_counters = 0;
-        }
-        else if (def.params.domain_mana)
-        {
-            // Faeburrow / Bloom Tender: one mana of EACH colour among controlled permanents.
-            amt = consumed = static_cast<int>(EffectiveProducesFor(state, active, def, &p).size());
-        }
-        else if (IsScaledManaDork(def))
-        {
-            // Priest of Titania / Elvish Archdruid: one tap bursts the LIVE Elf count of {G}.
-            amt = consumed = ScaledDorkCount(state, active, def);
-        }
-        else { amt = consumed = ManaProducedPerTap(def); }
-        // Per-PERMANENT: a locked etb_choose_color rock produces its ONE colour here, so it takes
-        // the single-colour path below instead of the multi-colour `wild` accounting -- which is
-        // what makes the executor's tap match the pool credit AddSourceToPool made for it.
-        const std::vector<Color>& prod = EffectiveProducesFor(state, active, def, &p);
-        // A multi-mode source that could have made {C} stops being able to once it is tapped, so
-        // retire its share of ManaPool::wild_c alongside its `wild` -- otherwise the projection keeps
-        // promising a {C} the board can no longer produce. Only ever nonzero for a source whose
-        // produces list includes Colorless, so every other deck's accounting is untouched.
-        const bool made_c = std::find(prod.begin(), prod.end(), Color::Colorless) != prod.end();
-        auto retire_wild_c = [&](int n)
-        { if (available && made_c) { available->wild_c = std::max(0, available->wild_c - n); } };
-        if (amt > 1 && prod.size() > 1)
-        {
-            for (Color c : prod) { floating.Add(c, 1); }
-            if (available) { available->wild -= consumed; }
-            retire_wild_c(consumed);
-        }
-        else
-        {
-            floating.Add(col, amt);
-            if (available) { available->Add(col, -consumed); }
-            if (prod.size() > 1) { retire_wild_c(consumed); }
-        }
-        // "Whenever enchanted land is tapped for mana, its controller adds an additional <X>" --
-        // the land Aura's mana arrives on THIS tap, in the AURA's colour (Wild Growth {G},
-        // Overgrowth {G}{G}, Fertile Ground any). AvailableManaPool credited it the same way via
-        // AddSourceToPool, so retire the same units from `available`. No-op with no aura attached.
-        // Per-tap half of MTG_FLOAT_TRACE. NOTE it covers only the GREEDY path: TapForCostBacktrack
-        // has its own tapping, so a cast paid by the backtracker prints a `cost=` line with no `tap`
-        // lines above it. That absence is itself the useful signal (it says which solver paid).
-        if (g_float_trace && !AllPlayHooksNull())
-        { std::fprintf(stderr, "[float]   tap %s as col=%d amt=%d -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
-                       def.card.m_name.str().c_str(), (int)col, amt,
-                       floating.white, floating.blue, floating.black, floating.red,
-                       floating.green, floating.colorless, floating.wild); }
-        if (LandAuraBonus(state, p) > 0)
-        {
-            ManaPool bonus;
-            LandAuraAddToPool(bonus, state, p);
-            floating.AddPool(bonus);
-            if (available)
-            {
-                available->white -= bonus.white; available->blue      -= bonus.blue;
-                available->black -= bonus.black; available->red       -= bonus.red;
-                available->green -= bonus.green; available->colorless -= bonus.colorless;
-                available->wild  -= bonus.wild;
-            }
-        }
-    };
+    { TapSourceIntoFloat(state, active, p, def, col, floating, available, for_creature); };
 
     // Ensure floating can satisfy one pip: `any` = generic, else specific colour
     // `needed`. Taps at most one producing source (a filter may also tap one feeder).
@@ -2694,4 +2711,156 @@ void ActivateTapTokensShared(GameState& state, ManaPool* available)
                     def->params.tap_token_toughness,
                     def->params.tap_token_subtypes);
     }
+}
+
+// ---- The viewer's MANUAL TAP/PAY fallback (docs/design/viewer-manual-tap-pay.md) ---------------
+// See ManaPayment.h for the token format and the one-parser rule.
+
+// Colour letters, indexed by static_cast<int>(Color) -- W U B R G C, matching Card.h's enum order.
+// The token format's alphabet, the decision JSON's `taps` alphabet and the rejection messages all
+// read from this one array, so they cannot drift.
+static const char kPreTapColorLetters[] = "WUBRGC";
+
+bool IsHumanPreTapToken(const std::string& tok)
+{
+    return tok.compare(0, 4, "tap=") == 0;
+}
+
+bool ParseHumanPreTapToken(const std::string& tok, TurnSolver::PreTap& out)
+{
+    if (!IsHumanPreTapToken(tok)) { return false; }
+    std::string val = tok.substr(4);
+    TurnSolver::PreTap t;
+    // ':' then '#', both split from the RIGHT and neither of which can occur in an MTG card name --
+    // the same argument `equip=`'s '#'/'@' and `blink=`'s '@'/'*' suffixes already rely on. An
+    // unrecognised colour letter leaves `color` at -1 (rejected downstream with a real message)
+    // rather than silently defaulting to white: guessing is the failure this fallback exists to fix.
+    const std::size_t colon = val.rfind(':');
+    if (colon != std::string::npos)
+    {
+        const std::string c = val.substr(colon + 1);
+        val = val.substr(0, colon);
+        if (c.size() == 1)
+        {
+            const char* hit = std::strchr(kPreTapColorLetters, c[0]);
+            if (hit != nullptr) { t.color = static_cast<int>(hit - kPreTapColorLetters); }
+        }
+    }
+    const std::size_t hash = val.rfind('#');
+    if (hash != std::string::npos)
+    { t.num = std::atoi(val.c_str() + hash + 1); val = val.substr(0, hash); }
+    if (val.empty()) { return false; }
+    t.name = val;
+    out = std::move(t);
+    return true;
+}
+
+std::string HumanPreTapFaces(const GameState& state, const Permanent& p)
+{
+    const int active = state.active_player_index;
+    if (p.controller_index != active || p.tapped) { return std::string(); }
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+    if (def == nullptr) { return std::string(); }
+    const CardParams& q = def->params;
+    // The same source test the payment's `usable()` applies -- MINUS the classes a hand-driven tap
+    // into the float cannot honestly carry, each excluded for a stated reason rather than by
+    // omission. These stay ENGINE-OWNED and the human simply leaves them to the allocator:
+    //   * PaySacSpendableNow (a Treasure, a Lotus Bloom): the "tap" destroys the permanent, and
+    //     which one-shot source a line spends is a payment decision with its own accounting.
+    //   * mana-CONVERSION sources (Cascade Bluffs, Arcum's Astrolabe, Ferrous Lake): they consume
+    //     a feeder unit per activation, so the tap is a two-source transaction this cannot express.
+    //   * a scaled mana LAND (Three Tree City's "{2},{T}"): the activation has a generic feed cost
+    //     that a pre-tap does not pay, so tapping it here would mint mana the card cannot make.
+    //   * `creature_mana_only` sources, and the COLOURED faces of a `colored_creature_only` land
+    //     (Cavern of Souls / Unclaimed Territory): that mana may be spent only on a creature spell,
+    //     and the float carries no such restriction -- pre-tapping it would launder a restricted
+    //     unit into a general one. Their painless "{T}: Add {C}" mode is fine and stays offered.
+    const bool is_src = (def->tmpl == CardTemplate::BasicLand)
+                     || (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                     || q.mana_rock;
+    if (!is_src) { return std::string(); }
+    if (IsManaConversionSource(q) || IsScaledManaLand(*def) || q.creature_mana_only)
+    { return std::string(); }
+    if (!StorageSourceLive(p, *def))               { return std::string(); }
+    if (!GraveyardFuelLive(state, active, *def))   { return std::string(); }
+    if (!ManaSubtypeGateLive(state, active, *def)) { return std::string(); }
+    std::string faces;
+    for (Color c : EffectiveProduces(state, active, *def))
+    {
+        if (q.colored_creature_only && c != Color::Colorless) { continue; }
+        const char letter = kPreTapColorLetters[static_cast<int>(c)];
+        if (faces.find(letter) == std::string::npos) { faces.push_back(letter); }
+    }
+    return faces;
+}
+
+// The stderr witness (MTG_PRE_TAP_TRACE, default OFF, zero cost when off). Without it a pre-tap is
+// unobservable from outside: the float it produces is spent by the very next payment, so "the human
+// dictated this tap" and "the allocator happened to pick the same land anyway" look identical from
+// the board alone. test/manual_tap_check.py asserts on exactly these lines.
+static bool PreTapTraceOn()
+{
+    static const bool v = EnvOn("MTG_PRE_TAP_TRACE");
+    return v;
+}
+
+std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
+{
+    auto reject = [&](const std::string& why) -> std::string
+    {
+        if (PreTapTraceOn())
+        { std::fprintf(stderr, "[pre-tap] REJECT %s#%d: %s\n", t.name.c_str(), t.num, why.c_str()); }
+        return why;
+    };
+    if (t.name.empty()) { return reject("a tap= token names no source"); }
+    if (t.color < 0 || t.color >= 6)
+    {
+        return reject("tap of '" + t.name + "' names no colour -- write "
+                      "tap=<name>#<num>:<W|U|B|R|G|C>");
+    }
+    const char letter = kPreTapColorLetters[t.color];
+    const int  active = state.active_player_index;
+    Permanent* found = nullptr;
+    bool name_seen = false, id_seen = false, tapped_seen = false;
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.card.m_name != t.name) { continue; }
+        name_seen = true;
+        if (t.num != 0 && p.card.m_number != t.num) { continue; }   // 0 = any copy of the name
+        id_seen = true;
+        if (p.tapped) { tapped_seen = true; continue; }
+        found = &p;
+        break;
+    }
+    if (found == nullptr)
+    {
+        if (tapped_seen) { return reject("'" + t.name + "' is already tapped"); }
+        if (name_seen && !id_seen)
+        { return reject("you control no copy of '" + t.name + "' with that id"); }
+        return reject("you control no untapped '" + t.name + "'");
+    }
+    const std::string faces = HumanPreTapFaces(state, *found);
+    if (faces.empty())
+    {
+        return reject("'" + t.name + "' cannot be tapped by hand -- a filter, a feed-cost source, a "
+                      "one-shot sacrifice source or restricted mana; the engine's payment owns those");
+    }
+    if (faces.find(letter) == std::string::npos)
+    {
+        return reject(std::string("'") + t.name + "' cannot produce {" + letter + "} (it makes {"
+                      + faces + "})");
+    }
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(found->card);
+    if (def == nullptr) { return reject("'" + t.name + "' has no card definition"); }
+    TapSourceIntoFloat(state, active, *found, *def, static_cast<Color>(t.color),
+                       state.floating_mana, /*available=*/nullptr, /*for_creature=*/false);
+    if (PreTapTraceOn())
+    {
+        const ManaPool& f = state.floating_mana;
+        std::fprintf(stderr,
+                     "[pre-tap] tap %s#%d as %c -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
+                     t.name.c_str(), found->card.m_number, letter,
+                     f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild);
+    }
+    return std::string();
 }

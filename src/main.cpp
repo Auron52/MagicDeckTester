@@ -30,7 +30,8 @@
 #include "ai/MulliganProfileIO.h"
 #include "ai/Profiler.h"
 #include "ai/DecisionProviders.h"   // SelectDecisionProvider for --scenario
-#include "ai/ManaPayment.h"      // CastOrderKey for the --cast-order-report sort
+#include "ai/ManaPayment.h"      // CastOrderKey for the --cast-order-report sort; the pre-tap API
+#include "ai/EngineFlags.h"      // HumanPreTapEnabled (the decision JSON's `taps` affordance)
 #include <nlohmann/json.hpp>        // --scenario board spec
 
 static void PrintUsage(const char* prog)
@@ -111,7 +112,8 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
     struct Cnt { const char* kind; const char* label; int count; };
     struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; int idx; bool tapped;
                  int num; bool is_aura; bool is_equip; int attached_to;
-                 std::string printed; };   // copy-entrant's PRINTED card name ("" = not a copy)
+                 std::string printed;      // copy-entrant's PRINTED card name ("" = not a copy)
+                 std::string taps; };      // MANUAL TAP/PAY faces ("GU"); "" = not hand-tappable
     std::vector<Row> rows;
     for (int pi = 0; pi < static_cast<int>(s.battlefield.size()); ++pi)
     {
@@ -155,8 +157,18 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         bool is_aura  = d && d->params.is_aura;
         bool is_equip = d && d->params.is_equipment;
         const int att = p.aura_attached_to > 0 ? p.aura_attached_to : p.equipped_to;
+        // MANUAL TAP/PAY affordance: the faces THIS permanent may be pre-tapped for, straight from
+        // the engine's own legality test (HumanPreTapFaces), so the GUI can never offer a tap
+        // ApplyHumanPreTap would refuse -- one function, no mirrored rule to drift. Absent (and
+        // therefore un-clickable) for a tapped permanent, an opponent's, a non-source, and every
+        // class the engine keeps for itself (filters, feed-cost lands, one-shot sac sources,
+        // restricted mana). Absent for the whole board when MTG_HUMAN_PRE_TAP=0.
+        std::string taps;
+        if (controller == s.active_player_index && HumanPreTapEnabled())
+        { taps = HumanPreTapFaces(s, p); }
         rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped,
-                         p.card.m_number, is_aura, is_equip, att, p.copy_printed_name.str() });
+                         p.card.m_number, is_aura, is_equip, att, p.copy_printed_name.str(),
+                         std::move(taps) });
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -177,6 +189,7 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         if (!rows[i].printed.empty()) { os << ", \"printed\": "; JsonStr(os, rows[i].printed); }
         os << ", \"is_land\": " << (rows[i].is_land ? "true" : "false");
         if (rows[i].is_le) { os << ", \"is_le\": true"; }
+        if (!rows[i].taps.empty()) { os << ", \"taps\": "; JsonStr(os, rows[i].taps); }
         if (!rows[i].counters.empty())
         {
             os << ", \"counters\": [";
@@ -2575,7 +2588,8 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
 // "sacout=<outlet name>" (repeat for repeat activations),
 // "equip=<equipment name>[#<source m_number>][@<host m_number>]",
 // "attachall=<name>", "sfput=<equipment name>", "jittemode=<1|2>", "gyexile=<1|2>",
-// "channel=<card name>", or the bare word "pass". Card
+// "channel=<card name>", "tap=<name>#<m_number>:<W|U|B|R|G|C>" (the manual tap/pay fallback --
+// docs/design/viewer-manual-tap-pay.md), or the bare word "pass". Card
 // names may contain spaces and commas (no MTG name contains ';' or '='), so they pass through
 // verbatim.
 static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
@@ -2638,6 +2652,19 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
             ls.pods.push_back(std::move(ps));
         }
         else if (key == "ooze")      { ls.ooze_exiles.push_back(val); }   // Scavenging Ooze exile
+        // "tap=<name>#<m_number>:<W|U|B|R|G|C>": the MANUAL TAP/PAY fallback -- tap this source for
+        // this face into the float before the line's payments run. Parsed by the SHARED reader
+        // (ManaPayment.h), which is the same one AIEngine's --cast-order full-order walk uses, so
+        // one token string cannot mean two different things on the validate and commit paths.
+        // A MALFORMED token is pushed anyway (with an empty name) rather than skipped like every
+        // other verb here: a pre-tap the human wrote and the engine silently dropped is precisely
+        // the mis-allocation this fallback exists to fix, so it must come back as a REJECTION.
+        else if (key == "tap")
+        {
+            TurnSolver::PreTap pt;
+            ParseHumanPreTapToken(tok, pt);
+            ls.pre_taps.push_back(std::move(pt));
+        }
         // "blink=<outlet>[@<target num>]": Emiel / Eldrazi Displacer exile-and-return. Same '@'
         // convention as equip= (no MTG name contains it), and a bare "blink=<outlet>" is the
         // any-target wildcard. See LineSpec::BlinkSpec.

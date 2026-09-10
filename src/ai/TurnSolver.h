@@ -468,6 +468,36 @@ struct Action
 class TurnSolver
 {
 public:
+    // ---- HUMAN PRE-TAP (viewer only; MTG_HUMAN_PRE_TAP, default ON) ---------------------------
+    // "I think we probably need an alternative fallback for the user, so they can tap and pay mana
+    //  as they desire ... for fixing poorly allocated taps or mana usage while still being able to
+    //  give good feedback on the mana usage by the engine." -- USER, EldraziDisplacerFlicker 2026-09.
+    //
+    // ONE pre-tap: tap the permanent `name`#`num` for one specific face `color`, into
+    // state.floating_mana, BEFORE the line's payments run. Because every payment path spends
+    // floating mana first (TapForCostSharedOnce's SpendFloatingTowardCost, before it taps
+    // anything), a human who pre-taps exactly the sources they want has DICTATED that part of the
+    // allocation; whatever they leave untapped is still the engine's to allocate. So this is a
+    // FALLBACK, not a new default -- with no pre-taps declared the engine's allocator is untouched
+    // and every apply is byte-identical.
+    //
+    // `position` is how many of the human's DECLARED ordered entries run before this tap, so a tap
+    // can sit mid-line ("crack the Clue, tap Kitchen for {G}, then blink"). It rides the same
+    // `--cast-order` full-order list the action sequence does (AIEngine::ReorderPlanCasts), which
+    // is also what makes a saved reference replay a pre-tapped line unchanged: the viewer records
+    // that list per main-phase decision and the reference checks reconstruct it verbatim.
+    //
+    // `color` is a Color cast to int, or -1 for "not stated" -- which is REJECTED rather than
+    // guessed (see ApplyHumanPreTap): a silently-fixed pre-tap is exactly the mis-allocation this
+    // feature exists to let the human correct.
+    struct PreTap
+    {
+        std::string name;        // the permanent's card name (display + the wildcard match key)
+        int         num   = 0;   // Card::m_number -- WHICH copy. 0 = "any untapped copy of `name`"
+        int         color = -1;  // static_cast<int>(Color) of the face to tap for; -1 = unstated
+        int         position = 0;// declared ordered entries that precede it (LineSpec leaves it 0)
+    };
+
     struct Plan
     {
         // The set of plays to execute this main phase. Execution order is canonical
@@ -551,6 +581,15 @@ public:
         // byte-identical. Deliberately absent from PlanSignature and PlansEqual for the same reason:
         // it is not part of the search's plan space.
         bool human_action_order = false;
+
+        // HUMAN PRE-TAPS (viewer only; MTG_HUMAN_PRE_TAP) -- see TurnSolver::PreTap. Applied by
+        // ApplyPlanDirect at each entry's declared `position` in the ordered walk, so the mana is
+        // in the float before the payment that should spend it. Set ONLY by AIEngine's
+        // --cast-order side channel (ReorderPlanCasts) under HumanPlayActive(); the search never
+        // sets it, so every rollout / autonomous / GT apply is byte-identical. Deliberately absent
+        // from PlanSignature and PlansEqual, for the same reason human_action_order is: it is not
+        // part of the search's plan space, it is a payment instruction riding on top of one.
+        std::vector<PreTap> human_pre_taps;
 
         // Casts this ORDERING declares but provably cannot make -- filled only by the cast-ordering
         // enumeration, by watching the apply on its scoring copy. It is a LABEL, never a filter: two
@@ -1290,6 +1329,15 @@ public:
         // hand back the index of whichever came first, which is the exact bug class d1698c5d fixed.
         struct BlinkSpec { std::string name; int target = 0; int count = 0; };
         std::vector<BlinkSpec> blinks;
+        // "tap=<card name>#<m_number>:<W|U|B|R|G|C>": the MANUAL TAP/PAY fallback -- tap this
+        // source for this face into the float before the line's payments run (see
+        // TurnSolver::PreTap). NOT part of the plan multiset: a pre-tap changes how the line is
+        // PAID, never which line it is, so it is deliberately excluded from every match test
+        // below. What it does change is AFFORDABILITY, so CheckLine performs the taps for real on
+        // its state copy before the walk (see the pre-tap block at the top of CheckLine) --
+        // monotone-accepting doctrine: a line with explicit taps is graded on the board those taps
+        // actually produce, never on an optimistic model of it. EMPTY => byte-identical.
+        std::vector<PreTap> pre_taps;
     };
     // One concrete plan variant the human's line matched -- when several enumerated plans
     // share the same land + cast names but differ in a per-spell sub-decision (tutor target,
