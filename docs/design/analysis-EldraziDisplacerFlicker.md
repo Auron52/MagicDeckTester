@@ -4451,3 +4451,21 @@ with no dropped cast: Kitchen pays Cloud and is recharged by the untap, Conserva
 Replays are index-sensitive: the wider fan remaps recorded indices (old T3 pick 26 -> 28 -> 29 as
 the fixes landed), which is exactly what the protocol checker's content anchoring absorbs -- the
 gate below is the proof it did.
+
+### Session 13 addendum: seed 12 gi=11 T4 -- the canonical cast order can hide an untapper line
+
+**The user's rejection** (`..._s12_gi11_t4.json`, saved 07:25): `land=Brushland; cast=Peregrine
+Drake; cast=Eldrazi Displacer; cast=Training Grounds`, verdict `legal_not_enumerated`. Board
+Azorius Chancery + Kitchen(+Trace of Abundance); pre-untap supply is 5 mana against 6 of cost, so
+the line is rules-legal ONLY with the Drake paid first -- its five-land ETB untap IS the missing
+mana. `SubsetPayableSequential` prices exactly one order (`CastOrderRank`, which puts Training
+Grounds mv1 first), priced 1+5 against 5, and refused; the reservation chain above cannot help a
+walk that never reaches the Drake with lands still untapped.
+
+**Fix: UNTAPPER-HOISTED RETRY** -- when the canonical-order walk fails and the subset holds an
+`etb_untap_lands` cast, re-walk once with the untappers hoisted to the front (stable within each
+group). Rescue-only (runs only on failure -> strictly more subsets admitted) and human-play only;
+execution of the human's picked order rides the existing `--cast-order`/`searched_order` mechanism,
+so nothing new is needed downstream. `MTG_SEQ_UNTAPPER_FIRST=0` restores the single-order walk.
+Verified on the exact rejection board: verdict **accept**, and the plan executes with Drake,
+Displacer and Training Grounds all resolved, no dropped cast.

@@ -3931,6 +3931,10 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return prov.CastOrderRank(state, *cands[x].def) < prov.CastOrderRank(state, *cands[y].def); });
 
+    // The walk over one candidate order, extracted so a second order can be priced (see the
+    // untapper-hoisted retry below the first call).
+    auto run_walk = [&](const std::vector<int>& ord) -> bool
+    {
     // Warm per-thread scratch board, same contract as SubsetPayableWithFilters' (see PayScratch):
     // this probe is the same shape -- a full GameState copy on entry, thrown away on return.
     PayScratch _pay_scratch(state);
@@ -3941,13 +3945,13 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
     // surplus-first generic order (USER, EDF seed 9 gi=8 T4). No autonomous reader exists
     // (SinkCostWithLineHold is human-gated), so autonomous walks are byte-identical.
     ManaCost _walk_total{};
-    for (int j : order)
+    for (int j : ord)
     {
         const Action& a = cands[j];
         if (!a.free_cast && !a.alt_cost) { AddManaCost(_walk_total, a.cost); }
     }
     LineUnpaidCostScope _luc(_walk_total);
-    for (int j : order)
+    for (int j : ord)
     {
         const Action& a   = cands[j];
         const CardDefinition& def = *a.def;
@@ -4132,6 +4136,37 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
         }
     }
     return true;
+    };
+    if (run_walk(order)) { return true; }
+    // UNTAPPER-HOISTED RETRY (USER, EDF seed 12 gi=11 T4, 2026-09-10): the line
+    // [Brushland; Peregrine Drake; Eldrazi Displacer; Training Grounds] is rules-legal ONLY with
+    // the Drake paid first -- pre-untap supply is 5 mana against 6 of cost, and the Drake's ETB
+    // untap of five lands IS the missing mana. CastOrderRank sorts by its own economics (Training
+    // Grounds mv1 first), so the single canonical order priced 1+5 against 5 and refused a subset
+    // the human can trivially execute; the verdict fell to "legal, not enumerated" and the fan
+    // never offered the line. A mana-POSITIVE cast belongs before the consumers whenever the
+    // canonical order cannot pay, so: retry once with the etb_untap_lands casts hoisted to the
+    // front (stable within each group). Rescue-only (runs only after the canonical walk failed ->
+    // strictly more subsets admitted) and HUMAN PLAY ONLY: execution of a human's picked order
+    // rides the existing --cast-order / searched_order mechanism, while autonomous play keeps the
+    // canonical-order-only walk byte-identical. MTG_SEQ_UNTAPPER_FIRST=0 restores that everywhere.
+    static const bool s_untapper_first = EnvOn("MTG_SEQ_UNTAPPER_FIRST", true);
+    if (s_untapper_first && HumanPlayActive())
+    {
+        std::vector<int> hoisted, rest_o;
+        for (int j : order)
+        {
+            const Action& a = cands[j];
+            if (a.def != nullptr && a.def->params.etb_untap_lands > 0) { hoisted.push_back(j); }
+            else { rest_o.push_back(j); }
+        }
+        if (!hoisted.empty() && !rest_o.empty())
+        {
+            hoisted.insert(hoisted.end(), rest_o.begin(), rest_o.end());
+            if (hoisted != order && run_walk(hoisted)) { return true; }
+        }
+    }
+    return false;
 }
 
 // True if the active player controls an untapped filter / ramp-filter mana source, whose color
