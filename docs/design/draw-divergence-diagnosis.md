@@ -71,6 +71,42 @@ skips the digest fold, making the log complete for humans and diagnostics while 
 existing digest byte-identical. That is the recommended route; it is not applied here because it is
 an engine change beyond the scope of the question that prompted this investigation.
 
+## "Physically different game" is NOT exculpatory — run the DEPTH/BUDGET LADDER on both binaries
+
+USER, 2026-09-10: *"Even the library manipulation spell cases are only so legitimate. They should get
+the same results at a higher budget and depth."* Correct, and testing it changed the verdict. If two
+engines disagree about WHEN to cast a cantrip, that is itself a search-quality artifact: with enough
+search both should reach the same decision. So the ladder — **both binaries, d5/d7/d9/d11 x rising
+budget** — is the test that "different physical game" was letting people skip.
+
+| game | memo ON (new) | memo OFF (old lever) | verdict |
+|---|---|---|---|
+| `hinata gi202` | 6 at d5, **5 at d7+** | 5 at every depth | costs a turn only at shallow depth — RECOVERABLE |
+| `hinata gi255` | 6 everywhere | 5 at d5/b20, **6 at d7+** | NOT a regression; old's T5 was shallow-search luck |
+| `hinata gi232` | **6 at every depth** | **5 at every depth** | **REAL, STABLE one-turn loss** |
+
+`gi232` holds at T6 even at **d11 / b10240 — 512x the case budget** — so it is definitively not churn.
+
+**Cause named by hatch sweep: `MTG_MEMO_WIN_ORDERFREE` (`d71b4157`, order-free WIN memo reuse,
+default ON).** Setting it to 0 restores T5 at every depth; none of the other levers
+(`MTG_FOLD_ACT_SOURCES`, `MTG_FOLD_HAND_CASTS`, `MTG_CAND_DEDUP`, `MTG_LADDER_EMULATED`,
+`MTG_ENUM_MEMO`, `MTG_ID_ANYTIME`) moves it. Mechanism in the game: new casts **Ponder on T2** where
+old holds it, which reorders its draws; at T5 new's line (Reality Spasm, Irencrag Feat, Crackle with
+Power) leaves the opponent on exactly **1 life**, while old's T5 fits an extra Soulfire Eruption and a
+second Reality Spasm for -1.
+
+**But the lever is an improvement, measured on the whole deck.** A/B over all 16 hinata /
+hinata2hg overnight keys: **better on 8 keys, worse on 0, equal on 8, sum -0.1409**. Every d0 key is
+byte-identical, confirming it is search-only. So `gi232` is a genuine but isolated cost paid against
+many gains — the rebaseline stands, and this is what "analyze the differences" is supposed to
+produce: a named cause and a deck-level verdict, not a shrug at "different physical game".
+
+**Bottoming is the one case that cannot converge by construction** (USER: *"the bottoming decision
+on the other hand is an actual different game"*). Changing which card goes to the bottom changes the
+library from turn 0, so the two lines are not the same game at any depth. (USER also noted it *might*
+match given enough budget and search if lookahead bottoming runs at the same settings — untested,
+and low priority.)
+
 ## What this does NOT change
 
 CRN is working. `ShuffleByKey` orders the live library by `splitmix64(seed, m_number)`, so removing a
