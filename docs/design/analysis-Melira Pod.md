@@ -2905,3 +2905,121 @@ Queue tonight, strictly serial: pooled screen (screen-2 remainder + `emulv` + `e
 workers) -> `probeonly` (320 cheap jobs) -> read -> adopt clean wins per deck via the sidecar's shape ->
 smoke + regression -> commit/push. Not tonight: the overnight tier; the rebase onto the Snow agent's
 61b3cfb7 (a default-ON play change that will move GT -- their rebaseline, not mine to fold in blind).
+
+### 2026-09-10a — the shape screen, complete: every approach on every deck (deterministic units, per-game learned state)
+
+Second reset of the night (a Windows update at ~14:30 killed the machine again; resumed 21:20). The pooled
+screen then ran to completion at 12 workers under the memory watchdog (peak ~10 GB), with two same-job-twice
+checks that now match (`antilife_emulnl` and `knights_emulnlv` reps: identical digests) -- the per-game
+R/G fix holds. Two more shapes were built mid-run on the user's direction and pooled in:
+- **escnlv** -- the NO-LEAF ESCALATION LADDER (user: *"no-leaf -> choose between value leaf or heuristic
+  leaf escalation. We would retain budget for the value-leaf at the last depth"*): the probe runs the whole
+  ladder leafless (proven wins banked with no leaf at all), its start gate admits a pass only if the same
+  cost again would still fit (`g_reserve_value_pass`), and an UNVERIFIED line at a TRUSTED depth pays one
+  value pass there (fresh memo); at an untrusted depth the heuristic escalation runs as today. A value pass
+  that overruns keeps its best-rated line under the ladder's anytime rule (user: *"we want the
+  prioritization of the value-leaf on the final depth ... but do not finish entirely"*), else escalates.
+  Sidecar shape `{ladder "escalation", leaf "none", commit "model"}`.
+- **emulnlv** is the user's *"no-leaf on depths where we don't think we will be ending"* (built in 09k).
+
+Units relative to the deck's shipped shape (`heur` for Fluctuator), d_avg > 0 is worse, 8 seeds x 500 games:
+
+| deck | cfg | escnl | emulnl | emulv | emulnlv | escnlv | verdict |
+|---|---|---|---|---|---|---|---|
+| antilife | d5b20 vs ship | 2.306x +0.0012 | 3.776x +0.0010 | 1.038x +0.0000 | 1.177x +0.0005 | 1.765x +0.0032 | ship |
+| antilife | d3b10 vs ship | 1.100x +0.0005 | 1.319x -0.0010 | 0.458x +0.1647 | 0.468x +0.1647 | 1.089x +0.0005 | ship |
+| auras | d5b20 vs ship | 1.639x +0.0000 | 7.666x +0.0035 | 1.199x -0.0005 | 1.188x -0.0005 | 1.801x +0.0003 | ship |
+| auras | d3b10 vs ship | 1.065x +0.0000 | 1.704x +0.0025 | 0.345x +0.0145 | 0.346x +0.0145 | 1.021x +0.0003 | ship |
+| breaching | d5b20 vs ship | 1.230x +0.0000 | 19.641x +0.0000 | 1.286x +0.0000 | 0.948x +0.0000 **clean** | 0.956x +0.0000 **clean** | emulnlv (0.948x) |
+| breaching | d3b10 vs ship | 0.984x +0.0000 | 5.966x +0.0000 | 0.348x +0.0012 | 0.348x +0.0012 | 0.986x +0.0000 | ship |
+| critter | d5b20 vs ship | 2.068x -0.0002 | 14.304x -0.0002 | 1.029x +0.0000 | 1.018x +0.0000 | 1.225x +0.0000 | ship |
+| critter | d3b10 vs ship | 1.000x +0.0000 | 1.159x +0.0002 | 0.117x +0.0198 | 0.117x +0.0198 | 1.000x +0.0000 | ship |
+| dragons | d5b20 vs ship | 1.137x -0.0008 | 2.795x +0.0025 | 0.323x +0.0020 | 0.322x +0.0020 | 1.091x -0.0008 | ship |
+| dragons | d3b10 vs ship | 1.000x +0.0000 | 1.160x +0.0003 | 0.118x +0.0320 | 0.118x +0.0320 | 1.000x +0.0000 | ship |
+| dragonstorm | d5b20 vs ship | 1.449x -0.0027 | 2.752x +0.0030 | 1.062x +0.0003 | 1.047x +0.0000 | 1.062x +0.0008 | ship |
+| dragonstorm | d3b10 vs ship | 1.032x -0.0027 | 1.161x -0.0013 | 0.272x +0.5663 | 0.272x +0.5663 | 1.000x +0.0000 | ship |
+| fivecolour | d5b20 vs ship | 2.357x -0.0148 | 2.346x +0.0058 | 0.901x +0.0105 | 0.949x +0.0095 | 2.171x -0.0133 | ship |
+| fivecolour | d3b10 vs ship | 1.152x +0.0000 | 2.143x +0.0098 | 0.447x +0.1160 | 0.453x +0.1160 | 1.098x +0.0002 | ship |
+| fluct | d5b20 vs heur | 0.381x -0.0047 **clean** | 1.003x -0.0002 | - | - | - | escnl (0.381x) |
+| fluct | d3b10 vs heur | 0.422x -0.0108 **clean** | 1.005x +0.0000 | - | - | - | escnl (0.422x) |
+| goblins | d5b20 vs ship | 1.066x -0.0003 | 4.830x +0.0040 | 0.768x +0.0032 | 0.747x +0.0032 | 1.176x +0.0003 | ship |
+| goblins | d3b10 vs ship | 1.052x +0.0000 | 1.683x +0.0045 | 0.430x +0.0232 | 0.431x +0.0232 | 1.029x +0.0000 | ship |
+| hinata | d5b20 vs ship | 1.824x -0.0080 | 1.271x +0.0200 | 1.057x -0.0045 | 1.052x -0.0012 | 1.272x +0.0103 | ship |
+| hinata | d3b10 vs ship | 1.145x -0.0030 | 1.130x +0.0057 | 0.495x +0.3160 | 0.496x +0.3160 | 1.023x -0.0002 | ship |
+| kitty | d5b20 vs ship | 1.647x -0.0013 | 3.012x +0.0078 | 0.907x +0.0078 | 0.906x +0.0075 | 1.606x -0.0008 | ship |
+| kitty | d3b10 vs ship | 1.129x +0.0000 | 1.512x +0.0080 | 0.549x +0.0375 | 0.549x +0.0375 | 1.111x +0.0017 | ship |
+| knights | d5b20 vs ship | 1.323x +0.0000 | 13.248x +0.0008 | 1.013x +0.0000 | 1.000x +0.0000 | 1.062x +0.0000 | ship |
+| knights | d3b10 vs ship | 1.009x +0.0000 | 1.376x +0.0005 | 0.202x +0.0235 | 0.202x +0.0235 | 1.001x +0.0000 | ship |
+| melira | d5b20 vs ship | 2.425x -0.0053 | 0.752x +0.0225 | 1.085x +0.0215 | 1.154x +0.0212 | 2.085x -0.0038 | ship |
+| melira | d3b10 vs ship | 1.481x -0.0073 | 0.816x +0.0085 | 0.983x +0.0357 | 0.993x +0.0357 | 1.587x -0.0103 | ship |
+| minotaur | d5b20 vs ship | 1.311x -0.0008 | 6.306x +0.0025 | 1.038x -0.0003 | 1.032x -0.0003 | 1.304x +0.0000 | ship |
+| minotaur | d3b10 vs ship | 1.001x +0.0000 | 1.293x +0.0012 | 0.253x +0.0525 | 0.253x +0.0525 | 1.005x +0.0000 | ship |
+| mirrorwing | d5b20 vs ship | 1.175x -0.0062 | 3.502x +0.0097 | 0.960x +0.0140 | 0.939x +0.0140 | 1.180x -0.0052 | ship |
+| mirrorwing | d3b10 vs ship | 1.003x +0.0000 | 1.456x +0.0147 | 0.559x +0.1237 | 0.559x +0.1237 | 1.018x +0.0002 | ship |
+| stompy | d5b20 vs ship | 1.151x -0.0023 | 4.117x +0.0175 | 0.893x +0.0037 | 0.888x +0.0037 | 1.176x -0.0017 | ship |
+| stompy | d3b10 vs ship | 1.050x -0.0010 | 1.352x +0.0068 | 0.420x +0.0733 | 0.420x +0.0732 | 1.006x +0.0000 | ship |
+| burn | d5b20 vs ship | 2.540x +0.0000 | 4.303x +0.0018 | 0.973x +0.0000 **clean** | 0.972x +0.0000 **clean** | 2.562x +0.0000 | emulnlv (0.972x) |
+| burn | d3b10 vs ship | 1.025x +0.0000 | 1.283x +0.0020 | 0.538x +0.0092 | 0.540x +0.0092 | 1.040x +0.0002 | ship |
+| slivers | d5b20 vs ship | 1.280x +0.0000 | 13.324x +0.0007 | 1.033x +0.0000 | 1.017x +0.0000 | 1.237x +0.0000 | ship |
+| slivers | d3b10 vs ship | 1.022x -0.0025 | 1.525x -0.0005 | 0.251x +0.0157 | 0.251x +0.0157 | 1.033x -0.0025 | ship |
+| th | d5b20 vs ship | 1.096x -0.0012 | 3.802x +0.0150 | 1.043x -0.0002 | 1.014x -0.0002 | 1.163x -0.0017 | ship |
+| th | d3b10 vs ship | 1.009x -0.0000 | 1.691x +0.0062 | 0.449x +0.0410 | 0.447x +0.0410 | 1.003x +0.0000 | ship |
+
+**Reading.**
+1. **Fluctuator: no-leaf escalation is a CLEAN WIN at both configs** -- 0.38x / 0.42x the heuristic ladder's
+   units with BETTER play (-0.005 / -0.011 t, net +21 / +47 games). Adopted below as the deck's live sidecar
+   with `{ladder "escalation", leaf "none"}`; the rejected 2026-09-06 model stays in the file for
+   reference (the DISABLED-file convention is retired, as 09i said it would be).
+2. **The emulated ladder committing on the model is BROKEN at d3b10 on every deck** (0.12-0.55x units,
+   +0.01 to +0.57 t): at a 10 ms budget the committing pass overruns, the fallback steps shallower and
+   overruns again, and the decision is left with the leafless warm-up line and no budget for the hybrid's
+   escalation. At d5b20 it tracks ship on most decks (emulv 1.01-1.06x) and is nominally clean on
+   Breaching / Burn (0.95x / 0.97x), but a shape applies at every depth (the mulligan generator runs the
+   deck at d3), so nothing is adoptable from it. The emulated ladder's remaining virtue is the one it was
+   built for -- warm-ups on a cheap leaf when the COMMITTING leaf is the expensive rollout -- and screen 1
+   already showed that loses to escalation wherever the model is trusted.
+3. **escnlv (no-leaf escalation ladder) is never a units win over ship** (1.0-1.1x at d3b10, 1.06-2.6x at
+   d5b20) and matches ship's quality within noise on every deck; its case rests entirely on WALL time (the
+   leaf evaluations it skips are unmetered) -- measured next by the single-worker CPU probe.
+4. **escnl on modelled decks at d3b10 costs 1.00-1.15x ship at equal quality** -- the model buys almost
+   nothing at d3 (every trust depth is >= 4, so ship escalates every unverified d3 decision anyway). At d5b20
+   the model's benefit is real: 1.1-2.5x, and up to 19x on the H-ladder decks (Breaching, Knights, Slivers,
+   Critter) where the escalation itself is the cost.
+
+**Leaf-usefulness predictor: the experiment is INVALID as built.** `probeonly` plays identically to `escnl`
+and `ship` (avg win turn equal to two decimals on six decks checked) at 0.9-1.07x `escnl`'s units: with the
+trust escalation switched off, an unverified leafless line is re-searched by the engine's continuation path
+-- the heuristic by another door -- so `probeonly / escnl` is ~1 by construction. The realized `ship / escnl`
+(0.4-0.9 at d5b20) is mostly the leaf's ORDERING and B&B cuts, not avoided escalations; a leafless run
+cannot see that. A working predictor needs per-decision instrumentation per job (verified fraction,
+escalation-unit share, tree size by depth) -- future work, recorded in `per-deck-search-shape.md`.
+
+**CPU probe (single worker, 150 games, two reps; Melira is the only deck heavy enough to time):** ship
+97.9 s / 97.8 s, emulv 88.7 s, emulnlv 88.5 s, escnlv 212 s, escnl 168 s. Leafless warm-ups save 0.2% of
+wall over model warm-ups -- the value leaf's evaluation is not where time goes -- and the leafless ladders
+are slower in wall exactly as in units. The 9% under ship of the emulated shapes is a different committed
+line (different digest), not a saving at equal play. Knights: 0.7 s per 150 games under every shape.
+Verdict on the user's question: the leaf costs its generation, not its play; in play it pays.
+
+### 2026-09-10b — Fluctuator ADOPTED (no-leaf escalation); run time AND quality, same batch
+
+User (01:20): *"this isn't just about quality, but also run time. We want numbers for both in each
+configuration to decide on adoption."* The screen's wall column is only comparable within one batch (screen
+1 ran 32 workers beside the overnight tier; the pooled runs 12 workers alone), so `ship`/`heur` wall ratios
+in the big table are NOT usable and `decide.py` now prints them only for same-batch pairs. For the one
+adoption, a dedicated same-batch A/B (12 workers, 8 seeds x 500 games, both arms interleaved):
+
+| cfg | arm | avg win turn | search units | wall ms |
+|---|---|---|---|---|
+| d5b20 | heur (old) | 3.6240 | 70,080,135 | 460,836 |
+| d5b20 | escnl (new) | 3.6193 | 26,725,819 | 130,194 |
+| d5b20 | new/old | **-0.0047 t** | **0.381x** | **0.283x** |
+| d3b10 | heur (old) | 3.6398 | 41,030,069 | 283,746 |
+| d3b10 | escnl (new) | 3.6290 | 17,313,567 | 103,850 |
+| d3b10 | new/old | **-0.0108 t** | **0.422x** | **0.366x** |
+
+Wall falls further than units because the heuristic ladder's rollouts are wall-heavy per unit. Tiers:
+smoke 3 Fluctuator configs moved, 9 games faster / 0 slower; regression 5 moved, 7 faster / 1 slower, and
+the slower one classifies as budget churn (T5 -> T6 at 1x, back to T5 at 16x). Accepted both (f714046c).
+For the other 19 decks the table in 10a is the adoption record: no shape beats `ship` on units at equal
+quality at BOTH configs, and the CPU probe shows the leaf's evaluation is not a wall cost, so `ship` stays.
