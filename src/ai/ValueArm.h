@@ -71,6 +71,10 @@ struct Arm
     // sweep costs one `mtg --batch` per arm and strands cores on every invocation's tail.
     int         of_wave        = -1;        // -1 unset | 0 off | 1 on     (MTG_FSL_OF_WAVE)
     double      of_wave_share  = -1.0;      // <0 unset                    (MTG_OF_WAVE_SHARE)
+    // FIRST-VERIFIED-WIN HORIZON EXIT (MTG_FS_HORIZON_EXIT). Same reason as every other entry here:
+    // measuring a PRUNE means running both arms, and the standing bar is to measure a prune
+    // UNBUDGETED -- which is expensive enough that it must not also pay a per-arm batch tail.
+    int         fs_horizon_exit = -1;       // -1 unset | 0 off | 1 on     (MTG_FS_HORIZON_EXIT)
     int         memo_orderfree_verified_only = -1;   // -1 unset | 0 all entries | 1 verified wins only (MTG_MEMO_ORDERFREE_VERIFIED_ONLY)
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).

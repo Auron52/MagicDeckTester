@@ -32643,7 +32643,7 @@ static bool M2WavesEnabled()
 static bool FsHorizonExitOn()
 {
     static const bool on = EnvOn("MTG_FS_HORIZON_EXIT", true);
-    return on;
+    return (valuearm::t_arm.fs_horizon_exit >= 0) ? (valuearm::t_arm.fs_horizon_exit != 0) : on;
 }
 
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,

@@ -3,9 +3,13 @@
 # that ONE game at higher search budget (the metric is the loss-penalized avg, so a slower game
 # is any worse score -- a bigger win turn OR a game becoming unwon, which is just the maximal slowdown):
 #
-#   * recovers to the OLD win turn at higher budget -> "churn"    (search-truncation at the case's
+#   * reaches AT LEAST the old win turn at higher budget -> "churn" (search-truncation at the case's
 #                                                                   budget; the fast line is still
-#                                                                   reachable -- benign)
+#                                                                   reachable -- benign). "At least",
+#                                                                   not "exactly": a re-run that comes
+#                                                                   back BETTER than the baseline is
+#                                                                   the opposite of a regression and
+#                                                                   must not be reported as one.
 #   * persists at the new (slower) turn             -> "PERSISTS" (NOT budget churn: either
 #                                                                   draw-divergence variance if the
 #                                                                   deck shuffles/fetches, or a real
@@ -75,6 +79,16 @@ run_wt() { # deck_file game_seed gi depth budget -> win turn (or -1 loss)
 echo "=== classify searched slower games ($MODE) -- re-run each at 4x and 16x its case budget ==="
 printf '%-40s %-5s %-5s  %s\n' "GAME" "OLD" "NEW" "CLASSIFICATION"
 churn=0; persist=0
+# Loss-penalized ORDER key, matching audit_changed_games.py / audit_cells.py: a won game scores its
+# win turn, anything unwon ("loss", "-1", empty) ranks worse than every win. Only the ordering is
+# used, so the sentinel just has to sit above any plausible win turn.
+score_of() {
+  case "$1" in
+    ''|*[!0-9]*) echo 10000 ;;
+    0)           echo 10000 ;;
+    *)           echo "$1"  ;;
+  esac
+}
 printf '%s\n' "$list" | while read -r key gi_field old_new; do
   gi=${gi_field#gi}; gi=${gi%:}
   old=${old_new%%->*}; new=${old_new##*->}
@@ -100,8 +114,21 @@ printf '%s\n' "$list" | while read -r key gi_field old_new; do
   b4=$(( budget * 4 )); b16=$(( budget * 16 ))
   wt4=$(run_wt "$file" "$gseed" "$gi" "$depth" "$b4")
   wt16=$(run_wt "$file" "$gseed" "$gi" "$depth" "$b16")
-  if [ "$wt4" = "$old" ] || [ "$wt16" = "$old" ]; then
-    cls="churn (recovers to $old: 4x=$wt4 16x=$wt16)"
+  # SCORE the re-runs, don't string-compare them. The old test was `wt == old`, which asks
+  # "did it come back to exactly the baseline turn" -- so a re-run that lands BETTER than the
+  # baseline failed it and got reported as PERSISTS, i.e. as the very thing it is the opposite
+  # of. That fired on both non-churn games of the 2026-09-10 overnight rebaseline (antilife d5
+  # s7007 gi959: 7 -> 8 at the case budget but 6 at 4x/16x; hinata d5 s4004 gi5: 6 -> 7 but 5),
+  # and it reads as a regression in a report whose whole job is to tell regressions apart from
+  # churn. What actually matters is whether more budget buys back at LEAST the baseline.
+  # An unwon re-run scores as a loss so it can never satisfy the test (see score()).
+  s_old=$(score_of "$old"); s4=$(score_of "$wt4"); s16=$(score_of "$wt16")
+  if [ "$s4" -le "$s_old" ] || [ "$s16" -le "$s_old" ]; then
+    if [ "$s4" -lt "$s_old" ] || [ "$s16" -lt "$s_old" ]; then
+      cls="churn -- and BETTER than baseline $old at higher budget (4x=$wt4 16x=$wt16)"
+    else
+      cls="churn (recovers to $old: 4x=$wt4 16x=$wt16)"
+    fi
   else
     cls="PERSISTS (4x=$wt4 16x=$wt16) -- variance if $deck shuffles, else same-draws slowdown"
   fi
