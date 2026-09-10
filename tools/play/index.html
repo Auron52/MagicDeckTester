@@ -2151,6 +2151,11 @@ function renderChooseDialog(v, line){
 // overlapping text and random pictures for all decklists". Real decisions still get a dialog or
 // board targeting; what is gone is the undifferentiated dump. renderChooseDialog's dimension walk
 // now handles every shape, including the mixed sub/no-sub variant sets that used to land here.)
+// Order-insensitive key for a list of card names, so two lists can be compared as MULTISETS.
+// Joined on \x01, which no MTG card name contains -- a plain '' join would make ['AB','C'] and
+// ['A','BC'] compare equal, and the whole point of the check is that the queued line and the
+// matched plan hold exactly the same actions before an order is pinned for them.
+const msKey = a => a.slice().sort().join('\u0001');
 function applyAccepted(planIndex, label) {
   // DISPLAY-ONLY RELABEL (USER 2026-09-05, seed 2: fifty-seven blink activations each logged as
   // "cast: Eldrazi Displacer"). The engine's summary uses one verb for the whole list, so a line
@@ -2187,13 +2192,36 @@ function applyAccepted(planIndex, label) {
   // ReorderPlanCasts/searched_order, which executes the queued sequence verbatim. Old references
   // carry no --cast-order and replay exactly as before. Keyed step marker `co` so undo drops the
   // side-channel entry.
+  //
+  // ...and #10 now pins the WHOLE line, not just its casts. USER 2026-09-10: "the order is off for
+  // Emiel activations and Kitchen activations ... Ideally the order I provide would be followed
+  // as-is. It's up to me to make sure the order is correct." A board ACTIVATION carried no order at
+  // all: cast_order_canonical lists hand casts only, so an activation was filtered out of `human`
+  // below and then executed by the engine's trailing pass in battlefield-index order -- the order
+  // those permanents happened to enter play. On EDF that made "crack the Clue to draw, THEN blink
+  // Emiel to untap the land" unreachable in one line (the Clue's permanent is newer than Emiel's,
+  // so the blink always ran first) and the player had to commit two lines to sequence it.
+  //
+  // So: when the queued entries and the matched plan's ACTIONS are the same multiset, send the full
+  // queued sequence, marked with a leading "*" so the engine widens its reorderable slot set to
+  // include activations (ReorderPlanCasts / kFullOrderMarker). The old cast-only pin stays as the
+  // fallback for every plan whose actions the line does not name one-for-one (an implicit
+  // sac-for-mana, a Vial deploy) -- there the queued order says nothing about those actions. Both
+  // forms ride the same S.castOrder map, the same `co` step marker and the same --cast-order arg,
+  // so undo, the recorded reference and viewer_protocol_check.py need no new concept.
   let coKey = null;
   const dec0 = S.decision, plan0 = dec0 && dec0.plans && dec0.plans[planIndex];
   const canon = plan0 && plan0.cast_order_canonical;
-  if (canon && canon.length >= 2 && dec0.main_ordinal != null) {
-    const human = (S.plan||[]).map(p=>p.name).filter(n => canon.includes(n));
-    const ms = a => a.slice().sort().join('');
-    if (ms(human) === ms(canon)) {   // same cast multiset -> the queued order is authoritative
+  // The queued entries that name a plan ACTION: the land is its own field (plan0.land) and a
+  // Land's Edge discard is a count, so neither is an action and neither can be sequenced here.
+  const queued = (S.plan||[]).filter(p => p.kind !== 'land' && p.kind !== 'le').map(p => p.name);
+  const acts   = ((plan0 && plan0.actions) || []).map(a => a.card);
+  if (dec0 && dec0.main_ordinal != null && acts.length >= 2 && msKey(queued) === msKey(acts)) {
+    coKey = String(dec0.main_ordinal);
+    (S.castOrder=S.castOrder||{})[coKey] = ['*'].concat(queued);   // the whole line, as-is
+  } else if (canon && canon.length >= 2 && dec0.main_ordinal != null) {
+    const human = queued.filter(n => canon.includes(n));
+    if (msKey(human) === msKey(canon)) {   // same cast multiset -> the queued order is authoritative
       coKey = String(dec0.main_ordinal);
       (S.castOrder=S.castOrder||{})[coKey] = human;
     }

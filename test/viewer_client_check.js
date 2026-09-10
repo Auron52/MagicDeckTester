@@ -238,6 +238,51 @@ function testCastOrderBookkeeping(win) {
   S.plan = [{ name: 'Spell A', kind: 'spell' }];
   co.apply(0, 'single');
   chk(Object.keys(S.castOrder).length === 0, 'a single-cast commit pins no castOrder');
+
+  // ---- FULL LINE ORDER: casts AND board activations, marked with a leading "*" -----------------
+  // (2026-09-10.) `cast_order_canonical` lists hand casts only, so a queued board ACTIVATION was
+  // filtered out of the pin entirely and the engine ran it in its trailing pass, ordered by
+  // battlefield index. When the queued entries and the matched plan's ACTIONS are the same
+  // multiset, the whole sequence is pinned instead, with the "*" marker that tells
+  // ReorderPlanCasts to widen its reorderable slot set. Every plan above carries no `actions`
+  // array, which is exactly the fallback case -- those assertions are the back-compat half.
+  const decF = { type: 'main_phase', turn: 6, main_ordinal: 7,
+                 me: { life: 20, battlefield: [] }, opponent: { life: 20, battlefield: [] },
+                 plans: [{ index: 0, casts: ['Wild Growth', 'Clue Token', 'Emiel the Blessed'],
+                           cast_order_canonical: ['Wild Growth', 'Clue Token'],
+                           actions: [{ card: 'Wild Growth' },
+                                     { card: 'Emiel the Blessed', activate: true, verb: 'blink' },
+                                     { card: 'Clue Token', activate: true }] }] };
+  function seedF(planOrder) {
+    S.choices = [1, 1]; S.steps = [{ n: 1 }, { n: 1 }];
+    S.checkpoints = [{ histLen: 0 }, { histLen: 0 }, { histLen: 0 }];
+    S.history = []; S.castOrder = {}; S.decision = decF; S.prev = null; S.busy = false;
+    S.plan = planOrder.map(n => ({ name: n, kind: n === 'Wild Growth' ? 'permanent' : 'activate' }));
+  }
+  // "crack the Clue to draw, THEN blink" -- the order the enumerated vector never offers.
+  seedF(['Clue Token', 'Wild Growth', 'Emiel the Blessed']);
+  co.apply(0, 'full order');
+  chk(JSON.stringify(S.castOrder['7'])
+      === JSON.stringify(['*', 'Clue Token', 'Wild Growth', 'Emiel the Blessed']),
+      'a queue matching the plan ACTIONS pins the full order with the * marker');
+  S.busy = false; co.rollback();
+  chk(!('7' in S.castOrder), 'undo drops the full-order side-channel entry too');
+  // A queued LAND and a Land's Edge discard are not actions and must not enter the pin (nor break
+  // the multiset match): plan0.land / the landsedge count carry them.
+  seedF(['Clue Token', 'Wild Growth', 'Emiel the Blessed']);
+  S.plan.unshift({ name: 'Aether Hub', kind: 'land' });
+  S.plan.push({ name: 'Mountain', kind: 'le' });
+  co.apply(0, 'full order + land');
+  chk(JSON.stringify(S.castOrder['7'])
+      === JSON.stringify(['*', 'Clue Token', 'Wild Growth', 'Emiel the Blessed']),
+      'the land drop and a Land’s Edge discard stay out of the pinned sequence');
+  // A queue that does NOT name every action (an implicit sac-for-mana, a Vial deploy) says nothing
+  // about those actions, so it falls back to the historical cast-only pin -- never a partial
+  // full-order list that would shuffle an action the human never sequenced.
+  seedF(['Clue Token', 'Wild Growth']);
+  co.apply(0, 'partial');
+  chk(JSON.stringify(S.castOrder['7']) === JSON.stringify(['Clue Token', 'Wild Growth']),
+      'a queue that misses an action falls back to the cast-only pin (no * marker)');
   return fails;
 }
 // The live client state. newGame() rebinds `let S` to a fresh object, so always re-read through the
