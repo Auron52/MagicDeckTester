@@ -172,6 +172,25 @@ mark EVERY position holding such a node (far more than the one that truncates to
 whole saving for most of the game's rows. **This is the one judgement call in this work that is
 worth a second opinion; `MTG_LABEL_WAVES=1` reverses it.**
 
+## 3c. The monster cohort, end to end
+
+Shipped defaults (`MTG_LABEL_EDGE_TAIL` on, `MTG_LABEL_GOFF_DOM` on at width 128, `MTG_LABEL_WAVES`
+off). Both monsters are from the 2026-09-09 list of games that ran **6+ hours without finishing**;
+both of these runs shared the box with 4–5 other jobs, so the clean numbers are lower.
+
+| game | before | after | plans cut by the width | group-wave phases cut | edge tails elided | rows |
+|---|---|---|---|---|---|---|
+| 900036 gi=36 | 6 h+, never finished | **5 m 55 s** | 139,857 | 42 | 178,828 | 4, none dropped |
+| 900021 gi=21 | 6 h+, never finished | **52 m 28 s** | **78,768,660** | 12,325 | 2,737,367 | 3 + 1 dropped |
+
+900021's residual class is the same shape as everywhere else — 27,916 residual edge nodes, **7** of
+them wins (0.03%) — but an order of magnitude more of them, and its edge nodes reach 9,418
+candidates. The width cut alone removed 78.8 million candidate scorings from that one game.
+
+Attribution on 900036 (paired, same box): restoring either half — `MTG_LABEL_WAVES=1`, or
+`MTG_LABEL_GOFF_DOM=0` — puts the game back over **40 minutes and still running** against the
+5 m 55 s shipped arm. Neither cut carries this cohort on its own.
+
 ## 4. Instruments added (all `MTG_WINLESS_STATS`-gated, zero cost when off)
 
 * `LABEL WORK` — `ApplyPlanDirect` calls, split by call site (root pass-0 / ladder pass /
