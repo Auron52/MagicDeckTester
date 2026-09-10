@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 4b589c0d  date 2026-09-10
+# Regression ground truth -- commit 0589e110  date 2026-09-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -67,7 +67,7 @@ minotaur2hg_smoke_d3_s1001=5.3500/d6096734765b010a
 goblins2hg_smoke_d3_s1001=4.0400/98eb843d496e3922
 knights2hg_smoke_d3_s1001=5.0933/2c8289b1ed029bba
 fivecolour2hg_smoke_d3_s1001=5.6000/f9071cc8102fe4cb
-fluctuator2hg_smoke_d3_s1001=3.6800/37e35530a9726610
+fluctuator2hg_smoke_d3_s1001=3.6533/d7cab3eacf51147a
 slivers2hg_smoke_d3_s1001=4.8200/60f7078e6e53e52d
 burn2hg_smoke_d3_s1001=5.8400/dc4e7d5057c61975
 th2hg_smoke_d3_s1001=4.5000/4507a7e2d44b44c5
@@ -82,8 +82,8 @@ breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
 critter2hg_smoke_d3_s1001=5.2000/4e1d2b89c377cd77
 melira2hg_smoke_d3_s1001=5.0800/3059da02fa50a29b
 fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
-fluctuator_smoke_d3_s1001=3.6733/99a13d053719f360
-fluctuator_smoke_d5_s1001=3.6400/c820ea4107b14c39
+fluctuator_smoke_d3_s1001=3.6400/b174974742419f91
+fluctuator_smoke_d5_s1001=3.6133/b5ac88c55b558ef8
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6790/990aaa21c4bc567e
@@ -188,12 +188,12 @@ minotaur2hg_regression_d3_s2002=5.3933/a6b3c5b4ba60297a
 goblins2hg_regression_d3_s2002=4.1500/0fcfb6954e71ca43
 knights2hg_regression_d3_s2002=5.0100/40a525918b346540
 fivecolour2hg_regression_d3_s2002=5.4000/b8ae3bee574b821e
-fluctuator2hg_regression_d3_s2002=3.6400/faab42f1304f1f36
+fluctuator2hg_regression_d3_s2002=3.6200/6b1d3dcd43234187
 fluctuator_regression_d0_s2002=5.1670/d028d0e755828667
-fluctuator_regression_d3_s2002=3.6533/f487027754db82a3
-fluctuator_regression_d3_s3003=3.6400/3d50d6054a505d8a
-fluctuator_regression_d5_s2002=3.7200/4f0eceab8542ccc2
-fluctuator_regression_d5_s3003=3.6667/7271dd9af3a05639
+fluctuator_regression_d3_s2002=3.6467/a15df1d4b609c017
+fluctuator_regression_d3_s3003=3.6267/e0ca62ab1295d8a3
+fluctuator_regression_d5_s2002=3.7067/f829b92a2b6c1f35
+fluctuator_regression_d5_s3003=3.6667/e63fe997453c5a2f
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/c408e174bb95edab
