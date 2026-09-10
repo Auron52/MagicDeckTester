@@ -33333,22 +33333,58 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             static const bool s_all_orderfree_env = EnvOn("MTG_MEMO_WIN_ORDERFREE", true);
             const bool s_all_orderfree = (valuearm::t_arm.memo_win_orderfree >= 0)
                                        ? (valuearm::t_arm.memo_win_orderfree != 0) : s_all_orderfree_env;
-            // VERIFIED ONLY (MTG_MEMO_ORDERFREE_VERIFIED_ONLY / job `memo_orderfree_verified_only`, default OFF =
-            // all entries): a WIN entry is stored for any win_turn <= max_turns, so it also
-            // carries a LEAF ESTIMATE when the win lies beyond the node's horizon -- and the greedy rollout
-            // is not order-invariant, so a permuted state's estimate is not this state's. Reusing those
-            // order-free lost 3 of 16000 Fluctuator games (seed 702739: the turn-3 cycling kill judged a
-            // turn worse at a permuted node). A win INSIDE the horizon was proven by simulation and holds
-            // for every permutation. Warm-up passes keep reusing estimates: their lines are discarded.
-            static const bool s_of_verified_only_env = EnvOn("MTG_MEMO_ORDERFREE_VERIFIED_ONLY", false);
+            // VERIFIED ONLY (MTG_MEMO_ORDERFREE_VERIFIED_ONLY / job `memo_orderfree_verified_only`).
+            // **DEFAULT ON since 2026-09-10 (USER RULING). `=0` restores the old unsound reuse for A/B ONLY.**
+            // A WIN entry is stored for any win_turn <= max_turns, so it also carries a LEAF ESTIMATE when
+            // the win lies beyond the node's horizon -- and the greedy rollout is not order-invariant, so a
+            // permuted state's estimate is not this state's. A win INSIDE the horizon was proven by
+            // simulation and holds for every permutation; an estimate was not proven for ANY state but the
+            // one it was computed on.
+            //
+            // WHY THIS IS NOT A TUNABLE. Reusing the unverified kind is UNSOUND, and it fails the
+            // infinite-budget test: hinata gi232 loses its turn-5 kill at EVERY depth 5..40 with an
+            // UNLIMITED budget, because the node is handed a cached "win at turn 6" it believes and stops
+            // looking. That is pruning by false belief, not by exhaustion, so no amount of budget recovers
+            // it -- which is exactly what makes it a bug and not a speed/quality trade. It also hid two more
+            // (gi202, gi255 at the shipped d5/b20). The earlier evidence for default-OFF ("lost 3 of 16000
+            // Fluctuator games") priced the damage and accepted it; the USER's bar is that unsoundness is a
+            // DEALBREAKER regardless of price: *"Just because greedy was also unsound doesn't mean we can
+            // accept a different version of unsoundness."*
+            //
+            // COST, measured and NOT yet recovered (16 hinata overnight keys): sound is +0.1409 t and
+            // 1.341x slower, and `memo ON + verified-only` is byte-identical to `memo OFF` on all 16 -- i.e.
+            // the order-free memo's ENTIRE measured benefit came from the unsound half. Recovering that
+            // SOUNDLY is tracked in docs/design/draw-divergence-diagnosis.md (re-anchor the cached line by
+            // card identity instead of hand index, then replay to verify; full re-search only as fallback).
+            static const bool s_of_verified_only_env = EnvOn("MTG_MEMO_ORDERFREE_VERIFIED_ONLY", true);
             const bool s_of_verified_only = (valuearm::t_arm.memo_orderfree_verified_only >= 0)
                                           ? (valuearm::t_arm.memo_orderfree_verified_only != 0) : s_of_verified_only_env;
             const bool verified = it->second.line.win_turn <= state.turn_number + depth - 1;
             const bool warm_of  = s_warm_orderfree && g_emul_warm_pass && g_force_value_leaf && !g_force_heuristic_leaf;
+            // FULLY SOUND (USER, 2026-09-10: "We should make it fully sound"): the verification
+            // requirement applies to EVERY reuse path, warm-up included. It used to sit inside the
+            // s_all_orderfree arm only, so the warm-up arm reused unverified estimates unconditionally
+            // on the rationale that "warm-up lines are discarded". That rationale is WRONG: a warm-up's
+            // win_turn feeds the ladder's cost prediction, which picks the committed depth, which picks
+            // the played line -- discarding the LINE does not make the ESTIMATE inert. The bypass is
+            // dormant today (MTG_LADDER_EMULATED defaults off and no deck profile enables it, so this
+            // is byte-identical on the suite) and is closed here so switching that feature on cannot
+            // silently reintroduce the same unsoundness. Which PASSES may reuse is unchanged.
             if (!g_orderfree_off
-                && ((s_all_orderfree && (verified || !s_of_verified_only)) || warm_of))
+                && (verified || !s_of_verified_only)
+                && (s_all_orderfree || warm_of))
             {
                 ++g_fs_memo_win_hits;
+                // WHY THE FIVE FILL-IN SITES CANNOT RESCUE AN UNVERIFIED REUSE (measured 2026-09-10, so
+                // nobody re-tries it): every fill-in is keyed on `line.truncated`, and the flag below only
+                // survives while this line is ADOPTED. A shortcut answer that FAILS the caller's cutoff is
+                // discarded together with its flag, and the branch is recorded as a clean "no win". That is
+                // how hinata gi232 lost its turn-5 kill at EVERY budget -- a bogus REFUTATION, not a bad
+                // adopted line -- and why `g_fillin_passes` is 0 on that game. Bumping g_fs_trunc_events
+                // here (so FSLineStoreNoWin refuses to cache the refutation) was tried and does NOT
+                // recover it: the prune is immediate, not cached. Making the shortcut sound needs the
+                // estimate turned into a PROOF for this state -- see the re-anchor+replay design in
+                // docs/design/draw-divergence-diagnosis.md -- not a marker.
                 TurnSolver::SearchLine cut; cut.win_turn = it->second.line.win_turn; cut.truncated = true;
                 return cut;
             }

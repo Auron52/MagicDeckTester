@@ -132,7 +132,46 @@ this state's. Reusing those order-free lost 3 of 16000 Fluctuator games."* Exact
 Setting `MTG_MEMO_ORDERFREE_VERIFIED_ONLY=1` restores T5 at **every** depth and budget with the memo
 still ON — and it also fixes `gi202` and `gi255` at the shipped d5/b20.
 
-## ...but the SOUND guard is a net LOSS at the shipped budget. This needs a USER ruling.
+## USER RULING 2026-09-10: UNSOUNDNESS IS A DEALBREAKER. Verified-only is now the DEFAULT.
+
+*"I don't want it to be unsound and didn't realize something unsound was introduced. That is
+unfortunately a dealbreaker. Just because greedy was also unsound doesn't mean we can accept a
+different version of unsoundness."* And on what an acceptable cost looks like: *"it only working at
+unlimited is also not acceptable, but it may potentially require a high budget. How this scales
+should always be done based on using our budget as well as possible."*
+
+`MTG_MEMO_ORDERFREE_VERIFIED_ONLY` now defaults **ON**; `=0` restores the unsound reuse for A/B only.
+All three hinata games win T5 at the shipped d5/b20, and gi232 is correct at every depth including
+unlimited.
+
+**The cost is CHURN, not lost reachability — which is the distinction that matters.** Smoke under the
+sound default: 15 keys changed, searched slower=5 / faster=0, d0 untouched, makespan 80s -> 199s.
+**All 5 slower games classify as CHURN** (each recovers to its old win turn at 4x and 16x budget).
+So the correct line stays reachable at a higher-but-finite budget — the acceptable failure mode —
+whereas the unsound version's wrong answer was unreachable at ANY budget. Those are categorically
+different, and only the second is a bug.
+
+## Recovering the throughput SOUNDLY (designed, not yet built)
+
+The prize is precisely known: **`memo ON + verified-only` is byte-identical to `memo OFF` on all 16
+hinata keys**, so order-free reuse of VERIFIED entries essentially never fires — 100% of the memo's
+benefit sat in the unverified entries. Recovering it therefore means making unverified entries usable
+*soundly*, not tuning the guard.
+
+**The route: re-anchor the cached line by card IDENTITY and REPLAY it, instead of importing its
+estimate.** A replay that reaches a win at turn N is a *proof for this state*, so it is sound by
+construction; the estimate never has to be trusted. Feasibility is good because the line is already
+mostly identity-anchored: battlefield sources use `sac_source_id = card.m_number` (stable), casts
+carry `card_name`, and only `hand_index` is positional — and the canonical key guarantees the two
+states hold the same multiset, so a permutation mapping exists (duplicate copies being
+interchangeable is exactly what the hand-cast fold established).
+
+**Shape it as a fallback wave** (USER's suggestion): on an order-mismatched WIN entry, (1) try the
+re-anchored replay — cheap, sound, and it verifies the entry for this state; (2) fall back to the
+full fresh search only when the replay fails. Today step (2) is the *only* path, which is where the
+1.34x goes.
+
+## (superseded) The measurement that prompted the ruling
 
 A/B over all 16 hinata / hinata2hg overnight keys:
 
