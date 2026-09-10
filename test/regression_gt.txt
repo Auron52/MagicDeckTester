@@ -1,10 +1,6 @@
-# Regression ground truth -- commit 0589e110  date 2026-09-10
-# NOTE: this file holds TWO measurement provenances after a rebase with disjoint tiers --
-#   smoke + regression: 0589e110 (fluctuator NO-LEAF escalation shape, upstream)
-#   overnight:          1dc1f8f6 (overnight re-accept, see accepted-with-regressions below)
-# GT is a measurement, not a text file to merge: the halves were kept by KEY, never hand-resolved.
+# Regression ground truth -- commit 0bc7c7cc  date 2026-09-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-09-10): Tier last accepted at 0ab355c7, 23 src commits stale. Attribution by hatch re-run (MTG_FOLD_HAND_CASTS=0): 102 of 114 changed keys are DRIFT (all d3/d5, net -0.2470, 44 better/10 worse); the hand-cast fold accounts for 12 keys at NET +0.0000 (11 d0, 1 d3 digest-only). Searched-slower games all belong to the drift half: 24 classified, 13 churn / 11 PERSISTS (9 distinct: fivecolour2hg gi84, fluctuator gi177, hinata gi202/gi232/gi255, melira gi17, mirrorwing gi173, th gi524, th gi232) -- drift-owned, not this change. Fold d0 deltas are greedy-horizon ties: all 8 changed games converge in both arms at d3.
+# accepted-with-regressions (overnight, 2026-09-10): Upstream NO-LEAF escalation shape (f05fb637/a0c2715a/ab2dc775, adopted for Fluctuator in 0589e110) measured on the overnight tier. 12 keys changed (4 digest-only); all 8 moved keys BETTER, zero worse, net -0.0645; confined to fluctuator/fluctuator2hg, the deck it was adopted for. Per-game 22 faster / 6 slower; all 6 slower classified CHURN (recover to the old win turn at 4x and 16x budget). d0 tier completely unchanged (slower=0 faster=0 play-changed=0). Batch makespan 2647s -> 1639s (-38%). fluctuator gi177, the one like-for-like slowdown in the prior baseline, recovers to T3 here.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -453,19 +449,19 @@ fivecolour2hg_overnight_d5_s4004=5.3700/309a4d309b1dee67
 fivecolour2hg_overnight_d5_s5005=5.4500/2e66e0787bf18002
 fivecolour2hg_overnight_d5_s6006=5.4100/990c23bfc9e620f0
 fivecolour2hg_overnight_d5_s7007=5.3700/47f22c9802977a2a
-fluctuator2hg_overnight_d5_s4004=3.6625/88ba4c48c4e29347
-fluctuator2hg_overnight_d5_s5005=3.5750/9d348eeadcacd92e
-fluctuator2hg_overnight_d5_s6006=3.5375/966686513eaec788
-fluctuator2hg_overnight_d5_s7007=3.6375/73880cae0217458d
+fluctuator2hg_overnight_d5_s4004=3.6625/98f56ac5b4f50068
+fluctuator2hg_overnight_d5_s5005=3.5750/df07a259229f26c1
+fluctuator2hg_overnight_d5_s6006=3.5250/8885325a0f81b239
+fluctuator2hg_overnight_d5_s7007=3.6375/7dbd27b67d9385c0
 fluctuator_overnight_d0_s4004=5.1455/ae9e09ca79a5b57b
 fluctuator_overnight_d0_s6006=5.2175/5a94065d77b441d4
 fluctuator_overnight_d0_s8008=5.1040/4116c85f96cb1a14
 fluctuator_overnight_d0_s10010=5.1765/5810c1ac937f9181
-fluctuator_overnight_d3_s4004=3.6080/34178f7bc9cdddbc
-fluctuator_overnight_d3_s5005=3.6180/1c85548dec4ef5f6
-fluctuator_overnight_d3_s6006=3.6320/9ad116cea0fbcefb
-fluctuator_overnight_d3_s7007=3.6440/e11517ccc5ba4c8c
-fluctuator_overnight_d5_s4004=3.6480/7b57b40b86eb6c52
-fluctuator_overnight_d5_s5005=3.6360/fb034a4e92835a27
-fluctuator_overnight_d5_s6006=3.6200/926ae47567a421cb
-fluctuator_overnight_d5_s7007=3.7200/5e7553700a8665de
+fluctuator_overnight_d3_s4004=3.6020/245cce628754e37f
+fluctuator_overnight_d3_s5005=3.6160/9c16a510020943ea
+fluctuator_overnight_d3_s6006=3.6280/669ac1a8c578e9a7
+fluctuator_overnight_d3_s7007=3.6440/8278280ecff6b389
+fluctuator_overnight_d5_s4004=3.6280/45c3827a2e2554a2
+fluctuator_overnight_d5_s5005=3.6320/c151879bd81e7caa
+fluctuator_overnight_d5_s6006=3.6160/3ec530866f05075f
+fluctuator_overnight_d5_s7007=3.7080/788aaba5e652efee

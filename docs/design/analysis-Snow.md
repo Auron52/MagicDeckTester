@@ -842,6 +842,28 @@ equipment-ETB draw, fold-ON casts Jitte first in main 1 and the Paladin in main 
 trigger and the T7 attack. **That is a cast-ORDER tie the d0 evaluator cannot price**, and the
 search resolves it identically in both arms — which is exactly what the d3 column shows.
 
+**Closing note: the tier was re-measured at the tip immediately after, and that is what ships.** The
+attribution above was taken at `1dc1f8f6`; upstream then landed the NO-LEAF escalation shape and
+adopted it for Fluctuator (`0589e110`), rebaselining smoke + regression but not overnight. Re-running
+overnight at the tip isolates that change cleanly: **12 keys, all 8 moved keys BETTER, zero worse,
+net -0.0645, confined to fluctuator/fluctuator2hg, d0 completely unchanged, makespan 2647s -> 1639s
+(-38%)**. Its 6 searched-slower games all classify as CHURN. `fluctuator gi177` -- the single
+like-for-like slowdown in the `1dc1f8f6` baseline -- recovers to T3 there.
+
+**AND THE REASON gi177 IS WORTH KNOWING ABOUT: a searched-depth game does NOT reproduce standalone.**
+`BatchRunner` re-creates the AI engine only when the JOB changes (`cached_job`), so the search memo is
+WARM by game N; and because the budget is deterministic **virtual ms** where memo hits cost fewer
+units, a warm memo buys MORE search for the same budget. gi177 reads T3 cold, T3 in a warm
+178-game single-threaded job, on BOTH binaries with an identical digest -- yet the real
+500-game/24-worker job records T4, because on its worker a different set of games preceded it.
+Consequences worth carrying: **d0 repro is faithful** (no search, no memo -- which is why kitty gi1812
+reproduced exactly); a searched-depth single-game repro is a **cold-memo probe**, sound for "can the
+search find this line at all" but not for "what did the suite play here"; and a per-game `.wins` diff
+between two runs of the SAME manifest still attributes to the binary, but the mechanism may be
+"warm state diverged earlier in this worker's sequence" -- so report it as *the outcome changed*, not
+as *the engine misplayed this position*. The `BatchRunner` comment promising that
+`--seed (base+off) --game-index off` reproduces a chunk "exactly" is true of GAME SETUP only.
+
 ### 3. TWO ways the canonical prefix was unsound, both found by root-causing ONE changed game
 
 The first cut of the hand fold cost `knights_regression_d0_s2002` gi497 a turn-4 kill. Root-causing
