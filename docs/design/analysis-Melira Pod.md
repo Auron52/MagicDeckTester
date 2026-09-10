@@ -3457,3 +3457,10 @@ use, so that conclusion now rests on the size of the margins (the rollout ladder
 every deck) rather than on configuration coverage. Two specific rows deserve a re-screen at the deck's own
 depth before being trusted: **fivecolour** (locks d6b20, and it is the one deck where the value-probe
 final-depth shape looked strong — z +6.8 at d5b20) and **hinata** (locks d5b30, screened at 2/3 that budget).
+
+**Second rebase (draw-log recording + the soundness pricing run) — the adoption still holds.** Re-verified on
+the twice-rebased binary, 8 x 500 games on the sidecar route: d5b20 **0.433x units, 25 better / 2 worse
+(z +4.4)**; d3b10 **0.786x, 18/6 (z +2.4)**. The unit ratios are identical to three decimal places across
+three different engine tips, and the per-game counts move by one or two games — the shape's saving is
+structural (it is the start gate admitting a pass), not an artefact of any one engine state. Smoke under
+upstream's re-accepted GT: 80 passed, 0 failed. `check_gt_logs`: 456 consistent, 0 stale, 0 missing.
