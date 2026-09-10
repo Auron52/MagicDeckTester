@@ -107,6 +107,65 @@ library from turn 0, so the two lines are not the same game at any depth. (USER 
 match given enough budget and search if lookahead bottoming runs at the same settings — untested,
 and low priority.)
 
+## THE UNLIMITED-BUDGET TEST: gi232 IS A BUG, and the guard for it already exists (default OFF)
+
+USER, 2026-09-10: *"the question we have to ask would be 'is this line reachable' at unlimited budget
+and sufficient depth. If it isn't we introduced a bug."* Run unbudgeted (`--budget-ms 0` = unlimited,
+`FromVirtualMs` treats `<= 0` as unlimited):
+
+| `hinata gi232` | d5 | d7 | d9 | d11 | d20 | d40 |
+|---|---|---|---|---|---|---|
+| `MTG_MEMO_WIN_ORDERFREE=1` (default) | 6 | 6 | 6 | 6 | 6 | 6 |
+| `MTG_MEMO_WIN_ORDERFREE=0` | **5** | 5 | 5 | 5 | 5 | 5 |
+
+**The T5 line is unreachable at unlimited budget at every depth to 40.** That is the bug criterion
+met — a lossy prune, not a search-effort tradeoff, and it violates the standing no-lossy-truncation
+USER bar (the infinite-budget test). It matters that **the search is CLAIRVOYANT**
+(`DecisionProvider.h`: *"this search is clairvoyant"*; rollouts draw the real library via
+`library.DrawTop()`), so the engine COULD see the earlier win and still does not take it.
+
+**Root cause, and the code already documents it.** `TurnSolver.cpp` order-free WIN reuse carries a
+guard, `MTG_MEMO_ORDERFREE_VERIFIED_ONLY`, **defaulted OFF**, whose own comment says: *"a WIN entry is
+stored for any win_turn <= max_turns, so it also carries a LEAF ESTIMATE when the win lies beyond the
+node's horizon -- and the greedy rollout is not order-invariant, so a permuted state's estimate is not
+this state's. Reusing those order-free lost 3 of 16000 Fluctuator games."* Exactly our failure mode.
+Setting `MTG_MEMO_ORDERFREE_VERIFIED_ONLY=1` restores T5 at **every** depth and budget with the memo
+still ON — and it also fixes `gi202` and `gi255` at the shipped d5/b20.
+
+## ...but the SOUND guard is a net LOSS at the shipped budget. This needs a USER ruling.
+
+A/B over all 16 hinata / hinata2hg overnight keys:
+
+| | keys better | keys worse | sum | cost |
+|---|---|---|---|---|
+| guard ON (sound) vs default | **0** | **8** | **+0.1409** | **1.341x slower** |
+
+And the decisive detail: **`memo ON + verified-only` is byte-identical to `memo OFF` on all 16 keys.**
+So the order-free WIN memo's ENTIRE measured quality benefit on hinata comes from reusing precisely
+the entries the code calls unsound; the sound half contributes nothing measurable.
+
+The tension is real and is a judgement call, not a fact: the unsound reuse is **wrong at unlimited
+budget** but **pays for itself at finite budget**, because being 1.34x cheaper buys more search per
+budget than the occasional bad reuse costs. Flipping the default to sound would cost ~+0.14 t across
+hinata. Recorded for the user; NOT changed here.
+
+## STILL OPEN — a SECOND bug: the search is NON-MONOTONE in depth and budget
+
+Independent of the memo (both arms identical), unbudgeted:
+* `gi202`: d5 -> **5**, d7/d9/d11/d20 -> **6**. A DEEPER search is worse.
+* `gi202` at d5, memo off: b20 -> 5, b320 -> **6**, b10240 -> 6, unlimited -> **5**. Worse, then better.
+* `gi202` at d7, memo off: b20/b80/b320 -> 5, then **b1280 onwards -> 6**.
+* `gi255`: d5/b20 -> 5, but unlimited at every depth -> 6.
+
+`SearchBudget.h` states the opposite as an exact property: *"The 'a deeper pass is never worse'
+property becomes exact rather than statistical."* With a CLAIRVOYANT search and an earliest-win
+objective, more search must never lose a found win. No lever moves it (`MTG_ID_ANYTIME`,
+`MTG_ESCALATION_GATE`, `MTG_COMMIT`, `MTG_ESC_SINGLE`, `MTG_ENUM_MEMO`, `MTG_BIG_SOLVE_MEMO`,
+`MTG_LEAF_CACHE` all leave gi202 d7/b1280 at 6). The d5 vs d7 lines diverge at Ponder's
+`cast_reorder` on T2 — d5 reorders to draw Island and kills on T5; d7 reorders to draw Mountain and
+wins T6 with huge overkill (opp -34), which hints the deeper pass is preferring a bigger-damage line
+over an earlier win. UNDIAGNOSED — this is the next thread.
+
 ## What this does NOT change
 
 CRN is working. `ShuffleByKey` orders the live library by `splitmix64(seed, m_number)`, so removing a
