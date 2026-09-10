@@ -35,8 +35,9 @@ existence; the H-cell ladder's 1.35-84.8x cliff on a missing model).
 User requirement: *"It would be preferable to not have more than a few options for the leaf, so 3-4 should be
 the maximum. Some of these approaches are likely to outperform others in general which means the dominated
 ideas can be dropped."* Four candidates were measured -- escalation and final-depth, each with and without the
-value leaf -- plus the full rollout ladder as the control. **Three survive.** Tables: `logs/emul_screen/menu.py`
--> `menu_batch4.txt`; per-arm detail in `decide2_batch4_all.txt`.
+value leaf -- plus the full rollout ladder as the control. **Three survive.** The decision is reproducible:
+`scripts/shape_menu.py` reads a screen's per-game logs and prints exactly the table below (per-arm detail
+in the screen's own `decide2_batch4_all.txt`).
 
 | # | shape | `value_play` | when |
 |---|---|---|---|
