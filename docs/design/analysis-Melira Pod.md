@@ -3376,3 +3376,34 @@ Fluctuator adoption was re-measured on the sidecar route with no flags at all be
 and the relaxed alpha mostly reaches the same decision with far less work — only ~0.7% of games end
 differently, so the 75/150-game regression cases see none). Smoke accepted earlier: 79 of 80 unchanged, the
 one change classified as churn. Viewer protocol: 0 play-drift, 0 enum-gap.
+
+### 2026-09-10j — rebase onto the sound order-free memo, GT re-accepted, pushed; Dragonstorm measured and STAGED
+
+**Rebased onto origin (13 commits: the sound order-free WIN reuse, the budget-gated reuse wave, the
+overnight rebaseline).** Only `test/regression_gt.txt` conflicted; per the gt-rebaseline-rebase rule it was
+NOT hand-merged — upstream's side was taken wholesale and the tiers re-measured under the rebased binary.
+Rebuilt; `check_gt_logs.py` 456 consistent / 0 stale / 0 missing.
+
+**The Fluctuator adoption re-verifies IDENTICALLY on the rebased engine**: d5b20 0.433x units, 24 better /
+3 worse, z +4.0; d3b10 0.786x, 19/5, z +2.9 — the same digits as before the rebase, so upstream's search
+changes and this one do not interact. Smoke: 79 of 80 byte-identical, the one moved key classified CHURN,
+accepted WITH the note (`--accept-with-regressions=`, which is a FLAG — an `ACCEPT_ACK=` env prefix is
+silently ignored, and accepting without it deletes the mode's previous note). Regression: 108 passed, 0
+failed, 0 changed; viewer protocol 0 play-drift / 0 enum-gap. Pushed as b2431ec4; CI ubuntu-latest green,
+windows-latest pending at the time of writing. Overnight tier started (pid in `overnight.pid`).
+
+**Dragonstorm `{ladder: single, leaf: none, alpha: relaxed}` — MEASURED ON THE SIDECAR ROUTE, STAGED, NOT
+ADOPTED.** 8 x 500 games against the shipped deck:
+
+| cfg | units | better / worse | z | d_avg |
+|---|---|---|---|---|
+| d5b20 | 0.958x | 11 / 7 | +0.9 | +0.0005 |
+| d3b10 | 0.740x | 11 / 18 | −1.3 | +0.0040 |
+
+Not a clean win: at d3b10 the quality moves the wrong way on BOTH indicators (7 net games worse, mean
++0.0040) in exchange for 26% fewer units, and adopting would also discard a tuned block (`escalation_cap`
+5, `beam_width` 3, `escalation_fresh_frac` 0.5, `escalation_r` 81) along with the model. It is a genuine
+cost/quality trade, and the cheap side of it (d3b10) is the MULLIGAN-GENERATION configuration, not the
+shipped play — so the saving is a one-off on generation, not on play. Left staged for the user.
+Note the route effect again: the screen's stand-in route read this cell as 1.01x at d5b20, the sidecar
+route reads 0.958x.
