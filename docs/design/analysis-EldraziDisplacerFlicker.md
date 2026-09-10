@@ -4469,3 +4469,18 @@ execution of the human's picked order rides the existing `--cast-order`/`searche
 so nothing new is needed downstream. `MTG_SEQ_UNTAPPER_FIRST=0` restores the single-order walk.
 Verified on the exact rejection board: verdict **accept**, and the plan executes with Drake,
 Displacer and Training Grounds all resolved, no dropped cast.
+
+### Session 13: viewer integrations landed on the combined tree
+
+* **Saturated-mana enumeration collapse** (the ETIMEDOUT fix) integrated: the 101,568-plan go-off
+  click (8.0x of it pure cast-order permutation, each ordering ApplyPlanDirect-validated) collapses
+  to the distinct-payload fan under `HumanEnumSaturated` (float >= 24, no live credit, no
+  mana-adder, lump-payability via CanPayFlat). Worst corpus click 4.72 s -> 0.04 s CPU; deep-loop
+  clicks ~23 ms against the 120 s step timeout. `MTG_HUMAN_SAT_ENUM=0` restores; sub-floor frames
+  (~1.2 s) deliberately untouched; `MTG_HUMAN_SAT_MAXACT=4` means a 5+-action combined entry is
+  reachable as two clicks rather than one menu row.
+* **Tutor-fan menu collapse** integrated (three dialogs -> two; the third lived in CheckLine's
+  choose path, not the plan array).
+* Combined-tree gates after each cherry-pick, final: scenarios 73/73; smoke ALL PASS (0 play
+  changes); sweep 307 refs, 11 ok / 296 repaired / 0 play-drift / 0 enum-gap / 0 contract-fail
+  (ok->repaired motion is index remapping under the smaller fan, absorbed by content anchoring).
