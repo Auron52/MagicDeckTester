@@ -1402,6 +1402,36 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
              || ac.kind == Action::Kind::GraveyardExileGrow))
             {
                 os << ", \"activate\": true";
+                // `cost_pips` = this activation's NON-GENERIC pips as the W/U/B/R/G/C letters the
+                // `need=` token and the `taps` affordance already use (docs/design/viewer-line-macros.md).
+                // The viewer sums it over the entries still QUEUED behind the segment it is about to
+                // commit, and declares the total as that line's `need=` -- which is how an untap pick
+                // between two macro iterations gets to serve the continuation instead of raw yield.
+                //
+                // PIPS ONLY, never the generic half: generic mana constrains WHICH land not at all
+                // (any source pays it), so folding it in would make every activation "demand"
+                // everything and the promotion would fire on noise. Absent when an activation has no
+                // coloured or {C} pip at all -- Emiel's blink is a bare {3} -- which is the honest
+                // statement that it does not care which land untaps.
+                {
+                    const ManaCost& q = ac.cost;
+                    std::string pips;
+                    for (int k = 0; k < q.white; ++k)     { pips += 'W'; }
+                    for (int k = 0; k < q.blue; ++k)      { pips += 'U'; }
+                    for (int k = 0; k < q.black; ++k)     { pips += 'B'; }
+                    for (int k = 0; k < q.red; ++k)       { pips += 'R'; }
+                    for (int k = 0; k < q.green; ++k)     { pips += 'G'; }
+                    for (int k = 0; k < q.colorless; ++k) { pips += 'C'; }
+                    if (!pips.empty()) { os << ", \"cost_pips\": "; JsonStr(os, pips); }
+                }
+                // `makes_clue` = this activation is an Investigate, i.e. it puts a Clue token onto
+                // the battlefield. The viewer offers "Investigate & crack" off THIS flag rather than
+                // off a card name, so any future Investigate source is covered with no viewer change
+                // (docs/design/viewer-line-macros.md). Purely an affordance hint: the fused gesture
+                // queues two ordinary entries and the engine sees the same two lines it always would.
+                if (ac.kind == Action::Kind::ActivatePermAbility
+                 && ac.ability_mode == Action::AbilityMode::TapInvestigate)
+                { os << ", \"makes_clue\": true"; }
                 // `sacout` tells the GUI to encode this as the sacout= line verb rather than cast=,
                 // and sac_count is how many creatures ONE activation eats (the burst). ONLY the two
                 // kinds that really eat a creature get it: ActivatePump used to be swept in by a

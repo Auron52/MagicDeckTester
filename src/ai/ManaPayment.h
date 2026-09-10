@@ -370,3 +370,42 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t);
 // decision JSON's per-permanent `taps`) AND the legality test ApplyHumanPreTap enforces -- one
 // function, so the viewer can never offer a tap the engine will refuse.
 std::string HumanPreTapFaces(const GameState& state, const Permanent& p);
+
+// ---- The viewer's QUEUED-CONTINUATION untap demand (docs/design/viewer-line-macros.md) --------
+// `need=<COLOURS>` -- e.g. `need=UC` -- declares the colours the human's REMAINING QUEUED LINE
+// still wants, i.e. the part of their declared sequence that has not been committed yet. It rides
+// the SAME `--cast-order` full-order list the `tap=` token does, for the same three reasons: that
+// list is the human's declared sequence, it is passed on the COMMIT path (`--validate-line` is
+// not), and it is recorded verbatim per main-phase decision in the reference trace and
+// reconstructed verbatim by test/viewer_protocol_check.py -- so a macro'd line replays from a
+// saved game with no new artifact field to keep in step.
+//
+// WHY IT HAS TO BE DECLARED RATHER THAN INFERRED. `g_line_unpaid_cost` already carries rest-of-LINE
+// coloured demand, and the tap-ahead reads it -- but a macro's continuation lives in the NEXT
+// committed segment, which is a different process invocation with a different plan. Nothing inside
+// the engine can see it. The viewer knows it exactly (it is the rest of the queue), so it says so.
+//
+// Same lexical argument as the other tokens: '=' cannot occur in an MTG card name, so a `need=`
+// entry can never be mistaken for one. Unknown letters are ignored (mask 0 == no demand == inert).
+bool IsHumanUntapNeedToken(const std::string& tok);   // does it start "need="?
+int  ParseHumanUntapNeedToken(const std::string& tok);// -> bitmask over static_cast<int>(Color)
+
+// The demanded-colour mask the CURRENTLY APPLYING line declared, or 0 for every line that declared
+// none (which is every autonomous apply, every rollout and every reference saved before this
+// feature). Defined in ManaPayment.cpp, redeclared in SpellEffects.h for EtbUntapLands' reader --
+// the same shape as g_line_unpaid_cost above, and for the same reason.
+extern thread_local int g_human_untap_need;
+
+// RAII for g_human_untap_need, same nesting contract as LineUnpaidCostScope: a nested apply sets
+// its own demand and restores the outer one on exit.
+class HumanUntapNeedScope
+{
+public:
+    explicit HumanUntapNeedScope(int mask) : m_prev(g_human_untap_need)
+    { g_human_untap_need = mask; }
+    ~HumanUntapNeedScope() { g_human_untap_need = m_prev; }
+    HumanUntapNeedScope(const HumanUntapNeedScope&)            = delete;
+    HumanUntapNeedScope& operator=(const HumanUntapNeedScope&) = delete;
+private:
+    int m_prev;
+};

@@ -19046,6 +19046,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // cast pays. Scoped, so a nested breakpoint re-solve gets its own hold and restores this one.
     // Empty (zero) for every plan without a hand cast, and inert for every deck with no mid-line sink.
     LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+    // What the human's REMAINING QUEUE wants (docs/design/viewer-line-macros.md). Unlike the hold
+    // above it is not derived from this plan's costs -- the continuation is in the NEXT committed
+    // segment, which this process cannot see, so the viewer declares it. 0 for every plan that
+    // declared none, i.e. every rollout and every autonomous apply.
+    HumanUntapNeedScope _hun(plan.human_untap_need);
     // Searched fresh-mint release (MTG_FRESH_SPEND_AXIS): same whole-plan static pin -- the
     // deferred-breakpoint re-solve after the mint must price under the same world as the prepay.
     ScriptedFreshMode _sfm(plan.freshmode_choice);

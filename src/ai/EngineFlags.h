@@ -762,3 +762,16 @@ inline bool HumanPreTapEnabled()
     static const bool v = EnvOn("MTG_HUMAN_PRE_TAP", true);
     return v;
 }
+
+// QUEUED-CONTINUATION UNTAP DEMAND (docs/design/viewer-line-macros.md). DEFAULT ON; =0 disables.
+// Shared reader per the lockstep rule -- there are TWO readers and a disagreement between them
+// means a declared demand is lifted out of the order list but never acted on (or vice versa):
+//   * AIEngine::ReorderPlanCasts -- lifts `need=` out of the --cast-order full-order list;
+//   * SpellEffects.h's EtbUntapLands -- diverts one untap pick toward the declared colours.
+// Both sites also test HumanPlayActive(), and the search never writes Plan::human_untap_need, so
+// rollouts, autonomous play and GT are byte-identical by construction.
+inline bool HumanUntapDemandEnabled()
+{
+    static const bool v = EnvOn("MTG_UNTAP_LINE_DEMAND", true);
+    return v;
+}
