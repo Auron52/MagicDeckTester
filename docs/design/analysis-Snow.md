@@ -738,6 +738,39 @@ identical) -- at most one land enters per turn, so the strict form excluded at m
 byte-identical across all 188 suite configs. It is in because the strict form was reasoning the
 engine does not need, not because it paid for itself.
 
+### 2d. RECOVERABILITY, verified rather than argued (USER: "worth ensuring all of the cases are recoverable")
+
+The bar (`docs/design/search-recoverability-audit.md`): *can this mechanism make a faster line
+unreachable on information the player legitimately has?* For a canonical-prefix fold that reduces to
+a CHECKABLE claim -- **every rejected selection must have a legal, enumerable twin** -- so
+`MTG_FOLD_VERIFY=1` (default off) checks it at runtime: build the twin (each class member replaced
+by the same class's ord 0..k-1), then apply ONE validity predicate to the original and to the twin,
+and report a violation only when the original passes and the twin fails.
+
+**Result: 14,454,667 rejected selections across all 40 suite decks, UNRECOVERABLE = 0.**
+
+**The verifier is proven non-vacuous.** `MTG_FOLD_LEGACY_SRC_COND=1` restores the pre-`4b589c0d`
+source condition (tagged actions only); with it on, knights gi497 reports `UNRECOVERABLE=1` and
+names the case exactly -- `twin=[Marshal#0(hi0) Marshal#4(hi0)]`, a cast and an Aether Vial deploy
+**on the same hand slot** -- and the game loses its turn-4 kill. That hatch is the permanent
+isolation gate for the fix.
+
+**Two false-positive shapes had to be designed out first, and both are the same mistake:** comparing
+the twin against a standard the ORIGINAL never had to meet.
+* FiveColour's Bloom Tender / Faeburrow Elder emit several modes per permanent, so the twin held two
+  activations of one source -- illegal by the `{T}` clause, but the original was too (69 + 941
+  phantom violations).
+* Two-Headed Hellkite produced twins with two `CastFromHand` on one hand slot -- but those are
+  Maelstrom Archangel FREE-CAST variants in different bank slots, which the guard legitimately
+  permits and which the original therefore also carried.
+
+The fix is to run one predicate over both and require original-passes-twin-fails. **Worth recording
+that the second shape is NOT an engine bug**: `apply_one` resolves a cast BY NAME, not by hand
+index, so two free casts of one slot resolve to two distinct copies when they exist and harmlessly
+find nothing when they do not. And the reason the knights twin is genuinely invalid is independent
+of that: `{cast slot 0, vial slot 0}` share a `PlanGroupKey`, so the odometer never enumerates them
+together at all.
+
 ### 3. TWO ways the canonical prefix was unsound, both found by root-causing ONE changed game
 
 The first cut of the hand fold cost `knights_regression_d0_s2002` gi497 a turn-4 kill. Root-causing

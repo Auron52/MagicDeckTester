@@ -180,6 +180,13 @@ inline std::atomic<long long> g_fold_reject_site[2];    // ...split by caller: 0
 // measurement read "units identical" while the guard was rejecting 456k subsets. Deterministic,
 // so unlike wall or CPU it is immune to a contended box.
 inline std::atomic<long long> g_subsets_scored[2];
+// RECOVERABILITY VERIFIER (MTG_FOLD_VERIFY, default off). USER bar, docs/design/
+// search-recoverability-audit.md: "can this mechanism make a faster line unreachable on
+// information the player legitimately has?" For a canonical-prefix fold that reduces to a
+// CHECKABLE claim -- every rejected selection must have a legal, enumerable TWIN -- so it is
+// checked at runtime rather than argued. Both holes fixed in 4b589c0d were exactly twin failures.
+inline std::atomic<long long> g_fold_recoverable{0};
+inline std::atomic<long long> g_fold_unrecoverable{0};
 inline int Bucket(size_t n)
 {
     if (n <= 1) { return 0; }
@@ -594,6 +601,8 @@ namespace
                               << " drop_src=" << bfcensus::g_fold_drop_src.load()
                               << " drop_single=" << bfcensus::g_fold_drop_single.load()
                               << " guard_seen=" << bfcensus::g_fold_guard_seen.load()
+                              << " recoverable=" << bfcensus::g_fold_recoverable.load()
+                              << " UNRECOVERABLE=" << bfcensus::g_fold_unrecoverable.load()
                               << " guard_reject=" << bfcensus::g_fold_guard_reject.load()
                               << " (greedy=" << bfcensus::g_fold_reject_site[0].load()
                               << " search=" << bfcensus::g_fold_reject_site[1].load() << ")\n";
@@ -5918,10 +5927,16 @@ static void FinalizeFoldTags(const GameState& state, std::vector<Action>& action
     //
     // The count is over EVERY action sharing the source key, tagged or not -- that key is what
     // PlanGroupKey buckets on, and same-group actions are mutually exclusive by construction.
+    // MTG_FOLD_LEGACY_SRC_COND=1 restores the pre-4b589c0d form, which counted only TAGGED actions
+    // per source and so could not see an Aether Vial deploy sharing a hand slot with a cast. Kept as
+    // the ISOLATION GATE for that fix: with it on, MTG_FOLD_VERIFY reports UNRECOVERABLE > 0 on
+    // knights gi497, which is what proves the verifier is not vacuous.
+    static const bool s_legacy_src_cond = EnvOn("MTG_FOLD_LEGACY_SRC_COND");
     static thread_local std::vector<int> src_all, src_cnt;
     src_all.clear(); src_cnt.clear();
     for (const Action& a : actions)
     {
+        if (s_legacy_src_cond && a.equiv_tag == 0) { continue; }   // legacy: tagged actions only
         // Mirrors PlanGroupKey: anything carrying a hand_index occupies that HAND SLOT (a Vial
         // deploy as much as a cast); otherwise the source is the permanent.
         if (a.hand_index < 0 && a.sac_source_id == 0) { continue; }   // no source to collide on
@@ -6042,8 +6057,118 @@ inline thread_local bool g_from_odometer = false;
 inline bool Take() { const bool b = g_from_odometer; g_from_odometer = false; return b; }
 }   // namespace foldsel
 
+static bool FoldVerifyOn()
+{
+    static const bool on = EnvOn("MTG_FOLD_VERIFY");
+    return on;
+}
+static thread_local bool g_in_fold_verify = false;
+
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
-                                        int site = 0, bool from_odometer = false)
+                                        int site, bool from_odometer);
+
+// For a selection the canonical-prefix rule is about to reject, BUILD ITS TWIN and check the twin
+// is a legal selection: every class member replaced by the same-class member holding ord 0..k-1.
+// If that twin is legal, the rejected arrangement was a duplicate and nothing was lost. If it is
+// not, the rejection deleted a line with no equivalent -- a recoverability violation.
+//
+// The SOURCE-COLLISION check is the load-bearing half and is done explicitly rather than by
+// re-running the guard: two CastFromHand on one hand slot with the same free_cast flag are NOT
+// rejected by any clause (the odometer's group structure normally makes them impossible), which is
+// exactly how the Aether Vial hole hid -- {cast slot 1, vial slot 0} folding to {cast slot 0, vial
+// slot 0}, the same slot twice.
+static void VerifyFoldRecoverable(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                  size_t a, int tag, int site)
+{
+    if (!FoldVerifyOn() || g_in_fold_verify) { return; }
+    g_in_fold_verify = true;
+    (void)a; (void)tag;
+
+    // ONE validity predicate, applied to the ORIGINAL and to the TWIN, and a violation reported only
+    // when the original passes and the twin does not. Comparing like-for-like is the whole trick:
+    // the first two cuts of this verifier each reported hundreds of "violations" on FiveColour that
+    // were properties the ORIGINAL selection shared --
+    //   * two activation modes of ONE permanent (illegal by the {T} clause either way), and
+    //   * two FREE casts of one hand card in different Maelstrom Archangel bank slots, which the
+    //     guard permits and which the twin therefore inherits.
+    // Neither was introduced by the fold, so neither is a recoverability question.
+    auto valid = [&](const std::vector<int>& v) -> bool
+    {
+        for (size_t x = 0; x < v.size(); ++x)
+        {
+            for (size_t y = x + 1; y < v.size(); ++y)
+            {
+                if (v[x] == v[y]) { return false; }
+                const Action& p = cands[v[x]];
+                const Action& q = cands[v[y]];
+                // Same hand slot / same permanent = physically the same object twice. Free-cast
+                // variants are exempt: they are the engine's own bank-slot mechanism and the guard
+                // already owns their legality.
+                if (p.hand_index >= 0 && p.hand_index == q.hand_index
+                    && !(p.free_cast || q.free_cast)) { return false; }
+                if (p.hand_index < 0 && q.hand_index < 0 && p.sac_source_id != 0
+                    && p.sac_source_id == q.sac_source_id && !(p.free_cast || q.free_cast))
+                { return false; }
+            }
+        }
+        // ...and every clause of the guard EXCEPT the prefix rule itself (from_odometer=false).
+        return !SubsetHasDuplicateSacSource(cands, v, site, /*from_odometer=*/false);
+    };
+
+    if (!valid(sel)) { g_in_fold_verify = false; return; }   // already illegal: nothing was lost
+
+    // Twin: keep untagged picks; per class, take ords 0..k-1.
+    std::vector<int> twin;
+    std::vector<std::pair<int, int>> per_class;   // (tag, count selected)
+    for (int j : sel)
+    {
+        if (cands[j].equiv_tag == 0) { twin.push_back(j); continue; }
+        bool found = false;
+        for (auto& pc : per_class)
+        { if (pc.first == cands[j].equiv_tag) { ++pc.second; found = true; break; } }
+        if (!found) { per_class.push_back({ cands[j].equiv_tag, 1 }); }
+    }
+    bool buildable = true;
+    for (const auto& pc : per_class)
+    {
+        for (int o = 0; o < pc.second; ++o)
+        {
+            int idx = -1;
+            for (int q = 0; q < static_cast<int>(cands.size()); ++q)
+            { if (cands[q].equiv_tag == pc.first && cands[q].equiv_ord == o) { idx = q; break; } }
+            if (idx < 0) { buildable = false; break; }
+            twin.push_back(idx);
+        }
+        if (!buildable) { break; }
+    }
+    std::sort(twin.begin(), twin.end());
+
+    const bool ok = buildable && valid(twin);
+    if (ok) { bfcensus::g_fold_recoverable.fetch_add(1, std::memory_order_relaxed); }
+    else
+    {
+        bfcensus::g_fold_unrecoverable.fetch_add(1, std::memory_order_relaxed);
+        static std::atomic<int> shown{0};
+        if (shown.fetch_add(1) < 20)
+        {
+            auto desc = [&](int j) {
+                return cands[j].card_name.str() + "#" + std::to_string(j)
+                     + "(k" + std::to_string(static_cast<int>(cands[j].kind))
+                     + ",hi" + std::to_string(cands[j].hand_index)
+                     + ",src" + std::to_string(cands[j].sac_source_id)
+                     + ",o" + std::to_string(cands[j].equiv_ord) + ") "; };
+            std::string so, tw;
+            for (int j : sel)  { so += desc(j); }
+            for (int j : twin) { tw += desc(j); }
+            std::cerr << "[fold-UNRECOVERABLE buildable=" << buildable << "] sel=[" << so
+                      << "] twin=[" << tw << "]\n";
+        }
+    }
+    g_in_fold_verify = false;
+}
+
+static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                        int site, bool from_odometer)
 {
     for (size_t a = 0; a < sel.size(); ++a)
     {
@@ -6137,6 +6262,7 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             }
             if (!have_pred)
             {
+                VerifyFoldRecoverable(cands, sel, a, tag, site);
                 static const bool s_ftrace = EnvOn("MTG_FOLD_TRACE");
                 if (s_ftrace)
                 {
