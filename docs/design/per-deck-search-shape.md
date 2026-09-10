@@ -30,6 +30,81 @@ Combinations that exist and were measured (arm names from the screen):
 from day one (no model needed), which removes the presence-gating traps (hybrid activation by file
 existence; the H-cell ladder's 1.35-84.8x cliff on a missing model).
 
+## THE MENU (SETTLED 2026-09-10, batches 3+4 on the fixed binary: 19 modelled decks + Fluctuator, both configurations, 8 x 500 games)
+
+User requirement: *"It would be preferable to not have more than a few options for the leaf, so 3-4 should be
+the maximum. Some of these approaches are likely to outperform others in general which means the dominated
+ideas can be dropped."* Four candidates were measured -- escalation and final-depth, each with and without the
+value leaf -- plus the full rollout ladder as the control. **Three survive.** Tables: `logs/emul_screen/menu.py`
+-> `menu_batch4.txt`; per-arm detail in `decide2_batch4_all.txt`.
+
+| # | shape | `value_play` | when |
+|---|---|---|---|
+| 1 | escalation, model leaf | `{ladder: escalation, leaf: model}` (the default; no keys needed) | any deck with a TRUSTED value leaf. Wins or ties on 17 of the 18 modelled decks. |
+| 2 | escalation, leafless probe | `{ladder: escalation, leaf: none, alpha: relaxed}` | a deck with NO model, a rejected one, or day one of a new deck. Fluctuator: **0.23x / 0.45x the rollout ladder's units** with better quality (`shape_probe`, fresh seeds), and 0.43x / 0.79x the same shape without `alpha`. |
+| 3 | final-depth single pass | `{ladder: single, leaf: none, alpha: relaxed}` | the low-budget dial: where the ladder's escalation is wasted. Dragonstorm 0.74x at d3b10 at neutral quality; Fluctuator 0.42x the rollout ladder at d3b10. |
+
+**DROPPED -- the full rollout ladder (`heur`), on the evidence the user predicted.** *"Likely the full
+heuristic ladder is such an idea, since skipping those early escalations should be pretty much free."* It is
+dominated on all 19 decks at both configurations: 1.17x to 18.76x the shipped shape's units, and never better
+on quality anywhere. It survives only as the control arm in a screen.
+
+**DROPPED -- the value probe + final-depth pass (`fit_v`).** Adoptable on no deck at both configurations.
+Wherever it looked good at d5b20 (FiveColour 0.91x with 58 net games better, z +6.8; Hinata z +2.5 at equal
+cost) it lost at d3b10 (z -2.4, -3.8). Its leafless twin (#3 above) is the one that earns a place, so the
+"value leaf on or off" pair collapses to ONE entry here -- which is the user's own prediction that the menu
+might come to three.
+
+### The one mechanism worth carrying forward: the single pass is a DIAL, not a free win
+
+The final-depth shapes behave oppositely at the two budgets, and consistently across decks:
+
+| | d5b20 (18,000 units) | d3b10 (9,000 units) |
+|---|---|---|
+| units vs ship | 0.80x - 1.8x (usually MORE) | 0.61x - 0.97x (always LESS) |
+| quality | neutral to better (Hinata z +2.5, FiveColour z +6.8) | worse on 10 of 18 decks (z -2 to -5) |
+
+The probe runs unreserved and eats the budget; the single rollout pass then runs at the deepest depth whose
+predicted cost still FITS what is left. At a large budget that is deep enough and the shape is a real saving.
+At a small budget "what is left" buys only a d1 or d2 rollout, where the ladder's escalation would have gone
+deeper -- so it is cheaper precisely BECAUSE it is doing less, and the quality goes with it. The reserved
+variant fails the mirror-image way: reserving room for the pass at every depth stops the PROBE early (Melira
++0.22 turns, finding 8). Neither is a free lunch; the single pass belongs on the menu as the option for decks
+whose escalation is wasted, not as a general replacement.
+
+### Two ways the screen's numbers are not the shipped deck's numbers
+
+Both were found by cross-checking a screen row against a fresh measurement, and both leave the screen's
+COMPARISONS intact (every arm in a batch shared the same binary and environment) while invalidating any
+ABSOLUTE reading of a row. An ADOPTION must therefore be re-measured the way the deck actually runs.
+
+**`MTG_NO_BP_PREFIX_CACHE=1` CHANGES PLAY -- it is not a pure memo under a budget.** Every screen batch ran
+with it (the breakpoint prefix cache costs ~730 MB per game on Dragonstorm and was OOMing the box). Isolated
+on Fluctuator, 500 games at d5b20: with the cache off the search spends **+2.9% units and returns a DIFFERENT
+play digest** (`e390ddbd` vs `885342e9`); the three memo caps beside it (`MTG_TT_CAP`, `MTG_FSL_CAP`,
+`MTG_FSL_POOL`) are byte-identical exactly as documented. The mechanism is the budget: a cache miss is not
+free, it is recomputation, so under a FIXED unit budget the same decision truncates at a different point and
+can commit a different line. "Result-neutral memo" holds only at an unlimited budget. The earlier reading
+that the cache is play-neutral came from Dragonstorm alone and does not generalise.
+
+**Finding 12 -- the screen's leafless arm is NOT the play a deck ships**
+
+`value_profile: "noleaf"` (how every leafless arm in the screen was run) substitutes a constant stand-in and
+**never loads the model file**, so the sidecar's escalation parameters -- trust depth, the fallback crossover,
+`escalation_cap` / `escalation_r`, the beam -- are absent. A deck that SHIPS `leaf: "none"` keeps its sidecar
+and those parameters stay live. The two are near-equivalent but not identical: on Fluctuator, 8 x 500 games,
+the stand-in route costs 0.967x the shipped route and 5 games in 2,000 end differently. Small enough that the
+menu's conclusions hold, but it means **an adoption must be re-measured on the sidecar route** -- which is
+what Fluctuator's was (see its `value_play.note`), and what `chain_fix5.sh`'s route check exists to catch.
+
+**A LABEL to distrust, for the same reason.** A screen arm named `heur` means "the plain rollout ladder" only
+if the job actually pins `value_model: false`. For Fluctuator -- the one deck in the screen with no trusted
+model -- the generator emitted `heur` as an EMPTY job spec, so the deck's own sidecar drove it and that row is
+Fluctuator's SHIPPED leafless escalation, not the rollout ladder. Every "vs heur" ratio for Fluctuator in
+batches 1-4 is therefore against its shipped shape (which is why `escnl_rx` at 0.438x agrees to 1% with the
+sidecar-route measurement of 0.433x). The true rollout-ladder comparison comes from `shape_probe.py`, whose
+control pins every shape key explicitly: **0.23x at d5b20, 0.45x at d3b10.**
+
 ## What the screen measured (2026-09-10, 19 modelled decks + Fluctuator, d5b20 and d3b10, 8 x 500 games)
 
 **SUPERSEDED IN PART -- read "Why the shapes measured what they did" below first.** The first screen ran on a

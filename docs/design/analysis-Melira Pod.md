@@ -3257,3 +3257,122 @@ is a tuning parameter of the leafless probe, not a menu item; x2 is measured on 
 **Finding 6 (executor full-depth fallback on an empty line) stays open by choice:** the fallback is the design
 (a no-win decision replays the baseline search so full-depth is a superset of baseline); what the leafless forms
 change is how often they hand it an EMPTY line. Measure after batch 4, separately.
+
+### 2026-09-10g — the menu apparatus, the early test, and a methodology fix (batch 4 running)
+
+**Methodology — the quality axis is now the PAIRED SIGN TEST, not the average win turn.** Measuring the
+per-seed spread of `d_avg` on batch 2's completed cells (500 games/seed) shows its standard error over the
+WHOLE 8 x 500-game screen is 0.011 (Melira), 0.004 (Hinata), 0.003 (FiveColour) — 6-22x the ±0.0005
+tolerance the adoption rule was written with — while the light decks sit at 0.000. So every "worse by
++0.0010" tag this screen printed on a heavy deck was inside its own noise, and the rule as written could not
+have decided the cases it exists for. Arms run identical games (same seed, game index and opening hand), so
+`better`/`worse` are paired and `z = net / sqrt(better + worse)` is a sign test on the discordant pairs.
+Re-reading batch 2 through it: Melira's rejections are z = −8 (escnl) to −27 (nl_sres), Hinata's leafless
+escalation is z = −3.1, and the sub-0.002 readings that decorated Knights/Critter are |z| <= 1 — the same
+conclusions, but now separable from noise. `d_avg` is kept as the MAGNITUDE (a shape losing a fifth of a turn
+is rejected whatever its z). Recorded in `per-deck-search-shape.md` "Adoption rule"; `decide2.py` reports z
+per cell.
+
+**`menu.py` — the decision the user asked for ("3-4 should be the maximum... dominated ideas can be
+dropped").** Five labels, four candidates plus the control: `esc_v` (ship), `esc_nl` (escnl_rx), `fit_v`
+(v_sfit), `fit_nl` (nl_sfit_rx), `heur`. Per deck it applies the adoption rule at BOTH configurations and
+prints which shapes are strictly better, which are merely no worse, and on which decks — so a dominated shape
+is dropped on evidence rather than taste. Queued on batch 4's reports (`chain_menu.sh` -> `menu_batch4.txt`).
+
+**`scripts/shape_probe.py` — the cheap early test for a NEW deck.** One pooled batch over the three
+MODEL-LESS shapes (rollout ladder / leafless escalation / leafless single pass) at the deck's own depth and
+budget: minutes, against the hours a value leaf costs, and it needs no model to run. Reports units and the
+sign test, names a winner, prints the `value_play` block to paste, and — this is the part the old apparatus
+lacked — says UNRESOLVED when |z| < 2 instead of pretending a tie is a verdict. Every shape key is pinned per
+arm so a deck that already ships a shape cannot leak it into the control. Validation queued (`chain_fix6.sh`)
+on two decks whose answer the screen already knows: Knights (light: the shapes should tie exactly) and
+Fluctuator at both configurations (leafless escalation should win), on seeds disjoint from the screen's.
+
+**Sidecar vocabulary (commit 4c9506e3, built by `chain_fix5.sh` after the batch).** `value_play.ladder`
+gains `"single"`; new `value_play.alpha` (`"relaxed"` / `"strict"`) and `value_play.exhaust_mult`. Resolution
+is arm > deck > env at every site, so the batch's per-job arms still win and every off-batch path stays
+byte-identical. chain5 verifies that (Melira ship 2040514, Fluctuator's sidecar route 1773) and then checks
+the sidecar route against the arm route for each candidate Fluctuator shape — the shape a deck SHIPS must be
+the shape the screen MEASURED, and only a route check can show that.
+
+### 2026-09-10h — batch 4 complete: THE MENU settles at three shapes; Fluctuator's relaxed alpha ADOPTED
+
+**Batch 4: 3,867 jobs, exited normally, 5 h 10 m at 32/32 workers, peak RSS 19.5 GB.** Integrity check first:
+the control arms are byte-identical across batches (`fluct heur`, `melira heur/ship`, `hinata heur/ship`,
+`knights heur/ship` all sum to the same units in `wins_fix2` and `wins_fix4`), so unit ratios ARE comparable
+across batches and every fix in 223c80f1 is inert on the shipped paths.
+
+**THE MENU (written up in `per-deck-search-shape.md`; tables in `menu_batch4.txt`).** Three shapes survive:
+escalation + model leaf (any deck with a trusted model — wins or ties on 17 of 18), escalation + leafless
+probe with the relaxed alpha (no model / day one), and the final-depth single pass, leafless, relaxed (the
+low-budget dial). Dropped: **the full rollout ladder**, dominated on all 19 decks at both configurations
+(1.17x–18.76x units, never better on quality) exactly as the user predicted; and **the value probe +
+final-depth pass**, adoptable nowhere at both configurations. So the "with and without the value leaf" pair
+collapses to one entry for the final-depth family and the menu is three, not four.
+
+**Why the final-depth family splits by budget (the mechanism, not a rule of thumb).** At d5b20 it costs
+0.80–1.8x with neutral-to-better quality; at d3b10 it costs 0.61–0.97x and loses quality on 10 of 18 decks
+(z −2 to −5). The probe runs unreserved and eats the budget, and the single rollout pass then runs at the
+deepest depth that still FITS what remains: at a large budget that is deep enough to be a real saving, at a
+small one it buys a d1/d2 rollout where the ladder's escalation would have gone deeper. It is cheaper
+BECAUSE it is doing less. The reserved variant fails the mirror-image way (reserving stops the probe early,
+finding 8). The single pass is a dial for decks whose escalation is wasted, not a general replacement.
+
+**Finding 12 — the screen's leafless arm is not the play a deck ships.** `value_profile: "noleaf"`
+substitutes a constant stand-in and never loads the model file, so a sidecar's trust depth, crossover,
+escalation cap/R and beam are absent; a deck shipping `leaf: "none"` keeps them live. On Fluctuator, 8 x 500
+games: the stand-in route is 0.967x the shipped route and 5 games in 2,000 differ. The menu's conclusions
+survive it, but an ADOPTION has to be measured on the sidecar route.
+
+**ADOPTED — Fluctuator `value_play.alpha: "relaxed"`** (clean win, both axes, both configurations; the
+standing 2026-09-03 directive covers it). Measured on the sidecar route against the same file without the
+key, 8 x 500 games: d5b20 **0.433x units**, 24 games better / 3 worse (z +4.0), mean −0.0035; d3b10
+**0.786x**, 19/5 (z +2.9), −0.0047. The `ladder: "single"` alternative was measured the same way and is
+cheaper at d3b10 (0.647x) but worse on the mean (+0.0025), so it was not taken. Verified after the edit: the
+shipped deck now reproduces the measured arm to the unit and to the digest. GT: full smoke re-run — **79 of
+80 configs unchanged** (every other deck byte-identical, confirming the new levers are inert), the one change
+being `fluctuator_smoke_d5_s1001` gi68 5→7, classified by `classify_turn_later.sh` as **churn** (recovers to
+T5 at 4x and 16x budget) against 24-better/3-worse over 4,000 games. Smoke accepted; regression tier running.
+
+**The exhaustion multiple does NOT earn a default.** At 2x the budget: Fluctuator escnl_rx2 0.476x/0.714x vs
+escnl_rx 0.438x/0.712x, nl_sfit_rx2 0.486x/0.664x vs 0.446x/0.662x — slightly worse or equal everywhere.
+`exhaust_mult` stays a knob at its byte-identical default of 1.
+
+### 2026-09-10i — the early test validates, and catches two ways the screen's rows are not shipped play
+
+**`shape_probe.py` end-to-end (chain 6), on decks whose answer the screen already knows, seeds 880000+
+(disjoint from the screen's).** Knights: esc_nl **0.10x** the rollout ladder's units, quality a tie (1
+better / 0 worse) — and the tool correctly reports UNRESOLVED rather than calling a tie a verdict.
+Fluctuator d5b20: esc_nl 0.23x, z +2.7 → recommends exactly the shape adopted an hour earlier, from a
+12-job run of minutes instead of a 3,867-job batch of five hours. Fluctuator d3b10: fit_nl 0.42x vs esc_nl
+0.45x, both z +4.5 → recommends the single pass, matching the screen. The tool reproduces the screen's
+verdicts; that is the validation.
+
+**It also exposed a 3% discrepancy that turned out to be two separate things.** The probe's rollout-ladder
+control was 2x the screen's `fluct heur` row, which forced a check:
+
+1. **The screen's `fluct heur` arm was never the rollout ladder.** `gen_manifest.py` emits `heur` as
+   `dict()` for a deck with no `val` entry, so no `value_model: false` was pinned and Fluctuator's own
+   sidecar drove the job — that row is its SHIPPED leafless escalation. Every "vs heur" ratio for Fluctuator
+   in batches 1-4 is against its shipped shape, which is why `escnl_rx` 0.438x agrees to 1% with the
+   sidecar-route measurement (0.433x). Confirmed by reproduction: the screen's row is byte-identical
+   (4,483,613 units, digest `e390ddbd`) to the pre-adoption sidecar re-run under the screen's environment.
+   `shape_probe.py` pins every shape key on every arm precisely so this cannot happen there.
+
+2. **`MTG_NO_BP_PREFIX_CACHE=1` CHANGES PLAY — finding 13.** Isolating the screen's four environment
+   variables on 500 Fluctuator games: the three memo caps (`MTG_TT_CAP`, `MTG_FSL_CAP`, `MTG_FSL_POOL`) are
+   byte-identical as documented, but the prefix-cache flag alone spends **+2.9% units and returns a different
+   play digest**. The mechanism is the budget: a cache miss is recomputation, not a free lookup, so under a
+   FIXED unit budget the same decision truncates elsewhere and can commit a different line. "Result-neutral
+   memo" holds only at an unlimited budget, and the earlier "play identical with it off" reading came from
+   Dragonstorm alone. Every screen batch carried this flag (it was what stopped the OOM), so all four batches
+   measure the no-cache play.
+
+**Neither invalidates the menu** — every arm in a batch shared one binary and one environment, so the
+comparisons are like-for-like — but both invalidate any ABSOLUTE reading of a row, and both are why the
+Fluctuator adoption was re-measured on the sidecar route with no flags at all before it was taken.
+
+**GT after the adoption: regression tier 108 passed, 0 failed, 0 changed** (the play digest folds DECISIONS,
+and the relaxed alpha mostly reaches the same decision with far less work — only ~0.7% of games end
+differently, so the 75/150-game regression cases see none). Smoke accepted earlier: 79 of 80 unchanged, the
+one change classified as churn. Viewer protocol: 0 play-drift, 0 enum-gap.
