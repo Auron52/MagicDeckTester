@@ -168,6 +168,8 @@ enum Slot : int
     EDF_M2,                   // MTG_EDF_M2               flicker-combo decks (blink outlet + ETB-untap payload) get the searched second main
     EDF_AUTOGOFF,             // MTG_EDF_AUTOGOFF         same-main go-off: plan apply runs the assembled loop (USER: no extra mains to search)
     EDF_LIB_ROUTE,            // MTG_EDF_LIB_ROUTE        library-route finisher pricing (default OFF: mana-only sizing measured -0.14/-0.20)
+    EDF_VAL_RAMP,             // MTG_EDF_VAL_RAMP        plan-value: a land Aura is priced by the MANA it adds
+    EDF_VAL_COMBO,            // MTG_EDF_VAL_COMBO       plan-value: a creature is priced by its COMBO role, not a combat clock
     COUNT
 };
 
@@ -313,6 +315,8 @@ inline const char* Name(int slot)
         "MTG_EDF_M2",
         "MTG_EDF_AUTOGOFF",
         "MTG_EDF_LIB_ROUTE",
+        "MTG_EDF_VAL_RAMP",
+        "MTG_EDF_VAL_COMBO",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

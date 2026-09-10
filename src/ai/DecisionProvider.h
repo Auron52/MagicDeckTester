@@ -53,7 +53,7 @@
 //   13  PostDrawKeepLandName                |  ScaledCastVariants
 //   14  HasExtraLethalModel /
 //       ExtraLethalDamage
-//   15  ArchetypeCardValue
+//   15  ArchetypeCardValue  |  ComboCardValue
 //
 // Never assigned: no hook was ever numbered above 30. ImpulseFloatColorRedOnly /
 // RestrictSacColorsToHasteAndRed were added unnumbered.
@@ -620,6 +620,26 @@ public:
     // estimate (so the engine keeps every generic card type). Generic = false.
     virtual bool ArchetypeCardValue(const GameState& s, const CardDefinition& def,
                                     int dmg_unit, int& out) const = 0;
+
+    // ComboCardValue -- the SAME per-card value question as ArchetypeCardValue, asked one step
+    // EARLIER: EvalCard consults this BEFORE its per-template branches, where ArchetypeCardValue is
+    // consulted after them. The distinction exists because the template branches RETURN, so a
+    // provider cannot own the value of a creature, a burn spell or a draw spell through
+    // ArchetypeCardValue at all -- it is only ever reached for cards that fell through to the
+    // generic tail.
+    //
+    // WHY THAT MATTERS (docs/design/edf-shortfall-classification.md, s10-T2 and s11-T3). EvalCard
+    // prices a creature as `power x expected-attacks x DMG` -- a COMBAT CLOCK. On a combo deck
+    // whose creatures are an engine and never attack, that estimate is not merely imprecise, it is
+    // measuring a plan the deck does not have: an Eldrazi Displacer scores 1200 on turn 2 while the
+    // land Aura that actually advances the kill scores the generic 100 floor. Both plans reach the
+    // same searched tail, so `plan.value` alone decides, and it decides on the clock.
+    //
+    // Generic = false -> EvalCard is byte-identical for every provider that does not override this,
+    // and the call is one virtual dispatch on a path that already makes several.
+    virtual bool ComboCardValue(const GameState& s, const CardDefinition& def,
+                                int dmg_unit, int& out) const
+    { (void)s; (void)def; (void)dmg_unit; (void)out; return false; }
 
     // CastOrderRank -- cast-order rank for a non-sacrifice hand cast (LOWER = cast earlier). The
     // engine stable-sorts the turn's hand casts by this rank, so the RELIABLE ordering rules
