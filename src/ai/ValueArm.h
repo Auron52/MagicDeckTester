@@ -63,6 +63,14 @@ struct Arm
     // the tree leaf-independent (heuristic == value warm-up) and skips the committing pass's own
     // order-miss re-searches; the line ends at that node (the engine re-searches past a line's end).
     int         memo_win_orderfree = -1;    // -1 unset | 0 off | 1 on     (MTG_MEMO_WIN_ORDERFREE)
+    // ORDER-FREE REUSE WAVE (MTG_FSL_OF_WAVE / MTG_OF_WAVE_SHARE; see FSLineStoreOfHint in
+    // TurnSolver.cpp). `of_wave_share` is the share of the REMAINING budget a node's re-search must
+    // be worth before it may take a permuted twin's answer instead -- the gate that makes the reuse
+    // decay to zero as the budget grows. Here rather than env-only for the reason this file states
+    // above: sizing it needs one arm per share value, and env knobs are process-wide, so an env-only
+    // sweep costs one `mtg --batch` per arm and strands cores on every invocation's tail.
+    int         of_wave        = -1;        // -1 unset | 0 off | 1 on     (MTG_FSL_OF_WAVE)
+    double      of_wave_share  = -1.0;      // <0 unset                    (MTG_OF_WAVE_SHARE)
     int         memo_orderfree_verified_only = -1;   // -1 unset | 0 all entries | 1 verified wins only (MTG_MEMO_ORDERFREE_VERIFIED_ONLY)
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).

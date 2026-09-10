@@ -32139,10 +32139,121 @@ inline std::size_t FslCap()
     return cap;
 }
 
+// ---- THE ORDER-FREE REUSE WAVE (MTG_FSL_OF_WAVE, DEFAULT ON since 2026-09-10) ----------------
+// ADOPTED on measurement, all 20 suite decks, 120 games each at d5/b20, ONE pooled batch:
+//   quality  better 2 / WORSE 0 / identical 18, NET -0.0249 t   (hinata -0.0166, dragons -0.0083)
+//   cost     0.7605x deterministic units in total, and no deck above 1.000x
+// Share sized on 200 Hinata games (see docs/design/order-free-reuse-wave.md for the table): quality
+// plateaus at 5.7950 for every share <= 0.005 and falls off at 0.01, so 0.005 is the LARGEST value
+// still on the plateau -- and on a flat plateau the tie-break is CONVERGENCE, because a larger share
+// closes the gate sooner as the budget grows.
+// WHAT IT IS FOR. Split keys made the memo sound by construction, but they paid for it: a WIN is
+// filed under an ORDER-EXACT key, so a state differing from its author only in zone order no longer
+// finds it and re-searches the position from scratch. That is not a rare corner -- measured on 40
+// Hinata games at d5/b20, 30.4% of all re-searches (14208 of 46695) had a permuted twin's answer
+// sitting unused -- and it is the entire residual the sound adoption still owes (+0.0990 t against
+// the unsound baseline).
+//
+// WHY A GATE AND NOT A RULE, measured rather than argued. Letting a node take its twin's answer
+// outright is what the old unsound shortcut did, and the twin-agreement probe says exactly how good
+// that answer is: over the same 14208 hits the node's own search AGREED with its twin 99.70% of the
+// time, did strictly BETTER 0.16% (23 nodes) and strictly WORSE 0.14% (20 nodes). So the shortcut
+// was right almost always -- and those 23 are the hinata gi232 shape: the node would have found an
+// EARLIER win than the answer it was handed, and taking the handed one throws that win away. There
+// is no way to tell a good hit from one of the 23 WITHOUT SEARCHING, which is precisely why this
+// cannot be a static rule at any confidence level.
+//
+// SO IT IS A BUDGET GATE, and the shape is the one SearchBudget already argues for: "UNLIMITED IS
+// NOT A SPECIAL CASE -- it is the limit that increasing budgets converge toward". A node reuses its
+// twin's answer only when re-searching would cost a serious share of what is LEFT to spend:
+//
+//     twin_units > share x budget->Remaining()          (SatMulD, so unlimited needs no branch)
+//
+// Read off what that does at the ends of the scale. Remaining() grows with the budget, so the
+// condition fails more and more often -- the reuse rate decays continuously to zero, with no cliff
+// anywhere and no "large-but-finite behaves like tiny" step (the failure mode the wave machinery was
+// rejected for in 2026-07-29). At an UNLIMITED budget Remaining() is LLONG_MAX and the gate never
+// opens, so the search is exactly the sound one and gi232's turn-5 kill is reachable. And within a
+// single budget it drains as the search proceeds, which is the ordinary anytime contract: cheap
+// early, thrifty late.
+//
+// THAT IS ALSO WHAT MAKES IT ADMISSIBLE. A reuse is still BELIEVING an estimate computed for another
+// zone order, so it is not a proof and is not offered as one -- it is a BUDGET-STARVATION fallback,
+// the one carve-out the standing bar allows ("Anything that stops search should be eliminated. The
+// only cases where this should be able to happen is when you are budget starved"). The bar it has to
+// clear is the USER's infinite-budget test -- *"it only working at unlimited is also not acceptable,
+// but it may potentially require a high budget"* -- i.e. unreachable at ANY budget is a BUG, and
+// reachable-with-more-budget is acceptable CHURN. The old shortcut had no gate at all and so failed
+// that test outright (gi232 was 6 at every depth 5..40 with the budget UNLIMITED). This one turns the
+// same case into churn. Every reuse also bumps g_fs_trunc_events, so no refutation resting on one is
+// ever cached as a real one.
+//
+// STORAGE: no new plumbing and no second map -- the index lives in the SAME FSLineCache under the
+// canonical key folded with a private salt, a key nothing else computes. Its FSLineEntry deliberately
+// holds NO line (a line is index-encoded and belongs to its own order) and repurposes two fields:
+//   nowin_bound = the twin's win turn        order_sig = the UNITS the twin's node spent
+// An earlier win replaces a later one, so the index always names the best answer any order found.
+inline TranspositionTable::Key FSOfHintKey(const TranspositionTable::Key& canonical)
+{
+    TranspositionTable::Key k = canonical;
+    Fold(k, 0x0F1E2D3C4B5A6978ULL);   // private salt: the wave-index namespace
+    return k;
+}
+
+static bool OfWaveEnabled()
+{
+    static const bool on = EnvOn("MTG_FSL_OF_WAVE", true);
+    return on;
+}
+// The twin-agreement probe needs the index POPULATED even though it never lets the search read it,
+// so the store gate is the OR of the two.
+static bool OfWaveProbeOn()
+{
+    static const bool on = EnvOn("MTG_OF_WAVE_PROBE");
+    return on;
+}
+// How large a share of the REMAINING budget a node's re-search must be worth before it is allowed to
+// take its twin's answer instead. Smaller = stricter (reuse only the very expensive nodes).
+static double OfWaveShare()
+{
+    static const double v = []() -> double
+    { const char* e = std::getenv("MTG_OF_WAVE_SHARE");
+      return (e != nullptr && *e != '\0') ? std::strtod(e, nullptr) : 0.005; }();
+    return v;
+}
+
+inline void FSLineStoreOfHint(FSLineCache* lc, const TranspositionTable::Key& canonical,
+                              const TurnSolver::SearchLine& line, long long units)
+{
+    if (lc == nullptr || line.phases.empty()) { return; }
+    const TranspositionTable::Key k = FSOfHintKey(canonical);
+    FSLineCache::iterator it = lc->find(k);
+    if (it == lc->end())
+    {
+        if (FslCap() && lc->size() >= FslCap()) { return; }
+        if (!FslPoolAcquire(1)) { return; }
+        lc->charged_kb += 1;
+        FSLineEntry e;
+        e.nowin_bound = line.win_turn;                              // repurposed (see above)
+        e.order_sig   = static_cast<std::uint64_t>(units > 0 ? units : 1);
+        lc->emplace(k, std::move(e));
+    }
+    else if (line.win_turn < it->second.nowin_bound)
+    {
+        it->second.nowin_bound = line.win_turn;
+        it->second.order_sig   = static_cast<std::uint64_t>(units > 0 ? units : 1);
+    }
+}
+
 inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
-                           const TurnSolver::SearchLine& line, const GameState& state)
+                           const TurnSolver::SearchLine& line, const GameState& state,
+                           const TranspositionTable::Key* of_canonical = nullptr,
+                           long long of_units = 0)
 {
     if (lc == nullptr) { return; }
+    if (of_canonical != nullptr
+        && (OfWaveEnabled() || OfWaveProbeOn() || valuearm::t_arm.of_wave > 0))
+    { FSLineStoreOfHint(lc, *of_canonical, line, of_units); }
     const std::uint64_t sig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
     FSLineCache::iterator it = lc->find(key);
     if (it == lc->end())
@@ -32253,6 +32364,52 @@ inline thread_local long long g_fs_cut_prunes   = 0;
 inline thread_local long long g_fs_hexits       = 0;
 inline thread_local long long g_fs_leaf_wt_sum  = 0;
 inline thread_local long long g_fs_memo_win_hits = 0, g_fs_memo_nowin_hits = 0, g_fs_memo_order_miss = 0, g_fs_memo_stale = 0;
+// ORDER-FREE WAVE OPPORTUNITY PROBE (MTG_OF_WAVE_PROBE, default off -- counters only, no behaviour).
+// Under SPLIT KEYS a WIN is stored order-exactly, so a permuted twin's win is simply not found and the
+// node re-searches from scratch. That silent miss is the whole residual the split-keys adoption gave up
+// (+0.0990 vs the unsound baseline), and it is invisible in every existing counter: `g_fs_memo_order_miss`
+// only ever incremented on the OLD single-key path. These name the size of the prize before any
+// machinery is built for it -- how many key_win misses have a canonical-key WIN sitting right there,
+// and how many of those are VERIFIED (win inside the horizon => permutation-invariant fact, replayable
+// as-is) versus UNVERIFIED (win beyond the horizon => a greedy-rollout estimate belonging to the other
+// order, the exact thing that made gi232 unreachable). Atomic + a static reporter because the batch
+// runner plays games on many threads and the numbers are wanted once per PROCESS, not per pass.
+namespace ofwprobe
+{
+    inline std::atomic<long long> g_lookups{0};    // key_win missed and no usable no-win => re-search
+    inline std::atomic<long long> g_avail{0};      // ... of those, a canonical-key WIN existed
+    inline std::atomic<long long> g_verified{0};   // ... of those, its win was inside THIS node's horizon
+    inline std::atomic<long long> g_reused{0};    // twin answers actually taken (budget gate opened)
+    // Twin-agreement (see the probe at the tail of FSLineWin): how a node's OWN answer compares
+    // with the answer a permuted twin of the same position had already stored.
+    inline std::atomic<long long> g_agree{0};
+    inline std::atomic<long long> g_better{0};   // node found a STRICTLY EARLIER win than the twin
+    inline std::atomic<long long> g_worse{0};    // node found a LATER win than the twin
+    struct Reporter
+    {
+        ~Reporter()
+        {
+            if (!EnvOn("MTG_OF_WAVE_PROBE")) { return; }
+            const long long l = g_lookups.load(), a = g_avail.load(), v = g_verified.load();
+            std::cerr << "[of-wave] re_searches=" << l << " twin_win_available=" << a
+                      << " avail_share=" << (l ? static_cast<double>(a) / l : 0.0)
+                      << " verified=" << v
+                      << " verified_share_of_avail=" << (a ? static_cast<double>(v) / a : 0.0)
+                      << " reused=" << g_reused.load() << "\n";
+            const long long ag = g_agree.load(), bt = g_better.load(), wo = g_worse.load();
+            const long long tot = ag + bt + wo;
+            std::cerr << "[of-wave] twin_agree=" << ag << " twin_better=" << bt
+                      << " twin_worse=" << wo
+                      << " agree_share=" << (tot ? static_cast<double>(ag) / tot : 0.0)
+                      << " better_share=" << (tot ? static_cast<double>(bt) / tot : 0.0) << "\n";
+        }
+    };
+    inline Reporter g_reporter;
+}
+// Hints that actually moved a plan to the front (matched a candidate). A hint that finds no match
+// is not a bug -- the twin's opening play can be one this node's enumeration dropped (a breadth cap,
+// the escalation beam) -- but a persistently low match rate would mean the signature is folding
+// something positional, so it is worth counting.
 // True only inside an EMULATED-LADDER value warm-up pass, whose line is discarded by construction (a
 // warm-up that finds a verified win is replayed on the heuristic at that depth). MTG_LADDER_VALUE_LEAF's
 // warm-ups also force the value leaf but CAN commit a verified warm-up line, so they do not set this.
@@ -33279,10 +33436,113 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // Interior-node memo: a transposed re-entry at this (state, depth) returns the
     // already-computed optimal line. depth is folded into the key, so different
     // remaining depths never collide. See FSLineCache.
-    TranspositionTable::Key key;
+    // SPLIT KEYS (MTG_FSL_SPLIT_KEYS). **DEFAULT ON since 2026-09-10; `=0` restores the single
+    // canonical key.** This is how the order-free unsoundness is removed BY CONSTRUCTION rather than
+    // by a guard: with wins under an order-exact key, an order mismatch cannot occur, so nothing is
+    // ever reused order-free and MTG_MEMO_ORDERFREE_VERIFIED_ONLY becomes INERT (verified 40-game
+    // hinata: byte-identical units AND avg with the guard on or off, and gi232 stays correct at
+    // d20/unlimited even with the guard OFF). The guard is kept as defence in depth for `=0`.
+    // ADOPTED on measurement, not taste -- against the verified-only-guard default:
+    //   regression tier (108 keys): 7 moved, 7 BETTER, 0 worse, NET -0.0710, wall 14.93M -> 11.60M ms (-22%)
+    //   smoke tier      (80 keys):  1 moved, 1 BETTER, 0 worse, NET -0.0266
+    // It recovers ~42% of the quality the unsound reuse was buying (vs GT: +0.1700 -> +0.0990) at
+    // lower cost. The rest is still on the table -- see the re-anchor+replay design in
+    // docs/design/draw-divergence-diagnosis.md, which would let a permuted state REUSE a win line
+    // (remap by card identity, replay to re-evaluate honestly, use as an incumbent).
+    // The canonical key merges zone permutations, which is right for a NO-WIN (a refutation is a
+    // property of the MULTISET, carries no line, and is ~99.99% of entries) and wrong for a WIN (its
+    // line is index-encoded, so a permuted state cannot replay it -- and reusing just its win_turn is
+    // exactly the unsoundness fixed above). Splitting gives each answer the key it deserves: WINs go
+    // under an ORDER-EXACT key so they are always replayable, NO-WINs stay canonical so they keep
+    // sharing across permutations. No order miss can then exist, and nothing is ever reused
+    // order-free -- soundness by construction rather than by a guard.
+    static const bool s_split_keys = EnvOn("MTG_FSL_SPLIT_KEYS", true);
+    static const bool s_ofw_probe  = EnvOn("MTG_OF_WAVE_PROBE");   // counters only; see ofwprobe
+    // Per-job arm wins over the env default, so one pooled batch can carry every share value.
+    const bool   s_of_wave       = (valuearm::t_arm.of_wave >= 0)
+                                 ? (valuearm::t_arm.of_wave != 0) : OfWaveEnabled();
+    const double s_of_wave_share = (valuearm::t_arm.of_wave_share >= 0.0)
+                                 ? valuearm::t_arm.of_wave_share : OfWaveShare();
+    int of_hint_win = 0;             // a twin's win turn (probe only -- NEVER consulted by search)
+    TranspositionTable::Key key, key_win;
     if (lc != nullptr)
     {
-        key = BuildSimKey(state, depth, max_turns, second_main);
+        key     = BuildSimKey(state, depth, max_turns, second_main);
+        key_win = key;
+        if (s_split_keys && CanonSimKeyOn()) { Fold(key_win, FsOrderSig(state)); }
+        if (s_split_keys)
+        {
+            // WIN on the order-exact key: stored by a state with THIS zone order, so the
+            // index-encoded line is replayable by construction and needs no order_sig check.
+            FSLineCache::const_iterator itw = lc->find(key_win);
+            if (itw != lc->end() && itw->second.nowin_bound == std::numeric_limits<int>::max())
+            {
+                PROF_INC(fsline_win_hit);
+                ++g_fs_memo_win_hits;
+                return itw->second.line;
+            }
+            // NO-WIN on the canonical key: order-free and sound (no line; the bound is a property of
+            // the multiset), and it still answers only what the refutation actually covered.
+            FSLineCache::const_iterator itn = lc->find(key);
+            if (itn != lc->end() && itn->second.nowin_bound != std::numeric_limits<int>::max()
+                && cutoff <= itn->second.nowin_bound)
+            {
+                PROF_INC(fsline_nowin_hit);
+                ++g_fs_memo_nowin_hits;
+                return itn->second.line;
+            }
+            // ---- ORDER-FREE REUSE WAVE (see FSLineStoreOfHint for the whole argument) ---------
+            // No order-exact win and no usable refutation, so this node is about to re-search a
+            // position a permuted twin already solved. Take that twin's answer ONLY when
+            // re-searching would cost a serious share of the budget still left -- so the reuse rate
+            // decays continuously to zero as the budget grows, and at an unlimited budget the gate
+            // never opens at all.
+            if (s_of_wave || s_ofw_probe)
+            {
+                FSLineCache::const_iterator ith = lc->find(FSOfHintKey(key));
+                if (s_ofw_probe)
+                {
+                    ofwprobe::g_lookups.fetch_add(1, std::memory_order_relaxed);
+                    if (ith != lc->end())
+                    {
+                        ofwprobe::g_avail.fetch_add(1, std::memory_order_relaxed);
+                        if (ith->second.nowin_bound <= state.turn_number + depth - 1)
+                        { ofwprobe::g_verified.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                }
+                if (ith != lc->end())
+                {
+                    of_hint_win = ith->second.nowin_bound;   // probe only -- never read by search
+                    // `!g_orderfree_off` is LOAD-BEARING, not defensive. A committed line that ends
+                    // at a wave reuse has no replayable continuation, so the engine re-searches it
+                    // with the shortcut disabled before it is ever played (that is what
+                    // g_orderfree_off marks). Letting the wave fire during that re-search would
+                    // hand back the same truncated answer and the fill-in would never complete --
+                    // play would replay a line that stops mid-air.
+                    if (s_of_wave && budget != nullptr && !g_orderfree_off)
+                    {
+                        const long long twin_units = static_cast<long long>(ith->second.order_sig);
+                        if (twin_units > SearchBudget::SatMulD(s_of_wave_share, budget->Remaining()))
+                        {
+                            // BUDGET-STARVED REUSE. Not a proof -- an estimate computed under
+                            // another zone order -- so it is booked exactly as what it is: a
+                            // truncation. Any enclosing no-win therefore stops being a refutation
+                            // (g_fs_trunc_events) and the committed line, if it ends here, is
+                            // re-searched with the shortcut off before it is ever played.
+                            ++g_fs_trunc_events;
+                            ++g_fs_memo_win_hits;
+                            if (s_ofw_probe)
+                            { ofwprobe::g_reused.fetch_add(1, std::memory_order_relaxed); }
+                            TurnSolver::SearchLine cut;
+                            cut.win_turn  = ith->second.nowin_bound;
+                            cut.truncated = true;
+                            return cut;
+                        }
+                    }
+                }
+            }
+        }
+        else {
         FSLineCache::const_iterator it = lc->find(key);
         PROF_INC(fsline_lookups);
         if (it != lc->end())
@@ -33392,9 +33652,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
         }
         else if (it != lc->end()) { ++g_fs_memo_stale; }   // no-win entry too weak for this cutoff
+        }   // end !s_split_keys
     }
     // Truncation watermark for this node's own exploration (see g_fs_trunc_events).
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
+    // What this node's search COSTS, in the same deterministic work units the budget is denominated
+    // in. Stored beside its answer in the wave index so a permuted twin can price the re-search it
+    // is deciding whether to skip -- a measured cost, not a guess at one. Subtree-inclusive, which
+    // is the right quantity: skipping this node skips everything under it too.
+    const long long of_used_at_entry = (budget != nullptr) ? budget->Used() : 0;
+    #define OF_UNITS() ((budget != nullptr) ? (budget->Used() - of_used_at_entry) : 0)
 
     // No projected-`wins_this_turn` shortcut: lethality is decided by actually
     // simulating each plan below, so the committed line's win turn always matches
@@ -33457,7 +33724,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             pre.swap(ranked);
         }
     }
-    // Record the probe's per-plan value-win-turns for this node (only during the probe pass, when beaming).
+    // MOVE-ORDER HINT: MEASURED WORTHLESS, DO NOT RE-TRY (2026-09-10, 40 Hinata games at d5/b20).
+    // The first shape tried for reusing a permuted twin's win was the safest one imaginable -- take
+    // only WHICH PLAY opened the twin's win and rotate it to the front of this node's candidate
+    // list, believing nothing and skipping nothing. It buys essentially zero: of 14208 twin hits the
+    // hint reached a candidate scan 65 times and the hinted play was ALREADY FIRST in 59 of those
+    // (91%), for 6 actual rotations. MoveOrderPlans is already picking it. The value in a twin's
+    // answer is the WORK IT SAVES, not the order it suggests -- which is why the mechanism below
+    // reuses the ANSWER under a budget gate instead.
     const bool rec_vals = (g_probe_val_recording && g_probe_plan_vals != nullptr && lc != nullptr);
     std::vector<int> node_vals;
     if (rec_vals) { node_vals.reserve(pre.size()); }
@@ -33661,7 +33935,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         TurnSolver::Plan p_rec = std::move(v);
                         p_rec.breakpoint_actions = std::move(bp3);
                         TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
-                        FSLineStoreWin(lc, key, win, state);
+                        FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
                         return win;
                     }
                     TurnSolver::SearchLine tail =
@@ -33693,7 +33967,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         {
                             ++g_fs_hexits;
                             if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
-                            FSLineStoreWin(lc, key, best, state);
+                            FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
                             return best;
                         }
                     }
@@ -33767,7 +34041,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
             // A this-turn win is the earliest possible from here, so it is the final
             // optimal line for this node -- cache it (cutoff-independent).
-            FSLineStoreWin(lc, key, win, state);
+            FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
             return win;
         }
         int chose_release = -1;   // -1 not contested / 0 natural / 1 release / 2 hold
@@ -33786,7 +34060,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 p_rec.atk_dork_release = alt_rec;
                 p_rec.breakpoint_actions = std::move(bp);
                 TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
-                FSLineStoreWin(lc, key, win, state);
+                FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
                 return win;
             }
             TurnSolver::SearchLine tail_rel =
@@ -33907,7 +34181,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // complete refutation, which a budget-truncated wave phase cannot promise. Break
                 // instead of returning so this node's own deferred ranks get a chance to beat it.
                 if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
-                FSLineStoreWin(lc, key, best, state);
+                FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
                 return best;
             }
         }
@@ -33995,7 +34269,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     TurnSolver::Plan p_rec = v;
                     p_rec.breakpoint_actions = std::move(bp);
                     TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
-                    FSLineStoreWin(lc, key, win, state);
+                    FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
                     return win;
                 }
                 TurnSolver::SearchLine tail =
@@ -34017,7 +34291,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     if (!BpWaveCompleteNodes() && tail.win_turn <= state.turn_number + depth - 1)
                     {
                         ++g_fs_hexits;
-                        FSLineStoreWin(lc, key, best, state);
+                        FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
                         return best;
                     }
                 }
@@ -34143,7 +34417,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     TurnSolver::Plan p_rec = v;
                     p_rec.breakpoint_actions = std::move(gw_bp);
                     TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
-                    FSLineStoreWin(lc, key, win, state);
+                    FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
                     return win;
                 }
             }
@@ -34168,7 +34442,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         TurnSolver::Plan p_rec = v;
                         p_rec.breakpoint_actions = std::move(gw_bp);
                         TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
-                        FSLineStoreWin(lc, key, win, state);
+                        FSLineStoreWin(lc, key_win, win, state, &key, OF_UNITS());
                         return win;
                     }
                 }
@@ -34281,7 +34555,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 
     if (best.win_turn <= max_turns)
     {
-        FSLineStoreWin(lc, key, best, state);
+        FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
     }
     else if (lc != nullptr)
     {
@@ -34298,6 +34572,25 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             FSLineStoreNoWin(lc, key, best, std::min(cutoff, max_turns + 1));
         }
     }
+    // ---- TWIN-AGREEMENT PROBE (MTG_OF_WAVE_PROBE; counters only) --------------------------------
+    // THE QUESTION THIS SETTLES. A permuted twin of this position already answered it, and this node
+    // has now answered it independently. Are the two answers the SAME? They are the same game
+    // position, so any difference is the search's own order-dependence -- the enumeration emits
+    // candidates in hand order and the greedy rollout breaks ties by vector position, so a
+    // permutation shuffles arbitrary tie-breaks. If the answers essentially always agree, the
+    // unsound shortcut was cheap because it was usually RIGHT and hinata gi232 was a rare tail worth
+    // catching some other way. If the node routinely does BETTER than its twin, then importing a
+    // twin's answer is systematically lossy, order-invariance is the real fix, and no amount of
+    // hinting or wave-scheduling will recover the residual.
+    // `twin_better` is the count that decides it: the node found a STRICTLY EARLIER win than the
+    // stored twin, i.e. exactly the gi232 shape, and exactly what a reuse would have thrown away.
+    if (s_ofw_probe && of_hint_win > 0)
+    {
+        if (best.win_turn == of_hint_win) { ofwprobe::g_agree.fetch_add(1, std::memory_order_relaxed); }
+        else if (best.win_turn < of_hint_win) { ofwprobe::g_better.fetch_add(1, std::memory_order_relaxed); }
+        else { ofwprobe::g_worse.fetch_add(1, std::memory_order_relaxed); }
+    }
+    #undef OF_UNITS
     return best;
 }
 
