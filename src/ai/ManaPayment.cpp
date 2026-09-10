@@ -999,11 +999,13 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // speculative payments stay silent.
     auto commit_leftover = [&](const ManaPool& lo)
     { if (FloatLeftoverManaEnabled()) { state.floating_mana.AddPool(lo); }
-      // NO GENERIC MANA IN A HUMAN-PLAY POOL (see ConcretiseHumanFloat): what a payment LEAVES
-      // BEHIND is the pool the human then looks at and spends, so an uncommitted "any colour" unit
-      // picks its colour here rather than staying a deferred choice the rules do not have. Runs
-      // over the WHOLE reserve, so a BatchPrepayMainCasts placeholder that survived the plan's
-      // first cast is committed too. No-op outside human play and for a wild-free pool.
+      // NO GENERIC MANA IN A HUMAN-PLAY POOL (see ConcretiseHumanFloat). This is the REQUEST site,
+      // not necessarily the commit: while a plan is still being applied, ConcreteDeferScope drops it
+      // and the commitment happens once at the decision boundary instead -- committing between the
+      // casts of one line strands a later cast of that same line (FiveColour s9_gi8 T4). It is left
+      // here rather than deleted because it IS the right site for any payment that runs outside a
+      // plan application, and it is separately levered (MTG_HUMAN_CONCRETE_LEFTOVER).
+      // No-op outside human play and for a wild-free pool.
       ConcretiseHumanFloat(state, active, ConcreteSite::Leftover);
       if (g_float_trace && !AllPlayHooksNull())
       { std::fprintf(stderr, "[float] cost=%s leftover{w%d u%d b%d r%d g%d c%d *%d} -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
