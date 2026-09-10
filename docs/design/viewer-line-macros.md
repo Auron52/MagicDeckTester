@@ -33,7 +33,7 @@ count token expanded engine-side — was rejected on three counts:
 
 One gesture: activate an Investigate source, then sacrifice the Clue it makes to draw.
 
-Offered in the activation picker beside the plain Investigate, so an ordinary click is unchanged.
+Controlled by a **global, persisted option** (below), not asked per click.
 The engine publishes `makes_clue: true` on any `ActivatePermAbility` whose mode is `TapInvestigate`
 (`src/main.cpp`), and the viewer keys the affordance off **that flag, not a card name** — so a future
 Investigate source is covered with no viewer change.
@@ -56,7 +56,52 @@ explicit FINISH plan"* (`DecisionProviders.cpp`, `EdfAutoGoOffAfterCasts`). This
 analogue of the same idea, built with no engine change at all.
 
 Removing **either** half removes both (`LB.removeFusedAt`): an Investigate whose Clue is never
-cracked is a different play, not half of the one that was asked for.
+cracked is a different play, not half of the one that was asked for. That includes clicking the
+source *off* at its cap — the cap path in `toggleActivate` routes through the same helper, because a
+bare splice left the deferred crack queued as an orphan segment that would sacrifice a Clue nothing
+had made.
+
+### The global option — and the regression that forced it
+
+> "I think I would much prefer to have the clue creation as a global option. It's kind of a pain to
+> constantly have pop-ups."
+> — USER, on the first cut of this feature
+
+**What the first cut got wrong.** Offering "Investigate & crack" as a *second entry beside* the plain
+Investigate made `opts.length` **2** for a land whose only ability is Investigate — and
+`toggleActivate` opens the picker on `opts.length > 1`. So a source that had always queued on one
+click started opening a modal **every single time**, on the deck whose whole loop is investigating
+over and over. A convenience feature put a dialog on the most-repeated click in the deck.
+
+**The fix** is `clickActivationOptions` collapsing the pair back to **one** option, chosen by a
+persistent pref. The important part is that this is *not* "ON = fused, OFF = ask":
+
+| `clue_fuse` | one click on an Investigate source | dialog |
+|---|---|---|
+| **ON** (default) | queues the fused create+crack | none |
+| OFF | queues the plain Investigate; crack the Clue whenever you like | none |
+
+Neither state pops anything, because **the setting is the choice**. Leaving a picker on the OFF path
+would have preserved the complaint for half the users, which is not what "global option" means.
+
+Stored in `localStorage` under **`mdt_queue`**, deliberately a *separate* key from the existing
+`mdt_surface` store. `mdt_surface` answers "show the modal, or auto-reply the AI's heuristic
+default?" and every entry there names a `dec.type`; this answers "what does a board click queue?",
+before any decision exists. The options menu shows it under its own **Queue shortcuts** heading for
+the same reason — `mdt_surface`'s heading ("The engine still evaluates every decision either way") is
+simply untrue of a queue preference.
+
+Collapsed in `clickActivationOptions` rather than in the picker because that is the one chokepoint
+the whole click path shares (`toggleActivate`, the `⟳` badge on `bfThumb`, `auraAttThumb`), so the
+badge count and the picker can never disagree about how many activations a click chooses between.
+A source that offers Investigate *plus* some other ability still opens the picker for that genuine
+choice — with one investigate-flavoured entry in it, not two.
+
+**Audited end to end, and the picker was the only recurring prompt.** Both halves of the fused line
+were measured on a deliberately wide board (3 Clues, 8 untapped sources): `cast=Conservatory` and
+`cast=Clue Token` each return `accept` with **exactly one variant**, so neither the "which copy" nor
+the phantom-`X` dialog that the blink `*1` fix once had to kill can arise here. Nothing else in the
+clue flow prompts.
 
 *Honest limitation:* the second segment is graded on the board the first produces, so if the
 Investigate spent the mana the crack needed, the crack comes back as an ordinary reject. That is the
@@ -203,6 +248,7 @@ viewer path emits and no digest folds.
 
 | layer | what it pins |
 |---|---|
+| `test/viewer_client_check.js` (`testClueFuseOption`) | the pair collapses to **one** option in BOTH states (so neither pops a modal); the survivor is the right flavour; the default is ON; the pref round-trips through `localStorage` (it must outlive a game *and* a server restart); a non-investigate source is untouched; clicking a fused Investigate off takes its deferred crack with it. The only layer that can see any of this — linebuild knows nothing of options or pickers, and the committed line is identical either way |
 | `test/viewer_linebuild_check.js` (`checkLineMacros`) | `repeatBlock` expands to N committable segments with the right `defer` flags; `dropFirstSegment` converges; a deferred entry carries its whole block; an **un**deferred plan partitions exactly as before; the fused pair encodes as two segments and removes as one unit; the `need=` token is a stable, order-independent, deduped set and is empty for a pip-less continuation |
 | `test/viewer_line_macros_check.py` (in `test/viewer_checks.sh`) | `need=C` diverts **exactly one** pick and says so in the trace; `need=U` on an already-served board diverts **nothing**; no declaration diverts nothing; `MTG_UNTAP_LINE_DEMAND=0` is a real off switch; the investigate half really creates a Clue and the deferred crack is enumerated on the frame it produces; a repeated block's second iteration validates against the frame the first produced |
 | `test/scenarios/edf_fused_clue_*.json` (in `test/scenarios.sh`, gated by `regression.sh`) | both halves of the fused gesture validate on a synthetic board, and the one-line form is **illegal** — the tripwire for the deferral |

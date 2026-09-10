@@ -501,6 +501,99 @@ function testActivationPicker(win) {
   return fails;
 }
 
+// CLUE FUSE, the GLOBAL option (docs/design/viewer-line-macros.md). USER, after the first cut:
+// "I think I would much prefer to have the clue creation as a global option. It's kind of a pain to
+// constantly have pop-ups."
+//
+// This is the only layer that can see the regression that prompted it. The line-build check drives
+// linebuild.js, which knows nothing about options or pickers; the protocol and validate checks see
+// the committed LINE, which is identical either way. The defect lived entirely in how many entries
+// the click path offers: offering "Investigate & crack" beside the plain Investigate made
+// `opts.length` 2, and toggleActivate opens a modal on `> 1` -- so a one-click activation became a
+// dialog on every single investigate, on the deck that investigates most.
+//
+// PINS: the pair collapses to exactly ONE option in BOTH states (no dialog either way, which is what
+// "global option" has to mean); the surviving option is the right flavour; the default is ON; the
+// pref round-trips through localStorage (it must outlive a game AND a server restart); a source with
+// no investigate is untouched; and clicking a fused Investigate OFF takes its deferred crack with it
+// rather than orphaning it.
+function testClueFuseOption(win) {
+  const S = win.__getS(), fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  let di = 9000;
+  // A synthetic main-phase frame whose land offers ONE activation: an Investigate. This is the exact
+  // shape the regression hit -- the engine enumerates one action, the viewer used to offer two.
+  const frame = (extraActions) => {
+    S.decision = {
+      type: 'main_phase', decision_index: ++di, turn: 3, phase: 'pre_main',
+      me: { hand: [], battlefield: [{ name: 'Conservatory', num: 13, is_land: true }],
+            land_drops_left: 0 },
+      opponent: { life: 20 },
+      plans: [{ index: 0, summary: 'investigate',
+                actions: [{ card: 'Conservatory', activate: true, makes_clue: true }]
+                          .concat(extraActions || []) }],
+    };
+    S.plan = []; S.over = false;
+    return S.decision;
+  };
+
+  // ---- the default, and the collapse in BOTH states -------------------------------------------
+  try { win.localStorage.removeItem('mdt_queue'); } catch (e) { /* jsdom always has it */ }
+  chk(win.clueFuseEnabled() === true, 'clue fuse does not default ON (the user asked for it ON)');
+
+  frame();
+  let opts = win.clickActivationOptions('Conservatory');
+  chk(opts.length === 1, `default ON: click offers ${opts.length} options, expected 1 (>1 opens the modal)`);
+  chk(opts.length === 1 && !!opts[0].fuseClue, 'default ON: the surviving option is not the FUSED one');
+
+  win.setQueueOpt('clue_fuse', false);
+  chk(win.clueFuseEnabled() === false, 'setQueueOpt(false) did not take effect');
+  frame();
+  opts = win.clickActivationOptions('Conservatory');
+  chk(opts.length === 1, `OFF: click offers ${opts.length} options, expected 1 (OFF must not pop a dialog either)`);
+  chk(opts.length === 1 && !opts[0].fuseClue && !!opts[0].makesClue,
+      'OFF: the surviving option is not the PLAIN investigate');
+
+  // ---- persistence: it has to outlive a reload, not just a render -----------------------------
+  // Asserted through the STORE, because that is what a new page load reads. A pref kept only in S
+  // would pass every in-session check and still be gone after a server restart.
+  let raw = null;
+  try { raw = JSON.parse(win.localStorage.getItem('mdt_queue') || '{}'); } catch (e) { /* below */ }
+  chk(raw && raw.clue_fuse === false, `pref did not persist to localStorage (got ${JSON.stringify(raw)})`);
+  win.setQueueOpt('clue_fuse', true);
+  try { raw = JSON.parse(win.localStorage.getItem('mdt_queue') || '{}'); } catch (e) { raw = null; }
+  chk(raw && raw.clue_fuse === true, 'flipping the pref back did not persist');
+
+  // ---- a source with no investigate is untouched ------------------------------------------------
+  S.decision = {
+    type: 'main_phase', decision_index: ++di, turn: 3, phase: 'pre_main',
+    me: { hand: [], battlefield: [{ name: 'Emiel the Blessed', num: 21 }], land_drops_left: 0 },
+    opponent: { life: 20 },
+    plans: [{ index: 0, summary: 'blink', actions: [
+      { card: 'Emiel the Blessed', activate: true, verb: 'blink', blink_target: 10,
+        blink_target_name: 'Cloud of Faeries', blink_count: 1, repeatable: true }] }],
+  };
+  S.plan = [];
+  const blinkOpts = win.clickActivationOptions('Emiel the Blessed');
+  chk(blinkOpts.length === 1 && blinkOpts[0].verb === 'blink',
+      `a non-investigate source was disturbed: ${JSON.stringify(blinkOpts.map(o => o.verb))}`);
+
+  // ---- clicking a fused Investigate OFF takes its crack with it ---------------------------------
+  // The cap path in toggleActivate used a bare splice, which removed the Investigate and left the
+  // DEFERRED crack queued as an orphan segment -- a line that sacrifices a Clue nothing made.
+  frame();
+  win.toggleActivate('Conservatory');
+  const queued = S.plan.length;
+  chk(queued === 2, `a fused click queued ${queued} entries, expected 2 (investigate + deferred crack)`);
+  chk(S.plan.length === 2 && S.plan[0].fuse === 'clue' && S.plan[1].fused === 'clue'
+      && S.plan[1].defer === true, 'the fused pair is not (investigate, deferred crack)');
+  win.toggleActivate('Conservatory');            // at the cap -> this removes it again
+  chk(S.plan.length === 0,
+      `clicking the fused Investigate off left ${S.plan.length} entr${S.plan.length === 1 ? 'y' : 'ies'} `
+      + `(an orphaned crack), expected 0: ${JSON.stringify(S.plan.map(p => p.name))}`);
+  return fails;
+}
+
 // MDFC LAND BACK on a nonland front (Turntimber Symbiosis // Turntimber, Serpentine Wood). The hand
 // card's `kind` is the FRONT's ("nonpermanent"), so every route on the thumb -- double-click, drag --
 // casts the {4}{G}{G}{G} sorcery, and the land drop the engine enumerates as `land=<front name>` had
@@ -920,6 +1013,10 @@ async function testColorlessFirstTapOrder() {
     const btFails = testBlinkBoardTargeting(win);
     if (btFails.length) { anyFail = true; console.log(`✗ blink board targeting: ${btFails.length} fail`); btFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ blink targets picked on the board (arm → click creature → stacks; 1 target asks nothing)'); }
+    // The clue gesture is a GLOBAL option, not a per-click dialog (fast, DOM-only).
+    const cfFails = testClueFuseOption(win);
+    if (cfFails.length) { anyFail = true; console.log(`✗ clue fuse option: ${cfFails.length} fail`); cfFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ clue fuse is a persisted GLOBAL option (one click, no modal, either state)'); }
     // MDFC land back reachable from the palette (fast, DOM-only).
     const lfFails = testMdfcLandFace(win);
     if (lfFails.length) { anyFail = true; console.log(`✗ mdfc land face: ${lfFails.length} fail`); lfFails.forEach(m => console.log('  - ' + m)); }
