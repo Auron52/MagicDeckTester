@@ -26,6 +26,10 @@
 #     and plays games through the GUI's entry points. The only layer that RENDERS the decision
 #     panels, so it is the only one that can see a panel that throws (a dead modal = a frozen
 #     game). Needs node + jsdom + the binary; ~2 min.
+#   * human line order (engine) -- human_line_order_check.py commits one line under several
+#     --cast-order pins and asserts the engine applied the human's DECLARED sequence, casts and
+#     board activations interleaved. Needs python3 + the binary; seconds. The only layer that can
+#     see the realised order at all (see its header).
 #   * protocol (engine<->GUI) -- viewer_protocol_check.py replays each reference's chosen plan
 #     indices through the binary and asserts the decision-JSON contract holds (well-formed,
 #     valid index, clean terminal). Needs python3 + the binary. FULL sweep ~35 min; --sample
@@ -134,6 +138,29 @@ if [ "$MODE" != line ]; then
       elif [ $crc -eq 2 ]; then echo "SKIP: viewer client check (jsdom not installed -- 'npm i' in test/)."
       else
         echo "FAIL: viewer client check (a decision panel cannot render, or undo corrupts history)."
+        rc=1
+      fi
+    fi
+  fi
+fi
+
+# 1c) HUMAN LINE ORDER (python + binary). ~10 short claude-play invocations, a few seconds.
+#     The realised order of a committed line is invisible to every other layer here -- the protocol
+#     check replays plan INDICES and compares win turns, the client check sees the GUI's
+#     bookkeeping but never the apply, and the regression suite covers autonomous play, which this
+#     feature is gated out of by construction. So the pin losing its marker, a kind falling out of
+#     TurnSolver::IsTrailingActivation, or the trailing pass running twice would be silent
+#     everywhere while the player's declared order quietly reverted to enumerator order.
+#     SKIPS itself (exit 0) when the board shape it drives is not reachable.
+if [ "$MODE" != line ]; then
+  if command -v python3 >/dev/null 2>&1 && [ -f "$HERE/human_line_order_check.py" ]; then
+    if [ ! -f "$BIN" ]; then
+      echo "FAIL: human line order check needs the binary but '$BIN' is missing."
+      rc=1
+    else
+      echo "--- human line order (the queued sequence is applied as-is) ---"
+      if MTG_BIN="$BIN" python3 "$HERE/human_line_order_check.py"; then :; else
+        echo "FAIL: a committed line no longer applies in the order the human declared."
         rc=1
       fi
     fi
