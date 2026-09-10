@@ -152,6 +152,28 @@ the regression tier's 2002/3003, 120 games per deck, one pooled batch:
 The single worse deck is melira at +0.0083 (one game in 120). The adoption reproduces on seeds it was
 never tuned against.
 
+## What it cost in ground truth, attributed honestly
+
+Against the tiers' own baselines (`git show <rev>:test/regression_gt.txt`, per GT-moving commit):
+
+| commit | tier | moved | better | worse | net |
+|---|---|---|---|---|---|
+| `202f938b` split keys + wave | regression | 11 | 3 | 8 | **+0.0688** |
+| `31fc60c6` rebaseline | overnight | 40 | 11 | 29 | **+0.0722** |
+
+Both are POSITIVE, i.e. worse in avg-turn terms, and that is the expected and accepted shape: the
+baseline being replaced is the UNSOUND engine, which scored better by pruning with false beliefs. The
+progression of that cost against the unsound baseline is **+0.1700 -> +0.0990 (split keys) -> +0.0688
+(wave)**, so roughly 60% of it has been recovered soundly. Every slower game on both tiers classifies
+as churn (or better-than-baseline at 4x/16x).
+
+**A correction to the `31fc60c6` accept note, which is wrong in the GT header:** it says the overnight
+tier was "~24 commits stale" and "spans MANY changes, not only the sound-memo arc". It was **10**
+commits, and the only ones touching `src/` were `8b2f0efa` and `202f938b` -- both this arc. So that
++0.0722 is this arc's own cost on the overnight tier, NOT other people's drift, and it should not be
+read as diluted. Judging the change itself needs the controlled A/Bs above (wave vs the sound
+baseline: better 2 / worse 0 / identical 18), not a diff against an unsound predecessor.
+
 ## Reading the counters
 
 ```
