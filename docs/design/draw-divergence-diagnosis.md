@@ -188,6 +188,18 @@ budget** but **pays for itself at finite budget**, because being 1.34x cheaper b
 budget than the occasional bad reuse costs. Flipping the default to sound would cost ~+0.14 t across
 hinata. Recorded for the user; NOT changed here.
 
+## RESOLVED — the residual is recovered by a BUDGET-GATED WAVE (2026-09-10)
+
+The recovery sketched above ("re-anchor the cached line on card IDENTITY and REPLAY it") was built
+and MEASURED, and it does not pay — the node's own plan 0 already yields an equal-or-better
+incumbent, so a replayed line saves nothing. What does pay is a gate rather than a rule, because the
+twin-agreement probe showed the reuse is **right 99.70% of the time** and its damage is a 0.16% tail
+that cannot be told apart WITHOUT SEARCHING. Shipped as `MTG_FSL_OF_WAVE` (default ON): a node may
+take a permuted twin's answer only when re-searching would cost a serious share of the budget still
+REMAINING, so the reuse rate decays continuously to zero and the gate never opens at an unlimited
+budget. gi232 holds win=5 at every share and budget, with `reused` 294 -> 5 -> 0 as budget rises.
+Full argument, sizing table and counters: **`order-free-reuse-wave.md`**.
+
 ## STILL OPEN — a SECOND bug: the search is NON-MONOTONE in depth and budget
 
 Independent of the memo (both arms identical), unbudgeted:

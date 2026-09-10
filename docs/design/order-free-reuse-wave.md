@@ -126,6 +126,17 @@ which means a high-budget run gets more of the exact, sound search. Paying ~3% m
 shipped budget to buy that is the right side of *"how this scales should always be done based on
 using our budget as well as possible"*.
 
+## Why this cannot introduce nondeterminism
+
+Worth stating explicitly, because a mechanism that reads the memo and changes what the search returns
+is exactly the shape that usually does. `FSLineCache line_cache;` is a **local in `FullSearchLine`** —
+built fresh for every decision, never shared between games and never touched by a second thread. So
+the wave's index has the same lifetime, `twin_units` comes from `budget->Used()` deltas (deterministic
+work units, never the clock), and `Remaining()` is likewise unit-denominated. Confirmed empirically:
+identical digests across separate batches, the suite's `--strict` reference reproducibility clean on
+the gating axes (`0 play-drift, 0 enum-gap, 0 mull-drift, 0 contract-fail`), and CI's Linux/Windows
+determinism-parity job green on the adopting commit.
+
 ## Reading the counters
 
 ```
