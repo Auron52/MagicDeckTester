@@ -24131,6 +24131,206 @@ static bool OrderingPlacesAuraBeforeCreature(const GameState& state, const std::
     return false;
 }
 
+// ---- SATURATED-MANA ENUMERATION COLLAPSE -- HUMAN PLAY ONLY ---------------------------------
+// (MTG_HUMAN_SAT_ENUM, DEFAULT ON; =0 restores the full fan.)
+//
+// THE DEFECT IT FIXES. In the play viewer a human drives EldraziDisplacerFlicker's blink loop by
+// hand (Emiel / Eldrazi Displacer flickering Peregrine Drake or Cloud of Faeries), banking huge
+// floating mana. The interactive persistent child (0f8ce63a) killed the prefix REPLAY cost, but
+// each click still re-enumerates the whole main-phase fan, and that fan GROWS with the bank:
+// measured 1,400 -> 208,392 plans across one user session, and a click finally blew past
+// tools/play/server.js's STEP_TIMEOUT_MS=120000 -- ETIMEDOUT killed the game the user was playing
+// ("Darn it just died with ETIMEDOUT. I will need the fix for sure."). Two things drive it, both
+// measured on the seed-8 T3 go-off frame (101,568 plans, 4.9 s for ONE click):
+//   * the odometer's subset/variant CROSS-PRODUCT -- 9,216 distinct action SETS out of just 23
+//     distinct (action, target) identities;
+//   * the cast-ORDERING expansion (OrderingSearchEnabled, opened for claude-play by MTG_UNPRUNED),
+//     which APPLIES up to 5! = 120 orderings PER surviving set on a GameState copy. That is the
+//     ApplyPlanDirect-inside-enumeration the gdb burst samples landed in, and it accounts for the
+//     101,568 / 12,672 = 8.0x between emitted plans and distinct action multisets.
+//
+// THE PREDICATE (HumanEnumSaturated below). "Saturated" means payment choice provably cannot
+// matter: the available pool -- floating mana plus every untapped source, i.e. the enumerator's own
+// `pool` -- can pay, AS ONE LUMP and by the engine's own payer predicate (ManaPool::CanPayFlat),
+// FACTOR x the MAXIMAL demand any single enumerated plan can carry (the dearest member of each
+// mutually-exclusive group plus every independent action). Plus a floor on FLOATING mana so this
+// cannot fire in ordinary play. Anything the lump check cannot price -- an {X} cost, a snow pip --
+// makes the predicate answer false and the full fan runs, per "when the predicate is not certain,
+// fall back to full enumeration".
+//
+// WHAT COLLAPSES, AND WHY EACH IS OUTCOME-PRESERVING:
+//   * cast ORDER (MTG_HUMAN_SAT_ORDER). Two orderings of one cast set differ observably only when
+//     one of them cannot PAY for a later cast -- that is what the ordering search exists to find
+//     and what Plan::would_drop labels ("Living Wish before Trace of Abundance spends the board's
+//     only white, so Trace is dropped"). Under saturation every cast in the set is payable in every
+//     order, so nothing is dropped and the survivors differ only in the order permanents entered
+//     (zone permutation -- the 2.26x order_frag the solve-key census measured). The aura-after-its
+//     -creature ordering constraint is not a mana question and is preserved: the canonical order is
+//     enabler-first by construction and AppendSequencedAuraCandidates' payload rides it.
+//   * redundant SUBSET combinations (MTG_HUMAN_SAT_SUBSET). Human play re-prompts after EVERY
+//     committed line (MTG_PLAY_SEGMENT_ALWAYS, default on: "Commit Line literally means let me play
+//     more things"), so a combined {A,B} plan is reachable by clicking A and then B -- and under
+//     saturation committing A cannot make B unaffordable, which is the only thing that made the
+//     combined plan more than a convenience. So the cross-product collapses towards ONE variant per
+//     distinct (action, target): every activatable ability per target and per count, every dig,
+//     every distinct hand cast, the COMBO OFF finisher, each land-drop choice and pass all survive
+//     as their own plan (they are single-action plans and the filter is a size test). Combinations
+//     survive up to HumanSatMaxActions (default 4, see there -- the collapse is sound at 1 and the
+//     cap is set by what a saved reference actually recorded, not by what is sound).
+//
+// GATED ON HumanPlayActive(), which is false in every rollout (HumanPlaySuppress) and every
+// autonomous run (env unset) -> the search is byte-identical and smoke must not move.
+static bool HumanSatEnumOn()
+{ static const bool v = EnvOn("MTG_HUMAN_SAT_ENUM", true); return v; }        // master; =0 disables
+static bool HumanSatOrderOn()
+{ static const bool v = EnvOn("MTG_HUMAN_SAT_ORDER", true); return v; }       // cast-order half
+static bool HumanSatSubsetOn()
+{ static const bool v = EnvOn("MTG_HUMAN_SAT_SUBSET", true); return v; }      // subset half
+// Minimum FLOATING mana before the shortcut may fire. This is the "deep in a go-off" gate, and it
+// is what keeps ordinary play (and every reference recorded there) on the full fan.
+static int  HumanSatFloor()
+{ static const int v = EnvInt("MTG_HUMAN_SAT_FLOOR", 24); return v; }
+// Safety factor on the maximal single-plan demand. DEFAULT 1, which is the EXACT non-interaction
+// condition and not a shortcut: if the pool can pay every candidate SIMULTANEOUSLY then no subset
+// and no order can make another action unaffordable, which is the whole soundness argument. Raise
+// it for extra headroom (2 was the first cut; it did not fire on the very go-off frame this exists
+// for -- the three uncastable-anyway Eldrazi Displacers in hand doubled a white demand the board
+// pays out of four wild units).
+static int  HumanSatFactor()
+{ static const int v = EnvInt("MTG_HUMAN_SAT_FACTOR", 1); return v; }
+static bool HumanSatDiagOn()
+{ static const bool v = EnvOn("MTG_HUMAN_SAT_DIAG"); return v; }              // stderr calibration
+// Largest number of CHOSEN actions a collapsed plan may carry. 1 would be the pure "one variant per
+// distinct (action, target)" reading and is sound for any K >= 1 by the same argument (a K+1 action
+// plan is the K-action plan committed and then one more click), but K is a MENU-QUALITY knob, not a
+// correctness one, and it costs almost nothing: the fan's action-count histogram is binomial, so on
+// the seed-8 T3 frame K=4 already keeps only 8,378 of 101,568 plans (12x) while K=1 keeps 22. Set at
+// 4 because that is the deepest COMBINED plan any saved reference actually picked at or above the
+// floating floor (EDF s8_gi7 T3, "Conservatory: investigate, Mariposa: draw a card, Displacer: blink,
+// Clue Token: sacrifice"), so no user-owned line loses the plan it recorded.
+static int  HumanSatMaxActions()
+{ static const int v = EnvInt("MTG_HUMAN_SAT_MAXACT", 4); return v; }
+// Only collapse subsets once the cross-product is actually BIG. Below this the full fan costs
+// microseconds and there is nothing to buy -- while collapsing it would drop combined plans a
+// reference recorded on a perfectly cheap frame (measured: an 11-plan EDF frame cut to 4, an
+// enum-gap for zero gain). The projected odometer position count is exact and O(groups) to compute.
+static long long HumanSatMinFan()
+{ static const long long v = EnvInt("MTG_HUMAN_SAT_MINFAN", 256); return v; }
+
+static bool HumanEnumSaturated(const GameState& state,
+                               const std::vector<Action>& cands,
+                               const std::vector<std::vector<int>>& groups,
+                               const std::vector<int>& independent,
+                               const ManaPool& pool,
+                               bool any_credit)
+{
+    if (!HumanPlayActive() || !HumanSatEnumOn()) { return false; }
+    const int floating = state.floating_mana.Total();
+    if (floating < HumanSatFloor()) { return false; }
+    // A live SAME-TURN mana/cost credit (ritual float, mana rock, cost reducer, coloured-pip
+    // reducer, affinity, metalcraft, Hinata) makes affordability depend on WHICH OTHER actions the
+    // subset takes -- which is precisely the interaction the collapse assumes away. The lump check
+    // below prices printed costs only, so it cannot see those credits: bail, and enumerate fully.
+    if (any_credit)
+    {
+        if (HumanSatDiagOn())
+        {
+            std::fprintf(stderr, "[human-sat] t%d floating=%d LIVE-CREDIT (ritual/rock/reducer/"
+                                 "affinity/metalcraft/hinata) -> full fan\n",
+                         state.turn_number, floating);
+        }
+        return false;
+    }
+
+    // A candidate that ADDS mana breaks the monotonicity the payable-filter below relies on (a cast
+    // that untaps five lands can fund a follow-up the pool alone could not), so its presence means
+    // the interaction the collapse assumes away is live. The credit scan above already covers
+    // rituals and rocks; this is the ETB-untap refund (Peregrine Drake / Cloud of Faeries), which
+    // the enumerator credits through EtbUntapLandsCredit. Absent -> every deck without one is
+    // unaffected by this clause.
+    for (const Action& a : cands)
+    {
+        if (a.ritual_float > 0 || a.rock_mana.Total() > 0
+            || (a.def && a.def->params.etb_untap_lands > 0))
+        {
+            if (HumanSatDiagOn())
+            {
+                std::fprintf(stderr, "[human-sat] t%d floating=%d MANA-ADDER in cands (%s) "
+                                     "-> full fan\n",
+                             state.turn_number, floating, a.card_name.str().c_str());
+            }
+            return false;
+        }
+    }
+
+    // MAXIMAL demand of ANY single enumerated plan: the dearest option of each mutually-exclusive
+    // group (the odometer takes at most one member per group) plus EVERY independent action (the
+    // odometer's powerset can take them all). No enumerated selection can cost more than this.
+    //
+    // ONLY INDIVIDUALLY-PAYABLE candidates count. With no credit and no mana-adder live (both
+    // established above), mana is monotonically CONSUMED, so an action the pool cannot pay on its
+    // own cannot become payable by adding more actions -- it is unpayable in every selection and
+    // contributes nothing to the interaction question. Excluding it is what lets the check answer
+    // the real board instead of the enumerator's optimism: the seed-8 T3 go-off hand holds three
+    // Eldrazi Displacers ({2}{W}) on a board with no white source at all, and counting their three
+    // white pips against four wild units answered "not saturated" on the exact 101,568-plan frame
+    // that motivated this work.
+    ManaCost demand;
+    bool priceable = true;
+    auto add_cost = [&](const ManaCost& c)
+    {
+        // Unbounded or supply-restricted pips the lump check cannot honestly price -> not certain.
+        if (c.has_x || c.snow_pips != 0) { priceable = false; return; }
+        demand.generic   += c.generic;   demand.white += c.white;  demand.blue  += c.blue;
+        demand.black     += c.black;     demand.red   += c.red;    demand.green += c.green;
+        demand.colorless += c.colorless;
+    };
+    for (const std::vector<int>& g : groups)
+    {
+        int dearest = -1, best_mv = -1;
+        for (int j : g)
+        {
+            if (!pool.CanPay(cands[j].cost)) { continue; }
+            const int mv = cands[j].cost.ManaValue();
+            if (mv > best_mv) { best_mv = mv; dearest = j; }
+        }
+        if (dearest >= 0) { add_cost(cands[dearest].cost); }
+    }
+    for (int j : independent)
+    {
+        if (pool.CanPay(cands[j].cost)) { add_cost(cands[j].cost); }
+    }
+    if (!priceable)
+    {
+        if (HumanSatDiagOn())
+        {
+            std::fprintf(stderr, "[human-sat] t%d floating=%d NOT-PRICEABLE (an {X} or {S} pip) "
+                                 "cands=%zu groups=%zu ind=%zu\n",
+                         state.turn_number, floating, cands.size(), groups.size(),
+                         independent.size());
+        }
+        return false;
+    }
+
+    const int factor = std::max(1, HumanSatFactor());
+    ManaCost scaled;
+    scaled.generic   = demand.generic   * factor;  scaled.white = demand.white * factor;
+    scaled.blue      = demand.blue      * factor;  scaled.black = demand.black * factor;
+    scaled.red       = demand.red       * factor;  scaled.green = demand.green * factor;
+    scaled.colorless = demand.colorless * factor;
+    const bool sat = pool.CanPayFlat(scaled);
+    if (HumanSatDiagOn())
+    {
+        std::fprintf(stderr,
+            "[human-sat] t%d floating=%d pool(total=%d W%d U%d B%d R%d G%d C%d wild%d) "
+            "demand_mv=%d x%d -> saturated=%d  cands=%zu groups=%zu ind=%zu\n",
+            state.turn_number, floating, pool.Total(), pool.white, pool.blue, pool.black,
+            pool.red, pool.green, pool.colorless, pool.wild, demand.ManaValue(), factor,
+            sat ? 1 : 0, cands.size(), groups.size(), independent.size());
+    }
+    return sat;
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
@@ -24614,10 +24814,68 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     const ColorFeasibility colour_feas    = BuildColorFeasibility(state);
     const ColorFeasibility colour_feas_nc = BuildColorFeasibility(state, /*noncreature=*/true);
 
+    // SATURATED HUMAN-PLAY COLLAPSE (see HumanEnumSaturated above the function). Evaluated ONCE
+    // here -- it is state-only -- and false for every rollout and every autonomous run, so the
+    // search is byte-identical. `sat_bypass` suspends the subset filter around the two
+    // short-circuit trials below, which hand eval_and_push a deliberately MAXIMAL selection (the
+    // storm go-off line) rather than an odometer position.
+    const bool sat_any_credit = any_ritual || any_rock || any_affinity || any_reducer
+                             || any_col_reducer || any_hinata_credit || any_metalcraft;
+    const bool sat_enum   = HumanEnumSaturated(state, cands, groups, independent, pool,
+                                               sat_any_credit);
+    // Projected odometer positions -- 2^num_ind x PROD(|g|+1), saturating so a wide board cannot
+    // overflow. This is the fan the subset collapse exists to cut, and gating on it keeps every
+    // cheap frame (and the references recorded there) on the full cross-product.
+    long long sat_positions = 1;
+    if (sat_enum)          // never walked on the autonomous path -- sat_enum is false there
+    {
+        const long long cap = 1ll << 40;
+        for (int b = 0; b < num_ind && sat_positions < cap; ++b) { sat_positions *= 2; }
+        for (const std::vector<int>& g : groups)
+        {
+            if (sat_positions >= cap) { break; }
+            sat_positions *= static_cast<long long>(g.size()) + 1;
+        }
+    }
+    // PlaySegmentAlwaysEnabled() is a SOUNDNESS precondition, not a nicety: the subset half is only
+    // lossless because the human can commit one line and be asked again. With the segment loop off,
+    // committing ends the phase and a dropped {A,B} really is unreachable -- so the collapse stands
+    // down. (The ORDER half needs no such guard: its variants differ only in the order permanents
+    // entered, which a second commit cannot reproduce and no line depends on under saturation.)
+    const bool sat_subset = sat_enum && HumanSatSubsetOn() && PlaySegmentAlwaysEnabled()
+                         && sat_positions > HumanSatMinFan();
+    const std::size_t sat_max_actions = static_cast<std::size_t>(std::max(1, HumanSatMaxActions()));
+    bool       sat_bypass = false;
+    if (sat_enum && HumanSatDiagOn())
+    {
+        std::fprintf(stderr, "[human-sat] t%d positions=%lld -> subset_collapse=%d (max_actions=%zu)"
+                             " order_collapse=%d\n",
+                     state.turn_number, sat_positions, sat_subset ? 1 : 0, sat_max_actions,
+                     HumanSatOrderOn() ? 1 : 0);
+    }
+
     // Evaluate one selected combination (a list of candidate indices) and, if
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     auto eval_and_push = [&](const std::vector<int>& sel)
     {
+        // SATURATED SUBSET COLLAPSE: keep ONE variant per distinct (action, target) and drop the
+        // cross-product BETWEEN them beyond `sat_max_actions` chosen actions. The forced free equips
+        // (auto_sel) ride EVERY subset by construction, so they are not a choice and must not count.
+        // Every single-action plan the human menu owes -- each activatable ability per target and
+        // per count, each dig/cycle, each distinct hand cast, the COMBO OFF finisher, the land drop,
+        // and pass (the empty selection) -- has one chosen action or none and survives untouched.
+        // What goes is the deep end of the combination fan, which human play reaches by clicking one
+        // line and then the next (MTG_PLAY_SEGMENT_ALWAYS, default on) and which saturation
+        // guarantees stays affordable when it does.
+        if (sat_subset && !sat_bypass && sel.size() > auto_sel.size() + sat_max_actions)
+        {
+            std::size_t chosen = 0;
+            for (int j : sel)
+            {
+                if (!std::binary_search(auto_sel.begin(), auto_sel.end(), j)) { ++chosen; }
+            }
+            if (chosen > sat_max_actions) { return; }
+        }
         // MTG_DBG_MULTI=<turn> -- see the reject dump further down. Logged at ENTRY too, because the
         // two answers are different questions: "was the subset ever considered" (here) and "which
         // gate dropped it" (there). A subset the odometer never emits shows up as silence in both,
@@ -25815,7 +26073,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (BuildStormGoffLine(cands, goff) >= 0)
         {
             const size_t before = plans.size();
+            // NOT an odometer position: this is the maximal storm line, offered whole or not at all,
+            // and the saturated subset filter must not decapitate it (see `sat_bypass`).
+            sat_bypass = true;
             eval_and_push(goff);
+            sat_bypass = false;
             if (plans.size() > before)
             {
                 // VERIFY the projected win by simulation (the projection is optimistic for the Apex-staged
@@ -26445,6 +26707,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // non-sacrifice hand casts, deduped by end-of-phase state. Off by default => return
     // the canonical-order sets unchanged (byte-identical). See OrderingSearchEnabled.
     if (!OrderingSearchEnabled(state)) { return deduped; }
+    // SATURATED CAST-ORDER COLLAPSE (see HumanEnumSaturated). This expansion APPLIES every
+    // candidate ordering on a GameState copy -- up to 5! = 120 ApplyPlanDirect calls per surviving
+    // action set -- and it is the single biggest term in the deep-go-off click (the seed-8 T3 frame
+    // emits 101,568 plans over only 12,672 distinct action multisets: 8.0x pure ordering). What the
+    // search is looking for here is an ordering that cannot PAY for a later cast (Plan::would_drop);
+    // under saturation no ordering drops anything, so the variants differ only in the order
+    // permanents entered and the canonical one represents them all. viewer_protocol_check's
+    // find_plan already re-anchors a recorded pick by (land, casts) precisely to "tolerate a dropped
+    // order variant", so a reference recorded under the full fan still resolves.
+    if (sat_enum && HumanSatOrderOn()) { return deduped; }
 
     std::vector<TurnSolver::Plan> ordered;
     ordered.reserve(deduped.size());

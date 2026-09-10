@@ -55,6 +55,16 @@ decision-emission contract changes.
 * No engine state snapshot/serialisation, no plan-list caching, no skipping of enumeration —
   those all create a second code path whose divergence from the stateless truth would be invisible
   until a reference drifts. The persistent child runs the code the stateless chain runs.
+
+  **Follow-up (2026-09-10): the remaining half of the slowdown was the FRAME's own enumeration, not
+  the replay, and it needed a different answer.** Killing the prefix cost left each click paying its
+  own fan — and that fan *grows with the banked mana*, reaching 208,392 plans and finally blowing
+  past `STEP_TIMEOUT_MS` (ETIMEDOUT, user report). The fix is
+  `docs/design/saturated-human-enumeration-collapse.md`: not a cache and not a second code path, but
+  a *narrower enumeration* on the same path, taken only where the pool provably makes payment choice
+  irrelevant. It is human-play-gated exactly as this mode is, so the same "no divergence from the
+  stateless truth" property holds — both the interactive child and the stateless respawn enumerate
+  identically, which `interactive_parity_check.py` still asserts.
 * The regression/reference tooling (`viewer_protocol_check.py`, `ref_line_replay.py`) stays on
   stateless spawns: those are batch sweeps where per-step latency is amortised and process
   isolation is worth more. (If the 306-ref sweep ever needs the speedup, drive it through the same
