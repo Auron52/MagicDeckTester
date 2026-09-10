@@ -12123,6 +12123,46 @@ inline void EtbUntapLands(GameState& state, int controller, int count, bool log_
                      [](const std::pair<int, int>& a, const std::pair<int, int>& b)
                      { return a.first > b.first; });
     const int n = std::min<int>(static_cast<int>(tapped.size()), count);
+    // STARVED {C} PROMOTION (USER, EDF seed 9 gi=8 deep go-off, 2026-09-10: float {G:86, C:0}
+    // with a live {C} sink -- "we have some problems with creating colourless when it is a bit
+    // starved... I should have colourless in my pool rather than just green"). The tie-break
+    // above is deliberately free and its own note records the stronger form as unmeasured; this
+    // is that measurement arriving as a live report. On that board the two untap picks go to
+    // Kitchen (yield 5, double Overgrowth) and a Conservatory (2) every single blink, so tapped
+    // Mariposa -- the board's ONLY {C} source -- never untaps again and green piles up while the
+    // sink starves. When the pool is genuinely starved (zero floating {C}, sink live), ONE pick
+    // is diverted: if no {C}-capable land made the top-`count` set, the LOWEST-yield pick is
+    // displaced by the best {C}-capable land below the cut. Bounded trade -- at most one pick,
+    // only under starvation, where any further non-{C} yield is pure surplus and the {C} unit is
+    // the loop's whole currency. The tap-ahead's existing equal-yield {C} tie-break then taps the
+    // promoted land next iteration and commits {C} to the float. Human-play + live-sink gated
+    // like the tie-break; autonomous play byte-identical. MTG_UNTAP_C_STARVED=0 restores.
+    static const bool s_untap_c_starved = EnvOn("MTG_UNTAP_C_STARVED", true);
+    if (s_untap_c_starved && c_sink_live && n > 0
+        && state.floating_mana.colorless == 0)
+    {
+        auto is_c = [&](int bi) -> bool
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(
+                state.battlefield[static_cast<std::size_t>(bi)].card);
+            if (d == nullptr) { return false; }
+            for (Color pc : UnconditionalProduces(*d))
+            { if (pc == Color::Colorless) { return true; } }
+            return false;
+        };
+        bool have_c = false;
+        for (int i = 0; i < n; ++i) { if (is_c(tapped[i].second)) { have_c = true; break; } }
+        if (!have_c)
+        {
+            for (int i = n; i < static_cast<int>(tapped.size()); ++i)
+            {
+                if (!is_c(tapped[i].second)) { continue; }
+                std::swap(tapped[static_cast<std::size_t>(n - 1)],
+                          tapped[static_cast<std::size_t>(i)]);
+                break;
+            }
+        }
+    }
     for (int i = 0; i < n; ++i) { state.battlefield[tapped[i].second].tapped = false; }
     // Real-game untap ledger for the viewer (see RitualUntapSources' identical block): g_reveal_logger
     // is nulled by RevealLogPause for every search/rollout scope, so only the executor logs.
