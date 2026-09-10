@@ -44,7 +44,14 @@ struct Arm
     // heuristic pass at each depth it admits (tree(k) + R x leaves(k), leaves extrapolated from the previous
     // pass), and the single pass then runs on the REMAINING budget, overrun-guarded, instead of unlimited.
     // On an overrun a partial line that rated a win is kept (anytime), else the heuristic escalation runs.
-    int         esc_single_reserve = -1;    // -1 unset | 0 unlimited pass | 1 reserved
+    int         constant_alpha_relaxed = -1;   // -1 unset | 0 strict | 1 a constant-leaf ladder keeps the relaxed value alpha (MTG_CONSTANT_ALPHA_RELAXED)
+    int         esc_single_reserve = -1;
+    // CONSTANT-LEAF EXHAUSTION MULTIPLE (MTG_CONSTANT_EXHAUST_MULT, default 1): a leafless pass stops at
+    // used >= mult x the decision budget. The MODEL pass has no such stop (it runs to the proportional overrun
+    // ceiling, 25x, because its truncated line is still rated); a leafless pass past exhaustion can only pay off
+    // by PROVING a win in what remains of its main loops (the optional wave phases stop at exhaustion anyway).
+    // 1 = stop at the budget (byte-identical to the 2026-09-10c exhaustion stop); >1 lets it run on that far.
+    double      constant_exhaust_mult = -1.0;   // <=0 unset    // -1 unset | 0 unlimited pass | 1 reserved | 2 FIT: unreserved probe, then the rollout pass at the deepest depth whose estimated cost fits (MTG_ESC_SINGLE_FIT)
     // EMULATED-GATE LADDER (MTG_LADDER_EMULATED): warm-up passes on the value leaf, the committing pass
     // on the heuristic rollout, at the depth the FULL HEURISTIC ladder would have committed -- its start
     // gate is replayed on reconstructed heuristic pass costs (value cost + R x leaves). User design

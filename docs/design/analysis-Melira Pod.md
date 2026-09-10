@@ -3152,3 +3152,108 @@ was `creature_giving_v_single` — an UNLIMITED single rollout pass. Resume poli
 `MTG_TT_CAP=1000000 MTG_FSL_CAP=200000 MTG_FSL_POOL=6000000`. Lesson re-learned: `launch_fix2.sh` was edited
 while its first instance was still running; bash re-read the changed file mid-execution and relaunched a
 garbage batch line ("ambiguous redirect"). Never edit a running shell script; write a new file.
+
+**Finding 7 — the batch memory spikes are the breakpoint-wave PREFIX-RESUME cache on Dragonstorm.** Batch 2
+was killed twice by its watchdog (05:07: 14.4 -> 19.6 GB in 30 s; 05:42: 9.1 -> 17.7 GB), both times with
+Dragonstorm d5b20 jobs in flight and the memo caps ON. Per-arm probe (500 games, seed 801000): EVERY arm
+peaks at 1.2-1.9 GB, ship included (1.55 GB) — so not an arm and not one 8 GB decision, but ordinary
+Dragonstorm games at ~1.5 GB each, a dozen of which coincide across 32 workers. Ship's slow game 801393
+(104k units, 10.3 s, 1156 MB): `MTG_NO_BP_PREFIX_CACHE=1` -> 5.5 s, 430 MB with IDENTICAL play (log diff);
+`MTG_BP_SEARCH=0` -> 1.4 s, 408 MB (the process baseline). The cache keeps up to 256 GameState snapshots
+per node (three sites); a Dragonstorm snapshot is MBs, a Melira one KBs, so an entry cap is no bound at
+all — and on this deck the copies cost more wall than the resumes save. FIX (built as fix4): the caps are
+by BYTES per node — min(256, MTG_BP_PREFIX_CACHE_KB / ApproxStateKb(state)), default 32 MB — result-neutral
+and deterministic per node. Watchdog for a box with 24 GB swap: `memwatch2.sh` trips on MemAvailable +
+SwapFree < 4 GB (the old 2.5 GB RAM floor killed before swap engaged). Memo caps restored to the looser
+TT 3M / FSL 500k / pool 10 GB (result-neutral, but recompute shows in units on monsters).
+Correction to finding 7 (measured after the byte cap was built): the cap does NOT bind — a 128 KB budget
+(<= 6 entries) leaves the slow Dragonstorm game at 10.7 s / 1156 MB, so the memory is in the RESUME path
+(capture + resumed apply), not in the stored snapshots; struct sizes are small (GameState 776 B, Card 136 B,
+Permanent 280 B). Open item: why a resumed apply allocates ~700 MB on Dragonstorm. `MTG_NO_BP_PREFIX_CACHE=1`
+is inert on Melira / Knights / Mirrorwing (same wall, memory, units, play) and FiveColour (identical play,
++136 units of recompute), and halves Dragonstorm's wall and memory with identical play — batch 2 resumes
+with it set (`launch_fix2.sh`), watchdog `memwatch2.sh` (RAM+swap floor 4 GB), 32 threads.
+
+### 2026-09-10e — batch 2 read at 2254/3258 jobs (every d5b20 cell complete) + three more mechanisms
+
+**Menu read so far (units vs ship; decide2.py dominance):** on every trusted-model deck at d5b20 SHIP dominates
+(escalation with leaf), escnl beats heur everywhere (leafless-first beats rollouts-everywhere), and the
+final-depth forms cost 2-9x ship for no quality. At **d3b10** the final-depth single pass is CLEAN on antilife
+(0.83x, −0.0013), critter (0.77x), dragonstorm (0.92x, −0.0007): the model buys nothing at d3 and one rollout
+pass beats the value ladder + escalation. **v_sres == nl_sres to the unit on most decks** (the reserve binds
+before the leaf matters) — the user's "same ladder with the leaf on and off". Melira d5b20: nothing beats ship;
+heur 0.71x/+0.0225; escnl 0.65x/+0.040 (worse than heur: the strict-alpha probe spends budget and banks
+nothing on this deck, starving the escalation). Fluctuator: escnl 0.966x heur (−0.001) — the 0.38x of screen 1
+is GONE (finding 10). Hinata: v_sres −0.0115 (+30) at 2.6x; escnlv +0.10 (−400) (finding 9).
+
+**Finding 8 — the single-pass reserve's R prior (120) is 10x too high on Melira: nl_sres/v_sres +0.2177 t
+(892 of 4000 games worse) at 0.175x.** Trace (800663): the reserve refuses pass 3 (R=120 x leaves), the probe
+stops at d2, the single rollout pass runs at d2, the deck plays d2-heuristic. Melira's real R is ~10-16 units
+per leaf. FIX (fix6): per-GAME calibration — the first decision runs a d1 leafless + d1 rollout pass on fresh
+caches (~1% of the budget), R = (h1 − t1) / leaves; each later single pass refines it (EMA); keyed on deck +
+game seed. Arms nl_sres2 / v_sres2 re-measure.
+
+**Finding 9 — under a leafless line the escalation's CAPPED single pass aborts and leaves the line EMPTY
+(Hinata escnlv 801634: T5 -> T8, 24k -> 254k units).** The 10d gating turned off only the depth predictor inside
+the `eff_single` escalation path; the path still ran one capped pass at the cap (5), which overruns its 2x
+fresh-half budget, sets hcommitted = 0, the take-decision rejects it, and the line stays the probe's empty
+no-win line -> the executor's full-depth fallback (finding 6) plays nothing at T1. FIX: a leafless line takes
+the plain ladder branch (`eff_single && !line_constant`). Arm escnlv2 re-measures.
+
+**Finding 10 — Fluctuator's 0.38x came from the RELAXED alpha; the strict alpha (fix 2a) threw it away.**
+Screen 1 escnl (relaxed 8.8, no exhaustion stop): 0.381x heur, 31 better / 6 worse. Batch 2 escnl (strict +
+exhaustion stop): 0.966x, 6/2. On Fluctuator the deep leafless passes bank the in-horizon wins; the strict alpha
+stops the ladder where heur's does. Never measured: relaxed alpha + exhaustion stop. LEVER: arm
+`constant_alpha_relaxed` / MTG_CONSTANT_ALPHA_RELAXED — arm escnl_rx in batch 3. Expected: Fluctuator regains
+its win; Melira loses (the deck-class split again).
+
+Batch 3 (`manifest_fix3.json`, 2497 jobs, `chain_fix3b.sh` after batch 2): ship, heur, nl_sfit, v_sfit (FIT
+single pass: unreserved probe, rollout at the deepest affordable depth), nl_sres2, v_sres2 (calibrated R),
+escnl_rx, escnlv2. Verification gate: ship 2040514; hinata 801634 escnlv2; melira 800663 nl_sres2; fluct escnl_rx.
+(Process note: `kill $(pgrep -f chain_fix3.sh)` killed my own tool shell — the pgrep matched it. Kill by saved pid.)
+
+### 2026-09-10f — batch 2 complete (final read unchanged), batch 3 stopped at 214 jobs, finding 11, batch 4 launched
+
+**Batch 2 final (3258 jobs, `decide2_batch2_final.txt` / `_vs_heur.txt`):** the 10e read holds on every cell. Late
+decks: kitty ship dominates all (escnl 1.39x/+0.0035 at d5b20); mirrorwing escnl 1.51x/−0.0025 (not clean on units),
+final-depth forms 3.5x; th ship dominates (escnlv +0.077, finding 9). Melira d3b10: escnl 0.667x/+0.039, heur
+0.782x/+0.0105, nl_sres 0.194x/+0.253 (finding 8). Fluctuator vs heur: escnl CLEAN at both cfgs (0.966x/−0.001,
+0.926x/−0.0018); nl_sres −0.0045/−0.0075 at 2.1x.
+
+**Verification of the fix6 tree (chain_fix3b): ship byte-identical (2040514).** But two of the three targeted
+replays did NOT land where predicted: Hinata escnlv 801634 T7 (ship T5, was T8; 254k → 48k units) and Melira
+nl_sres2 800663 T7 (ship T4; single passes completed=5, gate_refusals=2). Melira nl_sfit 802768: T6 at 1.40M units
+where ship plays T7 at 2.04M (the FIT form's first clean win on Melira).
+
+**Finding 11 — the STRICT alpha stops the leafless probe exactly one depth short of the win on Melira and Hinata;
+this is a GATE POLICY, not a bug, and it is the common cause of both misses.** Traces, same seeds, ship vs
+leafless: the passes cost the SAME units at every depth (Melira 800663 T1: 19 / 332 both; Hinata 801634 T1: 22 /
+236 / 2272 both), then ship runs the next pass under the relaxed alpha (x8.8) — Melira pass 3 = 16,810 units, finds
+the T4 line; Hinata pass 4 = 16,843 — while the constant-leaf ladder's strict alpha refuses it (est ≈ prev cost x
+growth ≈ 17-50x on Melira > remaining). The leafless probe then plays d2 (Melira) / d3 (Hinata) + escalation. So
+finding 8's R calibration was correct but moot on Melira: the reserve refused only 2 of 6 decisions; the other 4
+stopped at d2 by the ordinary gate. Relaxed alpha on the leafless probe (lever from finding 10, arm
+`constant_alpha_relaxed`) with the exhaustion stop: Melira nl_sfit_rx 800663 **T4 at 24,966 units vs ship 51,803
+(0.48x)**; 802768 T6 at 1.50M vs ship T7 at 2.04M; Hinata escnlv_rx 801634 T6 (ship T5; the leafless pass 4 is cut
+at exactly the budget, 18,000 units, where ship's identical-size pass ran to 19,373 — see the lever below).
+
+**Consequence for the batch:** batch 3 carried the relaxed alpha only on the escalation form (escnl_rx); the
+single-pass and model-commit leafless forms were all strict, so on the deep-win decks they would measure the gate
+policy, not the shape. Batch 3 (my run, 10 min old, 214 jobs reported) was stopped by pid and relaunched POOLED as
+**batch 4** (`gen_fix4.py`, `manifest_fix4.json`, 3,867 jobs, heavy decks first; the 214 done jobs are skipped —
+same binary at the default lever): batch 3's arms + `nl_sfit_rx`, `nl_sres2_rx`, `escnlv_rx` (relaxed alpha) +
+`nl_sfit_rx2`, `escnl_rx2` (relaxed alpha + exhaustion stop at 2x). `chain_fix4.sh` builds, verifies ship
+(2040514) AND a batch-3 arm at the default lever (mel_nlsfit 1400802) for byte-identity, replays the two seeds at
+x1 and x2, then runs the batch → `run_fix4.out`, `wins_fix4/`, `decide2_batch4_vs_ship.txt` / `_vs_heur.txt`
+(decide2 reads wins_fix3 + wins_fix4).
+
+**Lever — constant-leaf exhaustion multiple (`constant_exhaust_mult` / MTG_CONSTANT_EXHAUST_MULT, default 1 =
+byte-identical).** The 10c exhaustion stop cuts a leafless pass at used >= budget; the model pass has no such stop
+(it runs to the 25x proportional ceiling because its truncated line is still rated). In exhausted mode the search
+still walks its main plan loops (only the optional wave / group-wave / m2-fix phases stop), so a leafless pass past
+exhaustion can still PROVE a win in what remains — Hinata's pass 4 needed 8% more than the budget. The multiplier
+is a tuning parameter of the leafless probe, not a menu item; x2 is measured on the two forms where it can matter.
+
+**Finding 6 (executor full-depth fallback on an empty line) stays open by choice:** the fallback is the design
+(a no-win decision replays the baseline search so full-depth is a superset of baseline); what the leafless forms
+change is how often they hand it an EMPTY line. Measure after batch 4, separately.

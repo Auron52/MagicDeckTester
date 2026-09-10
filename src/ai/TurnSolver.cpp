@@ -20278,6 +20278,29 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
 // captures and takes the full apply as before. Byte-identity is the bar: the resumed tail must
 // produce exactly the state a full apply would (validated on wave counters + suite digests).
 // MTG_NO_BP_PREFIX_CACHE=1 restores the uncached walk.
+// Approximate bytes a GameState snapshot holds (the containers' element storage; strings assumed SSO). Used to
+// bound the prefix-resume caches by BYTES, not entries: a Dragonstorm game measured 730 MB and 2x the wall in
+// these caches at the old 256-entry cap (2026-09-10; play identical with the cache off), a Melira game a few MB.
+inline std::size_t ApproxStateKb(const GameState& st)
+{
+    std::size_t b = sizeof(GameState);
+    for (const Player& p : st.players)
+    {
+        b += (p.hand.capacity() + p.library.size() + p.graveyard.capacity() + p.sideboard.capacity()) * sizeof(Card);
+    }
+    b += st.battlefield.capacity() * sizeof(Permanent) + st.exile.capacity() * sizeof(Card);
+    return (b >> 10) + 1;
+}
+// Entry cap of ONE node's prefix-resume cache: min(256, MTG_BP_PREFIX_CACHE_KB / snapshot KB), default 32 MB per
+// node. Result-neutral (a miss re-applies the prefix); deterministic per node (no cross-worker state).
+inline std::size_t BpPrefixCacheEntryCap(const GameState& st)
+{
+    static const std::size_t kb_budget = []{ const char* e = std::getenv("MTG_BP_PREFIX_CACHE_KB");
+                                             return (e && *e) ? static_cast<std::size_t>(std::strtoull(e, nullptr, 10)) : std::size_t{32768}; }();
+    const std::size_t by_bytes = kb_budget / ApproxStateKb(st);
+    return std::min<std::size_t>(256, std::max<std::size_t>(1, by_bytes));
+}
+
 struct BpPrefixSnap
 {
     bool valid = false;
@@ -32351,6 +32374,15 @@ inline thread_local bool g_constant_leaf_pass = false;
 // escalation_r else 120. Set by the hybrid around the probe; never set otherwise (byte-identical).
 inline thread_local bool   g_single_reserve   = false;
 inline thread_local double g_single_reserve_R = 120.0;
+// Per-GAME learned rollout cost per leaf for the single-pass shapes (reserve / fit). The 120 prior is wrong by
+// 10x on Melira (measured R ~10-16 units/leaf), and a wrong prior is fatal: the reserve refuses every probe pass
+// past d2, the single pass runs at d2, and the deck plays d2 heuristic (batch 2: +0.22 t, 892 of 4000 games
+// worse). So the first decision of a game CALIBRATES: one rollout pass at d1 on a fresh cache (~1% of the
+// budget) against the probe's d1 tree cost; every later single pass refines it (EMA). Keyed on deck + game
+// seed so a batch worker never carries one game's R into another (the emulated ladder's lesson).
+inline thread_local std::string g_single_R_key;
+inline thread_local double      g_single_R      = 0.0;    // 0 = unlearned this game
+inline thread_local int         g_single_R_n    = 0;
 struct ConstantLeafPassGuard
 {
     bool prev;
@@ -32358,9 +32390,23 @@ struct ConstantLeafPassGuard
     ~ConstantLeafPassGuard() { g_constant_leaf_pass = prev; }
 };
 // The exhausted-mode stop a constant-leaf pass takes at its plan loops (see g_constant_leaf_pass).
+// How far past the budget it may run (MTG_CONSTANT_EXHAUST_MULT / arm constant_exhaust_mult; see ValueArm.h).
+// 1 (default) = stop at the budget; the model pass by contrast runs to the proportional overrun ceiling.
+inline double ConstantExhaustMult()
+{
+    static const double env = []{
+        const char* e = std::getenv("MTG_CONSTANT_EXHAUST_MULT");
+        const double v = (e != nullptr) ? std::atof(e) : 1.0;
+        return (v > 0.0) ? v : 1.0;
+    }();
+    return (valuearm::t_arm.constant_exhaust_mult > 0.0) ? valuearm::t_arm.constant_exhaust_mult : env;
+}
 inline bool ConstantLeafExhausted(const SearchBudget* budget)
 {
-    return g_constant_leaf_pass && budget != nullptr && !budget->Unlimited() && budget->Exhausted();
+    if (!g_constant_leaf_pass || budget == nullptr || budget->Unlimited()) { return false; }
+    const double m = ConstantExhaustMult();
+    if (m == 1.0) { return budget->Exhausted(); }
+    return budget->Used() >= SearchBudget::SatMulD(m, budget->Limit());
 }
 struct ForceConstantLeafGuard
 {
@@ -33197,7 +33243,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     g_bp_seen_last  = 0;          // ... and reached no nested one either
                     if (hit != prefix_cache.end())
                     { ApplyPlanDirect(s, v, false, &bp, nullptr, &hit->second); }
-                    else if (s_m2w_prefix_cache && prefix_cache.size() < 256)
+                    else if (s_m2w_prefix_cache && prefix_cache.size() < BpPrefixCacheEntryCap(state))
                     {
                         BpPrefixSnap snap;
                         ApplyPlanDirect(s, v, false, &bp, &snap, nullptr);
@@ -34298,7 +34344,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 g_bp_seen_last  = 0;              // ... and reached no nested one either
                 if (hit != prefix_cache.end())
                 { ApplyPlanDirect(s, v, true, &bp, nullptr, &hit->second); }
-                else if (s_prefix_cache && prefix_cache.size() < 256)
+                else if (s_prefix_cache && prefix_cache.size() < BpPrefixCacheEntryCap(state))
                 {
                     BpPrefixSnap snap;
                     ApplyPlanDirect(s, v, true, &bp, &snap, nullptr);
@@ -34945,7 +34991,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // transposition and runs to the overrun ceiling -- 14 aborts x 455k units in one Melira game (80% of
     // its cost; 2026-09-10). The strict heuristic alpha is the one the no-leaf ladder can honour.
     const bool vl_constant = vl_active && (state.m_value_model->constant || g_force_constant_leaf);
-    const double gate_alpha = (vl_active && !vl_constant && s_vl_alpha_mult > 1.0)
+    // LEVER (MTG_CONSTANT_ALPHA_RELAXED / arm constant_alpha_relaxed): let a constant-leaf ladder use the value
+    // ladder's relaxed alpha after all. With the exhaustion stop (g_constant_leaf_pass) the deep pass can no
+    // longer explode, and on Fluctuator the deep leafless passes were where the wins were banked (screen 1:
+    // 0.38x heur under the relaxed alpha vs 0.97x under the strict one).
+    static const bool s_const_relaxed_env = EnvOn("MTG_CONSTANT_ALPHA_RELAXED");
+    const bool const_relaxed = (valuearm::t_arm.constant_alpha_relaxed >= 0) ? (valuearm::t_arm.constant_alpha_relaxed != 0) : s_const_relaxed_env;
+    const double gate_alpha = (vl_active && (!vl_constant || const_relaxed) && s_vl_alpha_mult > 1.0)
                             ? kStartGateAlpha * s_vl_alpha_mult : kStartGateAlpha;
 
     // JUMP-LADDER (MTG_ESC_JUMP): heuristic-escalation only. The escalation's shallow ladder passes are
@@ -36110,11 +36162,43 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     static const bool s_esc_at_committed_env = EnvOn("MTG_ESC_SINGLE_AT_COMMITTED");
     const bool s_esc_at_committed = (valuearm::t_arm.esc_single >= 0) ? (valuearm::t_arm.esc_single != 0)
                                                                 : s_esc_at_committed_env;
+    // single_mode: 0 unlimited pass | 1 RESERVED (the probe's gate keeps room for the pass at each depth it admits)
+    // | 2 FIT (user, 2026-09-10: "delay the heuristic rollouts until we finish with the depth"): the probe ladders
+    // as deep as it can UNRESERVED (cheap tree work; a proven win ends the decision without a rollout), then the
+    // single rollout pass runs at the DEEPEST depth <= the probe's whose estimated cost, tree(d) + R x leaves(d)
+    // from the probe's own record, fits the remaining budget -- stepping shallower on an overrun.
     static const bool s_single_reserve_env = EnvOn("MTG_ESC_SINGLE_RESERVE");
-    const bool single_reserve = s_esc_at_committed
-                             && ((valuearm::t_arm.esc_single_reserve >= 0) ? (valuearm::t_arm.esc_single_reserve != 0)
-                                                                           : s_single_reserve_env);
-    if (single_reserve) { g_probe_recording = true; }   // the reserve reads the probe's per-depth leaf counts
+    static const bool s_single_fit_env     = EnvOn("MTG_ESC_SINGLE_FIT");
+    const int single_mode = !s_esc_at_committed ? 0
+                          : (valuearm::t_arm.esc_single_reserve >= 0) ? valuearm::t_arm.esc_single_reserve
+                          : (s_single_fit_env ? 2 : (s_single_reserve_env ? 1 : 0));
+    const bool single_reserve = (single_mode == 1);
+    if (single_mode >= 1) { g_probe_recording = true; }   // the reserve / fit read the probe's per-depth costs and leaves
+    if (single_mode >= 1)
+    {
+        const std::string rkey = valuearm::t_deck_key + '|' + valuearm::t_arm.value_profile + '|' + std::to_string(state.game_seed);
+        if (g_single_R_key != rkey) { g_single_R_key = rkey; g_single_R = 0.0; g_single_R_n = 0; }
+        if (g_single_R_n == 0 && depth >= 1)
+        {
+            // CALIBRATION pass: d1 leafless then d1 rollout, both on fresh caches, charged to the decision.
+            long long t1 = 0, h1 = 0, l1 = 0;
+            {
+                ForceConstantLeafGuard _c(true); ConstantLeafPassGuard _p(true);
+                FSLineCache c1; const long long u0 = budget ? budget->Used() : 0; const long long lv0 = g_fs_leaf_evals;
+                (void)FSLineWin(state, 1, max_turns, max_turns + 1, second_main, tt, &c1, budget);
+                t1 = (budget ? budget->Used() : 0) - u0; l1 = g_fs_leaf_evals - lv0;
+            }
+            {
+                ForceHeuristicLeafGuard _h(true);
+                FSLineCache c2; const long long u0 = budget ? budget->Used() : 0;
+                (void)FSLineWin(state, 1, max_turns, max_turns + 1, second_main, tt, &c2, budget);
+                h1 = (budget ? budget->Used() : 0) - u0;
+            }
+            if (l1 > 0 && h1 > t1) { g_single_R = static_cast<double>(h1 - t1) / static_cast<double>(l1); g_single_R_n = 1; }
+            else { g_single_R = (escalation_r > 0.0) ? escalation_r : 120.0; g_single_R_n = 1; }
+        }
+    }
+    const double single_R = (g_single_R_n > 0) ? g_single_R : ((escalation_r > 0.0) ? escalation_r : 120.0);
     static const bool s_nl_commit_env    = EnvOn("MTG_LADDER_EMUL_COMMIT_MODEL");
     static const bool s_nl_warm_none_env = EnvOn("MTG_LADDER_EMUL_WARM_NONE");
     static const bool s_nl_emul_env      = EnvOn("MTG_LADDER_EMULATED");
@@ -36136,7 +36220,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             bool p; double pr;
             SingleReserveGuard(bool on, double R) : p(g_single_reserve), pr(g_single_reserve_R) { g_single_reserve = on; g_single_reserve_R = R; }
             ~SingleReserveGuard() { g_single_reserve = p; g_single_reserve_R = pr; }
-        } _srg(single_reserve, (escalation_r > 0.0) ? escalation_r : 120.0);
+        } _srg(single_reserve, single_R);
         TrustPathGuard _tpg(trust_push ? value_min_depth : 0,
                             trust_push ? ((escalation_r > 0.0) ? escalation_r : 120.0) : 0.0);
         // MTG_CONDEMN_HONEST_PROBE (measurement lever, DEFAULT OFF): run the hybrid's PROBE with
@@ -36237,27 +36321,57 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         SearchBudget        single_budget1;   // unlimited: the pass at D must complete
         const int d1 = std::max(1, committed);
         SearchLine hl;
-        if (single_reserve && budget != nullptr && !budget->Unlimited())
+        if (single_mode >= 1 && budget != nullptr && !budget->Unlimited())
         {
             // RESERVED variant: the pass runs on the REMAINING shared budget (the probe's gate kept room for
             // it), overrun-guarded by the proportional ceiling like any ladder pass. A partial line that
             // rated a win is kept (anytime); nothing rated => the heuristic escalation below.
             static const double s_sres_mult = []{ const char* e = std::getenv("MTG_OVERRUN_MULT");
                                                   return (e && *e) ? std::atof(e) : 25.0; }();
-            const long long used_before = budget->Used();
-            budget->SetOverrunLimit(SearchBudget::SatAdd(used_before, SearchBudget::SatMulD(s_sres_mult, budget->EffectiveLimit())));
-            hl = FSLineWinComplete(state, d1, max_turns, max_turns + 1, second_main, single_tt1, &single_cache1, budget);
-            const bool over = budget->Overrun();
-            budget->SetOverrunLimit(0);
-            g_sres_units.fetch_add(budget->Used() - used_before, std::memory_order_relaxed);
-            if (over)
+            int dpass = d1;
+            if (single_mode == 2)
             {
-                g_sres_overruns.fetch_add(1, std::memory_order_relaxed);
-                static const bool s_sres_anytime = EnvOn("MTG_ID_ANYTIME", true);
-                if (s_sres_anytime && hl.win_turn <= max_turns && hl.win_turn < line.win_turn) { g_sres_partial.fetch_add(1, std::memory_order_relaxed); }
-                else { single_failed = true; g_sres_escalated.fetch_add(1, std::memory_order_relaxed); }
+                // FIT: the deepest probe depth whose rollout twin fits what is left. R = the deck's frozen
+                // escalation_r else 120 (the same constant the reserve uses).
+                const double R = single_R;
+                const double rem = static_cast<double>(std::max<long long>(0, budget->Remaining()));
+                dpass = 1;
+                for (int d = std::min(d1, 15); d >= 1; --d)
+                {
+                    const double est_h = static_cast<double>(g_probe_cost[d]) + R * static_cast<double>(std::max<long long>(0, g_probe_leaves[d]));
+                    if (g_probe_cost[d] > 0 && est_h <= kStartGateAlpha * rem) { dpass = d; break; }
+                }
             }
-            else { g_sres_passes.fetch_add(1, std::memory_order_relaxed); }
+            static const bool s_sres_anytime = EnvOn("MTG_ID_ANYTIME", true);
+            for (;;)
+            {
+                FSLineCache attempt_cache;
+                const long long used_before = budget->Used();
+                budget->SetOverrunLimit(SearchBudget::SatAdd(used_before, SearchBudget::SatMulD(s_sres_mult, budget->EffectiveLimit())));
+                hl = FSLineWinComplete(state, dpass, max_turns, max_turns + 1, second_main, single_tt1, &attempt_cache, budget);
+                const bool over = budget->Overrun();
+                budget->SetOverrunLimit(0);
+                g_sres_units.fetch_add(budget->Used() - used_before, std::memory_order_relaxed);
+                if (!over)
+                {
+                    g_sres_passes.fetch_add(1, std::memory_order_relaxed);
+                    // Refine this game's R from the pass just measured against the probe's tree at that depth.
+                    if (dpass < 16 && g_probe_leaves[dpass] > 0 && g_probe_cost[dpass] > 0)
+                    {
+                        const long long hc = budget->Used() - used_before;
+                        if (hc > g_probe_cost[dpass])
+                        {
+                            const double sample = static_cast<double>(hc - g_probe_cost[dpass]) / static_cast<double>(g_probe_leaves[dpass]);
+                            g_single_R = 0.6 * g_single_R + 0.4 * sample; ++g_single_R_n;
+                        }
+                    }
+                    break;
+                }
+                g_sres_overruns.fetch_add(1, std::memory_order_relaxed);
+                if (s_sres_anytime && hl.win_turn <= max_turns && hl.win_turn < line.win_turn) { g_sres_partial.fetch_add(1, std::memory_order_relaxed); break; }
+                if (single_mode == 2 && dpass > 1) { --dpass; continue; }   // FIT: one shallower, as a ladder would
+                single_failed = true; g_sres_escalated.fetch_add(1, std::memory_order_relaxed); break;
+            }
         }
         else
         {
@@ -36574,7 +36688,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 else if (delta > 0) { g_pred_deeper.fetch_add(1, std::memory_order_relaxed); }
             }
         }
-        else if (eff_single)
+        else if (eff_single && !line_constant)   // a leafless line takes the plain ladder below (its capped single pass aborts to hcommitted=0 and leaves the line EMPTY)
         {
             // SINGLE-DEPTH ESCALATION: run ONE heuristic pass instead of the full 1..depth ladder. The ADOPTED
             // path (per-deck value_play.escalation_cap>0 => eff_single_deck) predicts the budget-AFFORDABLE depth
@@ -37957,7 +38071,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     {
                         if (hit != prefix_cache.end())
                         { ApplyPlanDirect(copy, v, true, nullptr, nullptr, &hit->second); }
-                        else if (s_prefix_cache && prefix_cache.size() < 256)
+                        else if (s_prefix_cache && prefix_cache.size() < BpPrefixCacheEntryCap(state))
                         {
                             BpPrefixSnap snap;
                             ApplyPlanDirect(copy, v, true, nullptr, &snap, nullptr);
