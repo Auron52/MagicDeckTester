@@ -11893,6 +11893,21 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
             }
             if (best_i >= 0)
             {
+                // THE COUNTER WAS DEAD. `g_fin_paidfail` has been declared and printed since this
+                // routine was written and incremented NOWHERE, so [finish] could not tell "no
+                // finisher was a candidate" from "the finisher was right there and its cast could
+                // not be paid" -- which is exactly the question the user's s9 gi=8 frames posed
+                // (`wish=2 hand=0`). Wired here: a candidate was chosen and the deploy did not
+                // happen, which on this deck means its coloured pip was gone.
+                struct PaidFailMark
+                {
+                    bool ok = false;
+                    ~PaidFailMark()
+                    {
+                        if (!ok && finishstats::On())
+                        { finishstats::g_fin_paidfail.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                } _pfm;
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[best_i]);
                 const std::string name  = ap.hand[best_i].m_name.str();
                 // RE-CHECK THE INDEX AFTER THE PAYMENT. `pay` runs the whole payment machinery --
@@ -11908,6 +11923,7 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
                     if (DeployCreatureFromHand(state, controller, best_i))
                     {
                         did = true;
+                        _pfm.ok = true;
                         if (finishstats::On())
                         { finishstats::g_fin_hand.fetch_add(1, std::memory_order_relaxed); }
                         if (g_play_event_sink)
@@ -12598,7 +12614,27 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     // (see SpendSurplusOnDrawSinks) -- the untap slot it takes would otherwise go to an Overgrowth'd
     // land, so an unactivated draw land is a pure subtraction from the loop's own margin. The two go
     // on and off together, always.
-    if (LoopDrawSinkOn())
+    //
+    // ...AND "THE SPEND EXISTS" IS NOT `LoopDrawSinkOn()`, IT IS `want_draw`. The spend is DRAW ONLY
+    // TO FIND: it stands down the moment a finisher is already reachable. So on a board holding a
+    // Living Wish, every draw land is promoted above every yield and NONE of them is ever activated
+    // -- the exact loss this comment warns about, produced by the gate meant to prevent it. Harmless
+    // while the route was autonomous-only and a real kill under the button: the user's s9 gi=8
+    // frame 27 has three draw lands (Mariposa + two Conservatories), so the promotion took both
+    // Conservatories and Kitchen -- the board's ONLY blue, and its biggest yield -- was never
+    // untapped again. [finish] said it plainly once the dead pay-fail counter was wired:
+    // `wish=2 hand=0 pay-fail=108`, a go-off that fetched Dimensional Infiltrator and then could not
+    // pay its {1}{U} a hundred times over.
+    //
+    // Scoped to the button (ComboOffFinishActive()) so the autonomous arm keeps the promotion its
+    // measurement was taken under -- there `LoopDrawSinkOn()` is unconditional and this is inert.
+    // MTG_COMBO_OFF_DRAW_PROMOTE=0 restores the unconditional promotion here too.
+    static const bool s_draw_promote = EnvOn("MTG_COMBO_OFF_DRAW_PROMOTE", true);
+    const bool promote_draw_lands =
+        LoopDrawSinkOn()
+        && (!s_draw_promote || !ComboOffFinishActive()
+            || !ComboFinisherReachable(state, controller));
+    if (promote_draw_lands)
     {
         for (const Permanent& p : state.battlefield)
         {
@@ -12753,13 +12789,40 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
             if (SpendSurplusOnDrawSinks(state, controller, c, pay) > 0)
             { want_draw = !ComboFinisherReachable(state, controller); }
         }
-        // BANK THE COLOUR THE FINISH IS WAITING ON (COMBO OFF only). The land the untap is about to
-        // recharge is exactly the one that should carry the finisher's pip -- see
-        // PendingComboFinishCost. Re-asked each iteration because the answer changes the moment the
-        // finisher is deployed, and it is only asked at all under the button.
+        // BANK THE COLOUR THE FINISH IS WAITING ON, AND THEN DO NOT SPEND IT (COMBO OFF only).
+        //
+        // TWO SITES, and only fixing both closes it. The land the untap is about to recharge should
+        // CARRY the finisher's pip -- that is `pending_cost`, the MTG_TAPAHEAD_PENDING_PIP channel,
+        // and it is what makes Kitchen bank {U} instead of a fifth green. But banking it is useless
+        // on its own, because the NEXT iteration's blink costs {3} GENERIC and
+        // SpendFloatingTowardCost drains floating colours in WUBRG order whenever the line owes
+        // nothing -- so the {U} that was just banked is the second thing eaten, every pass, forever.
+        //
+        // The demand signal that stops it already exists: `g_line_unpaid_cost` is what turns on the
+        // SURPLUS-FIRST generic order (spend the colour we hold most of, keep the scarce demanded
+        // one), and it is empty here because a standalone go-off plan declares no casts. A go-off
+        // that is going to cast a finisher DOES owe that cost -- the loop simply had no way to say
+        // so. Injecting it for the iteration is the same reservation chain the {C} hold and the
+        // line-cost tap-ahead already use, pointed at the finisher's own colour.
+        //
+        // USER's frames s9 gi=8 #27/#28: [finish] `wish=2 hand=0` -- the Living Wish resolved, the
+        // Dimensional Infiltrator reached hand, and ComboFinishFromHand then failed to pay its
+        // {1}{U} four rounds running on a board whose only blue is a Kitchen the loop had committed
+        // to green. Re-asked EVERY iteration because the answer changes the moment the finisher is
+        // deployed (after which nothing is owed and the historical order returns).
+        // MTG_COMBO_OFF_HOLD_CAST_COLOR=0 restores the un-signalled loop.
         ManaCost pend_cost;
         const bool pend = ComboOffFinishActive() && ComboFinishOn()
                        && PendingComboFinishCost(state, controller, &pend_cost);
+        static const bool s_hold_cast_color = EnvOn("MTG_COMBO_OFF_HOLD_CAST_COLOR", true);
+        const ManaCost saved_line = g_line_unpaid_cost;
+        struct LineCostRestore
+        {
+            const ManaCost& saved; bool on;
+            ~LineCostRestore() { if (on) { g_line_unpaid_cost = saved; } }
+        } _lcr{ saved_line, pend && s_hold_cast_color };
+        if (pend && s_hold_cast_color)
+        { g_line_unpaid_cost = AddManaCosts(saved_line, pend_cost); }
         if (untaps > 0)
         {
             EtbUntapTapAheadIntoFloat(state, controller, untaps, /*reserve_color_mask=*/0,
@@ -12867,6 +12930,20 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     // did not ask for (the Gorge has its own ActivatePermAbility action for that).
     if (done > 0 && cash_sinks)
     {
+        // The same demand signal the iterations carried, for the post-loop kill chain: the surplus
+        // sinks below run BEFORE ComboFinishFromHand and would otherwise spend the finisher's own
+        // colour on a drain's or a draw's generic pip -- the identical burn, one step later.
+        static const bool s_hold_cast_color2 = EnvOn("MTG_COMBO_OFF_HOLD_CAST_COLOR", true);
+        ManaCost   tail_pend;
+        const bool tail_hold = s_hold_cast_color2 && ComboOffFinishActive() && ComboFinishOn()
+                            && PendingComboFinishCost(state, controller, &tail_pend);
+        const ManaCost tail_saved = g_line_unpaid_cost;
+        struct TailLineCostRestore
+        {
+            const ManaCost& saved; bool on;
+            ~TailLineCostRestore() { if (on) { g_line_unpaid_cost = saved; } }
+        } _tlcr{ tail_saved, tail_hold };
+        if (tail_hold) { g_line_unpaid_cost = AddManaCosts(tail_saved, tail_pend); }
         SpendSurplusOnDamageSinks(state, controller, ManaCost{}, pay);
         if (want_draw) { SpendSurplusOnDrawSinks(state, controller, ManaCost{}, pay); }
         SpendSurplusOnDrain(state, controller, ManaCost{}, pay);
