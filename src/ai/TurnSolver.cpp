@@ -18938,6 +18938,40 @@ struct LpSite
     explicit LpSite(int t) : prev(g_lp_site_tag) { g_lp_site_tag = t; }
     ~LpSite() { g_lp_site_tag = prev; }
 };
+// Every kind ApplyPlanDirect's `apply_trailing_activations` dispatcher handles -- see the header
+// note. Mirrors that else-if chain one-for-one; keep them in step when a kind is added there.
+// Consumed by AIEngine::ReorderPlanCasts (which of a plan's actions the human may sequence) and by
+// the human-order inline dispatch inside apply_plan_actions.
+bool TurnSolver::IsTrailingActivation(Action::Kind k)
+{
+    switch (k)
+    {
+        case Action::Kind::SacCreatureOutlet:
+        case Action::Kind::Channel:
+        case Action::Kind::ActivateRevealTop:
+        case Action::Kind::ActivatePod:
+        case Action::Kind::GraveyardExileGrow:
+        case Action::Kind::ActivateBlink:
+        case Action::Kind::ActivatePermAbility:
+        case Action::Kind::ActivatePump:
+        case Action::Kind::UntapCreature:
+        case Action::Kind::GraveyardExileAbility:
+        case Action::Kind::GraveyardReturnAbility:
+        case Action::Kind::GraveyardPlayAbility:
+        case Action::Kind::AnimateLand:
+        case Action::Kind::TapForTokenPay:
+        case Action::Kind::AttachAllEquipment:
+        case Action::Kind::PutFromHandAbility:
+        case Action::Kind::JitteModeAbility:
+        case Action::Kind::Equip:
+        case Action::Kind::ActivateLoyalty:
+        case Action::Kind::GarthActivate:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
                             BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume)
@@ -19272,6 +19306,52 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Forward-declared so apply_one's draw breakpoints can re-apply a freshly solved
     // sub-plan (newly drawn castables) through the same canonical-order dispatch.
     std::function<void(const std::vector<Action>&, bool)> apply_plan_actions;
+    // Forward-declared (assigned far below, next to the trailing pass it drives) so the ordered
+    // cast loop can dispatch a BOARD ACTIVATION at its declared position -- the human-order
+    // interleave, see human_seq_inline. Nothing calls it before it is assigned: the top-level
+    // apply_plan_actions(plan.actions, ...) call was moved down past the assignment for exactly
+    // this reason, and that move is a pure code move (a lambda definition executes nothing).
+    std::function<void(const std::vector<Action>&)> apply_trailing_activations;
+
+    // HUMAN-DECLARED ORDER, INTERLEAVED (Plan::human_action_order; MTG_HUMAN_LINE_ORDER, owned by
+    // AIEngine). The human's committed line names casts and board activations in ONE sequence, and
+    // the whole point is that the sequence is honoured verbatim -- "It's up to me to make sure the
+    // order is correct" (USER 2026-09-10). When set, the ordered cast loop dispatches each board
+    // activation inline where it stands and the trailing pass is skipped, so ONE walk over
+    // `actions` realises the declared order. `s_human_play` is belt-and-braces: the flag can only
+    // ever be set by the viewer's side channel, and the search never sets it, so every rollout and
+    // autonomous apply takes the historical two-pass route byte-identically.
+    // `searched_order` is part of the condition, not an assumption: the inline dispatch lives in
+    // the explicit-order cast loop, so without it the activations would be neither dispatched
+    // inline NOR run by the (skipped) trailing pass -- they would silently vanish. ReorderPlanCasts
+    // always sets both; this makes "both or neither" structural.
+    const bool human_seq = plan.human_action_order && plan.searched_order && s_human_play;
+    // ...and the inline dispatch is armed ONLY for the top-level committed plan, never for a
+    // continuation re-applied through the same lambda (a pod/snow continuation is followed by its
+    // OWN apply_trailing_activations call, so an inline dispatch there would apply it twice). Both
+    // of those sites are !s_human_play-gated today; this makes the guarantee structural instead.
+    bool human_seq_inline = false;
+    // DIAGNOSTIC (MTG_LINE_ORDER_TRACE, default OFF, zero cost when off): one line per action the
+    // main-phase apply performs, in the order it performs it. The realised sequence is otherwise
+    // unobservable from outside -- the decision JSON reports life events and draws, not order --
+    // so an order regression could only be caught by reasoning about which lands ended up tapped.
+    // Prints for BOTH routes (the historical casts-then-trailing pass and the human interleave),
+    // which is what makes an A/B of the two readable side by side.
+    //
+    // REAL APPLIES ONLY. Every instrument in this file fires in rollouts too -- SimulateToEnd and
+    // the d0 candidate scoring both call this function, thousands of times per decision, and a
+    // trace that cannot tell those from the committed apply reports the search's last scored
+    // candidate as though it were the line that was played (which is exactly how a first version
+    // of this trace read a plan the human never chose). `g_play_event_sink` is the discriminator:
+    // RevealLogPause nulls it for the whole duration of any search/rollout, so non-null means "the
+    // human is watching this one".
+    static const bool s_line_order_trace = EnvOn("MTG_LINE_ORDER_TRACE");
+    auto line_order_trace = [&](const char* what, const Action& a)
+    {
+        if (!s_line_order_trace || g_play_event_sink == nullptr || !g_real_resolution) { return; }
+        std::fprintf(stderr, "[line-order] turn=%d human_seq=%d %s %s\n",
+                     state.turn_number, human_seq ? 1 : 0, what, a.card_name.c_str());
+    };
 
     // Play a revealed land as the turn's land drop inside a staged-draw breakpoint
     // (pre-combat only), mirroring the real engine's draw-engine second pass
@@ -21641,6 +21721,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         fire_unlock();
         if (explicit_order)
         {
+            // HUMAN-ORDER INTERLEAVE: consume the arm here so a continuation re-entering this
+            // lambda (pod / snow chains, which run their own trailing pass afterwards) can never
+            // dispatch its activations twice. Scoped, so the flag is exactly as this call found it
+            // on the way out. Inert (false) for every search apply -> byte-identical.
+            struct SeqScope
+            {
+                bool& flag; const bool saved;
+                explicit SeqScope(bool& f) : flag(f), saved(f) { f = false; }
+                ~SeqScope() { flag = saved; }
+            } _seq(human_seq_inline);
+            const bool inline_acts = _seq.saved;
             // Cast-ordering search: play the non-sacrifice hand casts in the EXACT vector
             // order the search chose (no enabler-first bucketing), so interleavings the
             // canonical order batches wrong are reachable. See Plan::searched_order.
@@ -21648,9 +21739,32 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
+                    line_order_trace("cast", a);
                     prep_free(a);
                     apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
                     fire_unlock();
+                }
+                // ...and the board activation the human put HERE fires here, not in the trailing
+                // pass (Plan::human_action_order). A one-action slice through the SAME dispatcher
+                // the trailing pass uses -- never a second implementation of any activation -- so
+                // "at its declared position" is the only thing that changes about it.
+                //
+                // SERVER TRUTH, and its one gap. Every branch of that dispatcher is already
+                // stranded-outlet safe: it checks its precondition and its payment FIRST and
+                // no-ops without mutating anything when either fails. So an activation the human
+                // put somewhere it cannot be paid is DROPPED where it stands and is never rescued
+                // by moving it -- which is the deal the user asked for ("It's up to me to make
+                // sure the order is correct"). What it is NOT is REPORTED: `g_play_dropped_cast_sink`
+                // is fed from apply_one only, so a dropped ACTIVATION is silent in the viewer.
+                // That gap predates this change (the trailing pass could already strand one behind
+                // a cast that spent the mana) and closing it needs a success flag on each of the
+                // twenty branches -- the cheap proxies do not work, because ApplyBlinkLoop and
+                // SpendRepeatActivations END on a failed payment by design and would read as
+                // drops. Left as its own piece of work rather than shipped as false red banners.
+                else if (inline_acts && TurnSolver::IsTrailingActivation(a.kind))
+                {
+                    line_order_trace("activate", a);
+                    apply_trailing_activations(std::vector<Action>{ a });
                 }
             }
         }
@@ -22051,16 +22165,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         TurnSolver::BatchPrepayMainCasts(state, plan.actions);
     }
 
-    apply_plan_actions(plan.actions, plan.searched_order);
-
-    // Krenko, Mob Boss taps AFTER the main casts, so X = Goblins you control counts this turn's
-    // developed board (the tokens then count toward Skirk fuel / a later attack). Free ({T} only).
-    for (const Action& a : plan.actions)
-    {
-        if (a.kind == Action::Kind::TapForTokens)
-        { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
-    }
-
     // Costed sac outlets (Siege-Gang / Pashalik) + Twinshot channel: pay the mana cost from the pool
     // left after the main casts (TapForCostDirect, the rollout pay path), then realise the effect.
     // If the cost can't be paid (mana stranded), the outlet is a no-op -- the leaf/executor share this
@@ -22071,7 +22175,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // trailing activations -- that is the chain itself, and a continuation activation can open
     // the next breakpoint (bounded: every activation taps a Pod). Called with plan.actions
     // exactly where the loop stood -- byte-identical for every plan that opens no pod site.
-    std::function<void(const std::vector<Action>&)> apply_trailing_activations =
+    //
+    // DEFINED BEFORE THE CAST LOOP RUNS (the definition moved up past
+    // `apply_plan_actions(plan.actions, ...)`, which moved down below the assignment): the human-
+    // order interleave dispatches an activation from INSIDE the ordered cast loop, so this has to
+    // be assigned by then. A lambda definition executes nothing, so the realised sequence -- casts,
+    // Krenko taps, trailing activations -- is exactly what it was.
+    apply_trailing_activations =
         [&](const std::vector<Action>& trailing_acts)
     {
     for (const Action& a : trailing_acts)
@@ -22517,7 +22627,42 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
     }
     };
-    apply_trailing_activations(plan.actions);
+
+    // ---- The main-phase apply, in the order the two passes above define ------------------------
+    // (Moved down from just after the batch pre-pay; see the note on the lambda above. Nothing
+    // between the old and new positions executes, so this is a code move, not a sequence change.)
+    if (s_line_order_trace && g_play_event_sink != nullptr && g_real_resolution)
+    {
+        std::fprintf(stderr, "[line-order] turn=%d plan searched=%d human=%d vector:",
+                     state.turn_number, plan.searched_order ? 1 : 0,
+                     plan.human_action_order ? 1 : 0);
+        for (const Action& a : plan.actions) { std::fprintf(stderr, " %s", a.card_name.c_str()); }
+        std::fprintf(stderr, "\n");
+    }
+    human_seq_inline = human_seq;                       // armed for the TOP-LEVEL plan only
+    apply_plan_actions(plan.actions, plan.searched_order);
+    human_seq_inline = false;
+
+    // Krenko, Mob Boss taps AFTER the main casts, so X = Goblins you control counts this turn's
+    // developed board (the tokens then count toward Skirk fuel / a later attack). Free ({T} only).
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::TapForTokens)
+        { ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
+    }
+
+    // ...and the trailing pass, UNLESS the human's declared order already ran every activation
+    // inline at its own position (human_seq). Skipping it there is what makes the interleave a
+    // reordering rather than a duplication.
+    if (!human_seq)
+    {
+        if (s_line_order_trace)
+        {
+            for (const Action& a : plan.actions)
+            { if (TurnSolver::IsTrailingActivation(a.kind)) { line_order_trace("trailing", a); } }
+        }
+        apply_trailing_activations(plan.actions);
+    }
 
     // Play the deferred Karoo bounce land now -- after the main casts have tapped the lands we
     // needed, so BounceKarooLand returns a SPENT land at no tempo cost (see karoo_deferred
