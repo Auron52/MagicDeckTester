@@ -121,20 +121,147 @@
   // already enumerates together, so they stay in one segment exactly as they do today. A plan with
   // no repeat is partitioned identically to before -> every existing line and saved reference is
   // byte-identical.
+  // ---- LINE MACROS (docs/design/viewer-line-macros.md) ---------------------------------------
+  // A DEFERRED entry starts a new segment, and every entry after it goes in that segment (or a
+  // later one). This is the ONE new primitive the two macro features need, and both need exactly
+  // it -- for the same underlying reason:
+  //
+  //   * "Investigate & crack" -- the Clue does not EXIST while the Investigate is being committed,
+  //     so the crack cannot be in the same line. It has to be validated against the decision the
+  //     Investigate produces.
+  //   * "repeat xN" -- an engine Plan holds at most ONE activation of a given source, and the
+  //     `repeatable` split above only covers sources the engine tags repeatable (no {T}, no
+  //     sacrifice: ActivateBlink and the Drain/ExileTop perm abilities -- src/main.cpp's
+  //     `repeatable` emit). A {T} outlet like Mariposa's "{5},{T}: draw" is NOT tagged, because it
+  //     genuinely cannot be activated twice -- until a blink untaps it. So the second iteration of
+  //     a [draw, blink] block has to be its own segment, and nothing in the existing split says so.
+  //
+  // `defer` is therefore a statement about the QUEUE, not about the card, which is why it is a flag
+  // on the entry rather than another engine-published predicate. No entry the viewer built before
+  // this feature carries one, so every recorded line partitions exactly as it always did.
+  function isDeferred(p) { return !!p.defer; }
+
   function segmentParts(plan) {
     const seen = {}, main = [], extras = [];
-    for (const p of plan) {
+    // Everything from the first deferred entry onward is held back and partitioned separately, so
+    // a deferred entry carries the whole block behind it (a macro iteration), not just itself.
+    //
+    // The scan starts at 1, NOT 0, and that is load-bearing rather than tidy: a deferred entry at
+    // position 0 is already the head of the segment being built, so nothing precedes it to split
+    // from. Scanning from 0 cut there, produced an EMPTY first segment, and dropFirstSegment --
+    // which peels by removing exactly the entries segmentParts()[0] names -- then removed nothing
+    // and the commit chain spun forever on the second macro iteration.
+    let cut = -1;
+    for (let i = 1; i < plan.length; ++i) { if (isDeferred(plan[i])) { cut = i; break; } }
+    const head = cut < 0 ? plan : plan.slice(0, cut);
+    const tail = cut < 0 ? []   : plan.slice(cut);
+    for (const p of head) {
       const k = (p.kind === 'activate' && p.repeatable) ? (p.src || p.name) : null;
       if (k && seen[k]) { extras.push([p]); continue; }
       if (k) { seen[k] = true; }
       main.push(p);
     }
     const lands = planLands(main);
-    const head = lands.length <= 1
+    const parts = lands.length <= 1
       ? [main]
       : lands.slice(0, -1).map(l => [l])
              .concat([main.filter(p => p.kind !== 'land' || p === lands[lands.length - 1])]);
-    return head.concat(extras);
+    // The tail recurses AS-IS -- no copy, no flag clearing. Its own first entry is the one that
+    // caused the cut, and the scan above already ignores position 0, so the recursion makes
+    // progress on its own. Not copying is what keeps every returned entry IDENTICAL (by object
+    // identity) to the one in `plan`, which is the contract dropFirstSegment's filter relies on.
+    const rest = tail.length ? segmentParts(tail) : [];
+    return parts.concat(extras).concat(rest);
+  }
+
+  // Repeat plan entries [from, to) `n` times in total (n=1 is a no-op), returning the new plan.
+  // Each repetition after the first begins with a DEFERRED copy, so the repetitions commit as
+  // consecutive segments -- exactly the sequence the human would have produced by clicking the
+  // block out N times and committing between each, which is what keeps a macro'd game replayable
+  // from its saved reference with no new protocol.
+  //
+  // Entries are COPIED (never shared), because `dropFirstSegment` peels by object IDENTITY: two
+  // repetitions sharing one object would both vanish when the first segment committed.
+  function repeatBlock(plan, from, to, n) {
+    const block = plan.slice(from, to);
+    if (!block.length || !(n > 1)) { return plan; }
+    const out = plan.slice(0, to);
+    for (let r = 1; r < n; ++r) {
+      block.forEach((p, j) => {
+        // Only the FIRST entry of each repetition carries the flag: the rest of the block belongs
+        // with it, and marking them all would split one iteration into one segment per action.
+        out.push(Object.assign({}, p, j === 0 ? { defer: true } : { defer: false }));
+      });
+    }
+    return out.concat(plan.slice(to));
+  }
+
+  // The `need=<COLOURS>` token for a committing segment: the non-generic pips every entry STILL
+  // QUEUED behind it wants, deduped to a letter set. "" when the continuation is empty or wants
+  // nothing specific, in which case the caller emits no token at all and the engine's untap pick is
+  // byte-identical to before.
+  //
+  // `pipsOf` is supplied by the caller because the two entry classes read their pips from different
+  // published fields: an ACTIVATION from its enumerated action's `cost_pips`, a hand CAST from the
+  // hand card's `cost` display string. Keeping the lookup out here is what makes this testable.
+  function untapNeed(remaining, pipsOf) {
+    const seen = {};
+    (remaining || []).forEach(p => {
+      const s = pipsOf(p) || '';
+      for (const ch of s) { if ('WUBRGC'.indexOf(ch) >= 0) { seen[ch] = true; } }
+    });
+    // A FIXED alphabet order, so the same continuation always produces the same token -- a saved
+    // reference replays the string byte-for-byte, and two orderings of one queue cannot disagree.
+    return 'WUBRGC'.split('').filter(c => seen[c]).join('');
+  }
+  function untapNeedToken(remaining, pipsOf) {
+    const s = untapNeed(remaining, pipsOf);
+    return s ? 'need=' + s : '';
+  }
+
+  // ---- FUSED "investigate & crack" ------------------------------------------------------------
+  // The engine's CLUE-FUSION doctrine (fuse create+spend, payability-gated) is a SEARCH shortcut and
+  // is explicitly excluded from human play -- "the viewer keeps per-action blinking and its explicit
+  // FINISH plan" (DecisionProviders.cpp's EdfAutoGoOffAfterCasts note). This is the human-queue
+  // analogue of the same idea: one gesture, two queued entries, no engine change at all.
+  //
+  // It has to be TWO entries rather than one fused line token because the Clue is not on the
+  // battlefield while the Investigate is being committed -- there is no `cast=Clue Token` for the
+  // engine to match yet. The crack is therefore DEFERRED: it validates against the decision the
+  // Investigate produces, where the Clue is real, individually addressable and (having no {T} in its
+  // sac cost) crackable the same turn. Both halves encode exactly as a hand-clicked pair would.
+  //
+  // `srcName` is the Investigate source (Conservatory / Kitchen); `verb`/`mode` come from the
+  // enumerated action as for any other activation, so a future investigate source with its own verb
+  // needs no change here.
+  var CLUE_TOKEN = 'Clue Token';
+  function fusedInvestigateEntries(srcName, opt) {
+    const o = opt || {};
+    return [
+      { name: srcName, src: srcName, kind: 'activate', verb: o.verb || 'cast',
+        mode: o.mode != null ? o.mode : null, fuse: 'clue' },
+      // The crack. `defer` puts it in the NEXT segment; `fused` marks it as the tail of a fused
+      // gesture so the plan bar can render the pair as one chip and remove them together.
+      { name: CLUE_TOKEN, src: CLUE_TOKEN, kind: 'activate', verb: 'cast',
+        defer: true, fused: 'clue' }
+    ];
+  }
+  // Removing either half of a fused pair removes both: half a fused gesture is an Investigate whose
+  // Clue is never cracked (or a crack with nothing to crack), and neither is what the human asked
+  // for. Returns the new plan.
+  function removeFusedAt(plan, i) {
+    const p = plan[i];
+    if (!p) { return plan; }
+    if (p.fuse === 'clue') {
+      const j = plan.findIndex((q, k) => k > i && q.fused === 'clue');
+      return plan.filter((q, k) => k !== i && k !== j);
+    }
+    if (p.fused === 'clue') {
+      let j = -1;
+      for (let k = i - 1; k >= 0; --k) { if (plan[k].fuse === 'clue') { j = k; break; } }
+      return plan.filter((q, k) => k !== i && k !== j);
+    }
+    return plan.filter((q, k) => k !== i);
   }
   function encodeSegments(plan) { return segmentParts(plan).map(encodeLine); }
   // The plan entries left after the FIRST segment commits -- what stays queued while the chain runs.
@@ -355,5 +482,9 @@
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
            stampPlanNums, isPreTap, preTapToken,
+           // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
+           // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.
+           segmentParts, isDeferred, repeatBlock, untapNeed, untapNeedToken,
+           fusedInvestigateEntries, removeFusedAt, CLUE_TOKEN,
            nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };
 });
