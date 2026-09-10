@@ -1043,8 +1043,37 @@ function jitteModeLabel(m){ return JITTE_MODE_LABEL[m] || ('mode ' + m); }
 // option carrying the recognised go-off count (> 3; see the engine's EnumerateMainPlans gate, which
 // only lets that count through when the line VERIFIABLY wins) is filtered out of the click path and
 // rendered by comboOffHtml instead. What is left on the card is one honest single activation.
+// ...and the CLUE gesture is a GLOBAL OPTION, not a per-click question (USER, after the first cut
+// of docs/design/viewer-line-macros.md: "I think I would much prefer to have the clue creation as a
+// global option. It's kind of a pain to constantly have pop-ups.").
+//
+// WHAT WENT WRONG, precisely. Offering "Investigate & crack" as a second entry beside the plain
+// Investigate made `opts.length` 2 for a land whose only ability is Investigate -- and toggleActivate
+// opens the picker on `opts.length > 1`. So a source that used to queue on ONE CLICK started opening
+// a modal EVERY time, on a deck whose whole loop is investigating over and over. The convenience
+// feature added a dialog to the most repeated click in the deck, which is the exact opposite of what
+// it was for.
+//
+// The fix is to collapse the pair back to ONE option here, chosen by the persistent global pref, so
+// the click is a click again in BOTH states. Note it is not "ON = fused, OFF = ask": OFF also queues
+// directly (the plain Investigate, i.e. the pre-feature behaviour). Neither setting pops a dialog,
+// because the SETTING is the choice -- that is what "global option" means, and leaving a picker on
+// the OFF path would just preserve the complaint for half the users.
+//
+// Filtered HERE rather than in the picker because this is the one chokepoint the whole click path
+// shares (toggleActivate, the bfThumb ⟳ badge, auraAttThumb), so the badge count and the picker can
+// never disagree about how many activations a click has to choose between.
 function clickActivationOptions(name){
-  return activationOptions(name).filter(o=>o.verb!=='equip' && !(o.blinkCount > 3));
+  const opts = activationOptions(name).filter(o=>o.verb!=='equip' && !(o.blinkCount > 3));
+  const wantFused = clueFuseEnabled();
+  // Only collapse when BOTH members of the pair are present, which is exactly the case the engine's
+  // `makes_clue` flag creates. A source with no investigate is untouched, and so is one where some
+  // future change offers only one of the two.
+  if (opts.some(o=>o.fuseClue) && opts.some(o=>o.makesClue && !o.fuseClue)) {
+    return opts.filter(o => (o.makesClue || o.fuseClue) ? (wantFused ? !!o.fuseClue : !o.fuseClue)
+                                                        : true);
+  }
+  return opts;
 }
 // Can THIS battlefield Equipment (permanent `srcNum`) be dragged onto a creature right now? Scoped
 // to the copy, so a loose Bonesplitter does not advertise the hosts that only the copy in hand (via
@@ -1092,7 +1121,11 @@ function toggleActivate(name){
   const cap = activatableSources()[name]||0, have = clickActivateCount(name);
   if (have >= cap) {                                  // at the cap -> clicking removes the last one
     const i = S.plan.map(p=>p.kind==='activate'&&p.src===name&&p.verb!=='equip').lastIndexOf(true);
-    if (i>=0) { S.plan.splice(i,1); flashHint(`Removed ${name}’s ability from this turn’s line.`); renderBoard(); }
+    // Through LB.removeFusedAt, not a bare splice: clicking a fused Investigate off has to take its
+    // deferred Clue crack with it. A bare splice left the crack queued as an orphan segment that
+    // would try to sacrifice a Clue nothing had made -- the same reason the chip's ✕ (removePlanAt)
+    // routes through the identical helper.
+    if (i>=0) { S.plan = LB.removeFusedAt(S.plan, i); flashHint(`Removed ${name}’s ability from this turn’s line.`); renderBoard(); }
     return;
   }
   // A BLINK's only real choice is WHICH permanent to exile-and-return, and that choice is about a
@@ -3893,6 +3926,32 @@ function surfaceDefault(type){ return !SURFACE_OFF_BY_DEFAULT.has(type); }
 function surfaceStore(){ try { return JSON.parse(localStorage.getItem('mdt_surface')||'{}'); } catch(e){ return {}; } }
 function surfaceEnabled(type){ const s=surfaceStore(); return (type in s) ? !!s[type] : surfaceDefault(type); }
 function setSurface(type, on){ const s=surfaceStore(); s[type]=!!on; try { localStorage.setItem('mdt_surface', JSON.stringify(s)); } catch(e){} }
+
+// ---- Persistent QUEUE options (localStorage) --------------------------------------------------
+// Same idiom as the surface store above, deliberately a SEPARATE key because it answers a different
+// question. `mdt_surface` is about an ENGINE decision -- "show the modal, or auto-reply the AI's
+// heuristic default?" -- and every entry there names a `dec.type`. This is about what a BOARD CLICK
+// queues, before any decision exists. Blurring the two into one store would put a queue preference
+// in a menu whose text ("The engine still evaluates every decision either way") is untrue of it.
+//
+// clue_fuse: ON => clicking an Investigate source queues the FUSED create+crack (investigate now,
+// crack the Clue it makes in the next auto-committed segment). OFF => it queues the plain
+// Investigate and the Clue sits on the board for you to crack whenever you like. Either way it is
+// ONE CLICK with NO dialog -- see clickActivationOptions for why that is the point.
+//
+// DEFAULT ON, on the user's own preference ("I would much prefer..."), and because the fused form is
+// what the deck's loop actually wants: the Clue exists to be cracked, and leaving it uncracked is
+// the rarer intent.
+const QUEUE_OPTS = {
+  clue_fuse: ['Investigate → make a Clue <b>and crack it</b> in one click',
+              'Off: clicking an Investigate land just makes the Clue; crack it yourself later. '
+              + 'Either way there is no pop-up — this setting IS the choice.'],
+};
+const QUEUE_OPT_DEFAULT = { clue_fuse: true };
+function queueOptStore(){ try { return JSON.parse(localStorage.getItem('mdt_queue')||'{}'); } catch(e){ return {}; } }
+function queueOptEnabled(k){ const s=queueOptStore(); return (k in s) ? !!s[k] : !!QUEUE_OPT_DEFAULT[k]; }
+function setQueueOpt(k, on){ const s=queueOptStore(); s[k]=!!on; try { localStorage.setItem('mdt_queue', JSON.stringify(s)); } catch(e){} }
+function clueFuseEnabled(){ return queueOptEnabled('clue_fuse'); }
 function toggleOptMenu(){ const m=$('optmenu'); if (m.style.display==='block'){ m.style.display='none'; return; } renderOptMenu(); m.style.display='block'; }
 function renderOptMenu(){
   const m=$('optmenu');
@@ -3901,9 +3960,22 @@ function renderOptMenu(){
   Object.keys(AUTO_RESOLVABLE).forEach(t=>{
     h+=`<label class="optrow"><input type="checkbox" data-t="${t}" ${surfaceEnabled(t)?'checked':''}/><span>${esc(AUTO_RESOLVABLE[t])}</span></label>`;
   });
+  // Queue shortcuts: what a BOARD CLICK queues. Its own section (and its own store) because the
+  // heading above -- "Checked = ask me (show the modal)" -- is about surfacing an engine decision,
+  // and these never surface anything at all.
+  h+=`<h3 style="margin-top:16px">Queue shortcuts</h3>`+
+     `<div class="sub">What a click on the board puts in your line. These never show a prompt either way — the setting is the choice.</div>`;
+  Object.keys(QUEUE_OPTS).forEach(k=>{
+    h+=`<label class="optrow"><input type="checkbox" data-q="${k}" ${queueOptEnabled(k)?'checked':''}/>`+
+       `<span>${QUEUE_OPTS[k][0]}<br/><small style="opacity:.7">${QUEUE_OPTS[k][1]}</small></span></label>`;
+  });
   h+=`<div class="pbtns" style="margin-top:12px"><span class="spacer"></span><button id="optclose" class="ghost">Close</button></div>`;
   m.innerHTML=h;
   m.querySelectorAll('input[data-t]').forEach(cb=>cb.onchange=()=>setSurface(cb.dataset.t, cb.checked));
+  // Re-render the board on change: the ⟳ badge and the click behaviour both read this pref, so an
+  // un-rendered board would keep offering the old gesture until something else happened to redraw.
+  m.querySelectorAll('input[data-q]').forEach(cb=>cb.onchange=()=>{
+    setQueueOpt(cb.dataset.q, cb.checked); renderBoard(); });
   const c=m.querySelector('#optclose'); if (c) c.onclick=()=>{ m.style.display='none'; };
 }
 // History label for a land-entry answer (v: 1 = untapped/pay, 0 = tapped).
