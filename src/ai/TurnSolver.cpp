@@ -30586,6 +30586,14 @@ inline std::atomic<unsigned long long> g_gdom_seen{0};
 inline std::atomic<unsigned long long> g_res_win{0}, g_res_nowin{0};
 inline int  WinDumpN() { static const int v = EnvInt("MTG_WINLESS_WINDUMP", 0); return v; }
 inline std::atomic<int> g_windumped{0};
+// MTG_LABEL_EDGE_TAIL -- EXACT elision of the horizon-edge continuation on a SINGLE-MAIN deck.
+// At `turn >= cutoff` the per-plan FSLineTail does an end-of-turn simulation and then calls
+// FSLineWin at turn+1, whose FIRST line refuses `turn > cutoff` outright -- so the whole
+// continuation is a no-win by construction, for every plan of every edge node. Answer-identical
+// AND budget-identical (that path consumes no work units before returning). DEFAULT ON; =0
+// restores the call. Scoped to the unbounded label search for the same reason the certificate is.
+inline bool EdgeTailElideOn() { static const bool v = EnvOn("MTG_LABEL_EDGE_TAIL", true); return v; }
+inline std::atomic<unsigned long long> g_edge_tail_elided{0};
 inline std::atomic<unsigned long long> g_cseed_tries{0}, g_cseed_wins{0}, g_cseed_plans{0};
 inline std::atomic<unsigned long long> g_seed_tries{0}, g_seed_wins{0}, g_seed_edge_tries{0},
                                        g_seed_edge_wins{0}, g_audit_violations{0},
@@ -30706,6 +30714,11 @@ struct DumperBody
         {
             std::fprintf(stderr, "=== LABEL GO-OFF DOM: residual-edge nodes=%llu ===\n",
                          g_gdom_seen.load());
+        }
+        if (g_edge_tail_elided.load() != 0)
+        {
+            std::fprintf(stderr, "=== LABEL EDGE TAIL: elided=%llu continuations ===\n",
+                         g_edge_tail_elided.load());
         }
         if (g_lgoff_roots.load() != 0)
         {
@@ -32447,6 +32460,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // unbounded label/matrix scope -- leaves this loop byte-identical.
     EotStateSet  eot_seen;
     EotStateSet* eot_ptr = WinlessDevelopActive(state, budget) ? &eot_seen : nullptr;
+    // EXACT EDGE-TAIL ELISION (MTG_LABEL_EDGE_TAIL). On a SINGLE-MAIN deck FSLineTail is nothing
+    // but "simulate end of turn, then FSLineWin at turn+1" -- and at `turn >= cutoff` that call's
+    // very first line refuses `turn > cutoff`. So every plan of every horizon-edge node pays a
+    // full end-of-turn simulation (untap, cleanup, the next turn's draw) to be told the no-win it
+    // was always going to be told. `min(cutoff, best.win_turn) <= cutoff` keeps the argument
+    // intact for the B&B-tightened cutoff the calls actually pass. Answer- and budget-identical:
+    // the elided path consumes no work units before returning. See winlesscert::EdgeTailElideOn.
+    const bool edge_tail_elide = !second_main && g_unbounded_label_search > 0
+                                 && state.turn_number >= cutoff
+                                 && winlesscert::EdgeTailElideOn();
     // Per-plan scratch board, hoisted so each plan reuses the previous plan's heap capacity
     // (see LoadPlanState). Nothing in the body stores a pointer/reference to it past its
     // iteration, and it is never moved from, so reuse cannot alias.
@@ -32746,9 +32769,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             return win;
         }
         int chose_release = -1;   // -1 not contested / 0 natural / 1 release / 2 hold
-        TurnSolver::SearchLine tail =
-            FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget,
-                       &dom_arch, eot_ptr);
+        TurnSolver::SearchLine tail{ max_turns + 1, {} };
+        if (edge_tail_elide)
+        {
+            if (winlesscert::StatsOn())
+            { winlesscert::g_edge_tail_elided.fetch_add(1, std::memory_order_relaxed); }
+        }
+        else
+        {
+            tail = FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
+                              tt, lc, budget, &dom_arch, eot_ptr);
+        }
         if (dork_contested)
         {
             chose_release = 0;
