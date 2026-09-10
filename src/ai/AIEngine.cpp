@@ -34,25 +34,65 @@
 // record whenever a later turn's verified win turn exceeds one proved earlier.
 static const bool s_flag_nonconv = EnvOn("MTG_FLAG_NONCONV");
 
-// #10 cast-order side-channel: reorder a committed plan's non-sacrifice hand casts to the
-// human's pinned name order and flag searched_order so ApplyPlanDirect executes them in vector
-// order (no CastOrderRank re-sort). Only the non-sac CastFromHand actions move -- sac casts,
-// graveyard casts, vial activations and the land keep their positions (they run in separate
-// canonical loops regardless). Names in `order` are matched greedily (duplicate copies match in
-// listed order); any non-sac cast NOT named in `order` keeps its original relative position,
-// appended after the pinned ones. Empty `order` (the common / no-reorder case) is a no-op, so
-// existing references -- which pass no --cast-order -- stay byte-identical.
-static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::string>& order)
+// HUMAN LINE ORDER (MTG_HUMAN_LINE_ORDER, default ON; =0 restores the cast-only pin below).
+//
+// The whole line, applied as-is. USER 2026-09-10, EldraziDisplacerFlicker: "the order is off for
+// Emiel activations and Kitchen activations. This means that I cannot draw and then untap the
+// kitchen without going to an extra breakpoint ... Ideally the order I provide would be followed
+// as-is. It's up to me to make sure the order is correct."
+//
+// What was wrong: `--cast-order` pinned the HAND CASTS only. A plan's board activations ran in the
+// trailing pass, in whatever order the ENUMERATOR emitted them -- which is battlefield-index order,
+// i.e. the order those permanents happened to enter play, a fact about the past with no bearing on
+// the turn. Measured on seed 1 gi0 turn 6: the menu offers `(Emiel blink, Clue Token crack)` and
+// NEVER the reverse, so `cast=Clue Token;blink=Emiel...` and `blink=Emiel...;cast=Clue Token` both
+// accept plan 164 and both run the blink first. "Crack the Clue to draw, THEN blink to untap the
+// land" was therefore only reachable as TWO committed lines -- the extra decision point the user
+// is describing.
+//
+// With the marker (below) present, `order` is the FULL declared sequence and the reorderable slot
+// set widens from "non-sac hand casts" to "non-sac hand casts + every board activation"
+// (TurnSolver::IsTrailingActivation). Sac casts, graveyard casts, Vial deploys, SacForMana,
+// DigDraw and the land keep their positions -- they run in separate canonical loops and the viewer
+// has no way to sequence them against the rest.
+//
+// Names in `order` are matched greedily (duplicate copies match in listed order); any slot NOT
+// named keeps its original relative position, appended after the pinned ones. Empty `order` (the
+// common / no-reorder case) is a no-op, so existing references -- which pass no --cast-order --
+// stay byte-identical.
+static const bool s_human_line_order = EnvOn("MTG_HUMAN_LINE_ORDER", true);
+
+// The first element of a `--cast-order` list, when the viewer is declaring the FULL action order
+// (casts AND board activations) rather than the historical cast-only pin. No MTG card name is
+// "*", so this cannot collide with a real entry, and every reference saved before 2026-09-10
+// carries a cast-only list with no marker -> it takes the old branch verbatim. A marker rather
+// than an inferred "did the list happen to cover every slot?" test, because inference is exactly
+// how an old cast-only list would get silently promoted into a full-order one and shuffle a
+// saved game's activations.
+static const char* const kFullOrderMarker = "*";
+
+static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::string>& order_in)
 {
+    if (order_in.empty()) { return; }
+    const bool full_order = s_human_line_order && HumanPlayActive()
+                         && order_in.front() == kFullOrderMarker;
+    const std::vector<std::string> order(order_in.begin() + (full_order ? 1 : 0), order_in.end());
     if (order.empty()) { return; }
-    // Positions in plan.actions that hold a reorderable (non-sac hand) cast.
+    // Positions in plan.actions that hold a reorderable action: the non-sac hand casts always, and
+    // under the full-order marker the board activations too.
     std::vector<size_t> slots;
+    bool any_activation = false;
     for (size_t i = 0; i < plan.actions.size(); ++i)
     {
         const auto& a = plan.actions[i];
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
         { slots.push_back(i); }
+        else if (full_order && TurnSolver::IsTrailingActivation(a.kind))
+        { slots.push_back(i); any_activation = true; }
     }
+    // The interleaved apply is only needed when an ACTIVATION is in the sequence; a cast-only
+    // full-order list reorders exactly as the historical pin did and takes the historical apply.
+    plan.human_action_order = any_activation;
     if (slots.size() < 2) { plan.searched_order = true; return; }  // nothing to reorder, but honour order
     // Greedily pick, for each name in `order`, the first not-yet-used slot whose card matches.
     std::vector<size_t> remaining = slots;   // slot positions still to place
@@ -65,7 +105,9 @@ static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::stri
             { seq.push_back(plan.actions[*it]); remaining.erase(it); break; }
         }
     }
-    // Any non-sac casts the human didn't name keep their original relative order, after the pinned ones.
+    // Any reorderable action the human didn't name keeps its original relative order, after the
+    // pinned ones. (An unnamed action is one the viewer could not express, never one it dropped:
+    // a plan whose action multiset differs from the queued line is not pinned at all.)
     for (size_t pos : remaining) { seq.push_back(plan.actions[pos]); }
     // Write the reordered actions back into the same slot positions.
     for (size_t k = 0; k < slots.size(); ++k) { plan.actions[slots[k]] = seq[k]; }

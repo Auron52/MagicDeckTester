@@ -534,6 +534,24 @@ public:
         // MTG_UNPRUNED), which dedups orderings by end-of-phase state.
         bool searched_order = false;
 
+        // HUMAN-DECLARED ACTION ORDER (viewer only; MTG_HUMAN_LINE_ORDER). searched_order pins the
+        // order of the hand CASTS only -- board activations still run in ApplyPlanDirect's trailing
+        // pass, i.e. after every cast and among themselves in whatever order the ENUMERATOR emitted
+        // them (battlefield index order, which is just the order the permanents happened to enter).
+        // That is what made "crack the Clue to draw, THEN blink Emiel to untap the land" inexpressible
+        // in one line on EldraziDisplacerFlicker: the Clue sorts after Emiel, so the human had to
+        // commit two separate lines and eat an extra decision point (USER 2026-09-10, "the order is
+        // off for Emiel activations and Kitchen activations ... Ideally the order I provide would be
+        // followed as-is. It's up to me to make sure the order is correct.").
+        //
+        // When true, ApplyPlanDirect walks `actions` ONCE in vector order and dispatches each one
+        // where it stands -- casts and board activations interleaved -- instead of casts-then-
+        // trailing-pass. Set ONLY by AIEngine's --cast-order side channel (ReorderPlanCasts) under
+        // HumanPlayActive(); the search never sets it, so every rollout / autonomous / GT apply is
+        // byte-identical. Deliberately absent from PlanSignature and PlansEqual for the same reason:
+        // it is not part of the search's plan space.
+        bool human_action_order = false;
+
         // Casts this ORDERING declares but provably cannot make -- filled only by the cast-ordering
         // enumeration, by watching the apply on its scoring copy. It is a LABEL, never a filter: two
         // orderings of one cast set can differ entirely in what actually resolves (Living Wish before
@@ -1102,6 +1120,18 @@ public:
     // scarcity rule and why the batch pre-pay cannot cover this case.
     static std::vector<int> ManaUnlockColorReserve(const GameState& state,
                                                    const std::vector<Action>& acts);
+
+    // Is this action kind applied by ApplyPlanDirect's TRAILING activation pass -- i.e. is it a
+    // BOARD activation (a permanent already in play, or a from-hand ability that is not a cast)
+    // rather than a hand cast, a land, a Vial deploy or a payment detail?
+    //
+    // ONE list, consumed by two places that must not drift: the trailing dispatcher itself (whose
+    // else-if chain this mirrors, and which is where the definition lives) and AIEngine's
+    // ReorderPlanCasts, which needs to know which of a plan's actions the human can put in an
+    // order at all. A kind missing here is simply not reorderable by the human -- it keeps its
+    // canonical pass -- so the failure mode is "the viewer can't sequence it", never a double
+    // apply or a dropped action.
+    static bool IsTrailingActivation(Action::Kind k);
 
     // COLOUR-CRITICAL reserve (MTG_COLOR_RESERVE, default off). The batch pre-pay solves the turn's
     // mana JOINTLY, but it declines on most interesting turns -- producers, {X} spells, per-target
