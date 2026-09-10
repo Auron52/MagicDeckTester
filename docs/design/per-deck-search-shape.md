@@ -88,7 +88,7 @@ free, it is recomputation, so under a FIXED unit budget the same decision trunca
 can commit a different line. "Result-neutral memo" holds only at an unlimited budget. The earlier reading
 that the cache is play-neutral came from Dragonstorm alone and does not generalise.
 
-**Finding 12 -- the screen's leafless arm is NOT the play a deck ships**
+**Finding 12 -- the screen's leafless arm is NOT the play a deck ships, AND IT CAN INVERT A VERDICT**
 
 `value_profile: "noleaf"` (how every leafless arm in the screen was run) substitutes a constant stand-in and
 **never loads the model file**, so the sidecar's escalation parameters -- trust depth, the fallback crossover,
@@ -97,6 +97,20 @@ and those parameters stay live. The two are near-equivalent but not identical: o
 the stand-in route costs 0.967x the shipped route and 5 games in 2,000 end differently. Small enough that the
 menu's conclusions hold, but it means **an adoption must be re-measured on the sidecar route** -- which is
 what Fluctuator's was (see its `value_play.note`), and what `chain_fix5.sh`'s route check exists to catch.
+
+**On Creature Giving the two routes disagree about the SIGN.** Stand-in route (the screen): 0.92x units with
+17 net games better, z +2.3 -- a clean win, flagged BETTER. Sidecar route (what the deck would ship): 0.752x
+units but **14 better / 35 worse, z -3.0**, mean +0.0053 -- a rejection. The cause is visible in the deck's
+own block: `escalation_cap` 5, `beam_width` 3, `escalation_r` 21, `escalation_fresh_frac` 0.5, every one of
+them tuned FOR the model leaf. `leaf: "none"` keeps them live under a leafless probe they were not fitted to;
+`value_profile: "noleaf"` silently discards them, and that is why the stand-in looked good. So a deck with a
+TUNED value_play block cannot take shape #2 or #3 by reading a screen row -- the row is measuring a
+configuration the deck cannot ship. Re-measure, or retune the block for the leafless probe.
+
+**Consequence for reading the table below:** a `<== BETTER` row is a CANDIDATE, not a decision. Of the three
+the screen flagged, Fluctuator's held on the sidecar route and was adopted, Dragonstorm's became a trade
+(0.958x / z +0.9 at d5b20, 0.740x / z -1.3 at d3b10) and is staged, and Creature Giving's inverted and was
+rejected.
 
 **A LABEL to distrust, for the same reason.** A screen arm named `heur` means "the plain rollout ladder" only
 if the job actually pins `value_model: false`. For Fluctuator -- the one deck in the screen with no trusted

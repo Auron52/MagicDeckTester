@@ -3414,3 +3414,27 @@ at the third tier. `d5_s4004`: average IDENTICAL (3.6280), digest changed — tw
 same or better score. `d5_s5005`: 3.6320 → 3.6400, from two games classified CHURN (gi117 5→6, gi175 6→7,
 both recovering at 4x AND 16x). d0 untouched. Accepted with the note. All three tiers now sit on the
 adopted shape; `check_gt_logs.py` 456 consistent / 0 stale / 0 missing.
+
+### 2026-09-10k — a deck was MISSING from the menu (parser bug), and its candidate inverted on the route check
+
+**One of 19 decks never appeared in the menu table.** `shape_menu.py` split a job name positionally
+(`<deck>_<arm>_d<D>b<B>_s<seed>` with a non-greedy first group), but BOTH halves contain underscores:
+`creature_giving_ship_d5b20_s800000` parsed as deck `creature`, arm `giving_ship`. No arm matched the menu
+vocabulary, so the deck printed no rows and vanished — silently, because a deck with no recognised arm looks
+exactly like a deck that was not screened. Fixed by matching the arm as the longest suffix from an explicit
+`ARM_VOCAB` and REPORTING any job line whose arm is unrecognised, so the next hole announces itself.
+
+**The hidden row was not a null.** Creature Giving, stand-in route: esc_nl 0.92x units, 17 net games better,
+z +2.3 at d5b20 and exactly neutral at d3b10 — flagged BETTER, i.e. an adoption candidate by the rule.
+
+**And on the sidecar route it INVERTS.** 8 x 500 games against the shipped deck: d5b20 **0.752x units but 14
+better / 35 worse, z −3.0**, mean +0.0053; d3b10 0.975x with zero games changed. Rejected. The cause is in
+the deck's own block — `escalation_cap` 5, `beam_width` 3, `escalation_r` 21, `escalation_fresh_frac` 0.5,
+all tuned FOR the model leaf. `leaf: "none"` keeps them live under a leafless probe they were never fitted
+to, while `value_profile: "noleaf"` discards them entirely, which is why the stand-in looked good. This
+promotes finding 12 from "a 3% caveat" to "can reverse the sign", and it means **a deck with a tuned
+value_play block cannot take the leafless shapes off a screen row at all** without a re-measure or a retune.
+
+**Scoreboard of the three BETTER rows the screen flagged, after the route check:** Fluctuator held and was
+ADOPTED; Dragonstorm became a trade and is STAGED; Creature Giving inverted and is REJECTED. One in three
+survived — which is the argument for the route check existing.

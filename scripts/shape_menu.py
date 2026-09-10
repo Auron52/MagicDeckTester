@@ -48,8 +48,25 @@ CFGS = ("d5b20", "d3b10")
 # tolerance the rule was first written with, so on the heavy decks a small mean delta is noise. The mean is
 # kept only as a MAGNITUDE guard (a shape losing a fifth of a turn is rejected whatever its z).
 Z_TOL, Q_MAG, U_TOL = -2.0, 0.005, 1.02
-JOB = re.compile(r"(\w+?)_((?:v_|nl_)?\w+?)_(d\d+b\d+)_s(\d+)(_rep)?: played=\d+ avg=([\d.]+) "
-                 r"digest=\w+ ms=(\d+)")
+JOB = re.compile(r"(\S+)_(d\d+b\d+)_s(\d+)(_rep)?: played=\d+ avg=([\d.]+) digest=\w+ ms=(\d+)")
+# A job name is <deck>_<arm>_d<D>b<B>_s<seed>, and BOTH halves contain underscores ("creature_giving",
+# "nl_sfit_rx"), so the split cannot be positional. Splitting on the first underscore silently renamed
+# `creature_giving`'s arms (deck "creature", arm "giving_ship") and DROPPED that deck from the menu
+# entirely -- 1 of 19, invisible, because a deck with no recognised arm just prints no rows. The arm is
+# therefore matched as the longest suffix from a known vocabulary, and anything unmatched is REPORTED.
+ARM_VOCAB = ["ship", "heur", "escnl", "escnl_rx", "escnl_rx2", "escnlv", "escnlv2", "escnlv_rx",
+             "emul", "emulv", "emulnl", "emulnlv", "probeonly",
+             "v_single", "v_sres", "v_sres2", "v_sfit",
+             "nl_single", "nl_sres", "nl_sres2", "nl_sres2_rx", "nl_sfit", "nl_sfit_rx", "nl_sfit_rx2"]
+
+
+def split_job(stem):
+    """'creature_giving_nl_sfit_rx' -> ('creature_giving', 'nl_sfit_rx'); unknown arm -> (None, None)."""
+    best = None
+    for a in ARM_VOCAB:
+        if stem.endswith("_" + a) and (best is None or len(a) > len(best)):
+            best = a
+    return (stem[:-len(best) - 1], best) if best else (None, None)
 
 
 def load(name, col):
@@ -67,13 +84,19 @@ def load(name, col):
 
 
 def read_runs():
-    res = {}
+    res = {}; unknown = collections.Counter()
     for f in FILES:
         if not os.path.exists(f): continue
         for line in open(f):
             m = JOB.match(line)
-            if m and not m.group(5):
-                res[(m.group(1), m.group(2), m.group(3), int(m.group(4)))] = (float(m.group(6)), int(m.group(7)))
+            if not m or m.group(4): continue
+            dk, arm = split_job(m.group(1))
+            if arm is None: unknown[m.group(1)] += 1; continue
+            res[(dk, arm, m.group(2), int(m.group(3)))] = (float(m.group(5)), int(m.group(6)))
+    if unknown:
+        print(f"!! {sum(unknown.values())} job line(s) had an arm not in ARM_VOCAB and were IGNORED -- add them"
+              f" or the deck silently vanishes from the menu:\n   " +
+              ", ".join(sorted(unknown)[:8]) + ("..." if len(unknown) > 8 else "") + "\n")
     return res
 
 
