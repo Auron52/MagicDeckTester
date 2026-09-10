@@ -2726,6 +2726,32 @@ bool IsHumanPreTapToken(const std::string& tok)
     return tok.compare(0, 4, "tap=") == 0;
 }
 
+// ---- The viewer's QUEUED-CONTINUATION untap demand (docs/design/viewer-line-macros.md) --------
+// See ManaPayment.h for the token format and why the continuation has to be DECLARED.
+
+thread_local int g_human_untap_need = 0;
+
+bool IsHumanUntapNeedToken(const std::string& tok)
+{
+    return tok.compare(0, 5, "need=") == 0;
+}
+
+int ParseHumanUntapNeedToken(const std::string& tok)
+{
+    if (!IsHumanUntapNeedToken(tok)) { return 0; }
+    int mask = 0;
+    // Reads the SAME letter alphabet the pre-tap token and the decision JSON's `taps` affordance
+    // use, so the three cannot drift. An unrecognised letter is skipped rather than rejected: a
+    // demand is a PREFERENCE (it biases one untap pick), so the worst a typo can do is ask for
+    // less than the human meant -- unlike a pre-tap, where guessing is the failure being fixed.
+    for (std::size_t i = 5; i < tok.size(); ++i)
+    {
+        const char* hit = std::strchr(kPreTapColorLetters, tok[i]);
+        if (hit != nullptr && *hit != '\0') { mask |= 1 << static_cast<int>(hit - kPreTapColorLetters); }
+    }
+    return mask;
+}
+
 bool ParseHumanPreTapToken(const std::string& tok, TurnSolver::PreTap& out)
 {
     if (!IsHumanPreTapToken(tok)) { return false; }

@@ -606,6 +606,17 @@ public:
         // part of the search's plan space, it is a payment instruction riding on top of one.
         std::vector<PreTap> human_pre_taps;
 
+        // HUMAN QUEUED-CONTINUATION UNTAP DEMAND (viewer only; MTG_UNTAP_LINE_DEMAND) -- a bitmask
+        // over static_cast<int>(Color) naming the colours the human's REMAINING queued line still
+        // wants, declared by a `need=<COLOURS>` entry in the --cast-order full-order list. Bound
+        // around the apply (HumanUntapNeedScope) so EtbUntapLands can divert ONE untap pick toward
+        // a land that serves the continuation -- the macro case, where the continuation is known
+        // exactly. 0 for every plan that declared none, which is every autonomous apply and every
+        // rollout, so they are byte-identical. Absent from PlanSignature/PlansEqual for the same
+        // reason human_pre_taps is: it is an instruction riding on a plan, not part of the search's
+        // plan space.
+        int human_untap_need = 0;
+
         // Casts this ORDERING declares but provably cannot make -- filled only by the cast-ordering
         // enumeration, by watching the apply on its scoring copy. It is a LABEL, never a filter: two
         // orderings of one cast set can differ entirely in what actually resolves (Living Wish before

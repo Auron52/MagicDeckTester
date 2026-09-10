@@ -858,6 +858,13 @@ inline thread_local const int* g_generic_spend_budget = nullptr;
 // below can read it -- see the MTG_LINE_SURPLUS_GENERIC note at the drain site.
 extern thread_local ManaCost g_line_unpaid_cost;
 
+// Colours the human's REMAINING QUEUED line declared it still wants (a bitmask over
+// static_cast<int>(Color); defined in ManaPayment.cpp, bound around both plan-apply paths by
+// HumanUntapNeedScope). Redeclared here so EtbUntapLands' continuation-demand promotion below can
+// read it -- the same arrangement g_line_unpaid_cost has, one line up, and for the same reason:
+// the demand is decided in ai/ and consumed in core/. 0 == none declared == inert.
+extern thread_local int g_human_untap_need;
+
 struct GenericSpendBudgetScope
 {
     const int* prev;
@@ -13113,6 +13120,82 @@ inline void EtbUntapLands(GameState& state, int controller, int count, bool log_
             {
                 std::swap(tapped[n - 1], tapped[best_c]);
                 std::swap(is_c[n - 1], is_c[best_c]);
+            }
+        }
+    }
+    // QUEUED-CONTINUATION PROMOTION (docs/design/viewer-line-macros.md; MTG_UNTAP_LINE_DEMAND=0
+    // restores). The starved-{C} rule above is the same shape hardcoded to one colour and to a
+    // board-inferred sink; this is the human SAYING what the rest of their queue wants.
+    //
+    // WHY THE UNTAP PICK NEEDS TO HEAR IT. The ranking above prices lands in raw mana, and between
+    // two iterations of a macro that is the wrong currency for the same reason the {C} note gives:
+    // the continuation needs SPECIFIC pips, and a high-yield land of a colour the continuation does
+    // not want is surplus. USER's case is a queued `[draw, blink]` block -- if the next queued
+    // action wants {C} or {U}, untapping a double-Overgrowth {G} land serves nothing.
+    //
+    // BOUNDED EXACTLY LIKE THE STARVED RULE, and deliberately so: at most ONE pick moves, and only
+    // when the chosen set covers NONE of the still-unmet demand. Demand is netted against the float
+    // first, so a colour the human already holds is not demand at all -- otherwise a standing
+    // `need=` would re-divert a pick every iteration and bleed yield for mana already in the pool.
+    // A PREFERENCE, never a refusal: if no land below the cut can serve, the yield order stands.
+    // The mask is tested FIRST: it is a thread_local int that is 0 in every rollout and every
+    // autonomous apply (nothing but the viewer's --cast-order lift ever writes it), so the whole
+    // block short-circuits on one load there -- the same "an autonomous game pays a single bool"
+    // discipline the c_sink_live probe above follows.
+    if (g_human_untap_need != 0 && n > 0 && HumanUntapDemandEnabled() && HumanPlayActive())
+    {
+        // Still-unmet demand: a demanded colour the float cannot already pay from. `wild` is
+        // deliberately NOT counted as cover -- a wild unit cannot pay a {C} pip (CR 107.4c, the
+        // ManaPool::wild_c note), so treating it as cover is exactly the mis-model that makes a
+        // Fertile Ground look like a Displacer activation.
+        const int have[6] = { state.floating_mana.white, state.floating_mana.blue,
+                              state.floating_mana.black, state.floating_mana.red,
+                              state.floating_mana.green, state.floating_mana.colorless };
+        int unmet = 0;
+        for (int c = 0; c < 6; ++c)
+        { if ((g_human_untap_need & (1 << c)) != 0 && have[c] == 0) { unmet |= 1 << c; } }
+        if (unmet != 0)
+        {
+            auto serves = [&](int bi) -> bool
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(
+                    state.battlefield[static_cast<std::size_t>(bi)].card);
+                if (d == nullptr) { return false; }
+                // UnconditionalProduces, like both rules above: an aura bonus rides the host's tap
+                // in the AURA's colour, so a Wild Growth must not make its host count as a {U}
+                // source for a continuation that needs {U}.
+                for (Color pc : UnconditionalProduces(*d))
+                { if ((unmet & (1 << static_cast<int>(pc))) != 0) { return true; } }
+                return false;
+            };
+            bool covered = false;
+            for (int i = 0; i < n; ++i) { if (serves(tapped[i].second)) { covered = true; break; } }
+            if (!covered)
+            {
+                // The BEST serving land below the cut displaces the WORST member of the chosen set
+                // -- the same bounded trade the starved rule makes, and the same reason: under a
+                // declared continuation the marginal non-serving yield is surplus.
+                for (int i = n; i < static_cast<int>(tapped.size()); ++i)
+                {
+                    if (!serves(tapped[i].second)) { continue; }
+                    // The promotion is otherwise invisible from outside the process: the untapped
+                    // set is observable on the next frame, but "the demand moved this pick" and
+                    // "the yield order happened to pick it" look identical there. Default off.
+                    static const bool s_trace = EnvOn("MTG_UNTAP_DEMAND_TRACE");
+                    if (s_trace)
+                    {
+                        std::fprintf(stderr, "[untap-demand] need=%d unmet=%d promote %s over %s\n",
+                                     g_human_untap_need, unmet,
+                                     state.battlefield[static_cast<std::size_t>(tapped[i].second)]
+                                         .card.m_name.str().c_str(),
+                                     state.battlefield[static_cast<std::size_t>(
+                                         tapped[static_cast<std::size_t>(n - 1)].second)]
+                                         .card.m_name.str().c_str());
+                    }
+                    std::swap(tapped[static_cast<std::size_t>(n - 1)],
+                              tapped[static_cast<std::size_t>(i)]);
+                    break;
+                }
             }
         }
     }

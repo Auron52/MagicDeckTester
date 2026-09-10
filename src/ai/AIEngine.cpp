@@ -104,6 +104,22 @@ static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::stri
         }
         order = std::move(names);
     }
+    // QUEUED-CONTINUATION UNTAP DEMAND (docs/design/viewer-line-macros.md). Lifted out on the same
+    // principle as the pre-taps above -- everything below keeps seeing a pure list of card names --
+    // but it carries NO position: it describes the rest of the human's QUEUE (the segments still to
+    // be committed), not a point inside this one, so it holds for the whole apply.
+    plan.human_untap_need = 0;
+    if (HumanUntapDemandEnabled() && HumanPlayActive())
+    {
+        std::vector<std::string> names;
+        names.reserve(order.size());
+        for (const std::string& tok : order)
+        {
+            if (!IsHumanUntapNeedToken(tok)) { names.push_back(tok); continue; }
+            plan.human_untap_need |= ParseHumanUntapNeedToken(tok);
+        }
+        order = std::move(names);
+    }
     // A TAPS-ONLY list (no names left after the lift) still delivers its taps -- they are already
     // recorded on the plan above -- and returns here WITHOUT setting searched_order, deliberately.
     // Setting it would flip an unordered plan onto the explicit-order apply route, i.e. swap the
@@ -2977,6 +2993,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // ask the identical question. Each cast decrements it as it pays (CastSpellFromHand).
             // Zero for every plan with no hand cast, and inert for every deck with no mid-line sink.
             LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+            // (No HumanUntapNeedScope here, deliberately: this is the AUTONOMOUS executor branch,
+            // and a human-pinned plan never reaches it -- the external-chooser path above applies
+            // `chosen` through TurnSolver::ApplyPlan -> ApplyPlanDirect, which binds the demand at
+            // the point it binds the hold above. Binding a provably-zero mask on the autonomous
+            // path would be dead code on the one path that must stay byte-identical.)
 
             // MTG_LANDDROP_STATS (diagnostic): does the COMMITTED plan carry a searched land drop?
             // TurnSolver's counter cannot answer this -- every land play it sees is search-internal
