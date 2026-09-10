@@ -16888,6 +16888,85 @@ int EldraziFlickerProvider::CastOrderRank(const GameState& s, const CardDefiniti
     return GenericProvider::CastOrderRank(s, def);
 }
 
+// PLAN VALUE IN MANA-EQUIVALENTS -- A/B SCAFFOLDING, BOTH HALVES DEFAULT OFF.
+//
+// THE DEFECT THIS ARM TESTS. `TurnSolver::EvalCard` is the plan-ordering heuristic, and it prices a
+// creature as `power x ExpectedAttacks x DMG` -- a COMBAT CLOCK. This deck has no combat plan: it
+// wins by an Eldrazi Displacer / Emiel blink loop cashed into a drain, a deck-out or a Shivan Gorge,
+// and the creatures are the loop's outlet and its untappers. Everything that is NOT a creature, a
+// burn spell or a draw spell falls through EvalCard's template branches to the generic one-unit
+// floor -- which is where the deck's land Auras land, even though ramp is the resource the whole
+// kill is bottlenecked on (this provider's own CastOrderRank already says so: land Auras rank ahead
+// of every other card because "it feeds the rest").
+//
+// The consequence is measured, not supposed. `MTG_FS_ROOT_DUMP` at the two divergence nodes named in
+// docs/design/edf-shortfall-classification.md shows both plans reaching the SAME searched tail, so
+// the whole decision falls to `plan.value`:
+//
+//   s10_gi9 T2   win=5  val=1200 Eldrazi Displacer   vs   win=5  val=100 Fertile Ground
+//   s11_gi10 T3  win=8  val=1200 Emiel the Blessed   vs   win=8  val=200 Fertile Ground + Overgrowth
+//
+// and in both the human played the ramp. (The classification doc attributes `val` to the profile's
+// `card_scores`; it does not come from there -- `plan.value` is the sum of EvalCard over the plan's
+// casts and never reads `card_scores`. 1200 is 3 power x 4 attacks x 100 for the Displacer on T2 and
+// 4 x 3 x 100 for Emiel on T3.)
+//
+// THE TWO HALVES, separately selectable so the 2x2 can attribute the effect rather than assume it:
+//   MTG_EDF_VAL_RAMP    a land Aura is worth the MANA it adds, for the turns it will be tapped:
+//                       `land_aura_extra_mana x remaining x DMG`. `remaining` is EvalCard's own
+//                       ExpectedAttacks horizon (that function is private to TurnSolver, so the one
+//                       expression is repeated here rather than exported) -- ramp is worth less the
+//                       later it lands, for the same reason a creature is.
+//   MTG_EDF_VAL_COMBO   a creature is worth its COMBO ROLE instead of its clock: an ETB untapper is
+//                       worth the mana it refunds (`etb_untap_lands`, which is literally a mana
+//                       count), an outlet or a repeatable {C} sink is worth a flat three
+//                       mana-equivalents (the one judgement constant here -- "deploying a piece is
+//                       worth about a Fertile Ground's first three turns"), and a body with no
+//                       combo role is worth the generic floor, because this deck will never attack
+//                       with it.
+//
+// SCALE IS THE POINT, and it is why neither half flips these decisions alone: no honest ramp price
+// beats 1200 on turn 2 (one extra mana would have to be worth twelve damage), and no honest combo
+// price for an outlet sinks below the 100 floor a land Aura gets today. The mis-pricing is a
+// mismatch between the two sides, so only the pair can correct it. Predicted, then measured.
+//
+// GENERIC BY CONSTRUCTION: every tier is read from card PARAMS, never a name, so this is correct for
+// any flicker deck this provider covers. Returns false for anything it does not own (lands, tutors,
+// Training Grounds) and false outright when neither half is selected, which is what makes the whole
+// change byte-identical with the levers unset.
+bool EldraziFlickerProvider::ComboCardValue(const GameState& s, const CardDefinition& def,
+                                            int dmg_unit, int& out) const
+{
+    static const bool s_ramp_env  = EnvOn("MTG_EDF_VAL_RAMP");    // DEFAULT OFF; =1 enables
+    static const bool s_combo_env = EnvOn("MTG_EDF_VAL_COMBO");   // DEFAULT OFF; =1 enables
+    const bool ramp  = heurarm::Flag(heurarm::EDF_VAL_RAMP,  s_ramp_env);
+    const bool combo = heurarm::Flag(heurarm::EDF_VAL_COMBO, s_combo_env);
+    if (!ramp && !combo) { return false; }
+
+    if (ramp && def.params.is_land_aura && def.params.land_aura_extra_mana > 0)
+    {
+        // EvalCard::ExpectedAttacks, kept in lockstep by this comment: +1 includes the current turn,
+        // clamped to [1,5] against the same assumed 6-turn game length.
+        const int remaining = std::max(1, std::min(6 - s.turn_number + 1, 5));
+        out = def.params.land_aura_extra_mana * remaining * dmg_unit;
+        return true;
+    }
+    if (combo && def.card.IsCreature())
+    {
+        // The untapper IS ramp: `etb_untap_lands` lands refunded is `etb_untap_lands` mana back,
+        // this turn, and again on every blink. Priced in the same unit as the Auras above.
+        if (def.params.etb_untap_lands > 0)
+        { out = def.params.etb_untap_lands * dmg_unit; return true; }
+        // The outlet and the two repeatable {C} sinks -- the pieces the loop cannot run without.
+        if (def.params.blink_cost.has_value() || def.params.drain_cost.has_value()
+            || def.params.exile_opponent_top_cost.has_value())
+        { out = 3 * dmg_unit; return true; }
+        out = dmg_unit;   // a body with no combo role: the generic floor, because it never attacks
+        return true;
+    }
+    return false;
+}
+
 // WHICH card the wish takes -- the RANKING that a narrow width rests on.
 //
 // The width-8 that ships today is a COVERAGE patch, not a policy: the generic hook returns the pool

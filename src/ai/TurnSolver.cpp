@@ -4043,6 +4043,20 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
 {
     constexpr int DMG = 100;  // points per damage-equivalent
 
+    // PROVIDER-OWNED VALUE, ahead of the per-template branches (DecisionProvider::ComboCardValue).
+    // ArchetypeCardValue below is only reachable for cards that fall THROUGH those branches, so a
+    // provider whose deck disagrees with the generic creature/burn/draw estimate has no way to say
+    // so there. The base implementation returns false, so every provider that does not override it
+    // -- which today is every provider but EldraziFlicker's, and that one only when a lever names an
+    // arm -- leaves this function byte-identical.
+    {
+        int combo_value = 0;
+        if (ResolveProvider(state).ComboCardValue(state, def, DMG, combo_value))
+        {
+            return combo_value;
+        }
+    }
+
     if (def.tmpl == CardTemplate::DirectDamage)
     {
         // Penalise spells with additional costs so equivalent-damage alternatives
