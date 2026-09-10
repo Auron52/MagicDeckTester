@@ -1946,7 +1946,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         //   offer_sac(plans)  -- sac-to-draw digs actually OFFERED among the enumerated plans
         //     (AppendHumanPlayDigPlans additionally gates on the {1}-style sac cost being affordable
         //     THIS phase). This is the affordability signal.
-        static const bool s_segment_always = EnvOn("MTG_PLAY_SEGMENT_ALWAYS", true);
+        // Shared reader (EngineFlags.h): the enumerator's saturated subset collapse reads the SAME
+        // flag, because its soundness is "the dropped combined plan is reachable as two commits" --
+        // which is exactly what this loop provides. Two per-TU copies would let one be turned off
+        // while the other stayed armed.
+        const bool s_segment_always = PlaySegmentAlwaysEnabled();
         auto inplay_sac = [](const GameState& gs) -> std::set<std::string>
         {
             std::set<std::string> s;

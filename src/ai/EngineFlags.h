@@ -726,3 +726,20 @@ inline bool UnbudgetedLeafMemoOn()
     static const bool v = EnvOn("MTG_UNBUDGETED_LEAF_MEMO", true);
     return v;
 }
+
+// MTG_PLAY_SEGMENT_ALWAYS (DEFAULT ON; =0 restores the old draw-only re-prompt). Human play
+// re-enters the main-phase chooser after EVERY committed line, so "Commit Line literally means let
+// me play more things" (USER 2026-09-04) and only an explicit pass ends the phase.
+//
+// Shared reader per the lockstep rule, because there are now TWO readers and they must agree:
+//   * the executor -- AIEngine's external-chooser segment loop, which does the re-prompting;
+//   * the enumerator -- TurnSolver's saturated subset collapse, whose ENTIRE soundness argument is
+//     that a dropped combined plan {A,B} is still reachable as "commit A, then commit B". With the
+//     segment loop off, committing A ends the phase and {A,B} would be genuinely unreachable, so
+//     the collapse must not fire. One reader means the collapse cannot be left armed against a
+//     segment loop somebody turned off.
+inline bool PlaySegmentAlwaysEnabled()
+{
+    static const bool v = EnvOn("MTG_PLAY_SEGMENT_ALWAYS", true);
+    return v;
+}
