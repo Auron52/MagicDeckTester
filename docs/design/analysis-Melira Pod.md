@@ -3541,3 +3541,52 @@ ladder at all. The deck wins on turn ~4.2 inside a 5-ply horizon, so the search 
 everything before the horizon binds — neither the heuristic nor the leaf's trust is load-bearing. That also
 answers "we would want to skip using the heuristic if not": on Slivers there is nothing left to skip, which
 is why all four shapes reach the same 4000 outcomes and differ only in waste.
+
+### 2026-09-10o — the single-pass shape IS already adopted (as `escalation_cap`), Melira never got it, and its predictor runs on a 10x-wrong prior
+
+**USER CORRECTION, verified: "value-leaf probe -> ONE heuristic pass at the final affordable depth" is
+adopted — under the key `value_play.escalation_cap`, not under anything this session built.** It runs one
+escalation pass at the budget-affordable depth capped at the convergence depth instead of the full 1..D
+ladder. Live with `enabled: true` on **12 of 19** modelled decks (slivers, burn, th, knights, antilife,
+hinata, dragonstorm, auras, goblins, creature_giving, fivecolour, stompy — caps 5 or 6). **Absent on 7**
+(`escalation_cap` 0, `enabled` false): mirrorwing, minotaur, kitty, dragons, breaching, critter, **melira**.
+
+**This invalidates cross-configuration reading of the shape table.** The cap fires only when
+`m_lookahead_depth == value_play.target_depth` (`vp_here` in AIEngine), so at **d5b20 the `ship` baseline for
+the 10 decks with target_depth 5 ALREADY IS the capped single pass**, while at **d3b10 it is the FULL
+escalation ladder** (depth 3 != target 5/6, so the lever is off). Verified directly on slivers at d5b20 by
+removing the cap from a copy of its sidecar: **101,570 -> 128,180 units at byte-identical play (4.2167)**. So
+the earlier "budget size" story for why the fit columns are costly at d5b20 and cheap at d3b10 is WRONG; the
+real reason is that the high-budget baseline already does one pass (fit adds nothing) and the low-budget one
+does not (fit's pass is a genuine saving). Melira's 0.53x is large precisely BECAUSE it never got the cap.
+
+**Melira WITH the cap, 4 x 500 games at its own depth/budget, vs its shipped presence-only sidecar:**
+
+| arm | units | avg | better / worse | z |
+|---|---|---|---|---|
+| shipped (full escalation ladder) | 1.000x | 4.8090 | — | — |
+| capped single pass (`escalation_cap` 5) | 0.910x | 4.8325 | 2 / 41 | **−5.9** |
+| fit variant (`esc_single` + FIT) | 0.907x | 4.8205 | 49 / 68 | −1.8 |
+| rollout ladder (`value_model` false) | 0.739x | 4.8245 | 52 / 83 | −2.7 |
+
+**The cap is almost certainly MISCONFIGURED on Melira rather than wrong for it.** Its predictor needs a frozen
+cost-per-probe-leaf (`escalation_r`); Melira's is UNSET, so it falls back to the built-in **120 prior — the
+same prior finding 8 measured as ~10x too high for this deck (real ~10-16)**. Overestimating a pass's cost
+tenfold stops the escalation shallower than it should, which is exactly the damage shape (2 better / 41 worse
+for a 9% saving). Decks carrying a measured value sit in a plausible range (antilife 16, creature_giving 21,
+hinata 40, dragonstorm 81, fivecolour 86); **slivers, knights, th, auras and stompy also have it UNSET and so
+also run the 120 prior** — a repo-wide question, not a Melira one.
+
+**RUNNING (pid `logs/emul_screen/melr.pid`, manifest `manifest_melr.json`, 80 jobs = 5 arms x 16 seeds x 250
+games, fresh seeds 870000+250i, wins in `wins_melr/`):** shipped vs cap@R120 vs cap@R12 vs cap@R16 vs fit. If
+the quality loss is the PRIOR and not the shape, the R-corrected arms keep the 9% saving without the losses.
+
+**Also open, on the user's principle "it makes no sense to adopt something that loses to the previous
+setting":** Melira's value leaf itself. The 2026-09-08b record has the heuristic rollout AHEAD of the value
+leaf at every unbounded rung (H4 4.7440 vs V4 4.7500; matching H4 needs V5 at 1.8x H4's cost) and bounded
+play at 1.48x cost for −0.0055 t, with the written verdict "NOT a clean win — recommendation: do not adopt".
+It is live anyway (commit e75ac8ba, "adopted on the user's direction"). Reverting = rename to
+`.value.DISABLED.json` + GT rebaseline + re-derive the mull_gen settings, which read from that file. User's call.
+
+**Process note:** the preceding run was launched as 16 jobs on 32 workers — it could never use more than half
+the box and its tail was single-core. Pool MORE jobs than workers (80/32 here), splitting games per job.
