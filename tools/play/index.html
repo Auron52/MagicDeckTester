@@ -1365,9 +1365,15 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
 const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','jitte','choose_color'];
-// The plan the engine flagged as the verified go-off, or null. `combo_off` is only ever set on a
-// plan whose application was re-simulated to an actual win (EnumerateMainPlans' human-play gate),
-// so this button never promises a win the engine has not already proved.
+// The plan the engine flagged as a go-off, or null.
+//
+// TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
+// but accurate Combo Off"*). `combo_off` means the provider's RULE TABLE says a go-off is possible
+// from this board -- infinite mana plus the small set of sources the user specified -- and is what
+// decides whether the button appears at all. `combo_off_verified` is the stronger claim that the
+// engine re-simulated the plan to an actual win; only then does the button promise one. An offered
+// but unverified click still runs the whole line, and if it does not finish the game the engine
+// posts a "⚠ COMBO OFF did not finish the game" event to the history rather than pretending.
 function comboOffPlan(){
   const d = S.decision;
   if (S.over || !d || d.type !== 'main_phase') return null;
@@ -1383,8 +1389,10 @@ function comboOffPlan(){
 function comboOffButtonHtml(){
   const p = comboOffPlan();
   if (!p) return '';
-  return `<button id="combooffbtn" class="combooff" title="${esc(p.summary)}">`+
-         `⚡ Combo Off — win now</button>`;
+  const label = p.combo_off_verified ? '⚡ Combo Off — win now' : '⚡ Combo Off';
+  const tip   = esc(p.summary) + (p.combo_off_rule ? ' — rule: '+esc(p.combo_off_rule) : '')
+              + (p.combo_off_verified ? '' : ' — offered by rule, finish not pre-verified');
+  return `<button id="combooffbtn" class="combooff" title="${tip}">${label}</button>`;
 }
 function wireComboOffButton(){
   const b = $('combooffbtn'); if (!b) return;

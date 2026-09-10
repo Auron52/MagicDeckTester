@@ -1391,6 +1391,10 @@ public:
     bool ProjectsAlternateWin(const GameState& s,
                               const std::vector<const CardDefinition*>& casting) const override;
 
+    // THE COMBO OFF RULE TABLE (the viewer button's DISPLAY gate). Five named rules over board
+    // inventory -- see the table in DecisionProviders.cpp. Two of them are the user's own words.
+    bool ComboOffPossible(const GameState& s, int controller, std::string* rule) const override;
+
     // "STUCK -- PASS THE TURN" CERTIFICATE (USER, 2026-09-08: "we have the combo for infinite
     // mana, but no sink or sufficient sources of colourless. In those cases we need to be able to
     // identify that we are stuck and pass the turn like a human does. Rather than searching deep

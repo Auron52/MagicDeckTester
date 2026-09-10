@@ -1,0 +1,33 @@
+{
+  "_comment": [
+    "TAPPED vs UNTAPPED {C} SOURCE -- fixture 1 with Mariposa untapped. The distinction matters",
+    "because the executor's untap only ever sees TAPPED lands while the recognizer's refund is the",
+    "steady-state top-N over every land: after the tap-ahead the two coincide, and the button must",
+    "appear on both boards. Pinning the pair is what says the promotion is about which lands the",
+    "loop RECOVERS, not about the accident of which are tapped when the human opens the menu."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 12,
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    { "name": "Kitchen",                  "controller": 0, "tapped": false },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Conservatory",             "controller": 0, "tapped": false },
+    { "name": "Wild Growth",              "controller": 0, "tapped": false, "equips": "Conservatory" },
+    { "name": "Mariposa Military Base",   "controller": 0, "tapped": false },
+    { "name": "Emiel the Blessed",        "controller": 0, "tapped": false },
+    { "name": "Cloud of Faeries",         "controller": 0, "tapped": false },
+    { "name": "Dimensional Infiltrator",  "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "expect_combo_off": true
+}

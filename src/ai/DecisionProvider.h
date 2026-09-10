@@ -563,6 +563,28 @@ public:
                                       const std::vector<const CardDefinition*>& casting) const
     { (void)s; (void)casting; return false; }
 
+    // ComboOffPossible -- THE DECLARATIVE RULE TABLE behind the viewer's "⚡ Combo Off" button.
+    //
+    // USER, 2026-09-10: *"we should just come up with some rules that -> combo off is possible"*,
+    // and *"it really is something that is possible to determine from a smaller set of
+    // information"*. So this is deliberately NOT a search, NOT a score and NOT a threshold: it is a
+    // handful of named conjunctions over BOARD INVENTORY, each one readable, each one correctable
+    // in isolation. The user wrote two of the rules themselves; the rest are filled in at the same
+    // granularity and are expected to be argued with.
+    //
+    // THE DIVISION OF LABOUR MATTERS. This decides DISPLAY only -- "a combo off is possible from
+    // here". It must NOT prove the finish, must not look at the floating pool, and must not care
+    // which permanent happens to be untapped at the instant of the click: those are exactly the
+    // incidental details that made the old gate miss real combo positions. The EXECUTION guarantee
+    // lives on the other side of the click (the trial apply + OpponentHasLost, and a loud failure
+    // event if a pressed button does not in fact win), which is what keeps "aggressive" from
+    // meaning "dishonest".
+    //
+    // `rule` (optional) receives the NAME of the rule that fired, for logs and for the fixture
+    // harness. Generic = false (no rule table; the button is EDF-only today).
+    virtual bool ComboOffPossible(const GameState& s, int controller, std::string* rule) const
+    { (void)s; (void)controller; (void)rule; return false; }
+
     // ProvenWinlessThisTurn -- an ADMISSIBLE PRUNING CERTIFICATE, and the only hook on this
     // interface whose contract is a PROOF rather than a judgement.
     //

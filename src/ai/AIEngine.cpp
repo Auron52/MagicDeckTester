@@ -2343,10 +2343,40 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // does not happen (EDF seed 10 T4: nine blinks, opponent still on 20). The flag is set
             // only on the verified branch of the human-play COMBO OFF gate, so no other plan and no
             // autonomous run can enter this scope.
-            if (chosen.combo_off_verified)
+            if (chosen.combo_off_verified || chosen.combo_off_offered)
             {
                 ComboOffFinishScope co_finish;
-                TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main);
+                // ...and the SECOND half of the same symmetry: the trial ran with the choosers
+                // nulled, so the real apply must too, or a sub-decision inside the plan resolves one
+                // way in the run that made the promise and another in the run that keeps it (EDF
+                // seed 7). Nulling them here is what lets the gate offer a plan that CASTS things --
+                // the widening the 2026-09-07 fix had to forgo because it removed the plan class
+                // instead of the asymmetry. See ComboOffApplyPause; MTG_COMBO_OFF_SILENT=0 restores
+                // the live-chooser apply (one-binary A/B).
+                static const bool s_co_silent = EnvOn("MTG_COMBO_OFF_SILENT", true);
+                if (s_co_silent)
+                {
+                    ComboOffApplyPause co_quiet;
+                    TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main);
+                }
+                else { TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main); }
+                // FAIL LOUDLY, NEVER SILENTLY (USER 2026-09-10: a click that does not win must
+                // "fail loudly/visibly, never phantom-win"). The rule table offers the button on
+                // board INVENTORY, so a plan can be offered without a trial apply having proved the
+                // kill -- and when that offer turns out to be wrong the player has to be told, in
+                // the history, on the turn it happened. A verified plan reaching here is a harder
+                // failure still (the verify and the apply disagreed), and says so.
+                if (!OpponentHasLost(state))
+                {
+                    EmitPlayEvent(state.turn_number, "combo_off_failed",
+                        chosen.combo_off_verified
+                            ? std::string("⚠ COMBO OFF did NOT win -- the verified line and the "
+                                          "applied line disagree. Please report this frame.")
+                            : std::string("⚠ COMBO OFF did not finish the game (offered by rule ")
+                                  + (chosen.combo_off_rule.empty() ? std::string("?")
+                                                                   : chosen.combo_off_rule)
+                                  + "). The loop ran; the kill did not land.");
+                }
             }
             else { TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main); }
             // The opponent is DEAD -- stop asking. Under the commit-the-line rule the loop would

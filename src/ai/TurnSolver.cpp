@@ -40404,32 +40404,71 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             }
             return k;
         };
-        // ONLY A STANDALONE GO-OFF IS A CANDIDATE: the blink action alone, no land drop and no
-        // other casts. This is not tidiness, it is what makes the verify TRUTHFUL.
+        // EVERY GO-OFF-CARRYING PLAN IS A CANDIDATE, cheapest shape first (USER, 2026-09-10: *"we
+        // require a much more aggressive, but accurate Combo Off to make this deck workable"*).
         //
-        // The trial apply below runs under RevealLogPause, which nulls the 26 choosers -- so any
-        // sub-decision inside the plan resolves by ENGINE RANKING in the trial and by the HUMAN's
-        // declared answer in the real apply. A combined plan is exactly where those differ, and it
-        // shipped a false promise (USER, EDF seed 7 T5: the offered plan cast both Living Wishes
-        // for Adarkar Wastes and then blinked x10 -- the trial's nulled chooser re-ranked those
-        // wishes onto the SINK and won, while the real apply honoured the declared lands, left no
-        // wish in hand for the loop's own finisher route, and simply did not win: "Combo off failed
-        // to actually do the right thing here").
+        // This USED to be "only a STANDALONE go-off", i.e. the blink action alone, no land drop and
+        // no other casts -- and the reason was real: the trial apply runs under RevealLogPause,
+        // which nulls the 26 choosers, so a sub-decision inside a COMBINED plan resolved by ENGINE
+        // RANKING in the trial and by the HUMAN's live chooser in the real apply. EDF seed 7 T5 is
+        // the failure: the offered plan cast two Living Wishes for Adarkar Wastes and blinked x10,
+        // the trial's nulled chooser re-ranked those wishes onto the SINK and won, the real apply
+        // asked and did not ("Combo off failed to actually do the right thing here").
         //
-        // A standalone go-off has no such sub-decision to diverge on, and it loses nothing: the
-        // sink-still-in-hand case is handled INSIDE ApplyBlinkLoop, whose finish route casts the
-        // wish and fetches the finisher BY NAME (not by resolution-time ranking), identically in
-        // both worlds. EDF seed 1's turn-3 kill is exactly that shape -- its COMBO OFF plan is a
-        // bare "blink Peregrine Drake x4".
+        // THE ASYMMETRY IS NOW FIXED AT ITS SOURCE, so the restriction it forced is gone: the real
+        // apply of a `combo_off_verified` plan runs under ComboOffApplyPause (AIEngine's combo_off
+        // branch), which nulls exactly the choosers the trial nulled. Trial and apply resolve every
+        // sub-decision identically, whatever the plan's shape, so "wins this turn" is an assertion
+        // about the line that actually runs. That is also the user's own reading of the button --
+        // "You either win or let the user do each required action": the win branch asks nothing.
+        //
+        // ORDER IS COST, NOT TRUST. A standalone go-off is verified first because it is the cheapest
+        // apply and the most common shape (EDF seed 1's turn-3 kill is a bare "blink Peregrine Drake
+        // x4"), then plans with fewer extra actions, then bigger counts. MTG_COMBO_OFF_TRIES caps
+        // how many are applied on one frame -- the trial is milliseconds and the viewer replays the
+        // whole game per step, so this is the perf knob, not a correctness one.
+        // MTG_COMBO_OFF_STANDALONE=1 restores the old one-candidate rule.
+        static const bool s_co_alone_only = EnvOn("MTG_COMBO_OFF_STANDALONE", false);
+        // TWO, not eight, and the reason is the VIEWER'S CLOCK. Every trial apply runs a whole
+        // go-off (dozens of iterations plus sink instalments), and the play protocol REPLAYS the
+        // game from the start on every step -- so each extra candidate is paid once per
+        // already-decided prefix decision, for the whole rest of the game. Measured: at eight, a
+        // single EDF reference in the protocol sweep went from seconds to 40 s PER STEP. The button
+        // no longer depends on the verify to be SHOWN (the rule table decides that), so the trial's
+        // only jobs are picking the best of several go-off plans and earning the "wins this turn"
+        // wording -- neither is worth a per-step regression the user has already complained about
+        // once ("the essence depleter activations were painfully slow").
+        static const int  s_co_tries = []() {
+            const char* v = std::getenv("MTG_COMBO_OFF_TRIES");
+            const int   k = (v && *v) ? std::atoi(v) : 2;
+            return k > 0 ? k : 2;
+        }();
+        struct GoffCand { int idx; int k; int extra; };
+        std::vector<GoffCand> cands;
         int best_alone = -1, best_alone_k = 0, best_any = -1;
         for (int i = 0; i < static_cast<int>(plans.size()); ++i)
         {
             const int k = goff_of(plans[i]);
             if (k == 0) { continue; }
             best_any = i;   // a go-off exists -> the non-winning ones still get dropped below
-            if (plans[i].actions.size() == 1 && plans[i].land_to_play.empty() && k > best_alone_k)
-            { best_alone = i; best_alone_k = k; }
+            const int extra = static_cast<int>(plans[i].actions.size()) - 1
+                            + (plans[i].land_to_play.empty() ? 0 : 1);
+            cands.push_back(GoffCand{ i, k, extra });
+            if (extra == 0 && k > best_alone_k) { best_alone = i; best_alone_k = k; }
         }
+        std::stable_sort(cands.begin(), cands.end(),
+                         [](const GoffCand& a, const GoffCand& b)
+                         {
+                             if (a.extra != b.extra) { return a.extra < b.extra; }
+                             if (a.k     != b.k)     { return a.k > b.k; }
+                             return a.idx < b.idx;
+                         });
+        if (s_co_alone_only)
+        {
+            cands.clear();
+            if (best_alone >= 0) { cands.push_back(GoffCand{ best_alone, best_alone_k, 0 }); }
+        }
+        if (static_cast<int>(cands.size()) > s_co_tries) { cands.resize(s_co_tries); }
         // CHEAP PROJECTION FIRST -- the trial apply is NOT free. Running the whole go-off (dozens
         // of iterations plus sink instalments) costs milliseconds, and the viewer's stateless
         // protocol REPLAYS the game from the start on every step, so a gate that applies
@@ -40440,6 +40479,16 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
         // only when it says yes. Both projections are documented as optimistic-by-contract, which
         // is exactly what a pre-filter needs: it may over-admit (costing an apply) but never
         // under-admits a real kill. MTG_COMBO_OFF_PROJECT=0 forces the old unconditional verify.
+        //
+        // ...BUT IT IS NO LONGER A VETO ON THE BUTTON. The provider's RULE TABLE
+        // (ComboOffPossible -- board inventory, no search, the user's own three paths) is what
+        // decides DISPLAY now; this projection only decides whether it is worth paying for a trial
+        // apply to earn the stronger "wins this turn" label. A board the rules accept always gets
+        // its verify attempt.
+        std::string co_rule;
+        const bool rules_ok =
+            (best_any >= 0)
+            && ResolveProvider(state).ComboOffPossible(state, state.active_player_index, &co_rule);
         static const bool s_co_project = EnvOn("MTG_COMBO_OFF_PROJECT", true);
         bool plausible = true;
         if (best_any >= 0 && s_co_project)
@@ -40470,7 +40519,21 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
         {
             int best = -1;
             bool verified = false;
-            for (int cand : (plausible ? std::vector<int>{ best_alone } : std::vector<int>{}))
+            // THE PROJECTION STILL GATES THE EXPENSIVE HALF, it just no longer gates the button.
+            // `rules_ok` alone is enough to SHOW a combo off; paying for a trial apply on top of it
+            // is only worth it when the cheap arithmetic already says a kill is in reach.
+            // ...and when only the RULES fire, ONE attempt: the projection is documented as
+            // optimistic-by-contract, but it is optimistic about the wrong things here (it prices a
+            // one-gulp deck-out, not the instalment route the button's apply runs), so it says "no"
+            // on boards the apply then wins -- fixture edf_co_9 is exactly that. One trial restores
+            // the honest "wins this turn" wording there and keeps the per-frame cost at the level
+            // the old single-candidate gate already paid.
+            std::vector<int> to_try;
+            if (plausible)
+            { for (const GoffCand& gc : cands) { to_try.push_back(gc.idx); } }
+            else if (rules_ok && !cands.empty())
+            { to_try.push_back(cands.front().idx); }
+            for (int cand : to_try)
             {
                 if (cand < 0) { continue; }
                 // The APPLY half of the symmetric pair opened around the projection above: the trial
@@ -40524,6 +40587,15 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                     { best_bank = i; best_bank_k = k; }
                 }
             }
+            // THE RULE TABLE'S OWN CANDIDATE. When no trial apply won but the rules say a combo off
+            // IS possible from this board, the button still shows -- on the largest standalone
+            // go-off, which is the plan a human going off by hand would pick -- and it shows WITHOUT
+            // the "wins this turn" claim. If pressing it then fails to win, AIEngine says so in the
+            // history. That is the aggressive/accurate split the user asked for: the rules decide
+            // what is offered, the execution decides what is promised.
+            const int offered_idx = (!verified && rules_ok)
+                                        ? (best_bank >= 0 ? best_bank : best_alone)
+                                        : -1;
             std::vector<Plan> kept;
             kept.reserve(plans.size());
             Plan combo;
@@ -40531,7 +40603,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             for (int i = 0; i < static_cast<int>(plans.size()); ++i)
             {
                 if (goff_of(plans[i]) == 0)          { kept.push_back(std::move(plans[i])); }
-                else if ((i == best && verified) || i == best_bank)
+                else if ((i == best && verified) || i == best_bank || i == offered_idx)
                 {
                     combo = std::move(plans[i]); have_combo = true;
                     // STAMP THE VERIFY ONTO THE PLAN. `verified` is a local, and without this the
@@ -40540,6 +40612,8 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                     // this branch are exactly "the trial apply won" and "the trial apply did not run
                     // or did not win", so the flag is precisely the distinction the label needs.
                     combo.combo_off_verified = (i == best && verified);
+                    combo.combo_off_offered  = combo.combo_off_verified || (i == offered_idx);
+                    if (combo.combo_off_offered) { combo.combo_off_rule = co_rule; }
                 }
             }
             if (have_combo) { kept.push_back(std::move(combo)); }

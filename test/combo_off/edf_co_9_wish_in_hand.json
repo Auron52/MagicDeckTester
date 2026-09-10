@@ -1,0 +1,35 @@
+{
+  "_comment": [
+    "THE FINISHER IS STILL IN THE SIDEBOARD, one Living Wish away -- the deck's actual kill chain,",
+    "and the longest route the button is allowed to promise. ScanHandSinks' wish route prices the",
+    "wish {1}{G} plus the fetched creature as hand_setup_mv; ComboFinishFromHand casts the wish,",
+    "fetches BY NAME (not by resolution-time ranking, which is the seed-7 divergence this whole",
+    "gate was rebuilt around) and deploys it, all inside the go-off the button applies.",
+    "",
+    "The Emiel outlet is what makes it reachable at all: the wish costs green, the deck-out costs",
+    "colourless, and the Displacer would have eaten the only pip a pass produces."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 12,
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    { "name": "Kitchen",                  "controller": 0, "tapped": false },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Conservatory",             "controller": 0, "tapped": false },
+    { "name": "Wild Growth",              "controller": 0, "tapped": false, "equips": "Conservatory" },
+    { "name": "Mariposa Military Base",   "controller": 0, "tapped": true  },
+    { "name": "Emiel the Blessed",        "controller": 0, "tapped": false },
+    { "name": "Cloud of Faeries",         "controller": 0, "tapped": false }
+  ],
+  "hand": ["Living Wish"],
+  "expect_combo_off": true
+}

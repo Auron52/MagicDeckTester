@@ -14290,13 +14290,23 @@ constexpr int kFlickerMaxUntaps = 8;   // no printed "untap up to N lands" excee
 // feed the sink". An aura's bonus is NOT colourless-capable, not even a wild one: "one mana of any
 // color" cannot pay {C} (colourless is not a colour), which is why this counts the LAND's own
 // produces rather than reusing the yield.
-int FlickerTopLandYields(const GameState& s, int controller, int n, int* out_colorless = nullptr)
+//
+// `reserve_c`: model EtbUntapLands' {C}-STARVED PROMOTION (MTG_UNTAP_C_STARVED). The executor
+// reserves one untap slot for the best {C}-capable land whenever the yield order alone would take
+// none, and the recognizer must model the SAME set or its projection describes a loop the apply does
+// not run -- the identical "they must agree" rule the outlet/payload coherence fix (§9) exists for.
+// Passed as a parameter rather than read here because this function is on the rollout hot path and
+// the predicate (human play + a live {C} sink) is a property of the board, computed once by the
+// caller.
+int FlickerTopLandYields(const GameState& s, int controller, int n, int* out_colorless = nullptr,
+                         bool reserve_c = false)
 {
     if (out_colorless) { *out_colorless = 0; }
     if (n <= 0) { return 0; }
     if (n > kFlickerMaxUntaps) { n = kFlickerMaxUntaps; }
     int top[kFlickerMaxUntaps] = {0};
     int topc[kFlickerMaxUntaps] = {0};
+    int best_c_y = -1;   // highest yield among {C}-capable lands, for the starved promotion
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller || !p.card.IsLand()) { continue; }
@@ -14306,13 +14316,32 @@ int FlickerTopLandYields(const GameState& s, int controller, int n, int* out_col
         int c = 0;
         for (Color col : EffectiveProduces(s, controller, *d, /*in_hand=*/false))
         { if (col == Color::Colorless) { c = 1; break; } }
+        if (c && y > best_c_y) { best_c_y = y; }
         for (int i = 0; i < n; ++i)
         { if (y > top[i]) { std::swap(y, top[i]); std::swap(c, topc[i]); } }
     }
     int sum = 0, csum = 0;
     for (int i = 0; i < n; ++i) { sum += top[i]; csum += topc[i]; }
+    // Starved: the chosen set has no {C} at all but the board does own a {C} land. The executor will
+    // displace the LOWEST-yield member of the set for it, so price exactly that -- one slot, the
+    // best {C} yield, and never on a set that already carries its pip (csum > 0 is a no-op).
+    if (reserve_c && csum == 0 && best_c_y >= 0 && n >= 1)
+    {
+        sum += best_c_y - top[n - 1];
+        csum = 1;
+    }
     if (out_colorless) { *out_colorless = csum; }
     return sum;
+}
+
+// The predicate EtbUntapLands gates its {C}-starved promotion on, in ONE place so the recognizer and
+// the executor can never disagree about whether the untap will reserve a slot. Human-play gated, so
+// every autonomous game and every rollout (HumanPlaySuppress) reads false and is byte-identical.
+static bool FlickerReserveC(const GameState& s, int controller)
+{
+    if (!HumanPlayActive()) { return false; }
+    static const bool s_on = EnvOn("MTG_UNTAP_C_STARVED", true);
+    return s_on && ColorlessPipSinkReachable(s, controller);
 }
 
 // Recognise an assembled, SELF-FUNDING blink loop on the battlefield. Deliberately conservative:
@@ -14403,6 +14432,13 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
     const auto consider = [&](const CardDefinition* d, int setup)
     {
         if (d == nullptr || !d->card.IsCreature()) { return; }
+        // THE SAME COLOUR TEST ComboFinishFromHand applies when it deploys (USER, 2026-09-10:
+        // Essence Depleter if we have black, Dimensional Infiltrator if we only have blue). The
+        // recognizer and the deploy must agree about WHICH finisher is reachable, or the count is
+        // sized for a card the apply will decline to cast. MTG_COMBO_FINISH_COLOR=0 restores both.
+        static const bool s_fin_color = EnvOn("MTG_COMBO_FINISH_COLOR", true);
+        if (s_fin_color && HumanPlayActive()
+            && !BoardCanPayColors(s, controller, d->card.m_mana_cost)) { return; }
         const int cast_mv = setup + d->card.m_mana_cost.ManaValue();
         if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
         {
@@ -14481,9 +14517,21 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
     // draw-land fallback sizing, and its lethal projection needs a bank-then-deploy startability
     // test instead of pay-it-all-now. Worth re-measuring only after the value leaf moves the
     // deck's effective horizon (the s1 T3 target line is budget-blocked upstream at 20 ms anyway).
+    //
+    // IT IS ON, THOUGH, INSIDE THE COMBO OFF APPLY AND WHEN SIZING THAT BUTTON'S COUNT
+    // (MTG_EDF_LIB_ROUTE_COMBO_OFF=0 restores the blanket refusal). Every objection above is about
+    // the SEARCH's plan ranking -- shadowing the draw-land fallback, a startability test the
+    // scoring path then fails, rollout-wide damage. None of them apply here: this route's only
+    // consumer under the button is the ITERATION COUNT, and a mis-sized count costs one trial apply
+    // that ApplyBlinkLoop simply stops paying for. It is also the route the user's own base rule
+    // names -- *"Being able to draw repeatedly through infinite mana ... is sufficient"* -- so
+    // without it rule WISH-DRAW would offer a button whose line the count cannot express.
     static const bool s_lib_route = EnvOn("MTG_EDF_LIB_ROUTE", false);
-    if (!heurarm::Flag(heurarm::EDF_LIB_ROUTE, s_lib_route)) { return; }
-    if (HumanPlayActive()) { return; }
+    static const bool s_lib_co    = EnvOn("MTG_EDF_LIB_ROUTE_COMBO_OFF", true);
+    const bool for_combo_off = s_lib_co && HumanPlayActive()
+                            && (ComboOffFinishActive() || for_human_count_sizing);
+    if (!for_combo_off && !heurarm::Flag(heurarm::EDF_LIB_ROUTE, s_lib_route)) { return; }
+    if (HumanPlayActive() && !for_combo_off) { return; }
     int draw_mv = 0;
     for (const Permanent& p : s.battlefield)
     {
@@ -14539,6 +14587,10 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
 
     ScanBoardSinks(s, controller, &best);
 
+    // Computed ONCE for the whole pair search (O(battlefield), and false in one bool for every
+    // autonomous caller) -- see FlickerReserveC / EtbUntapLands' {C}-starved promotion.
+    const bool reserve_c = FlickerReserveC(s, controller);
+
     for (const Permanent& src : s.battlefield)
     {
         if (src.controller_index != controller) { continue; }
@@ -14557,7 +14609,7 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
             if (!td || td->params.etb_untap_lands <= 0) { continue; }
             const int n = td->params.etb_untap_lands;
             int c_refund = 0;
-            const int refund = FlickerTopLandYields(s, controller, n, &c_refund);
+            const int refund = FlickerTopLandYields(s, controller, n, &c_refund, reserve_c);
             const int net = refund - cost_mv;
             if (net <= 0) { continue; }
             // TIE-BREAK BY UNTAP COUNT -- load-bearing, not cosmetic, and MEASURED (2026-09-04).
@@ -14580,10 +14632,32 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
             // Preferring more untaps on an exact net tie makes the two agree by construction: for a
             // fixed outlet `net` is monotone nondecreasing in N, so the max-net payloads always
             // include the max-N one, and picking it is exactly what BlinkTargetCandidates returns.
-            if (best.ok && (net < best.net || (net == best.net && n <= best.untaps))) { continue; }
+            //
+            // ...AND THE OUTLET TIE IS THE SAME DEFECT ONE COLUMN OVER (USER, 2026-09-10: *"playing
+            // Emiel is also possible if I don't have enough colourless"*; human play only,
+            // MTG_EDF_OUTLET_NETC=0 restores). Eldrazi Displacer's blink is `{2}{C}` and Emiel's is
+            // `{3}` -- the SAME mana value, 3, and the same 1 under Training Grounds. So on a board
+            // holding both, `net` ties, `untaps` ties (same payload), and which outlet the loop is
+            // recognised on was decided by BATTLEFIELD INSERTION ORDER -- exactly the §9 failure
+            // mode, and with a sharper consequence: the Displacer spends a {C} per iteration
+            // (`c_cost` 1) where Emiel spends none, so picking it can zero `net_c` on a board where
+            // Emiel keeps it positive, and both lethal projections then refuse a kill that is
+            // genuinely there. On an EXACT net+untaps tie, prefer the outlet that banks more
+            // colourless; everything above it is untouched, so this can never trade mana for pips.
+            static const bool s_outlet_netc = EnvOn("MTG_EDF_OUTLET_NETC", true);
+            const int cand_net_c = c_refund - cost_c;
+            if (best.ok)
+            {
+                bool take;
+                if      (net != best.net)     { take = net > best.net; }
+                else if (n   != best.untaps)  { take = n > best.untaps; }
+                else                          { take = s_outlet_netc && HumanPlayActive()
+                                                       && cand_net_c > best.net_c; }
+                if (!take) { continue; }
+            }
             best.ok = true; best.outlet_id = src.card.m_number; best.payload_id = tgt.card.m_number;
             best.untaps = n; best.cost_mv = cost_mv; best.refund = refund; best.net = net;
-            best.c_refund = c_refund; best.c_cost = cost_c; best.net_c = c_refund - cost_c;
+            best.c_refund = c_refund; best.c_cost = cost_c; best.net_c = cand_net_c;
         }
     }
     // The hand / wish route LAST, and only for a loop that exists. It is a hand + sideboard scan on a
@@ -14700,7 +14774,8 @@ static void FlickerEconomics(const GameState& s, int controller,
                                                 od->params.blink_cost.value());
     const int cost   = bc.ManaValue();
     int c_refund = 0;
-    const int refund = FlickerTopLandYields(s, controller, n, &c_refund);
+    const int refund = FlickerTopLandYields(s, controller, n, &c_refund,
+                                            FlickerReserveC(s, controller));
     out->untaps = n; out->cost_mv = cost; out->refund = refund; out->net = refund - cost;
     out->c_refund = c_refund; out->c_cost = bc.colorless; out->net_c = c_refund - bc.colorless;
 }
@@ -14877,6 +14952,32 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
     // is already there): the wish, the finisher, or both. It has to be banked BEFORE the first
     // activation, so it is part of what the loop must fund -- omitting it would size a loop that
     // reaches the deploy and then cannot pay for a single drain.
+    // ITERATIONS THE {C} PIPS NEED, which is NOT the same number as the mana (human play only;
+    // MTG_EDF_GOFF_C_ITERS=0 restores the mana-only sizing).
+    //
+    // `FlickerIterationsForMana` divides a TOTAL by `net`, and on this deck's boards `net` is mostly
+    // colour: EDF seed 9 gi=8 T4 banks 3 a pass of which exactly ONE is colourless, so 49 exiles at
+    // `{1}{C}` are affordable in 33 iterations by mana and need 49 by pips. Sizing by mana alone
+    // hands the apply a loop that ends with the bank full and the pips short -- and
+    // `SpendSurplusOnExile` is all-or-nothing, so the deck-out then fires ZERO times and the
+    // COMBO OFF verify (correctly) refuses to promise a win. Same shape as the `dig_draws` term
+    // beside it: a resource the loop supplies PER ITERATION, so the count is a max, not a sum.
+    // Autonomous sizing is untouched -- that arm's economics are measured artifacts.
+    static const bool s_goff_c_iters = EnvOn("MTG_EDF_GOFF_C_ITERS", true);
+    const bool c_iters_on = s_goff_c_iters && HumanPlayActive() && loop.net_c > 0;
+    // `hand_setup_mv` is charged against the PIP budget as well as the mana one. It is generic (the
+    // wish's {1}{G}, the finisher's {1}{U}), so in the worst case every point of it is settled out
+    // of the colourless bank -- and on these boards the bank is exactly one pip per iteration, so a
+    // count sized to the sink alone comes up short by precisely the deploy. Measured: with the
+    // finisher in hand and a 6-card library the loop banked 6 pips, spent 2 on the cast, and exiled
+    // nothing. Over-charging costs at most a few extra iterations, which ApplyBlinkLoop simply
+    // declines to run once they stop being payable; under-charging costs the whole kill.
+    const auto c_iterations = [&](long long pips_needed) -> int {
+        if (!c_iters_on || pips_needed <= 0) { return 0; }
+        pips_needed += loop.hand_setup_mv;
+        const long long it = (pips_needed + loop.net_c - 1) / loop.net_c;
+        return static_cast<int>(std::min<long long>(it, FlickerMaxIterations()));
+    };
     if (loop.drain_amount > 0 && loop.drain_cost_mv >= 0)
     {
         const int activations = (life + loop.drain_amount - 1) / loop.drain_amount;
@@ -14888,7 +14989,12 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         // applied to a bounded dig. Without it a high-net loop affords the mana before the dig
         // completes and stalls with the finisher still in the library.
         if (iters > 0)
-        { return std::clamp(std::max(iters, loop.dig_draws), 1, FlickerMaxIterations()); }
+        {
+            const int want = std::max({ iters, loop.dig_draws,
+                                        c_iterations(static_cast<long long>(activations)
+                                                     * loop.drain_c_pips) });
+            return std::clamp(want, 1, FlickerMaxIterations());
+        }
     }
     if (loop.exile_cost_mv > 0 && s.opponent_library_dealt)
     {
@@ -14898,7 +15004,12 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         const int iters = FlickerIterationsForMana(loop.hand_setup_mv + cards * loop.exile_cost_mv,
                                                    loop.net);
         if (iters > 0)
-        { return std::clamp(std::max(iters, loop.dig_draws), 1, FlickerMaxIterations()); }
+        {
+            const int want = std::max({ iters, loop.dig_draws,
+                                        c_iterations(static_cast<long long>(cards)
+                                                     * loop.exile_c_pips) });
+            return std::clamp(want, 1, FlickerMaxIterations());
+        }
     }
 
     // NO COUNTER-WATCHER ROUTE. An earlier version of this heuristic sized the loop to "enough
@@ -16666,6 +16777,251 @@ bool EldraziFlickerProvider::ProjectsAlternateWin(
         if (c_need > static_cast<long long>(FlickerMaxIterations()) * loop.net_c) { return false; }
     }
     return true;
+}
+
+// ============================================================================================
+// THE COMBO OFF RULE TABLE -- "combo off is possible from here"
+// ============================================================================================
+//
+// USER, 2026-09-10, after being shown a search-shaped gate: *"But overall, we should just come up
+// with some rules that -> combo off is possible."* and *"Like I did here."* So this is a table of
+// NAMED CONJUNCTIONS over board inventory. One function per ingredient, one function per rule; a
+// rule can be corrected without touching any other, which is the entire point of writing it this
+// way rather than as a score or a search.
+//
+// WHAT IT DECIDES: whether the viewer SHOWS the button. Nothing else. It must not prove the finish,
+// must not read the floating pool, and must not care which permanent is untapped at the instant of
+// the click -- those incidental details are what made the old gate miss real combo positions
+// (USER: *"we simply do not get the Combo Off button in enough cases"*). The proof lives on the
+// other side of the click.
+//
+//   INGREDIENTS (battlefield unless stated)
+//     L    LOOP            an outlet (blink_cost) and a DIFFERENT untapper (etb_untap_lands > 0)
+//                          are both in play and top-N land yields - EffectiveActivationCost(outlet)
+//                          is positive.  [Displacer {2}{C} / Emiel {3}; Drake untaps 5, Cloud 2]
+//     D    DRAW            a repeatable draw source in play: tap_draw_cost (Mariposa Military Base
+//                          "{5},{T}: Draw") or tap_investigate_cost (Conservatory, Kitchen
+//                          "{4},{T}: Investigate", + the Clue's own {2}). The loop untaps it every
+//                          iteration, so with unbounded mana it draws the DECK.
+//     C1   {C} >= 1        at least one permanent whose OWN modes make {C}: Mariposa, Shivan Gorge,
+//                          Aether Hub, and the three painlands (Adarkar Wastes, Yavimaya Coast,
+//                          Brushland). A land Aura's bonus is NEVER {C} -- "one mana of any color"
+//                          cannot pay a colourless pip.
+//     C2   {C} >= 2        two or more of those.
+//     UB   BLUE-OR-BLACK   at least one permanent making {U} or {B} -- the colour the FINISHER's
+//                          own cast needs (Dimensional Infiltrator {1}{U}, Essence Depleter
+//                          {2}{B}). Kitchen, Yavimaya Coast, Adarkar Wastes, Azorius Chancery; and
+//                          Aether Hub only while it actually has energy (a conditional producer
+//                          counts only when its condition is met).
+//     E    EMIEL           Emiel the Blessed in play (its {3} activation carries no {C} pip).
+//     Fb   FINISHER IN PLAY   a {T}-less finisher on the battlefield (drain / library-exile).
+//     Fh   FINISHER IN HAND   ... in hand.
+//     W    WISH            a Living Wish that can still reach a sideboard finisher. In hand always
+//                          counts; still in the LIBRARY counts only when D holds, because then the
+//                          loop draws the deck and finds it.
+//     G    GORGE           Shivan Gorge in play, red actually producible, and the loop funds the
+//                          Gorge activation as well as itself.
+//
+//   RULES -- the button shows if ANY fires
+//     1  GORGE          L and G
+//     2  DEPLOYED       L and Fb and C1 and (D or E or C2)
+//     3  IN-HAND        L and Fh and C1 and UB and (D or E or C2)
+//     4  WISH-DRAW      L and W and D and C1 and UB               <- USER'S RULE
+//     5  WISH-NODRAW    L and W and C1 and UB and (E or C2)       <- USER'S RULE
+//
+// RULES 4 AND 5 ARE THE USER'S, AND THE WAY THEY RELATE IS THEIRS TOO: *"all cases cast living
+// wish, it's just a matter of whether the deck has to win without drawing through the deck."* So
+// the wish is not what distinguishes them -- the DRAW ENGINE is. With one (rule 4) *"one colourless
+// and one blue or black mana source is sufficient"*, because the loop draws the deck; without one
+// (rule 5) the deck must win off the wish line alone, and that *"does require either Emiel or 2
+// colourless sources on board."* Rule 4 deliberately does NOT branch on which outlet is in play:
+// *"the 1 colourless source works even when you have displacer out because you can draw into Emiel
+// and cast it if you can draw your deck."*
+//
+// Rules 1-3 are FILLED IN at the same granularity and are the ones to argue with first. They are
+// the strictly-easier boards where no wish is needed at all because the finisher is already here.
+// The `(D or E or C2)` rider on 2 and 3 is an inference, not a user statement: with a single {C}
+// source and only Eldrazi Displacer as the outlet, every iteration makes one colourless and the
+// blink's own {2}{C} spends it, so a {1}{C} sink can never be fed -- unless Emiel is the outlet (no
+// pip), a second source exists, or the draw engine can go and find one. If that rider is wrong,
+// rules 2 and 3 are one line each.
+//
+// ONE THING RULE 4 ASSUMES AND DOES NOT CHECK: that drawing the deck actually finds a pip-free
+// outlet -- i.e. that an Emiel is still in the library or hand rather than in the graveyard. The
+// user stated the rule as sufficient without that condition, so it is encoded as stated and the
+// question is raised in the report rather than answered here.
+//
+// MTG_COMBO_OFF_RULES=0 disables the table (the button then falls back to a verified finish only).
+namespace comborules
+{
+// --- ingredient predicates -------------------------------------------------------------------
+// Each is one board walk and nothing more. Kept separate and named so a rule reads as its table row.
+
+inline bool HasRepeatableDrawSource(const GameState& s, int c)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != c) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && (d->params.tap_draw_cost.has_value() || d->params.tap_investigate_cost.has_value()))
+        { return true; }
+    }
+    return false;
+}
+
+// Counts PERMANENTS that can make {C} from their own modes. EffectiveProduces so a conditional
+// producer (Aether Hub's coloured modes need energy) is judged on the board as it stands; the {C}
+// mode of every source here is unconditional.
+inline int ColorlessSourceCount(const GameState& s, int c)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != c) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        for (Color col : EffectiveProduces(s, c, *d, /*in_hand=*/false))
+        { if (col == Color::Colorless) { ++n; break; } }
+    }
+    return n;
+}
+
+inline bool HasBlueOrBlackSource(const GameState& s, int c)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != c) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        for (Color col : EffectiveProduces(s, c, *d, /*in_hand=*/false))
+        { if (col == Color::Blue || col == Color::Black) { return true; } }
+    }
+    return false;
+}
+
+inline bool HasRedSource(const GameState& s, int c)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != c) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        for (Color col : EffectiveProduces(s, c, *d, /*in_hand=*/false))
+        { if (col == Color::Red) { return true; } }
+        // A land Aura's "one mana of any color" rides its HOST's tap and is wild -- it is this
+        // deck's only real red (Fertile Ground, Trace of Abundance), so it counts here even though
+        // it can never count for {C}.
+        if (d->params.is_land_aura && d->params.land_aura_produces.empty()
+            && d->params.land_aura_extra_mana > 0)
+        { return true; }
+    }
+    return false;
+}
+
+// A DIFFERENT question from ColorlessSourceCount: does the loop's OUTLET carry no {C} pip? Emiel
+// {3} does not, Eldrazi Displacer {2}{C} does (and Training Grounds cannot remove it -- reductions
+// take the generic half first and the one-mana floor keeps the pip).
+inline bool EmielInPlay(const GameState& s, int c)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != c || !p.card.IsCreature()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.blink_cost.has_value() && d->params.blink_cost->colorless == 0)
+        { return true; }
+    }
+    return false;
+}
+
+// Fb / Fh / W -- where the {T}-less finisher is. A library-exile finisher is only a finisher at all
+// when the opponent's library is modelled (SpendSurplusOnExile is inert otherwise).
+inline bool IsTlessFinisher(const GameState& s, const CardDefinition* d)
+{
+    if (d == nullptr) { return false; }
+    if (d->params.drain_cost.has_value() && d->params.drain_amount > 0) { return true; }
+    return d->params.exile_opponent_top_cost.has_value()
+        && s.opponent_library_dealt && !s.opponent_decked;
+}
+
+inline bool FinisherInPlay(const GameState& s, int c)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != c) { continue; }
+        if (IsTlessFinisher(s, CardDatabase::Instance().LookupCached(p.card))) { return true; }
+    }
+    return false;
+}
+
+inline bool FinisherInHand(const GameState& s, int c)
+{
+    for (const Card& h : s.players[c].hand)
+    { if (IsTlessFinisher(s, CardDatabase::Instance().LookupCached(h))) { return true; } }
+    return false;
+}
+
+// W -- a Living Wish that can still reach a sideboard finisher. In HAND always counts. Still in the
+// LIBRARY counts only when a draw engine is live (`draws`), because that is the only thing that can
+// go and get it -- which is exactly the distinction rules 4 and 5 are built on.
+inline bool WishReachesFinisher(const GameState& s, int c, bool draws)
+{
+    const auto is_wish = [](const CardDefinition* d) {
+        return d != nullptr && d->params.tutor_to_hand && d->params.wish_from_sideboard;
+    };
+    const Player& ap = s.players[c];
+    bool wish = false;
+    for (const Card& h : ap.hand)
+    { if (is_wish(CardDatabase::Instance().LookupCached(h))) { wish = true; break; } }
+    if (!wish && draws)
+    {
+        for (const Card& l : ap.library)
+        { if (is_wish(CardDatabase::Instance().LookupCached(l))) { wish = true; break; } }
+    }
+    if (!wish) { return false; }
+    for (const Card& sb : ap.sideboard)
+    { if (IsTlessFinisher(s, CardDatabase::Instance().LookupCached(sb))) { return true; } }
+    return false;
+}
+
+// G -- USER, 2026-09-10: *"the third path would be Shivan Gorge, but that is only accessible with
+// red mana on board (fertile ground or trace of abundance) and Shivan Gorge already out + infinite
+// mana."* Exactly those three, and no more: the loop's untap restores the Gorge every iteration, so
+// with unbounded mana the {2}{R} ping repeats to lethal. In particular this does NOT require the
+// loop's per-iteration net to cover the Gorge's own cost -- unbounded mana banks the difference over
+// however many iterations it takes. (`loop.gorge_*` is filled by ScanBoardSinks off tap_damage_cost
+// / tap_damage_each_opponent, which is Shivan Gorge and nothing else in this deck.)
+inline bool GorgeKillLive(const GameState& s, int c, const FlickerLoop& loop)
+{
+    return loop.gorge_dmg > 0 && HasRedSource(s, c);
+}
+}   // namespace comborules
+
+bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller,
+                                              std::string* rule) const
+{
+    static const bool s_rules = EnvOn("MTG_COMBO_OFF_RULES", true);
+    if (!s_rules) { return false; }
+    const auto fire = [&](const char* name) { if (rule) { *rule = name; } return true; };
+
+    // L -- the one ingredient every rule shares. RecogniseFlickerLoop IS this predicate: outlet and
+    // untapper both in play, net mana per iteration positive.
+    const FlickerLoop loop = RecogniseFlickerLoop(s, controller);
+    if (!loop.ok || loop.net <= 0) { return false; }
+
+    using namespace comborules;
+    const bool D  = HasRepeatableDrawSource(s, controller);
+    const int  nC = ColorlessSourceCount(s, controller);
+    const bool C1 = nC >= 1, C2 = nC >= 2;
+    const bool UB = HasBlueOrBlackSource(s, controller);
+    const bool E  = EmielInPlay(s, controller);
+    const bool W  = WishReachesFinisher(s, controller, D);
+
+    if (GorgeKillLive(s, controller, loop))                          { return fire("GORGE"); }
+    if (FinisherInPlay(s, controller) && C1 && (D || E || C2))       { return fire("DEPLOYED"); }
+    if (FinisherInHand(s, controller) && C1 && UB && (D || E || C2)) { return fire("IN-HAND"); }
+    if (W && D && C1 && UB)                                          { return fire("WISH-DRAW"); }
+    if (W && C1 && UB && (E || C2))                                  { return fire("WISH-NODRAW"); }
+    return false;
 }
 
 // Deploy the combo before anything else: an outlet or a payload on the battlefield is what every

@@ -11395,7 +11395,14 @@ inline bool LoopDrawSinkOn()
     // human play (DrawLandGoOffOn), and an engine change is not allowed to cost a saved reference --
     // this deck's has been broken twice by exactly this class of gap. The search never sets
     // HumanPlayActive, so the whole measured gain is kept.
-    if (HumanPlayActive()) { return false; }
+    //
+    // ...EXCEPT INSIDE THE COMBO OFF APPLY, which is the one place the human HAS asked for it.
+    // USER, 2026-09-10: *"Being able to draw repeatedly through infinite mana ... is sufficient"* --
+    // the whole base path of the rule table IS this draw engine, so refusing it here would offer a
+    // button whose line the apply then declines to walk. ComboOffFinishActive() is reachable only
+    // through the button (false in every autonomous run, in every rollout, and in ordinary human
+    // play), so ordinary human turns and every saved reference still never draw a card unasked.
+    if (HumanPlayActive() && !ComboOffFinishActive()) { return false; }
     static const bool env_on = EnvOn("MTG_EDF_LOOP_DRAW", true);
     return heurarm::Flag(heurarm::EDF_LOOP_DRAW, env_on);
 }
@@ -11489,6 +11496,125 @@ inline bool ComboFinisherReachable(const GameState& state, int controller)
     if (!wish) { return false; }
     for (const Card& c : ap.sideboard)
     { if (is_sink(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    return false;
+}
+
+// CAN THE BOARD ACTUALLY CAST THIS? -- the colour half of choosing WHICH finisher to go and get.
+//
+// USER, 2026-09-10: *"the wish should be cast once we have some banked mana for Essence Depleter
+// (if we have black) or Dimensional Infiltrator (if we only have blue)"*. The engine's finisher
+// preference was mana-VALUE only and preferred the drain unconditionally, so on the ordinary board
+// -- where blue comes off Kitchen or a painland and BLACK exists only through an Aether Hub holding
+// energy -- it would wish for an Essence Depleter it could never cast, and the go-off ended holding
+// a {2}{B} it had no black for. Checks PRODUCIBILITY, not the current pool: inside a loop the pool
+// is unbounded but a colour the board cannot make stays unmakeable. Land Auras count for the colours
+// they add (Fertile Ground / Trace of Abundance add "one mana of any color", modelled as wild).
+inline bool BoardCanProduceColor(const GameState& state, int controller, Color want)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        for (Color c : EffectiveProduces(state, controller, *d, /*in_hand=*/false))
+        { if (c == want) { return true; } }
+        // A wild land Aura ("one mana of any color") makes any COLOUR -- never {C}.
+        if (want != Color::Colorless && d->params.is_land_aura
+            && d->params.land_aura_extra_mana > 0 && d->params.land_aura_produces.empty())
+        { return true; }
+        if (want != Color::Colorless && d->params.is_land_aura)
+        {
+            for (Color c : d->params.land_aura_produces) { if (c == want) { return true; } }
+        }
+    }
+    return false;
+}
+
+// Every coloured pip of `cost` has a producer on the board. Generic pips are ignored (any mana pays
+// them) and so is {C} (a colourless pip is the sink's own business -- the rule table counts those).
+inline bool BoardCanPayColors(const GameState& state, int controller, const ManaCost& cost)
+{
+    if (cost.white > 0 && !BoardCanProduceColor(state, controller, Color::White)) { return false; }
+    if (cost.blue  > 0 && !BoardCanProduceColor(state, controller, Color::Blue))  { return false; }
+    if (cost.black > 0 && !BoardCanProduceColor(state, controller, Color::Black)) { return false; }
+    if (cost.red   > 0 && !BoardCanProduceColor(state, controller, Color::Red))   { return false; }
+    if (cost.green > 0 && !BoardCanProduceColor(state, controller, Color::Green)) { return false; }
+    return true;
+}
+
+// THE COLOUR THE FINISH IS STILL WAITING ON -- fed to the blink loop's tap-ahead so the land it is
+// about to recharge banks it (MTG_TAPAHEAD_PENDING_PIP's `pending_cost` channel).
+//
+// The colourless hold protects the pips the SINK's activation needs. Nothing protected the pips the
+// finisher's own CAST needs, and on this deck those are the scarce ones: Dimensional Infiltrator is
+// {1}{U} and the only blue is a Kitchen the tap-ahead cheerfully commits to green (it is also the
+// board's biggest yield, so it is committed first). Measured on the user's s9 gi=8 frame 27: the
+// Living Wish resolved, the Infiltrator reached hand, and ComboFinishFromHand then failed to pay
+// {1}{U} four rounds running -- [finish] `wish=2 hand=0`, a go-off that fetched its win condition
+// and could not cast it.
+//
+// Returns the cost of the CHEAPEST still-pending finish (the finisher alone if it is in hand, else
+// the wish plus the finisher), or false when a {T}-less finisher is already in play. Colour-aware
+// in the same way ComboFinishFromHand is, so the two never aim at different cards.
+inline bool PendingComboFinishCost(const GameState& state, int controller, ManaCost* out);
+
+// Is a {C}-PIP SINK reachable at all this turn -- including one still in the sideboard behind a
+// Living Wish? (Declared here; defined below BoardHasColorlessPipSink, which it wraps.)
+//
+// BoardHasColorlessPipSink answers "on the battlefield, or castable from hand". That is the right
+// question for the mana-source RANKING it was written for, and one zone too narrow for the untap:
+// a player holding a Living Wish for Dimensional Infiltrator wants colourless kept back NOW, before
+// the wish resolves, because the loop's untap is what supplies the pips and it cannot be replayed.
+// Human play only -- the sideboard is not a zone the search reasons about.
+inline bool ColorlessPipSinkReachable(const GameState& state, int controller);
+
+// ...and the BATTLEFIELD-ONLY half: is a {T}-less finisher already in play? The early-deploy inside
+// ApplyBlinkLoop needs this narrower question -- ComboFinisherReachable above answers "reachable",
+// which is true of the very hand card the deploy is trying to put down and so can never say "done".
+inline bool ComboFinisherReachableOnBoard(const GameState& state, int controller)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.drain_cost.has_value() && d->params.drain_amount > 0) { return true; }
+        if (d->params.exile_opponent_top_cost.has_value()
+            && state.opponent_library_dealt && !state.opponent_decked) { return true; }
+    }
+    return false;
+}
+
+// The LIBRARY-EXILE half of the same question, for a sink that is NOT on the battlefield yet.
+//
+// ApplyBlinkLoop's colourless hold (g_hold_colorless_for_pips) is scoped to "such a sink is actually
+// on the battlefield", which is right for every loop that cannot change that mid-flight -- and wrong
+// for the one that can. ComboFinishFromHand deploys a held or wished Dimensional Infiltrator at the
+// END of the loop, by which point the blink's own generic cost has eaten every colourless the untaps
+// produced, so the deck-out it just deployed cannot pay for a single exile and
+// SpendSurplusOnExile's all-or-nothing gulp fires ZERO times. Measured exactly that way: the
+// COMBO OFF trial apply ran the whole 12-iteration go-off on a board holding the Infiltrator and did
+// not win, so the button (correctly, but uselessly) stayed hidden.
+//
+// Deliberately exile-only, mirroring the hold's own asymmetry: a drain spends its {C} one activation
+// at a time and can just tap a colourless land each pass.
+inline bool ExileFinisherReachableFromHand(const GameState& state, int controller)
+{
+    if (!state.opponent_library_dealt || state.opponent_decked) { return false; }
+    const auto is_exile = [](const CardDefinition* d) {
+        return d != nullptr && d->card.IsCreature() && d->params.exile_opponent_top_cost.has_value();
+    };
+    const Player& ap = state.players[controller];
+    bool wish = false;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (is_exile(d)) { return true; }
+        if (d != nullptr && d->params.tutor_to_hand && d->params.wish_from_sideboard) { wish = true; }
+    }
+    if (!wish) { return false; }
+    for (const Card& c : ap.sideboard)
+    { if (is_exile(CardDatabase::Instance().LookupCached(c))) { return true; } }
     return false;
 }
 
@@ -11672,6 +11798,17 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
     // Is this definition a repeatable {T}-less finisher, and what does one activation cost?
     const auto sink_act_mv = [&](const CardDefinition* d, bool* is_drain) -> int {
         if (d == nullptr || !d->card.IsCreature()) { return 0; }
+        // WHICH FINISHER IS A COLOUR QUESTION FIRST (USER, 2026-09-10: "Essence Depleter (if we
+        // have black) or Dimensional Infiltrator (if we only have blue)"). The preference below is
+        // mana-VALUE ordered and puts the drain first unconditionally -- correct when both are
+        // castable and wrong the rest of the time, because this deck's only black is an Aether Hub
+        // holding energy. Without this the wish fetches a {2}{B} the board cannot pay and the whole
+        // go-off ends holding it. Producibility, not the current pool: inside the loop the pool is
+        // unbounded, but a colour the board cannot make stays unmakeable.
+        // MTG_COMBO_FINISH_COLOR=0 restores the colour-blind preference.
+        static const bool s_fin_color = EnvOn("MTG_COMBO_FINISH_COLOR", true);
+        if (s_fin_color && !BoardCanPayColors(state, controller, d->card.m_mana_cost))
+        { return 0; }
         if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
         {
             if (kind_on_board(true)) { return 0; }
@@ -11696,6 +11833,21 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
     const auto affordable = [&](int cast_mv, int act_mv, bool is_drain, int drain_amount) {
         ManaPool have = AvailableManaPool(state, nullptr);
         have.AddPool(state.floating_mana);
+        // INSIDE THE COMBO OFF LOOP, "BOUNTIFUL" IS THE WRONG BAR -- AND IT IS THE WRONG BAR IN THE
+        // EXPENSIVE DIRECTION. USER, 2026-09-10: *"the wish should be cast once we have some banked
+        // mana for Essence Depleter ... or Dimensional Infiltrator"* -- SOME banked mana, not all of
+        // it. Waiting for the whole kill's worth is what breaks the deck-out: the exile needs one
+        // {C} pip per card and a pip is per-UNTAP supply, so every iteration spent waiting is a pip
+        // the loop will never make. Measured on the user's own s9 gi=8 frame 27 (Emiel + Cloud,
+        // Living Wish in hand, 50 cards to exile): the deploy waited for 2 + 50*2 = 102 mana, which
+        // at net 3 arrives around iteration 34, leaving 20 iterations for 50 pips -- so the
+        // Infiltrator landed, the instalment projection failed, and not one card was exiled.
+        // Deploying the moment the CAST is payable hands the remaining iterations to the sink.
+        // Outside the button this is unreachable (ComboOffFinishActive()), so the search keeps the
+        // guard its measurement was taken under. MTG_COMBO_OFF_EARLY_DEPLOY=0 restores it here too.
+        static const bool s_early_deploy2 = EnvOn("MTG_COMBO_OFF_EARLY_DEPLOY", true);
+        if (s_early_deploy2 && ComboOffFinishActive())
+        { return static_cast<long long>(have.Total()) >= cast_mv; }
         const int acts = is_drain
             ? (std::max(1, state.players[1 - controller].life) + std::max(1, drain_amount) - 1)
                   / std::max(1, drain_amount)
@@ -12473,6 +12625,16 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
             if (d && d->params.exile_opponent_top_cost.has_value())
             { want_hold_colorless = true; break; }
         }
+        // ...AND A SINK THIS VERY LOOP IS GOING TO DEPLOY (COMBO OFF only; MTG_HOLD_C_FOR_DEPLOY=0
+        // restores the board-only condition). "On the battlefield" is the right precondition for
+        // every loop that cannot change it mid-flight; ComboFinishFromHand is the one that can, and
+        // it runs at the END, so without this the pips are already spent when the sink lands. See
+        // ExileFinisherReachableFromHand. Reachable ONLY through the button: ComboOffFinishActive()
+        // is false in every autonomous run, in every rollout, and in ordinary human play, so the
+        // measured drain/deck-out economics and every saved reference are untouched.
+        static const bool s_hold_deploy = EnvOn("MTG_HOLD_C_FOR_DEPLOY", true);
+        if (!want_hold_colorless && s_hold_deploy && ComboOffFinishActive() && ComboFinishOn())
+        { want_hold_colorless = ExileFinisherReachableFromHand(state, controller); }
     }
     HoldColorlessScope _hcs(want_hold_colorless ? true : g_hold_colorless_for_pips);
     // Mark the whole loop as combo mode, so the tap-ahead's mana policy can tell a live loop
@@ -12591,7 +12753,18 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
             if (SpendSurplusOnDrawSinks(state, controller, c, pay) > 0)
             { want_draw = !ComboFinisherReachable(state, controller); }
         }
-        if (untaps > 0) { EtbUntapTapAheadIntoFloat(state, controller, untaps); }
+        // BANK THE COLOUR THE FINISH IS WAITING ON (COMBO OFF only). The land the untap is about to
+        // recharge is exactly the one that should carry the finisher's pip -- see
+        // PendingComboFinishCost. Re-asked each iteration because the answer changes the moment the
+        // finisher is deployed, and it is only asked at all under the button.
+        ManaCost pend_cost;
+        const bool pend = ComboOffFinishActive() && ComboFinishOn()
+                       && PendingComboFinishCost(state, controller, &pend_cost);
+        if (untaps > 0)
+        {
+            EtbUntapTapAheadIntoFloat(state, controller, untaps, /*reserve_color_mask=*/0,
+                                      pend ? &pend_cost : nullptr);
+        }
         if (!pay(c)) { break; }
         // Emiel's optional {G/W} counter trigger fires inside ApplyBlink's ETB cascade; hand it this
         // loop's payer so its mana is on the same books as the activation's (see
@@ -12652,6 +12825,31 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // playing the human's turn for them. The search keeps every point of the measurement (it
         // never sets HumanPlayActive), and the human keeps their mana and their choice: Essence
         // Depleter has its own searched ActivatePermAbility, which is what the menu should offer.
+        // DEPLOY THE HELD / WISHED FINISHER *INSIDE* THE LOOP, NOT AFTER IT (COMBO OFF only;
+        // MTG_COMBO_OFF_EARLY_DEPLOY=0 restores the post-loop-only deploy).
+        //
+        // The kill chain at the bottom of this function runs once the loop has ENDED, which is fine
+        // for the drain (mana is mana, and the post-loop pass can spend it) and structurally fatal
+        // for the deck-out. SpendSurplusOnExile is all-or-nothing, and after the loop it has no
+        // `loop_iters_left` -- so the only route left is the single whole-library gulp, needing every
+        // {C} pip realisable in ONE payment. A {C} pip is per-UNTAP supply; that is precisely why the
+        // INSTALMENT route exists, and a sink that arrives after the last untap can never use it.
+        //
+        // Measured: fixture edf_co_8 (Dimensional Infiltrator in hand, Emiel + Cloud + a starved
+        // Mariposa) deployed the Infiltrator correctly -- [finish] `hand=1` -- and still did not win
+        // at ANY opponent library size, because the sink landed one instant too late to be paid in
+        // instalments. Deploying it as soon as the loop can afford it puts the remaining iterations
+        // back on the instalment route, which is exactly the board fixture edf_co_1 wins on.
+        //
+        // Self-limiting and cheap: ComboFinishFromHand refuses a KIND already on the battlefield, so
+        // this fires at most once per kind, and it keeps its own "bountiful mana" guard, so an early
+        // iteration that cannot afford the deploy simply declines and the next one retries. Reachable
+        // ONLY through the button (ComboOffFinishActive() is false in every autonomous run, in every
+        // rollout, and in ordinary human play), so nothing measured moves.
+        static const bool s_early_deploy = EnvOn("MTG_COMBO_OFF_EARLY_DEPLOY", true);
+        if (cash_sinks && s_early_deploy && ComboOffFinishActive()
+            && k + 1 < iterations && !ComboFinisherReachableOnBoard(state, controller))
+        { ComboFinishFromHand(state, controller, pay); }
         if (cash_sinks)
         {
             SpendSurplusOnDrain(state, controller, c, pay);
@@ -12745,8 +12943,9 @@ inline void EtbUntapLands(GameState& state, int controller, int count, bool log_
     // Computed ONCE per untap, not per land: the sink is a property of the board, and the scan is
     // O(battlefield). HumanPlayActive() first, so an autonomous game pays a single bool. See the
     // tie-break inside the loop.
-    const bool c_sink_live = HumanPlayActive() && BoardHasColorlessPipSink(state, controller);
+    const bool c_sink_live = HumanPlayActive() && ColorlessPipSinkReachable(state, controller);
     std::vector<std::pair<int, int>> tapped;   // (sort key, battlefield index)
+    std::vector<char> is_c;                    // parallel to `tapped`: this land can make {C}
     for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
     {
         const Permanent& p = state.battlefield[bi];
@@ -12771,63 +12970,72 @@ inline void EtbUntapLands(GameState& state, int controller, int count, bool log_
         // takes the +1, so the yield order is preserved EXACTLY and only previously-arbitrary ties
         // move. That makes it strictly free -- it can never hand back less mana than before, which
         // the aggressive version (untap a 1-yield {C} land ahead of a 3-yield colour land) very much
-        // can. That stronger form is a real candidate but it TRADES mana for pip type, so it needs
-        // measuring rather than asserting; recorded as unmeasured, not shipped.
+        // can. The STARVED form of exactly that is now shipped just below -- see MTG_UNTAP_C_STARVED.
         //
         // Reads the land's own modes (UnconditionalProduces): an aura bonus rides the tap in the
         // AURA's colour and cannot make {C}, so a Wild Growth does not turn a Forest into a {C}
         // source. Human-play + live-sink gated, so autonomous play and every non-Eldrazi deck are
         // byte-identical.
         static const bool s_untap_c_first = EnvOn("MTG_UNTAP_C_FIRST", true);
+        bool makes_c = false;
+        for (Color pc : UnconditionalProduces(*d))
+        { if (pc == Color::Colorless) { makes_c = true; break; } }
         key *= 2;
-        if (s_untap_c_first && c_sink_live)
-        {
-            for (Color pc : UnconditionalProduces(*d))
-            { if (pc == Color::Colorless) { key += 1; break; } }
-        }
+        if (s_untap_c_first && c_sink_live && makes_c) { key += 1; }
         tapped.emplace_back(key, bi);
+        is_c.push_back(makes_c ? 1 : 0);
     }
-    std::stable_sort(tapped.begin(), tapped.end(),
-                     [](const std::pair<int, int>& a, const std::pair<int, int>& b)
-                     { return a.first > b.first; });
-    const int n = std::min<int>(static_cast<int>(tapped.size()), count);
-    // STARVED {C} PROMOTION (USER, EDF seed 9 gi=8 deep go-off, 2026-09-10: float {G:86, C:0}
-    // with a live {C} sink -- "we have some problems with creating colourless when it is a bit
-    // starved... I should have colourless in my pool rather than just green"). The tie-break
-    // above is deliberately free and its own note records the stronger form as unmeasured; this
-    // is that measurement arriving as a live report. On that board the two untap picks go to
-    // Kitchen (yield 5, double Overgrowth) and a Conservatory (2) every single blink, so tapped
-    // Mariposa -- the board's ONLY {C} source -- never untaps again and green piles up while the
-    // sink starves. When the pool is genuinely starved (zero floating {C}, sink live), ONE pick
-    // is diverted: if no {C}-capable land made the top-`count` set, the LOWEST-yield pick is
-    // displaced by the best {C}-capable land below the cut. Bounded trade -- at most one pick,
-    // only under starvation, where any further non-{C} yield is pure surplus and the {C} unit is
-    // the loop's whole currency. The tap-ahead's existing equal-yield {C} tie-break then taps the
-    // promoted land next iteration and commits {C} to the float. Human-play + live-sink gated
-    // like the tie-break; autonomous play byte-identical. MTG_UNTAP_C_STARVED=0 restores.
-    static const bool s_untap_c_starved = EnvOn("MTG_UNTAP_C_STARVED", true);
-    if (s_untap_c_starved && c_sink_live && n > 0
-        && state.floating_mana.colorless == 0)
+    // Sort the two arrays TOGETHER (index permutation), because the promotion below reads
+    // {C}-capability positionally and a bare stable_sort on `tapped` would desynchronise them.
     {
-        auto is_c = [&](int bi) -> bool
-        {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(
-                state.battlefield[static_cast<std::size_t>(bi)].card);
-            if (d == nullptr) { return false; }
-            for (Color pc : UnconditionalProduces(*d))
-            { if (pc == Color::Colorless) { return true; } }
-            return false;
-        };
+        std::vector<int> ord(tapped.size());
+        for (int i = 0; i < static_cast<int>(ord.size()); ++i) { ord[i] = i; }
+        std::stable_sort(ord.begin(), ord.end(), [&](int a, int b)
+                         { return tapped[a].first > tapped[b].first; });
+        std::vector<std::pair<int, int>> st; st.reserve(tapped.size());
+        std::vector<char> sc; sc.reserve(is_c.size());
+        for (int i : ord) { st.push_back(tapped[i]); sc.push_back(is_c[i]); }
+        tapped.swap(st); is_c.swap(sc);
+    }
+    const int n = std::min<int>(static_cast<int>(tapped.size()), count);
+    // {C}-STARVED PROMOTION -- RESERVE ONE UNTAP SLOT FOR A COLOURLESS SOURCE
+    // (human play + live {C} sink only; MTG_UNTAP_C_STARVED=0 restores the tie-break-only order).
+    //
+    // USER, 2026-09-10: *"Once I have the combo assembled for infinite mana and a draw source, blue
+    // or black and a colourless source it should be clear that I can win with the combo."* The
+    // tie-break above cannot deliver that, and EDF seed 9 gi=8 T4 is the proof: Emiel + Cloud of
+    // Faeries (untap up to TWO) over Kitchen(+2 Overgrowth, yield 5), Conservatory(+Wild Growth, 2),
+    // Conservatory(1) and a TAPPED Mariposa Military Base(1) -- the deck's only {C} source. Yield
+    // order takes Kitchen and the Conservatory every single iteration, Mariposa never comes back,
+    // and Dimensional Infiltrator's `{1}{C}` exile can never fire however long the loop runs. The
+    // trial apply confirmed it: forced past the projection with MTG_COMBO_OFF_PROJECT=0 the go-off
+    // ran and did NOT win, so the button was right to stay hidden and the DEFECT is upstream, in
+    // which lands the untap picks.
+    //
+    // WHY "STARVED" AND NOT "ALWAYS". This trades mana for pip type, so it is bounded to the case
+    // where the trade is not a trade at all: it fires only when the set the yield order would take
+    // contains NO {C}-capable land, i.e. when the alternative is zero colourless and the sink is
+    // dead. One slot, the highest-yield {C} land, displacing the LOWEST-yield member of the chosen
+    // set -- so the loss is bounded by one land's yield per untap and never touches a set that
+    // already had its pip. On a board with a {C} land inside the top-N (the common Drake case,
+    // untap 5) this is a no-op by construction.
+    //
+    // The recognizer must model the same set or the projection and the apply disagree -- see
+    // FlickerTopLandYields' `reserve_c`, which mirrors this exactly.
+    static const bool s_untap_c_starved = EnvOn("MTG_UNTAP_C_STARVED", true);
+    if (s_untap_c_starved && c_sink_live && n >= 1 && n < static_cast<int>(tapped.size()))
+    {
         bool have_c = false;
-        for (int i = 0; i < n; ++i) { if (is_c(tapped[i].second)) { have_c = true; break; } }
+        for (int i = 0; i < n && !have_c; ++i) { have_c = is_c[i] != 0; }
         if (!have_c)
         {
+            int best_c = -1;   // highest-yield {C} land outside the chosen prefix (list is sorted)
             for (int i = n; i < static_cast<int>(tapped.size()); ++i)
+            { if (is_c[i]) { best_c = i; break; } }
+            if (best_c >= 0)
             {
-                if (!is_c(tapped[i].second)) { continue; }
-                std::swap(tapped[static_cast<std::size_t>(n - 1)],
-                          tapped[static_cast<std::size_t>(i)]);
-                break;
+                std::swap(tapped[n - 1], tapped[best_c]);
+                std::swap(is_c[n - 1], is_c[best_c]);
             }
         }
     }
@@ -13065,6 +13273,56 @@ inline bool BoardHasColorlessPipSink(const GameState& state, int controller)
             if (hd->card.m_mana_cost.ManaValue() <= ceiling) { return true; }
         }
     }
+    return false;
+}
+
+inline bool PendingComboFinishCost(const GameState& state, int controller, ManaCost* out)
+{
+    if (ComboFinisherReachableOnBoard(state, controller)) { return false; }
+    const auto is_sink = [&](const CardDefinition* d) {
+        if (d == nullptr || !d->card.IsCreature()) { return false; }
+        if (!BoardCanPayColors(state, controller, d->card.m_mana_cost)) { return false; }
+        if (d->params.drain_cost.has_value() && d->params.drain_amount > 0) { return true; }
+        return d->params.exile_opponent_top_cost.has_value()
+            && state.opponent_library_dealt && !state.opponent_decked;
+    };
+    const Player& ap = state.players[controller];
+    for (const Card& h : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (is_sink(d)) { *out = d->card.m_mana_cost; return true; }
+    }
+    for (const Card& h : ap.hand)
+    {
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(h);
+        if (wd == nullptr || !wd->params.tutor_to_hand || !wd->params.wish_from_sideboard)
+        { continue; }
+        for (const Card& sb : ap.sideboard)
+        {
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(sb);
+            if (!is_sink(sd)) { continue; }
+            *out = AddManaCosts(wd->card.m_mana_cost, sd->card.m_mana_cost);
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool ColorlessPipSinkReachable(const GameState& state, int controller)
+{
+    if (BoardHasColorlessPipSink(state, controller)) { return true; }
+    static const bool s_wish_c_sink = EnvOn("MTG_WISH_C_SINK", true);
+    if (!s_wish_c_sink || !HumanPlayActive()) { return false; }
+    const Player& ap = state.players[controller];
+    bool wish = false;
+    for (const Card& h : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (d && d->params.tutor_to_hand && d->params.wish_from_sideboard) { wish = true; break; }
+    }
+    if (!wish) { return false; }
+    for (const Card& sb : ap.sideboard)
+    { if (CardHasColorlessPipActivation(state, controller, sb)) { return true; } }
     return false;
 }
 
