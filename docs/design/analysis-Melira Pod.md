@@ -3438,3 +3438,22 @@ value_play block cannot take the leafless shapes off a screen row at all** witho
 **Scoreboard of the three BETTER rows the screen flagged, after the route check:** Fluctuator held and was
 ADOPTED; Dragonstorm became a trade and is STAGED; Creature Giving inverted and is REJECTED. One in three
 survived — which is the argument for the route check existing.
+
+### 2026-09-10l — what the screen's two configurations actually are (a correction)
+
+Asked what the baseline is, I checked rather than answered from memory, and the check corrected a claim this
+record had been carrying. The baseline column (`ship`) is the deck with **no arm overrides**, so it is the
+adopted shape — but every job also ran `--ignore-play-profile` at an explicit d5/20ms and d3/10ms, which
+OVERRIDES the depth and budget the deck's own `value_play` locks. Reading the committed sidecars: **7 decks**
+lock exactly d5b20 (slivers, th, knights, antilife, dragonstorm, auras, creature_giving), **5 lock something
+the screen never ran** (burn, fivecolour, stompy at d6b20; hinata d5b30; goblins d6b40), and **8 lock
+nothing**. Worse, **d3b10 is no deck's generation configuration** — the `mull_gen` settings are d1b3, d2b1,
+d2b3, d3b3, d4b3, i.e. depth 1-4 at a 1-3 ms budget, never 10 ms — so the justification this doc gave for
+the second configuration ("the mulligan generator runs the deck at d3") was wrong in the budget.
+
+**What it does and does not touch.** No adoption rests on it: Fluctuator locks nothing and was re-measured
+at its real settings with no flags. The two DROPPED shapes were dropped at settings 5 of 20 decks do not
+use, so that conclusion now rests on the size of the margins (the rollout ladder loses by 1.17x-18.76x on
+every deck) rather than on configuration coverage. Two specific rows deserve a re-screen at the deck's own
+depth before being trusted: **fivecolour** (locks d6b20, and it is the one deck where the value-probe
+final-depth shape looked strong — z +6.8 at d5b20) and **hinata** (locks d5b30, screened at 2/3 that budget).

@@ -145,7 +145,27 @@ Full table: `analysis-Melira Pod.md` 2026-09-10a. Summary as first read:
 Both axes, per configuration, against the deck's shipped shape: quality AND run time (deterministic search
 units; wall only from a same-batch pair or the single-worker probe -- never across batches). A shape is
 adopted only when it is no worse on either axis at every configuration the deck is played at (d5b20 and
-d3b10 here, since the mulligan generator runs the deck at d3).
+d3b10 here -- but see the coverage caveat below: NEITHER is most decks' own configuration).
+
+**WHAT THE TWO SCREEN CONFIGURATIONS ACTUALLY ARE (checked 2026-09-10, do not assume).** Every screen job
+ran `--ignore-play-profile` at an explicit d5/20ms and d3/10ms, which OVERRIDES the depth and budget a
+deck's own `value_play` locks. Against the committed sidecars:
+
+| | decks |
+|---|---|
+| d5b20 IS their locked configuration | slivers, th, knights, antilife, dragonstorm, auras, creature_giving (7) |
+| lock something the screen never ran | burn d6b20, fivecolour d6b20, stompy d6b20, hinata d5b30, goblins d6b40 (5) |
+| lock nothing (`enabled: false`) | mirrorwing, minotaur, kitty, dragons, breaching, critter, melira, fluct (8) |
+
+And **d3b10 is no deck's generation configuration**: the mulligan generators run at `mull_gen` d1b3, d2b1,
+d2b3, d3b3 or d4b3 -- depth 1 to 4 at a 1-3 ms budget, never 10 ms. (That is what this sentence used to
+claim, and it was wrong in the budget.) So d3b10 is a generic low-budget probe, not a stand-in for
+generation, and for the 5 locked-elsewhere decks NEITHER column is a configuration they are played at.
+
+Nothing adopted rests on this -- Fluctuator locks nothing and was re-measured at its real settings with no
+flags -- but the two shapes this screen DROPPED were dropped at settings 5 of 20 decks do not use, and the
+margins are what carry that conclusion (the rollout ladder loses by 1.17x-18.76x, not by a hair), not the
+configuration coverage. A deck that locks d6 should be re-screened at d6 before its row is trusted.
 
 **The quality axis is the PAIRED SIGN TEST, not the average win turn (2026-09-10).** Arms are compared on
 identical games (same seed, same game index, same opening hand), so `better` and `worse` game counts are
