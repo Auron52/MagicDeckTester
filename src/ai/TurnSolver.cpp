@@ -481,6 +481,7 @@ static std::atomic<long long> g_emul_decisions{0}, g_emul_vpasses{0}, g_emul_hpa
                               g_emul_fallbacks{0}, g_emul_overruns{0}, g_emul_no_heuristic{0}, g_emul_direct_commits{0},
                               g_emul_commit_model_decisions{0},
                               g_nlv_decisions{0}, g_nlv_banked{0}, g_nlv_value_passes{0}, g_nlv_overruns{0}, g_nlv_to_heuristic{0}, g_nlv_value_units{0}, g_nlv_partial_kept{0},
+                              g_sres_passes{0}, g_sres_overruns{0}, g_sres_partial{0}, g_sres_escalated{0}, g_sres_units{0}, g_sres_refused{0},
                               g_emul_r_milli{0}, g_emul_r_n{0},
                               g_emul_v_units{0}, g_emul_h_units{0}, g_emul_waste_units{0},
                               g_emul_calib_passes{0};
@@ -813,6 +814,13 @@ namespace
                           << " (partial line kept=" << g_nlv_partial_kept.load() << ")"
                           << " to_heuristic(untrusted depth)=" << g_nlv_to_heuristic.load()
                           << " value_units=" << g_nlv_value_units.load() << "\n";
+            }
+            if (g_sres_passes.load() + g_sres_escalated.load() > 0)
+            {
+                std::cerr << "[rollout-stats] reserved single pass: completed=" << g_sres_passes.load()
+                          << " overruns=" << g_sres_overruns.load() << " (partial kept=" << g_sres_partial.load()
+                          << ", escalated=" << g_sres_escalated.load() << ") gate_refusals=" << g_sres_refused.load()
+                          << " units=" << g_sres_units.load() << "\n";
             }
             if (g_emul_decisions.load() > 0)
             {
@@ -32329,6 +32337,31 @@ inline thread_local bool g_force_constant_leaf = false;
 // ladder's start gate admits a pass only if the SAME cost again would still fit after it -- the value
 // pass at that depth costs the pass's tree once more (its leaf is unmetered) and must be affordable.
 inline thread_local bool g_reserve_value_pass = false;
+// CONSTANT-LEAF PASS (set by the ladders around every pass whose leaf is the no-leaf stand-in or a forced
+// constant leaf): the pass STOPS at budget exhaustion. Its only useful result is a VERIFIED in-horizon
+// win; every other result is a no-win, and once the first exhausted-mode truncation lands no no-win can
+// be memoised (the trunc_at_entry watermark), so continuing re-searches every transposition at full
+// price -- a leafless Melira pass estimated at 10.8k ran to 130k units (2026-09-10, after the strict-alpha
+// fix). A rated leaf holds an incumbent and its WIN entries keep the memo alive, so it is untouched
+// (byte-identical: the flag is never set on a rated or rollout pass).
+inline thread_local bool g_constant_leaf_pass = false;
+// SINGLE-PASS RESERVE (arm esc_single_reserve): while the probe ladders, its start gate also keeps room for ONE
+// heuristic pass at the depth it is about to admit -- tree(k) (the leafless/value pass costs the same tree)
+// plus R x leaves(k), leaves extrapolated from the previous pass's leaves-per-unit. R = the deck's frozen
+// escalation_r else 120. Set by the hybrid around the probe; never set otherwise (byte-identical).
+inline thread_local bool   g_single_reserve   = false;
+inline thread_local double g_single_reserve_R = 120.0;
+struct ConstantLeafPassGuard
+{
+    bool prev;
+    explicit ConstantLeafPassGuard(bool v) : prev(g_constant_leaf_pass) { g_constant_leaf_pass = v; }
+    ~ConstantLeafPassGuard() { g_constant_leaf_pass = prev; }
+};
+// The exhausted-mode stop a constant-leaf pass takes at its plan loops (see g_constant_leaf_pass).
+inline bool ConstantLeafExhausted(const SearchBudget* budget)
+{
+    return g_constant_leaf_pass && budget != nullptr && !budget->Unlimited() && budget->Exhausted();
+}
 struct ForceConstantLeafGuard
 {
     bool prev;
@@ -32771,6 +32804,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
             if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only)
+            // A constant-leaf pass stops at exhaustion (see g_constant_leaf_pass); the truncation is recorded.
+            if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; w0_trunc = true; break; }
             ++m2_scanned;
             ConsumeAt(budget, unitsite::kFsMain2);   // one interior node (plan applied)
             if (s_rollout_stats)
@@ -33824,6 +33859,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // near-leaf nodes (beam_here); the top plies keep full exploration so the committed play is never pruned.
         // 0 = unlimited = byte-identical. pre is value-ordered above, so this keeps the best W lines.
         if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; break; }
+        // A constant-leaf pass stops at exhaustion (see g_constant_leaf_pass); the truncation is recorded.
+        if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; break; }
         ++scanned;
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         ConsumeAt(budget, unitsite::kFsPre);   // one interior node (plan applied)
@@ -34900,7 +34937,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // Per-job override (see ValueArm.h); <=0 = unset => the env static (byte-identical off-batch).
     const double s_vl_alpha_mult = (valuearm::t_arm.startgate_alpha > 0.0)
                                  ? valuearm::t_arm.startgate_alpha : s_vl_alpha_env;
-    const double gate_alpha = (vl_active && s_vl_alpha_mult > 1.0)
+    // The relaxed alpha exists for a leaf that RATES lines: an admitted pass that exhausts the budget
+    // still holds an incumbent, its subtrees are WIN entries the memo keeps, and the exhausted-mode loop
+    // breaks wind it down (Melira T1 d5: 67,890 units for a 44k estimate against 9.2k remaining). A
+    // CONSTANT (no-leaf) pass has neither: every result is a no-win, and after the first exhausted-mode
+    // truncation no no-win is memoised (the trunc_at_entry watermark), so the same pass re-searches every
+    // transposition and runs to the overrun ceiling -- 14 aborts x 455k units in one Melira game (80% of
+    // its cost; 2026-09-10). The strict heuristic alpha is the one the no-leaf ladder can honour.
+    const bool vl_constant = vl_active && (state.m_value_model->constant || g_force_constant_leaf);
+    const double gate_alpha = (vl_active && !vl_constant && s_vl_alpha_mult > 1.0)
                             ? kStartGateAlpha * s_vl_alpha_mult : kStartGateAlpha;
 
     // JUMP-LADDER (MTG_ESC_JUMP): heuristic-escalation only. The escalation's shallow ladder passes are
@@ -34987,7 +35032,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                            ? (valuearm::t_arm.ladder_emul_direct != 0)
                            : (s_emul_direct_env || warm_none);
     bool emul_done = false;
-    if (s_ladder_emul && depth >= 1 && state.m_value_model && !state.m_value_model->empty())
+    // NEVER on the hybrid's HEURISTIC ESCALATION (g_force_heuristic_leaf): that call must run the
+    // rollout-leaf ladder. Measured 2026-09-10 (Dragonstorm d3/b10, game 800676): with commit_model the
+    // escalation re-entered this block, run_pass's ForceHeuristicLeafGuard(false) cancelled the forced
+    // rollout leaf, and the "escalation" replayed the identical model passes -- the rollout leaf never
+    // ran in any emulv/emulnlv game, which is the whole quality loss those arms measured (T4 -> T8).
+    if (s_ladder_emul && !g_force_heuristic_leaf && depth >= 1 && state.m_value_model && !state.m_value_model->empty())
     {
         emul_done = true;
         g_emul_decisions.fetch_add(1, std::memory_order_relaxed);
@@ -35103,6 +35153,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             ForceValueLeafGuard     _v(!heuristic || commit_model);
             ForceHeuristicLeafGuard _h(heuristic && !commit_model);
             ForceConstantLeafGuard  _c(!heuristic && warm_none);
+            ConstantLeafPassGuard   _clp(!heuristic && warm_none);   // leafless warm-up: stop at exhaustion
             struct WarmFlag { bool prev; WarmFlag(bool on) : prev(g_emul_warm_pass) { g_emul_warm_pass = on; } ~WarmFlag() { g_emul_warm_pass = prev; } } _wf(!heuristic);
             const long long used_before   = budget ? budget->Used() : 0;
             const long long leaves_before = g_fs_leaf_evals;
@@ -35349,6 +35400,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     {
         // Cheap leaf for every pass but the one that commits.
         ForceValueLeafGuard _lvl(s_ladder_value_leaf && pass_depth < depth);
+        ConstantLeafPassGuard _clp(vl_constant);   // the no-leaf stand-in / forced constant leaf: stop at exhaustion
         // Start gate: skip (and commit the prior pass) when the next pass clearly
         // won't fit. Keyed on the running work-unit count, never the clock, so a
         // deeper search makes the same skip decision and can never come out worse.
@@ -35382,6 +35434,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 const double slack = (valuearm::t_arm.trust_slack > 0.0)
                                    ? valuearm::t_arm.trust_slack : kTrustPathSlack;
                 if (path <= slack * (remaining + avoided)) { fits = true; }
+            }
+            // SINGLE-PASS RESERVE (g_single_reserve): admit pass k only if ONE heuristic pass at k still fits
+            // after it -- strictly (a rollout pass has no anytime value; it must complete).
+            if (fits && g_single_reserve && pass_depth - 1 >= 0 && pass_depth - 1 < 16 && c_prev > 0)
+            {
+                const double lpu   = static_cast<double>(std::max<long long>(0, g_probe_leaves[pass_depth - 1]))
+                                   / static_cast<double>(c_prev);
+                const double est_h = estimate * (1.0 + g_single_reserve_R * lpu);
+                if (est_h > kStartGateAlpha * (remaining - estimate)) { fits = false; g_sres_refused.fetch_add(1, std::memory_order_relaxed); }
             }
             if (!fits) { break; }
         }
@@ -36044,6 +36105,16 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // at that depth (fresh memo: the no-leaf pass's entries would mask the estimates) and that line goes
     // through the hybrid unchanged; at an untrusted depth the heuristic escalation runs as it does today
     // (the value line would only have been escalated). A value pass that overruns forces the escalation.
+    // SINGLE HEURISTIC PASS AT THE COMMITTED DEPTH (see the block after the probe) and its RESERVED variant,
+    // resolved here because the probe's gate must know about the reserve.
+    static const bool s_esc_at_committed_env = EnvOn("MTG_ESC_SINGLE_AT_COMMITTED");
+    const bool s_esc_at_committed = (valuearm::t_arm.esc_single >= 0) ? (valuearm::t_arm.esc_single != 0)
+                                                                : s_esc_at_committed_env;
+    static const bool s_single_reserve_env = EnvOn("MTG_ESC_SINGLE_RESERVE");
+    const bool single_reserve = s_esc_at_committed
+                             && ((valuearm::t_arm.esc_single_reserve >= 0) ? (valuearm::t_arm.esc_single_reserve != 0)
+                                                                           : s_single_reserve_env);
+    if (single_reserve) { g_probe_recording = true; }   // the reserve reads the probe's per-depth leaf counts
     static const bool s_nl_commit_env    = EnvOn("MTG_LADDER_EMUL_COMMIT_MODEL");
     static const bool s_nl_warm_none_env = EnvOn("MTG_LADDER_EMUL_WARM_NONE");
     static const bool s_nl_emul_env      = EnvOn("MTG_LADDER_EMULATED");
@@ -36056,9 +36127,16 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     const bool nl_esc = !nl_emulated && nl_commit && nl_warm && UseValueModel()
                      && state.m_value_model && !state.m_value_model->empty() && !state.m_value_model->constant;
     bool nl_force_escalate = false;
+    bool nl_value_line = false;   // the no-leaf escalation ladder's value pass produced the line (rated)
     {
         ForceConstantLeafGuard _nlc(nl_esc);
         struct ReserveGuard { bool prev; ReserveGuard(bool on) : prev(g_reserve_value_pass) { g_reserve_value_pass = on; } ~ReserveGuard() { g_reserve_value_pass = prev; } } _nlr(nl_esc);
+        struct SingleReserveGuard
+        {
+            bool p; double pr;
+            SingleReserveGuard(bool on, double R) : p(g_single_reserve), pr(g_single_reserve_R) { g_single_reserve = on; g_single_reserve_R = R; }
+            ~SingleReserveGuard() { g_single_reserve = p; g_single_reserve_R = pr; }
+        } _srg(single_reserve, (escalation_r > 0.0) ? escalation_r : 120.0);
         TrustPathGuard _tpg(trust_push ? value_min_depth : 0,
                             trust_push ? ((escalation_r > 0.0) ? escalation_r : 120.0) : 0.0);
         // MTG_CONDEMN_HONEST_PROBE (measurement lever, DEFAULT OFF): run the hybrid's PROBE with
@@ -36120,7 +36198,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 if (s_nl_anytime && vl.win_turn < line.win_turn)
                 {
                     g_nlv_partial_kept.fetch_add(1, std::memory_order_relaxed);
-                    line = vl;
+                    line = vl; nl_value_line = true;
                     verified = (line.win_turn <= state.turn_number + committed - 1);
                 }
                 else { nl_force_escalate = true; }
@@ -36128,7 +36206,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             else
             {
                 g_nlv_value_passes.fetch_add(1, std::memory_order_relaxed);
-                line = vl;
+                line = vl; nl_value_line = true;
                 verified = (line.win_turn <= state.turn_number + committed - 1);
             }
         }
@@ -36142,9 +36220,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // its committing pass overruns, and the shipped escalation re-ladders d1..depth from the starved
     // remaining budget and may fall back by crossover. A VERIFIED probe win is a real simulation and is
     // kept as-is (nothing for the heuristic to improve).
-    static const bool s_esc_at_committed_env = EnvOn("MTG_ESC_SINGLE_AT_COMMITTED");
-    const bool s_esc_at_committed = (valuearm::t_arm.esc_single >= 0) ? (valuearm::t_arm.esc_single != 0)
-                                                                : s_esc_at_committed_env;
+    // A LEAFLESS probe line (no-leaf escalation ladder whose value pass did not run) is worth NOTHING to the
+    // escalation: it carries no value ranks for the beam, no rated win turn for the crossover, and no depth the
+    // single-pass predictor can compare against. Measured 2026-09-10 (antilife d5b20, escnlv 41 games worse and
+    // 0 better vs ship): with the sidecar's beam + predicted single pass + crossover table applied to a no-win
+    // line, the escalation was skipped or its line discarded and the executor was left with nothing. Under a
+    // leafless line the escalation is the PLAIN ladder and its result is always taken.
+    const bool line_constant = nl_esc && !nl_value_line && !verified;
+    bool single_failed = false;   // the reserved single pass overran with nothing rated: escalate instead
     if (s_esc_at_committed && value_active && !verified)
     {
         ForceHeuristicLeafGuard _fh1(true);
@@ -36153,9 +36236,35 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         TranspositionTable* single_tt1 = (tt != nullptr) ? tt : &single_tt1_local;
         SearchBudget        single_budget1;   // unlimited: the pass at D must complete
         const int d1 = std::max(1, committed);
-        const SearchLine hl = FSLineWinComplete(state, d1, max_turns, max_turns + 1, second_main,
-                                                single_tt1, &single_cache1, &single_budget1);
-        if (g_hybrid_stats.enabled)
+        SearchLine hl;
+        if (single_reserve && budget != nullptr && !budget->Unlimited())
+        {
+            // RESERVED variant: the pass runs on the REMAINING shared budget (the probe's gate kept room for
+            // it), overrun-guarded by the proportional ceiling like any ladder pass. A partial line that
+            // rated a win is kept (anytime); nothing rated => the heuristic escalation below.
+            static const double s_sres_mult = []{ const char* e = std::getenv("MTG_OVERRUN_MULT");
+                                                  return (e && *e) ? std::atof(e) : 25.0; }();
+            const long long used_before = budget->Used();
+            budget->SetOverrunLimit(SearchBudget::SatAdd(used_before, SearchBudget::SatMulD(s_sres_mult, budget->EffectiveLimit())));
+            hl = FSLineWinComplete(state, d1, max_turns, max_turns + 1, second_main, single_tt1, &single_cache1, budget);
+            const bool over = budget->Overrun();
+            budget->SetOverrunLimit(0);
+            g_sres_units.fetch_add(budget->Used() - used_before, std::memory_order_relaxed);
+            if (over)
+            {
+                g_sres_overruns.fetch_add(1, std::memory_order_relaxed);
+                static const bool s_sres_anytime = EnvOn("MTG_ID_ANYTIME", true);
+                if (s_sres_anytime && hl.win_turn <= max_turns && hl.win_turn < line.win_turn) { g_sres_partial.fetch_add(1, std::memory_order_relaxed); }
+                else { single_failed = true; g_sres_escalated.fetch_add(1, std::memory_order_relaxed); }
+            }
+            else { g_sres_passes.fetch_add(1, std::memory_order_relaxed); }
+        }
+        else
+        {
+            hl = FSLineWinComplete(state, d1, max_turns, max_turns + 1, second_main,
+                                   single_tt1, &single_cache1, &single_budget1);
+        }
+        if (!single_failed && g_hybrid_stats.enabled)
         {
             g_hybrid_stats.decisions.fetch_add(1);
             const int di = (committed >= 0 && committed < 16) ? committed : 15;
@@ -36164,12 +36273,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             g_hybrid_stats.redo_depth[di].fetch_add(1);
             g_hybrid_stats.redo_hdepth[di].fetch_add(1);
         }
-        line = hl;   // committed depth unchanged: the heuristic played the probe's depth
-        if (out_committed_depth) { *out_committed_depth = committed; }
-        RecordIdDepth(committed);
-        return line;
+        if (!single_failed)
+        {
+            line = hl;   // committed depth unchanged: the heuristic played the probe's depth
+            if (out_committed_depth) { *out_committed_depth = committed; }
+            RecordIdDepth(committed);
+            return line;
+        }
     }
-    const bool escalate = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified) || nl_force_escalate;
+    const bool escalate = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified) || nl_force_escalate || single_failed;
     if (g_hybrid_stats.enabled && value_active)
     {
         g_hybrid_stats.decisions.fetch_add(1);
@@ -36272,7 +36384,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // cap, so the kept W lines are the value pass's best -- only their rollouts are new work. s_esc_beam was
         // read + recording armed at the top of the hybrid (before the probe). 0 = unlimited = byte-identical.
         // eff_beam_leafdepth restricts the beam to near-leaf nodes (protects the top plies / committed play).
-        EscBeamGuard _beam(eff_beam, eff_beam_leafdepth, eff_beam_static);
+        EscBeamGuard _beam(line_constant ? 0 : eff_beam, eff_beam_leafdepth, eff_beam_static);   // no ranks under a leafless line
         int hcommitted = depth;
         SearchBudget  esc_alloc_budget;
         SearchBudget* esc_budget = budget;   // legacy shared REMAINING budget (only when fresh_frac < 0)
@@ -36499,7 +36611,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // where it is cheapest to fix, with no ladder rework. Off (predict unset) => target == cap (the
             // fixed-depth research path). No probe structure (all leaves 0) => walk stops at d1 => target 1.
             int target = cap;
-            if (eff_single_predict)
+            if (eff_single_predict && !line_constant)
             {
                 double R;
                 if (frozen_R) { R = R_fixed; }             // deterministic per-deck constant (no g_esc_R mutation)
@@ -36658,7 +36770,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 // is self-consistent (its cumulative sum through td reproduces this measured cost). EMA-smoothed;
                 // d1 skipped (short-tree per-leaf overhead is unrepresentative), mirroring the ladder.
                 (void)r_lv0;
-                if (eff_single_predict && first && !aborted && td >= 2 && esc_budget)
+                if (eff_single_predict && !line_constant && first && !aborted && td >= 2 && esc_budget)
                 {
                     long long cumL = 0, cumC = 0;
                     for (int k = 1; k <= td && k < 16; ++k)
@@ -36839,7 +36951,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         //      the value_no_fallback override (always take).
         // The env override MTG_VALUE_TRUST_OFFSET (s_vto_override>=0) forces the uniform crossover for A/B.
         bool taken;
-        if (!value_fallback_take_at.empty() && s_vto_override < 0)
+        if (line_constant) { taken = (hcommitted >= 1); }   // a leafless line is beaten by any heuristic line
+        else if (!value_fallback_take_at.empty() && s_vto_override < 0)
         {
             const int hi = static_cast<int>(value_fallback_take_at.size()) - 1;   // max measured committed depth
             const int c  = committed < 1 ? 1 : (committed > hi ? hi : committed);

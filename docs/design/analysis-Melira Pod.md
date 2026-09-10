@@ -3023,3 +3023,132 @@ smoke 3 Fluctuator configs moved, 9 games faster / 0 slower; regression 5 moved,
 the slower one classifies as budget churn (T5 -> T6 at 1x, back to T5 at 16x). Accepted both (f714046c).
 For the other 19 decks the table in 10a is the adoption record: no shape beats `ship` on units at equal
 quality at BOTH configs, and the CPU probe shows the leaf's evaluation is not a wall cost, so `ship` stays.
+
+### 2026-09-10c — WHY each rejected shape measured what it did: two implementation bugs, one exposure, one identity
+
+User (2026-09-10 ~02:15): *"If ideas are not panning out, we need to understand the why rather than just
+discarding them. So far, you have only done the latter."* Then: *"Implemented incorrectly is a real cause that
+could be biting us here"*, and *"It's best to look at many real games that differ in quality or time and see what
+happened."* So this session replays individual games from the screen's per-game `.wins`/`.units` files
+(`logs/emul_screen/gamediff.py <armA> <armB>` lists the divergent games) single-process with
+`MTG_ROLLOUT_STATS=1 MTG_TRACE=search`, and reads the ladder pass by pass. Every replay reproduced its batch
+result exactly (same win turn, same units), so the mechanisms below are read off the real decisions.
+
+**1. emulv / emulnlv (emulated ladder, commit on the model) — the heuristic escalation was HIJACKED. Bug.**
+Dragonstorm d3b10 game 800676: ship wins T4 (646 units), emulv T8 (568 units) — same tiny search, so not a budget
+problem. Trace: ship's T1 value ladder commits win=5, the hybrid escalates, and the ROLLOUT ladder finds the T4
+win (passes 179/203/216 units). emulv's "escalation" replays the identical three model passes a second time and
+never runs a rollout. Cause: the emulated block re-enters on the escalation call (it only checks the arm flag),
+and `run_pass`'s `ForceHeuristicLeafGuard(heuristic && !commit_model)` = false OVERWRITES the escalation's forced
+rollout leaf. So in every emulv/emulnlv game the escalation was a no-op: the arms measured "cheap" (no rollouts)
+and "bad" (no escalation) for the same reason. This is the d3b10 catastrophe (1196 of 4000 Dragonstorm games
+worse) AND the small quality losses at d5b20. The earlier "commit-pass overrun fallback" diagnosis was wrong:
+the replays show 0 overruns and 0 fallbacks. FIX: the emulated block is skipped when `g_force_heuristic_leaf` is
+set. Verified: 800676 emulv now T4 with ship's exact escalation.
+
+**2. escnl on modelled decks (Melira 2.4x) — overrun WASTE, not slow leafless search. Exposure of a general
+defect.** Game 802768: ship 2.04M units T7, escnl 7.92M T6. Stats: `id_pass starts=151 aborted=14
+waste_units=6.3M (80%)`; ship aborted 0. Each abort runs to the proportional ceiling (25 x 18k = ~455k units,
+Snow's MTG_OVERRUN_PROP). Pass by pass: leafless passes cost 14/118/1236/7411, then pass 5 is admitted (est 44k
+vs 9.2k remaining — the VALUE ladder's relaxed alpha 8.8 applies because the stand-in is "a model") and
+overruns. At b1000 the same pass costs 80,679 — IDENTICAL to ship's model pass, at every depth and decision.
+So the leafless tree is the SAME SIZE as the model's (the doc's "ordering and B&B cuts" story is refuted);
+what differs is behaviour AFTER EXHAUSTION: no-win results are not memoised once a truncation event has
+landed (`trunc_at_entry` watermark), the model's results are WIN entries (stored regardless) so its exhausted
+pass winds down at 67,890, and the constant leaf's are ALL no-wins so its pass re-searches every transposition
+to the ceiling. Two fixes: (a) a constant-leaf ladder uses the strict alpha 1.10 (the relaxed alpha exists for a
+leaf that holds an incumbent) — verified: 802768 escnl 0 aborts, 1.83M units (< ship's 2.04M), still T6;
+(b) a constant-leaf pass STOPS at exhaustion at its plan loops (after (a) a pass estimated 10.8k still ran to
+130k under the same blackout) — edited + syntax-checked, built and measured only after the running batch.
+Ship is byte-identical under both (the flags are never set on a rated or rollout pass).
+
+**3. escnlv on Melira (2.09x, never a win) — the same explosion, and its value pass NEVER RAN.** Game 801771:
+8 aborts, 52% waste; `no-leaf escalation ladder decisions=30 value_passes=0 to_heuristic=24`. Melira ships no
+`value_trust_depth`, so `escalate_below` = depth+1 and `committed >= value_min_depth` never holds: on every
+deck without a trust depth (Melira, Dragonstorm, Anti-Lifegain, ...) escnlv degenerates to escnl by design.
+Its fair measurement is on the trust-depth decks (knights/slivers/auras/breaching) after fix 2.
+
+**4. emulnl (emulated, commit on the ROLLOUT) — it IS the heuristic ladder.** Melira: emulnl vs heur differs in
+16 of 4000 games (units 1.056x). Game 800663 (ship T4, emulnl T7): the replayed heuristic gate sees the rollout
+ladder's 46x growth d2->d3 and refuses pass 3, committing the heuristic d2 line (land only); ship's relaxed
+alpha admits a 16.8k value pass 3 that rates the spell line (win=4). So emulnl's +0.0225 t is heur's gap to ship
+and its 0.75x is heur's cost; on cheap decks its 3-19x is the rollout leaf (~145 units/leaf on Breaching where
+ship's whole ladder is 1,102 units). Not a shape defect and not a candidate: it has no advantage over heur.
+
+**What this changes about the conclusions.** The model buys NOTHING in tree size on Melira; its benefit is (i) a
+rated line at the exhausted deepest pass that the executor keeps by crossover, and (ii) the escalation it
+cancels on trust-depth decks. The no-leaf shape's advantage is ONLY over the rollout leaf (Fluctuator). The
+"leaf eval is ~0.2% of wall" CPU-probe reading stands, but "ship 9% slower than emulv in wall" was the hijack
+(no rollouts ran). Re-screen: `logs/emul_screen/manifest_fix.json` (1858 jobs: ship/heur/escnl/escnlv/emulv/
+emulnlv, all decks, both cfgs, 12 workers + memwatch) started 02:21 on the fix-1 + fix-2a binary
+(`chain_fix.sh` -> `decide_fix.txt`, `report_fix_vs_*.txt`, wins in `wins_fix/`). Fluctuator's adopted shape is
+affected by 2a (its GT will move); emulnl is unaffected and keeps its pooled6 numbers.
+
+### 2026-09-10d — the menu (user), batch 2 at 32 threads, and two more implementation findings
+
+User direction (2026-09-10 ~03:30-04:30): *"we need to try on other decks as well"*; keep the menu small —
+*"Escalation with and escalation without the value leaf and heuristic ladder with and without the value-leaf.
+It's possible the ladder will be the same with value-leaf on and off making this only 3 possibilities"*; the
+full rollout ladder is the likely dominated idea (*"early rollouts rather than escalations ... don't bring much
+benefit"*); and *"being stuck with less than half of our threads is not acceptable"* / *"We should very rarely
+go over 20 GB even with 32 threads. If we are, we might have a bug."*
+
+**Batch 1 (fix 1 + 2a, 12 workers) was killed by its own watchdog at 04:18** (MemAvailable 1.46 GB; 652/1858
+jobs). Ship/heur digests were byte-identical to screen 1 on every finished job (26,000/26,000 games). Its
+partial `decide_fix.txt` is superseded by batch 2.
+
+**Memory.** Per-game peaks are small (50-260 MB); single DECISIONS balloon (the TT comment records ~6 GB on
+an antilife escalation, the line-cache comment ~28 GB on Mirrorwing). Both memos have result-neutral caps
+that were OFF: `MTG_TT_CAP`, `MTG_FSL_CAP` (deterministic recompute) and `MTG_FSL_POOL` (global backstop).
+Verified inert on a normal game (identical units + play for ship/escnl/nl_sres). Batch 2 runs at 32 threads
+with `MTG_TT_CAP=3000000 MTG_FSL_CAP=500000 MTG_FSL_POOL=10000000`, watchdog 2.5 GB floor, 30 s RSS trend
+(`memtrend_fix2.log`, names the in-flight games). First 10 min: RSS 9.5 -> 14.3 GB, still climbing —
+watch; the caps may need to be tighter (TT is not pooled).
+
+**Batch 2** (`manifest_fix2.json`, 3410 jobs, `launch_fix2.sh`, RESUME mode via `gen_resume.py`): ship, escnl,
+heur, emul, emulv, v_single, v_sres (value probe -> ONE reserved rollout pass), nl_single, nl_sres (leafless
+probe -> ONE reserved rollout pass), escnlv, emulnlv. New code: `esc_single_reserve` (the probe's gate keeps
+tree(k) + R x leaves(k) for the single pass; the pass runs on the remainder, overrun-guarded, partial kept if
+rated else the escalation) and fix 2b (a constant-leaf pass stops at exhaustion). Verification on the new
+binary: ship 2040514 units unchanged; Dragonstorm emulv T4 at ship's 646 units; Melira escnl 1.494M (2a:
+1.834M; ship 2.040M) T6; nl_sres 1.100M T6, 36/36 single passes completed; **v_sres == nl_sres to the unit on
+that game** (the strict reserve binds before the relaxed alpha, so both probes stop at the same depth and
+the single pass overrides the line — the user's "same ladder with the leaf on and off").
+
+**Finding 5 — the value-tuned escalation applied to a LEAFLESS line (escnlv, antilife d5b20: 41 worse / 0
+better vs ship).** 13 of 20 sidecars carry `escalation_cap` (the predicted single-pass escalation) and 4 a
+value-ranked beam (`beam_width`). Under `escnlv` the sidecar is loaded, so when the probe's value pass does
+not run (untrusted depth, i.e. every deck without `value_trust_depth`) the escalation beams by value ranks
+that do not exist, predicts against a no-win line and the crossover table discards its result: game 800681
+shows the probe stop at pass 4 (the reserve refuses pass 5, where escnl banks the T5 win), then NO heuristic
+pass at all, T5 -> T7. `escnl` (stand-in, no sidecar loaded) is unaffected — it runs the plain ladder. FIX
+(edited, syntax-checked, unbuilt while batch 2 runs): a leafless line disables the beam and the single-pass
+predictor and the crossover always takes the heuristic line (`line_constant`). escnlv is re-run in the resume.
+
+**Early batch-2 read (antilife d5b20, n=8, vs ship):** emulv 1.038x / +0.0000 / net 0 — the fidelity control
+now TRACKS ship (hijack fixed); heur 3.72x; escnl 2.14x (+0.0015); nl_sres 2.15x (+0.0023, −11); v_sres 4.92x
+(−0.0017, +3); unlimited single passes 10.8x / 14.1x (not adoptable on cost); emulnlv 1.17x (+0.0003).
+
+**Finding 6 — the FiveColour "monster" games: the executor's full-depth fallback on an EMPTY line.** Game
+803307 (d5b20): heur 2.70M units / 50 s / T6; escnl 40.7M units / 571 s single-threaded / T6, 257 MB peak.
+79% of escnl's units are `la_cand` — SolveWithLookahead's root candidate loop, i.e. AIEngine's fallback
+("no committed play for this phase ... rank this turn with the SAME full lookahead on a FRESH budget"): a
+no-win search line has EMPTY phases (the leaf returns `{max_turns+1, {}}` and a node with no improving child
+keeps that), so it is never committed and the executor re-searches the decision at depth 5 with rollouts.
+A constant leaf makes EVERY unverified probe line empty, so the shape leans on the escalation's rated line;
+where the rollout leaf finds no win by turn 8 either (FiveColour: slow deck), the fallback fires per decision
+(118 decisions in the game, ~273k units each — far past the 18k budget, so the candidate loop's budget stop
+is not bounding it). heur shows the same fallback at 36% of its units; ship (rated line, never empty) does
+not. The fallback's cost is why FiveColour is the batch's wall tail on every leafless arm and on heur.
+Not fixed tonight: candidates are (a) commit the ladder's best-graded no-win line anyway (the refuted-follow
+lever already keeps a whole lost line), (b) bound the fallback's candidate loop by its budget, (c) for a
+leafless probe, treat the escalation's line as authoritative even when unrated.
+
+**Batch 2 killed by its watchdog at 05:07** (533/3410 jobs): RSS jumped 14.4 -> 19.6 GB in 30 s (MemAvailable
+2.38 GB) with the memo caps ON, so a single decision still allocated ~5 GB outside the capped memos (or in
+them: FSL entries on a mass-draw deck are far larger than the ~600 B the cap assumes). The in-flight slowest
+was `creature_giving_v_single` — an UNLIMITED single rollout pass. Resume policy: the unlimited arms
+(v_single / nl_single: 10-14x units, ceiling reference only) are dropped from the resume, caps tightened to
+`MTG_TT_CAP=1000000 MTG_FSL_CAP=200000 MTG_FSL_POOL=6000000`. Lesson re-learned: `launch_fix2.sh` was edited
+while its first instance was still running; bash re-read the changed file mid-execution and relaunched a
+garbage batch line ("ambiguous redirect"). Never edit a running shell script; write a new file.

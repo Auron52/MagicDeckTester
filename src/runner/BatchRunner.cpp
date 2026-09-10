@@ -608,6 +608,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     // what lets ONE pooled batch run the A/B instead of one invocation per arm.
     if (jspec.contains("esc_to_trust")) { j.arm.esc_to_trust = jspec["esc_to_trust"].get<bool>() ? 1 : 0; }
     if (jspec.contains("esc_single"))   { j.arm.esc_single   = jspec["esc_single"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("esc_single_reserve")) { j.arm.esc_single_reserve = jspec["esc_single_reserve"].get<bool>() ? 1 : 0; }
     if (jspec.contains("ladder_emulated")) { j.arm.ladder_emulated = jspec["ladder_emulated"].get<bool>() ? 1 : 0; }
     if (jspec.contains("ladder_emul_direct")) { j.arm.ladder_emul_direct = jspec["ladder_emul_direct"].get<bool>() ? 1 : 0; }
     if (jspec.contains("ladder_emul_commit_model")) { j.arm.ladder_emul_commit = jspec["ladder_emul_commit_model"].get<bool>() ? 1 : 0; }

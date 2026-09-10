@@ -40,6 +40,11 @@ struct Arm
     // and its line is always taken. No d1..D heuristic re-ladder, no crossover fall-back, no
     // starvation. User paradigm 2026-09-08 ("don't search further; heuristic at the final depth").
     int         esc_single        = -1;     // -1 unset | 0 off | 1 on     (MTG_ESC_SINGLE_AT_COMMITTED)
+    // RESERVED single pass (MTG_ESC_SINGLE_RESERVE, with esc_single): the probe's start gate keeps room for ONE
+    // heuristic pass at each depth it admits (tree(k) + R x leaves(k), leaves extrapolated from the previous
+    // pass), and the single pass then runs on the REMAINING budget, overrun-guarded, instead of unlimited.
+    // On an overrun a partial line that rated a win is kept (anytime), else the heuristic escalation runs.
+    int         esc_single_reserve = -1;    // -1 unset | 0 unlimited pass | 1 reserved
     // EMULATED-GATE LADDER (MTG_LADDER_EMULATED): warm-up passes on the value leaf, the committing pass
     // on the heuristic rollout, at the depth the FULL HEURISTIC ladder would have committed -- its start
     // gate is replayed on reconstructed heuristic pass costs (value cost + R x leaves). User design

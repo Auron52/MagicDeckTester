@@ -32,7 +32,12 @@ existence; the H-cell ladder's 1.35-84.8x cliff on a missing model).
 
 ## What the screen measured (2026-09-10, 19 modelled decks + Fluctuator, d5b20 and d3b10, 8 x 500 games)
 
-Full table: `analysis-Melira Pod.md` 2026-09-10a. Summary:
+**SUPERSEDED IN PART -- read "Why the shapes measured what they did" below first.** The first screen ran on a
+binary with two defects (the emulated model-commit ladder's escalation hijack; the constant-leaf ladder's
+relaxed start gate), so its emulv / emulnlv / escnl / escnlv rows measure those defects, not the shapes. The
+re-screen on the fixed binary is `logs/emul_screen/decide_fix.txt`. Fluctuator's and emulnl's rows stand.
+
+Full table: `analysis-Melira Pod.md` 2026-09-10a. Summary as first read:
 
 - **Fluctuator (no trusted model): escnl is a clean win on every axis** -- units 0.38x / 0.42x, wall 0.28x /
   0.37x (same-batch A/B, 12 workers), play -0.005 / -0.011 t at d5b20 / d3b10. ADOPTED 2026-09-10 (f714046c).
@@ -66,11 +71,11 @@ turn to two decimals on every deck checked: antilife 4.18, auras 4.12, knights 4
 decision with the leafless line: an unverified empty line is re-searched by the engine's own continuation
 path, which is the heuristic again. So `probeonly / escnl` is ~1 by construction and says nothing.
 
-What the screen DOES show about where a leaf's benefit comes from: the realized `ship / escnl` is 0.4-0.9 at
-d5b20 while the heuristic escalation is NOT the dominant cost of `escnl` -- the value leaf's estimates give
-the search an ORDERING and B&B cuts that a leafless pass cannot have, so its tree is smaller. A leafless run
-therefore cannot predict the leaf's benefit; the predictor needs per-decision instrumentation (verified
-fraction, escalation-unit share, tree size by depth) recorded per job, which is future work.
+The first reading of the realized `ship / escnl` (0.4-0.9 at d5b20) as "the value leaf's estimates give the
+search an ORDERING and B&B cuts, so its tree is smaller" is REFUTED by the replays below: at an unexhausted
+budget the leafless tree costs exactly what the model's does at every depth. The gap was the overrun waste of
+the constant-leaf ladder under the relaxed alpha. A predictor still needs per-decision instrumentation
+(verified fraction, escalation-unit share, exhausted-pass share) recorded per job; future work.
 
 ## CPU probe
 
@@ -90,9 +95,27 @@ differently (a different digest, not a saving at equal play). The leafless ladde
 in wall exactly as in units (escnl +72%, escnlv +117%). On Knights the leafless shapes read 13-20% faster,
 but the whole job is 0.7 s for 150 games -- nothing to bank. Breaching is unmeasurable (single-digit ms).
 
-So the answer to "are we wasting unnecessary time with the value leaf" is no: what the leaf costs is its
-generation, not its play; in play it PAYS (0.4-0.9x units) through ordering and cuts. The no-leaf shapes
-are for decks WITHOUT a trusted model (Fluctuator: 0.38x) and for day one of a new deck.
+So the leaf's evaluation costs ~nothing in play; what it costs is its generation. The "emulv 9% under
+ship" wall reading was the escalation hijack (no rollouts ran), not a saving. The no-leaf shapes are for
+decks WITHOUT a trusted model (Fluctuator: 0.38x) and for day one of a new deck.
+
+## Why the shapes measured what they did (2026-09-10; per-game replays, `analysis-Melira Pod.md` 2026-09-10c)
+
+Method: `logs/emul_screen/gamediff.py <armA> <armB>` lists the games whose win turn or units diverge; each
+was replayed single-process (`--seed <base+gi> --games 1`, `MTG_ROLLOUT_STATS=1 MTG_TRACE=search`) and
+reproduced its batch result exactly; the ladder was then read pass by pass.
+
+| shape | screen reading | mechanism | status |
+|---|---|---|---|
+| emulv / emulnlv | cheap but bad at d3b10; ~1.0x, slightly worse at d5b20 | **BUG: escalation hijacked.** The emulated block re-entered on the hybrid's escalation call and `run_pass` overwrote the forced rollout leaf, so the "escalation" replayed the same model passes; the rollout leaf never ran in any game (Dragonstorm 800676: T4 -> T8 at the same 600 units) | fixed: block skipped under `g_force_heuristic_leaf`; re-screened |
+| escnl on modelled decks | 1.1-2.5x ship at d5b20 | **Overrun waste.** Leafless pass costs == model pass costs at every depth (Melira T1: 14/118/1236/7411/80679 both). The stand-in inherits the value ladder's alpha 8.8, so the deepest pass is admitted with est 44k vs 9.2k remaining; after exhaustion no no-win is memoised (truncation watermark) and every result of a constant leaf IS a no-win, so the pass runs to the 25x ceiling: 14 aborts = 80% of the game's units. The model's exhausted pass winds down (WIN entries keep the memo alive) | fixed (a): strict alpha 1.10 for a constant-leaf ladder (0 aborts, 1.83M vs ship 2.04M on that game); (b): a constant-leaf pass stops at exhaustion (edited, measured after (a)'s batch) |
+| escnlv | never a units win | same waste as escnl, plus on every deck WITHOUT `value_trust_depth` (`escalate_below` = depth+1) the reserved value pass can never run: 30 decisions, 0 value passes on Melira | re-screened after (a); judge it on trust-depth decks |
+| emulnl | 0.75x / +0.02 t on Melira; 3-19x on cheap decks | **It is the heuristic ladder** (16 of 4000 Melira games differ from heur): the replayed rollout gate sees 46x growth d2->d3 and commits the heuristic d2 line where ship's relaxed alpha admits a rated value d3 line. On cheap decks the rollout leaf (~145 units/leaf) is the whole cost | not a candidate: no advantage over heur |
+
+Two facts that reshape the picture: (1) in deterministic units the tree does not depend on the leaf, so a
+leafless pass can only save units by being SKIPPED (fewer passes) or by replacing rollouts; (2) the model's
+benefit on a deck without a trust depth is the rated line of an exhausted deepest pass (kept by crossover),
+plus the cancelled escalation on trust-depth decks.
 
 ## Determinism
 
@@ -100,8 +123,16 @@ The emulated ladder's learned R(k)/G(k) are per GAME (keyed on `game_seed`, prio
 `escalation_r` else 120). Before 2026-09-09 they persisted across games on a batch worker, so a job's play
 depended on thread history (caught by a re-run: different digest). Same-job-twice checks now match.
 
-## Memory
+## Memory (and why screens ran at 12 of 32 workers until 2026-09-10)
 
-The leafless ladders build large per-decision memos: a 32-worker screen batch reached ~20 GB on the 23 GB
-box, 16 workers 14.6 GB, 12 workers ~10 GB. Run screens of these shapes at <= 12 workers with a
-`MemAvailable` watchdog (`logs/emul_screen/memwatch.sh <pid>`).
+Per-GAME peaks are small (Melira ship 50 MB, Melira escnl 131 MB, FiveColour ship 78 MB, FiveColour escnl
+monster game 259 MB), but a single DECISION's memo can balloon: the TT comment records a ~6 GB antilife
+escalation, the line-cache comment a ~28 GB Mirrorwing decision. A 12-worker batch sat at ~10 GB RSS with a
+16.5 GB high-water mark and was killed by its own watchdog when MemAvailable fell to 1.46 GB (batch 1,
+04:18). Both memos have RESULT-NEUTRAL caps that were OFF by default: `MTG_TT_CAP` (entries per table),
+`MTG_FSL_CAP` (entries per decision cache) -- deterministic, a refused insert just recomputes -- and
+`MTG_FSL_POOL` (a global KB bound across workers; schedule-dependent recompute, so a backstop only).
+Batches now run at 32 workers with `MTG_TT_CAP=3000000 MTG_FSL_CAP=500000 MTG_FSL_POOL=10000000`
+(`logs/emul_screen/launch_fix2.sh`), a pid watchdog (`memwatch.sh`, 2.5 GB floor) and a 30 s RSS trend
+that names the in-flight games (`memtrend.sh`). Verified inert on normal games: identical units and play
+for ship, escnl and nl_sres on Melira 802768 with and without the caps.
