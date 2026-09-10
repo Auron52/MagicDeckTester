@@ -4199,6 +4199,56 @@ land-aura colours" item is NOT "make s9_gi8 legal"; whatever residual the 10b se
 fresh post-pipeline re-diagnosis (start from `--validate-line` on the rejection artifacts) before
 any GT-moving engine change is written.
 
+### Session 12 (2026-09-10 day): run stopped by user; tractability + reference/viewer batch
+
+**Run disposition.** The 2026-09-09 12:41 launch was killed mid-phase-A by a Windows Update
+(~14:40-21:16); relaunched 21:29 (resume verified, 2 jobs banked); STOPPED ~03:40 by USER
+directive: *"we should not be running the value-leaf... 'Make the value-leaf generation
+tractable', not run it. Running it is kept for when I decide on an overnight period... which
+might be tonight if we are ready. But not yet."* Banked rows remain resumable. Evidence captured
+at stop: >=10 monster games at 6h+ UNFINISHED with all four label cuts active.
+
+**Monster diagnosis (fresh, this binary).** MTG_WINLESS_STATS on completing monsters: 900255
+(7 min) residual 1,956/3,426 edge nodes (57%), 900264 (48 min) 2,653/3,300 (80.4%) — all dig-inf,
+loop source hand-dominated; seeds almost never kill (0-0.3%). KEY SCALING: residual COUNT grew
+1.35x while wall grew 7x — the blowup is PER-NODE cost (unbudgeted FSLineWin/FSLineTail B&B on
+high-mana boards; 12/12 gdb samples inside EnumerateEarliestWins→EnumeratePlansWithLandUncached→
+FSLineWin). FSL/TT caps ruled out: capped-vs-uncapped 446s vs 381s (~15%). Optimization fanned out
+(certificate ceiling extension / within-pass state dedup / user-blessed dominance pruning).
+
+**Viewer/user batch (live session, all landed + gated).**
+- Living Wish double-cast: the second wish silently fetched NOTHING (both variants baked the same
+  singleton target; second found it gone, `idx<0` no-op). Fix 543f540d: every tutor/wish CAST gets
+  its own resolution frame, live candidate list, default = baked target (or decline if gone);
+  Eladamri's Call same cause fixed. 3 refs ok→repaired (inserted frames), 0 drift.
+- Mana reservation + concrete colours (USER: "the biggest problem with handling this deck")
+  98b0f751 + d2b769d5: (1) {C}-sink detector now sees HAND sinks (a turn casting Displacer
+  finally holds {C}); (2) ConsumeFloatingAny no longer eats {C} on generic pips mid-payment when a
+  sink is live (MTG_HOLD_C_IN_PAYMENT); (3) painland tap-ahead exclusion is now COVERAGE-based,
+  not membership (seed-6 second-Drake banks again) + yield-ordered picks; (4) DOCTRINE: no
+  wild/generic in the human-visible pool — ConcretiseHumanFloat commits by demand then breadth at
+  DECISION BOUNDARIES (the two other placements each cost reference win-turns; corpus-settled);
+  (5) ComputeRefloatDemand hand-cost bug (zone cards carry empty m_mana_cost) fixed. Demand =
+  player-visible knowledge only (USER refinement x2): searched-to-hand + board abilities + hand;
+  known-library-top is a wired NO-OP hook pending provenance tracking. All HumanPlayActive-gated,
+  8 default-ON flags + 1 default-OFF (MTG_HUMAN_CONCRETE_TAPAHEAD, the measured-losing half).
+- Combined-tree gates: scenarios 73/73, smoke 73/73 ALL PASS, sweep 306/306 (12 ok/294 repaired,
+  0 drift), agent-side full regression 99/99.
+
+**Reference matching (USER: "we need to match the references I have generated").** ref_bench
+refreshed with s10_gi9/s11_gi10 (e35debe2): search trails human 5/8 (avg 4.50 vs 5.25).
+Classification (c1aacaf9): s2/s5/s11 = BUDGET-STARVED TAILS — the VALUE LEAF is the fix (tonight's
+run closes 3 of 5); s10 = the known library-route structural gap (revive after the value leaf);
+s1 (+2) = the documented bank-then-deploy class, NOT budget-fixed on this binary. Cheap queued
+candidate: card_scores creature-over-ramp tiebreak decided s10-T2 AND s11-T3 at equal tail —
+needs one measured batch.
+
+**Queued next:** manual tap/pay viewer fallback (USER: engine allocation stays the observable
+default; human can pre-tap lands for chosen colours into float — rides pay-from-float-first);
+EffectiveProduces aura colours in ProducesForPayment (new precise symptom from the mana agent:
+seed-8 forces a Yavimaya pain tap for {G} that Mariposa+Wild Growth makes); monster-agent
+integration + consolidated full regression; tonight-readiness verdict.
+
 **LAUNCH** (12:41, alone on the box, frozen at HEAD 2a913b0b / HEAD:src 030115fa):
 `MTG_MATRIX_FD_LEAF_DEPTH=0 bash scripts/valueleaf.sh run decks/EldraziDisplacerFlicker`.
 Play digests verified UNCHANGED by the script itself -- all 770 banked rows kept; phase A is 22
