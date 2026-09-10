@@ -458,8 +458,20 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 // board and the trial apply is skipped. Say what is actually true of each.
                 // The GUI keys on blink_count / combo_off, not on this text; claude-play agents
                 // read it.
+                //
+                // THREE STATES now, not two (USER 2026-09-10, the rule table): a plan can be
+                // OFFERED by the inventory rules without a trial apply having proved the kill.
+                // That one says COMBO OFF and names the rule that fired; it does not say "wins".
                 if (bk > 3)
-                { tag += plan.combo_off_verified ? " -- COMBO OFF: wins this turn" : " (bank)"; }
+                {
+                    if (plan.combo_off_verified) { tag += " -- COMBO OFF: wins this turn"; }
+                    else if (plan.combo_off_offered)
+                    {
+                        tag += " -- COMBO OFF";
+                        if (!plan.combo_off_rule.empty()) { tag += " [" + plan.combo_off_rule + "]"; }
+                    }
+                    else { tag += " (bank)"; }
+                }
                 break;
             }
             case Action::Kind::ActivatePermAbility:
@@ -1095,7 +1107,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // act on has to survive a display cap. One slot, taken before the diversity pass.
         for (size_t i = 0; i < plans.size(); ++i)
         {
-            if (!plans[i].combo_off_verified || hide_bundle[i]) { continue; }
+            if ((!plans[i].combo_off_verified && !plans[i].combo_off_offered) || hide_bundle[i])
+            { continue; }
             emit_order.push_back(i); taken[i] = 1; break;
         }
         for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
@@ -1169,7 +1182,16 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // board). combo_off_verified is set only on the branch where ApplyPlanDirect actually ran
         // and OpponentHasLost was actually true, so the button now means what it says. A bank still
         // reaches the menu, just as an ordinary sized activation labelled "(bank)".
-        if (p.combo_off_verified) { os << ", \"combo_off\": true"; }
+        //
+        // ...and the DISPLAY flag is now the wider one. `combo_off` means "the button appears"
+        // (the provider's rule table said a go-off is possible here); `combo_off_verified` is the
+        // strictly stronger claim that a trial apply ran and won, and is what the viewer keys its
+        // "win now" wording on. `combo_off_rule` names which rule fired, so a wrong rule is
+        // identifiable from a saved decision JSON without re-running anything.
+        if (p.combo_off_offered || p.combo_off_verified) { os << ", \"combo_off\": true"; }
+        if (p.combo_off_verified) { os << ", \"combo_off_verified\": true"; }
+        if (!p.combo_off_rule.empty())
+        { os << ", \"combo_off_rule\": "; JsonStr(os, p.combo_off_rule); }
         // Plain name list (used for the land+cast multiset match). Land's Edge activations
         // are NOT casts -- they are surfaced via the action's "landsedge" count below and the
         // top-level "lands_edge" object, so the GUI's cast match doesn't treat them as spells.
@@ -5014,6 +5036,17 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //                                    // must contain this. The count cannot express WHICH variants
 //                                    // survived, and the dropped-cast defect changed only that --
 //                                    // three variants before the fix, three after, different three.
+//     "expect_combo_off": true,      // optional: HUMAN-PLAY assertion. Enumerate this board's main
+//                                    // menu through TurnSolver::EnumerateMainPlans (the viewer's own
+//                                    // entry point) and require a plan flagged combo_off_verified --
+//                                    // i.e. the "⚡ Combo Off" button. `false` requires its ABSENCE,
+//                                    // which is how a board that CANNOT win is pinned as such.
+//                                    // Needs "env": {"MTG_HUMAN_PLAY": "1"}; returns without running
+//                                    // the turn engine (a statement about the position).
+//     "combo_off_verify": true,      // optional (default true): re-apply the flagged plan through
+//                                    // TurnSolver::ApplyPlan and require OpponentHasLost -- the
+//                                    // verified-finish guarantee, re-derived independently of the
+//                                    // gate's own trial.
 //     "log_out": "logs/play/scenario.json" }            // optional: write the per-turn trace
 static int RunScenario(const std::filesystem::path& scenario_path)
 {
@@ -5278,6 +5311,75 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             }
         }
         std::cout << "scenario: PASS (line " << got << ")\n";
+    }
+
+    // Optional COMBO OFF assertion -- does the viewer's gold "⚡ Combo Off" button appear on THIS
+    // board, and does the plan behind it really win when applied?
+    //
+    // A win-turn fixture structurally cannot answer either question: the button is a HUMAN-PLAY menu
+    // entry (EnumerateMainPlans' `HumanPlayActive() && MTG_COMBO_OFF` gate), and the autonomous
+    // engine a scenario otherwise runs never sets that flag, so it enumerates a different menu and
+    // reaches its kill by its own route. The fixture must therefore call the same entry point the
+    // viewer calls, on the board as authored -- no untap, no draw step -- exactly as `validate_line`
+    // does for CheckLine. Set `"env": {"MTG_HUMAN_PLAY": "1"}` in the fixture (applied above, before
+    // any EnvOn static caches).
+    //
+    // THE SECOND HALF IS THE POINT. `expect_combo_off: true` alone would pass on a button that lies,
+    // which is the exact regression this deck has already shipped once (seed 7: "COMBO OFF: wins this
+    // turn", ten blinks, opponent still on 20). So the flagged plan is re-APPLIED here on a fresh
+    // copy through the public `ApplyPlan` -- the canonical execution order the viewer's commit runs,
+    // NOT the gate's own internal trial -- and the opponent must actually have lost. An independent
+    // re-derivation of the promise, not a re-read of the flag that made it.
+    if (j.contains("expect_combo_off"))
+    {
+        const bool want = j.at("expect_combo_off").get<bool>();
+        GameState s = state;
+        s.turn_number = turn;
+        std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+        int found = -1;
+        for (int i = 0; i < static_cast<int>(plans.size()); ++i)
+        { if (plans[i].combo_off_offered || plans[i].combo_off_verified) { found = i; break; } }
+        std::cout << "scenario: combo_off plans=" << plans.size()
+                  << " offered=" << (found >= 0 ? 1 : 0)
+                  << " verified=" << (found >= 0 && plans[found].combo_off_verified ? 1 : 0)
+                  << (found >= 0 && !plans[found].combo_off_rule.empty()
+                          ? (" rule=" + plans[found].combo_off_rule) : std::string())
+                  << (found >= 0 ? (" summary=\"" + SummarizePlan(plans[found], s) + "\"")
+                                 : std::string())
+                  << "\n";
+        if (want != (found >= 0))
+        {
+            // The menu itself, because "offered=0" alone cannot tell the three ways to get there
+            // apart -- no go-off COUNT was sized (no plan carries a big blink), a count was sized
+            // but no STANDALONE plan carries it, or the trial apply ran and did not win. The first
+            // two are visible in these summaries; the third is not, and is what
+            // MTG_COMBO_OFF_PROJECT=0 plus a re-run distinguishes.
+            for (int i = 0; i < static_cast<int>(plans.size()) && i < 40; ++i)
+            { std::cout << "scenario:   plan " << i << " " << SummarizePlan(plans[i], s) << "\n"; }
+            std::cout << "scenario: FAIL expected combo_off " << (want ? "OFFERED" : "ABSENT")
+                      << ", got " << (found >= 0 ? "OFFERED" : "ABSENT") << "\n";
+            return 1;
+        }
+        if (found >= 0 && j.value("combo_off_verify", true))
+        {
+            GameState c = s;
+            // The button's own apply path: the finish gates open (ComboOffFinishScope) and the
+            // choosers nulled (ComboOffApplyPause), exactly as AIEngine does on a click.
+            ComboOffFinishScope co_finish;
+            ComboOffApplyPause  co_quiet;
+            TurnSolver::ApplyPlan(c, plans[found], /*is_pre_combat=*/true);
+            if (!OpponentHasLost(c))
+            {
+                std::cout << "scenario: FAIL combo_off plan applied but did NOT win"
+                          << " (opponent life " << c.players[1 - c.active_player_index].life
+                          << ", library " << c.players[1 - c.active_player_index].library.size()
+                          << ")\n";
+                return 1;
+            }
+            std::cout << "scenario: combo_off verified finish (opponent lost)\n";
+        }
+        std::cout << "scenario: PASS (combo_off " << (want ? "offered" : "absent") << ")\n";
+        return 0;   // a COMBO OFF fixture is a statement about THIS position, not about a played turn
     }
 
     const std::map<std::string, std::vector<int>> numbering = GoldFishRunner::BuildCardNumbering(deck);

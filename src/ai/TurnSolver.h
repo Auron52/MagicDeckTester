@@ -508,6 +508,21 @@ public:
         // search never reads it and no digest keys on it, so autonomous play is byte-identical.
         bool combo_off_verified = false;
 
+        // ...and the DISPLAY half, which is a different question and now has a different answer.
+        // USER, 2026-09-10: *"we simply do not get the Combo Off button in enough cases"* and
+        // *"we should just come up with some rules that -> combo off is possible"*. So the button
+        // is shown when the provider's RULE TABLE (DecisionProvider::ComboOffPossible -- board
+        // inventory only, no search) says a go-off is possible from here; `combo_off_verified`
+        // stays the strictly stronger claim that a trial apply actually ran and actually won, and
+        // is the only thing entitled to print "wins this turn". A plan carrying `offered` but not
+        // `verified` runs the go-off on click and, if it does not win, says so loudly rather than
+        // pretending (AIEngine's combo_off branch emits the failure event).
+        //
+        // Both flags are human-menu only and neither is read by the search or any digest.
+        bool combo_off_offered  = false;
+        // Which rule fired, for the viewer label, the logs and the fixture harness.
+        std::string combo_off_rule;
+
         // Pump-waste tie-break flag (SubsetPumpWasted): this plan casts a target_own_creature
         // alt payload (Invigorate) whose pump cannot be used -- no ready attacker, or the
         // plan's own payment must tap the pump's target. Consequence is ORDERING ONLY:

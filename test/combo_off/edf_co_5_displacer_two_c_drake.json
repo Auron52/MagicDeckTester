@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "OUTLET = ELDRAZI DISPLACER, PAYLOAD = PEREGRINE DRAKE, TWO {C} SOURCES. The other side of",
+    "fixture 4's line: the Drake untaps five, so both Mariposas come back every pass, c_refund is 2",
+    "against the Displacer's own c_cost of 1, and net_c is 1 -- a real, if slow, colourless engine.",
+    "The button must appear here, and the promotion is INERT (the {C} lands are already inside the",
+    "top-5), which is exactly the control the starved form needs: it changes nothing on a board that",
+    "was never starved."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 5,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 12,
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    { "name": "Kitchen",                  "controller": 0, "tapped": false },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Conservatory",             "controller": 0, "tapped": false },
+    { "name": "Mariposa Military Base",   "controller": 0, "tapped": false },
+    { "name": "Mariposa Military Base",   "controller": 0, "tapped": false },
+    { "name": "Eldrazi Displacer",        "controller": 0, "tapped": false },
+    { "name": "Peregrine Drake",          "controller": 0, "tapped": false },
+    { "name": "Dimensional Infiltrator",  "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "expect_combo_off": true
+}

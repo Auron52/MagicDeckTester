@@ -993,6 +993,91 @@ struct RevealLogPause
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };
 
+// ---- COMBO OFF: make the REAL apply resolve exactly what the TRIAL apply resolved -------------
+//
+// The verify/apply pair was asymmetric in one specific, load-bearing way, and it is what forced the
+// COMBO OFF gate to accept only STANDALONE go-off plans. The trial runs under RevealLogPause, which
+// nulls all 26 CHOOSERS; the real apply (AIEngine's combo_off branch) ran with them LIVE. So any
+// sub-decision inside the plan -- a wish target, a dig, an aura host -- resolved by ENGINE RANKING
+// in the trial and by whatever the human answered in the real apply, and the two could disagree.
+// That is EDF seed 7 exactly: "Combo off failed to actually do the right thing here" -- the trial's
+// nulled chooser re-ranked two Living Wishes onto the sink and won, the real apply asked and did not.
+// The 2026-09-07 fix removed the whole class of plan rather than the asymmetry.
+//
+// This removes the ASYMMETRY instead, which is both safer and much less restrictive: the button's
+// apply nulls the same choosers the trial nulled, so the line the human is promised is the line that
+// runs, whatever shape the plan has. It also happens to be the user's own specification of the
+// button -- *"You either win or let the user do each required action"* (2026-09-07). A verified
+// COMBO OFF is the "you win" branch: it asks nothing, because everything it would ask was already
+// answered, identically, in the run that proved it wins.
+//
+// Deliberately NOT a RevealLogPause: the reveal logger, the event sink, the draw sink and
+// g_real_resolution all stay LIVE, so the viewer's history shows every blink, exile and draw the
+// go-off performed. Those are pure OUTPUT -- they cannot change a resolution -- so keeping them on
+// costs nothing in fidelity to the trial.
+//
+// Constructed only on the `combo_off_verified` branch, which only the human-play gate can set.
+struct ComboOffApplyPause
+{
+    TopChooser* c0; TargetChooser* c1; BounceChooser* c2; DigChooser* c3;
+    DiscardChooser* c4; EIChooser* c5; RetraceDiscardChooser* c6; SoulfireTargetChooser* c7;
+    BounceChooser* c8; ReplicateChooser* c9; LandEntryChooser* c10; LandRadChooser* c11;
+    DragonChooser* c12; SacTutorChooser* c13; ReviveChooser* c14; BounceChooser* c15;
+    RummageChooser* c16; LackeyChooser* c17; FreeCastChooser* c18; DemonstrateChooser* c19;
+    LightPawsChooser* c20; FirebreatheChooser* c21; StorageHoldChooser* c22; TutorChooser* c23;
+    BounceChooser* c24; FirebreatheChooser* c25; TapPrefChooser* c26; LoyaltyTargetChooser* c27;
+    ComboOffApplyPause()
+    {
+        c0 = g_play_top_chooser;        c1 = g_play_target_chooser;
+        c2 = g_play_bounce_chooser;     c3 = g_play_dig_chooser;
+        c4 = g_play_discard_chooser;    c5 = g_play_ei_chooser;
+        c6 = g_play_retrace_chooser;    c7 = g_play_soulfire_chooser;
+        c8 = g_play_sacrifice_chooser;  c9 = g_play_replicate_chooser;
+        c10 = g_play_land_entry_chooser; c11 = g_play_land_rad_chooser;
+        c12 = g_play_dragon_chooser;    c13 = g_play_sac_tutor_chooser;
+        c14 = g_play_revive_chooser;    c15 = g_play_flicker_chooser;
+        c16 = g_play_rummage_chooser;   c17 = g_play_lackey_chooser;
+        c18 = g_play_free_cast_chooser; c19 = g_play_demonstrate_chooser;
+        c20 = g_play_lightpaws_chooser; c21 = g_play_firebreathe_chooser;
+        c22 = g_play_storage_hold_chooser; c23 = g_play_tutor_chooser;
+        c24 = g_play_attach_host_chooser;  c25 = g_play_jitte_chooser;
+        c26 = g_play_tap_pref_chooser;  c27 = g_play_loyalty_chooser;
+        g_play_top_chooser = nullptr;        g_play_target_chooser = nullptr;
+        g_play_bounce_chooser = nullptr;     g_play_dig_chooser = nullptr;
+        g_play_discard_chooser = nullptr;    g_play_ei_chooser = nullptr;
+        g_play_retrace_chooser = nullptr;    g_play_soulfire_chooser = nullptr;
+        g_play_sacrifice_chooser = nullptr;  g_play_replicate_chooser = nullptr;
+        g_play_land_entry_chooser = nullptr; g_play_land_rad_chooser = nullptr;
+        g_play_dragon_chooser = nullptr;     g_play_sac_tutor_chooser = nullptr;
+        g_play_revive_chooser = nullptr;     g_play_flicker_chooser = nullptr;
+        g_play_rummage_chooser = nullptr;    g_play_lackey_chooser = nullptr;
+        g_play_free_cast_chooser = nullptr;  g_play_demonstrate_chooser = nullptr;
+        g_play_lightpaws_chooser = nullptr;  g_play_firebreathe_chooser = nullptr;
+        g_play_storage_hold_chooser = nullptr; g_play_tutor_chooser = nullptr;
+        g_play_attach_host_chooser = nullptr;  g_play_jitte_chooser = nullptr;
+        g_play_tap_pref_chooser = nullptr;   g_play_loyalty_chooser = nullptr;
+    }
+    ~ComboOffApplyPause()
+    {
+        g_play_top_chooser = c0;        g_play_target_chooser = c1;
+        g_play_bounce_chooser = c2;     g_play_dig_chooser = c3;
+        g_play_discard_chooser = c4;    g_play_ei_chooser = c5;
+        g_play_retrace_chooser = c6;    g_play_soulfire_chooser = c7;
+        g_play_sacrifice_chooser = c8;  g_play_replicate_chooser = c9;
+        g_play_land_entry_chooser = c10; g_play_land_rad_chooser = c11;
+        g_play_dragon_chooser = c12;    g_play_sac_tutor_chooser = c13;
+        g_play_revive_chooser = c14;    g_play_flicker_chooser = c15;
+        g_play_rummage_chooser = c16;   g_play_lackey_chooser = c17;
+        g_play_free_cast_chooser = c18; g_play_demonstrate_chooser = c19;
+        g_play_lightpaws_chooser = c20; g_play_firebreathe_chooser = c21;
+        g_play_storage_hold_chooser = c22; g_play_tutor_chooser = c23;
+        g_play_attach_host_chooser = c24;  g_play_jitte_chooser = c25;
+        g_play_tap_pref_chooser = c26;  g_play_loyalty_chooser = c27;
+    }
+    ComboOffApplyPause(const ComboOffApplyPause&)            = delete;
+    ComboOffApplyPause& operator=(const ComboOffApplyPause&) = delete;
+};
+
 // ---- Human-play suppression inside the engine's clairvoyant rollouts -----------------------
 // --claude-play sets MTG_HUMAN_PLAY (and MTG_UNPRUNED) for the whole process, so every place that
 // reads those env vars diverges from an autonomous run. That is correct for the REAL turn (the

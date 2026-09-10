@@ -1,0 +1,36 @@
+{
+  "_comment": [
+    "THE FINISHER IS IN HAND, NOT ON THE BOARD -- the user's *'blue or black'* clause. Dimensional",
+    "Infiltrator costs {1}{U} and the Kitchen makes the blue; the board otherwise is fixture 1's.",
+    "",
+    "Two mechanisms carry this one and neither is new: ScanHandSinks prices the cast as a one-off",
+    "hand_setup_mv (through BlinkActivationCounts' human bank-count bypass, so a count is offered at",
+    "all), and ComboFinishFromHand deploys it inside the loop -- which it is allowed to do ONLY",
+    "inside ComboOffFinishActive(), i.e. only because the human pressed the button. What the fixture",
+    "guards is that the two agree: the count is sized for the deploy route AND the deploy really",
+    "happens, so the promise the button makes is the line the apply runs."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 12,
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    { "name": "Kitchen",                  "controller": 0, "tapped": false },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Conservatory",             "controller": 0, "tapped": false },
+    { "name": "Wild Growth",              "controller": 0, "tapped": false, "equips": "Conservatory" },
+    { "name": "Mariposa Military Base",   "controller": 0, "tapped": true  },
+    { "name": "Emiel the Blessed",        "controller": 0, "tapped": false },
+    { "name": "Cloud of Faeries",         "controller": 0, "tapped": false }
+  ],
+  "hand": ["Dimensional Infiltrator"],
+  "expect_combo_off": true
+}

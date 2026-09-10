@@ -4484,3 +4484,109 @@ Displacer and Training Grounds all resolved, no dropped cast.
 * Combined-tree gates after each cherry-pick, final: scenarios 73/73; smoke ALL PASS (0 play
   changes); sweep 307 refs, 11 ok / 296 repaired / 0 play-drift / 0 enum-gap / 0 contract-fail
   (ok->repaired motion is index remapping under the smaller fan, absorbed by content anchoring).
+
+## Session 14 (2026-09-10): COMBO OFF becomes a RULE TABLE -- "aggressive, but accurate"
+
+**USER, opening the session:** *"we simply do not get the Combo Off button in enough cases. Once I
+have the combo assembled for infinite mana and a draw source, blue or black and a colourless source
+it should be clear that I can win with the combo. Note that playing Emiel is also possible if I
+don't have enough colourless."* And, sharpening it: *"The current version is still too difficult to
+make work in the viewer and I feel that we require a much more aggressive, but accurate Combo Off to
+make this deck workable."* And finally, settling the architecture: *"we should just come up with
+some rules that -> combo off is possible."*
+
+### The gate as it was, and the four things wrong with it
+
+`EnumerateMainPlans`' human-play gate (TurnSolver.cpp) showed the button only when ALL of:
+`HumanPlayActive() && MTG_COMBO_OFF`; some plan carried an `ActivateBlink` with `chosen_x > 3`; that
+plan was **standalone** (one action, no land drop); the provider's cheap lethal projection said a
+kill was in reach; and a trial `ApplyPlanDirect` then actually won. Four of those five are wrong for
+the user's question:
+
+1. **`c_refund` modelled an untap that never picks the {C} land.** `FlickerTopLandYields` ranks
+   lands purely by yield, and `EtbUntapLands`' `MTG_UNTAP_C_FIRST` was a tie-break only. On seed 9
+   gi=8 T4 -- the user's own frame -- Cloud of Faeries untaps TWO and the yield order takes Kitchen
+   (1 + two Overgrowths = 5) and a Wild-Growth'd Conservatory (2); the tapped Mariposa Military Base
+   (1) is the board's ONLY colourless source and never comes back. `net_c = 0`, so
+   `ProjectsAlternateWin` refused, and forcing past it with `MTG_COMBO_OFF_PROJECT=0` confirmed the
+   refusal was honest: the go-off ran and did not win. The defect was upstream, in which lands the
+   untap picks.
+2. **The outlet was chosen by battlefield insertion order.** Eldrazi Displacer `{2}{C}` and Emiel
+   `{3}` have the SAME mana value (3, or 1 under Training Grounds), so `net` tied, `untaps` tied,
+   and the recognizer kept whichever sat earlier -- the §9 defect one column over, with a sharper
+   consequence: the Displacer spends a colourless a pass and Emiel spends none.
+3. **The finisher's own colour was never checked.** `ComboFinishFromHand` preferred the drain
+   unconditionally, so it would wish for an Essence Depleter `{2}{B}` on a board whose only black is
+   an Aether Hub holding energy.
+4. **`plausible` was a VETO on the display**, so a cheap projection built for plan ranking decided
+   whether the user could see a button at all.
+
+### The rule table (DecisionProviders.cpp, `EldraziFlickerProvider::ComboOffPossible`)
+
+The trigger is now a small declarative table of named conjunctions over BOARD INVENTORY -- no
+search, no score, no threshold -- so the user can read it and correct one row without touching the
+others. Ingredients: **L** loop assembled (outlet + untapper in play, top-N land yields minus the
+outlet's effective activation cost > 0); **D** a repeatable draw source in play (`tap_draw_cost`
+Mariposa, `tap_investigate_cost` Conservatory / Kitchen); **C1/C2** one / two permanents whose own
+modes make `{C}`; **UB** a permanent making `{U}` or `{B}` (Aether Hub only while it has energy);
+**E** Emiel in play (a blink outlet with no `{C}` pip); **Fb/Fh** a `{T}`-less finisher in play / in
+hand; **W** a Living Wish that can still reach a sideboard finisher (in hand always; in the library
+only when **D**); **G** Shivan Gorge in play with red producible.
+
+| # | rule | fires when | source |
+|---|------|-----------|--------|
+| 1 | `GORGE` | L and G | USER: *"the third path would be Shivan Gorge, but that is only accessible with red mana on board (fertile ground or trace of abundance) and Shivan Gorge already out + infinite mana."* |
+| 2 | `DEPLOYED` | L and Fb and C1 and (D or E or C2) | filled in |
+| 3 | `IN-HAND` | L and Fh and C1 and UB and (D or E or C2) | filled in |
+| 4 | `WISH-DRAW` | L and W and D and C1 and UB | USER: *"Being able to draw repeatedly through infinite mana and having one colourless and one blue or black mana source is sufficient."* |
+| 5 | `WISH-NODRAW` | L and W and C1 and UB and (E or C2) | USER: *"The living wish approach ... does require either Emiel or 2 colourless sources on board."* |
+
+Rules 4 and 5 are one finish split by the draw engine, which is the user's own framing: *"all cases
+cast living wish, it's just a matter of whether the deck has to win without drawing through the
+deck."* Rule 4 deliberately does not branch on which outlet is in play -- *"the 1 colourless source
+works even when you have displacer out because you can draw into Emiel and cast it if you can draw
+your deck."* The `(D or E or C2)` rider on rules 2 and 3 is an INFERENCE, not a user statement, and
+is the first thing to argue with. `MTG_COMBO_OFF_RULES=0` disables the table.
+
+### Display vs execution -- the split that makes "aggressive" safe
+
+* **Display** = the rule table. `Plan::combo_off_offered`, JSON `combo_off`, button visible.
+* **Promise** = the trial apply. `Plan::combo_off_verified`, JSON `combo_off_verified`; only this
+  prints "COMBO OFF: wins this turn".
+* **Execution** = the click. If the applied line does not win, AIEngine emits a
+  `combo_off_failed` history event naming the rule that offered it. Never a phantom win.
+
+The standalone-only restriction is gone, and the reason it existed is gone with it: the trial ran
+under `RevealLogPause` (choosers nulled) while the real apply ran with them live, which is the whole
+seed-7 false promise. The real apply now runs under `ComboOffApplyPause` -- the same choosers nulled,
+logging and reveals kept -- so trial and apply resolve every sub-decision identically whatever the
+plan's shape. Up to `MTG_COMBO_OFF_TRIES` (8) candidates are verified, cheapest shape first.
+
+### The other repairs the user's criteria needed
+
+* `MTG_UNTAP_C_STARVED` (human play, live {C} sink): when the yield order would take NO
+  {C}-capable land, reserve ONE untap slot for the best one. Bounded to the starved case, so a set
+  that already has its pip is untouched. `FlickerTopLandYields` mirrors it exactly (`reserve_c`).
+* `MTG_EDF_OUTLET_NETC`: on an exact net+untaps tie, prefer the outlet that banks more colourless.
+* `MTG_EDF_GOFF_C_ITERS`: size the go-off by the `{C}` PIPS as well as the mana (a pip is per-untap
+  supply; the seed-9 board affords 49 exiles in 33 iterations by mana and needs 49 by pips), and
+  charge `hand_setup_mv` against the pip budget too.
+* `MTG_HOLD_C_FOR_DEPLOY`, `MTG_COMBO_OFF_EARLY_DEPLOY`: deploy the held/wished finisher INSIDE the
+  loop as soon as its cast is payable, and set the colourless hold for a sink the loop is about to
+  deploy. Post-loop deployment can only use the one-payment gulp, which a per-untap pip supply can
+  never fund.
+* `MTG_COMBO_FINISH_COLOR`: pick the finisher by producible colour (USER: *"Essence Depleter (if we
+  have black) or Dimensional Infiltrator (if we only have blue)"*), in the recognizer and the deploy
+  together.
+* `MTG_WISH_C_SINK`: a {C}-pip sink still in the sideboard behind a Living Wish counts as live for
+  the untap's {C} reservation.
+* `MTG_EDF_LIB_ROUTE_COMBO_OFF`, and `LoopDrawSinkOn` under `ComboOffFinishActive()`: the draw
+  engine rule 4 names is allowed to run inside the button's apply. Ordinary human turns still never
+  draw a card unasked.
+
+### New check
+
+`bash test/combo_off_check.sh` over `test/combo_off/*.json` -- 9 fixtures, each asserting BOTH that
+the button appears (or does not) AND that re-applying the offered plan actually kills. Kept out of
+`test/scenarios/` so `scenarios.sh` stays at 73. `python3 test/combo_off_frames.py` replays every
+saved user frame under `logs/play/` through the table as a report.

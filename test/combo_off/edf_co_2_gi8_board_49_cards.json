@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "The seed-9 gi=8 T4 board as the user actually left it -- both Conservatories, the second",
+    "Overgrowth, and a FULL 49-card opponent library rather than the trimmed 12 of fixture 1. It is",
+    "the same defect at the size that matters: 49 exiles need 49 colourless pips, which the loop can",
+    "only bank one per iteration, so FlickerGoOffCount's {C} term (MTG_EDF_GOFF_C_ITERS) is what",
+    "carries it -- sizing by mana alone asks for 33 iterations, banks the mana, comes up 16 pips",
+    "short, and SpendSurplusOnExile (all-or-nothing) then fires zero times.",
+    "",
+    "The user's float of {G:86} is deliberately NOT staged: the scenario harness cannot, and the",
+    "point is that the board funds the finish on its own. Passing without it is the stronger claim."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 49,
+  "library_filler": "Forest",
+  "library_size": 45,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    { "name": "Kitchen",                  "controller": 0, "tapped": false },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Conservatory",             "controller": 0, "tapped": false },
+    { "name": "Wild Growth",              "controller": 0, "tapped": false, "equips": "Conservatory" },
+    { "name": "Mariposa Military Base",   "controller": 0, "tapped": true  },
+    { "name": "Emiel the Blessed",        "controller": 0, "tapped": false },
+    { "name": "Cloud of Faeries",         "controller": 0, "tapped": false },
+    { "name": "Dimensional Infiltrator",  "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "expect_combo_off": true
+}

@@ -1,0 +1,41 @@
+{
+  "_comment": [
+    "*'Note that playing Emiel is also possible if I don't have enough colourless.'* (USER,",
+    "2026-09-10.) Fixture 4's exact board with an Emiel added, and the Displacer listed FIRST so the",
+    "old insertion-order tie-break would pick it.",
+    "",
+    "Eldrazi Displacer {2}{C} and Emiel the Blessed {3} have the SAME mana value, so the recognizer's",
+    "net/untaps comparison ties and which outlet the loop was recognised on came down to battlefield",
+    "order -- the §9 defect one column over. It is not cosmetic: the Displacer spends a colourless a",
+    "pass and Emiel spends none, so the coin flip decided whether net_c was 0 (no kill, no button) or",
+    "1 (a real deck-out). MTG_EDF_OUTLET_NETC breaks the exact tie toward the outlet that banks more",
+    "colourless, and the fixture asserts BOTH halves: the button appears, and applying it wins.",
+    "",
+    "With MTG_EDF_OUTLET_NETC=0 this board goes back to ABSENT -- the one-binary A/B for the lever."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 12,
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    { "name": "Kitchen",                  "controller": 0, "tapped": false },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
+    { "name": "Conservatory",             "controller": 0, "tapped": false },
+    { "name": "Wild Growth",              "controller": 0, "tapped": false, "equips": "Conservatory" },
+    { "name": "Mariposa Military Base",   "controller": 0, "tapped": true  },
+    { "name": "Eldrazi Displacer",        "controller": 0, "tapped": false },
+    { "name": "Emiel the Blessed",        "controller": 0, "tapped": false },
+    { "name": "Cloud of Faeries",         "controller": 0, "tapped": false },
+    { "name": "Dimensional Infiltrator",  "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "expect_combo_off": true
+}
