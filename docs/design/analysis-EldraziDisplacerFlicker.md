@@ -4738,3 +4738,46 @@ one glance apart. The unverified button is now `⚡ Combo Off — not yet proven
 with no pulse, its tooltip spelling out that the engine has not proved the line wins; the plan text
 reads `COMBO OFF (NOT PROVEN -- may not finish)`; the history entry says `clicked (not yet proven)`.
 Aggressive display is kept -- it is the user's call -- and only the promise is withdrawn.
+
+### Session 15b: the two live follow-ups, and seed 9 T4's verdict
+
+**USER:** *"I would much prefer to have the clue creation as a global option. It's kind of a pain to
+constantly have pop-ups."* Root cause was the fused feature itself: offering "Investigate & crack"
+as a SECOND entry beside plain Investigate made `opts.length` 2 for a land whose only ability is
+Investigate, and `toggleActivate` opens the picker on `opts.length > 1` -- a modal on the single
+most-repeated click in the deck. `67f2da4f`: one persisted global pref (`mdt_queue.clue_fuse`,
+default ON) decides what a click queues; NEITHER state prompts. A latent orphaned-crack bug in the
+queue-cap path (bare `splice` left the deferred crack behind) was fixed on the way. Zero engine
+changes. Guard: `testClueFuseOption` in `test/viewer_client_check.js`.
+
+**USER:** *"Combo Off needs to list exactly how we reached the win. It should not list 'Combo Off'
+in the history except potentially to show when the user clicked it."* `3c475f08`: one
+`⚡ Combo Off — clicked` marker, then the real actions -- the outlet is now named
+(`Emiel the Blessed: blinked Cloud of Faeries`; `ApplyBlink` had `source_id` and never printed it),
+the wish route is narrated (`combo finish: Living Wish → Dimensional Infiltrator`; route 2 emitted
+nothing before), and the SAVE bug this exposed is fixed: `WriteClaudePlayTrace` dropped every event
+after the last decision -- which for a Combo Off click is the entire winning sequence. New additive
+`final_events` key. Identical runs coalesce to `×N` exactly as hand-play renders.
+
+**USER, seed 9 T4:** *"COMBO OFF did not finish the game (offered by rule WISH-DRAW). The loop ran;
+the kill did not land. Note that I was later able to Combo off, but it didn't work here."* The
+offer was UNVERIFIED (no "wins this turn"), and the position genuinely cannot win on T4: four lands
+(Kitchen 3, Conservatory 2, Conservatory 1, Mariposa 1), Cloud untaps TWO, one slot must be Mariposa
+for {C}, so a pass refunds 4 against Emiel's {3} -- **net +1**, and `ApplyBlinkLoop` caps at 60
+iterations: 60 mana total against a ~100-mana deck-out plus wish and finisher. Rule **L** had
+encoded "infinite mana" as `net > 0`, which on a capped loop is not infinity.
+`MTG_COMBO_OFF_BANKABLE`: a rule fires only if `net × 60` covers its OWN path's cheapest cost (no
+dig term -- display stays permissive). A second colour-blindness fell out: the cost estimate priced
+Essence Depleter `{2}{B}` on a blackless board; `FinishNeedMana` now applies `BoardCanPayColors`.
+Fixture 10 (`edf_co_10_seed9_t4_thin_loop_absent`) pins `offered=0`. Unproven offers are now
+unmistakable: gold pulsing "win now" vs muted outlined "not yet proven", matching plan text and
+history. No executor gap was found -- round-robin untap banking cannot conjure mana a capped loop
+does not make.
+
+**References:** the user saved `claude_s9_gi8` (won T4, 55 decisions -- the same game whose earlier
+save the mid-session rebuild corrupted) and `claude_s12_gi11` (won T4, 60 decisions); committed
+`b3189f50`. Corpus 307 → 309, zero regressions on the clue-option gate.
+
+**Rulings still open:** "bankable" reading of infinite mana vs raising `MTG_EDF_MAX_ITER`; the
+rule-2/3 rider; rule 4's missing graveyard-Emiel guard; ×N coalescing vs expanded lines; the clue
+toggle in ⚙ options vs a header control.
