@@ -5517,14 +5517,42 @@ std::vector<int> TurnSolver::ManaUnlockColorReserve(const GameState& state,
 static bool PermIsPlainForFold(const GameState& state, const Permanent& p)
 {
     if (p.damage != 0 || p.pending_death_trigger != 0 || !p.counters.empty()) { return false; }
-    // SUMMONING SICKNESS (user, 2026-09-09): "summoning sick Augur 2 may not be able to tap while
-    // 1 can" -- a creature's {T} is gated by it, so two Augurs differing here are NOT
-    // interchangeable. Rejected outright rather than reasoned about per card type: for a LAND like
-    // Scrying Sheets the flag does not gate tapping (the user noted this), but the bar is
-    // "identical in all state", and entered_this_turn is state that other effects read. The cost of
-    // the strict form is negligible -- at most one land enters per turn, so at most one copy is
-    // excluded.
-    if (p.entered_this_turn || p.gained_control_this_turn) { return false; }
+    // SUMMONING SICKNESS IS AN ORDERING CONCERN, NOT A MEMBERSHIP ONE -- and this replaces an
+    // earlier, stricter form that refused to fold anything which entered this turn.
+    //
+    // USER 2026-09-09: "we shouldn't need to check the 'entered this turn' unless they are
+    // creatures or the ability makes them a creature. The reason I bring this up is that Scrying
+    // Sheets really doesn't care." Then the stronger form, which is what is implemented: "we could
+    // also deduplicate to use the OLDEST copy (which would avoid the manland summoning sick
+    // problem). For that problem, the older one is strictly better."
+    //
+    // So age is handled by the CANONICAL ORDER, and that is free: activations are emitted walking
+    // state.battlefield, which is entry order, so a permanent that arrived this turn sorts LAST and
+    // the prefix rule already selects oldest-first.
+    //
+    // Two DIFFERENT arguments cover the two cases, and it matters not to conflate them:
+    //
+    //   * ALREADY A CREATURE (Frost Augur). A summoning-sick one never emits a {T} activation to
+    //     begin with -- the emission sites gate on CanTapNow(p, battlefield) / !p.CanTap(), and
+    //     Permanent::CanTap gates a CREATURE on entered_this_turn/gained_control_this_turn unless
+    //     it has haste. So a sick Augur is not a candidate and cannot be folded into a healthy
+    //     one's class at all.
+    //
+    //   * NOT YET A CREATURE (a manland; and Scrying Sheets, which never becomes one). CanTap
+    //     returns true unconditionally for a non-creature, so THE GATE ABOVE DOES NOTHING HERE --
+    //     both copies are candidates. USER 2026-09-09, correcting exactly this point: "manlands are
+    //     not summoning sick until they become creatures and the older one is never summoning sick
+    //     if the newer one is not... CanTap() will return true for both, but they may still be
+    //     summoning sick after the activation. However, there is no drawback to picking the older
+    //     if you need to choose (assuming everything else equal of course)."
+    //
+    //     What makes it safe is therefore DOMINANCE, not legality: sickness is MONOTONE IN AGE. If
+    //     the newer copy is not summoning sick the older one is not either, and the older can be
+    //     usable when the newer is not -- so the older copy is never worse and canonicalising to it
+    //     cannot drop a line. The "everything else equal" premise is not an assumption here, it is
+    //     what the rest of this function enforces: every other differentiating field at its default
+    //     and nothing attached. (An ALREADY-animated permanent is refused outright by is_animated
+    //     below, so it never reaches this argument.)
     if (p.aura_attached_to != 0 || p.equipped_to != 0) { return false; }
     if (p.marked_for_destruction) { return false; }
     if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0) { return false; }
@@ -5572,20 +5600,28 @@ static bool FoldActSourcesOn()
 // identical in all state"), applied to a Card instead of a Permanent, and it is enforced the same
 // way: content equality (see HandCardContentHash) rather than a name match.
 //
-// DEFAULT OFF, AWAITING THE DECK OWNER'S RULING -- and the reason is NOT doubt about the fold.
-// MEASURED 2026-09-09, Snow 60 games at play settings, deterministic work counters:
-//   greedy subsets scored   79,260,597 -> 66,443,718   (-16.2%)
-//   search subsets scored    4,861,933 ->  4,208,545   (-13.4%)
-//   avg 5.9833 and play digest 4d0ae0ea43f9ba15 IDENTICAL
-// The activation half of this fold was byte-identical across the whole suite, which is what made
-// adopting it on the spot defensible. This half is NOT: it moves 10 of 80 smoke keys, because
+// ADOPTED DEFAULT-ON 2026-09-09 on the USER's call ("it should be tested for performance and
+// quality on other decks and then adopted if that holds up"). MTG_FOLD_HAND_CASTS=0 is the hatch.
+//
+// PERFORMANCE -- every one of the 40 suite decks/2HG variants got cheaper, none got slower, at a
+// searched depth with the play digest UNCHANGED on all 40. Deterministic subset counters:
+//   total greedy subsets scored   120,445,840 -> 106,617,520   (-11.5%)
+//   best: hinata2hg -33.7%, fluctuator -24.7%, hinata -24.2%, dragonstorm2hg -20.6%
+//   worst: kitty -4.0%          Snow (not in the suite) -15.7%
+// Hinata is on record as BUDGET-STARVED, so a quarter of its greedy enumeration is real headroom.
+//
+// QUALITY -- three DISJOINT seed sets, audited per game (audit_changed_games.py):
+//   smoke (s1001)             3 of 80 keys changed, 0 averages moved
+//   regression (s2002/s3003)  3 of 108 keys changed, 1 average moved: fivecolour d0
+//                             5.8360 -> 5.8350, i.e. BETTER
+//   searched depths           slower=0  faster=0  play-changed=0   -- the search is untouched
+//   d0 (greedy)               slower=0  FASTER=1  play-changed=10
+// Nothing is worse anywhere. The residue is 6 keys of d0 play-digest churn at identical scores:
 // picking the canonical copy reorders same-named casts within a plan ("Sinew, Predatory, Sinew"
-// becomes "Sinew, Sinew, Predatory"). Every one of those 10 has an IDENTICAL average -- pure play
-// digest churn, no quality change anywhere -- but adopting it means rebaselining ground truth, and
-// a default flip that rewrites GT is the deck owner's call, not the agent's.
+// becomes "Sinew, Sinew, Predatory"). Adoption rebaselines those 6 keys and nothing else.
 static bool FoldHandCastsOn()
 {
-    static const bool on = EnvOn("MTG_FOLD_HAND_CASTS");
+    static const bool on = EnvOn("MTG_FOLD_HAND_CASTS", true);
     return on;
 }
 
@@ -5941,6 +5977,12 @@ static void FinalizeFoldTags(const GameState& state, std::vector<Action>& action
         fc.members = 0;
     }
 
+    // ORD 0 IS THE OLDEST COPY, and that is load-bearing rather than incidental: activations are
+    // emitted walking state.battlefield, which is entry order (permanents are appended on entry and
+    // an erase preserves relative order), so numbering in candidate order puts the longest-standing
+    // permanent first. The prefix rule therefore always spends the oldest copies -- which is what
+    // makes it safe to fold copies of differing age at all (see PermIsPlainForFold's note on
+    // summoning sickness and the manland case).
     for (int p = 0; p < t; ++p)
     {
         Action& a = actions[t_idx[p]];

@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 7b9f226f  date 2026-09-09
+# Regression ground truth -- commit 4b589c0d  date 2026-09-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -37,7 +37,7 @@ creature_giving_smoke_d5_s1001=4.6667/ae3e7c5e37a15aa5
 mirrorwing_smoke_d0_s1001=5.8750/9e6150c6e3cd76aa
 mirrorwing_smoke_d3_s1001=4.2467/ae1ae059b97e525f
 mirrorwing_smoke_d5_s1001=4.3467/09c76f8101cedf25
-fivecolour_smoke_d0_s1001=5.7830/b58f920fbeed16d0
+fivecolour_smoke_d0_s1001=5.7830/3fcfb0a295fe3a1b
 fivecolour_smoke_d3_s1001=4.9600/94247794612f3f57
 fivecolour_smoke_d5_s1001=5.0933/6797e71eac795925
 stompy_smoke_d0_s1001=5.4420/dc78a74c3af62737
@@ -46,10 +46,10 @@ stompy_smoke_d5_s1001=4.4400/cd9d1e6544af07b4
 minotaur_smoke_d0_s1001=5.3410/a8c5efde8e2d218e
 minotaur_smoke_d3_s1001=4.9080/ef1ba01170ee7d78
 minotaur_smoke_d5_s1001=4.9000/808ce153bb80571e
-kitty_smoke_d0_s1001=4.9900/4b96809105a7d663
+kitty_smoke_d0_s1001=4.9900/3fd0b6c5e0d07b80
 kitty_smoke_d3_s1001=4.4520/f6d195fe697ee222
 kitty_smoke_d5_s1001=4.4667/a038954249d178e6
-dragons_smoke_d0_s1001=6.0490/910952c8f5e05f43
+dragons_smoke_d0_s1001=6.0490/758cc0616877e8f1
 dragons_smoke_d3_s1001=5.7160/a9726d87a810e952
 dragons_smoke_d5_s1001=5.5800/899b12bf81b7c888
 breaching_smoke_d0_s1001=4.8460/8c8e7d2fb5fd0181
@@ -141,7 +141,7 @@ mirrorwing_regression_d3_s2002=4.3050/7d9692c7dc2407b7
 mirrorwing_regression_d3_s3003=4.1500/85891167a39f9449
 mirrorwing_regression_d5_s2002=4.3400/f3f37e6704e0612c
 mirrorwing_regression_d5_s3003=4.1800/8b373902ac0bd649
-fivecolour_regression_d0_s2002=5.8360/726a26818be082f8
+fivecolour_regression_d0_s2002=5.8350/5524af389ebde0f7
 fivecolour_regression_d3_s2002=4.8600/f880c396740b33b0
 fivecolour_regression_d3_s3003=4.9250/1d35f3face14029a
 fivecolour_regression_d5_s2002=4.7900/961ad2d6bd245fa7
@@ -156,12 +156,12 @@ minotaur_regression_d3_s2002=4.8967/2fb901e3e8f27cff
 minotaur_regression_d3_s3003=4.8733/24f8353e12d21f02
 minotaur_regression_d5_s2002=4.9040/8c95bcdc3139bd06
 minotaur_regression_d5_s3003=4.8600/cd3d72103a43adb8
-kitty_regression_d0_s2002=4.9530/1d5005d927f09fce
+kitty_regression_d0_s2002=4.9530/52fb103ec8885f3f
 kitty_regression_d3_s2002=4.3233/c4c47b6564d2db71
 kitty_regression_d3_s3003=4.3833/d865357ca99a0aff
 kitty_regression_d5_s2002=4.3120/2d8c283efdc07c2e
 kitty_regression_d5_s3003=4.3320/bf5b3ca6d77ed19d
-dragons_regression_d0_s2002=6.0250/8d8956a208dd6034
+dragons_regression_d0_s2002=6.0250/01dcf77e235aa27c
 dragons_regression_d3_s2002=5.5400/baaec000d55f7cc1
 dragons_regression_d3_s3003=5.6300/a0c307159342bc33
 dragons_regression_d5_s2002=5.4960/37e1af892c8b1619

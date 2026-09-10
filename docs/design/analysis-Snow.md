@@ -650,7 +650,7 @@ would have gone unreachable in that enumeration.
 **Smoke 80/80 ALL PASS, zero churn** -- the lost arrangements never mattered to an outcome on the
 current suite, which is precisely why nothing caught this.
 
-### 2. The hand-cast fold: -15.7% of the greedy enumeration, DEFAULT OFF pending a ruling
+### 2. The hand-cast fold: ADOPTED DEFAULT-ON 2026-09-10 (-11.5% greedy work across 40 decks)
 
 `MTG_FOLD_HAND_CASTS=1`. Same canonical prefix, applied to duplicate cards in hand -- the census put
 `cast_from_hand` at 77.4% of candidate mass against the activation slice already folded.
@@ -683,6 +683,60 @@ per 5 games. This is the MIRROR of the trap recorded for the candidate dedup (th
 counters `bf_scored greedy_subsets/search_subsets` were added to settle it deterministically --
 unlike wall or CPU they cannot be moved by a contended box, and this box could not resolve it: three
 interleaved CPU reps gave -7.0%, +27.7%, -2.8% with a within-arm spread of ~49%.
+
+### 2b. Adoption: measured on every suite deck, then adopted on the USER's call
+
+USER 2026-09-09: *"This sounds entirely positive, so it should be tested for performance and quality
+on other decks and then adopted if that holds up."* It held up.
+
+**Performance -- all 40 suite decks/2HG variants, one searched-depth case each, deterministic
+subset counters:** every deck got cheaper, none got slower, and the **play digest was unchanged on
+all 40**.
+
+| | greedy subsets scored |
+|---|---|
+| total, 40 decks | 120,445,840 -> 106,617,520 (**-11.5%**) |
+| best | hinata2hg **-33.7%**, fluctuator -24.7%, hinata -24.2%, dragonstorm2hg -20.6% |
+| worst | kitty -4.0% |
+| Snow (not in the suite) | -15.7% |
+
+Hinata is on record as BUDGET-STARVED, so a quarter of its greedy enumeration is real headroom.
+
+**Quality -- three disjoint seed sets, audited per game.** smoke (s1001) 3 of 80 keys, 0 averages
+moved; regression (s2002/s3003) 3 of 108 keys, 1 average moved and it is BETTER (fivecolour d0
+5.8360 -> 5.8350); **searched depths slower=0 faster=0 play-changed=0**, d0 slower=0 **faster=1**.
+
+**Ground truth rebaselined: exactly 6 keys, all d0** -- five digest-only, one improved. Accepted from
+the inspected runs via `regression.sh --smoke --accept` / `--accept`, `check_gt_logs.py` clean at
+456.
+
+### 2c. Summoning sickness is an ORDERING concern, not a membership one
+
+USER 2026-09-09: *"we shouldn't need to check the 'entered this turn' unless they are creatures or
+the ability makes them a creature ... Scrying Sheets really doesn't care"*, then the stronger form
+that was implemented: *"we could also deduplicate to use the oldest copy (which would avoid the
+manland summoning sick problem). For that problem, the older one is strictly better."*
+
+The original fold refused to fold anything that entered this turn. That is now dropped, and age is
+handled by the canonical ORDER instead -- for free, because activations are emitted walking
+`state.battlefield`, which is entry order, so ord 0 IS the oldest copy.
+
+The two cases need DIFFERENT arguments, and the user corrected me for conflating them:
+
+* **Already a creature** (Frost Augur): a summoning-sick one never emits a `{T}` activation at all,
+  because the emission sites gate on `CanTapNow` / `!p.CanTap()`. It cannot join the class.
+* **Not yet a creature** (a manland; and Scrying Sheets, which never becomes one): `CanTap()`
+  returns true unconditionally for a non-creature, so **that gate does nothing here** -- both copies
+  are candidates, and as the user put it, *"they may still be summoning sick after the activation."*
+  What makes it safe is **dominance, not legality**: sickness is MONOTONE IN AGE. If the newer copy
+  is not sick the older one is not either, and the older can be usable when the newer is not, so the
+  older is never worse. The "everything else equal" premise is not assumed -- it is exactly what the
+  rest of `PermIsPlainForFold` enforces.
+
+Measured contribution on Snow: **~0** on its own (greedy subsets 72,474,369 -> 72,471,495, digest
+identical) -- at most one land enters per turn, so the strict form excluded at most one copy. It is
+byte-identical across all 188 suite configs. It is in because the strict form was reasoning the
+engine does not need, not because it paid for itself.
 
 ### 3. TWO ways the canonical prefix was unsound, both found by root-causing ONE changed game
 
