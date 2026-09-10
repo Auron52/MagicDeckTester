@@ -1,8 +1,6 @@
 # Keepgen: the producer-side barrier and the size-7 durability gap
 
-Status (2026-08-28): *(updated 2026-09-03: Defect 1 is FIXED at HEAD — 6fa7dba0, 2026-08-28,
-bounded speculation via persistent cursor + per-iteration FEED budget; "closes the three defects
-in this doc" per its commit message. §3 retained as the analysis.)*
+Status (2026-08-28):
 * **Defect 1 (producer-side barrier) — DIAGNOSED, OPEN at HEAD.** Verified still present:
   `sub_refine_step()` is called once per outer iteration above an unbounded speculation pass
   (`ExhaustiveKeep.cpp:3413`, `:3420-3427` at `9fbd47a2`).
@@ -404,6 +402,30 @@ with a fixed adaptive trim, computed from a floor rate (24 rollouts/s) that was 
 by the barrier, and it has no knowledge that 64% of the table froze at reconcile. Its own label says
 "rough guide". Use `frozen / 3,955,796` and its slope instead — that is the first metric this run has
 had with an honest denominator.
+
+### CHAINED post-generation validation (added 2026-09-10) — do not kill it
+
+`logs/FiveColour_gen/run.sh` is a bare `exec mtg-analyze --gen-mulligan fast`; **nothing was chained
+after it**. Since the keep profile is PRESENCE-GATED (the file existing IS adoption), a finished
+generation would go live with zero games played against it. `logs/FiveColour_gen/post_gen.sh` now
+runs detached and closes that window:
+
+1. waits for the generation pid to exit, then sleeps 60 s for the final writes;
+2. **verifies success** — `size-7 DONE` in the log, plus a non-empty raw sidecar AND runtime profile
+   — and aborts without validating if any is missing (never validate an incomplete generation);
+3. runs `bash scripts/mullgen.sh validate decks/FiveColour`.
+
+That is the canonical gate: `KM_MODE=keep` (exhaustive keep vs static) and `KM_MODE=bottom` with
+`MTG_CONFOUND_BOTTOM=1` (blind exhaustive bottoming vs lookahead, library reshuffled after the
+decision). It quarantines to `*.profile.DISABLED.json` on failure and runs regression "for
+VISIBILITY -- cannot reject". **It never auto-accepts GT.** Expect ~2 h, up to ~6 h at MAX_ROUNDS=3.
+
+`scripts/mullgen.sh` and `test/keepmodel_pool_ab.py` were staged from `origin` because this checkout
+predates them. Both live outside `src/`, so `HEAD:src` is untouched — verified `e196e432` still
+equals `freeze.src` after staging.
+
+**When the generation ends, 12 cores will get busy again. That is the validation, not a runaway job.**
+Logs: `logs/FiveColour_gen/post_gen.log` and `logs/FiveColour_mullgen/VALIDATION.txt`.
 
 ### Hazards — all of these have already cost something
 
