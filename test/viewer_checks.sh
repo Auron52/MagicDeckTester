@@ -36,6 +36,13 @@
 #     reason. Needs python3 + the binary; seconds. Nothing else can see it: the fallback is
 #     human-play-only and default-inert, and the float it makes is spent by the next payment (see
 #     its header). SKIPS itself when the board it drives is not reachable.
+#   * SAVE parity (server<->engine) -- viewer_save_parity_check.js drives real games through
+#     server.js's own step entry point and then SAVES them, asserting the save's fresh full-stream
+#     replay reproduces the live session decision-for-decision. The only layer that runs /api/save
+#     at all: a save re-runs the whole choice stream in a NEW process, so a mid-session rebuild (or
+#     a side channel that stops threading through) publishes a game nobody played, under the right
+#     name, with no error -- which is exactly what happened on 2026-09-10. Needs node + the binary;
+#     ~15 s.
 #   * protocol (engine<->GUI) -- viewer_protocol_check.py replays each reference's chosen plan
 #     indices through the binary and asserts the decision-JSON contract holds (well-formed,
 #     valid index, clean terminal). Needs python3 + the binary. FULL sweep ~35 min; --sample
@@ -190,6 +197,28 @@ if [ "$MODE" != line ]; then
       echo "--- manual tap/pay (the human's taps are honoured, and only the human's) ---"
       if MTG_BIN="$BIN" python3 "$HERE/manual_tap_check.py"; then :; else
         echo "FAIL: a hand-forced mana tap is no longer performed as declared (or is no longer rejected with a reason)."
+        rc=1
+      fi
+    fi
+  fi
+fi
+
+# 1e) SAVE PARITY (node + binary). ~15 s. The save path is the one seam nothing else here touches:
+#     every other layer either steps the game or reads a file that already exists, while /api/save
+#     RE-RUNS the entire accumulated choice stream in a fresh process and publishes the result as the
+#     game the human played. On 2026-09-10 that re-run picked up a binary rebuilt two minutes earlier,
+#     veered at decision 27 of a turn-4 go-off, and wrote a won-on-turn-7 log for a game still in
+#     turn 4 -- no error, right filename. This check drives real sessions and saves them, and would
+#     have caught it twice over (out-of-range pick at 27, board mismatch at 28).
+if [ "$MODE" != line ]; then
+  if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_save_parity_check.js" ]; then
+    if [ ! -f "$BIN" ]; then
+      echo "FAIL: save parity check needs the binary but '$BIN' is missing."
+      rc=1
+    else
+      echo "--- viewer save parity (a saved log IS the game that was played) ---"
+      if MTG_BIN="$BIN" node "$HERE/viewer_save_parity_check.js"; then :; else
+        echo "FAIL: a saved game log does not reproduce the session it was saved from."
         rc=1
       fi
     fi

@@ -3947,7 +3947,12 @@ function notifyDropped(names){
   $('dropok').onclick=hideVerdict;
 }
 async function newGame() {
-  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set(), firebreathe:{}, storageHold:{}, castOrder:{} };
+  // jitte:{} is NOT optional here. Every OTHER side-channel is reset per game; Umezawa's Jitte was
+  // the one omission, so a counter-spend answered in game N kept riding --jitte into game N+1 --
+  // a turn-keyed answer applied to a board that never earned it. Found by the 2026-09-10
+  // choice-carrier audit (the save-divergence bug); harmless in decks without a Jitte, silent in
+  // the ones with it.
+  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set(), firebreathe:{}, storageHold:{}, castOrder:{}, jitte:{} };
   hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); checkReference(); await step();
 }
 // Bump Seed and start the next game — for playing several in a row. (Game index is always 0;
