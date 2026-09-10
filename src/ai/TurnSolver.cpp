@@ -30625,7 +30625,28 @@ inline bool GoffDomOn() { static const bool v = EnvOn("MTG_LABEL_GOFF_DOM", true
 // candidates (measured, seed 900021): 128 still deletes 96% of such a node.
 inline int GoffDomWidth() { static const int v = EnvInt("MTG_LABEL_GOFF_WIDTH", 128); return v; }
 inline std::atomic<unsigned long long> g_gdom_pruned{0}, g_gdom_seen{0}, g_gdom_beamed{0},
-                                       g_gdom_plans_cut{0};
+                                       g_gdom_plans_cut{0}, g_gdom_waves_cut{0};
+// MTG_LABEL_WAVES -- may a RESIDUAL edge node still run its deferred WAVE phases (the breakpoint
+// rank walk and, the one that matters, the GROUP-WAVE tranche re-enumeration)? DEFAULT OFF, =1
+// restores them. Part of the same dominance approximation as the width above and gated on the same
+// MTG_LABEL_GOFF_DOM master switch, because it is the same judgement applied to the same class:
+// the wave phases exist to make the node's answer equal the UNCAPPED enumeration's at an unlimited
+// budget, i.e. to exhaust the combo turn's plan space -- exactly what the user blessed pruning.
+//
+// It is by a wide margin the biggest lever here, and it is entirely game-shape dependent. Seed
+// 900264: 363,631 -> 165,735 applies and 1,474 s -> 341 s (4.3x), all of it the GROUP-wave half
+// (MTG_GROUP_WAVES=0 alone reproduces the arm exactly). Seed 900255: 150,223 -> 148,907 applies,
+// no measurable wall -- that game's enumerations never hit the group cap, so there are no tranches
+// to defer. Nothing to tune: a node either dropped groups or it did not.
+//
+// TWO WAYS IT IS LOSSY, both pessimistic. The node answers from the CAPPED enumeration, so a kill
+// that lives only in a dropped group is missed. And -- deliberately -- it does not bump
+// g_fs_trunc_events, so the position is EMITTED with that answer rather than dropped: on 900264
+// that turned the one position the labeller drops today into a row (turn 3, label 5.667), with the
+// other five rows byte-identical. Bumping instead would preserve today's drop-on-doubt doctrine,
+// but it would mark EVERY position holding such a node -- far more than the one that truncates
+// today -- so it would trade the wall saving for most of the game's rows.
+inline bool LabelWavesOn() { static const bool v = EnvOn("MTG_LABEL_WAVES"); return v; }
 // RESIDUAL OUTCOME (MTG_WINLESS_STATS): of the residual edge nodes that pay the full enumeration,
 // how many turn out to be WINS? That is the number that decides whether the residual class may be
 // dominance-pruned at all -- a class that is ~all no-win can be dropped for nearly nothing, and a
@@ -30762,9 +30783,9 @@ struct DumperBody
         {
             std::fprintf(stderr,
                 "=== LABEL GO-OFF DOM: residual-edge=%llu width=%d conceded=%llu beamed=%llu "
-                "plans-cut=%llu ===\n",
+                "plans-cut=%llu group-wave-phases-cut=%llu ===\n",
                 g_gdom_seen.load(), GoffDomOn() ? GoffDomWidth() : -1, g_gdom_pruned.load(),
-                g_gdom_beamed.load(), g_gdom_plans_cut.load());
+                g_gdom_beamed.load(), g_gdom_plans_cut.load(), g_gdom_waves_cut.load());
         }
         if (g_edge_tail_elided.load() != 0)
         {
@@ -32538,6 +32559,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // concede-at-once branch returned above); a residual node with W >= pre.size() is exact.
     const int gdom_width = (residual_node && winlesscert::GoffDomOn())
                          ? winlesscert::GoffDomWidth() : 0;
+    // ... and the same class's deferred WAVE phases (see winlesscert::LabelWavesOn).
+    const bool gdom_no_waves = residual_node && winlesscert::GoffDomOn()
+                               && !winlesscert::LabelWavesOn();
     if (gdom_width > 0 && winlesscert::StatsOn()
         && static_cast<std::size_t>(gdom_width) < pre.size())
     {
@@ -33008,7 +33032,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // rest here. Deliberately AFTER the loop and AFTER node_vals is stored, and node_vals is never
     // extended, so the probe's position-keyed ranks keep mapping to the same plans (the documented
     // silent-mis-ordering hazard). Off under a budget by default => byte-identical there.
-    if (BpWavesHere(budget))
+    if (BpWavesHere(budget) && !gdom_no_waves)
     {
         BpWaveWalker walker(state, pre, scanned);
         if (walker.Empty())
@@ -33121,7 +33145,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // node with nothing counted -- silently when the beam itself never cut a plan. gw_dropped > 0
     // can only be set with group waves enabled, so the =0 hatch arm stays byte-identical.
     if (gw_dropped > 0 && beam_here && TruncCompleteEnabled()) { ++g_fs_trunc_events; }
-    if (gw_dropped > 0 && !beam_here && GroupWavesHere(budget))
+    if (gw_dropped > 0 && !beam_here && gdom_no_waves)
+    {
+        // Conceded, not truncated -- see LabelWavesOn for why this deliberately does not bump
+        // g_fs_trunc_events.
+        if (winlesscert::StatsOn())
+        { winlesscert::g_gdom_waves_cut.fetch_add(1, std::memory_order_relaxed); }
+    }
+    else if (gw_dropped > 0 && !beam_here && GroupWavesHere(budget))
     {
         if (groupwave::ProbeOn()) { groupwave::g_probe.nodes.fetch_add(1); }
         const int cap_base = EffectiveGroupCap(state);
