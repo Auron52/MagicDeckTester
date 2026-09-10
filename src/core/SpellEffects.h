@@ -1422,9 +1422,15 @@ inline bool MaybeReplaceGraveyardWithLibraryShuffle(GameState& state, int contro
 }
 
 // PerformTutor -- body in SpellEffects.cpp (see the header note above).
+//
+// `human_repick` = "this tutor is resolving from a CAST in a committed plan", which makes the human
+// chooser fire even though the plan already baked a target (each cast instance gets its own frame,
+// in cast order, against the LIVE zone). Set ONLY at the two cast-resolution sites; every other
+// caller -- ETB off a put, the blink-loop finisher route -- leaves it false and is unchanged.
 void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
                          const std::string& target_name = "",
-                         const std::string& source_name = "Tutor");
+                         const std::string& source_name = "Tutor",
+                         bool human_repick = false);
 
 // Ranger of Eos ("search your library for up to two creature cards with mana value 1 or less,
 // reveal them, put them into your hand, then shuffle"): the etb_tutor_hand_count > 1 multi-tutor,
