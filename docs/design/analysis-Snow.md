@@ -771,6 +771,77 @@ find nothing when they do not. And the reason the knights twin is genuinely inva
 of that: `{cast slot 0, vial slot 0}` share a `PlanGroupKey`, so the odometer never enumerates them
 together at all.
 
+### 2e. HELD-OUT attribution on the overnight tier — separating the fold from upstream drift
+
+The overnight tier at the new default came back **114 of 268 keys changed**, which the harness
+headlines as REGRESSION DETECTED. That number is almost entirely NOT the fold, and the only way to
+know that was to measure it: the overnight tier was last accepted at `0ab355c7`, and **23 commits
+have touched `src/` since** — several of them deliberately play-changing (overrun multiplier 11->25,
+order-free memo default-ON, the activation fold, the NO-LEAF stand-in). So a second overnight run
+with `MTG_FOLD_HAND_CASTS=0` gives a three-way split (`logs/snow_profile/attrib.py`):
+
+| comparison | meaning | keys changed | net |
+|---|---|---|---|
+| GT -> fold-OFF | 23 src commits of drift | **102** (48 digest-only, 54 moved) | **-0.2470** (44 better / 10 worse) |
+| fold-OFF -> fold-ON | **the hand fold, held-out seeds** | **12** | **+0.0000** (4 better / 4 worse) |
+
+**Be precise about what "drift" covers here:** the hatch is `MTG_FOLD_HAND_CASTS`, so the fold-OFF
+arm still runs `MTG_FOLD_ACT_SOURCES` (the ACTIVATION fold, `61b3cfb7` + its lossy fix `5d93ee20`).
+The 102 keys are therefore *everything on this branch except the hand fold* — other agents' search
+work AND my own earlier activation-fold commits — not decomposed further, because each of those
+landed with its own adoption evidence and a third 46-minute arm would buy nothing here. The claim
+being made is only the one the split actually supports: **the hand fold accounts for 12 keys and
+none of the 102.**
+
+**The two halves are cleanly disjoint in character, which is itself the corroboration:** every one of
+the 102 drift keys is d3 or d5 (65 at d5, 37 at d3, **zero at d0**) — drift comes from search
+changes. Eleven of the fold's 12 keys are **d0**, and the twelfth (`dragons_overnight_d3_s4004`) is
+**digest-only at an identical average**. Attributing the tier's headline to the fold without this
+split would have been wrong by an order of magnitude.
+
+**The 10 worse drift keys are 9 distinct games, and they belong to the drift half, not to this
+change** — melira gi141 (7 -> unwon) and gi17, mirrorwing gi49 (7 -> unwon) and gi55, fivecolour2hg
+gi45 and gi23, fluctuator gi177 (the same game at BOTH d3 and d5, which is why 10 keys is only 9
+games), th gi524 and gi232. Each loses exactly one turn. Flagged for their owners; re-accepting the
+tier rebaselines them.
+
+**The searched result is the one that matters, because searched is what ships.** Across ~150,000
+searched games the fold changed exactly ONE game's line: dragons gi961, same T5 win, same spells on
+the same turns, only the land-drop identity permuted among equal-scoring options (a second Haven of
+the Spirit Dragon instead of a third Mountain).
+
+**The 11 d0 keys are greedy-horizon churn, and this is measured, not asserted.** Per-game diff over
+24,000 d0 games: 8 games changed, **4 worse and 4 better**, net exactly 0 turns. Re-running all 8 at
+d3 in both arms:
+
+```
+GAME                       kind   d0_off   d0_on    d3_off   d3_on
+dragons_s6006_gi583        WORSE  6        7        6        6
+fivecolour_s8008_gi1499    WORSE  7        8        5        5
+kitty_s10010_gi1079        WORSE  4        5        4        4
+kitty_s4004_gi1812         WORSE  8        unwon    7        7
+fivecolour_s10010_gi1212   better 8        7        5        5
+fivecolour_s4004_gi1962    better unwon    8        7        7
+fivecolour_s6006_gi1233    better 8        7        5        5
+kitty_s8008_gi1063         better 6        5        5        5
+```
+
+**Every one converges to an identical outcome in both arms once the search runs, and in every case
+d3 beats the better d0 arm.** d0 is greedy-only, so these are ties the greedy's horizon cannot see.
+
+**Root cause of the worst one, traced to the decision.** `kitty gi1812` (T8 win -> unwon at d0) has
+only **6 fold rejections in the whole game**, all one shape: two Puresteel Paladins in hand (hi0 =
+#51, hi3 = #49 drawn that turn), selection took the ord-1 copy without ord-0. `MTG_FOLD_VERIFY=1`
+reports **UNRECOVERABLE=0** on this game and on the other three worse games (6, 6, 28 and 136
+rejections respectively). And the line the fold-OFF arm actually won with — `{Paladin@hi0, Jitte}` —
+**contains ord 0 and is therefore never rejected**: the fold did not remove the winning line. What
+changed is which of two plans the greedy preferred once the duplicate arrangements were gone. Both
+arms have identical board and hand entering T7 and both can afford the pair (Paladin `{W}{W}` +
+Jitte `{2}` = exactly the 4 mana available); fold-OFF casts Paladin first and collects the
+equipment-ETB draw, fold-ON casts Jitte first in main 1 and the Paladin in main 2, forfeiting the
+trigger and the T7 attack. **That is a cast-ORDER tie the d0 evaluator cannot price**, and the
+search resolves it identically in both arms — which is exactly what the d3 column shows.
+
 ### 3. TWO ways the canonical prefix was unsound, both found by root-causing ONE changed game
 
 The first cut of the hand fold cost `knights_regression_d0_s2002` gi497 a turn-4 kill. Root-causing
