@@ -254,13 +254,35 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     if (board_c_sink)
     {
         int demand[6] = { 0, 0, 0, 0, 0, 0 };
-        ComputeRefloatDemand(state, active, demand);
+        ComputeHumanPlayDemand(state, active, demand);
         const ManaPool& f = state.floating_mana;
         const int have[5] = { f.white, f.blue, f.black, f.red, f.green };
         for (int i = 0; i < 5; ++i) { c_budget[i] = std::max(0, have[i] - demand[i]); }
     }
     HoldColorlessScope _hcs_sink(board_c_sink ? true : g_hold_colorless_for_pips);
     GenericSpendBudgetScope _gsb_sink(board_c_sink ? c_budget : nullptr);
+    // ...AND THE SAME HOLD INSIDE THIS PAYMENT'S OWN POOL (see g_hold_colorless_in_payment).
+    // `board_c_sink` above requires colourless to be FLOATING already, because that is what the
+    // scope it guards can reorder. The in-payment hold has no such precondition: the {C} it
+    // protects is produced by a tap this payment is about to make (Mariposa's `{C}{G}` on the
+    // user's seed-8 T3 frame), so the gate is the SINK plus the board's ability to make {C} at all.
+    // MTG_HOLD_C_IN_PAYMENT=0 isolates just this half.
+    static const bool s_hold_c_pay = EnvOn("MTG_HOLD_C_IN_PAYMENT", true);
+    bool board_makes_c = false;
+    if (s_hold_c_pay && s_hold_c_sink && HumanPlayActive()
+        && BoardHasColorlessPipSink(state, active))
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            for (Color c : EffectiveProduces(state, active, *d))
+            { if (c == Color::Colorless) { board_makes_c = true; break; } }
+            if (board_makes_c) { break; }
+        }
+    }
+    HoldColorlessInPaymentScope _hcp_sink(board_makes_c);
 
     // Spend any turn-scoped RESERVE mana (a ritual's floating output) before tapping. No-op when
     // empty -> byte-identical for non-ritual decks. Restored if the whole payment fails below.
@@ -971,6 +993,12 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // speculative payments stay silent.
     auto commit_leftover = [&](const ManaPool& lo)
     { if (FloatLeftoverManaEnabled()) { state.floating_mana.AddPool(lo); }
+      // NO GENERIC MANA IN A HUMAN-PLAY POOL (see ConcretiseHumanFloat): what a payment LEAVES
+      // BEHIND is the pool the human then looks at and spends, so an uncommitted "any colour" unit
+      // picks its colour here rather than staying a deferred choice the rules do not have. Runs
+      // over the WHOLE reserve, so a BatchPrepayMainCasts placeholder that survived the plan's
+      // first cast is committed too. No-op outside human play and for a wild-free pool.
+      ConcretiseHumanFloat(state, active, ConcreteSite::Leftover);
       if (g_float_trace && !AllPlayHooksNull())
       { std::fprintf(stderr, "[float] cost=%s leftover{w%d u%d b%d r%d g%d c%d *%d} -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
                      cost.ToString().c_str(), lo.white, lo.blue, lo.black, lo.red, lo.green, lo.colorless, lo.wild,

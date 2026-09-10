@@ -808,7 +808,8 @@ extern thread_local int g_scripted_tutor_choice;   // defined below (ScriptedTut
 inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefinition&);   // defined below
 inline void EtbUntapLands(GameState&, int controller, int count, bool log_ledger = true);    // defined below
 inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count,
-                                      int reserve_color_mask = 0);                           // defined below
+                                      int reserve_color_mask = 0,
+                                      const ManaCost* pending_cost = nullptr);                // defined below
 inline int  EtbUntapLandsCredit(const GameState&, int count);                                // defined below
 // Live {C}-pip activation sink on our board + a source's own (unfed) colours -- both defined below,
 // both read by EtbUntapLands's human-play tie-break above their definitions.
@@ -874,6 +875,38 @@ struct HoldColorlessScope
     explicit HoldColorlessScope(bool on)
         : prev(g_hold_colorless_for_pips) { g_hold_colorless_for_pips = on; }
     ~HoldColorlessScope() { g_hold_colorless_for_pips = prev; }
+};
+
+// HOLD BACK {C} INSIDE THE PAYMENT'S OWN LOCAL POOL (human play only).
+//
+// `g_hold_colorless_for_pips` above reorders SpendFloatingTowardCost, i.e. the mana that was already
+// floating when the payment started. It does NOT reach the pool a payment builds AS IT TAPS: a
+// generic pip settled by `ConsumeFloatingAny` takes Colorless FIRST, unconditionally, and that is a
+// second, independent way to burn the bank.
+//
+// USER, EDF seed 8 T3 (2026-09-10), the frame this exists for: the line
+// `land=Yavimaya Coast; cast: Fertile Ground -> Conservatory, Cloud of Faeries, Eldrazi Displacer`
+// ends with float {G:1} and NO colourless anywhere, so the Displacer that just resolved cannot be
+// activated ({2}{C}). Trace: Fertile Ground's `{1}` tapped Mariposa Military Base, whose Wild Growth
+// made the tap `{C}{G}` -- two units in the payment's local pool -- and ConsumeFloatingAny spent the
+// {C} and left the {G}. Nothing downstream can undo that: the {C} is gone before the leftover is
+// ever committed to `state.floating_mana`, so `MTG_HOLD_C_FOR_SINK` (which reads that float) never
+// sees it. The two holds are the same rule at two layers.
+//
+// Set by the SAME human-play {C}-sink scope in PayManaCost, and deliberately a SEPARATE flag from
+// `g_hold_colorless_for_pips`: that one is also set by ApplyBlinkLoop's exile sink in AUTONOMOUS
+// play, and reordering the greedy's per-pip consumption there would move GT. Nothing sets this
+// outside human play, so every autonomous game is byte-identical by construction.
+inline thread_local bool g_hold_colorless_in_payment = false;
+
+struct HoldColorlessInPaymentScope
+{
+    bool prev;
+    explicit HoldColorlessInPaymentScope(bool on)
+        : prev(g_hold_colorless_in_payment) { g_hold_colorless_in_payment = on; }
+    ~HoldColorlessInPaymentScope() { g_hold_colorless_in_payment = prev; }
+    HoldColorlessInPaymentScope(const HoldColorlessInPaymentScope&)            = delete;
+    HoldColorlessInPaymentScope& operator=(const HoldColorlessInPaymentScope&) = delete;
 };
 
 // SET ONLY INSIDE ApplyBlinkLoop -- "we have the pieces on the field and are untapping".
@@ -12177,29 +12210,93 @@ inline void AddCostToRefloatDemand(int* need, const ManaCost& mc)
 // through EffectiveActivationCost, exactly as the payment will price them, so a Training Grounds
 // reduction is seen (Displacer's {2}{C} becomes {C}: the generic half goes, the PIP remains).
 //
-// Deliberately NOT hand cards: an Eldrazi Displacer in HAND costs {2}{W} and has no {C} pip; its
-// sink only exists once it has resolved. Deliberately NOT the one-shot tap abilities either
-// (tap_investigate / tap_draw / sac_draw): those are the costs this predicate exists to keep OFF
-// the bank, so counting them would be circular.
+// Deliberately NOT the one-shot tap abilities (tap_investigate / tap_draw / sac_draw): those are
+// the costs this predicate exists to keep OFF the bank, so counting them would be circular.
+//
+// ...BUT THE HAND COUNTS IN HUMAN PLAY (MTG_HAND_C_SINK, default ON; human play only).
+// The original note said hand cards were excluded because "an Eldrazi Displacer in HAND costs
+// {2}{W} and has no {C} pip; its sink only exists once it has resolved". That reasoning is what
+// fails on the USER's seed-8 turn 3 (2026-09-10), where the Displacer is being cast THIS TURN by
+// THIS line: every payment before it resolves sees no sink, spends the board's colourless on
+// generic pips, and the Displacer lands on a board that can no longer pay {2}{C}. The user's rule,
+// verbatim: *"If we played a card with an ability we need to reserve mana for the ability."*
+// A card in hand is exactly that -- a sink we are about to own -- and the demand it creates is real
+// the moment we start paying for it, not the moment it resolves.
+//
+// Scoped two ways so it cannot leak. HUMAN PLAY ONLY (the human-line-vs-AI-average rule: all three
+// consumers -- MTG_HOLD_C_FOR_SINK, MTG_C_SOURCE_HOLD, MTG_UNTAP_C_FIRST -- are already
+// HumanPlayActive-gated at their call sites, so autonomous play and every GT are byte-identical by
+// construction). And CASTABLE-THIS-TURN only: a Displacer we cannot deploy creates no demand this
+// turn, and holding the bank for it would be the "reserve for a line that never happens" failure.
+// Castability is priced as "mana value <= what this board could still produce", the cheap
+// necessary condition -- deliberately not a full payability solve, because this predicate runs
+// inside every payment.
+//
+// What it does NOT read, per the USER's scope ruling (2026-09-10): the LIBRARY. Demand is
+// player-visible knowledge only -- hand, battlefield, and cards legitimately known to be on top
+// (AddKnownTopDemand below, a documented no-op today). The engine's clairvoyant view of undrawn
+// cards is never a reservation reason.
 //
 // Param-keyed, so it is false for every deck in the repo without an Eldrazi-style {C} activation
 // -- i.e. all of them but this one.
+inline bool CardHasColorlessPipActivation(const GameState& state, int controller, const Card& card)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
+    if (d == nullptr) { return false; }
+    const CardParams& q = d->params;
+    const std::optional<ManaCost>* acts[] = {
+        &q.blink_cost, &q.drain_cost, &q.exile_opponent_top_cost, &q.tap_damage_cost,
+    };
+    for (const std::optional<ManaCost>* c : acts)
+    {
+        if (!c->has_value()) { continue; }
+        if (EffectiveActivationCost(state, controller, card, c->value()).colorless > 0)
+        { return true; }
+    }
+    return false;
+}
+
+// Cheap upper bound on the mana this player could still make this turn: every untapped source's
+// per-tap yield (aura bonuses included) plus what is already floating. Used only as a
+// castable-this-turn necessary condition -- never as a payability answer.
+inline int LooseManaCeiling(const GameState& state, int controller)
+{
+    int total = state.floating_mana.Total();
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (!p.card.IsLand() && d->tmpl != CardTemplate::ManaDork && !d->params.mana_rock)
+        { continue; }
+        if (d->params.produces.empty()) { continue; }
+        total += PermanentManaYield(state, p, *d);
+    }
+    return total;
+}
+
+inline bool HandCSinkOn()
+{
+    static const bool on = EnvOn("MTG_HAND_C_SINK", true);
+    return on;
+}
+
 inline bool BoardHasColorlessPipSink(const GameState& state, int controller)
 {
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d == nullptr) { continue; }
-        const CardParams& q = d->params;
-        const std::optional<ManaCost>* acts[] = {
-            &q.blink_cost, &q.drain_cost, &q.exile_opponent_top_cost, &q.tap_damage_cost,
-        };
-        for (const std::optional<ManaCost>* c : acts)
+        if (CardHasColorlessPipActivation(state, controller, p.card)) { return true; }
+    }
+    if (HandCSinkOn() && HumanPlayActive())
+    {
+        const int ceiling = LooseManaCeiling(state, controller);
+        for (const Card& hc : state.players[controller].hand)
         {
-            if (!c->has_value()) { continue; }
-            if (EffectiveActivationCost(state, controller, p.card, c->value()).colorless > 0)
-            { return true; }
+            if (!CardHasColorlessPipActivation(state, controller, hc)) { continue; }
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            if (hd == nullptr) { continue; }
+            if (hd->card.m_mana_cost.ManaValue() <= ceiling) { return true; }
         }
     }
     return false;
@@ -12210,7 +12307,26 @@ inline bool BoardHasColorlessPipSink(const GameState& state, int controller)
 // priced the same way the payment will price it.
 inline void ComputeRefloatDemand(const GameState& state, int controller, int* need)
 {
-    for (const Card& hc : state.players[controller].hand) { AddCostToRefloatDemand(need, hc.m_mana_cost); }
+    // THE HAND'S COST COMES FROM THE DEFINITION, NOT FROM THE ZONE CARD. A `Card` sitting in a zone
+    // carries the NAME; `m_mana_cost` is empty on every decklist-loaded copy (the same trap
+    // ManaPayment.cpp's HUMAN_TAP_DEMAND scan documents at its own hand loop). Reading it directly
+    // -- which this function did until 2026-09-10 -- makes the entire hand contribute ZERO, so the
+    // "hand + battlefield" demand model was really a battlefield-only one, and every consumer fell
+    // back to its all-equal tie-break without saying so.
+    //
+    // Caught by the reference sweep, not by reasoning: with the human-play float concretisation
+    // reading this model, `claude_s1_gi0` turn 3 committed its one floating wild to WHITE on a hand
+    // of Cloud of Faeries {1}{U} + two Peregrine Drakes {4}{U} (blue demand 3, white demand 0) and
+    // the recorded `cast: Cloud of Faeries` stopped being enumerated -- an all-zero demand vector
+    // reads exactly like "nothing is wanted". The fallback keeps a card whose definition is missing
+    // on its own cost rather than dropping it.
+    // MTG_REFLOAT_HAND_COST=0 restores the zero-hand read (one-binary A/B of the repair).
+    static const bool s_hand_cost = EnvOn("MTG_REFLOAT_HAND_COST", true);
+    for (const Card& hc : state.players[controller].hand)
+    {
+        const CardDefinition* hd = s_hand_cost ? CardDatabase::Instance().LookupCached(hc) : nullptr;
+        AddCostToRefloatDemand(need, hd ? hd->card.m_mana_cost : hc.m_mana_cost);
+    }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller) { continue; }
@@ -12225,6 +12341,86 @@ inline void ComputeRefloatDemand(const GameState& state, int controller, int* ne
         {
             if (!c->has_value()) { continue; }
             AddCostToRefloatDemand(need, EffectiveActivationCost(state, controller, p.card, c->value()));
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE HUMAN-PLAY DEMAND SET (USER, 2026-09-10: *"A simple rule is to ask: what mana type could the
+// next line need after the breakpoint?"*)
+//
+// A human builds a turn as a SEQUENCE of separate lines with breakpoints (a draw, a search, a
+// resolution) between them, and each payment can only see the line it is paying for. The demand set
+// is what makes the next line visible to this one. Its members, and the boundary the user drew
+// around them:
+//
+//   (a) cards SEARCHED / TUTORED to hand -- explicit intent, the strongest signal. They are in hand
+//       by the time any payment sees them, so they are counted here as hand cards; a separate
+//       higher-priority TIER for them is NOT implemented (see the note at the end).
+//   (b) cards the player LEGITIMATELY KNOWS are on top of the library -- put there by a
+//       tutor-to-top, or seen and arranged by a Ponder/scry/surveil-style effect, and not since
+//       shuffled away. AddKnownTopDemand is the hook; it is a documented NO-OP today (see below).
+//   (c) the ACTIVATION costs of our own battlefield permanents -- Eldrazi Displacer's {2}{C},
+//       Essence Depleter's {1}{C}, Emiel's {3}, Shivan Gorge's {2}{R}, Mariposa's draw.
+//   (d) the cards in HAND, cast costs AND (human play) the activation costs of the abilities they
+//       will bring with them -- the seed-8 case: paying for a Displacer while ignoring the {2}{C}
+//       it is about to add to the board is how the board ends up unable to use it.
+//
+// EXCLUDED, by the user's explicit ruling: the engine's private clairvoyant knowledge of undrawn
+// cards. *"I'm not as worried about reservation for drawn cards that we only know about
+// clairvoyantly."* No function below reads `player.library` -- the rollouts are fully clairvoyant
+// and reserving off that would be reserving against information the human does not have.
+inline void AddKnownTopDemand(const GameState&, int /*controller*/, int* /*need*/)
+{
+    // (b) above, DELIBERATELY EMPTY, and this is the honest state rather than an oversight.
+    //
+    // "Known top" is not a thing this engine tracks. There is no field on Player or GameState that
+    // records *why* a library card's identity is known: a tutor-to-top writes the library and
+    // leaves no marker, and there is no scry/surveil/Ponder implementation to hang one off. Reading
+    // `library[0]` here would therefore be indistinguishable from clairvoyance -- exactly what the
+    // user excluded -- because it would fire on every draw, seen or not.
+    //
+    // To fill this in, the tracking has to come first: a per-game `known_top_count` on Player, set
+    // by the tutor-to-top / look-at-top-and-reorder resolvers, cleared by any shuffle and
+    // decremented on each draw. Then this function adds the costs of `library[0 .. known_top_count)`
+    // and nothing else changes.
+    //
+    // INERT FOR THIS DECK EITHER WAY: EldraziDisplacerFlicker's only search effects are Living Wish
+    // and Eladamri's Call, and both are tutor-to-HAND (`tutor_to_hand: true`) -- their results land
+    // in (a)/(d) and are already counted. So no reported behaviour depends on this hook today.
+}
+
+// MTG_HUMAN_DEMAND -- the hand-ability half of (d). Default ON, human play only.
+inline bool HumanDemandModelOn()
+{
+    static const bool on = EnvOn("MTG_HUMAN_DEMAND", true);
+    return on;
+}
+
+// ComputeRefloatDemand + (d)'s hand-ability half + (b)'s hook. This is the ONE demand notion the
+// human-play mana policy uses -- the generic-spend budget, the leftover concretisation and the
+// tap-ahead colour choice all read it, so they cannot disagree with each other.
+inline void ComputeHumanPlayDemand(const GameState& state, int controller, int* need)
+{
+    ComputeRefloatDemand(state, controller, need);          // (c) + (d)'s cast half + (a)
+    AddKnownTopDemand(state, controller, need);             // (b), a no-op today
+    if (!HumanDemandModelOn() || !HumanPlayActive()) { return; }
+    const int ceiling = LooseManaCeiling(state, controller);
+    for (const Card& hc : state.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(hc);
+        if (d == nullptr) { continue; }
+        // Only a card we could actually deploy this turn brings its ability's demand with it --
+        // same castable-this-turn condition BoardHasColorlessPipSink uses, for the same reason.
+        if (d->card.m_mana_cost.ManaValue() > ceiling) { continue; }
+        const CardParams& q = d->params;
+        const std::optional<ManaCost>* costs[] = {
+            &q.drain_cost, &q.exile_opponent_top_cost, &q.blink_cost, &q.tap_damage_cost,
+        };
+        for (const std::optional<ManaCost>* c : costs)
+        {
+            if (!c->has_value()) { continue; }
+            AddCostToRefloatDemand(need, EffectiveActivationCost(state, controller, hc, c->value()));
         }
     }
 }
@@ -12324,8 +12520,259 @@ inline int ColoredPipReserveMask(const ManaCost& cost)
     return m;
 }
 
+// MTG_TAPAHEAD_COLOR_COVER -- the DEMAND-AWARE replacement for the tap-ahead's blanket
+// "this source can make a colour the pending cost wants, so keep it out" exclusions.
+// Default ON, human play only; =0 restores the blanket exclusions exactly.
+inline bool TapAheadColorCoverOn()
+{
+    static const bool on = EnvOn("MTG_TAPAHEAD_COLOR_COVER", true);
+    return on;
+}
+
+// Is every coloured pip of `pending` that `prod` could have supplied ALREADY COVERED by something
+// else -- the float we have banked so far, plus the OTHER sources still untapped?
+//
+// This is the whole seed-6-vs-seed-9 discrimination, and it is a coverage question, not a
+// membership one. Both boards cast a Peregrine Drake ({4}{U}) with an untapped painland up:
+//
+//   seed 9 (Conservatory, Adarkar+Wild Growth, Mariposa, Brushland): Adarkar Wastes is the ONLY
+//   blue source on the board. Float it as {C} and the {U} pip becomes unpayable, the whole line
+//   rolls back, and the untap that justified the banking never happens. It must stay out.
+//
+//   seed 6 (Kitchen+Overgrowth, Brushland+Fertile Ground, Adarkar Wastes): Kitchen makes {U} too --
+//   and by the time the walk reaches Adarkar, Kitchen has already been tapped ahead and COMMITTED
+//   to blue by the need model, so the {U} is sitting in the float. Adarkar's {C} is free money and
+//   keeping it out costs the turn exactly one mana. That is the USER's *"banks ZERO float"* report.
+//
+// The old rule -- "any overlap with the cost's colours excludes the source" -- cannot tell those
+// apart, because the overlap is identical. Counting the coverage can.
+//
+// Deliberately CONSERVATIVE in two places, both in the direction of the old behaviour:
+//   * a HYBRID pip counts against BOTH of its colours (ColoredPipReserveMask already sets both
+//     bits), so a hybrid cost keeps the source out unless both halves are covered twice over;
+//   * `wild` float counts as covering ONE coloured pip of any colour, which is what it can pay.
+// With `pending == nullptr` (no cost threaded) it answers false -- i.e. the caller keeps the
+// blanket exclusion, so an un-migrated call site is unchanged.
+inline bool ReservedColorsStillCovered(const GameState& state, int controller,
+                                       const std::vector<Color>& prod, int reserve_color_mask,
+                                       const ManaCost* pending, const Permanent& candidate)
+{
+    if (pending == nullptr || reserve_color_mask == 0) { return false; }
+    // Which of THIS source's colours the pending cost actually wants.
+    int want = 0;
+    for (Color c : prod)
+    {
+        const int ci = static_cast<int>(c);
+        if (ci < 5 && (reserve_color_mask & (1 << ci)) != 0) { want |= 1 << ci; }
+    }
+    if (want == 0) { return true; }                      // no overlap at all -> nothing to cover
+    const int need[5] = { pending->white, pending->blue, pending->black,
+                          pending->red,   pending->green };
+    const ManaPool& f = state.floating_mana;
+    const int have[5] = { f.white, f.blue, f.black, f.red, f.green };
+    for (int ci = 0; ci < 5; ++ci)
+    {
+        if ((want & (1 << ci)) == 0 || need[ci] <= 0) { continue; }
+        int supply = have[ci] + f.wild;                  // banked mana that can pay this pip
+        for (const Permanent& q : state.battlefield)
+        {
+            if (supply >= need[ci]) { break; }
+            if (q.controller_index != controller || q.tapped) { continue; }
+            if (&q == &candidate) { continue; }          // the source we are about to spend on {C}
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd == nullptr) { continue; }
+            if (!q.card.IsLand() && qd->tmpl != CardTemplate::ManaDork && !qd->params.mana_rock)
+            { continue; }
+            bool makes = false;
+            for (Color c : EffectiveProduces(state, controller, *qd, false))
+            { if (static_cast<int>(c) == ci) { makes = true; break; } }
+            // A land Aura's bonus rides the host's tap in the AURA's colour, so it is supply too
+            // (Fertile Ground / Trace of Abundance: any colour).
+            if (!makes && q.card.IsLand()
+                && (LandAuraColorMask(state, q) & (1 << ci)) != 0) { makes = true; }
+            if (makes) { ++supply; }
+        }
+        if (supply < need[ci]) { return false; }
+    }
+    return true;
+}
+
+// ============================================================================================
+// NO GENERIC MANA IN A HUMAN-PLAY POOL (MTG_HUMAN_CONCRETE_POOL, default ON; human play only).
+//
+// USER doctrine, stated twice (2026-09-04 and again 2026-09-10): *"Generic mana should not exist
+// in the mana pool, only in costs"* / *"There should also not be such a thing as generic mana in
+// the mana pool. We probably need to come up with a different approach to ensure that we get the
+// right actual colours."*
+//
+// They are describing the rules, not a preference. CR 106.1: mana has a TYPE, and it is chosen
+// when the mana ability RESOLVES -- "add one mana of any color" (Fertile Ground, Trace of
+// Abundance) makes a specific colour the moment the land is tapped, not later. `ManaPool::wild`
+// models the opposite: a deferred choice that pays whichever pip turns up. Inside the search that
+// deferral is deliberate, measured enumeration optimism and it stays exactly as it is. In the
+// VIEWER it is three separate problems: the float display says "generic", which is not a thing;
+// the pool can pay a pip the board could never have made (a tap-ahead float of {G:1,wild:2} let
+// Emiel resolve its {W}{W} with no white source ever tapped); and a `wild` unit provably cannot
+// pay a {C} pip, so "flexible" is not even true in the direction that matters for this deck.
+//
+// So: at the two places where a unit survives UNCOMMITTED into `state.floating_mana` -- the ETB
+// tap-ahead's bank and a payment's leftover -- each such unit picks its colour now, by the demand
+// model (ComputeHumanPlayDemand: hand, hand abilities, battlefield abilities; never the library).
+// Every other producer already commits: `tap_source` hands its unit straight to a pip, and
+// AddRefloatContribution's constrain_partial_choice commits a 2-4 colour source to a real colour.
+//
+// TWO KINDS OF UNIT ARE DELIBERATELY LEFT ALONE:
+//   * `wild_phantom` (a fed Arcum's Astrolabe with no free mode). Those are colour CONVERSIONS of
+//     units this pool already counts, not supply -- CanPayFlat subtracts them from the payable
+//     amount. Committing one would silently promote a conversion into an extra mana, which is the
+//     +1-per-Astrolabe bug the phantom count exists to stop. No EDF card has it, so this is
+//     inert here and correct everywhere else.
+//   * BatchPrepayMainCasts' pool (TurnSolver.cpp). Its `wild` is not an undecided tap, it is a
+//     PLACEHOLDER equal to the batch's generic requirement (audited: wild <= combined.generic),
+//     which the plan's own casts drain generic-first. It is not concretised at the prepay site.
+//     Whatever survives the plan's first payment IS concretised, because this runs over the whole
+//     pool from commit_leftover.
+inline bool HumanConcretePoolOn()
+{
+    static const bool on = EnvOn("MTG_HUMAN_CONCRETE_POOL", true);
+    return on;
+}
+
+// TWO SITES, AND ONLY THE LEFTOVER ONE IS ON. This is not a hedge -- the leftover site alone is
+// sufficient, and the tap-ahead one is measurably harmful.
+//
+// SUFFICIENT: `commit_leftover` runs ConcretiseHumanFloat over the WHOLE reserve, and every ETB
+// tap-ahead is immediately followed by the very payment it banked for. So a tap-ahead's surplus is
+// concretised anyway, one payment later -- after that payment has had first refusal on it. There is
+// no window in which a human sees a `wild` unit in the float: the pool is only ever displayed
+// between decisions, and every decision boundary is downstream of a commit_leftover.
+//
+// HARMFUL: committing at the tap-ahead pre-empts the payment. SpendFloatingTowardCost drains
+// generic pips from `wild` FIRST, which is why a healthy blink loop's float reads as pure {G:N} --
+// the flexible units are spent, the colours accumulate. Commit them up front and the payment takes
+// a different set of sources for the same cost. Measured on the reference corpus (2026-09-10):
+// tap-ahead ON costs TWO EldraziDisplacerFlicker references -- `claude_s1_gi0`, whose turn-3 win
+// the user ruled must keep reproducing, and `claude_s10_gi9`. Leftover ON alone: 306/306 green.
+// MTG_HUMAN_CONCRETE_TAPAHEAD=1 turns the losing half back on for a one-binary A/B.
+// `Frame` is the DECISION BOUNDARY itself (AIEngine's external-chooser segment loop) and is the
+// site that actually ships; it rides the Leftover lever and ignores the defer counter below.
+enum class ConcreteSite { TapAhead, Leftover, Frame };
+inline bool HumanConcreteSiteOn(ConcreteSite s)
+{
+    static const bool tap  = EnvOn("MTG_HUMAN_CONCRETE_TAPAHEAD");          // DEFAULT OFF
+    static const bool left = EnvOn("MTG_HUMAN_CONCRETE_LEFTOVER", true);    // DEFAULT ON
+    return s == ConcreteSite::TapAhead ? tap : left;
+}
+
+// ...AND NOT UNTIL THE PLAN IS FINISHED. `commit_leftover` fires after EVERY payment, including the
+// ones BETWEEN the casts of a single multi-cast line, and there the commitment is not a choice the
+// human is making -- it is the engine pre-empting its own next payment.
+//
+// Measured, on a deck with no {C} pips at all: `references/FiveColour/claude_s9_gi8` turn 4 is one
+// plan, `cast: Mana Cannons, Faeburrow Elder, Oko` -- and committing the first payment's leftover
+// dropped a later cast in the same line, T4 -> T5. That is the exact stranding shape
+// docs/design/mana-source-reservation.md records for per-payment reservation ("payable without S"
+// judged against ONE payment, not the whole turn), reappearing one layer down.
+//
+// The human never sees a mid-plan pool: the viewer emits a decision, the chosen plan is applied to
+// completion, then the next decision is emitted. So the correct boundary is the END of the executed
+// step, and this counter is what holds the commitment there. Requests inside a live plan are
+// dropped; the scope's destructor performs exactly one concretisation on the way out.
+inline thread_local int g_concrete_defer = 0;
+
+inline void ConcretiseHumanFloat(GameState& state, int controller, ConcreteSite site);
+
+struct ConcreteDeferScope
+{
+    GameState* st; int ctrl;
+    ConcreteDeferScope(GameState& s, int controller) : st(&s), ctrl(controller)
+    { ++g_concrete_defer; }
+    ~ConcreteDeferScope()
+    {
+        --g_concrete_defer;
+        if (g_concrete_defer == 0) { ConcretiseHumanFloat(*st, ctrl, ConcreteSite::Leftover); }
+    }
+    ConcreteDeferScope(const ConcreteDeferScope&)            = delete;
+    ConcreteDeferScope& operator=(const ConcreteDeferScope&) = delete;
+};
+
+inline void ConcretiseHumanFloat(GameState& state, int controller, ConcreteSite site)
+{
+    if (!HumanConcretePoolOn() || !HumanConcreteSiteOn(site) || !HumanPlayActive()) { return; }
+    // A plan is still being applied -- see ConcreteDeferScope. The frame boundary is exempt: it IS
+    // the moment the deferral was waiting for.
+    if (g_concrete_defer > 0 && site != ConcreteSite::Frame) { return; }
+    ManaPool& f = state.floating_mana;
+    const int phantom = std::min(f.wild_phantom, f.wild);
+    int convertible = f.wild - phantom;
+    if (convertible <= 0) { return; }
+    int wild_c = std::min(f.wild_c, f.wild);        // how many of them can legally become {C}
+    int need[6] = { 0, 0, 0, 0, 0, 0 };
+    ComputeHumanPlayDemand(state, controller, need);
+    const int have[6] = { f.white, f.blue, f.black, f.red, f.green, f.colorless };
+    for (int i = 0; i < 6; ++i) { need[i] = std::max(0, need[i] - have[i]); }
+    // BREADTH breaks a pip-count tie: how many DISTINCT hand cards want each colour.
+    //
+    // Pip count alone is not enough, and the reference corpus says so. `claude_s1_gi0` turn 3 holds
+    // Emiel the Blessed {2}{W}{W} and two Peregrine Drakes {4}{U}: white and blue both score 2 pips,
+    // the tie fell to colour order, the one floating wild became WHITE, and the recorded
+    // `cast: Cloud of Faeries` ({1}{U}) stopped being enumerated. Blue is wanted by TWO cards and
+    // white by one -- committing to blue leaves strictly more of the hand castable, which is the
+    // thing the commitment can actually cost us. Pips still decide first (a {W}{W} cast really does
+    // need two whites); breadth only moves what colour order used to decide by accident.
+    int breadth[6] = { 0, 0, 0, 0, 0, 0 };
+    for (const Card& hc : state.players[controller].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd == nullptr) { continue; }
+        const ManaCost& m = hd->card.m_mana_cost;
+        const int pips[6] = { m.white, m.blue, m.black, m.red, m.green, m.colorless };
+        for (int i = 0; i < 6; ++i) { if (pips[i] > 0) { ++breadth[i]; } }
+    }
+    while (convertible > 0)
+    {
+        // {C} is a candidate only for a unit whose source could actually make colourless, and it
+        // wins ties: a colour pays generic pips and its own pip, a {C} pip is payable by nothing
+        // else at all (CR 107.4c), so on a board that wants colourless it is the scarcer commitment.
+        Color best = Color::White; int best_need = INT_MIN, best_breadth = INT_MIN;
+        if (wild_c > 0)
+        {
+            best = Color::Colorless;
+            best_need = need[static_cast<int>(Color::Colorless)];
+            best_breadth = breadth[static_cast<int>(Color::Colorless)];
+        }
+        const Color cols[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
+        for (Color c : cols)
+        {
+            const int ci = static_cast<int>(c);
+            if (need[ci] > best_need
+                || (need[ci] == best_need && breadth[ci] > best_breadth))
+            { best_need = need[ci]; best_breadth = breadth[ci]; best = c; }
+        }
+        // All-zero demand degenerates to {C} when available (this deck's scarcest pip) and to
+        // white otherwise -- deterministic either way, and still a CONCRETE unit, which is the
+        // point. Never `wild`: laundering a unit into "any colour" is what this exists to stop.
+        // MTG_CONCRETE_DBG (default off): which colour each unit took and the demand it read.
+        // The instrument that found the empty-hand-cost bug in ComputeRefloatDemand -- an all-zero
+        // demand vector and a correctly-computed one are indistinguishable from the outcome alone.
+        { static const bool s_dbg = EnvOn("MTG_CONCRETE_DBG");
+          if (s_dbg)
+          { std::fprintf(stderr, "[concrete] wild->%d  need{W%d U%d B%d R%d G%d C%d} wild_c=%d hand=%d\n",
+                         static_cast<int>(best), need[0], need[1], need[2], need[3], need[4],
+                         need[5], wild_c,
+                         static_cast<int>(state.players[controller].hand.size())); } }
+        f.Add(best, 1);
+        --f.wild;
+        --convertible;
+        if (best == Color::Colorless) { --wild_c; }
+        int& n = need[static_cast<int>(best)];
+        n = std::max(0, n - 1);
+    }
+    f.wild_c = std::min(f.wild_c, f.wild);          // subset invariant (see ManaPool::wild_c)
+}
+
 inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int count,
-                                      int reserve_color_mask)
+                                      int reserve_color_mask, const ManaCost* pending_cost)
 {
     if (count <= 0) { return; }
     // COMBO MODE is scoped to a live loop (g_in_blink_loop), never to a plain ETB-untap cast.
@@ -12383,8 +12830,24 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
     // deck's noise floor as a global default). Combo mode turns it on for the window where it
     // obviously pays: while the stockpile is still being built. Past 100 floating the pick stops
     // mattering, so it reverts rather than staying on forever.
-    const bool yield_order = EtbTapYieldOn()
+    // HUMAN PLAY ORDERS BY YIELD TOO (MTG_TAPAHEAD_HUMAN_ORDER, default ON; human play only).
+    // The tap-ahead can bank at most `count` lands, so WHICH ones it picks is the whole value of the
+    // step whenever the board has more lands than the ETB untaps -- and unordered it picks by
+    // BATTLEFIELD ORDER, i.e. by when the lands happened to be played. On the user's seed-6 board
+    // that put a 1-yield Adarkar Wastes ahead of a 3-yield Overgrowth'd Kitchen for a Cloud of
+    // Faeries' two untaps. The untap that follows already ranks by yield (EtbUntapLands), so this
+    // just stops the two halves of one step from disagreeing. Strictly more mana banked, never
+    // less. Rollouts (HumanPlaySuppress) and autonomous play keep the measured battlefield order.
+    static const bool s_human_order = EnvOn("MTG_TAPAHEAD_HUMAN_ORDER", true);
+    const bool human_order = s_human_order && HumanPlayActive();
+    const bool yield_order = EtbTapYieldOn() || human_order
                           || (combo && state.floating_mana.Total() < 100);
+    // ...and among EQUAL-yield lands a {C}-capable one is banked first while a {C} sink is live --
+    // the exact tie-break EtbUntapLands' MTG_UNTAP_C_FIRST applies on the untap side, for the same
+    // reason (USER: *"we need to be super aggressive about getting and keeping colourless"*). A
+    // TIE-BREAK only: the yield key is doubled and the {C}-capable land takes the +1, so the mana
+    // ordering is preserved exactly and only previously-arbitrary ties move.
+    const bool c_tiebreak = human_order && BoardHasColorlessPipSink(state, controller);
     if (yield_order)
     {
         // Keys computed BEFORE the loop, because the loop mutates `tapped`. A permanent that is not
@@ -12396,7 +12859,14 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
             if (p.controller_index != controller || p.tapped || !p.card.IsLand()) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (d == nullptr) { continue; }
-            key[static_cast<std::size_t>(i)] = PermanentManaYield(state, p, *d);
+            int k = PermanentManaYield(state, p, *d);
+            if (c_tiebreak)
+            {
+                k *= 2;
+                for (Color pc : UnconditionalProduces(*d))
+                { if (pc == Color::Colorless) { k += 1; break; } }
+            }
+            key[static_cast<std::size_t>(i)] = k;
         }
         std::stable_sort(order.begin(), order.end(),
                          [&key](int a, int b)
@@ -12461,6 +12931,17 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         // (pain and all). Painlands with no such overlap keep the seed-6 banking win. The
         // blink-loop branch is untouched -- activation costs are generic/{C} by construction.
         // MTG_PAINLAND_CAST_RESERVE=0 restores the stranding behaviour.
+        //
+        // ...AND THE RESERVATION IS DEMAND-AWARE, NOT BLANKET (USER, EDF seed 6, re-reported
+        // 2026-09-10: *"casting a second Peregrine Drake with ~6 untapped mana on board banks ZERO
+        // float"* -- the September-7 painland fix did not cure their board). The blanket rule above
+        // asks "could this land have made a colour the cost wants?", which is true of every
+        // {U}-capable painland on a {4}{U} Drake, so Adarkar Wastes was skipped even on a board
+        // where Kitchen had already banked the blue. That is a whole land's mana lost per cast, and
+        // it is the difference between the two boards the rule has to separate -- see
+        // ReservedColorsStillCovered, which asks the COVERAGE question instead. When the pips are
+        // covered the land banks its {C}; when they are not (seed 9's sole blue source) the old
+        // exclusion stands unchanged. MTG_TAPAHEAD_COLOR_COVER=0 restores the blanket rule.
         static const bool s_pain_tapahead = EnvOn("MTG_PAINLAND_TAPAHEAD", true);
         static const bool s_pain_cast     = EnvOn("MTG_PAINLAND_TAPAHEAD_CAST", true);
         static const bool s_pain_reserve  = EnvOn("MTG_PAINLAND_CAST_RESERVE", true);
@@ -12473,6 +12954,10 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
                     && (reserve_color_mask & (1 << static_cast<int>(c))) != 0)
                 { reserve_overlap = true; break; }
             }
+            if (reserve_overlap && TapAheadColorCoverOn() && HumanPlayActive()
+                && ReservedColorsStillCovered(state, controller, q.produces, reserve_color_mask,
+                                              pending_cost, p))
+            { reserve_overlap = false; }
         }
         bool pain_c = false;
         if (q.tap_self_damage > 0 && PainlandCModeEnabled() && s_pain_tapahead
@@ -12508,7 +12993,17 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         {
             Player& epl = state.players[controller];
             const bool can_pay_e = epl.energy_counters >= q.energy_per_colored_tap;
-            if (!g_in_blink_loop && can_pay_e && reserve_color_mask != 0) { continue; }
+            // Same demand-aware widening as the painland branch above (MTG_TAPAHEAD_COLOR_COVER,
+            // human play only): "the cost has ANY coloured pip" is a blunter gate still -- it keeps
+            // an Aether Hub out even when the pip in question is covered three times over -- and a
+            // Hub that stays untapped here banks nothing at all. Its free "{T}: Add {C}" mode is
+            // exactly what a {C} sink wants, and if the pips are covered nothing can be stranded by
+            // taking it. Autonomous play keeps the blanket gate (byte-identical).
+            if (!g_in_blink_loop && can_pay_e && reserve_color_mask != 0
+                && !(TapAheadColorCoverOn() && HumanPlayActive()
+                     && ReservedColorsStillCovered(state, controller, q.produces,
+                                                   reserve_color_mask, pending_cost, p)))
+            { continue; }
             p.tapped = true;
             ++tapped_n;
             if (refloatstats::On()) { refloatstats::g_tapped.fetch_add(1, std::memory_order_relaxed); }
@@ -12629,6 +13124,9 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         // aura itself says "any colour").
         if (LandAuraBonus(state, p) > 0) { LandAuraAddToPool(state.floating_mana, state, p); }
     }
+    // "One mana of any colour" (Fertile Ground, Trace of Abundance) and a full-rainbow source both
+    // land in `wild` above; in human play the choice is made NOW, by demand. See the header.
+    ConcretiseHumanFloat(state, controller, ConcreteSite::TapAhead);
 }
 
 // Number of mana sources the active player controls (the natural chosen X for Reality Spasm:
@@ -14249,13 +14747,23 @@ inline bool ConsumeFloating(ManaPool& floating, Color c)
 
 // Consumes one mana of ANY colour from a floating pool (for a generic pip), returning
 // the colour drained via `took`. Returns false if the pool is empty.
+//
+// `g_hold_colorless_in_payment` (human play, live {C} sink -- see its declaration) moves Colorless
+// to the BACK of this order, which is the same rule SpendFloatingTowardCost's `hold_c` applies to
+// the pre-existing float, applied to the pool the payment is building as it taps. It REORDERS and
+// never refuses: a pool holding nothing but colourless still pays the pip on the final tier, so no
+// cast can become unpayable because of it (the s1_gi0 lesson -- a hold must be a preference with
+// fall-through). Off everywhere but human play, so every autonomous game is byte-identical.
 inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
 {
-    const Color order[] = { Color::Colorless, Color::White, Color::Blue,
-                            Color::Black, Color::Red, Color::Green };
-    for (Color c : order)
+    static const Color kCFirst[] = { Color::Colorless, Color::White, Color::Blue,
+                                     Color::Black, Color::Red, Color::Green };
+    static const Color kCLast[]  = { Color::White, Color::Blue, Color::Black,
+                                     Color::Red, Color::Green, Color::Colorless };
+    const Color* order = g_hold_colorless_in_payment ? kCLast : kCFirst;
+    for (int i = 0; i < 6; ++i)
     {
-        if (ConsumeFloating(floating, c)) { took = c; return true; }
+        if (ConsumeFloating(floating, order[i])) { took = order[i]; return true; }
     }
     return false;
 }
