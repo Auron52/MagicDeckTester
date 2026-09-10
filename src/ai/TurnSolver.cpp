@@ -30577,7 +30577,55 @@ inline std::atomic<unsigned long long> g_lgoff_roots{0}, g_lgoff_seedwins{0}, g_
 // Lossless by state identity. DEFAULT ON; =0 searches every candidate.
 inline bool LadderDedupOn() { static const bool v = EnvOn("MTG_LABEL_LADDER_DEDUP", true); return v; }
 inline std::atomic<unsigned long long> g_ldd_searched{0}, g_ldd_inherited{0};
-inline std::atomic<unsigned long long> g_gdom_seen{0};
+// MTG_LABEL_GOFF_DOM / MTG_LABEL_GOFF_WIDTH -- GO-OFF DOMINANCE at the horizon edge. THE ONE
+// APPROXIMATION on this path (everything else here is exact); DEFAULT ON, MTG_LABEL_GOFF_DOM=0
+// restores the full search. User-directed, 2026-09-09: "Technically we could even dominance prune
+// those cases if we need to."
+//
+// WHERE IT APPLIES. A RESIDUAL node -- horizon edge, certificate declined, both go-off seeds
+// applied and neither killed -- and only when the decline was itself a GO-OFF decline
+// (EdfCertLastDeclineWasGoOff: the bound had already concluded this turn's mana is unbounded).
+// That is the combo-turn class and nothing else: an unmodelled card, an unmodelled zone, an
+// opponent permanent, a failure to settle, or a bounded board whose damage routes already reach
+// lethal all read false and keep today's full search.
+//
+// WHY THIS CLASS COSTS SO MUCH. On such a node the only question is "does some line kill THIS
+// turn", and the deck's answer is always the same shape: cast the ramp and the pieces, then let
+// ApplyPlanDirect's tail run the loop. So EVERY candidate's apply runs a full go-off -- ~40 blink
+// iterations, each re-paid through the mana solver, plus the library dig it funds. Measured on
+// the 900255 yardstick: 2.3 ms per plan apply, 89,650 of the game's 95,702 label-path plans sit
+// at horizon-edge nodes, and 1,944 of the 1,956 residual nodes (99.4%) are proving a NO-win.
+//
+// WHY IT IS A WIDTH AND NOT A DELETION. Measured (900255, MoveOrderPlans order): of the 12
+// residual nodes that do hold a this-turn kill, the winning plan is candidate #1 at 6 of them,
+// #7 at one and #49 at one -- the static move order already puts the kill first. Deleting the
+// node outright (width 0) therefore threw away real wins for little speed: it moved all four of
+// that game's rows a FULL TURN later and returned only 1.8x, because refusing the edge pushes the
+// ladder into deeper, wider passes. Scoring the first W candidates instead keeps the wins the
+// order finds, keeps the ladder shallow, and pays W applies instead of ~46.
+//
+// HOW IT IS LOSSY, precisely. A residual node whose only kill ranks beyond W becomes a no-win at
+// this horizon, so its label moves LATER -- pessimistic, never optimistic, and never a fabricated
+// win (every win here is still an OBSERVED kill, and a this-turn kill is exact by definition).
+// Row deltas are quantified in docs/design/analysis-EldraziDisplacerFlicker.md.
+//
+// SCOPE: g_unbounded_label_search only (the offline label ladder). Budgeted play and the
+// depth-matrix's Unlimited() cells are untouched, so the suite is byte-identical BY CONSTRUCTION.
+inline bool GoffDomOn() { static const bool v = EnvOn("MTG_LABEL_GOFF_DOM", true); return v; }
+// Candidates a residual edge node may score before conceding the no-win. 0 = concede at once (the
+// measured-bad deletion above); a huge value = exact. Value-carrying, so it keeps EnvInt.
+//
+// DEFAULT 128, chosen off the measured winner RANKS, not off a speed curve. On 900255 the 12
+// residual wins sit at candidate 1 (x8), 5, 7, 49 and 70 -- so 128 covers every observed one with
+// most of a doubling in hand, and it was row-identical there (8 was not: it moved one row +0.33).
+// The speed does not ask for less: on 900255 widths 8 / 32 / 128 measured 131.7 / 132.5 / 135.5 s
+// against 163.9 s exact -- the curve is flat, because the candidates a small width removes are the
+// CHEAP ones (MoveOrderPlans puts the big multi-cast plans, i.e. the expensive applies AND the
+// winners, first). Where the width really pays is the monster cohort, whose edge nodes reach 3,422
+// candidates (measured, seed 900021): 128 still deletes 96% of such a node.
+inline int GoffDomWidth() { static const int v = EnvInt("MTG_LABEL_GOFF_WIDTH", 128); return v; }
+inline std::atomic<unsigned long long> g_gdom_pruned{0}, g_gdom_seen{0}, g_gdom_beamed{0},
+                                       g_gdom_plans_cut{0};
 // RESIDUAL OUTCOME (MTG_WINLESS_STATS): of the residual edge nodes that pay the full enumeration,
 // how many turn out to be WINS? That is the number that decides whether the residual class may be
 // dominance-pruned at all -- a class that is ~all no-win can be dropped for nearly nothing, and a
@@ -30712,8 +30760,11 @@ struct DumperBody
         }
         if (g_gdom_seen.load() != 0)
         {
-            std::fprintf(stderr, "=== LABEL GO-OFF DOM: residual-edge nodes=%llu ===\n",
-                         g_gdom_seen.load());
+            std::fprintf(stderr,
+                "=== LABEL GO-OFF DOM: residual-edge=%llu width=%d conceded=%llu beamed=%llu "
+                "plans-cut=%llu ===\n",
+                g_gdom_seen.load(), GoffDomOn() ? GoffDomWidth() : -1, g_gdom_pruned.load(),
+                g_gdom_beamed.load(), g_gdom_plans_cut.load());
         }
         if (g_edge_tail_elided.load() != 0)
         {
@@ -32311,6 +32362,18 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             residual_node = true;
             if (winlesscert::StatsOn())
             { winlesscert::g_gdom_seen.fetch_add(1, std::memory_order_relaxed); }
+            if (winlesscert::GoffDomOn() && winlesscert::GoffDomWidth() <= 0)
+            {
+                if (winlesscert::StatsOn())
+                { winlesscert::g_gdom_pruned.fetch_add(1, std::memory_order_relaxed); }
+                // Memoised exactly like the certificate's refutation -- "no win at turn <= cutoff"
+                // -- so the thousands of order-variant transpositions onto one combo state answer
+                // from the memo instead of re-running the seeds. The entry can only ever exist
+                // when this cut is armed, so a run never mixes the two kinds of no-win.
+                const TurnSolver::SearchLine nw{ max_turns + 1, {} };
+                if (lc != nullptr && FSNoWinCacheOn()) { FSLineStoreNoWin(lc, key, nw, cutoff); }
+                return nw;
+            }
         }
     }
 
@@ -32470,6 +32533,18 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     const bool edge_tail_elide = !second_main && g_unbounded_label_search > 0
                                  && state.turn_number >= cutoff
                                  && winlesscert::EdgeTailElideOn();
+    // GO-OFF DOMINANCE WIDTH (see winlesscert::GoffDomOn). A residual node scores its first W
+    // MoveOrder'd candidates and then concedes the no-win. <= 0 means it never got here (the
+    // concede-at-once branch returned above); a residual node with W >= pre.size() is exact.
+    const int gdom_width = (residual_node && winlesscert::GoffDomOn())
+                         ? winlesscert::GoffDomWidth() : 0;
+    if (gdom_width > 0 && winlesscert::StatsOn()
+        && static_cast<std::size_t>(gdom_width) < pre.size())
+    {
+        winlesscert::g_gdom_beamed.fetch_add(1, std::memory_order_relaxed);
+        winlesscert::g_gdom_plans_cut.fetch_add(pre.size() - static_cast<std::size_t>(gdom_width),
+                                                std::memory_order_relaxed);
+    }
     // Per-plan scratch board, hoisted so each plan reuses the previous plan's heap capacity
     // (see LoadPlanState). Nothing in the body stores a pointer/reference to it past its
     // iteration, and it is never moved from, so reuse cannot alias.
@@ -32492,6 +32567,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (s_force_t1_land != nullptr && state.turn_number == 1 && bp_root
                 && p.land_to_play != s_force_t1_land) { continue; }
         }
+        // GO-OFF DOMINANCE (MTG_LABEL_GOFF_WIDTH): a residual node has had its W best candidates.
+        // Deliberately does NOT bump g_fs_trunc_events -- that counter is what makes
+        // EarliestWinReport::truncated fire, and a truncated report tells the labeller to DROP the
+        // position. This cut concedes a no-win, it does not fail to answer.
+        if (gdom_width > 0 && static_cast<int>(scanned) >= gdom_width) { break; }
         ++scanned;
         if (cert_scope && winlesscert::ProgEvery() > 0)
         {
