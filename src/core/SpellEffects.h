@@ -1471,6 +1471,53 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
                          const std::string& source_name = "Tutor",
                          bool human_repick = false);
 
+// ---- HUMAN-PLAY TUTOR FAN COLLAPSE (viewer-only; MTG_PLAY_TUTOR_FAN_COLLAPSE, DEFAULT ON, =0 off)
+// "TRUE when a CAST of this card re-asks its tutor target at RESOLUTION, so the plan MENU must stop
+// asking it too." USER 2026-09-10, EldraziDisplacerFlicker's double-Living-Wish line: "That double
+// living wish line now gives me three dialogs."
+//
+// The three were the queue-time variant picker plus the two per-cast resolution frames 543f540d
+// added. Only the last two are real: those run once per cast, in cast order, against the LIVE zone,
+// so the second wish is offered the pool the first one left. The menu's named variants are the fan
+// CollectActions emits under human play (one cast Action per candidate), and they cannot express the
+// same decision -- both copies of a doubled tutor are handed the SAME name off the pre-cast board
+// ("Living Wish -> Azorius Chancery, Living Wish -> Azorius Chancery" on a SINGLETON wish pool).
+// Asking a question whose answer is immediately re-asked is pure menu noise, so the two viewer-only
+// surfaces drop it and let the resolution frames own the choice:
+//   * main.cpp's display collapse -- plans differing ONLY by this target fold to the rank-best
+//     entry, whose bake becomes the picker's default (the Pod / Chord-fetch precedent beside it);
+//   * TurnSolver::CheckLine's `resolution_tutor` -- those variants share a dedup signature, so a
+//     committed "cast=Living Wish;cast=Living Wish" ACCEPTS instead of opening a choose dialog.
+//
+// SCOPE IS THE RESOLUTION ROUTE, NOT THE PARAM. Only a NON-PERMANENT tutor spell reaches
+// PerformTutor's `human_repick` branch (EffectHandler's non-permanent arm and the rollout twin in
+// ApplyPlanDirect's apply_one). A CREATURE carrying tutor_to_hand -- Goblin Matron, Stoneforge
+// Mystic, Recruiter of the Guard -- fetches from its ETB with human_repick FALSE, so its baked
+// target is never re-asked and the menu variant is the human's ONLY say: collapsing those would
+// DELETE the decision rather than move it. Ranger of Eos (etb_tutor_hand_count > 1) picks its pair
+// once at resolution and has no cast-time axis at all. The permanent test mirrors EffectHandler's
+// own branch so the two stay in lockstep.
+//
+// HumanPlayActive() gated, so autonomous play, the search and every rollout keep the full variant
+// fan (that is the search's business) and stay byte-identical. Both call sites are viewer-only on
+// top of that: the display collapse runs only under a plan CAP -- test/viewer_protocol_check.py
+// replays UNCAPPED (MTG_PLAY_PLANS_CAP=0), so every recorded reference still finds and picks its
+// recorded named variant and the resolution frame's default still reads that plan's tutor_target,
+// reproducing the recorded game byte-identically -- and CheckLine is reachable only from
+// --validate-line.
+inline bool HumanPlayDefersTutorTarget(const CardDefinition& def)
+{
+    static const bool s_on = EnvOn("MTG_PLAY_TUTOR_FAN_COLLAPSE", true);   // DEFAULT ON; =0 disables
+    if (!s_on || !HumanPlayActive()) { return false; }
+    if (!(def.params.tutor_to_hand || def.params.tutor_to_top)) { return false; }
+    if (def.params.etb_tutor_hand_count > 1) { return false; }   // Ranger of Eos: no cast-time axis
+    // A PERMANENT fetches from its ETB, not from a spell resolution -> no `human_repick` frame.
+    if (def.card.HasType(CardType::Creature)     || def.card.HasType(CardType::Land)
+        || def.card.HasType(CardType::Enchantment) || def.card.HasType(CardType::Artifact)
+        || def.card.HasType(CardType::Planeswalker)) { return false; }
+    return true;
+}
+
 // Ranger of Eos ("search your library for up to two creature cards with mana value 1 or less,
 // reveal them, put them into your hand, then shuffle"): the etb_tutor_hand_count > 1 multi-tutor,
 // resolved ONCE at the ETB (both the cast and the Pod/Chord put path -- no cast-time plan axis;

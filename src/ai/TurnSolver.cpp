@@ -37883,13 +37883,23 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             // Variants differing only by those axes now share a sig and collapse; a bare
             // "cast=Chord" often auto-accepts with no queue dialog at all. Explicit pod=/verb
             // declarations still filter candidates directly (that match is not sub-based).
+            //
+            // EVERY repick-at-resolution TUTOR CAST joins them (HumanPlayDefersTutorTarget, USER
+            // 2026-09-10, EDF: "that double living wish line now gives me three dialogs"). Since
+            // 543f540d each tutor CAST gets its own frame at resolution off the LIVE zone, so this
+            // sub is verbatim the round-4 defect one card class over: the queue dialog asked "which
+            // wish target?" and the picker then asked it again, twice. With the sub dropped a
+            // committed "cast=Living Wish;cast=Living Wish" collapses to one variant and ACCEPTS,
+            // leaving exactly the two resolution frames. HumanPlayActive-gated inside the
+            // predicate, and CheckLine is viewer-only (sole caller --validate-line) -> GT-neutral.
             const bool resolution_tutor =
                 a.kind == Action::Kind::ActivatePod
                 || (a.kind == Action::Kind::CastFromHand && !a.tutor_target.empty()
                     && [&]() {
                            const CardDefinition* cd2 = a.def ? a.def
                                : CardDatabase::Instance().Lookup(a.card_name);
-                           return cd2 && cd2->params.tutor_mv_max_is_x;
+                           return cd2 && (cd2->params.tutor_mv_max_is_x
+                                          || HumanPlayDefersTutorTarget(*cd2));
                        }());
             if (!a.tutor_target.empty() && !resolution_tutor)
             { addSub(a.card_name + " \xE2\x86\x92 " + a.tutor_target, a.card_name + " \xE2\x86\x92", a.tutor_target, a.tutor_target, "tutor"); }
