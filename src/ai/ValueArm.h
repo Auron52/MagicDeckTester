@@ -109,6 +109,13 @@ inline thread_local int         t_deck_warm_none = 0;
 // 1 = value_play.commit "model" (both ladders: the emulated ladder's committing pass, or the escalation
 // ladder's value pass at its last depth before the heuristic escalation).
 inline thread_local int         t_deck_commit_model = 0;
+// value_play.ladder "single": -1 unset | 2 = the FIT single pass (see ValuePlay). Same resolution order as the
+// other shape keys: the per-job arm wins, then the deck, then the env default.
+inline thread_local int         t_deck_single = -1;
+// value_play.alpha for a leafless probe: -1 unset | 0 strict | 1 relaxed.
+inline thread_local int         t_deck_alpha_relaxed = -1;
+// value_play.exhaust_mult: <=0 unset.
+inline thread_local double      t_deck_exhaust_mult = 0.0;
 inline thread_local std::string t_deck_key;
 
 // Reset to "use the env default for everything". Called by a worker before a job with no arm block,

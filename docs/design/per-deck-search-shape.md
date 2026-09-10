@@ -52,11 +52,31 @@ Full table: `analysis-Melira Pod.md` 2026-09-10a. Summary as first read:
 
 ## Adoption rule
 
-Both axes, per configuration, against the deck's shipped shape: quality (average win turn and per-game
-better/worse counts over >= 8 x 500 games) AND run time (deterministic search units; wall only from a
-same-batch pair or the single-worker probe -- never across batches). A shape is adopted only when it is no
-worse on either axis at every configuration the deck is played at (d5b20 and d3b10 here, since the mulligan
-generator runs the deck at d3).
+Both axes, per configuration, against the deck's shipped shape: quality AND run time (deterministic search
+units; wall only from a same-batch pair or the single-worker probe -- never across batches). A shape is
+adopted only when it is no worse on either axis at every configuration the deck is played at (d5b20 and
+d3b10 here, since the mulligan generator runs the deck at d3).
+
+**The quality axis is the PAIRED SIGN TEST, not the average win turn (2026-09-10).** Arms are compared on
+identical games (same seed, same game index, same opening hand), so `better` and `worse` game counts are
+paired and `z = net / sqrt(better + worse)` is a sign test on the discordant pairs. Use it as the decision
+statistic; keep `d_avg` only as the magnitude (a shape that loses a fifth of a turn per game is rejected
+whatever its z). **Why the change:** `d_avg`'s spread ACROSS SEEDS, measured on batch 2's completed cells at
+500 games per seed, is
+
+| deck | sd of d_avg per seed | se over 8 seeds |
+|---|---|---|
+| Melira | 0.033 | 0.011 |
+| Hinata | 0.011 | 0.004 |
+| FiveColour | 0.008 | 0.003 |
+| Knights / Critter | 0.001 | 0.000 |
+
+-- so on the heavy decks the standard error of `d_avg` over the whole 8 x 500-game screen is 8-22x the
+0.0005 tolerance this rule was originally written with. A "+0.0010 worse" reading there is noise. The sign
+test uses the pairing and resolves what the mean cannot: Melira's rejections come back at z = -8 to -27
+(unambiguous), Hinata's leafless escalation at z = -3.1 (real), while the sub-0.002 readings that decorated
+the light decks turn out to be |z| <= 1. It also sizes the CHEAP EARLY TEST for a new deck: a light deck
+separates at one or two seeds, a heavy one needs the full eight.
 
 ## Leaf-usefulness predictor
 

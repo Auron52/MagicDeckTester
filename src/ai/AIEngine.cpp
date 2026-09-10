@@ -2513,17 +2513,24 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // this decision so a pooled batch's next deck on this thread starts clean.
                     struct DeckShapeScope
                     {
-                        int prev_l, prev_w, prev_c; std::string prev_k;
+                        int prev_l, prev_w, prev_c, prev_s, prev_a; double prev_x; std::string prev_k;
                         DeckShapeScope(const MulliganProfile& p)
-                            : prev_l(valuearm::t_deck_ladder), prev_w(valuearm::t_deck_warm_none), prev_c(valuearm::t_deck_commit_model), prev_k(valuearm::t_deck_key)
+                            : prev_l(valuearm::t_deck_ladder), prev_w(valuearm::t_deck_warm_none), prev_c(valuearm::t_deck_commit_model),
+                              prev_s(valuearm::t_deck_single), prev_a(valuearm::t_deck_alpha_relaxed), prev_x(valuearm::t_deck_exhaust_mult), prev_k(valuearm::t_deck_key)
                         {
                             valuearm::t_deck_ladder    = (p.value_play.ladder != "emulated") ? 0
                                                        : (p.value_play.commit == "model") ? 2 : 1;
                             valuearm::t_deck_warm_none = (p.value_play.leaf == "none") ? 1 : 0;
                             valuearm::t_deck_commit_model = (p.value_play.commit == "model") ? 1 : 0;
+                            // "single" = the FIT single pass (2); any other ladder leaves it unset (-1 => env default).
+                            valuearm::t_deck_single    = (p.value_play.ladder == "single") ? 2 : -1;
+                            valuearm::t_deck_alpha_relaxed = (p.value_play.alpha == "relaxed") ? 1
+                                                           : (p.value_play.alpha == "strict") ? 0 : -1;
+                            valuearm::t_deck_exhaust_mult = p.value_play.exhaust_mult;
                             valuearm::t_deck_key       = p.value_source;
                         }
-                        ~DeckShapeScope() { valuearm::t_deck_ladder = prev_l; valuearm::t_deck_warm_none = prev_w; valuearm::t_deck_commit_model = prev_c; valuearm::t_deck_key = prev_k; }
+                        ~DeckShapeScope() { valuearm::t_deck_ladder = prev_l; valuearm::t_deck_warm_none = prev_w; valuearm::t_deck_commit_model = prev_c;
+                                            valuearm::t_deck_single = prev_s; valuearm::t_deck_alpha_relaxed = prev_a; valuearm::t_deck_exhaust_mult = prev_x; valuearm::t_deck_key = prev_k; }
                     } _shape(m_profile);
                     TurnSolver::SearchLine line = TurnSolver::FullSearchLineHybrid(
                         state, m_lookahead_depth, m_max_turns, m_search_post_combat,

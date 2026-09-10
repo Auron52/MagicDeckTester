@@ -52,9 +52,21 @@ struct ValuePlay
     //                                would commit, then the hybrid's trust escalation (user design,
     //                                2026-09-09: no-leaf warm-ups, "the value-leaf first when escalation is
     //                                needed"). With leaf "none" the model stays attached for that pass.
+    //   ladder: "single"         => the SINGLE-PASS shape (2026-09-10): the probe runs unreserved as deep as its
+    //                                gate allows (a proven win ends the decision), then ONE rollout pass at the
+    //                                deepest probed depth whose predicted cost fits the remaining budget (FIT,
+    //                                stepping shallower on overrun; per-game R calibration) -- the user's "delay
+    //                                the heuristic rollouts until we finish with the depth".
+    //   alpha:  "" | "relaxed" | "strict" -- the START-GATE alpha of a LEAFLESS probe (leaf "none"). The model
+    //                                ladder is always relaxed (x8.8); a leafless ladder defaults to strict, which
+    //                                stops it one depth short of the win on deep-win decks (finding 11, Melira /
+    //                                Hinata) -- "relaxed" gives it the model ladder's gate (with the exhaustion stop).
+    //   exhaust_mult: 0 (=1) | >0  -- how far past the budget a leafless pass may run before its exhaustion stop.
     std::string ladder;
     std::string leaf;
     std::string commit;
+    std::string alpha;
+    double exhaust_mult = 0.0;
     bool   enabled      = false;          // true => the ADOPTED policy: drives + locks play. false => recorded
                                           //         recommendation only (does NOT affect play; byte-identical).
     double escalation_fresh_frac = -1.0;  // budget renewal, per-deck; -1 = off (legacy shared budget)

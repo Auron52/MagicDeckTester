@@ -1254,11 +1254,14 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
             if (vp.is_object() && (vp.contains("target_depth") || vp.contains("mull_gen_depth")
                                    || vp.contains("mull_gen_budget_ms")
                                    || vp.contains("expected_buckets")
-                                   || vp.contains("ladder") || vp.contains("leaf") || vp.contains("commit")))
+                                   || vp.contains("ladder") || vp.contains("leaf") || vp.contains("commit")
+                                   || vp.contains("alpha") || vp.contains("exhaust_mult")))
             {
                 profile.value_play.ladder       = vp.value("ladder", std::string(""));
                 profile.value_play.leaf         = vp.value("leaf", std::string(""));
                 profile.value_play.commit       = vp.value("commit", std::string(""));
+                profile.value_play.alpha        = vp.value("alpha", std::string(""));
+                profile.value_play.exhaust_mult = vp.value("exhaust_mult", 0.0);
                 profile.value_play.target_depth = vp.value("target_depth", 0);
                 profile.value_play.budget_ms    = vp.value("budget_ms", 0);
                 profile.value_play.enabled      = vp.value("enabled", false);

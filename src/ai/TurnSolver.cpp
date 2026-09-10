@@ -32399,7 +32399,8 @@ inline double ConstantExhaustMult()
         const double v = (e != nullptr) ? std::atof(e) : 1.0;
         return (v > 0.0) ? v : 1.0;
     }();
-    return (valuearm::t_arm.constant_exhaust_mult > 0.0) ? valuearm::t_arm.constant_exhaust_mult : env;
+    return (valuearm::t_arm.constant_exhaust_mult > 0.0) ? valuearm::t_arm.constant_exhaust_mult
+         : (valuearm::t_deck_exhaust_mult > 0.0)         ? valuearm::t_deck_exhaust_mult : env;   // arm > deck > env
 }
 inline bool ConstantLeafExhausted(const SearchBudget* budget)
 {
@@ -34996,7 +34997,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // longer explode, and on Fluctuator the deep leafless passes were where the wins were banked (screen 1:
     // 0.38x heur under the relaxed alpha vs 0.97x under the strict one).
     static const bool s_const_relaxed_env = EnvOn("MTG_CONSTANT_ALPHA_RELAXED");
-    const bool const_relaxed = (valuearm::t_arm.constant_alpha_relaxed >= 0) ? (valuearm::t_arm.constant_alpha_relaxed != 0) : s_const_relaxed_env;
+    const bool const_relaxed = (valuearm::t_arm.constant_alpha_relaxed >= 0) ? (valuearm::t_arm.constant_alpha_relaxed != 0)
+                             : (valuearm::t_deck_alpha_relaxed >= 0)         ? (valuearm::t_deck_alpha_relaxed != 0)   // sidecar value_play.alpha
+                             : s_const_relaxed_env;
     const double gate_alpha = (vl_active && (!vl_constant || const_relaxed) && s_vl_alpha_mult > 1.0)
                             ? kStartGateAlpha * s_vl_alpha_mult : kStartGateAlpha;
 
@@ -36161,7 +36164,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // resolved here because the probe's gate must know about the reserve.
     static const bool s_esc_at_committed_env = EnvOn("MTG_ESC_SINGLE_AT_COMMITTED");
     const bool s_esc_at_committed = (valuearm::t_arm.esc_single >= 0) ? (valuearm::t_arm.esc_single != 0)
-                                                                : s_esc_at_committed_env;
+                                  : (valuearm::t_deck_single >= 0)  ? (valuearm::t_deck_single != 0)   // sidecar value_play.ladder "single"
+                                                                    : s_esc_at_committed_env;
     // single_mode: 0 unlimited pass | 1 RESERVED (the probe's gate keeps room for the pass at each depth it admits)
     // | 2 FIT (user, 2026-09-10: "delay the heuristic rollouts until we finish with the depth"): the probe ladders
     // as deep as it can UNRESERVED (cheap tree work; a proven win ends the decision without a rollout), then the
@@ -36171,6 +36175,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     static const bool s_single_fit_env     = EnvOn("MTG_ESC_SINGLE_FIT");
     const int single_mode = !s_esc_at_committed ? 0
                           : (valuearm::t_arm.esc_single_reserve >= 0) ? valuearm::t_arm.esc_single_reserve
+                          : (valuearm::t_deck_single >= 0)            ? valuearm::t_deck_single          // "single" => FIT
                           : (s_single_fit_env ? 2 : (s_single_reserve_env ? 1 : 0));
     const bool single_reserve = (single_mode == 1);
     if (single_mode >= 1) { g_probe_recording = true; }   // the reserve / fit read the probe's per-depth costs and leaves
