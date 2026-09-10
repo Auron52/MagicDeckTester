@@ -809,7 +809,8 @@ inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefi
 inline void EtbUntapLands(GameState&, int controller, int count, bool log_ledger = true);    // defined below
 inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count,
                                       int reserve_color_mask = 0,
-                                      const ManaCost* pending_cost = nullptr);                // defined below
+                                      const ManaCost* pending_cost = nullptr,
+                                      const ManaCost* line_cost = nullptr);                   // defined below
 inline int  EtbUntapLandsCredit(const GameState&, int count);                                // defined below
 // Live {C}-pip activation sink on our board + a source's own (unfed) colours -- both defined below,
 // both read by EtbUntapLands's human-play tie-break above their definitions.
@@ -851,6 +852,11 @@ inline thread_local bool g_hold_colorless_for_pips = false;
 // a genuine fall-through, so a cost that can only be paid by dipping past every budget still gets
 // paid; the budget is a PREFERENCE, never a refusal (same doctrine as ManaSourceRank).
 inline thread_local const int* g_generic_spend_budget = nullptr;
+
+// Summed cost the applying line still owes (defined in ManaPayment.cpp; bound by both plan-apply
+// paths and by the payability walks). Redeclared here so SpendFloatingTowardCost's surplus order
+// below can read it -- see the MTG_LINE_SURPLUS_GENERIC note at the drain site.
+extern thread_local ManaCost g_line_unpaid_cost;
 
 struct GenericSpendBudgetScope
 {
@@ -13445,7 +13451,8 @@ inline void ConcretiseHumanFloat(GameState& state, int controller, ConcreteSite 
 }
 
 inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int count,
-                                      int reserve_color_mask, const ManaCost* pending_cost)
+                                      int reserve_color_mask, const ManaCost* pending_cost,
+                                      const ManaCost* line_cost)
 {
     if (count <= 0) { return; }
     // COMBO MODE is scoped to a live loop (g_in_blink_loop), never to a plain ETB-untap cast.
@@ -13753,8 +13760,72 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         if (choice_source)
         {
             Color best = prod[0]; int best_need = INT_MIN;
+            // PENDING-PIP OVERRIDE (USER, EDF seed 9 gi=8 T4, 2026-09-10): the cost about to be
+            // paid outranks every deferred demand for THIS land's unit, because committing it
+            // elsewhere can strand the very cast the tap-ahead serves -- the same circular trap
+            // the painland cast-reserve and energy branches above already guard, unguarded here
+            // for a plain dual land. On that board the hand's demand is W:5 U:1 G:1, so Kitchen
+            // ({G} or {U}, the board's ONLY blue) ties G-vs-U, the argmax keeps list order, the
+            // unit commits {G}, and Cloud of Faeries' own {1}{U} -- the untapper being banked
+            // for -- becomes unpayable: SubsetPayableSequential refuses the {Cloud, Emiel}
+            // subset and the fan never offers Emiel at all. Committing the pending cost's still-
+            // uncovered pip first (net of float, so a second land falls through to the demand
+            // argmax once the pip is covered) is what the user's doctrine asks: "spend the green
+            // from wild growth and overgrowth liberally and reserve the white [scarce colour] we
+            // really need". HUMAN PLAY ONLY, like every lever in this family -- autonomous play
+            // and rollouts keep the historical commit byte-identical.
+            // MTG_TAPAHEAD_PENDING_PIP=0 restores the demand-only argmax.
+            static const bool s_pending_pip = EnvOn("MTG_TAPAHEAD_PENDING_PIP", true);
+            bool pip_committed = false;
+            if (s_pending_pip && HumanPlayActive() && pending_cost != nullptr)
+            {
+                for (Color c : prod)
+                {
+                    int pips = 0, have = 0;
+                    const ManaPool& fp = state.floating_mana;
+                    switch (c)
+                    {
+                        case Color::White:     pips = pending_cost->white;     have = fp.white;     break;
+                        case Color::Blue:      pips = pending_cost->blue;      have = fp.blue;      break;
+                        case Color::Black:     pips = pending_cost->black;     have = fp.black;     break;
+                        case Color::Red:       pips = pending_cost->red;       have = fp.red;       break;
+                        case Color::Green:     pips = pending_cost->green;     have = fp.green;     break;
+                        case Color::Colorless: pips = pending_cost->colorless; have = fp.colorless; break;
+                    }
+                    if (pips > have) { best = c; pip_committed = true; break; }
+                }
+            }
+            // ONE PRIORITY DOWN: the REST OF THE CHAIN's coloured pips (`line_cost`, threaded by
+            // the caller that knows them -- SubsetPayableSequential's walk over the subset, the
+            // executor over its plan's remaining casts). This is the other half of the same seed-9
+            // board: with Kitchen's unit already committed {U} by the override above, Conservatory
+            // still committed {G} (the demand model reads all-zero here, degenerating to prod[0]),
+            // and Emiel's {W}{W} -- the reason the untapper is being banked at all -- found one
+            // white. The land the ETB untap is about to recharge should bank the colour the chain
+            // comes back for: argmax of the line's still-uncovered pips (net of float, so a second
+            // land moves on once a pip is covered). Same gate and kill switch as the override.
+            if (s_pending_pip && HumanPlayActive() && !pip_committed && line_cost != nullptr)
+            {
+                int best_short = 0;
+                for (Color c : prod)
+                {
+                    int pips = 0, have = 0;
+                    const ManaPool& fp = state.floating_mana;
+                    switch (c)
+                    {
+                        case Color::White:     pips = line_cost->white;     have = fp.white;     break;
+                        case Color::Blue:      pips = line_cost->blue;      have = fp.blue;      break;
+                        case Color::Black:     pips = line_cost->black;     have = fp.black;     break;
+                        case Color::Red:       pips = line_cost->red;       have = fp.red;       break;
+                        case Color::Green:     pips = line_cost->green;     have = fp.green;     break;
+                        case Color::Colorless: pips = line_cost->colorless; have = fp.colorless; break;
+                    }
+                    if (pips - have > best_short) { best_short = pips - have; best = c; pip_committed = true; }
+                }
+            }
             for (Color c : prod)
             {
+                if (pip_committed) { break; }
                 int n = 0;
                 if (need_model) { n = need[static_cast<int>(c)]; }
                 else
@@ -15583,6 +15654,37 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
             while (cost.generic > 0 && allow > 0) { --cost.generic; --*pool[i]; --allow; }
         }
         drain(cost.generic, reserve.colorless);
+    }
+    // SURPLUS-FIRST GENERIC ORDER (human play only; USER, EDF seed 9 gi=8 T4, 2026-09-10). The
+    // historical order below is WUBRG -- an arbitrary ranking that spent a banked {W} on Cloud of
+    // Faeries' generic {1} while three green floated untouched, stranding the Emiel {W}{W} the
+    // bank existed for. The user's stated general rule: "with the spend green first, that is
+    // primarily because we have a lot of green... If we have a lot of a colour and nothing
+    // requesting all of it, it would make sense to use that colour." So: order the five colours
+    // by (units floating - units the line still owes), descending -- generic pips eat the colour
+    // most in surplus, and a scarce demanded colour survives to its own pip. Demand is
+    // g_line_unpaid_cost: live during any plan application and bound by the payability walks,
+    // zero (-> historical order, byte-identical) everywhere else; autonomous play and rollouts
+    // are excluded by the HumanPlayActive gate besides. MTG_LINE_SURPLUS_GENERIC=0 restores the
+    // WUBRG order in human play too.
+    static const bool s_line_surplus = EnvOn("MTG_LINE_SURPLUS_GENERIC", true);
+    const ManaCost& _lu = g_line_unpaid_cost;
+    if (s_line_surplus && HumanPlayActive()
+        && (_lu.white + _lu.blue + _lu.black + _lu.red + _lu.green) > 0)
+    {
+        struct Ent { int* res; int surplus; };
+        Ent e[5] = {
+            { &reserve.white, reserve.white - _lu.white },
+            { &reserve.blue,  reserve.blue  - _lu.blue  },
+            { &reserve.black, reserve.black - _lu.black },
+            { &reserve.red,   reserve.red   - _lu.red   },
+            { &reserve.green, reserve.green - _lu.green },
+        };
+        std::stable_sort(std::begin(e), std::end(e),
+                         [](const Ent& a, const Ent& b) { return a.surplus > b.surplus; });
+        for (Ent& x : e) { drain(cost.generic, *x.res); }
+        if (hold_c) { drain(cost.generic, reserve.colorless); }
+        return;
     }
     drain(cost.generic, reserve.white);
     drain(cost.generic, reserve.blue);
