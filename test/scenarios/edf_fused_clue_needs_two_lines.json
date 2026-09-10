@@ -1,0 +1,24 @@
+{
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "battlefield": [
+    { "name": "Conservatory", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "library_filler": "Conservatory",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "cast=Conservatory;cast=Clue Token",
+  "expect_verdict": "illegal",
+  "comment": "LINE MACROS: WHY the fused 'Investigate & crack' is TWO segments and not one line (docs/design/viewer-line-macros.md). This is the same gesture written as a single line, on a board with mana to spare for both halves ({4} to investigate + {2} to crack, seven sources) -- and it is ILLEGAL, because the Clue does not exist yet. The engine is right and this fixture exists so that stays true: enumeration reads the BATTLEFIELD, so at the moment this line is graded there is no Clue Token to sacrifice, and no amount of mana changes that. Hence the crack is DEFERRED to the segment after the Investigate resolves, where edf_fused_clue_crack_half.json shows it validating as an ordinary line. If a future change ever made this one-line form legal (an engine-side human-play clue fusion), this fixture is the tripwire that says the viewer's deferral can be simplified away."
+}

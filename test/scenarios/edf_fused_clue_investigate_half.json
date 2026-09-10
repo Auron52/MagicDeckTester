@@ -1,0 +1,22 @@
+{
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "battlefield": [
+    { "name": "Conservatory", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "library_filler": "Conservatory",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "cast=Conservatory",
+  "expect_verdict": "accept",
+  "comment": "LINE MACROS, the fused 'Investigate & crack' -- FIRST half (docs/design/viewer-line-macros.md). Conservatory's '{4}, {T}: Investigate' taps ITSELF as part of the cost, so the {4} has to come from the other four; five copies is the smallest board that makes the activation payable at all, and it is what makes this fixture a statement about the ability rather than about the mana. The viewer's fused gesture queues exactly this line as its first segment, so this pins the half that CAN be committed today. Its partner is edf_fused_clue_crack_half.json (the deferred half, on a board where the Clue already exists) and edf_fused_clue_needs_two_lines.json (why the two cannot be one line). MTG_HUMAN_PLAY is on because CheckLine is human-play-only -- without it the fixture would be vacuous."
+}

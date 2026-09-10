@@ -43,6 +43,14 @@
 #     a side channel that stops threading through) publishes a game nobody played, under the right
 #     name, with no error -- which is exactly what happened on 2026-09-10. Needs node + the binary;
 #     ~15 s.
+#   * line macros (engine) -- viewer_line_macros_check.py asserts that a `need=<COLOURS>` declaration
+#     (the colours the human's still-queued continuation wants) diverts exactly ONE ETB-untap pick,
+#     does nothing when the demand is already served, and is a real off switch; plus that a fused
+#     "Investigate & crack" really makes a Clue and that the deferred crack is reachable on the frame
+#     the investigate produces. Needs python3 + the binary; seconds. Nothing else can see it: the
+#     declaration is human-play-only and default-inert, and yield order and demand order usually
+#     agree, so the end-of-turn board cannot tell a steered untap from a lucky one (see its header).
+#     SKIPS itself when the board shape it drives is not reachable.
 #   * protocol (engine<->GUI) -- viewer_protocol_check.py replays each reference's chosen plan
 #     indices through the binary and asserts the decision-JSON contract holds (well-formed,
 #     valid index, clean terminal). Needs python3 + the binary. FULL sweep ~35 min; --sample
@@ -219,6 +227,31 @@ if [ "$MODE" != line ]; then
       echo "--- viewer save parity (a saved log IS the game that was played) ---"
       if MTG_BIN="$BIN" node "$HERE/viewer_save_parity_check.js"; then :; else
         echo "FAIL: a saved game log does not reproduce the session it was saved from."
+        rc=1
+      fi
+    fi
+  fi
+fi
+
+# 1f) LINE MACROS (python + binary). ~15 short claude-play invocations, a few seconds.
+#     The "repeat xN" macro and the fused "Investigate & crack" are deliberately pure QUEUE edits --
+#     they expand into ordinary segments and commit through the existing chain -- so the frontend
+#     half is covered by viewer_linebuild_check.js above. What lives HERE is the one piece that had
+#     to be new engine behaviour: `need=<COLOURS>` steering an ETB-untap pick toward the colours the
+#     human's REMAINING queue wants. That is human-play-only and default-inert, so GT, the scenarios
+#     and the reference sweep all stay green whatever it does -- and the yield order and the demand
+#     order agree most of the time, so the board alone cannot tell a diverted pick from a lucky one.
+#     The failure that matters is SILENT REVERSION (the promotion quietly not firing), which no
+#     outcome-based test can see. SKIPS itself (exit 0) when the board it drives is not reachable.
+if [ "$MODE" != line ]; then
+  if command -v python3 >/dev/null 2>&1 && [ -f "$HERE/viewer_line_macros_check.py" ]; then
+    if [ ! -f "$BIN" ]; then
+      echo "FAIL: line macros check needs the binary but '$BIN' is missing."
+      rc=1
+    else
+      echo "--- line macros (a queued continuation steers the untap; a fused gesture's halves land) ---"
+      if MTG_BIN="$BIN" python3 "$HERE/viewer_line_macros_check.py"; then :; else
+        echo "FAIL: a declared queued continuation no longer steers the untap pick (or a fused half no longer lands)."
         rc=1
       fi
     fi
