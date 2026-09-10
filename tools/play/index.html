@@ -56,6 +56,10 @@
                        animation:combopulse 1.6s ease-in-out infinite; }
   @keyframes combopulse { 0%,100% { box-shadow:0 0 0 0 rgba(214,184,76,.55); }
                           50%     { box-shadow:0 0 0 6px rgba(214,184,76,0); } }
+  /* An UNPROVEN offer must not look like the gold "win now" button (USER 2026-09-10: they clicked
+     one expecting a win). Muted, outlined, and no pulse -- the pulse is the promise. */
+  #planbar .combooff.unproven { background:none; color:#d6b84c; border:1px dashed #6a5c2a;
+                                font-weight:600; animation:none; }
   #planbar .chips { display:flex; gap:6px; flex-wrap:wrap; flex:1; }
   #planbar .chip { display:inline-flex; align-items:center; gap:5px; background:#2a313b; border:1px solid var(--line);
       border-radius:13px; padding:2px 6px 2px 4px; font-size:12px; }
@@ -1524,17 +1528,38 @@ function comboOffPlan(){
 function comboOffButtonHtml(){
   const p = comboOffPlan();
   if (!p) return '';
-  const label = p.combo_off_verified ? '⚡ Combo Off — win now' : '⚡ Combo Off';
-  const tip   = esc(p.summary) + (p.combo_off_rule ? ' — rule: '+esc(p.combo_off_rule) : '')
-              + (p.combo_off_verified ? '' : ' — offered by rule, finish not pre-verified');
-  return `<button id="combooffbtn" class="combooff" title="${tip}">${label}</button>`;
+  // TWO BUTTONS, NOT ONE WITH A FOOTNOTE. USER, 2026-09-10: they clicked a rule-offered go-off
+  // expecting a win and got "the kill did not land". The old pair read "⚡ Combo Off — win now" and
+  // "⚡ Combo Off", which at a glance is the same button. An unproven offer now says so in its own
+  // words and carries its own style, so the promise and the attempt cannot be confused.
+  const label = p.combo_off_verified ? '⚡ Combo Off — win now'
+                                     : '⚡ Combo Off — not yet proven';
+  const cls   = p.combo_off_verified ? 'combooff' : 'combooff unproven';
+  const tip   = p.combo_off_verified
+    ? esc(p.summary) + (p.combo_off_rule ? ' — rule: '+esc(p.combo_off_rule) : '')
+    : 'The rule table says a combo off is possible from here'
+      + (p.combo_off_rule ? ' (rule: '+esc(p.combo_off_rule)+')' : '')
+      + ', but the engine has NOT proved this line wins. Clicking runs the whole loop; if it does '
+      + 'not finish the game, the history will say so. — ' + esc(p.summary);
+  return `<button id="combooffbtn" class="${cls}" title="${tip}">${label}</button>`;
 }
 function wireComboOffButton(){
   const b = $('combooffbtn'); if (!b) return;
   b.onclick = () => {
     const p = comboOffPlan(); if (!p) return;
     S.plan=[]; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.segmentsLeft=0;
-    applyAccepted(p.index, 'COMBO OFF: '+p.summary);
+    // ONE CLICK MARKER, NOT A MACRO. USER, 2026-09-10: *"Combo Off needs to list exactly how we
+    // reached the win. It should not list 'Combo Off' in the history except potentially to show
+    // when the user clicked it."* The old label pushed the whole engine summary -- "COMBO OFF:
+    // land=none; cast: Emiel the Blessed: blink Cloud of Faeries x50 -- COMBO OFF: wins this turn"
+    // -- which says "Combo Off" TWICE and explains nothing: it is a macro standing in for the line.
+    // What actually happened arrives as the engine's own per-action events (every blink and its
+    // outlet, the Living Wish and what it fetched, each exile/drain, the deck-out), rendered by
+    // logEventList exactly as they are when the same line is clicked out by hand. So this entry
+    // shrinks to the one thing the events cannot say: that the human pressed the button, and on
+    // which turn. The engine summary stays on the button's own tooltip for anyone who wants it.
+    applyAccepted(p.index, p.combo_off_verified ? '⚡ Combo Off — clicked'
+                                                : '⚡ Combo Off — clicked (not yet proven)');
   };
 }
 function renderComboOff(){

@@ -4675,3 +4675,66 @@ next. Integration order and outcomes:
 drawable" guard (a graveyard Emiel would misfire it); (c) the fused crack queues even when the
 crack will be unaffordable -- the reject is honest, but the gesture could refuse instead; (d) the
 plan-value objective question above.
+
+## Session 14c (2026-09-10): the history says HOW, and the rules learned to COUNT
+
+Two user reports landed together, and they turned out to be the same button seen from both ends.
+
+### 1. *"Combo Off needs to list exactly how we reached the win"*
+
+USER: *"It should not list 'Combo Off' in the history except potentially to show when the user
+clicked it."* The click pushed ONE history line -- `COMBO OFF: land=none; cast: Emiel the Blessed:
+blink Cloud of Faeries x50 -- COMBO OFF: wins this turn` -- which says "Combo Off" twice and explains
+nothing. It is a macro standing in for a line.
+
+The plumbing was mostly already there: `ComboOffApplyPause` keeps the event sink live, so
+`logEventList` renders the apply's own events, coalescing runs into `xN` exactly as it does for a
+hand-clicked line. Three gaps, now closed:
+
+* **the outlet was anonymous** -- fifty `blinked Cloud of Faeries` lines never said WHICH permanent
+  was activated fifty times, and on this deck that is the load-bearing fact (Displacer `{2}{C}` and
+  Emiel `{3}` are different lines with different mana). `ApplyBlink` already had `source_id`; it
+  simply never printed it. Now `✨ Emiel the Blessed: blinked Cloud of Faeries`.
+* **the Living Wish was invisible** -- route 1 of `ComboFinishFromHand` has always emitted
+  `⚡ combo finish: <name>`; route 2, the one that goes and FETCHES the win condition, emitted
+  nothing. Now `⚡ combo finish: Living Wish → Dimensional Infiltrator`.
+* **the winning turn was dropped on SAVE** -- `WriteClaudePlayTrace` wrote decisions only, and the
+  harness clears its event buffer per decision, so everything after the LAST decision was lost. The
+  Combo Off click IS the last decision of the game, so the saved file recorded that the human picked
+  plan N and then won, and nothing about how. New additive `final_events` key.
+
+The viewer's own entry shrinks to the one thing the events cannot say: `⚡ Combo Off — clicked`.
+
+### 2. Seed 9, T4: a clicked Combo Off that did not finish
+
+USER: *"Seed 9: Combo Off failure ... Note that I was later able to Combo off, but it didn't work
+here."* Reproduced exactly as `test/combo_off/edf_co_10_seed9_t4_thin_loop_absent.json`
+(`blink Cloud of Faeries x60 -- COMBO OFF [WISH-DRAW]`, unverified, apply does not win).
+
+**The position cannot win on T4, and the arithmetic says so.** Four lands: Kitchen 1+2 = 3,
+Conservatory 1+1 = 2, Conservatory 1, Mariposa 1. Cloud of Faeries untaps TWO and the {C}-starved
+promotion must spend one slot on Mariposa (the only colourless), so a pass refunds 3+1 = 4 against
+Emiel's `{3}`: **net +1**, confirmed by the recognizer (`net=1 refund=4 cost=3`). `ApplyBlinkLoop` is
+capped at `FlickerMaxIterations` = 60, so that loop is worth **60 mana**, total -- while the deck-out
+alone wants ~50 activations at `{1}{C}` = 100, plus the wish and the finisher, plus the digging.
+
+So the RULE was too loose, in one specific way: `L` encoded the user's *"infinite mana"* as
+`net > 0`, and on a capped loop that is not infinity. `MTG_COMBO_OFF_BANKABLE` gives each rule the
+arithmetic it was missing -- can the loop bank what ITS OWN path costs (`net x 60`)? Deliberately the
+cheapest reading of each path (activations x cost, plus casts not yet made, and NO dig term), because
+under-counting keeps the display permissive, which is the user's stated preference -- and the seed-9
+board is refuted by more than 2x even so.
+
+**One trap inside the trap.** The first cut of that arithmetic still fired, because it priced Essence
+Depleter (`{2}{B}`, ~43 mana to run) on a board with no black -- affording a card it could never
+cast. Exactly the colour-blindness `MTG_COMBO_FINISH_COLOR` fixed in the deploy; the rule table has
+to agree with it or the two aim at different cards. `FinishNeedMana` now applies `BoardCanPayColors`
+to any finisher not already in play.
+
+### 3. An unproven offer now SAYS it is unproven
+
+The user clicked expecting a win. `⚡ Combo Off — win now` (gold, pulsing) and `⚡ Combo Off` were
+one glance apart. The unverified button is now `⚡ Combo Off — not yet proven`, muted and outlined
+with no pulse, its tooltip spelling out that the engine has not proved the line wins; the plan text
+reads `COMBO OFF (NOT PROVEN -- may not finish)`; the history entry says `clicked (not yet proven)`.
+Aggressive display is kept -- it is the user's call -- and only the promise is withdrawn.

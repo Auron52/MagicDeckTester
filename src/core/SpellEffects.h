@@ -11061,8 +11061,18 @@ inline void ApplyBlink(GameState& state, int controller, int source_id, int targ
     { EnforceLegendRule(state, owner); }
     if (g_play_event_sink)
     {
+        // NAME THE OUTLET. USER, 2026-09-10: *"Combo Off needs to list exactly how we reached the
+        // win."* A go-off narration of fifty "blinked Cloud of Faeries" lines does not say which
+        // permanent was activated fifty times -- and on this deck that is the load-bearing fact,
+        // because Eldrazi Displacer's {2}{C} and Emiel's {3} are different lines with different
+        // mana. The source is already an argument; it was simply never printed.
+        std::string src_name;
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.m_number == source_id) { src_name = p.card.m_name.str(); break; } }
         EmitPlayEvent(state.turn_number, "ability",
-                      "\xE2\x9C\xA8 blinked " + raw.m_name.str()
+                      "\xE2\x9C\xA8 " + (src_name.empty() ? std::string("blinked ")
+                                                          : src_name + ": blinked ")
+                      + raw.m_name.str()
                       + (returns_tapped ? " (returns tapped)" : ""));
     }
 }
@@ -11993,6 +12003,14 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
                     // the win condition this whole routine exists to find.
                     PerformTutor(state, controller, wd->params, want, wd->card.m_name.str());
                     did = true;
+                    // SAY THAT THE WISH WAS CAST, AND FOR WHAT. Route 1 has always emitted its
+                    // "combo finish: <name>" line; this route emitted nothing, so a go-off that
+                    // went and FETCHED its win condition narrated only the creature appearing --
+                    // the single most load-bearing action in the deck's whole kill chain, invisible.
+                    // (The tutor's own reveal reaches the panel through the reveal channel, which is
+                    // a different question from "what did I spend and why".)
+                    EmitPlayEvent(state.turn_number, "cast",
+                                  "\xE2\x9A\xA1 combo finish: " + wname + " \xE2\x86\x92 " + want);
                     if (finishstats::On())
                     { finishstats::g_fin_wish.fetch_add(1, std::memory_order_relaxed); }
                     continue;   // the fetched finisher is in hand now -- route 1 deploys it

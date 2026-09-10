@@ -31,5 +31,23 @@
     { "name": "Cloud of Faeries",         "controller": 0, "tapped": false }
   ],
   "hand": ["Living Wish"],
-  "expect_combo_off": true
+  "expect_combo_off": true,
+  "_history_comment": [
+    "USER, 2026-09-10: 'Combo Off needs to list exactly how we reached the win. It should not list",
+    "\"Combo Off\" in the history except potentially to show when the user clicked it.' So the",
+    "narration the viewer renders -- the engine's own event stream during the apply -- has to name",
+    "every action, and must contain no macro standing in for the line. This is the LONGEST chain the",
+    "deck has (wish -> fetch -> cast -> exile the library), which makes it the right fixture to pin",
+    "it on: the blink WITH ITS OUTLET, the Living Wish and what it fetched, the deck-out itself.",
+    "expect_history_no_macro defaults true, so every combo-off fixture is guarded against a macro",
+    "creeping back in; only this one asserts the contents."
+  ],
+  "expect_history_contains": [
+    "Emiel the Blessed: blinked Cloud of Faeries",
+    "combo finish: Living Wish",
+    "Dimensional Infiltrator",
+    "opponent exiles their top card",
+    "decked and lose the game"
+  ],
+  "expect_history_min": 20
 }
