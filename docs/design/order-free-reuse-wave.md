@@ -152,6 +152,35 @@ the regression tier's 2002/3003, 120 games per deck, one pooled batch:
 The single worse deck is melira at +0.0083 (one game in 120). The adoption reproduces on seeds it was
 never tuned against.
 
+## THE NUMBER THAT MATTERS: what soundness actually costs, measured against the UNSOUND engine
+
+USER, 2026-09-10: *"we should be minimizing the soundness cost and to be honest, it should be
+extremely minor since we want the best result at our given budget. If we are leaving a lot on the
+table that means we didn't do this well."* Right, and that is the bar this table is against. The whole
+ladder, ONE pooled batch, 20 decks x 120 games at seed 4004 / b20 (2,400 games per arm), deterministic
+units:
+
+| arm | mean avg-turn | vs unsound | units |
+|---|---|---|---|
+| `unsound` (legacy reuse, split keys off, guard off) | 4.4208 | — | 1.000x |
+| `guard` (verified-only only) | 4.4250 | +0.0042 | 1.563x |
+| `split` (split keys, no wave) | 4.4242 | +0.0033 | 1.243x |
+| **`shipped` (split keys + wave)** | **4.4225** | **+0.0017** | **0.976x** |
+
+**The soundness cost is +0.0017 avg turns — 0.04% of one turn — and the sound engine is CHEAPER than
+the unsound one it replaced (0.976x units).** 16 of 20 decks are bit-identical to the unsound arm; the
+residual is 4 decks at roughly one game each (stompy +0.0166, minotaur +0.0084, hinata +0.0083, th
++0.0083) against fivecolour -0.0084, i.e. about 4 game-turns out of 2,400 games.
+
+Read the ladder left to right and it is the story of the whole arc: the naive guard cost +0.0042 at
+**1.56x** the work, split keys took it to +0.0033 at 1.24x, and the wave takes it to +0.0017 at 0.976x
+-- below the unsound engine's own cost.
+
+**BEWARE THE NORMALIZATION, because I got this wrong reporting it once.** The suite's "NET" is a SUM
+of per-key deltas over the keys that MOVED; quoting it without the denominator (`+0.0688` over 11
+moved keys of 108) makes the cost look material when the per-deck mean is +0.0017. Same data, and the
+sum over these 20 decks is +0.0332. Always say which one you mean.
+
 ## What it cost in ground truth, attributed honestly
 
 Against the tiers' own baselines (`git show <rev>:test/regression_gt.txt`, per GT-moving commit):

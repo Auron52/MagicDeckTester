@@ -622,6 +622,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("of_wave_share"))      { j.arm.of_wave_share      = jspec["of_wave_share"].get<double>(); }
     if (jspec.contains("fs_horizon_exit"))    { j.arm.fs_horizon_exit    = jspec["fs_horizon_exit"].get<bool>() ? 1 : 0; }
     if (jspec.contains("memo_orderfree_verified_only")) { j.arm.memo_orderfree_verified_only = jspec["memo_orderfree_verified_only"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("fsl_split_keys"))     { j.arm.fsl_split_keys     = jspec["fsl_split_keys"].get<bool>() ? 1 : 0; }
     if (jspec.contains("trust_slack"))  { j.arm.trust_slack  = jspec["trust_slack"].get<double>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());
     // "flags": {"MTG_KE_ORDER": true, ...} -- per-job boolean lever overrides (see ai/HeuristicArm.h).

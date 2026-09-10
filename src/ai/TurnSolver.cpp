@@ -33558,7 +33558,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // under an ORDER-EXACT key so they are always replayable, NO-WINs stay canonical so they keep
     // sharing across permutations. No order miss can then exist, and nothing is ever reused
     // order-free -- soundness by construction rather than by a guard.
-    static const bool s_split_keys = EnvOn("MTG_FSL_SPLIT_KEYS", true);
+    static const bool s_split_keys_env = EnvOn("MTG_FSL_SPLIT_KEYS", true);
+    const bool s_split_keys = (valuearm::t_arm.fsl_split_keys >= 0)
+                            ? (valuearm::t_arm.fsl_split_keys != 0) : s_split_keys_env;
     static const bool s_ofw_probe  = EnvOn("MTG_OF_WAVE_PROBE");   // counters only; see ofwprobe
     // Per-job arm wins over the env default, so one pooled batch can carry every share value.
     const bool   s_of_wave       = (valuearm::t_arm.of_wave >= 0)

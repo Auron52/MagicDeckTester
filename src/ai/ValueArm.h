@@ -88,6 +88,11 @@ struct Arm
     // UNBUDGETED -- which is expensive enough that it must not also pay a per-arm batch tail.
     int         fs_horizon_exit = -1;       // -1 unset | 0 off | 1 on     (MTG_FS_HORIZON_EXIT)
     int         memo_orderfree_verified_only = -1;   // -1 unset | 0 all entries | 1 verified wins only (MTG_MEMO_ORDERFREE_VERIFIED_ONLY)
+    // SPLIT KEYS (MTG_FSL_SPLIT_KEYS): WIN entries under an ORDER-EXACT key, NO-WINs canonical --
+    // the change that makes order-free reuse sound BY CONSTRUCTION. Here so the whole soundness
+    // ladder (legacy unsound -> guard -> split keys -> split keys + wave) can be measured as ONE
+    // pooled batch instead of four env-pinned invocations, each stranding cores on its own tail.
+    int         fsl_split_keys = -1;        // -1 unset | 0 off (single canonical key) | 1 on
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).
     // "none"/"off"/"0" => explicitly NO sidecar, which is how an H-arm job asks for the pure
