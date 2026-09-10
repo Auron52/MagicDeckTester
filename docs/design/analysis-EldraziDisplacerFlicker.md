@@ -4629,3 +4629,49 @@ line-cost channel both know the finish is waiting on a colour. That one is kept 
 the correct signal and it costs nothing) even though it was not the cause here.
 
 **After: all 10 frames the table shows are VERIFIED -- zero unverified offers.**
+
+## Session 15 (2026-09-10, overnight): the five-agent viewer campaign, integrated
+
+**USER, framing the night:** *"this is all trying to get the performance and quality to a point
+where we are relatively satisfied. The current version is still too difficult to make work in the
+viewer and I feel that we require a much more aggressive, but accurate Combo Off to make this deck
+workable."* Five parallel agents; every landing cherry-picked onto `phase-1-2-deck-analyzer` and
+gated (build → scenarios → combo-off fixtures → smoke/regression → full viewer checks) before the
+next. Integration order and outcomes:
+
+1. **Manual tap/pay** (`103a9deb`, docs/design/viewer-manual-tap-pay.md): `tap=<Card>#<id>:<colour>`
+   tokens ride `--validate-line` AND the `--cast-order` full-order list, so a hand-tapped source is
+   what the next payment spends and a saved reference replays the taps with no new artifact field.
+   `⛏ Tap mana` arm-mode in the GUI; refused source classes (filters, feed-cost, one-shot sac,
+   restricted-mana colours) are enforced engine-side and mirrored in the decision JSON.
+2. **Save parity + per-session binary pin** (`cee518af`): the s9_gi8 "skipped to turn 7" save is
+   fully explained -- `/api/save` re-ran the intact 49-choice stream against a binary rebuilt
+   mid-session whose plan fans differed (pick 3526 of a 1206-fan), and index choosers CLAMP
+   out-of-range picks silently. Sessions now pin their engine image under `logs/play/.session/`;
+   every save is audited decision-for-decision against the live ledger and REFUSED on divergence.
+   `test/viewer_save_parity_check.js` drives real sessions over the real routes (layer 1e).
+3. **Combo Off rule table + draw-promotion fix** (`b114f0aa` + `5e2f8f6e`): Session 14/14b above.
+4. **Saturation extension + payload-aware cap** (`87f00ff4` + `05eaa83f`): the no-mana-adder clause
+   never armed on a real go-off (22/48 frames bailed on the castable Drake); the lump test now
+   prices every candidate with zero refund credit, and `MTG_HUMAN_SAT_MAXACT` rose 4→6 after
+   lockstep caught K=4 re-anchoring 7 of the user's clicks onto shorter plans. User's line: blink
+   clicks 230-812ms → 30-37ms; worst click 2591ms → 70ms CPU. `MTG_PLAY_PLANS_CAP` is now
+   payload-aware -- with it off, 22/50 frames lose the (Emiel → Cloud) variant entirely, which was
+   the whole "can no longer choose targets" report.
+5. **Line macros** (`b39ac2c8` + `b6707ee7` + `641f049d`, docs/design/viewer-line-macros.md): fused
+   "Investigate & crack" (queued as create + deferred crack -- the Clue does not exist until the
+   first half resolves), `⟲ Repeat ×N` (client-side expansion into ordinary segments, so references
+   replay byte-for-byte), and `need=<COLOURS>` -- the queued continuation's colour demand diverts at
+   most ONE ETB-untap pick, the bounded shape inherited from `MTG_UNTAP_C_STARVED`.
+6. **Plan-value A/B, NOT adopted** (`25bd34db` + `0b2a6fbf`, docs/design/edf-plan-value-
+   mana-equivalents.md): the 1200-vs-100 "ramp loses the tiebreak" defect is EvalCard's combat-clock
+   creature branch, NOT card_scores. The measured re-pricing arm is faster on deck average
+   (-0.0567t, t=3.19, 8/8 seeds) and WORSE on the reference corpus (+0.111t, breaks s3) -- both
+   levers ship DEFAULT OFF behind `MTG_EDF_VAL_RAMP`/`MTG_EDF_VAL_COMBO` pending the user's ruling
+   on which objective governs when the two disagree.
+
+**Open user rulings collected tonight (nothing blocked on them):** (a) rules 2/3's
+`(D or E or C2)` rider is inference, not user words; (b) rule 4 deliberately omits an "Emiel still
+drawable" guard (a graveyard Emiel would misfire it); (c) the fused crack queues even when the
+crack will be unaffordable -- the reject is honest, but the gesture could refuse instead; (d) the
+plan-value objective question above.
