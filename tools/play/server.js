@@ -198,7 +198,10 @@ function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
 // Run the binary once for the given choices (optionally with the mulligan-table sidecar); classify.
 function runStepRaw(p, logDir, exhaustiveKeep) {
   const args = buildArgs(p, logDir, null, exhaustiveKeep);
-  const r = spawnSync(BIN, args, { cwd: ROOT, encoding: 'utf8', timeout: STEP_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 });
+  // sessionBin, not BIN: every spawn belonging to a live game must use the image that game STARTED
+  // on (see "SESSION-PINNED ENGINE BINARY" below) -- a rebuild mid-session must not change a
+  // half-played game's replay semantics.
+  const r = spawnSync(sessionBin(p), args, { cwd: ROOT, encoding: 'utf8', timeout: STEP_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 });
   if (r.error) return { kind: 'error', error: String(r.error), args };
   const out = (r.stdout || '') + '\n' + (r.stderr || '');
 
@@ -306,7 +309,7 @@ async function runStepCached(p, logDir) {
   }
   // (Re)spawn: new game, rewind, changed side-channel args, or a busy/dead child.
   killIsession();
-  const child = spawn(BIN, rest.concat(['--choices', choices.join(','), '--interactive']),
+  const child = spawn(sessionBin(p), rest.concat(['--choices', choices.join(','), '--interactive']),
                       { cwd: ROOT });
   const ns = { key, child, sent: choices, buf: '', dead: false, busy: true, wake: null };
   child.stdout.on('data', (d) => { ns.buf += d; if (ns.wake) ns.wake(); });
@@ -352,7 +355,7 @@ async function runKeepHint(p) {
   try { hasSidecar = resolveDeck(p.deck, p.version).hasSidecar; } catch (e) { /* table-less */ }
   if (!hasSidecar) return { kind: 'keep-hint', hasSidecar: false };
   const args = buildArgs(p, null, null, true);   // WITH --exhaustive-keep
-  const r = await spawnAsyncCollect(BIN, args, { cwd: ROOT, timeout: STEP_TIMEOUT_MS });
+  const r = await spawnAsyncCollect(sessionBin(p), args, { cwd: ROOT, timeout: STEP_TIMEOUT_MS });
   if (r.error) return { kind: 'keep-hint', hasSidecar: true, error: String(r.error) };
   const out = (r.stdout || '') + '\n' + (r.stderr || '');
   const decisionRaw = extractBlock(out, '<<<CLAUDE_DECISION>>>', '<<<END_DECISION>>>');
@@ -386,7 +389,7 @@ async function runKeepHint(p) {
 async function runAiHint(p) {
   const depth = intParam(p.hintDepth, HINT_DEPTH);
   const args = buildArgs({ ...p, depth }, null, null, false);   // table-less, depth = HINT_DEPTH
-  const r = await spawnAsyncCollect(BIN, args, { cwd: ROOT, timeout: STEP_TIMEOUT_MS });
+  const r = await spawnAsyncCollect(sessionBin(p), args, { cwd: ROOT, timeout: STEP_TIMEOUT_MS });
   if (r.error) return { kind: 'hint-error', error: String(r.error) };
   const out = (r.stdout || '') + '\n' + (r.stderr || '');
   const decisionRaw = extractBlock(out, '<<<CLAUDE_DECISION>>>', '<<<END_DECISION>>>');
@@ -409,7 +412,7 @@ async function runAiHint(p) {
 // the caller resolves that first.
 function runValidate(p, line) {
   const args = buildArgs(p, null, line);
-  const r = spawnSync(BIN, args, { cwd: ROOT, encoding: 'utf8', timeout: STEP_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 });
+  const r = spawnSync(sessionBin(p), args, { cwd: ROOT, encoding: 'utf8', timeout: STEP_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 });
   if (r.error) return { kind: 'error', error: String(r.error), args };
   const out = (r.stdout || '') + '\n' + (r.stderr || '');
 
@@ -435,6 +438,21 @@ function runValidate(p, line) {
 
 // Sanitise a deck stem for use in an artifact filename.
 function safeStem(s) { return String(s).replace(/[^A-Za-z0-9_-]+/g, '_'); }
+
+// The KEYED side channels (never --choices slots) rendered as a shell fragment, for the reproduce
+// line a rejection artifact carries. DERIVED from buildArgs rather than re-encoded, so the printed
+// repro cannot drift from the invocation the engine actually receives -- an artifact whose repro
+// omits, say, --cast-order describes a different game from the one that was rejected.
+const SIDE_CHANNEL_FLAGS = ['--cast-order', '--firebreathe', '--jitte', '--storage-hold'];
+function sideChannelArgs(p) {
+  let args;
+  try { args = buildArgs(p, null, null, false); } catch (e) { return ''; }
+  let out = '';
+  for (let i = 0; i + 1 < args.length; i++) {
+    if (SIDE_CHANNEL_FLAGS.indexOf(args[i]) >= 0) { out += ` ${args[i]} "${args[i + 1]}"`; }
+  }
+  return out;
+}
 
 // ---- deck maturity: which decks are still (beta) ----------------------------------
 //
@@ -741,6 +759,255 @@ function deckMaturity(dir, name, hasProfile, version) {
                        tierFrom({ hasProfile, refs, hasValueLeaf, valueLeafDisabled, hasKeepModel, refsOnArchivedList, bench }));
 }
 
+// ---- SESSION-PINNED ENGINE BINARY + LIVE-FRAME LEDGER ----------------------------
+//
+// WHAT WENT WRONG (user, 2026-09-10 11:21, EldraziDisplacerFlicker seed 9 gi 8): a long go-off
+// session was saved and the written log "just skipped to turn 7" -- 36 decisions, win_turn 7, while
+// the human was still mid-turn-4. Nothing was wrong with the choice stream. The 49 picks recorded in
+// that session's 11:09 rejection artifact replay PERFECTLY on the session's own engine image: they
+// land on decision 49, turn 4, exactly the board the human was looking at.
+//
+// What changed was the ENGINE UNDERNEATH. /api/save re-runs the FULL accumulated choices in a FRESH
+// process, and that process was spawned from build/Release/mtg -- which had been rebuilt at 11:19,
+// two minutes earlier, by another agent working in the same checkout. The live --interactive child
+// was still executing the pre-rebuild image (a running process keeps its inode), so the two engines
+// enumerated different plan fans for the same board:
+//
+//     decision 27:  live/session image 3528 plans   |  save-time image 1206 plans   -> pick 3526 is
+//     decision 28:  live/session image 14112 plans  |  save-time image  423 plans      OUT OF RANGE
+//
+// A plan index is only meaningful against the fan it was picked from. Once index 3526 fell off the
+// end of a 1206-plan menu the replay took some other line, the turn ended early, and every later
+// index landed on a different plan -- the game "veered" to an auto-win at turn 7 and the remaining
+// picks were simply never consumed. The log was written with no error whatsoever.
+//
+// TWO FIXES, because either alone leaves a hole:
+//
+//  1. PIN THE BINARY PER GAME. The first request of a game copies the engine to a session-scoped
+//     path under logs/play/.session/ and EVERY later spawn for that game -- interactive child,
+//     stateless fallback, /api/validate, the hints, /api/save, /api/save-reference -- runs the COPY.
+//     A rebuild mid-session can no longer change a half-played game's replay semantics. A new game
+//     (different deck/seed/game-index) re-pins, so new games pick the new binary up immediately.
+//
+//  2. AUDIT THE SAVE. Pinning cannot cover a server restarted mid-game, an engine nondeterminism, or
+//     a carrier that stops threading through. So the save is VERIFIED before it is published: the
+//     server already sees every live decision frame (it serves them), so it keeps a per-decision
+//     state fingerprint and compares the replayed trace against it -- plus a self-contained
+//     out-of-range check that needs no ledger at all. A save that fails is REFUSED, not written.
+//
+// Both detectors fire on the real incident: the out-of-range check at decision 27, the fingerprint
+// at decision 28 (phase pre_main vs post_main, float {G:26} vs none). The out-of-range check was
+// run over all 344 committed references and flags none of them.
+
+const SESSION_DIR = path.join(ROOT, 'logs', 'play', '.session');
+const STAGING_DIR = path.join(ROOT, 'logs', 'play', '.staging');
+const DIVERGED_DIR = path.join(ROOT, 'logs', 'play', 'diverged');
+
+// Pinning is for a LIVE viewer session, where a rebuild can land mid-game. It is OFF when server.js
+// is require()d by a headless check: those drive hundreds of distinct (deck, seed) games one-shot,
+// so a 6 MB copy per game would be pure overhead against a rebuild that cannot happen. PLAY_PIN_BIN
+// forces it either way (=1 on, =0 off) -- test/viewer_save_parity_check.js sets =1 to exercise it.
+const PIN_BIN = process.env.PLAY_PIN_BIN === '1'
+             || (process.env.PLAY_PIN_BIN !== '0' && require.main === module);
+
+// At most ONE live game (single-user tool), mirroring `isession`. Holds the pinned binary and the
+// fingerprints of the decision frames this game has actually been shown.
+let gsession = null;   // { key, bin, pinned, frames: Map<decision_index, fingerprint> }
+
+// The identity of a GAME, not of an invocation: `depth` is deliberately absent so the deep-search
+// AI hint (which re-runs the same board at HINT_DEPTH) stays inside the session it is hinting for.
+function gameKey(p) {
+  return [String(p.deck || ''), String(p.version || ''),
+          intParam(p.seed, 1), intParam(p.gameIndex, 0), intParam(p.maxTurns, 8)].join('|');
+}
+
+// Copy the engine aside. Best-effort by design: a failure here falls back to the shared binary
+// rather than taking the viewer down -- the save audit is the backstop that keeps a drifted replay
+// from being published either way.
+function pinEngineBinary() {
+  try {
+    fs.mkdirSync(SESSION_DIR, { recursive: true });
+    // Sweep pins a previous run leaked (a hard kill skips the exit handler). A day is far longer
+    // than any session, so this can never race a live sibling server.
+    const DAY = 24 * 60 * 60 * 1000;
+    for (const f of fs.readdirSync(SESSION_DIR)) {
+      if (!f.startsWith('mtg-')) continue;
+      const fp = path.join(SESSION_DIR, f);
+      try { if (Date.now() - fs.statSync(fp).mtimeMs > DAY) fs.unlinkSync(fp); } catch (e) {}
+    }
+    const dst = path.join(SESSION_DIR, `mtg-${process.pid}-${Date.now()}${path.extname(BIN)}`);
+    fs.copyFileSync(BIN, dst);
+    try { fs.chmodSync(dst, 0o755); } catch (e) {}
+    return dst;
+  } catch (e) { return null; }
+}
+
+function dropPin(sess) {
+  if (!sess || !sess.pinned) return;
+  // Windows holds an executing image open; an EBUSY here just leaves the file for the sweep above.
+  try { fs.unlinkSync(sess.bin); } catch (e) {}
+}
+
+let pinWarned = false;
+function sessionFor(p) {
+  const key = gameKey(p);
+  if (gsession && gsession.key === key) return gsession;
+  if (gsession) { killIsession(); dropPin(gsession); }
+  const pin = PIN_BIN ? pinEngineBinary() : null;
+  // SAY SO when the pin could not be taken. Falling back to the shared binary is the right call --
+  // refusing to serve a game because a copy failed would be worse -- but an unpinned game is
+  // exactly the game that can be corrupted by a rebuild, and silence about it is how the original
+  // bug got to be silent. Once per process; the save audit is still the backstop.
+  if (PIN_BIN && !pin && !pinWarned) {
+    pinWarned = true;
+    console.log('  WARNING: could not pin the engine binary for this session (see logs/play/.session/).');
+    console.log('           A rebuild during play could change this game\'s replay; saves are still audited.');
+  }
+  gsession = { key, bin: pin || BIN, pinned: !!pin, frames: new Map() };
+  return gsession;
+}
+
+// The binary every spawn belonging to `p`'s game must use.
+function sessionBin(p) { return sessionFor(p).bin; }
+
+// A cheap, replay-stable fingerprint of the STATE a decision was taken from.
+//
+// Deliberately NOT the plan menu: `plans` is display-capped (kMaxEmittedPlans) and the --log-dir
+// writer additionally re-emits the chosen plan when it sits beyond the cap, so the trace's plan
+// array legitimately differs from the live frame's by one entry. Board state has no such licence --
+// if the replay reached a different board, these differ, and if it reached the same board they are
+// identical. Fields absent on a given decision type simply compare absent-to-absent.
+function frameFingerprint(d) {
+  if (!d || typeof d !== 'object') return null;
+  const me = d.me || {}, opp = d.opponent || {};
+  const len = (v) => (Array.isArray(v) ? v.length : -1);
+  return [d.type, d.turn, d.phase, me.life, opp.life, me.library_size,
+          len(me.hand), len(me.battlefield), len(me.graveyard),
+          JSON.stringify(me.floating_mana === undefined ? null : me.floating_mana),
+          len(opp.battlefield)].join('|');
+}
+
+// Record the frame the human was actually shown. Frames arrive in non-decreasing decision_index
+// order along the live branch, so recording index i INVALIDATES everything after it -- which is
+// exactly what an undo/rewind does, and is why a rewound branch cannot leave stale entries behind.
+function recordFrame(p, d) {
+  if (!d || typeof d.decision_index !== 'number') return;
+  const s = sessionFor(p);
+  for (const k of Array.from(s.frames.keys())) { if (k > d.decision_index) s.frames.delete(k); }
+  s.frames.set(d.decision_index, frameFingerprint(d));
+}
+
+// PURE, so it is testable without a filesystem or a server (test/viewer_save_parity_check.js).
+// `frames` is a Map<decision_index, fingerprint> (may be empty -- then only the self-contained
+// out-of-range check runs, and everything else is reported as unverified rather than as passing).
+function auditTrace(traceObj, frames) {
+  const problems = [];
+  const decs = (traceObj && traceObj.decisions) || [];
+  let checked = 0, unverified = 0, lastIdx = -1;
+  for (const e of decs) {
+    const d = (e && e.decision) || {};
+    const i = typeof d.decision_index === 'number' ? d.decision_index : -1;
+    if (i > lastIdx) lastIdx = i;
+    // (1) OUT-OF-RANGE PICK. The writer guarantees a chosen plan is emitted even past the display
+    // cap, so in a faithful trace `chosen` is never above the highest emitted plan index. Above it
+    // means the pick indexed a fan this replay never produced -- the exact 2026-09-10 signature.
+    if (d.type === 'main_phase' && typeof e.chosen === 'number' && e.chosen >= 0) {
+      let mx = -1;
+      for (const pl of (d.plans || [])) {
+        if (pl && typeof pl.index === 'number' && pl.index > mx) mx = pl.index;
+      }
+      if (e.chosen > mx) {
+        problems.push(`decision ${i} (turn ${d.turn}): pick ${e.chosen} is outside the replay's `
+                    + `plan menu (highest enumerated index ${mx}) -- the replay saw a different game`);
+      }
+    }
+    // (2) LIVE-FRAME MISMATCH.
+    const want = frames && typeof frames.get === 'function' ? frames.get(i) : undefined;
+    if (want === undefined) { unverified++; continue; }
+    checked++;
+    const got = frameFingerprint(d);
+    if (want !== got) {
+      problems.push(`decision ${i} (turn ${d.turn}): the replay's board is not the one you played `
+                  + `from  [live ${want}] != [replay ${got}]`);
+    }
+  }
+  // (3) TRUNCATION. The user's corrupted log ended after 36 decisions on a session that had played
+  // far more: the replay's game simply finished early. A live frame past the trace's last decision
+  // is that, stated directly.
+  let maxLive = -1;
+  if (frames && typeof frames.forEach === 'function') { frames.forEach((_, k) => { if (k > maxLive) maxLive = k; }); }
+  if (maxLive > lastIdx) {
+    problems.push(`the replay ended after decision ${lastIdx}, but this session reached decision `
+                + `${maxLive} -- the saved log would be TRUNCATED`);
+  }
+  return { ok: problems.length === 0, checked, unverified, decisions: decs.length, problems };
+}
+
+function rmrf(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch (e) {} }
+
+function moveFile(src, dst) {
+  fs.mkdirSync(path.dirname(dst), { recursive: true });
+  try { fs.renameSync(src, dst); }
+  catch (e) { fs.copyFileSync(src, dst); try { fs.unlinkSync(src); } catch (e2) {} }   // EXDEV
+}
+
+// Replay the full choice stream with --log-dir, AUDIT the trace, and only then publish it.
+//
+// The replay writes into a STAGING directory, never straight into its destination. That is what
+// makes "refuse" possible at all -- and it is load-bearing for /api/save-reference, whose
+// destination is references/, where a corrupted overwrite would destroy user ground truth that the
+// repo's own rules say may never be discarded.
+function saveTrace(p, destDir) {
+  const seed = intParam(p.seed, 1), gi = intParam(p.gameIndex, 0);
+  const name = `claude_s${seed}_gi${gi}.json`;
+  const stage = path.join(STAGING_DIR, `${process.pid}-${Date.now()}`);
+  fs.mkdirSync(stage, { recursive: true });
+  const r = runStep(p, stage);
+  const staged = path.join(stage, name);
+  // No trace: the game did not end on this choice stream (the engine emitted the next decision
+  // instead). Unchanged behaviour -- savedAs null, and the caller reports whatever `r` says.
+  if (!fs.existsSync(staged)) { rmrf(stage); return { ...r, savedAs: null }; }
+
+  let audit;
+  try { audit = auditTrace(JSON.parse(fs.readFileSync(staged, 'utf8')), sessionFor(p).frames); }
+  catch (e) { audit = { ok: false, checked: 0, unverified: 0, decisions: 0,
+                        problems: ['the replayed trace could not be read back: ' + e.message] }; }
+
+  if (!audit.ok) {
+    const keptAt = path.join(DIVERGED_DIR, `${Date.now()}_${name}`);
+    moveFile(staged, keptAt);
+    rmrf(stage);
+    const rel = path.relative(ROOT, keptAt);
+    return {
+      kind: 'error', savedAs: null, diverged: audit.problems,
+      divergedAs: rel,
+      error: 'SAVE REFUSED -- the replay diverged from the game you played, so the log would be '
+           + 'wrong. Most likely the engine was rebuilt mid-session (a new binary enumerates a '
+           + 'different plan fan, so your recorded plan indices no longer mean the same lines). '
+           + 'Nothing was written to ' + path.relative(ROOT, path.join(destDir, name)) + '; the '
+           + 'diverged replay is kept at ' + rel + ' for triage. '
+           + audit.problems.slice(0, 3).join(' | ')
+           + (audit.problems.length > 3 ? ` | (+${audit.problems.length - 3} more)` : ''),
+    };
+  }
+
+  const dst = path.join(destDir, name);
+  moveFile(staged, dst);
+  rmrf(stage);
+  return { ...r, savedAs: path.relative(ROOT, dst),
+           verified: audit.checked, unverified: audit.unverified };
+}
+
+// Session end = process end (single-user tool, one live game). Keyed on PIN_BIN rather than on
+// "am I the server" so a require()d harness that opted INTO pinning still cleans up after itself.
+if (PIN_BIN) {
+  const bye = () => { killIsession(); if (gsession) dropPin(gsession); };
+  process.on('exit', bye);
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => { bye(); process.exit(0); });
+  }
+}
+
 // ---- routes ----------------------------------------------------------------------
 
 function listDecks() {
@@ -827,7 +1094,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/step') {
       const p = await readBody(req);
-      return sendJson(res, 200, await runStepCached(p, null));
+      const out = await runStepCached(p, null);
+      // Ledger the frame the human is about to answer -- this is the ONLY record of what the live
+      // session actually saw, and it is what /api/save is audited against (see auditTrace).
+      if (out && out.kind === 'decision') recordFrame(p, out.decision);
+      return sendJson(res, 200, out);
     }
     if (req.method === 'POST' && url.pathname === '/api/ai-hint') {
       // Async deep-search hint for the current decision (see runAiHint). Genuinely non-blocking now: the
@@ -849,7 +1120,13 @@ const server = http.createServer(async (req, res) => {
       // against the model at the current decision. Accept -> the GUI appends plan_index and
       // advances; reject -> the GUI shows the classified verdict and offers an artifact save.
       const p = await readBody(req);
-      return sendJson(res, 200, runValidate(p, String(p.line == null ? '' : p.line)));
+      const out = runValidate(p, String(p.line == null ? '' : p.line));
+      // A validation carries the same pending decision frame; a rejected line then re-steps into it,
+      // so ledgering here keeps the audit complete across a reject/retry.
+      // Both shapes carry the pending frame under `decision` (a verdict nests it; a non-main-phase
+      // fallthrough IS one), so one line covers the verdict, the fallthrough and a reject/retry.
+      if (out && out.decision) recordFrame(p, out.decision);
+      return sendJson(res, 200, out);
     }
     if (req.method === 'POST' && url.pathname === '/api/reject-artifact') {
       // Persist a rejected line ("I tried X, the model wouldn't take it") for later triage.
@@ -879,9 +1156,18 @@ const server = http.createServer(async (req, res) => {
         // simply not reachable -- priorChoices pins WHICH plan, never how it was ordered or paid.
         // This line's own taps are already inside `encodedLine`.
         castOrder: (p.castOrder && Object.keys(p.castOrder).length) ? p.castOrder : null,
+        // The KEYED side channels the session was carrying. They are not part of --choices, so an
+        // artifact holding only priorChoices records a repro that is NOT the game the user played
+        // (a cast-order pin in particular changes which line is applied). Recorded verbatim, and
+        // spelled out in `note` below, so the reproduce line is the whole invocation
+        // (sideChannelArgs derives from buildArgs, so it carries castOrderArg's output too).
+        sideChannels: {
+          castOrder: p.castOrder || {}, firebreathe: p.firebreathe || {},
+          jitte: p.jitte || {}, storageHold: p.storageHold || {},
+        },
         note: 'Reproduce: --claude-play --seed <seed> --game-index <gi> --choices "' +
-              (Array.isArray(p.choices) ? p.choices.join(',') : '') + '"' +
-              castOrderArg(p.castOrder).map(a => ' ' + JSON.stringify(a)).join('') +
+              (Array.isArray(p.choices) ? p.choices.join(',') : '') +
+              '"' + sideChannelArgs(p) +
               ' --validate-line "' + (p.line || '') + '"',
       };
       const full = path.join(dir, fn);
@@ -905,22 +1191,25 @@ const server = http.createServer(async (req, res) => {
         ? path.join(ROOT, 'references', 'suboptimal', safeStem(stem), ...(version ? [version] : []))
         : path.join(ROOT, 'references', safeStem(stem), ...(version ? [version] : []));
       fs.mkdirSync(dir, { recursive: true });
-      const r = runStep(p, dir);
-      const seed = intParam(p.seed, 1), gi = intParam(p.gameIndex, 0);
-      const tracePath = path.join(dir, `claude_s${seed}_gi${gi}.json`);
-      return sendJson(res, 200, { ...r, savedAs: fs.existsSync(tracePath) ? path.relative(ROOT, tracePath) : null });
+      // Staged + AUDITED (saveTrace): a reference is user ground truth the repo's rules say may
+      // never be discarded, so a replay that diverged from the played game must not be able to land
+      // on top of one. A refusal returns kind:'error' with savedAs null -- the GUI already renders
+      // that as "save failed: <error>", and nothing is written.
+      return sendJson(res, 200, saveTrace(p, dir));
     }
     if (req.method === 'POST' && url.pathname === '/api/save') {
       // Re-run the FULL accumulated choices with --log-dir so RunClaudePlay writes the
       // deterministic per-game decision trace (the "trustworthy reference" artifact).
       // It is also viewable in tools/replay/ and re-playable from (deck, seed, gi, choices).
+      //
+      // AUDITED (saveTrace). This is the route that wrote the 2026-09-10 corrupted log: the replay
+      // ran on a binary rebuilt two minutes earlier, veered at decision 27, and the wrong game was
+      // published under the right name with no error at all. It is now staged, checked against the
+      // frames this session was actually shown, and refused if they disagree.
       const p = await readBody(req);
       const logDir = path.join(ROOT, 'logs', 'play');
       fs.mkdirSync(logDir, { recursive: true });
-      const r = runStep(p, logDir);
-      const seed = intParam(p.seed, 1), gi = intParam(p.gameIndex, 0);
-      const tracePath = path.join(logDir, `claude_s${seed}_gi${gi}.json`);
-      return sendJson(res, 200, { ...r, savedAs: fs.existsSync(tracePath) ? path.relative(ROOT, tracePath) : null });
+      return sendJson(res, 200, saveTrace(p, logDir));
     }
     res.writeHead(404); res.end('not found');
   } catch (e) {
@@ -950,6 +1239,12 @@ if (require.main === module) {
 
 // Exported for the headless jsdom client check so it drives the REAL protocol (not a reimplementation).
 module.exports = { runStep, runValidate, listDecks, resolveDeck, buildArgs, BIN,
+                   // save-path integrity, for test/viewer_save_parity_check.js. `httpServer` is the
+                   // unbound http.Server, so that check can listen(0) and drive the REAL routes --
+                   // the route wiring (does /api/step ledger? does /api/save audit?) is not
+                   // reachable by calling the helpers directly, and that wiring is the whole fix.
+                   runStepCached, saveTrace, auditTrace, frameFingerprint, recordFrame,
+                   sessionBin, sessionFor, gameKey, PIN_BIN, SESSION_DIR, httpServer: server,
                    // deck maturity, for test/viewer_deck_beta_check.js
                    tierFrom, benchState, deckMaturity, countOptimalRefs, MIN_OPTIMAL_REFS, STABLE_REFS, KEEPMODEL_EXTS,
                    pySlug, referenceOwners };

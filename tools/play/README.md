@@ -192,6 +192,33 @@ UI does not change.** That is why the GUI is built against the protocol, not the
 - `GET /api/reference-exists` — reports `{exists, path, suboptimal, suboptimalPath}` for a game.
 - `POST /api/save` — re-runs with `--log-dir logs/play` (used for a game that had rejects).
 
+### A saved log IS the game you played (the engine is pinned, the save is audited)
+
+Both save routes RE-RUN the whole accumulated choice stream in a **fresh process** and publish the
+result. A plan index only means something against the plan fan it was picked from, so if that fresh
+process enumerates differently, every later index lands on a different plan and the file records a
+game nobody played — under the right name, with no error. That happened on **2026-09-10**: the
+engine was rebuilt two minutes before a save, the replay veered at decision 27 of a turn-4 go-off
+(3528 plans on the session's image, 1206 on the new one), and the log came out "won on turn 7" for a
+game still in turn 4. Two guards now stand between a session and its file:
+
+* **The engine binary is pinned per game.** The first request of a `(deck, version, seed,
+  game-index, max-turns)` copies `build/Release/mtg` to `logs/play/.session/` and every later spawn
+  for that game — interactive child, stateless fallback, `/api/validate`, the hints, and both saves
+  — runs the copy. **Rebuild whatever you like mid-session; the game in front of you does not
+  change.** Starting a new game re-pins, so a rebuild is picked up immediately. `PLAY_PIN_BIN=0`
+  disables it.
+* **The save is verified before it is published.** The server fingerprints every decision frame it
+  serves you, the replay writes to a staging dir, and the two are compared decision-for-decision
+  (plus a self-contained check that no recorded pick is outside the fan the replay produced). A save
+  that disagrees is **REFUSED** — nothing is written to `logs/play/` or `references/`, and the
+  diverged replay is parked in `logs/play/diverged/` for triage. With the pin in place a refusal
+  means the pin was not available — the server was **restarted** part-way through the game, so the
+  image the earlier decisions were played on is gone. Nothing can recover that game's log; the
+  refusal is there so you are told rather than handed a wrong one.
+
+`test/viewer_save_parity_check.js` (wired into `test/viewer_checks.sh`) guards both.
+
 ### The line-reconciliation seam (engine)
 
 `--validate-line "<spec>"` (with the same `--choices` prefix) replays to the first un-chosen
