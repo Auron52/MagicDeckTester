@@ -26,6 +26,25 @@ Each committed segment is reconciled against what the model would do and returns
 - **illegal** — a cast is unaffordable or a land can't be played (with the offending action).
 - **unsupported** — an action kind v1 can't yet validate (X spells, alt-cost, tutors).
 
+### Tapping mana yourself (the ⛏ Tap mana fallback)
+
+The engine allocates your mana. When it allocates it **badly** — the classic being a dual tapped for
+the wrong half, stranding the one pip a later cast needed — you can override it: press **⛏ Tap
+mana** (in the Lands header, next to the floating-mana pips) and click the sources you want tapped.
+A source that makes more than one kind of mana asks which face; the mana goes into your floating
+pool, and the line's payments spend the float **before** they tap anything, so what you tapped is
+what gets spent. Anything you *don't* tap is still the engine's to allocate — this overrides an
+allocation, it does not replace the allocator.
+
+Each forced tap is a plan chip (`⛏ tap Conservatory → {W}`) at the position you clicked it, so it
+can sit *between* two other queued actions ("crack the Clue, then tap Kitchen, then blink"); ✕
+removes it. After the line commits, the history names each one (`manual tap: …`) — every other
+tapped permanent on that board was the engine's own choice, which is how the two stay tellable
+apart. A tap that can't happen (a source already tapped, a colour it can't make) is **rejected with
+a reason** rather than quietly fixed. Filters, feed-cost lands, one-shot sacrifice sources and
+restricted mana are not offered: they stay with the engine's payment. Full design:
+`docs/design/viewer-manual-tap-pay.md`; `MTG_HUMAN_PRE_TAP=0` removes the feature entirely.
+
 No clairvoyance: play is deliberately run **without** `--reveal`, so your win-turn is an honest
 no-foresight ground-truth bound a good AI should be able to match. On any reject you can **Store
 as artifact** (`logs/play/rejections/`). A **clean** completed game (no rejects) saves to the

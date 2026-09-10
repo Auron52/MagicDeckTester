@@ -743,3 +743,22 @@ inline bool PlaySegmentAlwaysEnabled()
     static const bool v = EnvOn("MTG_PLAY_SEGMENT_ALWAYS", true);
     return v;
 }
+
+// MTG_HUMAN_PRE_TAP (DEFAULT ON; =0 removes the fallback entirely). The viewer's MANUAL TAP/PAY
+// fallback: `tap=<name>#<num>:<COLOR>` tokens let a human tap specific sources for specific faces
+// into the float before a committed line's payments run, so a poorly-allocated engine tap can be
+// corrected by hand (USER, EldraziDisplacerFlicker 2026-09). See docs/design/viewer-manual-tap-pay.md.
+//
+// Shared reader per the lockstep rule -- there are FOUR readers and a disagreement between any two
+// is a line that validates one way and executes another:
+//   * TurnSolver::CheckLine       -- performs the taps on its state copy before the affordability walk;
+//   * TurnSolver::ApplyPlanDirect -- performs them for real at their declared positions;
+//   * AIEngine::ReorderPlanCasts  -- lifts them out of the --cast-order full-order list;
+//   * main.cpp's WriteDecisionJson -- publishes the per-source `taps` affordance the GUI offers from.
+// OFF everywhere but human play regardless (every site also tests HumanPlayActive()), so rollouts,
+// autonomous play and GT are byte-identical by construction.
+inline bool HumanPreTapEnabled()
+{
+    static const bool v = EnvOn("MTG_HUMAN_PRE_TAP", true);
+    return v;
+}

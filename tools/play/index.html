@@ -227,6 +227,17 @@
       border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; cursor:pointer; }
   .thumb.act-src { cursor:pointer; box-shadow:0 0 0 1px #6b4a8a inset; }
   .thumb.act-src:hover { box-shadow:0 0 0 2px #c58cf0, 0 0 8px rgba(197,140,240,.45); }
+  /* MANUAL TAP/PAY (docs/design/viewer-manual-tap-pay.md): a mana source you may tap YOURSELF for
+     this line. Only visible while the ⛏ Tap mana toggle is armed -- a permanent whose only extra
+     affordance is a fallback most turns never use must not carry a badge all the time. */
+  .tapmana { margin-left:10px; vertical-align:middle; font-size:11px; padding:2px 8px; border-radius:6px;
+      border:1px solid #2f6b78; background:#14262b; color:#7fd1e0; cursor:pointer; }
+  .tapmana.on { background:#1d4652; color:#bff0fa; border-color:#7fd1e0; }
+  .thumb .pretapbadge { position:absolute; bottom:2px; right:2px; background:rgba(127,209,224,.95); color:#0c1116;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; cursor:pointer; }
+  .thumb.pretap-src { cursor:pointer; box-shadow:0 0 0 1px #2f6b78 inset; }
+  .thumb.pretap-src:hover { box-shadow:0 0 0 2px #7fd1e0, 0 0 8px rgba(127,209,224,.45); }
+  #planbar .chip.pretap { border-color:#2f6b78; background:#14262b; } #planbar .chip.pretap .nm { color:#7fd1e0; }
   /* Equipment in play: DRAGGED onto a creature to equip it, the same gesture as an Aura (the plan
      chip / hand aura use .aura). Grab cursor + a badge, because "drag me" has no other affordance. */
   .thumb .eqbadge { position:absolute; bottom:2px; left:2px; background:rgba(240,190,120,.95); color:#0c1116;
@@ -473,6 +484,9 @@
   .hist li.ev-staged .lab { color:#b794d6; }   /* exiled-but-playable (Light Up the Stage) */
   .hist li.ev-copy .lab { color:#b794d6; }     /* copy-entrant swap (Sakashima's Protege) */
   .hist li.ev-legend .lab { color:var(--warn); } /* legend-rule death (otherwise invisible) */
+  /* MANUAL TAP/PAY: a tap the HUMAN forced. Every other tap on the board was the engine's own
+     allocation, so this line is the only thing that tells the two apart after the fact. */
+  .hist li.ev-mana .lab { color:#7fd1e0; }
   #saveinfo { margin-top:10px; font-size:12px; color:var(--muted); word-break:break-all; }
   .err { color:var(--bad); white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:12px; }
 
@@ -548,7 +562,13 @@ const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+enc
 // reference replay against a different game. 8 covers every deck's win turn with room to spare.
 const MAX_TURNS = 8;
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
-          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{}, castOrder:{}, jitte:{} };
+          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{}, castOrder:{}, jitte:{},
+          // MANUAL TAP/PAY (docs/design/viewer-manual-tap-pay.md). `tapMode` armed => clicking one of
+          // your untapped mana sources adds a hand-forced tap to the line; `tapPick` is the open
+          // face picker for a source that makes more than one colour. Same arm-then-click shape as
+          // leMode / vialMode / blinkMode, and for the same reason: it must not change what a plain
+          // board click already does.
+          tapMode:false, tapPick:null };
 
 // The SELECTED deck entry (see /api/decks): carries the decklist file name and, for an
 // archived list, the version folder it lives in. Both travel on every request.
@@ -785,7 +805,7 @@ function retargetPlanAura(planIdx, num) {
   renderBoard();
   return true;
 }
-function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; S.blinkMode=null; hideVerdict(); renderBoard(); }
+function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.tapMode=false; S.tapPick=null; hideVerdict(); renderBoard(); }
 
 // ---- rendering -------------------------------------------------------------
 // Colored counter badges for a permanent {counters:[{kind,label,count}]}. One circle per kind.
@@ -1116,6 +1136,76 @@ function queueActivation(src, opt){
     : `Activating ${src}’s ability${cap>1?` (${have+1}/${cap})`:''}. Commit the phase to resolve it.`);
   renderBoard();
 }
+
+// ---- MANUAL TAP/PAY (docs/design/viewer-manual-tap-pay.md) ---------------------------------
+// "I think we probably need an alternative fallback for the user, so they can tap and pay mana as
+//  they desire ... for fixing poorly allocated taps or mana usage while still being able to give
+//  good feedback on the mana usage by the engine." -- USER, EldraziDisplacerFlicker 2026-09.
+//
+// A FALLBACK, so it is armed rather than always-on: `Tap mana` toggles tapMode, and only while it
+// is armed does clicking a source do anything new. That is deliberate -- a plain click on a land is
+// a no-op today, and quietly turning it into "tap this land" would change a gesture nobody asked to
+// change and make an accidental click into a mana commitment.
+//
+// WHICH sources are offered is the ENGINE's answer, not a rule mirrored here: the decision JSON
+// carries `taps` (the faces this permanent may be pre-tapped for) straight from HumanPreTapFaces,
+// the same function ApplyHumanPreTap enforces. So the viewer cannot offer a tap the engine refuses,
+// and it needs no notion of painlands, storage counters, filters or restricted mana of its own.
+function preTapSources(){
+  const bf = ((S.decision||{}).me||{}).battlefield || [];
+  return bf.filter(o => o.taps);            // absent => not hand-tappable (see JsonBattlefield)
+}
+function toggleTapMode(){
+  if (S.over || !S.decision || S.decision.type!=='main_phase') return;
+  if (S.tapMode) { S.tapMode = false; S.tapPick = null; renderBoard(); return; }
+  if (!preTapSources().length) {
+    flashHint('No untapped mana source you can tap by hand right now. (Filters, feed-cost lands and one-shot sources stay with the engine.)');
+    return;
+  }
+  S.tapMode = true; S.leMode = false; S.vialMode = null; S.blinkMode = null; S.actPick = null;
+  flashHint('Tap mana armed — click your untapped sources to tap them yourself. Everything you DON’T tap is still allocated by the engine. Click “Tap mana” again to finish.');
+  renderBoard();
+}
+// Commit one hand-forced tap of the permanent `num`. One face -> queue it; several -> the face
+// picker (a central dialog, per the play-viewer decision principle -- never the history panel).
+function preTapAt(num){
+  const src = preTapSources().find(o => o.num === num);
+  if (!src) return false;
+  const faces = String(src.taps);
+  if (faces.length === 1) { queuePreTap(src, faces); return true; }
+  S.tapPick = { name:src.name, num:src.num, faces:faces.split('') };
+  renderBoard();
+  return true;
+}
+function queuePreTap(src, color){
+  S.tapPick = null;
+  // Queued at the END of the current line, which IS its declared position: the engine performs it
+  // after the entries already queued and before the ones added next (Plan::human_pre_taps carries
+  // the index). So "crack the Clue, tap Kitchen for {G}, then blink" is built by clicking in that
+  // order, and is committed as ONE line.
+  S.plan.push({ kind:'pretap', name:src.name, num:src.num, color });
+  flashHint(`Tapping ${src.name} for {${color}} by hand — it goes into your pool before the rest of this line is paid. ✕ on the chip undoes it.`);
+  renderBoard();
+}
+function tapPickerHtml(pick){
+  const NAMES = { W:'White', U:'Blue', B:'Black', R:'Red', G:'Green', C:'Colourless' };
+  let h=`<h3>${esc(pick.name)} — tap it for which mana?</h3>`;
+  h+=`<div class="sub">This source makes more than one kind of mana. The unit you pick goes into your floating pool and the line’s payments spend it first; anything you leave untapped is still the engine’s to allocate.</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
+  pick.faces.forEach(c=>{ h+=`<button class="primary" data-tapface="${esc(c)}">{${esc(c)}} ${esc(NAMES[c]||c)}</button>`; });
+  h+=`<button class="ghost" data-tapface="">Cancel</button></div>`;
+  return h;
+}
+function renderTapPicker(){
+  const pick=S.tapPick, panel=$('decpanel'), back=$('decback');
+  back.className='modal'; back.style.display='block';
+  panel.className='show modal'; panel.innerHTML=tapPickerHtml(pick);
+  panel.querySelectorAll('[data-tapface]').forEach(el=>{
+    el.onclick=()=>{ const c=el.dataset.tapface;
+      if (!c) { S.tapPick=null; renderBoard(); return; }
+      queuePreTap({ name:pick.name, num:pick.num }, c); };
+  });
+}
 function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const land = !!o.is_land;
   const le = !!o.is_le;   // a Land's Edge-style "discard a land: deal N" source
@@ -1158,13 +1248,21 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   // is simply never a match.
   const numAttr = (o.num) ? ` data-num="${o.num}"` : '';
   const tcls = o.tapped ? ' tapped' : '';   // #9: show tapped (used / enters-tapped) permanents
-  return `<span class="thumb ${cls}${vcls}${tcls}" data-name="${esc(o.name)}"${idxAttr}${numAttr}${attrs}${eqAttr}>`+
+  // MANUAL TAP/PAY: the faces this source may be hand-tapped for, straight from the engine
+  // (JsonBattlefield's `taps`). Carried on EVERY render so wireBoard can arm it, and rendered as a
+  // badge only while Tap mana is armed -- a permanent whose only affordance is "you could tap this
+  // for mana" must not grow a permanent badge for a fallback most turns never use.
+  const tapAttr = o.taps ? ` data-taps="${esc(o.taps)}"` : '';
+  const tapN = o.taps ? S.plan.filter(p=>p.kind==='pretap'&&p.num===o.num).length : 0;
+  const tapCls = o.taps && S.tapMode ? ' pretap-src' : '';
+  return `<span class="thumb ${cls}${vcls}${tcls}${tapCls}" data-name="${esc(o.name)}"${idxAttr}${numAttr}${attrs}${eqAttr}${tapAttr}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" alt="${esc(o.name)}" onerror="this.style.opacity=.15"/>`+
     (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
     (canSac?`<span class="digbadge" title="sacrifice ${esc(o.name)} to draw a card">🩸 sac</span>`:'')+
     (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
     (eqDrag?`<span class="eqbadge" title="drag onto one of your creatures to equip it">⚔ drag${eqN?` ×${eqN}`:''}</span>`:'')+
     (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
+    ((o.taps&&S.tapMode)?`<span class="pretapbadge" title="click to tap ${esc(o.name)} yourself for {${esc(String(o.taps).split('').join('} or {'))}}">⛏${tapN?` ×${tapN}`:''}</span>`:'')+
     // Copy-entrant provenance (Sakashima's Protege): the art/name ARE the copied card — without
     // this badge a Protege-copy of Boarding Party is indistinguishable from a real one and the
     // player can't find their Protege on the board (user-reported 2026-09-03).
@@ -1469,7 +1567,12 @@ function renderBoard() {
   };
   const suspendCards = (me.exile||[]).filter(c=>c.reason==='suspend');
   const exiledDead   = (me.exile||[]).filter(c=>c.reason!=='suspend');
-  const landsZone = `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}${energyHtml(me)}</h3>`+zoneRow(meLands.concat(plannedLands), plannedLands.length?'padrow':'')+`</div>`;
+  // MANUAL TAP/PAY toggle. It lives in the LANDS header, beside the floating pool, because that is
+  // exactly what it edits -- and it is only offered on a main-phase frame that actually has a
+  // hand-tappable source, so it never shows up as a dead control.
+  const tapBtn = (S.decision && S.decision.type==='main_phase' && !S.over && preTapSources().length)
+    ? `<button id="tapmana" class="tapmana${S.tapMode?' on':''}" title="Tap mana sources yourself for this line, when the engine allocates them badly. Anything you don’t tap is still the engine’s choice.">⛏ Tap mana${S.tapMode?' — on':''}</button>` : '';
+  const landsZone = `<div class="zone lands"><h3>Lands (${meLands.length+plannedLands.length})${floatingManaHtml(me)}${energyHtml(me)}${tapBtn}</h3>`+zoneRow(meLands.concat(plannedLands), plannedLands.length?'padrow':'')+`</div>`;
   if (suspendCards.length)
     h += `<div class="fieldrow">${landsZone}<div class="zone suspend"><h3>Suspended (${suspendCards.length})</h3>`+zoneRow(suspendCards.map(exThumb))+`</div></div>`;
   else h += landsZone;
@@ -1533,6 +1636,7 @@ function renderBoard() {
   renderBanner(); renderEffects(); if(isMain){ renderPlanbar(); renderHand(); } wireBoard();
   if (dec) { wireDecisionBoard(d, dec); renderDecisionPanel(d, dec); }
   else if (S.actPick) renderActivationPicker();   // queue-time "which ability?" (see below)
+  else if (S.tapPick) renderTapPicker();          // queue-time "tap it for which mana?" (manual tap/pay)
   else hideDecPanel();
 }
 
@@ -1553,6 +1657,14 @@ function renderPlanbar() {
   // (per-land removal lives in the discard zone), appended at the end.
   const chips = S.plan.map((p,i)=>{
     if (p.kind==='le') return '';
+    // MANUAL TAP/PAY: a hand-forced mana tap. Its own chip class, and its POSITION among the other
+    // chips is meaningful -- the engine performs the tap exactly there in the committed line -- so
+    // it renders inline with everything else rather than collapsing into a summary like Land's Edge.
+    if (LB.isPreTap(p)) {
+      return `<span class="chip pretap"><span class="n">${i+1}</span>`+
+        `<span class="nm" data-name="${esc(p.name)}">⛏ tap ${esc(p.name)} → {${esc(p.color)}}</span>`+
+        `<span class="x" data-rm="${i}">✕</span></span>`;
+    }
     const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend')?'act':(p.kind==='land'?'land':'spell');
     // A board activation names WHAT it does where the verb already says so — "⟳ ability" on four
     // chips reading "Bonesplitter / Shadowspear / Balan / Stoneforge" tells you nothing about which
@@ -1802,6 +1914,18 @@ function wireBoard() {
       if (!legal.has(num)) return;
       t.classList.add('selectable');
       t.onclick = e => { e.stopPropagation(); blinkAtTarget(num); };
+    });
+  }
+  // MANUAL TAP/PAY. Wired LAST, and only while armed, so it overrides an existing hook for the
+  // duration of the mode and gives the permanent back untouched the moment the mode ends -- the
+  // same override discipline as the armed blink above. Nothing about a plain (unarmed) board click
+  // changes, which is the whole reason this is a mode.
+  const tapBtn = $('tapmana');
+  if (tapBtn) { tapBtn.onclick = e => { e.stopPropagation(); toggleTapMode(); }; }
+  if (S.tapMode) {
+    $('board').querySelectorAll('#playfield .thumb[data-taps]').forEach(t=>{
+      t.classList.add('selectable');
+      t.onclick = e => { e.stopPropagation(); preTapAt(+t.dataset.num); };
     });
   }
 }
@@ -2214,17 +2338,38 @@ function applyAccepted(planIndex, label) {
   const canon = plan0 && plan0.cast_order_canonical;
   // The queued entries that name a plan ACTION: the land is its own field (plan0.land) and a
   // Land's Edge discard is a count, so neither is an action and neither can be sequenced here.
-  const queued = (S.plan||[]).filter(p => p.kind !== 'land' && p.kind !== 'le').map(p => p.name);
+  //
+  // ...and the MANUAL TAP/PAY taps ride this SAME list (docs/design/viewer-manual-tap-pay.md).
+  // They are not plan actions, so they are held out of every multiset comparison below -- a
+  // pre-tapped line matches the plan it would have matched without the taps -- but they ARE part of
+  // the declared sequence, so they go into the emitted list at their queued position. Riding here
+  // rather than on a channel of their own is what makes a pre-tapped line reproducible from a saved
+  // reference for free: `cast_order` is already recorded per main-phase decision and already
+  // reconstructed verbatim by the reference checks.
+  const entries = (S.plan||[]).filter(p => p.kind !== 'land' && p.kind !== 'le');
+  const taps    = entries.filter(p => LB.isPreTap(p)).map(p => LB.preTapToken(p));
+  const queued  = entries.filter(p => !LB.isPreTap(p)).map(p => p.name);
+  const ordered = entries.map(p => LB.isPreTap(p) ? LB.preTapToken(p) : p.name);
   const acts   = ((plan0 && plan0.actions) || []).map(a => a.card);
   if (dec0 && dec0.main_ordinal != null && acts.length >= 2 && msKey(queued) === msKey(acts)) {
     coKey = String(dec0.main_ordinal);
-    (S.castOrder=S.castOrder||{})[coKey] = ['*'].concat(queued);   // the whole line, as-is
+    (S.castOrder=S.castOrder||{})[coKey] = ['*'].concat(ordered);  // the whole line, as-is
   } else if (canon && canon.length >= 2 && dec0.main_ordinal != null) {
     const human = queued.filter(n => canon.includes(n));
     if (msKey(human) === msKey(canon)) {   // same cast multiset -> the queued order is authoritative
       coKey = String(dec0.main_ordinal);
-      (S.castOrder=S.castOrder||{})[coKey] = human;
+      (S.castOrder=S.castOrder||{})[coKey] = taps.concat(human);
     }
+  }
+  // Neither pin fired (a one-action plan, an implicit sac-for-mana), but the human still forced
+  // taps -- so send them ALONE, with no marker and no names. The engine lifts them out, finds an
+  // empty order, and leaves the plan's own execution order completely untouched (ReorderPlanCasts
+  // returns without setting searched_order); the taps go in up front, which is what "tap these,
+  // then play the line" means. Without this branch a pre-tap on a single-cast line would be
+  // silently dropped -- the exact failure the fallback exists to prevent.
+  if (!coKey && taps.length && dec0 && dec0.main_ordinal != null) {
+    coKey = String(dec0.main_ordinal);
+    (S.castOrder=S.castOrder||{})[coKey] = taps;
   }
   S.prev = S.decision; S.choices.push(planIndex);
   // A multi-segment line (two land drops) keeps the REST of the plan queued: only the land just
@@ -2296,6 +2441,11 @@ function handleVerdict(v, line) {
 async function storeArtifact(v, line) {
   S.hadReject=true; $('artinfo').textContent='saving…';
   const d=S.decision;
+  // `line` already carries this line's own `tap=` tokens (encodeLine writes them), so the artifact's
+  // reproduce command replays a manual-tap rejection verbatim. `castOrder` is added for the OTHER
+  // half of reproducibility: the pins (and pre-taps) of every EARLIER decision in the game, which
+  // priorChoices alone cannot express -- without them a replay reaches a different board and the
+  // recorded verdict is unreachable. cfg() supplies it; naming it here is documentation.
   const res=await post('/api/reject-artifact', cfg({ line, turn:d.turn, phase:d.phase,
     attemptedLine:{ plan:S.plan.slice() }, verdict:v.verdict, reason:v.reason, failed_action:v.failed_action,
     modelPlans:(v.decision&&v.decision.plans)||[], state:{me:d.me, opponent:d.opponent} }));
@@ -3670,6 +3820,10 @@ function autoResolveDecision(dec){
 function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n));
   S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.boardSel=null; S._selFor=null;
   S.actPick=null;   // a half-open activation picker belongs to the decision it was opened on
+  // ...and so does an armed MANUAL TAP/PAY mode or a half-open face picker: `taps` is computed
+  // per frame off the board the engine just sent, so carrying either across a decision would
+  // offer a tap of a permanent that may already be tapped.
+  S.tapMode=false; S.tapPick=null;
   // When this decision was reached by an UNDO (user stepping back), suppress the forward-play
   // auto-advance below for THIS one decision: the dead-opponent auto-pass / commit-turn skip exist to
   // spare a FORWARD player clicking through a decided game, but on undo they would instantly re-commit

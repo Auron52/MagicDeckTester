@@ -1,0 +1,19 @@
+{
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "battlefield": [
+    { "name": "Kitchen", "controller": 0, "tapped": true },
+    { "name": "Conservatory", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Cloud of Faeries"],
+  "library_filler": "Conservatory",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "tap=Kitchen#0:U;cast=Cloud of Faeries",
+  "expect_verdict": "illegal",
+  "comment": "MANUAL TAP/PAY: tapping a source that is ALREADY TAPPED is ILLEGAL with the reason \"'Kitchen' is already tapped\", not a no-op (docs/design/viewer-manual-tap-pay.md). Dropping it instead would be the worst of both worlds -- the line would validate, the {U} would never be produced, and the cast would then be silently dropped at apply time with the human told nothing. It is also the fixture that pins the `taps` AFFORDANCE indirectly: HumanPreTapFaces returns \"\" for a tapped permanent, which is the same function the decision JSON publishes to the GUI, so a tapped source is un-clickable in the viewer for exactly this reason. Same board as edf_manual_tap_dictates_the_face.json with Kitchen tapped, so the ONLY difference between accept and illegal here is the state of the source."
+}

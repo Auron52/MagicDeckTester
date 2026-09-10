@@ -30,6 +30,12 @@
 #     --cast-order pins and asserts the engine applied the human's DECLARED sequence, casts and
 #     board activations interleaved. Needs python3 + the binary; seconds. The only layer that can
 #     see the realised order at all (see its header).
+#   * manual tap/pay (engine) -- manual_tap_check.py commits one line with and without hand-forced
+#     `tap=` tokens and asserts the human's allocation is performed exactly as declared, that no
+#     pre-tap means the ENGINE still allocates, and that an impossible tap is rejected with a
+#     reason. Needs python3 + the binary; seconds. Nothing else can see it: the fallback is
+#     human-play-only and default-inert, and the float it makes is spent by the next payment (see
+#     its header). SKIPS itself when the board it drives is not reachable.
 #   * protocol (engine<->GUI) -- viewer_protocol_check.py replays each reference's chosen plan
 #     indices through the binary and asserts the decision-JSON contract holds (well-formed,
 #     valid index, clean terminal). Needs python3 + the binary. FULL sweep ~35 min; --sample
@@ -161,6 +167,29 @@ if [ "$MODE" != line ]; then
       echo "--- human line order (the queued sequence is applied as-is) ---"
       if MTG_BIN="$BIN" python3 "$HERE/human_line_order_check.py"; then :; else
         echo "FAIL: a committed line no longer applies in the order the human declared."
+        rc=1
+      fi
+    fi
+  fi
+fi
+
+# 1d) MANUAL TAP/PAY (python + binary). ~15 short claude-play invocations, a few seconds.
+#     The viewer's hand-tap fallback (docs/design/viewer-manual-tap-pay.md) is human-play-only and
+#     inert unless a line carries `tap=` tokens, so GT, the scenarios and the reference sweep all
+#     stay green whatever it does -- and the float a forced tap makes is spent by the very next
+#     payment, so the end-of-turn board cannot tell a human's tap from the allocator's. The failure
+#     that matters is SILENT REPAIR (the engine quietly re-allocating around an awkward forced tap),
+#     which is invisible to every outcome-based test there is.
+#     SKIPS itself (exit 0) when the board shape it drives is not reachable.
+if [ "$MODE" != line ]; then
+  if command -v python3 >/dev/null 2>&1 && [ -f "$HERE/manual_tap_check.py" ]; then
+    if [ ! -f "$BIN" ]; then
+      echo "FAIL: manual tap/pay check needs the binary but '$BIN' is missing."
+      rc=1
+    else
+      echo "--- manual tap/pay (the human's taps are honoured, and only the human's) ---"
+      if MTG_BIN="$BIN" python3 "$HERE/manual_tap_check.py"; then :; else
+        echo "FAIL: a hand-forced mana tap is no longer performed as declared (or is no longer rejected with a reason)."
         rc=1
       fi
     fi

@@ -117,6 +117,24 @@ function intParam(v, dflt) {
 }
 
 // Build the argv for one --claude-play invocation.
+// #10 cast-order side-channel, as argv. `map` is a { mainOrdinal: [entry, ...] } map of the human's
+// declared order for that main-phase decision. Passed as "<ord>:A|B|C;..." (pipe-separated, since
+// MTG names contain ',' but never '|'), keyed by main-phase ordinal — NEVER a --choices slot, so
+// existing references (no --cast-order) replay in canonical order unchanged.
+//
+// An entry is a card NAME, the leading "*" full-order marker, or a MANUAL TAP/PAY token
+// `tap=<name>#<num>:<COLOUR>` (docs/design/viewer-manual-tap-pay.md) — all three are opaque strings
+// here and are told apart by the engine (AIEngine::ReorderPlanCasts). ONE builder, because the
+// reject artifact's reproduce command has to name the identical argument the live run used;
+// re-deriving it there is how the two would come to disagree.
+function castOrderArg(map) {
+  if (!map || typeof map !== 'object') return [];
+  const entries = Object.keys(map)
+    .filter(k => Array.isArray(map[k]) && map[k].length)
+    .map(k => `${k}:${map[k].join('|')}`);
+  return entries.length ? ['--cast-order', entries.join(';')] : [];
+}
+
 // validateLine (optional): an encoded human-assembled line ("land=X;cast=Y;...") to reconcile
 // against the model at the first un-chosen main phase instead of dumping the plan menu.
 // exhaustiveKeep (optional): pass --exhaustive-keep so the engine loads the deck's mulligan-table
@@ -161,16 +179,7 @@ function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
     if (jpairs.length) args.push('--jitte', jpairs.join(','));
   }
   args.push('--firebreathe-prompt');
-  // #10 cast-order side-channel: p.castOrder is a { mainOrdinal: [name, ...] } map of the human's
-  // pinned non-sac hand-cast order for that main-phase decision. Passed as "<ord>:A|B|C;..." (pipe-
-  // separated names, since MTG names contain ',' but never '|'), keyed by main-phase ordinal — NEVER
-  // a --choices slot, so existing references (no --cast-order) replay in canonical order unchanged.
-  if (p.castOrder && typeof p.castOrder === 'object') {
-    const entries = Object.keys(p.castOrder)
-      .filter(k => Array.isArray(p.castOrder[k]) && p.castOrder[k].length)
-      .map(k => `${k}:${p.castOrder[k].join('|')}`);
-    if (entries.length) args.push('--cast-order', entries.join(';'));
-  }
+  args.push(...castOrderArg(p.castOrder));
   // #6 storage tap-vs-charge side-channel: p.storageHold is a { "turn:num": 0|1 } map of the human's
   // per-(turn, land) hold answers (1 = hold/charge, 0 = allow tap). Passed as "turn:num:val,..." keyed by
   // (turn, land number) — NEVER a --choices slot, so existing references (no --storage-hold) replay as the
@@ -863,9 +872,17 @@ const server = http.createServer(async (req, res) => {
         failedAction: p.failed_action || null,
         modelPlans: p.modelPlans || null,           // what the model WOULD play here
         state: p.state || null,                     // me/opponent snapshot at the decision
+        // The main-ordinal-keyed pins of every EARLIER decision, carrying their queued action order
+        // AND their MANUAL TAP/PAY `tap=` entries (docs/design/viewer-manual-tap-pay.md). Without
+        // it the reproduce command replays those decisions in the engine's own order and with the
+        // engine's own mana allocation, so it reaches a different board and the recorded verdict is
+        // simply not reachable -- priorChoices pins WHICH plan, never how it was ordered or paid.
+        // This line's own taps are already inside `encodedLine`.
+        castOrder: (p.castOrder && Object.keys(p.castOrder).length) ? p.castOrder : null,
         note: 'Reproduce: --claude-play --seed <seed> --game-index <gi> --choices "' +
-              (Array.isArray(p.choices) ? p.choices.join(',') : '') +
-              '" --validate-line "' + (p.line || '') + '"',
+              (Array.isArray(p.choices) ? p.choices.join(',') : '') + '"' +
+              castOrderArg(p.castOrder).map(a => ' ' + JSON.stringify(a)).join('') +
+              ' --validate-line "' + (p.line || '') + '"',
       };
       const full = path.join(dir, fn);
       fs.writeFileSync(full, JSON.stringify(artifact, null, 2));

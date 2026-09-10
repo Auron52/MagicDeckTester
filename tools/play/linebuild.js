@@ -47,9 +47,11 @@
   function castableCount(decision, name) {
     return (decision.me.hand || []).filter(c => c.name === name).length;
   }
-  // 'le' entries are Land's Edge discards, not casts -- exclude them from the cast count.
+  // 'le' entries are Land's Edge discards and 'pretap' entries are board mana taps, not casts --
+  // exclude both from the cast count (a pre-tapped Forest must not eat a Forest's cast cap).
   function plannedCount(plan, name) {
-    return plan.filter(p => p.name === name && p.kind !== 'land' && p.kind !== 'le').length;
+    return plan.filter(p => p.name === name && p.kind !== 'land' && p.kind !== 'le'
+                                            && p.kind !== 'pretap').length;
   }
   function leCount(plan) { return plan.filter(p => p.kind === 'le').length; }
 
@@ -189,15 +191,31 @@
          + (p.blinkCount > 0 ? '*' + p.blinkCount : '');
   }
 
+  // ---- MANUAL TAP/PAY (docs/design/viewer-manual-tap-pay.md) ---------------------------------
+  // A 'pretap' entry is a board mana source the human tapped BY HAND for a specific face, so the
+  // engine's payment spends that unit instead of allocating one itself. It is not a play: it never
+  // enters the cast multiset, it takes no plan action, and a line with none of them encodes exactly
+  // as it always did. `num` is the PERMANENT's m_number (which copy), `color` one of W U B R G C.
+  //
+  // The token text is produced HERE and nowhere else, because it is written into two different
+  // arguments -- the `--validate-line` spec and the `--cast-order` full-order list -- and the
+  // engine parses both with one reader (ParseHumanPreTapToken). Two producers is how the two
+  // arguments would come to disagree about the same tap.
+  function isPreTap(p) { return p.kind === 'pretap'; }
+  function preTapToken(p) { return 'tap=' + p.name + '#' + (p.num || 0) + ':' + (p.color || ''); }
+
   function encodeLine(plan) {
     const parts = []; const l = planLand(plan); if (l) parts.push('land=' + l.name);
-    for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && lineVerb(p) === 'cast') parts.push('cast=' + p.name);
+    // Taps first: they are what the rest of the line is paid from.
+    for (const p of plan) if (isPreTap(p)) parts.push(preTapToken(p));
+    for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isPreTap(p) && lineVerb(p) === 'cast') parts.push('cast=' + p.name);
     for (const p of plan) if (p.kind === 'vial') parts.push('vial=' + p.name);
     for (const p of plan) if (p.kind === 'retrace') parts.push('retrace=' + p.name);
     // Board activations that are neither a hand cast nor a pass need their own verb -- a line made
     // up ONLY of them used to encode as 'pass' (CheckLine stage 0). MODE_VERBS name the MODE INT,
     // every other verb names a card.
     for (const p of plan) {
+      if (isPreTap(p)) continue;               // already emitted above, and it has no verb
       const v = lineVerb(p);
       if (v === 'cast') continue;
       parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode) : p.name)
@@ -252,7 +270,9 @@
     const hand = (((decision || {}).me || {}).hand) || [];
     const used = new Set(plan.filter(p => p.num != null).map(p => p.num));
     plan.forEach(p => {
-      if (p.num != null || p.kind === 'le') return;
+      // 'pretap' names a permanent ALREADY on the battlefield, so its `num` is a board id, not a
+      // hand card's -- it is never stamped and never consumes one (it also always arrives stamped).
+      if (p.num != null || p.kind === 'le' || p.kind === 'pretap') return;
       const hc = hand.find(c => c.name === p.name && !used.has(c.num));
       if (hc) { p.num = hc.num; used.add(hc.num); }
     });
@@ -334,6 +354,6 @@
 
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
-           stampPlanNums,
+           stampPlanNums, isPreTap, preTapToken,
            nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };
 });

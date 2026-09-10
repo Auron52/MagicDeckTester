@@ -1,0 +1,19 @@
+{
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "battlefield": [
+    { "name": "Kitchen", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false }
+  ],
+  "hand": ["Cloud of Faeries"],
+  "library_filler": "Conservatory",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "tap=Kitchen#0:U;cast=Cloud of Faeries",
+  "expect_verdict": "accept",
+  "comment": "MANUAL TAP/PAY, the accepting side (docs/design/viewer-manual-tap-pay.md). The human taps Kitchen for {U} by hand -- the board's ONLY blue source -- and the {1}{U} Cloud of Faeries is then paid off that float plus Conservatory's generic. CheckLine performs the tap FOR REAL on its state copy before the affordability walk (monotone-accepting doctrine), so this fixture is the statement that a hand-forced allocation is graded on the board it actually produces rather than on an optimistic model of it. #0 is the any-untapped-copy wildcard: a scenario board's m_numbers are not stable to author against, and the wildcard is the same one a hand-written line uses. MTG_HUMAN_PLAY is on because CheckLine and the whole pre-tap path are human-play-only -- without it the fixture would be vacuous. Its rejecting twins are edf_manual_tap_rejects_*.json."
+}

@@ -76,7 +76,40 @@ static void ReorderPlanCasts(TurnSolver::Plan& plan, const std::vector<std::stri
     if (order_in.empty()) { return; }
     const bool full_order = s_human_line_order && HumanPlayActive()
                          && order_in.front() == kFullOrderMarker;
-    const std::vector<std::string> order(order_in.begin() + (full_order ? 1 : 0), order_in.end());
+    std::vector<std::string> order(order_in.begin() + (full_order ? 1 : 0), order_in.end());
+    // MANUAL TAP/PAY (docs/design/viewer-manual-tap-pay.md): `tap=<name>#<num>:<COLOUR>` entries
+    // ride THIS list rather than a side channel of their own, and that is the design decision, not
+    // a shortcut. The full-order list is already (a) the human's declared SEQUENCE, which is what a
+    // pre-tap needs a position in, (b) passed on the COMMIT path (`--validate-line` is not), and
+    // (c) recorded verbatim per main-phase decision in the reference trace and reconstructed
+    // verbatim by the reference checks -- so a pre-tapped line is reproducible from a saved game
+    // for free, with no new artifact field to keep in step.
+    //
+    // They are LIFTED OUT here, so everything below still sees a pure list of card names and the
+    // slot-matching walk is untouched. `position` is the number of declared entries that precede
+    // the tap, which is exactly what ApplyPlanDirect counts down as it dispatches them.
+    // No MTG card name contains '=', so a name can never be mistaken for a token.
+    plan.human_pre_taps.clear();
+    if (HumanPreTapEnabled() && HumanPlayActive())
+    {
+        std::vector<std::string> names;
+        names.reserve(order.size());
+        for (const std::string& tok : order)
+        {
+            if (!IsHumanPreTapToken(tok)) { names.push_back(tok); continue; }
+            TurnSolver::PreTap pt;
+            ParseHumanPreTapToken(tok, pt);     // malformed -> empty name -> rejected at apply
+            pt.position = static_cast<int>(names.size());
+            plan.human_pre_taps.push_back(std::move(pt));
+        }
+        order = std::move(names);
+    }
+    // A TAPS-ONLY list (no names left after the lift) still delivers its taps -- they are already
+    // recorded on the plan above -- and returns here WITHOUT setting searched_order, deliberately.
+    // Setting it would flip an unordered plan onto the explicit-order apply route, i.e. swap the
+    // canonical CastOrderRank sort for plan-vector order, which is a real reordering the human
+    // never asked for. ApplyPlanDirect's `!plan.searched_order` branch flushes such taps up front,
+    // which is exactly what "tap these, then play the line" means.
     if (order.empty()) { return; }
     // Positions in plan.actions that hold a reorderable action: the non-sac hand casts always, and
     // under the full-order marker the board activations too.

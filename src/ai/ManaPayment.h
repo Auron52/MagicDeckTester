@@ -337,3 +337,36 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts);
 // selects the rollout's MTG_LEGACY_CCO_PAY hatch, the poolless caller being the only one with it).
 void AnimateLandsShared(GameState& state, ManaPool* available);
 void ActivateTapTokensShared(GameState& state, ManaPool* available);
+
+// ---- THE tap mechanic, shared -----------------------------------------------------------------
+// Tap ONE non-filter source for colour `col`, into `floating`, applying everything a real tap of
+// that permanent does: depletion decrement, painland damage, Grove's opponent lifegain, Aether
+// Hub's {E} spend, a storage land's full counter burst, a Karoo's two colours, a domain source's
+// one-of-each, a scaled dork's live count, and the attached land Aura's bonus. Extracted from
+// TapForCostSharedOnce's `tap_source` lambda so the payment and the human pre-tap below share one
+// implementation -- see the definition's header for why a second copy is four rules bugs.
+// `available` = the executor's turn-scoped accounting pool, decremented alongside; nullptr = none.
+void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDefinition& def,
+                        Color col, ManaPool& floating, ManaPool* available, bool for_creature);
+
+// ---- The viewer's MANUAL TAP/PAY fallback (docs/design/viewer-manual-tap-pay.md) ---------------
+// ONE token format -- `tap=<card name>#<m_number>:<W|U|B|R|G|C>` -- and ONE parser for it, because
+// the token appears in TWO places (a `--validate-line` spec token and a `--cast-order` full-order
+// entry) and two parsers is two chances for validation and execution to read the same string
+// differently. `#<m_number>` picks WHICH copy (0 = any untapped copy of that name); `:<COLOUR>` is
+// the face to tap for and is mandatory in practice -- an unstated colour parses to -1 and is
+// REJECTED by ApplyHumanPreTap rather than guessed.
+bool IsHumanPreTapToken(const std::string& tok);   // cheap discriminator: does it start "tap="?
+bool ParseHumanPreTapToken(const std::string& tok, TurnSolver::PreTap& out);
+
+// Perform one pre-tap on `state` (into state.floating_mana, via TapSourceIntoFloat). Returns "" on
+// success, else a human-readable reason -- an impossible pre-tap is REPORTED, never quietly
+// repaired, because a silently-fixed tap is exactly the mis-allocation this fallback exists to let
+// the human correct. MTG_PRE_TAP_TRACE (default off) prints one stderr line per tap and rejection.
+std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t);
+
+// The faces `p` may legally be pre-tapped for, as the letters the token format uses ("GU"), or ""
+// when the source is not hand-tappable at all. This is the affordance the GUI offers from (the
+// decision JSON's per-permanent `taps`) AND the legality test ApplyHumanPreTap enforces -- one
+// function, so the viewer can never offer a tap the engine will refuse.
+std::string HumanPreTapFaces(const GameState& state, const Permanent& p);
