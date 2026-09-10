@@ -265,12 +265,15 @@ function checkActivationVerbs() {
     // plus (when the go-off recognizer sees a live loop) a single FINISH plan at the go-off count;
     // both are the same verb on the same target, so a token without the count cannot tell CheckLine
     // which of the two the human picked -- and CheckLine would hand back the other one's index.
-    // Count 1 and a missing count must both encode WITHOUT a tail: every saved reference predates
-    // the field and has to keep matching (the engine reads a missing count as the 0 wildcard).
+    // An EXPLICIT count is emitted even at 1 (commit 58ef6fc7, the phantom-X-dialog fix: a
+    // *1-less token used to be re-asked); a MISSING count still encodes bare and the engine
+    // reads it as the 0 wildcard, which is how every pre-count saved reference keeps matching --
+    // the full 307-ref protocol sweep is green under this encoding. (This expectation asserted
+    // the pre-58ef6fc7 format for months; updated 2026-09-10.)
     [{ name: 'Emiel the Blessed', src: 'Emiel the Blessed', kind: 'activate', verb: 'blink', blinkTarget: 42 },
      'blink=Emiel the Blessed@42'],
     [{ name: 'Emiel the Blessed', src: 'Emiel the Blessed', kind: 'activate', verb: 'blink', blinkTarget: 42, blinkCount: 1 },
-     'blink=Emiel the Blessed@42'],
+     'blink=Emiel the Blessed@42*1'],
     [{ name: 'Emiel the Blessed', src: 'Emiel the Blessed', kind: 'activate', verb: 'blink', blinkTarget: 42, blinkCount: 9 },
      'blink=Emiel the Blessed@42*9'],
     // No target (the legacy any-target wildcard) still takes a count tail.
@@ -347,7 +350,7 @@ function checkStackedActivations() {
 
   // Three clicks on one outlet -> three segments, one activation each.
   const three = [blink(), blink(), blink()];
-  const want = ['blink=Emiel the Blessed@42', 'blink=Emiel the Blessed@42', 'blink=Emiel the Blessed@42'];
+  const want = ['blink=Emiel the Blessed@42*1', 'blink=Emiel the Blessed@42*1', 'blink=Emiel the Blessed@42*1'];
   if (!eq(LB.encodeSegments(three), want))
     fails.push(`3 blinks -> ${JSON.stringify(LB.encodeSegments(three))}`);
 
@@ -355,8 +358,8 @@ function checkStackedActivations() {
   const mixed = [{ name:'Yavimaya Coast', kind:'land' },
                  { name:'Peregrine Drake', kind:'nonpermanent' }, blink(), blink()];
   if (!eq(LB.encodeSegments(mixed),
-          ['land=Yavimaya Coast;cast=Peregrine Drake;blink=Emiel the Blessed@42',
-           'blink=Emiel the Blessed@42']))
+          ['land=Yavimaya Coast;cast=Peregrine Drake;blink=Emiel the Blessed@42*1',
+           'blink=Emiel the Blessed@42*1']))
     fails.push(`land+cast+2 blinks -> ${JSON.stringify(LB.encodeSegments(mixed))}`);
 
   // dropFirstSegment peels ONE segment per call and converges to empty.
