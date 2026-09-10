@@ -60,11 +60,41 @@ runs to the 25x proportional overrun ceiling. Setting `MTG_CONSTANT_EXHAUST_MULT
 | knights | 58,589 | 58,589 | 85,925 | none (no pass overruns) |
 | critter | 66,570 | 66,570 | 93,723 | none |
 
-So mechanism 2 is real and independent on decks whose passes fit the budget, and partly confounded on decks
-whose passes overrun. **And the comparison points somewhere useful:** play is IDENTICAL at 1x and 25x on all
+Confirmed again for the ESCALATION arm (not just the final-depth arm): on slivers, knights and critter,
+`esc_nl` at stop-1x and stop-25x are IDENTICAL to the unit (79,413 / 58,054 / 73,320 nodes), so the stop never
+fires there at all, while ship still expands 1.25x / 1.49x / 1.41x more nodes. On auras the stop DOES fire and
+hides waste: 112,174 nodes at 1x against 152,010 at 25x for identical play (4.22 both). So mechanism 2 is real
+and independent on decks whose passes fit the budget, and partly confounded on decks whose passes overrun. **And the comparison points somewhere useful:** play is IDENTICAL at 1x and 25x on all
 four decks (avg 5.30 / 5.70 / 4.32 / 4.93 unchanged), so the extra work a model pass is permitted to do buys
 nothing there. Applying the exhaustion stop to MODEL passes is therefore an untested candidate lever, not a
 conclusion -- it needs a screen.
+
+## Where the HEURISTIC actually gets used (and why "skip it" has nothing to skip on some decks)
+
+A shape can only win by avoiding the heuristic where the heuristic is being used. Under the shipped shape at
+d5b20, `interior_esc` (interior nodes re-walked by the heuristic escalation) as a share of all interior nodes:
+
+| deck | escalated share | rollout share of units | decisions touching the heuristic ladder |
+|---|---|---|---|
+| slivers | 0.008% (8 of 99,081) | 0.95% | 2 of 61 |
+| auras | 0.00% | 1.2% | - |
+| breaching | 0.00% | 0.0% | - |
+| critter | 0.00% | 1.3% | - |
+| burn | 0.1% | 1.5% | - |
+| melira | (see below) | - | - |
+
+So on Slivers the heuristic is ALREADY effectively skipped: the search proves or refutes nearly everything
+inside the horizon and the rollout leaf is 1% of the work. That is why no shape can win quality there and why
+every shape reaches the same 4000 outcomes -- there is no heuristic use left to remove, and the value leaf's
+TRUST is not load-bearing either, because proof arrives first. It is not that trust is "unnecessary" in
+general; it is that this deck wins on turn ~4.2 inside a 5-ply horizon, so the horizon is rarely the binding
+constraint. The decks where the heuristic IS load-bearing are the ones where the probe often cannot prove
+(fivecolour 311 single passes / 646 decisions, hinata 77/136) -- and there, removing it costs quality.
+
+**RETRACTED:** an earlier reading of this took `[leaf-eval] published=0` as "the value leaf is never
+evaluated". That counter measures TIEBREAK exposure (the life term at a horizon leaf), not value-model
+evaluations, and its line is simply absent when nothing published. There is no counter for value-leaf
+evaluations; do not infer one from that line.
 
 ## Per deck, at d5b20
 

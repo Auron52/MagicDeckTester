@@ -3502,3 +3502,42 @@ the model's wider probe tree is the whole story, i.e. the opposite sign of cause
 `xargs -I{} bash -c "{}"` CONSUMES the quotes in its input, so a deck path containing a space split into
 two arguments ("File not found: decks/Melira"). Re-run NUL-separated (`xargs -0`). A zero-unit run is easy
 to miss in an aggregate table — it prints as a dash, not an error.
+
+### 2026-09-10n — per-GAME classification of the divergences, and three corrections
+
+**Melira, ship vs fit_nl, 16 sampled differing games (of 358 in 4000), each replayed at 1x / 4x / 16x the
+case budget:** **10 churn** (the loser recovers at a bigger budget), **2 persist at 16x**, 4 unstable/flip.
+So most of the leafless final-depth shape's losses on Melira are BUDGET STARVATION, not a mis-directed
+search — at b20 it truncates where ship does not. At the shipped budget that is still a real quality loss,
+but the mechanism is truncation, and the two that persist are the only games worth reading as line
+differences. Tooling: `logs/shape_why/difflist.py` (which games differ) and `classify.py` (the ladder, run in
+parallel). Note the on-disk arm names are NOT the menu labels (`fit_nl` is `nl_sfit_rx`); a first run against
+the label names reported "0 of 4000 differ", which is how a naming slip looks.
+
+**Correction 1 — Melira runs the DEFAULT shape, and deliberately.** Its `value_play` holds only
+`mull_gen_depth 3`, `mull_gen_budget_ms 3`, `expected_buckets 23` — no `ladder`, no `leaf`, `enabled` absent.
+So the sidecar is PRESENCE-ONLY and the deck plays escalation + model leaf, which is what commit e75ac8ba
+adopted for it ("Melira Pod sidecar (presence-only) + phase F contract; emulated-gate ladder CLOSED"). What
+was rejected FOR Melira is a different set: the emulated-gate ladder (closed), every ENABLED `value_play`
+depth arm (d4/d5/d6 with `escalation_cap` — all +0.0135..+0.015 t worse), and verified-only order-free reuse
+(1.10x for no quality). The NO-LEAF escalation shape adopted on 2026-09-10 was **Fluctuator's**, via its own
+sidecar; no repo-wide default changed.
+
+**Correction 2 — mechanism 2 re-verified on the escalation arm, and it is not my artefact there.** `esc_nl`
+at exhaust-stop 1x and 25x is IDENTICAL to the unit on slivers (79,413), knights (58,054) and critter
+(73,320) — the stop never fires — while ship still expands 1.25x / 1.49x / 1.41x more interior nodes at the
+same committed depth. On auras the stop DOES fire and hides pure waste (112,174 -> 152,010 nodes at identical
+play). So: real where passes fit the budget, confounded where they overrun.
+
+**Correction 3 — RETRACTED inference.** I read `[leaf-eval] published=0` as "the value leaf is never
+evaluated" on slivers/knights/critter/burn/auras. That counter measures TIEBREAK exposure (the life term at a
+horizon leaf), not value-model evaluations, and the line is absent when nothing published. No conclusion
+should rest on it, and none now does.
+
+**What Slivers is actually saying (user: "it feels like trust is not necessary, but that makes little
+sense").** Under the shipped shape the HEURISTIC is already effectively unused on that deck: `interior_esc`
+is 8 nodes of 99,081 (0.008%), rollouts are 0.95% of units, and only 2 of 61 decisions touch the heuristic
+ladder at all. The deck wins on turn ~4.2 inside a 5-ply horizon, so the search proves or refutes nearly
+everything before the horizon binds — neither the heuristic nor the leaf's trust is load-bearing. That also
+answers "we would want to skip using the heuristic if not": on Slivers there is nothing left to skip, which
+is why all four shapes reach the same 4000 outcomes and differ only in waste.
