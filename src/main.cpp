@@ -1026,12 +1026,25 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 // Chord-class X-capped tutor cast: the TARGET is re-picked at resolution
                 // (tutor_etb, baked default), so its fan folds too. X stays in the key --
                 // it is a real payment difference the menu must keep distinct.
+                //
+                // TUTOR/WISH CAST FAN (HumanPlayDefersTutorTarget, USER 2026-09-10 "that double
+                // living wish line now gives me three dialogs"): identical reasoning, one card
+                // class wider. Since 543f540d every tutor CAST gets its own resolution frame off
+                // the LIVE zone, so the menu's named-variant cross product is asking a question
+                // that is about to be re-asked -- and asking it WORSE, because both copies of a
+                // doubled wish were baked to the same singleton. Folding them leaves ONE menu
+                // entry per rest-of-plan, its bake standing as the picker's default. The predicate
+                // is HumanPlayActive-gated (search enumeration untouched) and this whole block is
+                // capped-mode only, so the uncapped protocol checker still replays every recorded
+                // named variant verbatim. Measured on the repro (EDF seed 6 gi 5, T6 pre-main):
+                // 1268 plans, of which 72 double-wish + 884 single-wish variants.
                 std::string tgt = a.tutor_target.str();
                 if (a.kind == Action::Kind::CastFromHand && !tgt.empty())
                 {
                     const CardDefinition* cd = a.def ? a.def
                                              : CardDatabase::Instance().Lookup(a.card_name);
-                    if (cd && cd->params.tutor_mv_max_is_x) { has_collapse = true; tgt.clear(); }
+                    if (cd && (cd->params.tutor_mv_max_is_x || HumanPlayDefersTutorTarget(*cd)))
+                    { has_collapse = true; tgt.clear(); }
                 }
                 key += a.card_name.str() + "|" + std::to_string(static_cast<int>(a.kind))
                      + "|" + std::to_string(a.chosen_x) + "|" + tgt
