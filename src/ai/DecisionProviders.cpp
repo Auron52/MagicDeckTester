@@ -16784,6 +16784,122 @@ inline bool GorgeKillLive(const GameState& s, int c, const FlickerLoop& loop)
 {
     return loop.gorge_dmg > 0 && HasRedSource(s, c);
 }
+
+// B -- BANKABLE. What "infinite mana" is worth in this engine, which is not infinity.
+//
+// USER, 2026-09-10, on a clicked Combo Off that did not finish: *"Seed 9: Combo Off failure ... Note
+// that I was later able to Combo off, but it didn't work here."* Their T4 board is four lands --
+// Kitchen 1+2 (Overgrowth) = 3, Conservatory 1+1 (Wild Growth) = 2, Conservatory 1, Mariposa 1 --
+// with Cloud of Faeries (untaps TWO) and Emiel ({3} a blink). The {C}-starved promotion must spend
+// one of the two untap slots on Mariposa, the only colourless, so a pass refunds 3+1 = 4 against a
+// cost of 3: `net = +1`, confirmed by the recognizer's own trace (`net=1 refund=4 cost=3`).
+//
+// `net > 0` was the whole of the rule table's "infinite mana", and on a fixed board it is NOT
+// infinite: `ApplyBlinkLoop` is bounded by FlickerMaxIterations (60), so a loop netting one banks
+// SIXTY MANA, full stop. The deck-out alone wanted ~50 activations at {1}{C} = 100, plus the wish
+// and the finisher. Short by more than 2x, before the digging. The rule was not wrong in KIND --
+// the user wrote it, and it is right on every board that has the mana -- it simply could not count.
+//
+// So: each rule now also asks whether the loop can bank what ITS OWN path costs. Deliberately the
+// CHEAPEST possible reading of each path (activations x cost, plus casts that have not happened
+// yet, and no dig term at all), because under-counting keeps the display gate permissive -- which
+// is the user's stated preference -- and the seed-9 board is refuted by a factor of two even so.
+inline long long BankableMana(const FlickerLoop& loop)
+{
+    return static_cast<long long>(std::max(0, loop.net))
+         * static_cast<long long>(FlickerMaxIterations());
+}
+
+// What the finisher `d` costs to RUN to a kill from here: activations x per-activation cost, plus
+// its own cast when it is not on the battlefield yet, plus `setup` (a wish that still has to fetch
+// it). `on_board` prices the activation through EffectiveActivationCost (a Training Grounds is
+// real); off-board it uses the printed cost, which over-pays and so under-admits nothing.
+inline long long FinishNeedMana(const GameState& s, int c, const CardDefinition* d,
+                                bool on_board, long long setup)
+{
+    if (d == nullptr) { return -1; }
+    // A FINISHER THE BOARD CANNOT CAST COSTS NOTHING TO RUN, because it never runs. Without this the
+    // cheapest-path arithmetic prices Essence Depleter ({2}{B}, ~20 drains at {1}{C} = 43 mana) on a
+    // board with no black at all, and a loop that can bank 60 "affords" it -- so the seed-9 board
+    // passed the new guard by costing out a card it could never put onto the battlefield. Same
+    // colour-blindness MTG_COMBO_FINISH_COLOR fixed in the deploy; the rule table has to agree with
+    // it or the two aim at different cards. Only for a finisher NOT yet in play: one already on the
+    // battlefield has had its cast paid, and its activation pips are {C}, which C1 covers.
+    if (!on_board && !BoardCanPayColors(s, c, d->card.m_mana_cost)) { return -1; }
+    const auto act_mv = [&](const ManaCost& printed) -> int {
+        return on_board ? EffectiveActivationCost(s, c, d->card, printed).ManaValue()
+                        : printed.ManaValue();
+    };
+    long long need = setup + (on_board ? 0 : d->card.m_mana_cost.ManaValue());
+    if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
+    {
+        const int life = std::max(1, s.players[1 - c].life);
+        const long long acts = (life + d->params.drain_amount - 1) / d->params.drain_amount;
+        return need + acts * std::max(1, act_mv(d->params.drain_cost.value()));
+    }
+    if (d->params.exile_opponent_top_cost.has_value())
+    {
+        if (!s.opponent_library_dealt || s.opponent_decked) { return -1; }
+        const long long cards = static_cast<long long>(s.players[1 - c].library.size());
+        return need + cards * std::max(1, act_mv(d->params.exile_opponent_top_cost.value()));
+    }
+    return -1;
+}
+
+// The cheapest finisher reachable on `where`, priced through FinishNeedMana. -1 = none reachable.
+inline long long CheapestFinishNeed(const GameState& s, int c, int where /*0=bf,1=hand,2=wish*/)
+{
+    long long best = -1;
+    const auto take = [&](const CardDefinition* d, bool on_board, long long setup) {
+        const long long n = FinishNeedMana(s, c, d, on_board, setup);
+        if (n >= 0 && (best < 0 || n < best)) { best = n; }
+    };
+    if (where == 0)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != c) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (IsTlessFinisher(s, d)) { take(d, true, 0); }
+        }
+        return best;
+    }
+    const Player& ap = s.players[c];
+    if (where == 1)
+    {
+        for (const Card& h : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+            if (IsTlessFinisher(s, d)) { take(d, false, 0); }
+        }
+        return best;
+    }
+    long long wish_mv = -1;
+    for (const Card& h : ap.hand)
+    {
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(h);
+        if (wd && wd->params.tutor_to_hand && wd->params.wish_from_sideboard)
+        { wish_mv = wd->card.m_mana_cost.ManaValue(); break; }
+    }
+    if (wish_mv < 0)
+    {
+        // Still in the library: the draw engine has to find it first. Priced at the WISH'S OWN cost
+        // only -- the draws themselves are deliberately not charged (see the header).
+        for (const Card& l : ap.library)
+        {
+            const CardDefinition* wd = CardDatabase::Instance().LookupCached(l);
+            if (wd && wd->params.tutor_to_hand && wd->params.wish_from_sideboard)
+            { wish_mv = wd->card.m_mana_cost.ManaValue(); break; }
+        }
+    }
+    if (wish_mv < 0) { return -1; }
+    for (const Card& sb : ap.sideboard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(sb);
+        if (IsTlessFinisher(s, d)) { take(d, false, wish_mv); }
+    }
+    return best;
+}
 }   // namespace comborules
 
 bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller,
@@ -16806,11 +16922,27 @@ bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller
     const bool E  = EmielInPlay(s, controller);
     const bool W  = WishReachesFinisher(s, controller, D);
 
-    if (GorgeKillLive(s, controller, loop))                          { return fire("GORGE"); }
-    if (FinisherInPlay(s, controller) && C1 && (D || E || C2))       { return fire("DEPLOYED"); }
-    if (FinisherInHand(s, controller) && C1 && UB && (D || E || C2)) { return fire("IN-HAND"); }
-    if (W && D && C1 && UB)                                          { return fire("WISH-DRAW"); }
-    if (W && C1 && UB && (E || C2))                                  { return fire("WISH-NODRAW"); }
+    // B -- can the loop actually BANK what each path costs? See BankableMana: `net > 0` is not
+    // "infinite mana" on a board where the go-off is capped at 60 iterations, and the user's seed-9
+    // T4 board (net +1, so 60 mana, against a ~104-mana deck-out) is the frame that proved it.
+    // MTG_COMBO_OFF_BANKABLE=0 restores the count-free rules.
+    static const bool s_bankable = EnvOn("MTG_COMBO_OFF_BANKABLE", true);
+    const long long bank = BankableMana(loop);
+    const auto affords = [&](long long need)
+    { return !s_bankable || (need >= 0 && need <= bank); };
+
+    if (GorgeKillLive(s, controller, loop)
+        && affords(static_cast<long long>((std::max(1, s.players[1 - controller].life)
+                                           + loop.gorge_dmg - 1) / loop.gorge_dmg)
+                   * std::max(1, loop.gorge_cost_mv)))                { return fire("GORGE"); }
+    if (FinisherInPlay(s, controller) && C1 && (D || E || C2)
+        && affords(CheapestFinishNeed(s, controller, 0)))             { return fire("DEPLOYED"); }
+    if (FinisherInHand(s, controller) && C1 && UB && (D || E || C2)
+        && affords(CheapestFinishNeed(s, controller, 1)))             { return fire("IN-HAND"); }
+    if (W && D && C1 && UB
+        && affords(CheapestFinishNeed(s, controller, 2)))             { return fire("WISH-DRAW"); }
+    if (W && C1 && UB && (E || C2)
+        && affords(CheapestFinishNeed(s, controller, 2)))             { return fire("WISH-NODRAW"); }
     return false;
 }
 

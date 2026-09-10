@@ -467,7 +467,11 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     if (plan.combo_off_verified) { tag += " -- COMBO OFF: wins this turn"; }
                     else if (plan.combo_off_offered)
                     {
-                        tag += " -- COMBO OFF";
+                        // SAY THAT IT IS NOT PROVEN. USER, 2026-09-10, after clicking one: they read
+                        // "COMBO OFF [WISH-DRAW]" as a win and got "the kill did not land". The two
+                        // labels differed by four words in the middle of a long summary; the
+                        // difference has to be the loudest thing on the line, not the quietest.
+                        tag += " -- COMBO OFF (NOT PROVEN -- may not finish)";
                         if (!plan.combo_off_rule.empty()) { tag += " [" + plan.combo_off_rule + "]"; }
                     }
                     else { tag += " (bank)"; }
@@ -2951,9 +2955,20 @@ g_play_soulfire_chooser = nullptr;
 
 // The per-game trace file a --log-dir run writes: the reference format the play viewer and
 // test/viewer_protocol_check.py read back.
+// `final_events`: the narration of everything that happened AFTER the last recorded decision --
+// i.e. the winning turn itself. The harness clears its event buffer each time a decision is written,
+// so this vector holds exactly the tail, and without it the tail was simply LOST on save.
+//
+// That gap is what made a saved COMBO OFF unreadable (USER, 2026-09-10: *"Combo Off needs to list
+// exactly how we reached the win"*). The click is the LAST decision of the game, so every action it
+// performed -- fifty blinks and their outlet, the Living Wish and what it fetched, each exile, the
+// deck-out -- happened after it and reached no decision frame. The file recorded that the human
+// picked plan N and then won, and nothing whatsoever about how. Additive key: every existing
+// reference simply lacks it, and nothing that reads these files validates the schema.
 void WriteClaudePlayTrace(const std::filesystem::path& log_dir, uint64_t seed, int game_index,
                           bool won, int win_turn, const std::string& mulligan_json,
-                          const std::vector<std::string>& trace)
+                          const std::vector<std::string>& trace,
+                          const std::vector<PlayEvent>& final_events)
 {
 if (!log_dir.empty())
 {
@@ -2970,7 +2985,21 @@ if (!log_dir.empty())
     {
         out << "    " << trace[i] << (i + 1 < trace.size() ? ",\n" : "\n");
     }
-    out << "  ]\n}\n";
+    out << "  ]";
+    if (!final_events.empty())
+    {
+        out << ",\n  \"final_events\": [\n";
+        for (size_t ei = 0; ei < final_events.size(); ++ei)
+        {
+            out << "    { \"turn\": " << final_events[ei].turn << ", \"kind\": ";
+            JsonStr(out, final_events[ei].kind);
+            out << ", \"text\": ";
+            JsonStr(out, final_events[ei].text);
+            out << " }" << (ei + 1 < final_events.size() ? ",\n" : "\n");
+        }
+        out << "  ]";
+    }
+    out << "\n}\n";
     std::cerr << "Claude-play trace written to " << (log_dir / fn.str()).string() << "\n";
 }
 }
@@ -4783,7 +4812,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     const std::string mulligan_json = mull_ss.str();
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.
-    WriteClaudePlayTrace(log_dir, seed, game_index, won, win_turn, mulligan_json, h.trace);
+    WriteClaudePlayTrace(log_dir, seed, game_index, won, win_turn, mulligan_json, h.trace,
+                         h.event_log);
 
     WriteClaudePlayResult(state, h.event_log, h.dropped_log, won, win_turn, h.decisions_made,
                           mulligan_json);
@@ -5450,9 +5480,78 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             GameState c = s;
             // The button's own apply path: the finish gates open (ComboOffFinishScope) and the
             // choosers nulled (ComboOffApplyPause), exactly as AIEngine does on a click.
+            //
+            // ...AND THE EVENT SINK IS BOUND, because "did it win" is only half of what the user
+            // asks of this button. USER, 2026-09-10: *"Combo Off needs to list exactly how we
+            // reached the win. It should not list 'Combo Off' in the history except potentially to
+            // show when the user clicked it."* The history the viewer renders IS this event list,
+            // so a fixture that never binds the sink cannot tell a fully-narrated go-off from an
+            // opaque one -- and the opaque one is what shipped.
+            std::vector<PlayEvent>  co_events;
+            std::vector<PlayReveal> co_reveals;
             ComboOffFinishScope co_finish;
             ComboOffApplyPause  co_quiet;
+            std::vector<PlayEvent>*  sv_ev = g_play_event_sink;
+            std::vector<PlayReveal>* sv_rv = g_play_reveal_sink;
+            g_play_event_sink  = &co_events;
+            g_play_reveal_sink = &co_reveals;
             TurnSolver::ApplyPlan(c, plans[found], /*is_pre_combat=*/true);
+            g_play_event_sink  = sv_ev;
+            g_play_reveal_sink = sv_rv;
+            if (j.value("combo_off_show_history", false))
+            {
+                for (const PlayEvent& e : co_events)
+                { std::cout << "scenario:   hist [" << e.kind << "] " << e.text << "\n"; }
+            }
+            std::cout << "scenario: combo_off history events=" << co_events.size()
+                      << " reveals=" << co_reveals.size() << "\n";
+            // EVERY ACTION NAMED. `expect_history_contains` is the list of substrings the narration
+            // must carry -- the blink, the wish and what it fetched, the finisher's cast, the kill.
+            for (const auto& need : j.value("expect_history_contains", json::array()))
+            {
+                const std::string want_txt = need.get<std::string>();
+                bool hit = false;
+                for (const PlayEvent& e : co_events)
+                { if (e.text.find(want_txt) != std::string::npos) { hit = true; break; } }
+                if (!hit)
+                {
+                    for (const PlayEvent& e : co_events)
+                    { std::cout << "scenario:   hist [" << e.kind << "] " << e.text << "\n"; }
+                    std::cout << "scenario: FAIL combo_off history has no entry containing \""
+                              << want_txt << "\"\n";
+                    return 1;
+                }
+            }
+            // ...AND NO MACRO AMONG THEM. The single "Combo Off" marker is the VIEWER's record of
+            // the click; the engine's own narration must be actions and nothing else, or the panel
+            // is back to reading "Combo Off" twice and explaining nothing.
+            if (j.value("expect_history_no_macro", true))
+            {
+                for (const PlayEvent& e : co_events)
+                {
+                    std::string low = e.text;
+                    for (char& ch : low)
+                    { ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch))); }
+                    if (low.find("combo off") != std::string::npos)
+                    {
+                        std::cout << "scenario: FAIL combo_off history contains a MACRO entry: "
+                                  << e.text << "\n";
+                        return 1;
+                    }
+                }
+            }
+            if (j.contains("expect_history_min"))
+            {
+                const int want_n = j.at("expect_history_min").get<int>();
+                if (static_cast<int>(co_events.size()) < want_n)
+                {
+                    for (const PlayEvent& e : co_events)
+                    { std::cout << "scenario:   hist [" << e.kind << "] " << e.text << "\n"; }
+                    std::cout << "scenario: FAIL combo_off history has " << co_events.size()
+                              << " entries, expected at least " << want_n << "\n";
+                    return 1;
+                }
+            }
             if (!OpponentHasLost(c))
             {
                 std::cout << "scenario: FAIL combo_off plan applied but did NOT win"
