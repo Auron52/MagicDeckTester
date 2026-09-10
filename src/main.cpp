@@ -2159,11 +2159,16 @@ static void WriteDemonstrateDecisionJson(std::ostream& os, const GameState& s,
     d.Note("reply 1 to copy the spell (the copy resolves first, with its own free cast), or 0 to decline. Default = copy.");
 }
 
-// ETB tutor fired off a PUT rather than a cast (a Lackey combat cheat / Vial deploy / Muxus reveal
-// dropping a Goblin Matron): the player picks WHICH card to search up, or declines. A tutor resolved
-// from a CAST never reaches here -- the search enumerates one plan variant per candidate and the
-// viewer's variant dialog already asks -- so this covers exactly the path that used to pick silently.
-// `heuristic_default` = the engine's pick (candidate 0), pre-selected in the viewer.
+// Tutor pick: the player picks WHICH card to search up, or declines. TWO routes reach here.
+//   * ETB off a PUT (a Lackey combat cheat / Vial deploy / Muxus reveal dropping a Goblin Matron):
+//     no plan variant existed, so this path used to pick silently.
+//   * A CAST resolving from a committed plan (PerformTutor's `human_repick`). One frame per cast
+//     INSTANCE, in cast order, with the plan's baked target as `heuristic_default` -- so two copies
+//     of one tutor in a single plan each get their own pick, each against the LIVE zone. (Before
+//     2026-09-10 a cast never reached here at all: the plan baked the target, and two Living Wishes
+//     in one plan were handed the SAME name, so the second silently whiffed on a spent singleton.)
+// `heuristic_default` = the engine's pick, pre-selected in the viewer; -1 = decline, which is also
+// what a baked target that has left the zone defaults to (reproducing the old whiff for replays).
 static void WriteTutorDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
                                    const std::vector<std::string>& candidates, int heuristic_default,
                                    int decision_index)
@@ -3797,10 +3802,12 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         };
     g_play_demonstrate_chooser = &demonstrate_chooser;
 
-    // ETB tutor off a PUT (Lackey cheat / Vial deploy / Muxus reveal drops a Goblin Matron): the human
-    // picks WHICH card to search up, or -1 to decline ("you MAY search"). A tutor from a CAST carries a
-    // searched target and never reaches the chooser. Shares the --choices stream; default = candidate 0
-    // (the heuristic's pick). Human-play only (nulled for search/rollout), so ground truth is unaffected.
+    // Tutor pick: the human picks WHICH card to search up, or -1 to decline ("you MAY search").
+    // Fires both for an ETB off a PUT (Lackey cheat / Vial deploy / Muxus reveal drops a Goblin
+    // Matron) and, since 2026-09-10, for each CAST instance in a committed plan -- there the plan's
+    // baked target is the default, so the pick is offered rather than assumed (see PerformTutor's
+    // `human_repick`). Shares the --choices stream. Human-play only (nulled for search/rollout), so
+    // ground truth is unaffected.
     tutor_chooser =
         [this](const GameState& s, int controller, const std::string& source,
             const std::vector<std::string>& candidates, int heuristic_index) -> int

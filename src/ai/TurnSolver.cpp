@@ -21055,7 +21055,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Tutor (Idyllic / Enlightened): fetch the SEARCHED target (tutor_target); empty
             // falls back to the heuristic's top pick. Identical to the real game (EffectHandler)
             // so the clairvoyant rollout sees the same fetched card.
-            PerformTutor(state, state.active_player_index, def.params, tutor_target, def.card.m_name);
+            // human_repick: this IS a cast resolving, so a human at the viewer re-picks here off the
+            // live zone with the plan's baked target as the default (one frame per cast instance, in
+            // cast order). The chooser is null in every search / rollout / enumeration scope
+            // (RevealLogPause), so autonomous play is byte-identical.
+            PerformTutor(state, state.active_player_index, def.params, tutor_target, def.card.m_name,
+                         /*human_repick=*/true);
             // Tutor-to-hand re-solve (AcqResolveEnabled / MTG_ACQ_RESOLVE, EngineFlags.h -- the
             // mid-phase acquisition family; main-2 parity work, USER 2026-08-14): the fetched
             // card competes for this turn's remaining mana exactly like a cantrip's draw, but

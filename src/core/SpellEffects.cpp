@@ -25,15 +25,112 @@
 #include "SpellEffects.h"
 #include <bit>            // std::popcount -- portable replacement for __builtin_popcount (MSVC has no such builtin)
 
+// ---- Human-play tutor pick, asked at RESOLUTION off the LIVE zone -----------------------------
+// Shared by both of PerformTutor's human routes: the no-baked-target route (an ETB off a PUT) and
+// the CAST route (`human_repick`, below). Returns Chosen + `out` = the fetched name, Declined
+// ("you MAY search"), or NoCandidates (nothing to offer -> the caller keeps its own behaviour).
+//
+// THE DEFAULT IS THE WHOLE REFERENCE-COMPATIBILITY STORY. A recording made before this frame
+// existed replays through viewer_protocol_check's engine_default(), which answers an inserted frame
+// from `heuristic_default`. So the default must reproduce exactly what the OLD engine did:
+//   * baked target still in the zone  -> default = that target, i.e. the recorded fetch, exactly.
+//   * baked target GONE (the 2nd cast of a wish whose singleton pool no longer holds it)
+//                                     -> default = -1 DECLINE, which reproduces the old SILENT
+//                                        WHIFF (PerformTutor's `idx < 0` early return) rather than
+//                                        inventing a fetch the recorded line never made.
+// Only the DEFAULT encodes history. The offered LIST is always the live one, so a human at the
+// keyboard sees the real, already-shrunken pool instead of a stale plan-time grid.
+enum class TutorAskResult { NoCandidates, Declined, Chosen };
+
+static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
+                                        const CardParams& pp, const std::string& source_name,
+                                        const std::string& baked, std::string& out)
+{
+    // Offer each NAME once: TutorCandidates lists zone order, so a deck with three copies of a card
+    // would otherwise show it three times, and picking any of them fetches the same first matching
+    // card anyway. Dedup preserves first-occurrence order.
+    const std::vector<std::string> cands =
+        ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+    std::vector<std::string> uniq;
+    for (const std::string& c : cands)
+    { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+
+    // Is the baked target STILL fetchable? Read the same zone the fetch below will read (the
+    // SIDEBOARD for a wish, else the library). Zone presence -- not membership of `cands` -- is the
+    // ground truth the default must track, because a provider may narrow the candidate list.
+    const Player& ap = state.players[controller_index];
+    auto zone_has = [&](const std::string& nm) -> bool {
+        if (nm.empty()) { return false; }
+        if (pp.wish_from_sideboard)
+        {
+            for (const Card& c : ap.sideboard) { if (c.m_name == nm) { return true; } }
+            return false;
+        }
+        for (std::size_t i = 0; i < ap.library.size(); ++i)
+        { if (ap.library[i].m_name == nm) { return true; } }
+        return false;
+    };
+    const bool baked_live = zone_has(baked);
+    // A baked target the provider narrowed OUT of `cands` must still be offerable, or the default
+    // could not point at it and a recorded line would silently change under us.
+    if (baked_live && std::find(uniq.begin(), uniq.end(), baked) == uniq.end())
+    { uniq.push_back(baked); }
+    if (uniq.empty()) { return TutorAskResult::NoCandidates; }
+
+    int def = -1;   // baked-but-gone -> DECLINE, reproducing the old silent whiff
+    if (baked_live)
+    {
+        for (int k = 0; k < static_cast<int>(uniq.size()); ++k)
+        { if (uniq[k] == baked) { def = k; break; } }
+    }
+    else if (baked.empty())
+    {
+        // The badged "AI pick" must be the provider's RANKED pick, not uniq[0] (viewer issue #7).
+        // --claude-play forces MTG_UNPRUNED, and an archetype TutorCandidates returns the UNRANKED
+        // GenericProvider list under that gate -- so `cands` above is raw ZONE ORDER and the old
+        // hard-coded default of 0 badged whatever happened to be first (Goblins s22: Stingscourger,
+        // over Krenko / Muxus / every lord). Re-ask the provider inside a HumanPlaySuppress scope,
+        // which is exactly the guard that makes DecisionUnpruned() false, to get the real ranking.
+        //
+        // Only the DEFAULT INDEX changes -- the offered list keeps zone order. Reordering it would
+        // silently re-point every `tutor_etb` index already recorded under references/ (s22 recorded
+        // 11 = Goblin Chieftain), so the human still sees the same grid in the same places and only
+        // the badge moves. Falls back to 0 if the ranked pick is somehow absent.
+        def = 0;
+        HumanPlaySuppress pruned;   // ranked (pruned) view; restores on scope exit
+        const std::vector<std::string> ranked =
+            ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+        if (!ranked.empty())
+        {
+            auto it = std::find(uniq.begin(), uniq.end(), ranked.front());
+            if (it != uniq.end()) { def = static_cast<int>(it - uniq.begin()); }
+        }
+    }
+
+    const int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, def);
+    if (picked < 0) { return TutorAskResult::Declined; }   // -1 = decline the optional search
+    // Out of range keeps the CALLER's current pick rather than declining -- the exact prior
+    // semantics of this path. Unreachable from the shipped harness (the --choices reader validates
+    // the index and substitutes the heuristic default), so this is belt-and-braces only.
+    if (picked >= static_cast<int>(uniq.size())) { return TutorAskResult::NoCandidates; }
+    out = uniq[picked];
+    return TutorAskResult::Chosen;
+}
+
 // Execute a tutor (Idyllic / Enlightened): fetch `target_name` from the library and move it to
 // hand (to_hand) or the top of the library (to_top). When target_name is empty, fall back to
 // the heuristic's top candidate (TutorCandidates) -- so any path that doesn't carry a searched
 // choice still plays the heuristic. The library is treated as already shuffled (the remaining
 // order past the tutored card is a goldfish-irrelevant simplification that keeps the real game
 // and rollout byte-consistent). Shared by EffectHandler (real) and ApplyPlanDirect (rollout).
+//
+// `human_repick` = "this tutor is resolving from a CAST in a committed plan". Set ONLY at the two
+// cast-resolution sites (EffectHandler's spell resolution and ApplyPlanDirect's apply_one); it makes
+// the human chooser fire even though the plan already baked a target. See the note at that branch.
 void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
                          const std::string& target_name,
-                         const std::string& source_name)
+                         const std::string& source_name,
+                         bool human_repick)
 {
     // Searched pick by INDEX (Plan::tutor_choice via ScriptedTutor, MTG_TUTOR_AXIS_RESOLVE=1).
     // Read-and-reset at entry so the FIRST tutor of the apply consumes it on every path (named
@@ -69,38 +166,39 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         // heuristic front() and stay byte-identical. See GameLogger.h TutorChooser.
         if (g_play_tutor_chooser)
         {
-            // Offer each NAME once: TutorCandidates lists library order, so a deck with three copies
-            // of a card would otherwise show it three times, and picking any of them fetches the same
-            // first matching library card anyway. Dedup preserves first-occurrence order.
-            std::vector<std::string> uniq;
-            for (const std::string& c : cands)
-            { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
-            // The badged "AI pick" must be the provider's RANKED pick, not uniq[0] (viewer issue #7).
-            // --claude-play forces MTG_UNPRUNED, and an archetype TutorCandidates returns the UNRANKED
-            // GenericProvider list under that gate -- so `cands` here is raw LIBRARY ORDER and the old
-            // hard-coded default of 0 badged whatever happened to be first (Goblins s22: Stingscourger,
-            // over Krenko / Muxus / every lord). Re-ask the provider inside a HumanPlaySuppress scope,
-            // which is exactly the guard that makes DecisionUnpruned() false, to get the real ranking.
-            //
-            // Only the DEFAULT INDEX changes -- the offered list keeps library order. Reordering it
-            // would silently re-point every `tutor_etb` index already recorded under references/
-            // (s22 recorded 11 = Goblin Chieftain), so the human still sees the same grid in the same
-            // places and only the badge moves. Falls back to 0 if the ranked pick is somehow absent.
-            int def = 0;
-            {
-                HumanPlaySuppress pruned;   // ranked (pruned) view; restores on scope exit
-                const std::vector<std::string> ranked =
-                    ResolveProvider(state).TutorCandidates(state, controller_index, pp);
-                if (!ranked.empty())
-                {
-                    auto it = std::find(uniq.begin(), uniq.end(), ranked.front());
-                    if (it != uniq.end()) { def = static_cast<int>(it - uniq.begin()); }
-                }
-            }
-            const int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, def);
-            if (picked < 0) { return; }                                   // declined the optional search
-            if (picked < static_cast<int>(uniq.size())) { want = uniq[picked]; }
+            std::string chosen;
+            const TutorAskResult r = AskHumanTutorPick(state, controller_index, pp, source_name,
+                                                       /*baked=*/std::string{}, chosen);
+            if (r == TutorAskResult::Declined) { return; }   // declined the optional search
+            if (r == TutorAskResult::Chosen)   { want = chosen; }
         }
+    }
+    // CAST ROUTE (USER 2026-09-10, EDF seed 6 T4: "No dialog was provided for the second living
+    // wish! It didn't let me choose"). A tutor cast from a committed plan carries a plan-baked
+    // target, so the chooser above -- gated on an EMPTY target -- never fired for it, and the
+    // human's only say was the plan-variant menu. That menu cannot express this decision:
+    //
+    //   * It bakes ONE target per cast at ENUMERATION time, against the pre-cast board. With TWO
+    //     copies of the same tutor in one plan the enumeration handed BOTH casts the SAME name
+    //     ("Living Wish -> Azorius Chancery, Living Wish -> Azorius Chancery"), and a wish pool is
+    //     a SINGLETON pool -- so the second resolution found its target already gone and silently
+    //     fetched NOTHING (the `idx < 0` guard below). One of the player's two spells evaporated.
+    //   * Even with distinct names, the plan-time pick is made before the same-line casts resolve,
+    //     so it cannot see what the earlier fetch took.
+    //
+    // Asking HERE fixes both at once: PerformTutor runs once per cast, in cast order, so each
+    // instance gets its own frame, and each frame's candidate list is rebuilt from the LIVE zone --
+    // the second wish is offered the pool the first one left behind. The plan's baked target is the
+    // DEFAULT, which is what keeps every predating reference replaying its recorded line (see
+    // AskHumanTutorPick). Chooser-gated, so search / rollout / autonomous play never reach it and
+    // stay byte-identical.
+    else if (human_repick && g_play_tutor_chooser)
+    {
+        std::string chosen;
+        const TutorAskResult r = AskHumanTutorPick(state, controller_index, pp, source_name,
+                                                   /*baked=*/want, chosen);
+        if (r == TutorAskResult::Declined) { return; }   // declined, or the baked target is gone
+        if (r == TutorAskResult::Chosen)   { want = chosen; }
     }
     // DIAGNOSTIC (MTG_TUTOR_CHOSEN_RANK, default off): where in the ranking did the SEARCH actually
     // land? Gated on g_real_resolution, so it reports only the target the engine commits to, never

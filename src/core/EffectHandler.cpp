@@ -308,8 +308,11 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 {
                     // Fetch the searched target carried on the stack entry (empty -> the
                     // heuristic's top pick), matching the rollout's ApplyPlanDirect.
+                    // human_repick: this IS a cast resolving, so a human at the viewer re-picks
+                    // here off the live zone with the plan's baked target as the default (one frame
+                    // per cast instance, in cast order). Inert without a chooser installed.
                     PerformTutor(state, entry.controller_index, def.params, entry.tutor_target,
-                                 def.card.m_name);
+                                 def.card.m_name, /*human_repick=*/true);
                 }
                 // Crop Rotation: search a land card, put it onto the battlefield (the sacrifice-a-
                 // land additional cost is handled by the shared sacrifice_land cast path). Target =
