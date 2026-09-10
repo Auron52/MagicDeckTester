@@ -32626,6 +32626,26 @@ static bool M2WavesEnabled()
     return heurarm::Flag(heurarm::M2_WAVES, env_on);
 }
 
+// ---- FIRST-VERIFIED-WIN HORIZON EXIT (MTG_FS_HORIZON_EXIT, default ON = shipped behaviour) ------
+// DIAGNOSTIC HATCH for the open non-monotonicity bug (see draw-divergence-diagnosis.md, "the search
+// is NON-MONOTONE in depth and budget": hinata gi202 is win 5 at d5 and win 6 at d7 UNBUDGETED,
+// which an earliest-win objective must never do).
+//
+// The exit's own justification is an ID PREMISE, quoted from the comment at the main loop: *"a pass
+// runs only after every shallower pass found no win ... so any in-horizon win is at that edge = the
+// global minimum. Hence the FIRST one found is optimal"*. The premise makes all in-horizon wins TIED,
+// which is what licenses stopping at the first rather than the earliest. Where that premise does not
+// hold -- a single pass run at a committed depth with no d1..D re-ladder beneath it, a shallower pass
+// that was truncated rather than refuted -- the wins are NOT tied, and the loop can stop on a plan
+// that wins at the edge while a later plan would have won sooner. `=0` keeps min-tracking through
+// the whole candidate list, which is the behaviour the objective actually asks for; the difference
+// between the two arms IS the size of the bug.
+static bool FsHorizonExitOn()
+{
+    static const bool on = EnvOn("MTG_FS_HORIZON_EXIT", true);
+    return on;
+}
+
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
                                          FSLineCache* lc, SearchBudget* budget,
@@ -32968,7 +32988,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         best.phases.push_back({ false, std::move(q_rec) });
                         best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
                         // First VERIFIED win -- the m2 loop's own shortcut, same horizon edge.
-                        if (sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
+                        if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
                     }
                 }
                 continue;   // the pending base plan itself is never scored -- its children were
@@ -33064,7 +33084,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                             best.phases.insert(best.phases.end(),
                                                cont.phases.begin(), cont.phases.end());
                             best.truncated = best.truncated || cont.truncated;
-                            if (cont.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
+                            if (FsHorizonExitOn() && cont.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
                         }
                         continue;   // the recursion scored the empty continuation == the plain tail
                     }
@@ -33102,7 +33122,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 // Stop at the first VERIFIED win (within horizon) -- the pass minimum.
                 // Same reasoning as FSLineWin; the second-main FSLineWin runs at turn+1
                 // with `depth` more turns, so its horizon edge is state.turn_number+depth.
-                if (sub.win_turn <= state.turn_number + depth)
+                if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth)
                 {
                     ++g_fs_hexits;
                     return best;
@@ -33176,7 +33196,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         best.phases.push_back({ false, std::move(q_rec) });
                         best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
                         // Same horizon edge as the base loop's first-verified-win shortcut.
-                        if (sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
+                        if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth) { ++g_fs_hexits; return best; }
                     }
                 }
             }
@@ -33334,7 +33354,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         q_rec.breakpoint_actions = std::move(bp);
                         best.phases.push_back({ false, std::move(q_rec) });
                         best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end()); best.truncated = best.truncated || sub.truncated;
-                        if (sub.win_turn <= state.turn_number + depth)
+                        if (FsHorizonExitOn() && sub.win_turn <= state.turn_number + depth)
                         {
                             ++g_fs_hexits;
                             return best;
@@ -33963,7 +33983,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         best.phases.push_back({ true, std::move(p_rec) });
                         best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end()); best.truncated = best.truncated || tail.truncated;
                         // In-horizon win: same COMPLETE-NODES deferral as the main loop below.
-                        if (tail.win_turn <= state.turn_number + depth - 1)
+                        if (FsHorizonExitOn() && tail.win_turn <= state.turn_number + depth - 1)
                         {
                             ++g_fs_hexits;
                             if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
@@ -34174,7 +34194,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // mutually tied, so they fall through to keep min-tracking. NOTE: this
             // couples FSLineWin's correctness to that calling convention -- it is not a
             // standalone earliest-win finder.
-            if (tail.win_turn <= state.turn_number + depth - 1)
+            if (FsHorizonExitOn() && tail.win_turn <= state.turn_number + depth - 1)
             {
                 ++g_fs_hexits;
                 // COMPLETE NODES: this win is only known-optimal if every shallower pass was a
@@ -34288,7 +34308,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     // remaining ranks rather than stopping at the first in-horizon win, so the node
                     // answers with the minimum over every rank it could afford. The walk still ends
                     // on its own when the slots retire or the budget runs out.
-                    if (!BpWaveCompleteNodes() && tail.win_turn <= state.turn_number + depth - 1)
+                    if (FsHorizonExitOn() && !BpWaveCompleteNodes() && tail.win_turn <= state.turn_number + depth - 1)
                     {
                         ++g_fs_hexits;
                         FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());

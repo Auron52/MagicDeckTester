@@ -200,7 +200,32 @@ REMAINING, so the reuse rate decays continuously to zero and the gate never open
 budget. gi232 holds win=5 at every share and budget, with `reused` 294 -> 5 -> 0 as budget rises.
 Full argument, sizing table and counters: **`order-free-reuse-wave.md`**.
 
-## STILL OPEN — a SECOND bug: the search is NON-MONOTONE in depth and budget
+## THE SECOND BUG NO LONGER REPRODUCES (re-measured 2026-09-10, after the sound memo + wave)
+
+Re-run on the recorded cases with the current engine (verified-only + split keys + the reuse wave),
+unbudgeted and depth-pinned exactly as the original ladder was (`--depth D --budget-ms 0
+--ignore-play-profile`):
+
+* **Depth axis, 18 cells** — gi202 / gi232 / gi255 x seeds 6006, 7007 x d5, d7, d9: **every cell
+  agrees within its game.** No "deeper is worse" anywhere.
+* **Budget axis, 24 cells** — gi202 / gi255 x seeds 6006, 7007 x b20, b80, b320, b1280, b10240,
+  unlimited: **flat throughout.**
+
+The most likely explanation is that the non-monotonicity was a downstream SYMPTOM of the unsound
+order-free reuse rather than an independent defect: importing a permuted twin's leaf ESTIMATE fires
+at some depth/budget combinations and not others, which is exactly the shape "worse, then better
+again" has. (The original note recorded it as memo-independent on the grounds that both
+`MTG_MEMO_WIN_ORDERFREE` arms agreed — but that lever is only one of the paths into the reuse, and
+the arm comparison predates both the verified-only default and split keys.)
+
+**Not the same as proving the search monotone.** This says the recorded repro is gone, on 42 measured
+cells. `MTG_FS_HORIZON_EXIT=0` was added as a standing A/B hatch for the mechanism that would be the
+prime suspect if it returns — the first-verified-win exit, whose soundness rests on an ID premise
+(*"a pass runs only after every shallower pass found no win"*) that a single pass at a committed depth
+does not supply. On the three games that sit at a later win (s6006 gi255, s7007 gi232, s4004 gi232),
+turning the exit off changes nothing at d7/unlimited, so the premise holds where it has been tested.
+
+## (historical) the non-monotonicity as first recorded
 
 Independent of the memo (both arms identical), unbudgeted:
 * `gi202`: d5 -> **5**, d7/d9/d11/d20 -> **6**. A DEEPER search is worse.
