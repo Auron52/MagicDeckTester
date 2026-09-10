@@ -4205,3 +4205,149 @@ Play digests verified UNCHANGED by the script itself -- all 770 banked rows kept
 remaining jobs. Gate state at launch: smoke 73/73, regression 99/99 GT-identical with the ONE
 documented reference-gate red (s1_gi0), scenarios 73/73 (incl. new aura fixture), winless audit
 0/183,306, six-ref digests identical. DO-NOT-PUSH hold still in force (45 local commits).
+
+### Session 12 (2026-09-10): demand-aware mana reservation + concrete colours in the human pool
+
+USER: *"I think we generically need much smarter logic about mana reservation"*, and (twice now)
+*"There should also not be such a thing as generic mana in the mana pool. We probably need to come
+up with a different approach to ensure that we get the right actual colours."* They called this
+**the biggest problem with handling this deck**. Three linked reports, one design; everything below
+is HumanPlayActive-gated, so smoke / GT / scenarios are byte-identical by construction.
+
+#### The demand set (the USER's own rule, and the boundary they drew around it)
+
+*"What mana type could the next line need after the breakpoint? If we searched a specific card, we
+should hold up mana for that card. If we played a card with an ability we need to reserve mana for
+the ability."* Scoped mid-task to **player-visible knowledge only**: (a) cards searched/tutored to
+hand, (b) cards legitimately known to be on top (Ponder/scry/tutor-to-top), (c) our own battlefield
+activation costs, (d) the hand -- cast costs AND the activation costs the hand's cards will bring
+with them. Excluded: the engine's clairvoyant view of undrawn cards.
+
+`ComputeHumanPlayDemand` (SpellEffects.h) is that set and is now the ONE model the human-play mana
+policy reads -- the generic-spend budget, the {C} holds, the tap-ahead colour choice and the pool
+concretisation all share it. **(b) is a documented no-op**: nothing in this engine tracks *why* a
+library card's identity is known, so reading `library[0]` would be indistinguishable from
+clairvoyance. `AddKnownTopDemand` is the hook, with the tracking it needs spelled out. Inert for
+this deck either way -- Living Wish and Eladamri's Call are tutor-to-HAND, so their results are
+already counted under (a)/(d).
+
+#### 1. Seed 8 turn 3 -- "the payment fails to keep colourless". FIXED.
+
+Repro (the user's own line): mull to 6 bottoming Eldrazi Displacer; T1 Conservatory; T2 Mariposa +
+Wild Growth->Mariposa + Fertile Ground->Conservatory; T3 `land=Yavimaya Coast; cast: Fertile Ground
+-> Conservatory, Cloud of Faeries, Eldrazi Displacer`.
+
+    BEFORE  float {G:1}; Mariposa (the board's only untapped {C} source) TAPPED;
+            Conservatory untapped (G/W + 2 wild -- cannot make {C}).
+            Menu after the line: "cast: (nothing)". The Displacer that just resolved
+            CANNOT BE ACTIVATED.
+    AFTER   float {W:2}; Mariposa UNTAPPED ({C} + Wild Growth's {G}); Conservatory tapped.
+            Menu: "Eldrazi Displacer: blink #0" / "blink Cloud of Faeries".
+
+TWO independent causes, both "the sink is in HAND, so nothing thinks there is a sink":
+* `BoardHasColorlessPipSink` scanned the battlefield ONLY -- its own comment said hand cards were
+  excluded because "its sink only exists once it has resolved". On a turn that CASTS the Displacer,
+  every payment before it resolves sees no sink. Now (human play, `MTG_HAND_C_SINK`) a hand card
+  with a {C}-pip activation counts, gated on castable-this-turn (`LooseManaCeiling`). That flips
+  `MTG_C_SOURCE_HOLD` on one line earlier, which is what leaves Mariposa up.
+* `ConsumeFloatingAny` -- the generic-pip drain from the pool a payment builds AS IT TAPS -- took
+  Colorless FIRST, unconditionally. Mariposa's tap is `{C}{G}` (Wild Growth) and the Fertile Ground
+  `{1}` ate the {C}. `MTG_HOLD_C_FOR_SINK` could never see it: the {C} is spent before the leftover
+  reaches `state.floating_mana`. New `g_hold_colorless_in_payment` (`MTG_HOLD_C_IN_PAYMENT`) applies
+  the same back-of-the-order rule one layer down. A PREFERENCE with fall-through, never a refusal.
+
+#### 2. Seed 6 -- the second Drake banks ZERO. FIXED, and the earlier fix was the wrong shape.
+
+The September-7 fix let a painland into the cast-site tap-ahead under the `count >= tapped_n + 1`
+budget, then (September-8, seed 9) took it back out whenever its colours intersected the pending
+cost. That second rule is BLANKET: on a `{4}{U}` Peregrine Drake it excludes EVERY {U}-capable
+painland, whatever else the board can make. It is the same predicate on both boards --
+
+    seed 9  Conservatory, Adarkar+Wild Growth, Mariposa, Brushland. Adarkar is the ONLY blue
+            source. Bank it as {C} and the {U} is unpayable, the line rolls back, and the untap
+            that justified the banking never happens. Must stay out.
+    seed 6  Kitchen+Overgrowth, Brushland+Fertile Ground, Adarkar Wastes. Kitchen makes {U} too,
+            and by the time the walk reaches Adarkar that blue is already banked. Keeping Adarkar
+            out costs the turn a whole land's mana, every cast.
+
+-- so membership cannot separate them and COVERAGE can. `ReservedColorsStillCovered` asks whether
+each pip the source could have supplied is already covered by the float plus the other untapped
+sources (land auras included); the pending `ManaCost` is now threaded to all three cast sites, not
+just its colour mask. Conservative on hybrids (both halves count). `MTG_TAPAHEAD_COLOR_COVER=0`
+restores the blanket rule. The same widening replaces the energy branch's blunter gate ("the cost
+has ANY coloured pip" -> an Aether Hub that stays untapped banks nothing at all).
+
+Isolated A/B on a Drake cast with a {U}-capable painland up (seed 8 gi7 T5: Conservatory+2 Fertile
+Ground, Mariposa+Wild Growth, Yavimaya Coast+Overgrowth):
+
+    BEFORE  float {G:1, C:1}        AFTER  float {G:1, C:2}      (all lands untapped in both)
+
+Second half: the tap-ahead banks at most `count` lands, and unordered it picked by BATTLEFIELD
+ORDER -- a 1-yield Adarkar ahead of a 3-yield Overgrowth'd Kitchen. `MTG_TAPAHEAD_HUMAN_ORDER`
+(human play) sorts by yield, matching the untap that immediately follows (`EtbUntapLands` already
+ranks by yield), with a {C}-capable tie-break while a {C} sink is live -- the exact shape of
+`MTG_UNTAP_C_FIRST`, and a tie-break only, so it can never bank less mana than before.
+
+#### 3. No generic mana in a human-play pool -- SHIPPED, at the DECISION BOUNDARY
+
+`ConcretiseHumanFloat` commits every uncommitted `wild` unit to a concrete colour (or {C} for the
+`wild_c` subset) by the demand model. CR 106.1 is the argument: mana has a type and it is chosen
+when the mana ability resolves; `wild` models a deferral the rules do not have, it displays as
+"generic", and it can pay a pip the board could never have made. `wild_phantom` (a fed Astrolabe's
+1-in/1-out conversion) is deliberately never committed -- promoting one would turn a conversion into
+an extra mana.
+
+**WHERE it fires was the whole engineering problem, and the reference corpus settled it.** Three
+placements were measured:
+
+    tap-ahead bank      2 EDF references lost (s1_gi0's protected T3, s10_gi9). It pre-empts the
+                        payment: SpendFloatingTowardCost drains generic from `wild` FIRST, which is
+                        why a healthy blink loop's float reads as pure {G:N}. DEFAULT OFF
+                        (MTG_HUMAN_CONCRETE_TAPAHEAD=1 to A/B).
+    every payment       FiveColour/claude_s9_gi8 T4 -> T5. Its turn 4 is ONE plan
+    leftover            (`Mana Cannons, Faeburrow Elder, Oko`) and committing the first payment's
+                        leftover drops a later cast in the same line -- the per-payment stranding
+                        docs/design/mana-source-reservation.md already records, one layer down.
+    DECISION BOUNDARY   306/306 green. One iteration of the external-chooser segment loop IS a
+    (SHIPPED)           frame: enumerate, show, pick, apply. Committing there (before enumeration,
+                        so the offered plans are priced against the pool that will pay them) means
+                        no frame a human ever sees carries a unit without a colour, while a
+                        multi-cast line's own intermediate payments keep their flexibility.
+                        `ConcreteDeferScope` holds the commitment across the apply.
+
+Colour choice: demand (pips) first, then BREADTH -- how many DISTINCT hand cards want the colour.
+Breadth is not decoration: `claude_s1_gi0` T3 holds Emiel {2}{W}{W} and two Drakes {4}{U}, white and
+blue tie at 2 pips, and the colour-order tie sent the one wild to WHITE, after which the recorded
+`cast: Cloud of Faeries` stopped being enumerated. `MTG_CONCRETE_DBG` prints the vector.
+
+#### A latent bug the concretisation exposed: ComputeRefloatDemand read an EMPTY hand cost
+
+`ComputeRefloatDemand` summed `hc.m_mana_cost` straight off the hand's `Card` objects -- and a zone
+Card carries the NAME, not the cost (`m_mana_cost` is empty on every decklist-loaded copy; the
+HUMAN_TAP_DEMAND scan in ManaPayment.cpp documents the same trap at its own hand loop). So the
+"hand + battlefield" demand model was a battlefield-only one, and every consumer silently fell back
+to its tie-break. Now looked up through the definition; `MTG_REFLOAT_HAND_COST=0` restores.
+This also un-blinds the `MTG_HOLD_C_FOR_SINK` generic-spend budget, which reads the same model.
+
+#### Gates
+
+scenarios 73/73 PASS; smoke 73/73 byte-identical (0 configs changed, 0 play-changed); reference
+sweep **15 ok / 291 repaired / 0 play-drift / 0 enum-gap / 0 shuffle-dead / 0 contract-fail (306)**
+-- identical to the pre-change baseline.
+
+#### Deliberately NOT done
+
+* **"Let the plan include the next step"** (cast the searched card / activate the ability as one
+  line). Out of scope this pass -- it is a plan-ENUMERATION change with tractability consequences,
+  not a payment one. Where it would fit: `TurnSolver::EnumerateMainPlans`' action-subset builder,
+  as an extra Action appended to a subset that already contains the tutor or the permanent's cast,
+  gated to human play and to a *single* follow-on step. Note it does NOT subsume the work above --
+  the demand model still has to price the steps a plan does not contain, and today's segment loop
+  ("commit line stops at the line") already lets a human take the follow-on step by hand.
+* **Aura colours in payment source selection.** On the seed-8 frame the aura-host reservation keeps
+  Conservatory untapped, so the Fertile Ground's `{G}` has to come off Yavimaya Coast (1 life) even
+  though Mariposa's Wild Growth makes green -- `ProducesForPayment` reads the land's own modes and
+  cannot see an attached aura's colour. That is the standing "EffectiveProduces land-aura colours"
+  item; it is shared-engine and GT-moving, so it is not in a viewer-scoped pass.
+* **A tutored-this-turn PRIORITY TIER.** Tutored cards are counted (they are in hand); ranking them
+  ABOVE other hand cards needs a per-game marker the engine does not have. Recorded, not faked.

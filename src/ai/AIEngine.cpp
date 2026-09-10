@@ -1810,6 +1810,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // makes budgeted play structurally -- not merely measurably -- untouched. Scoped, because
     // BottomEvalScope re-enters with a different budget.
     UnbudgetedPlayScope _unbudgeted_play(m_budget_ms <= 0);
+    // NO GENERIC MANA IN A HUMAN-PLAY POOL, committed at the DECISION BOUNDARY (see
+    // ConcreteDeferScope). One TakeTurn = "emit a decision, apply the plan the human picked", so
+    // its exit is exactly the moment the pool becomes something a human looks at again. Holding
+    // the commitment here is what stops it from pre-empting a later cast of the same line.
+    // Inert outside human play (ConcretiseHumanFloat's own gate) and for a wild-free pool.
+    ConcreteDeferScope _concrete_defer(state, state.active_player_index);
     // MTG_EDF_TURN_TRACE (diagnostic, no-op unless set): dump the blink loop as it stands on the
     // REAL board, before the search is entered. Taken here rather than inside the recognizer because
     // every call site it has is already under a RevealLogPause -- see EdfTurnTrace.
@@ -2102,6 +2108,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         bool drew_last = false;             // did the last applied plan draw (library shrank)?
         for (int seg = 0; seg < 64; ++seg)
         {
+            // NO GENERIC MANA IN THE POOL THE HUMAN IS ABOUT TO LOOK AT (see ConcretiseHumanFloat).
+            // THIS is the decision boundary -- one iteration of this loop is one frame: enumerate,
+            // show the board, take a pick, apply it. Committing here rather than inside
+            // `commit_leftover` is what keeps a multi-cast line's own intermediate payments free to
+            // spend a `wild` as they see fit (see ConcreteDeferScope: the FiveColour s9_gi8 T4 line
+            // is dropped a cast if they are not), while still guaranteeing that no frame the human
+            // ever sees carries a unit without a colour. BEFORE the enumeration below, deliberately:
+            // the plans this frame offers must be priced against the pool that will really pay them.
+            ConcretiseHumanFloat(state, state.active_player_index, ConcreteSite::Frame);
             // #6 storage-land TAP-vs-CHARGE, POST-DRAW variant (Mercadian Bazaar, storage_charge_mode
             // "tap"): its "{T}: put a counter" is an active MAIN-PHASE tap, so the human decides hold-vs-
             // burst AFTER the draw, with full information. Consulted once per turn at the START of the pre-
@@ -5426,7 +5441,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         if (def->params.etb_untap_lands > 0)
         {
             EtbUntapTapAheadIntoFloat(state, state.active_player_index, def->params.etb_untap_lands,
-                                      ColoredPipReserveMask(def->card.m_mana_cost));
+                                      ColoredPipReserveMask(def->card.m_mana_cost),
+                                      &def->card.m_mana_cost);
             available = AvailableManaPool(state);
         }
         // Sac-fodder-first (MTG_SAC_FODDER_PAYS): lockstep twin of the rollout's apply-cast
