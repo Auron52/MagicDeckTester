@@ -3407,3 +3407,10 @@ cost/quality trade, and the cheap side of it (d3b10) is the MULLIGAN-GENERATION 
 shipped play — so the saving is a one-off on generation, not on play. Left staged for the user.
 Note the route effect again: the screen's stand-in route read this cell as 1.01x at d5b20, the sidecar
 route reads 0.958x.
+
+**Overnight tier (2026-09-10, after the adoption): 266 of 268 configs unchanged, 12m51s.** Both moved keys
+are Fluctuator's and no other deck moved, which closes the byte-identity question for the new sidecar keys
+at the third tier. `d5_s4004`: average IDENTICAL (3.6280), digest changed — two games play-changed at the
+same or better score. `d5_s5005`: 3.6320 → 3.6400, from two games classified CHURN (gi117 5→6, gi175 6→7,
+both recovering at 4x AND 16x). d0 untouched. Accepted with the note. All three tiers now sit on the
+adopted shape; `check_gt_logs.py` 456 consistent / 0 stale / 0 missing.

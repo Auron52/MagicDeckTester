@@ -1,8 +1,8 @@
-# Regression ground truth -- commit f0ddad8a  date 2026-09-10
+# Regression ground truth -- commit e5760bf3  date 2026-09-10
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (regression, 2026-09-10): SOUND order-free memo: split keys (WINs under an ORDER-EXACT key, NO-WINs canonical) + the budget-gated order-free reuse wave (MTG_FSL_OF_WAVE, share 0.005). GT moves because the baseline it replaces pruned by FALSE BELIEF -- hinata gi232's turn-5 kill was unreachable at EVERY depth 5..40 with an UNLIMITED budget. All 11 searched-slower games classify as CHURN (recover at 4x and 16x); d0 untouched (search-only); makespan 555s -> 468s. Against the shipped sound code the wave is better 2 / worse 0 / identical 18 across all 20 decks at 0.76x deterministic units. See docs/design/order-free-reuse-wave.md.
-# accepted-with-regressions (overnight, 2026-09-10): Overnight tier was ~24 commits stale, so this rebaseline spans MANY changes, not only the sound-memo arc (split keys + the order-free reuse wave). Analysis: 78 configs changed, d0 UNTOUCHED (search-only). All 37 searched-slower games classified: 35 CHURN (recover at 4x/16x), and the 2 labelled PERSISTS are both BETTER than the old GT at 4x/16x, i.e. the label is a tooling artifact -- antilife d5 s7007 gi959 (identical hand+draws, 7->8 at b20 but 6 at 4x/16x) and hinata d5 s4004 gi5 (DRAWS DIVERGE at T3 on Ponder's cast_reorder = physically different game, 6->7 at b20 but 5 at 4x/16x). Both wins-turned-losses are CHURN: hinata d5 s5005 gi140 recovers to 8, mirrorwing d5 s7007 gi44 recovers to 6. 13 games faster; per-cell: 3 cells net better, 17 net worse and every one of those driven by classified churn (python3 test/audit_cells.py overnight). Makespan 48m28s.
 # accepted-with-regressions (smoke, 2026-09-10): Fluctuator adopted value_play.alpha=relaxed (its leafless probe now uses the model ladder's start gate). Only fluctuator_smoke_d5_s1001 moved -- 79 of 80 configs byte-identical, so the new sidecar keys (ladder single / alpha / exhaust_mult) are inert on every other deck. The one changed game, gi68 5->7, classifies as CHURN (classify_turn_later.sh: recovers to T5 at 4x AND 16x budget), against a measured 24-better/3-worse over 4000 games at d5b20 (sign test z +4.0) at 0.433x the units. Re-verified after the rebase onto the sound order-free memo: identical ratios.
+# accepted-with-regressions (overnight, 2026-09-10): Fluctuator adopted value_play.alpha=relaxed. 266 of 268 configs unchanged; both moved keys are Fluctuator's, and no other deck moved, so the new sidecar keys (ladder single / alpha / exhaust_mult) are inert elsewhere. d5_s4004: average IDENTICAL (3.6280), digest changed -- 2 games play-changed at the same or better score. d5_s5005: 3.6320 -> 3.6400, from 2 games classified CHURN by classify_turn_later.sh (gi117 5->6 and gi175 6->7, both recovering at 4x AND 16x budget). Set against the deck's measured 24-better/3-worse over 4000 games at d5b20 (sign test z +4.0) at 0.433x the units, and 19/5 (z +2.9) at 0.786x at d3b10, both on the sidecar route and both re-verified after the rebase onto the sound order-free memo. d0 untouched (search-only). Makespan 12m51s.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -463,7 +463,7 @@ fluctuator_overnight_d3_s4004=3.6020/245cce628754e37f
 fluctuator_overnight_d3_s5005=3.6160/9c16a510020943ea
 fluctuator_overnight_d3_s6006=3.6280/669ac1a8c578e9a7
 fluctuator_overnight_d3_s7007=3.6440/8278280ecff6b389
-fluctuator_overnight_d5_s4004=3.6280/45c3827a2e2554a2
-fluctuator_overnight_d5_s5005=3.6320/c151879bd81e7caa
+fluctuator_overnight_d5_s4004=3.6280/13d17b6d0a2e81dc
+fluctuator_overnight_d5_s5005=3.6400/a4952e1ce431cd2d
 fluctuator_overnight_d5_s6006=3.6160/3ec530866f05075f
 fluctuator_overnight_d5_s7007=3.7080/788aaba5e652efee
