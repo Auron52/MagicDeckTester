@@ -4401,3 +4401,53 @@ sweep **15 ok / 291 repaired / 0 play-drift / 0 enum-gap / 0 shuffle-dead / 0 co
   item; it is shared-engine and GT-moving, so it is not in a viewer-scoped pass.
 * **A tutored-this-turn PRIORITY TIER.** Tutored cards are counted (they are in hand); ranking them
   ABOVE other hand cards needs a per-game marker the engine does not have. Recorded, not faked.
+
+---
+
+## Session 13 (2026-09-10): the untapper reservation chain -- seed 9 gi=8 T4 "can't pay {2}{W}{W}"
+
+**The user's rejection** (`logs/play/rejections/EldraziDisplacerFlicker_cod_s9_gi8_t4.json`):
+board Conservatory(+Wild Growth) / Kitchen(+Overgrowth) / Mariposa, line
+`cast=Cloud of Faeries; cast=Emiel the Blessed`, verdict "illegal -- can't pay {2}{W}{W}".
+Rules-legal: Conservatory is the board's only white source, so {W}{W} exists only by tapping it on
+BOTH sides of Cloud's ETB untap -- bank the {W} while paying Cloud (the Wild Growth {G} covers
+generic), untap, tap it again. The user's doctrine, verbatim: *"we should be ready to spend the
+green from wild growth and overgrowth liberally and reserve the white which we really need for
+Emiel"*, later generalised: *"If we have a lot of a colour and nothing requesting all of it, it
+would make sense to use that colour."*
+
+**Four defects stacked on this one line, fixed in order** (all human-play-gated; autonomous play,
+rollouts and GT byte-identical by construction):
+
+1. **CheckLine's ETB-untap retry paid minimally** -- Cloud tapped only Kitchen, the untap had
+   nothing worth recharging. Fix: a second `ta=1` pass (only after every exact-historical combo
+   fails, so strictly monotone-accepting) whose `line_tap_ahead` banks up to `etb_untap_lands`
+   lands chosen by the REST of the line's coloured demand, with a circular-trap guard (never
+   pre-tap a land whose colours the current cost still needs uncovered). `MTG_CHECKLINE_ETB_UNTAP=0`
+   disables the pass with the untap it rides on.
+2. **The tap-ahead's colour commit stranded the cast's own pip** -- `SubsetPayableSequential`
+   already taps ahead, but Kitchen ({G} or {U}, the only blue) tied G-vs-U in the demand argmax and
+   committed {G}, so Cloud's own {1}{U} failed and the {Cloud, Emiel} subset was refused -- the fan
+   never held an Emiel plan at all. Fix: PENDING-PIP OVERRIDE in `EtbUntapTapAheadIntoFloat`'s
+   choice-source commit (the cast's own uncovered pips outrank every deferred demand; net of float,
+   so a covered pip falls through). `MTG_TAPAHEAD_PENDING_PIP=0`.
+3. **Nothing told Conservatory to bank WHITE** -- the walk's demand model read all-zero and
+   degenerated to `prod[0]` = {G}. Fix: a `line_cost` priority one rung below the override, fed by
+   `g_line_unpaid_cost` -- the existing line-hold already bound by BOTH apply paths and now also by
+   `SubsetPayableSequential` and CheckLine's retry walk (each mirrors `apply_one`'s per-cast
+   decrement). The land the untap is about to recharge banks the colour the chain comes back for.
+4. **The payment then spent the banked {W} on Cloud's generic {1}** -- `SpendFloatingTowardCost`'s
+   colour order was WUBRG, an arbitrary ranking that ate white first while three green floated.
+   Fix: SURPLUS-FIRST GENERIC ORDER -- colours ordered by (floating - still-owed), descending, per
+   the user's general rule above. Reads the same `g_line_unpaid_cost`; zero -> historical order
+   byte-identical. `MTG_LINE_SURPLUS_GENERIC=0`.
+
+**End-to-end on the exact rejection board**: the fan now offers
+`land=none; cast: Cloud of Faeries, Emiel the Blessed` (and land variants), the line validates as
+**accept** (a real plan index, not `legal_not_enumerated`), and execution resolves BOTH creatures
+with no dropped cast: Kitchen pays Cloud and is recharged by the untap, Conservatory taps twice for
+{W}{W}, greens pay every generic, float ends {G:1}.
+
+Replays are index-sensitive: the wider fan remaps recorded indices (old T3 pick 26 -> 28 -> 29 as
+the fixes landed), which is exactly what the protocol checker's content anchoring absorbs -- the
+gate below is the proof it did.

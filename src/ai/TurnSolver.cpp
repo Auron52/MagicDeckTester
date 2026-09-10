@@ -3483,6 +3483,18 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
     // this probe is the same shape -- a full GameState copy on entry, thrown away on return.
     PayScratch _pay_scratch(state);
     GameState& cp = _pay_scratch.Board();
+    // Bind the walk's own remaining-cost hold, exactly as both apply paths do (LineUnpaidCostScope
+    // at ApplyPlanDirect / the rollout apply), decremented below as each cast pays. Two human-play
+    // consumers: the tap-ahead's line-priority colour commit and SpendFloatingTowardCost's
+    // surplus-first generic order (USER, EDF seed 9 gi=8 T4). No autonomous reader exists
+    // (SinkCostWithLineHold is human-gated), so autonomous walks are byte-identical.
+    ManaCost _walk_total{};
+    for (int j : order)
+    {
+        const Action& a = cands[j];
+        if (!a.free_cast && !a.alt_cost) { AddManaCost(_walk_total, a.cost); }
+    }
+    LineUnpaidCostScope _luc(_walk_total);
     for (int j : order)
     {
         const Action& a   = cands[j];
@@ -3535,8 +3547,15 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
             // this sequential-payability answer prices the chain the way it will really be paid.
             if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(cp, a.chosen_x); }
             if (def.params.etb_untap_lands > 0)
-            { EtbUntapTapAheadIntoFloat(cp, cp.active_player_index, def.params.etb_untap_lands,
-                                        ColoredPipReserveMask(ec), &ec); }
+            {
+                // The line's still-owed coloured pips steer which colour a banked unit commits to
+                // (see the line_cost priority in EtbUntapTapAheadIntoFloat -- USER, EDF seed 9
+                // gi=8 T4). g_line_unpaid_cost still includes THIS cast's own cost here (it is
+                // subtracted after payment), which is fine: the pending-pip override outranks the
+                // line priority for the cast's own pips.
+                EtbUntapTapAheadIntoFloat(cp, cp.active_player_index, def.params.etb_untap_lands,
+                                          ColoredPipReserveMask(ec), &ec, &g_line_unpaid_cost);
+            }
             if (_dbg) { ManaPool _ap = AvailableManaPool(cp);
                         std::fprintf(stderr, "[dbgseq]   pay %s cost=%s float{w%d u%d b%d r%d g%d c%d *%d} avail{w%d u%d b%d r%d g%d c%d *%d}\n",
                                      def.card.m_name.str().c_str(), ec.ToString().c_str(),
@@ -3575,6 +3594,8 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
             }
             if (!paid_ok)
             { if (_dbg) { std::fprintf(stderr, "[dbgseq]   -> FAIL\n"); } return false; }
+            // Paid -> the walk no longer owes it (mirrors apply_one's decrement; clamped).
+            SubManaCost(g_line_unpaid_cost, ec);
         }
         // Resolve the cast's mana-relevant effects so they fund the NEXT payment. Anything not
         // modelled here simply earns no credit (under-optimistic -> fewer rescues, never unsound).
@@ -19858,7 +19879,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (def.params.untap_x_mana_sources) { RitualTapAheadIntoFloat(state, chosen_x); }
             if (def.params.etb_untap_lands > 0)
             { EtbUntapTapAheadIntoFloat(state, state.active_player_index, def.params.etb_untap_lands,
-                                        ColoredPipReserveMask(ec), &ec); }
+                                        ColoredPipReserveMask(ec), &ec, &g_line_unpaid_cost); }
             PaySacVictimScope _psv(
                 !def.params.sac_additional_creature_color.empty() ? own_targets : 0);
             // Phyrexian life gate (before the tap, which mutates): the payment must leave us
@@ -39012,9 +39033,153 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         long long combos = 1;
         for (int i = 0; i < n_aura && combos < kComboCap; ++i) { combos *= radix; }
         if (combos > kComboCap) { combos = kComboCap; }
+        // LINE-DEMAND TAP-AHEAD, pass ta=1 only (USER, EDF seed 9 gi=8 T4 re-report, 2026-09-10:
+        // "cast=Cloud of Faeries;cast=Emiel the Blessed" still rejected as "can't pay {2}{W}{W}").
+        // The walk pays each cast MINIMALLY, so Cloud's {1}{U} taps only Kitchen (its Overgrowth
+        // rider covers the generic), the ETB untap has nothing worth recharging, and Conservatory
+        // -- the board's only white source -- taps once: one {W}, never two. The legal execution
+        // over-taps ON PURPOSE: tap Conservatory while paying Cloud (bank the {W}, spend the Wild
+        // Growth {G} on the generic), let the untap recharge it, tap it again. The user's doctrine,
+        // verbatim: "we should be ready to spend the green from wild growth and overgrowth
+        // liberally and reserve the white which we really need for Emiel."
+        //
+        // `line_tap_ahead` banks up to `budget` (= etb_untap_lands) extra lands BEFORE an untapper
+        // cast pays, choosing lands and committed colours by the REST OF THE LINE's coloured
+        // demand -- which CheckLine, unlike real play, knows exactly. Guards: never a conditional
+        // source (pain/storage/energy/depletion/...), and never a land producing a colour the
+        // CURRENT cost still needs uncovered by float (the circular trap the painland cast-reserve
+        // note in EtbUntapTapAheadIntoFloat documents: banking the only {U} source as something
+        // else strands the very cast the banking serves). ta=1 starts only after every ta=0 combo
+        // -- the exact historical walk -- has failed, and each banking is transactional at the
+        // payment site, so this pass can only ACCEPT more lines, never fewer.
+        // MTG_CHECKLINE_ETB_UNTAP=0 disables the untap and this pass together.
+        auto line_tap_ahead = [&](GameState& g, const std::vector<bool>& paid_v, size_t self,
+                                  const ManaCost& own, int budget)
+        {
+            auto float_of = [](const GameState& g2, Color c) -> int
+            {
+                const ManaPool& fp = g2.floating_mana;
+                switch (c)
+                {
+                    case Color::White:     return fp.white;
+                    case Color::Blue:      return fp.blue;
+                    case Color::Black:     return fp.black;
+                    case Color::Red:       return fp.red;
+                    case Color::Green:     return fp.green;
+                    case Color::Colorless: return fp.colorless;
+                }
+                return 0;
+            };
+            auto own_pips = [&own](Color c) -> int
+            {
+                switch (c)
+                {
+                    case Color::White:     return own.white;
+                    case Color::Blue:      return own.blue;
+                    case Color::Black:     return own.black;
+                    case Color::Red:       return own.red;
+                    case Color::Green:     return own.green;
+                    case Color::Colorless: return own.colorless;
+                }
+                return 0;
+            };
+            int lneed[6] = { 0, 0, 0, 0, 0, 0 };
+            int lgeneric = 0;
+            for (size_t j = 0; j < pending.size(); ++j)
+            {
+                if (j == self || paid_v[j] || pending[j].alt_free) { continue; }
+                const ManaCost& mc = pending[j].full_cost;
+                lneed[static_cast<int>(Color::White)]     += mc.white;
+                lneed[static_cast<int>(Color::Blue)]      += mc.blue;
+                lneed[static_cast<int>(Color::Black)]     += mc.black;
+                lneed[static_cast<int>(Color::Red)]       += mc.red;
+                lneed[static_cast<int>(Color::Green)]     += mc.green;
+                lneed[static_cast<int>(Color::Colorless)] += mc.colorless;
+                lgeneric += mc.generic;
+            }
+            for (int i = 0; i < 6; ++i)
+            { lneed[i] = std::max(0, lneed[i] - float_of(g, static_cast<Color>(i))); }
+            // Yield-descending, so an aura-stacked land banks first -- the same ordering rationale
+            // as EtbUntapTapAheadIntoFloat's human-play branch.
+            const int n_perm = static_cast<int>(g.battlefield.size());
+            std::vector<int> ord(static_cast<std::size_t>(n_perm));
+            std::vector<int> key(static_cast<std::size_t>(n_perm), -1);
+            for (int i = 0; i < n_perm; ++i)
+            {
+                ord[static_cast<std::size_t>(i)] = i;
+                const Permanent& p = g.battlefield[static_cast<std::size_t>(i)];
+                if (p.controller_index != g.active_player_index || p.tapped || !p.card.IsLand())
+                { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr) { continue; }
+                key[static_cast<std::size_t>(i)] = PermanentManaYield(g, p, *d);
+            }
+            std::stable_sort(ord.begin(), ord.end(), [&key](int a, int b)
+            { return key[static_cast<std::size_t>(a)] > key[static_cast<std::size_t>(b)]; });
+            int taps = 0;
+            for (int idx : ord)
+            {
+                if (taps >= budget) { break; }
+                Permanent& p = g.battlefield[static_cast<std::size_t>(idx)];
+                if (p.controller_index != g.active_player_index || p.tapped || !p.card.IsLand())
+                { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr) { continue; }
+                const CardParams& q = d->params;
+                if (q.gy_land_exile_mana || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
+                    || q.storage_land || q.domain_mana || q.colored_creature_only
+                    || q.energy_per_colored_tap > 0 || IsManaConversionSource(q)) { continue; }
+                bool depletion = false;
+                for (const Counter& c : p.counters)
+                { if (c.type == Counter::Type::Depletion) { depletion = true; break; } }
+                if (depletion) { continue; }
+                const std::vector<Color>& prod =
+                    EffectiveProduces(g, g.active_player_index, *d, false);
+                if (prod.empty()) { continue; }
+                bool strands = false;
+                for (Color c : prod)
+                {
+                    const int pips = own_pips(c);
+                    if (pips > 0 && float_of(g, c) < pips) { strands = true; break; }
+                }
+                if (strands) { continue; }
+                Color pick      = Color::Colorless;
+                int   pick_need = 0;
+                for (Color c : prod)
+                {
+                    if (lneed[static_cast<int>(c)] > pick_need)
+                    { pick_need = lneed[static_cast<int>(c)]; pick = c; }
+                }
+                if (pick_need == 0)
+                {
+                    if (lgeneric <= 0) { continue; }   // nothing left in the line wants this mana
+                    pick = prod[0];
+                }
+                p.tapped = true;
+                const int amt = ManaProducedPerTap(*d);
+                g.floating_mana.Add(pick, amt);
+                if (pick_need > 0)
+                {
+                    int& n = lneed[static_cast<int>(pick)];
+                    n = std::max(0, n - amt);
+                }
+                else { lgeneric = std::max(0, lgeneric - amt); }
+                if (LandAuraBonus(g, p) > 0) { LandAuraAddToPool(g.floating_mana, g, p); }
+                ++taps;
+            }
+        };
+        const int ta_passes = (s_checkline_etb_untap && pending_etb_untap) ? 2 : 1;
+        for (int ta = 0; ta < ta_passes; ++ta)
+        {
         for (long long combo = 0; combo < combos; ++combo)
         {
         GameState cp = s;
+        // Same line-hold binding as SubsetPayableSequential's walk (surplus-first generic order +
+        // the tap-ahead's line-priority commit both read it); upper bound, clamped on subtract.
+        ManaCost _pend_total{};
+        for (const PendingCast& pc : pending)
+        { if (!pc.alt_free) { AddManaCost(_pend_total, pc.full_cost); } }
+        LineUnpaidCostScope _luc(_pend_total);
         std::vector<bool> paid(pending.size(), false);
         bool spec = s.opponent_lost_life_this_turn;
         size_t left = pending.size();
@@ -39056,7 +39221,24 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                                         : (pending[k].has_spectacle && spec) ? pending[k].spectacle_cost
                                         : pending[k].full_cost;
                     const bool for_creature = pending[k].def && pending[k].def->card.IsCreature();
-                    bool cost_ok = (cost.ManaValue() == 0) || TapForCostDirect(cp, cost, for_creature);
+                    // Pass ta=1: bank line-demanded colours ahead of an untapper's own payment so
+                    // the ETB untap recharges the banked lands (see line_tap_ahead above).
+                    // Transactional: adopted only when the cast still pays with the banking in
+                    // place; otherwise the historical minimal payment runs untouched.
+                    bool cost_ok = false;
+                    bool banked  = false;
+                    if (ta == 1 && pending[k].def && !pending[k].board_act
+                        && pending[k].def->params.etb_untap_lands > 0)
+                    {
+                        GameState bank_cp = cp;
+                        line_tap_ahead(bank_cp, paid, k, cost,
+                                       pending[k].def->params.etb_untap_lands);
+                        cost_ok = (cost.ManaValue() == 0)
+                               || TapForCostDirect(bank_cp, cost, for_creature);
+                        if (cost_ok) { cp = std::move(bank_cp); banked = true; }
+                    }
+                    if (!banked)
+                    { cost_ok = (cost.ManaValue() == 0) || TapForCostDirect(cp, cost, for_creature); }
                     if (host > 0)
                     {
                         SetPermTapped(cp, cp.active_player_index, host, false);   // give the host back
@@ -39072,11 +39254,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     static const bool s_checkline_trace = EnvOn("MTG_CHECKLINE_TRACE");
                     if (s_checkline_trace)
                     { std::fprintf(stderr,
-                                   "[checkline] combo=%lld pick=%d k=%zu name=%s aura=%d host=%d "
-                                   "cost=%s ok=%d\n",
-                                   combo, my_pick, k, pending[k].name.c_str(), (int)aura, host,
-                                   cost.ToString().c_str(), (int)cost_ok); }
+                                   "[checkline] ta=%d combo=%lld pick=%d k=%zu name=%s aura=%d "
+                                   "host=%d banked=%d cost=%s ok=%d\n",
+                                   ta, combo, my_pick, k, pending[k].name.c_str(), (int)aura,
+                                   host, (int)banked, cost.ToString().c_str(), (int)cost_ok); }
                     if (!cost_ok) { continue; }
+                    SubManaCost(g_line_unpaid_cost, cost);   // paid -> no longer owed (clamped)
                     if (pending[k].rock && pending[k].def)   // freshly-cast rock funds later casts
                     {
                         Permanent perm;
@@ -39119,6 +39302,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             out.reason  = "rules-legal (a filter-aware affordability simulation can execute it), but "
                           "the search never enumerated this line";
             return out;
+        }
         }
         }
     }
