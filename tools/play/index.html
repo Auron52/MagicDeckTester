@@ -238,6 +238,9 @@
   .thumb.pretap-src { cursor:pointer; box-shadow:0 0 0 1px #2f6b78 inset; }
   .thumb.pretap-src:hover { box-shadow:0 0 0 2px #7fd1e0, 0 0 8px rgba(127,209,224,.45); }
   #planbar .chip.pretap { border-color:#2f6b78; background:#14262b; } #planbar .chip.pretap .nm { color:#7fd1e0; }
+  /* LINE MACROS: the boundary between two auto-committed segments (a macro iteration, or a fused
+     Clue crack waiting for its Clue). A separator, not a control -- it is not clickable. */
+  #planbar .segbrk { color:#6f7d8c; font-size:11px; padding:0 3px; align-self:center; user-select:none; }
   /* Equipment in play: DRAGGED onto a creature to equip it, the same gesture as an Aura (the plan
      chip / hand aura use .aura). Grab cursor + a badge, because "drag me" has no other affordance. */
   .thumb .eqbadge { position:absolute; bottom:2px; left:2px; background:rgba(240,190,120,.95); color:#0c1116;
@@ -568,7 +571,12 @@ let S = { choices:[], history:[], decision:null, prev:null, over:false, result:n
           // face picker for a source that makes more than one colour. Same arm-then-click shape as
           // leMode / vialMode / blinkMode, and for the same reason: it must not change what a plain
           // board click already does.
-          tapMode:false, tapPick:null };
+          tapMode:false, tapPick:null,
+          // LINE MACROS (docs/design/viewer-line-macros.md). `repeatPick` is the open "repeat the
+          // queued block how many times?" dialog -- null when closed. There is no armed MODE here:
+          // a repeat acts on the line the human has already built, so it needs no board click and
+          // must not change what one does.
+          repeatPick:null };
 
 // The SELECTED deck entry (see /api/decks): carries the decklist file name and, for an
 // archived list, the version folder it lives in. Both travel on every request.
@@ -643,7 +651,10 @@ function queueCard(name, kind, target, targetName) {
   LB.stampPlanNums(S.decision, S.plan);
   renderBoard();
 }
-function removePlanAt(i) { S.plan.splice(i,1); renderBoard(); }
+// Removing a FUSED half removes both halves (LB.removeFusedAt) -- an Investigate whose Clue is
+// never cracked is not half of what the human asked for, it is a different play. Every other entry
+// splices exactly as before.
+function removePlanAt(i) { S.plan = LB.removeFusedAt(S.plan, i); renderBoard(); }
 // Legal enchant targets a hand Aura can attach to, harvested from the enumerated plans (every
 // (aura, target) the engine offers appears as an action with enchant_target). Returns a map
 // num -> creature name; empty for a non-Aura (so drop-to-enchant only fires for real auras).
@@ -805,7 +816,7 @@ function retargetPlanAura(planIdx, num) {
   renderBoard();
   return true;
 }
-function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.tapMode=false; S.tapPick=null; hideVerdict(); renderBoard(); }
+function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.tapMode=false; S.tapPick=null; S.repeatPick=null; hideVerdict(); renderBoard(); }
 
 // ---- rendering -------------------------------------------------------------
 // Colored counter badges for a permanent {counters:[{kind,label,count}]}. One circle per kind.
@@ -978,9 +989,21 @@ function activatableSources(){
                 + (a.verb==='blink' ? '|'+a.blink_target+'|'+(a.blink_count||1) : '');
       (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload,
                                          repeatable:!!a.repeatable,
+                                         makesClue:!!a.makes_clue,
                                          blinkTarget:(a.verb==='blink' ? a.blink_target : undefined),
                                          blinkCount:(a.verb==='blink' ? (a.blink_count||1) : undefined),
                                          blinkTargetName:(a.verb==='blink' ? a.blink_target_name : undefined) };
+      // FUSED "Investigate & crack" (docs/design/viewer-line-macros.md): a SECOND, synthetic option
+      // beside the plain Investigate, so the picker offers both and the human's ordinary click is
+      // unchanged. It is synthesised in the viewer rather than enumerated by the engine because
+      // there is nothing for the engine to enumerate -- the Clue does not exist yet, so its crack
+      // belongs to the NEXT decision. The engine's own clue-fusion doctrine is a SEARCH shortcut and
+      // is explicitly excluded from human play; this is the human-queue analogue of the same idea.
+      if (a.makes_clue) {
+        (opts[src]=opts[src]||{})[key+'|fuseclue'] =
+          { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload,
+            repeatable:false, fuseClue:true };
+      }
       // REPEATABLE (engine flag: no {T}, no sacrifice -- a blink outlet, Essence Depleter's drain):
       // the click cap is MANA, which the viewer cannot compute, not one-per-plan. An engine Plan
       // holds at most one activation of a source, so the per-plan count above caps these at 1 and
@@ -1108,6 +1131,15 @@ function queueActivation(src, opt){
   const sac = isSacOutletSource(src);
   const cap = activatableSources()[src]||0, have = activateCount(src);
   S.actPick = null;
+  // FUSED "Investigate & crack": two ordinary entries, the second DEFERRED so it validates against
+  // the decision the Investigate produces -- where the Clue exists, is individually addressable and
+  // (no {T} in its sac cost) is crackable the same turn. Nothing else in the queue path changes.
+  if (opt.fuseClue) {
+    LB.fusedInvestigateEntries(src, opt).forEach(e => S.plan.push(e));
+    flashHint(`${src}: investigating, then cracking the Clue it makes — two lines, committed back to back. Total {4} + {2}, draws a card.`);
+    renderBoard();
+    return;
+  }
   // A sac outlet's verb is sacout=, whatever the action said — the engine only tags `verb` on the
   // kinds with a dedicated one, and `sacout` predates that field.
   S.plan.push({ name:opt.name, src, kind:'activate', verb:(sac ? 'sacout' : (opt.verb||'cast')),
@@ -1204,6 +1236,76 @@ function renderTapPicker(){
     el.onclick=()=>{ const c=el.dataset.tapface;
       if (!c) { S.tapPick=null; renderBoard(); return; }
       queuePreTap({ name:pick.name, num:pick.num }, c); };
+  });
+}
+// ---- LINE MACROS (docs/design/viewer-line-macros.md) -----------------------------------------
+// USER, EldraziDisplacerFlicker 2026-09: "a shortcut for the create clue + sacrifice and maybe even
+// a way to multistack draw + untap + draw + untap since it is really slow doing it manually,
+// especially when the engine slows down."
+
+// The NON-GENERIC pips one queued entry wants, as W/U/B/R/G/C letters -- the input to the `need=`
+// token LB.untapNeed builds. Read off what the ENGINE published, never re-derived from a card name:
+//   * an ACTIVATION -> the `cost_pips` its enumerated action carries (src/main.cpp emits it);
+//   * a hand CAST   -> the pips in the hand card's `cost` display string ("{1}{U}" -> "U").
+// Generic is deliberately excluded on both paths: any source pays it, so it constrains no untap.
+// A hybrid pip ("{G/W}") is skipped rather than guessed -- it demands neither colour specifically,
+// and inventing one would divert an untap toward a colour the human may not need.
+function entryPips(p) {
+  if (!p) return '';
+  if (p.kind === 'activate') {
+    const d = S.decision, want = p.src || p.name;
+    for (const pl of ((d && d.plans) || [])) {
+      for (const a of (pl.actions || [])) {
+        if (a && a.cost_pips && (a.activate_source || a.card) === want) return a.cost_pips;
+      }
+    }
+    return '';
+  }
+  const hc = (((S.decision||{}).me||{}).hand || []).find(c => c.name === p.name);
+  const cost = (hc && hc.cost) || '';
+  let out = '';
+  // Single-symbol groups only: "{1}" is generic (a digit), "{G/W}" is hybrid (contains '/').
+  cost.replace(/\{([^}]*)\}/g, (m, sym) => {
+    if (sym.length === 1 && 'WUBRGC'.indexOf(sym) >= 0) out += sym;
+    return m;
+  });
+  return out;
+}
+
+// REPEAT xN. Purely a QUEUE edit: it expands the block N times into S.plan and nothing else happens
+// until the human commits. The repetitions then commit as consecutive segments (LB.repeatBlock marks
+// each one deferred; advanceTo's existing chain auto-commits them), which is byte-for-byte the
+// sequence the human would have produced by clicking the block out N times by hand. So there is no
+// new protocol, no engine count token, and a macro'd game replays from its saved reference for free.
+const REPEAT_COUNTS = [2,3,4,5,8,10,15,20];
+// Offered only for a block that is actually repeatable as a block: 2+ entries, none of them a land
+// drop or a Land's Edge discard (both are once-per-turn resources, so repeating them is a line the
+// engine will simply reject) and no pre-tap (a hand-forced tap names a SPECIFIC untapped copy, which
+// the second iteration's board no longer has -- see the doc's "deliberately not done").
+function repeatableBlock() {
+  const p = S.plan;
+  if (!p || p.length < 2) return false;
+  return !p.some(e => e.kind==='land' || e.kind==='le' || LB.isPreTap(e));
+}
+function repeatPickerHtml(){
+  let h=`<h3>Repeat the queued line — how many times?</h3>`;
+  h+=`<div class="sub">The whole queued block (${S.plan.length} action${S.plan.length===1?'':'s'}) is stacked this many times and commits as that many consecutive lines, without another click. Same result as clicking it out by hand — the engine still pays every iteration for real and stops at the first one it cannot.</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
+  REPEAT_COUNTS.forEach(n=>{ h+=`<button class="primary" data-rep="${n}">×${n}</button>`; });
+  h+=`<button class="ghost" data-rep="0">Cancel</button></div>`;
+  return h;
+}
+function renderRepeatPicker(){
+  const panel=$('decpanel'), back=$('decback');
+  back.className='modal'; back.style.display='block';
+  panel.className='show modal'; panel.innerHTML=repeatPickerHtml();
+  panel.querySelectorAll('[data-rep]').forEach(el=>{
+    el.onclick=()=>{ const n=+el.dataset.rep; S.repeatPick=null;
+      if (n>1) {
+        S.plan = LB.repeatBlock(S.plan, 0, S.plan.length, n);
+        flashHint(`Queued ×${n} — ${S.plan.length} actions, committing as ${n} consecutive lines. ✕ on a chip removes one; Clear starts over.`);
+      }
+      renderBoard(); };
   });
 }
 function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
@@ -1645,6 +1747,7 @@ function renderBoard() {
   if (dec) { wireDecisionBoard(d, dec); renderDecisionPanel(d, dec); }
   else if (S.actPick) renderActivationPicker();   // queue-time "which ability?" (see below)
   else if (S.tapPick) renderTapPicker();          // queue-time "tap it for which mana?" (manual tap/pay)
+  else if (S.repeatPick) renderRepeatPicker();    // queue-time "repeat the block how many times?" (line macros)
   else hideDecPanel();
 }
 
@@ -1689,6 +1792,10 @@ function renderPlanbar() {
               : p.verb==='sfput'     ? ' ⟳ put from hand'
               : p.verb==='jittemode' ? ' \u27f3 ' + jitteModeLabel(p.mode)
               : p.verb==='sacout'    ? ' ⟳ sacrifice'
+              // The two halves of a fused "Investigate & crack" say which half they are, so the
+              // pair reads as one gesture spread over two commits rather than two mystery chips.
+              : p.fuse==='clue'      ? ' 🔍 investigate → Clue'
+              : p.fused==='clue'     ? ' 💎 crack the Clue (draw)'
               :                        ' ⟳ ability';
     const tag = (p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':act)
               + (p.targetName?` → ${esc(p.targetName)}`:'');
@@ -1698,7 +1805,11 @@ function renderPlanbar() {
     const isAura = isEquipChip
                 || (p.kind!=='land' && p.kind!=='activate' && Object.keys(enchantTargetsFor(p.name)).length>0);
     const drag = isAura ? ` draggable="true" data-pi="${i}" title="drag onto a creature to ${isEquipChip?'equip it':'enchant it'}"` : '';
-    return `<span class="chip ${cls}${isAura?' aura':''}"${drag}><span class="n">${i+1}</span>`+
+    // A DEFERRED entry starts its own committed line (a macro iteration, or a fused Clue crack that
+    // has to wait for the Clue to exist). Marking the boundary is what makes a 20-chip macro
+    // readable as "the same 2 actions, ten times" instead of one undifferentiated wall.
+    const brk = LB.isDeferred(p) ? `<span class="segbrk" title="commits as a separate line, automatically">⏎</span>` : '';
+    return brk + `<span class="chip ${cls}${isAura?' aura':''}"${drag}><span class="n">${i+1}</span>`+
       `<span class="nm" data-name="${esc(p.name)}">${esc(p.name)}${tag}</span><span class="x" data-rm="${i}">✕</span></span>`;
   }).join('');
   const nLE = leCount();
@@ -1716,6 +1827,9 @@ function renderPlanbar() {
   pb.innerHTML = `<button id="commit" class="primary" title="${empty?'Pass just THIS phase — you\'ll still get Main 2 to cast in (use Pass turn to skip the whole turn)':'Commit this line; you stay in this phase to re-decide if it draws a card or opens an ability (e.g. a same-turn Horizon Canopy sac)'}">${empty?'Pass phase':'Commit Line'}</button>`+
     `<button id="committurn" class="primary" title="${empty?'Do nothing this turn and skip to the next turn':'Commit this line, then auto-pass the rest of this turn (skip Main 2 / any re-prompts)'}">${empty?'Pass turn':'Commit turn'}</button>`+
     (empty?'':`<button id="clearp" class="ghost">Clear</button>`)+
+    // LINE MACROS: repeat the queued block. Offered only when the block really is repeatable (see
+    // repeatableBlock), so it is never a dead control -- the same rule the ⛏ Tap mana toggle follows.
+    (repeatableBlock()?`<button id="repeatp" class="ghost" title="Stack the whole queued line N times — it commits as N consecutive lines without another click. For grinding a loop (draw, untap, draw, untap...) without clicking every activation.">⟲ Repeat ×N</button>`:'')+
     `<span class="lbl">Turn plan</span>`+
     (empty?`<span class="empty">double-click or drag cards in hand to build a line</span>`:`<div class="chips">${chips}${leChip}</div>`)+
     tip+
@@ -1724,6 +1838,7 @@ function renderPlanbar() {
   $('committurn').onclick = commitTurn;
   wireComboOffButton();
   if ($('clearp')) $('clearp').onclick = clearPlan;
+  if ($('repeatp')) $('repeatp').onclick = ()=>{ S.repeatPick = true; renderBoard(); };
   pb.querySelectorAll('.x[data-rm]').forEach(x=>x.onclick=()=>removePlanAt(+x.dataset.rm));
   // Aura chips: drag onto a creature in the field to (re)assign the enchant target (routes through
   // the #playfield drop handler via the stamped text/planidx; see retargetPlanAura).
@@ -2354,19 +2469,35 @@ function applyAccepted(planIndex, label) {
   // rather than on a channel of their own is what makes a pre-tapped line reproducible from a saved
   // reference for free: `cast_order` is already recorded per main-phase decision and already
   // reconstructed verbatim by the reference checks.
-  const entries = (S.plan||[]).filter(p => p.kind !== 'land' && p.kind !== 'le');
+  //
+  // SCOPED TO THE COMMITTING SEGMENT (line macros). `plan0.actions` describes the ONE line being
+  // committed now, so the multiset test below has to compare it against that line's entries, not
+  // against the whole queue. It made no difference while every multi-segment plan was a bonus land
+  // drop (whose extra segments carry no actions) or a stack of one repeated ability (one action,
+  // so the `acts.length >= 2` guard already declined) -- but a macro's segment is a genuine
+  // multi-action line, and unscoped the test compares 2 actions against all 6 queued entries,
+  // fails, and drops the macro back to enumerator order. Which is the exact defect
+  // docs/design/human-line-order-as-is.md exists to fix, re-introduced one layer up.
+  const seg0    = LB.segmentParts(S.plan||[])[0] || [];
+  const entries = seg0.filter(p => p.kind !== 'land' && p.kind !== 'le');
   const taps    = entries.filter(p => LB.isPreTap(p)).map(p => LB.preTapToken(p));
   const queued  = entries.filter(p => !LB.isPreTap(p)).map(p => p.name);
   const ordered = entries.map(p => LB.isPreTap(p) ? LB.preTapToken(p) : p.name);
   const acts   = ((plan0 && plan0.actions) || []).map(a => a.card);
+  // QUEUED-CONTINUATION UNTAP DEMAND (docs/design/viewer-line-macros.md): the colours everything
+  // STILL QUEUED behind this segment wants, so an ETB untap inside this line can serve the next
+  // iteration instead of raw yield. Rides the same list as the taps, for the same reasons.
+  // Empty continuation -> empty token -> omitted -> byte-identical to before.
+  const need = LB.untapNeedToken((S.plan||[]).filter(p => seg0.indexOf(p) < 0), entryPips);
+  const withNeed = a => need ? a.concat([need]) : a;
   if (dec0 && dec0.main_ordinal != null && acts.length >= 2 && msKey(queued) === msKey(acts)) {
     coKey = String(dec0.main_ordinal);
-    (S.castOrder=S.castOrder||{})[coKey] = ['*'].concat(ordered);  // the whole line, as-is
+    (S.castOrder=S.castOrder||{})[coKey] = withNeed(['*'].concat(ordered));  // the whole line, as-is
   } else if (canon && canon.length >= 2 && dec0.main_ordinal != null) {
     const human = queued.filter(n => canon.includes(n));
     if (msKey(human) === msKey(canon)) {   // same cast multiset -> the queued order is authoritative
       coKey = String(dec0.main_ordinal);
-      (S.castOrder=S.castOrder||{})[coKey] = taps.concat(human);
+      (S.castOrder=S.castOrder||{})[coKey] = withNeed(taps.concat(human));
     }
   }
   // Neither pin fired (a one-action plan, an implicit sac-for-mana), but the human still forced
@@ -2375,9 +2506,9 @@ function applyAccepted(planIndex, label) {
   // returns without setting searched_order); the taps go in up front, which is what "tap these,
   // then play the line" means. Without this branch a pre-tap on a single-cast line would be
   // silently dropped -- the exact failure the fallback exists to prevent.
-  if (!coKey && taps.length && dec0 && dec0.main_ordinal != null) {
+  if (!coKey && (taps.length || need) && dec0 && dec0.main_ordinal != null) {
     coKey = String(dec0.main_ordinal);
-    (S.castOrder=S.castOrder||{})[coKey] = taps;
+    (S.castOrder=S.castOrder||{})[coKey] = withNeed(taps);
   }
   S.prev = S.decision; S.choices.push(planIndex);
   // A multi-segment line (two land drops) keeps the REST of the plan queued: only the land just
@@ -2633,7 +2764,9 @@ function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; 
 // opens this picker for its two counter modes only, and is dragged for the attach.
 // Reuses #decpanel, which is free during a main phase (main_phase is not in SUBDECISIONS).
 function activationPickerHtml(pick){
-  const label = o => o.verb==='sfput'     ? `Put ${o.name} onto the battlefield`
+  const label = o => o.fuseClue           ? `Investigate & crack — make a Clue and sacrifice it to draw`
+                   : o.makesClue          ? `Investigate — make a Clue (crack it later)`
+                   : o.verb==='sfput'     ? `Put ${o.name} onto the battlefield`
                    : o.verb==='attachall' ? `Attach every Equipment to ${pick.src}`
                    : o.verb==='jittemode' ? jitteModeLabel(o.mode)
                    : o.verb==='gyexile'   ? (o.mode===2 ? 'Exile a creature card from a graveyard — gain 2 life'
@@ -3826,7 +3959,7 @@ function autoResolveDecision(dec){
   return true;
 }
 function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n));
-  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.boardSel=null; S._selFor=null;
+  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.repeatPick=null; S.boardSel=null; S._selFor=null;
   S.actPick=null;   // a half-open activation picker belongs to the decision it was opened on
   // ...and so does an armed MANUAL TAP/PAY mode or a half-open face picker: `taps` is computed
   // per frame off the board the engine just sent, so carrying either across a decision would
