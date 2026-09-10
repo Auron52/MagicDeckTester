@@ -24419,16 +24419,32 @@ static int  HumanSatFactor()
 { static const int v = EnvInt("MTG_HUMAN_SAT_FACTOR", 1); return v; }
 static bool HumanSatDiagOn()
 { static const bool v = EnvOn("MTG_HUMAN_SAT_DIAG"); return v; }              // stderr calibration
+// MTG_HUMAN_SAT_LEGACY_ADDER_BAIL=1 restores the FIRST cut of this predicate: bail outright when any
+// candidate can ADD mana, and (because that made mana monotonically consumed) price the lump over
+// only the individually-payable candidates. Kept as the one-binary A/B control for the fix, because
+// the artifact that motivated it -- a tools/play rejection recording the user's own pick indices --
+// only replays against the engine those indices were recorded on. Off by default; nothing reads it
+// outside HumanEnumSaturated.
+static bool HumanSatLegacyAdderBail()
+{ static const bool v = EnvOn("MTG_HUMAN_SAT_LEGACY_ADDER_BAIL"); return v; }
 // Largest number of CHOSEN actions a collapsed plan may carry. 1 would be the pure "one variant per
 // distinct (action, target)" reading and is sound for any K >= 1 by the same argument (a K+1 action
 // plan is the K-action plan committed and then one more click), but K is a MENU-QUALITY knob, not a
-// correctness one, and it costs almost nothing: the fan's action-count histogram is binomial, so on
-// the seed-8 T3 frame K=4 already keeps only 8,378 of 101,568 plans (12x) while K=1 keeps 22. Set at
-// 4 because that is the deepest COMBINED plan any saved reference actually picked at or above the
-// floating floor (EDF s8_gi7 T3, "Conservatory: investigate, Mariposa: draw a card, Displacer: blink,
-// Clue Token: sacrifice"), so no user-owned line loses the plan it recorded.
+// correctness one.
+//
+// 6, MEASURED, not chosen for elegance. K=4 was the first cut, sized off the deepest combined plan
+// any saved *reference* picked above the floating floor. That set was not representative: replaying
+// the user's own seed-9 gi=8 turn-4 session frame-for-frame against the pre-collapse engine (content
+// -anchored, the rule viewer_protocol_check uses), K=4 silently re-anchored SEVEN of their clicks
+// onto a SHORTER plan and left the board 7 floating mana light by the end -- the line they actually
+// played uses 5- and 6-action plans (a blink plus three Clue cracks plus the two investigate lands).
+// K=5 and K=6 both reproduce the line exactly (0 drift, 0 anchor-fail over 47 matched frames); K=6
+// is taken for margin, since the cost is only on the subset axis (4,704 -> 1,639 plans at K=6 vs
+// 715 at K=4) while the ORDER collapse -- the dominant term, 8.0x on the frame that motivated all
+// this -- is untouched by K. A menu that drops the plan the player is clicking is the same class of
+// defect as the display cap hiding their target, and it is not worth 50 ms.
 static int  HumanSatMaxActions()
-{ static const int v = EnvInt("MTG_HUMAN_SAT_MAXACT", 4); return v; }
+{ static const int v = EnvInt("MTG_HUMAN_SAT_MAXACT", 6); return v; }
 // Only collapse subsets once the cross-product is actually BIG. Below this the full fan costs
 // microseconds and there is nothing to buy -- while collapsing it would drop combined plans a
 // reference recorded on a perfectly cheap frame (measured: an 11-plan EDF frame cut to 4, an
@@ -24461,39 +24477,54 @@ static bool HumanEnumSaturated(const GameState& state,
         return false;
     }
 
-    // A candidate that ADDS mana breaks the monotonicity the payable-filter below relies on (a cast
-    // that untaps five lands can fund a follow-up the pool alone could not), so its presence means
-    // the interaction the collapse assumes away is live. The credit scan above already covers
-    // rituals and rocks; this is the ETB-untap refund (Peregrine Drake / Cloud of Faeries), which
-    // the enumerator credits through EtbUntapLandsCredit. Absent -> every deck without one is
-    // unaffected by this clause.
-    for (const Action& a : cands)
-    {
-        if (a.ritual_float > 0 || a.rock_mana.Total() > 0
-            || (a.def && a.def->params.etb_untap_lands > 0))
-        {
-            if (HumanSatDiagOn())
-            {
-                std::fprintf(stderr, "[human-sat] t%d floating=%d MANA-ADDER in cands (%s) "
-                                     "-> full fan\n",
-                             state.turn_number, floating, a.card_name.str().c_str());
-            }
-            return false;
-        }
-    }
-
     // MAXIMAL demand of ANY single enumerated plan: the dearest option of each mutually-exclusive
     // group (the odometer takes at most one member per group) plus EVERY independent action (the
     // odometer's powerset can take them all). No enumerated selection can cost more than this.
     //
-    // ONLY INDIVIDUALLY-PAYABLE candidates count. With no credit and no mana-adder live (both
-    // established above), mana is monotonically CONSUMED, so an action the pool cannot pay on its
-    // own cannot become payable by adding more actions -- it is unpayable in every selection and
-    // contributes nothing to the interaction question. Excluding it is what lets the check answer
-    // the real board instead of the enumerator's optimism: the seed-8 T3 go-off hand holds three
-    // Eldrazi Displacers ({2}{W}) on a board with no white source at all, and counting their three
-    // white pips against four wild units answered "not saturated" on the exact 101,568-plan frame
-    // that motivated this work.
+    // EVERY CANDIDATE COUNTS, AND NO REFUND IS CREDITED. This is what makes the check sound in the
+    // presence of a MANA-ADDER -- a Peregrine Drake / Cloud of Faeries whose ETB untaps lands, a
+    // ritual, a rock. The first cut instead BAILED whenever such a candidate existed, and on this
+    // deck that is nearly always: measured on the user's own seed-9 gi=8 turn-4 session, 22 of 48
+    // predicate evaluations answered "MANA-ADDER in cands (Peregrine Drake) -> full fan", and they
+    // were precisely the expensive frames (float 62-90, 4,704-plan fan, 600-950 ms per blink click)
+    // -- so the shortcut never armed on the go-off it exists for.
+    //
+    // The bail is unnecessary once the lump is priced with ZERO credit. If the pool ALONE covers
+    // every candidate's PRINTED cost simultaneously, then supply at any point in any line is at
+    // least (pool - spent) and remaining cost is at most (demand - spent), colour for colour by
+    // CanPayFlat's own accounting -- so no ordering can fail to pay, and a refund can only ADD
+    // headroom on top. The refund is an engine-deterministic consequence of a resolution, not a
+    // plan dimension, so it cannot make two orderings differ in WHAT resolves.
+    //
+    // It also settles the converse worry -- a subset the flat pool rejects but SubsetPayableSequential
+    // admits *because* the untapper's own cast funds it (the untapper-reservation chain and its
+    // hoisted retry). Such a subset needs the refund to be payable; the lump test above requires
+    // everything payable WITHOUT it; so a board carrying one is by construction NOT saturated and
+    // gets the full fan. The two cannot both be true at once, which is exactly the separation wanted.
+    //
+    // The price of dropping the individually-payable filter is that enumeration OPTIMISM now counts:
+    // a candidate the board cannot actually pay (the seed-8 hand's three {2}{W} Eldrazi Displacers on
+    // a white-less board) still charges the lump its pips. That is the conservative direction -- it
+    // can only refuse to collapse -- and it is measured to still arm on both motivating frames.
+    const bool legacy_bail = HumanSatLegacyAdderBail();     // A/B control, see the reader
+    if (legacy_bail)
+    {
+        for (const Action& a : cands)
+        {
+            if (a.ritual_float > 0 || a.rock_mana.Total() > 0
+                || (a.def && a.def->params.etb_untap_lands > 0))
+            {
+                if (HumanSatDiagOn())
+                {
+                    std::fprintf(stderr, "[human-sat] t%d floating=%d MANA-ADDER in cands (%s) "
+                                         "-> full fan (LEGACY)\n",
+                                 state.turn_number, floating, a.card_name.str().c_str());
+                }
+                return false;
+            }
+        }
+    }
+
     ManaCost demand;
     bool priceable = true;
     auto add_cost = [&](const ManaCost& c)
@@ -24509,7 +24540,7 @@ static bool HumanEnumSaturated(const GameState& state,
         int dearest = -1, best_mv = -1;
         for (int j : g)
         {
-            if (!pool.CanPay(cands[j].cost)) { continue; }
+            if (legacy_bail && !pool.CanPay(cands[j].cost)) { continue; }
             const int mv = cands[j].cost.ManaValue();
             if (mv > best_mv) { best_mv = mv; dearest = j; }
         }
@@ -24517,7 +24548,8 @@ static bool HumanEnumSaturated(const GameState& state,
     }
     for (int j : independent)
     {
-        if (pool.CanPay(cands[j].cost)) { add_cost(cands[j].cost); }
+        if (legacy_bail && !pool.CanPay(cands[j].cost)) { continue; }
+        add_cost(cands[j].cost);
     }
     if (!priceable)
     {
