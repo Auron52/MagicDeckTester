@@ -9080,6 +9080,19 @@ inline void TrickDraw(GameState& state, int controller, int n)
         for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
         { g_play_draw_sink->push_back({ state.turn_number, pl.hand[hi].m_name.str() }); }
     }
+    // ...and the SAVED LOG, which this missed until 2026-09-10 while already feeding the viewer
+    // sink above -- i.e. the screen showed the draw and the log did not, the exact inversion
+    // EmitReveal's comment calls "the wrong way round". This is the resolver the trick family uses
+    // (Oracle's Restoration, Fists of Flame, Expedite, Ancestral Anger...), so it is the one that
+    // made `explain_game.py` blame a shuffle for mirrorwing gi173 -- a line with no fetch, tutor or
+    // shuffle in it at all, whose two sides were simply the same library consumed one card apart.
+    // Folding into the play digest is the accepted price (see the EffectHandler cast_draw site);
+    // nothing in play reads the digest, so no win turn moves.
+    if (g_reveal_logger != nullptr)
+    {
+        for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
+        { g_reveal_logger->LogDraw(pl.hand[hi].m_number, pl.hand[hi].m_name); }
+    }
 }
 
 // Treasures `controller` controls (subtype "Treasure" -- only ever the "Treasure Token" def).

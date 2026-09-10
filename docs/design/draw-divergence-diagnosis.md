@@ -226,16 +226,17 @@ FIRST is the EARLIEST) that a single pass at a committed depth does not supply.
 
 ### ...and the exit MEASURES CLEAN, so the suspicion is retired
 
-Priced with the hatch across 19 decks x 50 games at **b320** (16x the gate budget — the practical
+Priced with the hatch across all 20 decks x 50 games at **b320** (16x the gate budget — the practical
 stand-in for unbudgeted, which on fivecolour/melira would not terminate in a usable window):
 
 | exit | quality | units |
 |---|---|---|
 | ON (shipped) | baseline | 1.00x |
-| OFF | better 0 / **worse 1** / identical 18, NET +0.0200 | **5.16x** |
+| OFF | better 0 / **worse 1** / identical 19, NET +0.0200 | **6.76x** |
 
-Turning the prune off finds **no better line anywhere** and costs **five times the work**; the single
-difference (hinata +0.0200) is itself churn, since 5x the work per node buys less search inside the
+Turning the prune off finds **no better line anywhere** and costs nearly **seven times the work**
+(fivecolour alone: identical 5.0600 either way, 28.8M units vs 245.0M — 8.50x); the single quality
+difference (hinata +0.0200) is itself churn, since 6.8x the work per node buys less search inside the
 same budget. So the ID premise holds in practice, the exit is not lossy, and it is one of the
 largest prunes in the search. The hatch stays as an instrument, default ON.
 

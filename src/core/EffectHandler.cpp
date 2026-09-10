@@ -586,10 +586,33 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
     }
 
     // Magma Opus rider: "draw two cards." Drawn to hand on resolution; mirrors apply_one (lockstep).
+    //
+    // AND IT IS LOGGED, which it was not until 2026-09-10. The turn's draw step (GameEngine) and the
+    // `draw_spell` template both call LogDraw; this rider did not, so Oracle's Restoration's draw was
+    // invisible while Ponder's was recorded. That is not a cosmetic gap: `explain_game.py` compares
+    // the two logged draw sequences with a naive zip-by-index, so ONE unlogged draw shifts a line's
+    // stream by one, the tool then compares two different game MOMENTS, and it blames a shuffle.
+    // It did exactly that on mirrorwing gi173 -- reported as "a fetch/shuffle resolved differently"
+    // for a line containing no fetch, no tutor and no shuffle at all; the real story was the same
+    // library consumed one card apart because this cantrip was cast a turn earlier.
+    //
+    // Logging it MOVES THE PLAY DIGEST (LogDraw folds "D" + card number), so this costs a
+    // ground-truth rebaseline on every deck running such a card. That is the trade this codebase has
+    // already ruled on, in EmitReveal's comment: a digest-free side channel added to dodge a
+    // rebaseline "is the wrong way round -- it made the saved log strictly less informative than the
+    // screen... Pay the rebaseline." Win turns are untouched: nothing in play reads the digest.
     if (def.params.cast_draw > 0)
     {
         Player& cp = state.players[entry.controller_index];
+        const std::size_t before = cp.hand.size();
         cp.cards_drawn_this_turn += cp.library.DrawN(def.params.cast_draw, cp.hand);
+        // g_reveal_logger is null in every search/rollout scope (RevealLogPause), so this fires only
+        // for the REAL game's resolution -- the same guard every reveal site uses.
+        if (g_reveal_logger != nullptr)
+        {
+            for (std::size_t i = before; i < cp.hand.size(); ++i)
+            { g_reveal_logger->LogDraw(cp.hand[i].m_number, cp.hand[i].m_name); }
+        }
     }
 
     MoveToGraveyard(state, entry);
