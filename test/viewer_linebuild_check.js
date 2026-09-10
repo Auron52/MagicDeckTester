@@ -379,6 +379,90 @@ function checkStackedActivations() {
   return fails;
 }
 
+// LINE MACROS (docs/design/viewer-line-macros.md). The macro and the fused clue are deliberately
+// pure QUEUE edits -- they expand into ordinary entries and commit through the existing segment
+// chain -- so this file, which drives the real browser queue logic headlessly, is the layer that
+// can see them at all. The engine half (the `need=` untap promotion, and that each segment really
+// lands) is test/viewer_line_macros_check.py.
+function checkLineMacros() {
+  const fails = [];
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  // A {T} draw outlet (NOT engine-repeatable: it taps, so it genuinely cannot go twice -- until a
+  // blink untaps it) and a repeatable blink. This pairing is the whole point: the existing
+  // `repeatable` split cannot express it, which is why `defer` had to exist.
+  const draw  = () => ({ name:'Mariposa Military Base', src:'Mariposa Military Base',
+                         kind:'activate', verb:'cast' });
+  const blink = () => ({ name:'Emiel the Blessed', src:'Emiel the Blessed', kind:'activate',
+                         verb:'blink', repeatable:true, blinkTarget:10, blinkCount:1 });
+  const ITER = 'cast=Mariposa Military Base;blink=Emiel the Blessed@10*1';
+
+  // ---- repeatBlock: N iterations, each its own committed line ----------------------------------
+  const x3 = LB.repeatBlock([draw(), blink()], 0, 2, 3);
+  if (x3.length !== 6) fails.push(`repeatBlock x3 made ${x3.length} entries, want 6`);
+  if (!eq(LB.encodeSegments(x3), [ITER, ITER, ITER]))
+    fails.push(`x3 -> ${JSON.stringify(LB.encodeSegments(x3))}`);
+  // Only the FIRST entry of each repetition is deferred: marking them all would split one iteration
+  // into one segment per action, which is a different (and wrong) line.
+  if (!eq(x3.map(p => !!p.defer), [false, false, true, false, true, false]))
+    fails.push(`x3 defer flags -> ${JSON.stringify(x3.map(p => !!p.defer))}`);
+
+  // n<=1 is a no-op, and an empty block cannot be repeated.
+  if (LB.repeatBlock([draw(), blink()], 0, 2, 1).length !== 2) fails.push('x1 was not a no-op');
+  if (LB.repeatBlock([draw()], 0, 0, 5).length !== 1) fails.push('empty block was repeated');
+
+  // Entries are COPIED, not shared: dropFirstSegment peels by object IDENTITY, so a shared object
+  // would make two iterations vanish together. Peel all three and check it converges.
+  let rest = x3, peeled = 0;
+  while (rest.length && peeled < 10) { rest = LB.dropFirstSegment(rest); peeled++; }
+  if (peeled !== 3) fails.push(`x3 peeled in ${peeled} segments, want 3`);
+
+  // ---- the deferred entry carries its BLOCK, not just itself -----------------------------------
+  // Three entries where the middle one is deferred -> [a], [b, c]. If `defer` only split off its own
+  // entry, the third would land back in the first segment and the iteration would be torn apart.
+  const trio = [draw(), Object.assign(blink(), { defer:true }), draw()];
+  if (LB.encodeSegments(trio).length !== 2)
+    fails.push(`deferred-middle trio -> ${JSON.stringify(LB.encodeSegments(trio))}`);
+
+  // ---- a plan with NO deferred entry partitions exactly as it always did ------------------------
+  // The byte-identity claim for every recorded line, asserted directly rather than inferred.
+  const plain = [draw(), blink(), blink()];
+  if (!eq(LB.encodeSegments(plain),
+          ['cast=Mariposa Military Base;blink=Emiel the Blessed@10*1',
+           'blink=Emiel the Blessed@10*1']))
+    fails.push(`undeferred plan -> ${JSON.stringify(LB.encodeSegments(plain))}`);
+
+  // ---- fused "investigate & crack" --------------------------------------------------------------
+  const fused = LB.fusedInvestigateEntries('Conservatory', { verb:'cast', mode:null });
+  if (!eq(LB.encodeSegments(fused), ['cast=Conservatory', 'cast=Clue Token']))
+    fails.push(`fused clue -> ${JSON.stringify(LB.encodeSegments(fused))}`);
+  // Removing EITHER half removes both -- half a fused gesture is a different play.
+  if (LB.removeFusedAt(fused, 0).length !== 0) fails.push('removing the investigate left the crack');
+  if (LB.removeFusedAt(fused, 1).length !== 0) fails.push('removing the crack left the investigate');
+  // ...but an ordinary entry beside a fused pair is untouched by either removal.
+  const withOther = [draw()].concat(fused);
+  if (LB.removeFusedAt(withOther, 1).length !== 1)
+    fails.push('removing a fused half also removed an unrelated entry');
+  if (LB.removeFusedAt(withOther, 0).length !== 2)
+    fails.push('removing an ordinary entry disturbed the fused pair');
+
+  // ---- the need= token --------------------------------------------------------------------------
+  const pips = p => ({ 'Eldrazi Displacer':'C', 'Cloud of Faeries':'U', 'Emiel the Blessed':'' }[p.name] || '');
+  if (LB.untapNeedToken([{ name:'Eldrazi Displacer' }, { name:'Cloud of Faeries' }], pips) !== 'need=UC')
+    fails.push(`need token -> ${LB.untapNeedToken([{ name:'Eldrazi Displacer' }, { name:'Cloud of Faeries' }], pips)}`);
+  // A FIXED alphabet order, so the same continuation always produces the same string -- a saved
+  // reference has to replay it byte-for-byte.
+  if (LB.untapNeedToken([{ name:'Cloud of Faeries' }, { name:'Eldrazi Displacer' }], pips) !== 'need=UC')
+    fails.push('need token is order-dependent');
+  // No pips (Emiel's blink is a bare {3}) -> no token -> the untap pick is byte-identical to before.
+  if (LB.untapNeedToken([{ name:'Emiel the Blessed' }], pips) !== '')
+    fails.push('a pip-less continuation still emitted a need= token');
+  if (LB.untapNeedToken([], pips) !== '') fails.push('an empty continuation emitted a need= token');
+  // Duplicates collapse: a demand is a SET, not a count.
+  if (LB.untapNeedToken([{ name:'Eldrazi Displacer' }, { name:'Eldrazi Displacer' }], pips) !== 'need=C')
+    fails.push('repeated demand did not collapse to a set');
+  return fails;
+}
+
 function checkBonusLandDrop() {
   const hand = [{ name: 'Forest', kind: 'land' }, { name: 'Forest', kind: 'land' },
                 { name: 'Mountain', kind: 'land' }, { name: 'Gold Rush', kind: 'nonpermanent' }];
@@ -471,8 +555,12 @@ function main() {
   stackFails.forEach(m => console.log(`  FAIL  stacked activation: ${m}`));
   console.log(`Viewer stacked activations: ${stackFails.length ? 'WRONG' : 'K clicks commit as K segments, one per accepted commit'} ` +
               `(${stackFails.length} FAIL)`);
+  const macroFails = checkLineMacros();
+  macroFails.forEach(m => console.log(`  FAIL  line macro: ${m}`));
+  console.log(`Viewer line macros: ${macroFails.length ? 'WRONG' : 'repeat xN and investigate&crack expand into ordinary segments'} ` +
+              `(${macroFails.length} FAIL)`);
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
-          + mixFails.length + hostFails.length + stackFails.length) ? 1 : 0;
+          + mixFails.length + hostFails.length + stackFails.length + macroFails.length) ? 1 : 0;
 }
 
 process.exit(main());

@@ -1,0 +1,20 @@
+{
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "battlefield": [
+    { "name": "Clue Token", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false },
+    { "name": "Conservatory", "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "library_filler": "Conservatory",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "validate_line": "cast=Clue Token",
+  "expect_verdict": "accept",
+  "comment": "LINE MACROS, the fused 'Investigate & crack' -- SECOND (DEFERRED) half (docs/design/viewer-line-macros.md). Once the Clue is really on the battlefield its '{2}, Sacrifice this token: Draw a card' is an ordinary searched ActivatePermAbility and the crack validates as a plain line -- no {T} in that cost, so a Clue made this turn is crackable this turn (the card's own note). That is the whole reason the fused gesture defers the crack rather than dropping it: the second segment is not a special case, it is this line, run against the board the first segment produces. Two Conservatories pay the {2}."
+}
