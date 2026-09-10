@@ -1,8 +1,9 @@
 # The order-free reuse wave — recovering split keys' residual without reintroducing the bug
 
-**Status: measured, default OFF pending the suite A/B.** Flags: `MTG_FSL_OF_WAVE` (on/off),
-`MTG_OF_WAVE_SHARE` (the gate), plus per-job `of_wave` / `of_wave_share` arms so a sweep runs as ONE
-pooled batch. Probe: `MTG_OF_WAVE_PROBE` (counters only, no behaviour).
+**Status: ADOPTED, default ON since 2026-09-10 (`202f938b`), all three GT tiers rebaselined,
+CI green including Linux/Windows determinism parity.** Flags: `MTG_FSL_OF_WAVE` (on/off, `=0` for the
+A/B), `MTG_OF_WAVE_SHARE` (the gate), plus per-job `of_wave` / `of_wave_share` arms so a sweep runs as
+ONE pooled batch. Probe: `MTG_OF_WAVE_PROBE` (counters only, no behaviour).
 
 Background for everything below: `draw-divergence-diagnosis.md` (how the unsound shortcut was found,
 and the USER rulings that bound what may replace it).
@@ -136,6 +137,20 @@ work units, never the clock), and `Remaining()` is likewise unit-denominated. Co
 identical digests across separate batches, the suite's `--strict` reference reproducibility clean on
 the gating axes (`0 play-drift, 0 enum-gap, 0 mull-drift, 0 contract-fail`), and CI's Linux/Windows
 determinism-parity job green on the adopting commit.
+
+## Held-out confirmation
+
+The share was sized on Hinata at seed 1001 and confirmed across 20 decks at the same seed, so the
+sizing and its confirmation shared a seed. Re-measured on **seed 4004**, held out from both that and
+the regression tier's 2002/3003, 120 games per deck, one pooled batch:
+
+| | |
+|---|---|
+| quality | better 4 / worse 1 / identical 15, **NET -0.0335 t** |
+| cost | **0.7852x** deterministic units |
+
+The single worse deck is melira at +0.0083 (one game in 120). The adoption reproduces on seeds it was
+never tuned against.
 
 ## Reading the counters
 

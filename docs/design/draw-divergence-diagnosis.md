@@ -221,9 +221,23 @@ the arm comparison predates both the verified-only default and split keys.)
 **Not the same as proving the search monotone.** This says the recorded repro is gone, on 42 measured
 cells. `MTG_FS_HORIZON_EXIT=0` was added as a standing A/B hatch for the mechanism that would be the
 prime suspect if it returns — the first-verified-win exit, whose soundness rests on an ID premise
-(*"a pass runs only after every shallower pass found no win"*) that a single pass at a committed depth
-does not supply. On the three games that sit at a later win (s6006 gi255, s7007 gi232, s4004 gi232),
-turning the exit off changes nothing at d7/unlimited, so the premise holds where it has been tested.
+(*"a pass runs only after every shallower pass found no win"* ⇒ all in-horizon wins are TIED ⇒ the
+FIRST is the EARLIEST) that a single pass at a committed depth does not supply.
+
+### ...and the exit MEASURES CLEAN, so the suspicion is retired
+
+Priced with the hatch across 19 decks x 50 games at **b320** (16x the gate budget — the practical
+stand-in for unbudgeted, which on fivecolour/melira would not terminate in a usable window):
+
+| exit | quality | units |
+|---|---|---|
+| ON (shipped) | baseline | 1.00x |
+| OFF | better 0 / **worse 1** / identical 18, NET +0.0200 | **5.16x** |
+
+Turning the prune off finds **no better line anywhere** and costs **five times the work**; the single
+difference (hinata +0.0200) is itself churn, since 5x the work per node buys less search inside the
+same budget. So the ID premise holds in practice, the exit is not lossy, and it is one of the
+largest prunes in the search. The hatch stays as an instrument, default ON.
 
 ## (historical) the non-monotonicity as first recorded
 
