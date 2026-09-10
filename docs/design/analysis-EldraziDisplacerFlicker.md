@@ -4560,7 +4560,10 @@ The standalone-only restriction is gone, and the reason it existed is gone with 
 under `RevealLogPause` (choosers nulled) while the real apply ran with them live, which is the whole
 seed-7 false promise. The real apply now runs under `ComboOffApplyPause` -- the same choosers nulled,
 logging and reveals kept -- so trial and apply resolve every sub-decision identically whatever the
-plan's shape. Up to `MTG_COMBO_OFF_TRIES` (8) candidates are verified, cheapest shape first.
+plan's shape. Up to `MTG_COMBO_OFF_TRIES` (2) candidates are verified, cheapest shape first -- two,
+not eight, because every trial runs a whole go-off and the play protocol replays the game on every
+step, so an eighth candidate is paid once per already-decided prefix decision for the rest of the
+game (measured: 40 s per step at eight).
 
 ### The other repairs the user's criteria needed
 
@@ -4590,3 +4593,39 @@ plan's shape. Up to `MTG_COMBO_OFF_TRIES` (8) candidates are verified, cheapest 
 the button appears (or does not) AND that re-applying the offered plan actually kills. Kept out of
 `test/scenarios/` so `scenarios.sh` stays at 73. `python3 test/combo_off_frames.py` replays every
 saved user frame under `logs/play/` through the table as a report.
+
+### Session 14b: the last two unverified frames -- a PROMOTION whose SPEND had stood down
+
+Session 14 shipped with three frames (`claude_s9_gi8` #27/#28/#29) where the rule table showed the
+button and the applied line did not win. `[finish]` reported `wish=2 hand=0`: the Living Wish
+resolved, Dimensional Infiltrator reached hand, and its `{1}{U}` was never paid. The first two
+hypotheses -- the tap-ahead committing Kitchen (the board's only blue) to green, and the generic
+spend eating the banked `{U}` -- were both wrong, and both were **refuted by measurement** rather
+than by argument: `MTG_TAPAHEAD_PENDING_PIP`'s `pending_cost` channel changed nothing, and so did
+turning the whole line hold off (`MTG_NO_LINE_HOLD=1`).
+
+**The dead counter is what found it.** `finishstats::g_fin_paidfail` had been declared and printed
+since `ComboFinishFromHand` was written and incremented NOWHERE, so `[finish]` could not distinguish
+"no finisher was a candidate" from "the finisher was in hand and its cast could not be paid". Wiring
+it turned `hand=0` into `hand=0 pay-fail=108` -- a hundred and eight attempts to cast a card that was
+sitting right there.
+
+**The cause: the untap-priority promotion was gated on the WRONG predicate.** `ApplyBlinkLoop` builds
+its `g_etb_untap_priority` set under `if (LoopDrawSinkOn())`, and the comment beside it states the
+rule correctly -- *"Promoting a sink the loop cannot cash is a measured LOSS ... The two go on and
+off together, always."* But the SPEND is not `LoopDrawSinkOn()`, it is `want_draw`, which is
+`LoopDrawSinkOn() && !ComboFinisherReachable(...)` -- draw ONLY TO FIND, standing down the moment a
+finisher is reachable. So on any board holding a Living Wish, every draw land was promoted above
+every yield and not one of them was ever activated: exactly the loss the gate exists to prevent,
+produced by the gate itself. Harmless while the route was autonomous-only; a kill under the button,
+where frame 27's three draw lands (Mariposa + two Conservatories) took both untap slots and Kitchen
+-- the only blue AND the biggest yield -- was never untapped again.
+
+`MTG_COMBO_OFF_DRAW_PROMOTE` gates the promotion on the spend's own predicate inside
+`ComboOffFinishActive()` only; the autonomous arm keeps the promotion its measurement was taken
+under. Also landed: `MTG_COMBO_OFF_HOLD_CAST_COLOR`, which injects the pending finisher's cost into
+`g_line_unpaid_cost` for the iteration so the surplus-first generic order and the tap-ahead's
+line-cost channel both know the finish is waiting on a colour. That one is kept on its merits (it is
+the correct signal and it costs nothing) even though it was not the cause here.
+
+**After: all 10 frames the table shows are VERIFIED -- zero unverified offers.**
