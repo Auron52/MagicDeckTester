@@ -141,6 +141,37 @@ conceded no-win is memoised as a bound exactly like the certificate's, and — d
 and a truncated report tells the labeller to DROP the position entirely. This cut concedes a
 slightly pessimistic answer; it does not refuse to answer.
 
+## 3b. Cut 3 (LOSSY) — `MTG_LABEL_WAVES`, default OFF (waves suppressed), same class
+
+The biggest lever in this session, and it only appears on the games that need it.
+
+The wave phases exist to make a node's answer equal the UNCAPPED enumeration's once the budget
+allows: `BpWaveWalker`'s deferred breakpoint-rank walk, and — the one that matters — the
+**group-wave tranche re-enumeration**, which re-enumerates one `EnumGroupCap`-dropped candidate
+group at a time. Under the label ladder's ~unlimited budget that reads "exhaust the combo turn's
+plan space", which is exactly the class the user blessed pruning. So a residual go-off edge node
+now skips them, under the same `MTG_LABEL_GOFF_DOM` master switch as the width.
+
+| game | applies (waves on → off) | wall | rows |
+|---|---|---|---|
+| 900264 gi=14 | 352,623 → **167,126** | 1,369.7 s → **453.5 s (3.0x)** | 5 identical + 1 recovered |
+| 900255 gi=5 | 150,223 → 148,907 | no measurable change | identical |
+
+It is entirely the GROUP half — `MTG_GROUP_WAVES=0` alone reproduces the 900264 arm to the digit
+(165,735 applies, 340.8 s). And the concentration is extreme: on 900264 only **7 nodes** had a
+group-wave phase cut, and those 7 were worth ~185,000 applies. 900255 gains nothing because its
+enumerations never hit the group cap, so there are no tranches to defer — there is nothing to tune
+here, a node either dropped groups or it did not.
+
+**Two ways it is lossy, both pessimistic.** The node answers from the CAPPED enumeration, so a kill
+living only in a dropped group is missed. And it deliberately does **not** bump
+`g_fs_trunc_events`, so such a position is EMITTED with that answer rather than dropped — on 900264
+that turns the one position the labeller drops today into a row (turn 3, label 5.667), with the
+other five byte-identical. Bumping instead would preserve the drop-on-doubt doctrine, but it would
+mark EVERY position holding such a node (far more than the one that truncates today) and trade the
+whole saving for most of the game's rows. **This is the one judgement call in this work that is
+worth a second opinion; `MTG_LABEL_WAVES=1` reverses it.**
+
 ## 4. Instruments added (all `MTG_WINLESS_STATS`-gated, zero cost when off)
 
 * `LABEL WORK` — `ApplyPlanDirect` calls, split by call site (root pass-0 / ladder pass /
@@ -182,6 +213,16 @@ to better than a factor of 1.5.
   `g_fs_trunc_events` bump (a group-wave breadth cap), not a budget overrun. The message the
   labeller prints on a drop blames `MTG_VALUE_LABEL_BUDGET_MS` and is therefore misleading; worth
   fixing separately.
+* **Closing the stuck-turn state closure over the CANONICAL key** instead of the order-exact one.
+  `WINLESS DEVELOP` collapses only 13.7% of boundaries on 900255 and 7.2% on 900264, and the
+  obvious suspect was `BuildDedupKey` folding `FsOrderSig` on top of `BuildSimKey` — so two lines
+  reaching the same board in a different zone order never collapse. The engine's own rule one level
+  down is that a NO-WIN answer is order-free, and a duplicate here returns exactly a no-win, so the
+  canonical key looked both cheaper and consistent. **BUILT AND REFUTED**: paired same-minute arms
+  on 900255 moved the collapse from 575 to 579 boundaries (13.7% → 13.8%), with identical apply
+  counts (150,223 both) and identical wall (205.0 s vs 205.1 s). The boundary states genuinely
+  differ; zone-order variance is not what is keeping the closure small. The lever was deleted rather
+  than shipped dark.
 * **Cheapening `ApplyPlanDirect` itself** (the mana-payment backtrack is ~35% of a `perf` profile).
   Real, and probably the largest single opportunity on this deck — but it is engine-wide, not
   label-scoped, so it would have to carry a byte-identity proof against play and GT. Out of scope
