@@ -54,10 +54,20 @@ ARMS = {
     "combo": {"MTG_EDF_VAL_RAMP": False, "MTG_EDF_VAL_COMBO": True},
     "both":  {"MTG_EDF_VAL_RAMP": True,  "MTG_EDF_VAL_COMBO": True},
 }
+
+# JOB ORDER IS ARM-INTERLEAVED, NOT ARM-MAJOR, AND THAT IS NOT COSMETIC. One pooled queue is right
+# (CLAUDE.md: never a wave per arm), but a queue emitted arm-by-arm behaves like waves anyway on a
+# deck with a heavy per-game tail. Measured here on 2026-09-10: EldraziDisplacerFlicker has games
+# that run FOUR HOURS at a 20 ms VIRTUAL budget, and with the arms in blocks the first three arms'
+# tails held 17 of 23 workers while the LAST arm crawled on the remaining 6 -- base/ramp/combo
+# reached ~795 of 800 while `both` was still at 113. Interleaving (chunk outermost, then arm, then
+# seed) keeps every arm at a similar completion fraction, so the run is readable as a balanced
+# paired comparison at ANY point, not only at the end. That matters precisely because the tail makes
+# "at the end" hard to reach.
 jobs = []
-for arm, flags in ARMS.items():
-    for s in SEEDS:
-        for gi in range(0, games, chunk):
+for gi in range(0, games, chunk):
+    for arm, flags in ARMS.items():
+        for s in SEEDS:
             n = min(chunk, games - gi)
             jobs.append({
                 "name": f"edf_{arm}_s{s}_g{gi}",
@@ -78,4 +88,8 @@ rc=$?
 echo "batch rc=$rc"
 grep -E "heartbeat|SLOW-GAME" "$OUT/batch.err" | tail -20
 echo "--- results ---"
+# Reads every [win] line in the file(s) given, keyed (seed, game_index), and intersects the arms --
+# so a partial run reports on whatever pairs exist, and results from SEPARATE batches of the same
+# binary merge by concatenation (the engine is deterministic and thread-invariant, so one queue is a
+# scheduling convenience, not a requirement of the comparison).
 python3 test/edf_refloat_report.py "$OUT/batch.err"

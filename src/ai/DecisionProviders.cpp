@@ -16943,6 +16943,24 @@ bool EldraziFlickerProvider::ComboCardValue(const GameState& s, const CardDefini
     const bool combo = heurarm::Flag(heurarm::EDF_VAL_COMBO, s_combo_env);
     if (!ramp && !combo) { return false; }
 
+    // MTG_EDF_VAL_FROM_TURN=<n> -- VERIFICATION INSTRUMENT, default 0 = inert. Suppresses the
+    // re-pricing on any state whose turn is below n.
+    //
+    // STATE THE LIMIT, because it is the whole lesson of the run that produced it. This was written
+    // to isolate "did the decision at turn n flip", by pinning the shipped line up to n so the node
+    // is the same state in both arms. IT CANNOT DO THAT, and no turn test can: `s` is whatever state
+    // is being evaluated, so a ROLLOUT launched from turn 1 reaches simulated turn 3 and the gate
+    // opens there. The turn-1 decision therefore still moves, and on reference s11_gi10 it does --
+    // the arm skips the turn-1 land drop, so the turn-3 node the classification names is never
+    // reached. Separating real play from rollout needs an executor-side hook, not a state predicate
+    // (see docs/design/edf-shortfall-classification.md and the memory note of the same shape).
+    //
+    // What it IS good for: bounding how much of the arm's effect comes from the EARLY turns, by
+    // moving n and watching the result. Value-carrying, so it keeps EnvInt; never set it in a
+    // measurement run.
+    static const int s_from_turn = EnvInt("MTG_EDF_VAL_FROM_TURN", 0);
+    if (s_from_turn > 0 && s.turn_number < s_from_turn) { return false; }
+
     if (ramp && def.params.is_land_aura && def.params.land_aura_extra_mana > 0)
     {
         // EvalCard::ExpectedAttacks, kept in lockstep by this comment: +1 includes the current turn,

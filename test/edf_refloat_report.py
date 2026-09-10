@@ -25,17 +25,24 @@ def score(wt):
     return wt if wt > 0 else MAX_TURNS + 1
 
 
-def main(path):
+def main(paths):
     # arm -> (seed, gi) -> score.  The job NAME already carries the BASE seed (the manifest names a
     # chunk edf_<arm>_s<base seed>_g<offset> while setting "seed" to base+offset), so the key is
     # (base seed, global game index) directly -- identical across arms, which is the pairing.
+    #
+    # SEVERAL FILES ARE ALLOWED, and merging them is sound rather than a convenience: the engine is
+    # deterministic and thread-invariant, so an arm measured in its OWN batch pairs against another
+    # arm's stored games exactly as if the two had shared a queue. One queue is how you keep the
+    # cores fed; it is not a condition of the comparison. A key seen twice takes the same value
+    # twice, so an overlapping re-run cannot double-count.
     games = collections.defaultdict(dict)
-    for line in open(path, errors="replace"):
-        m = LINE.search(line)
-        if not m:
-            continue
-        arm = m.group("arm")
-        games[arm][(int(m.group("seed")), int(m.group("gi")))] = score(int(m.group("wt")))
+    for path in paths:
+        for line in open(path, errors="replace"):
+            m = LINE.search(line)
+            if not m:
+                continue
+            arm = m.group("arm")
+            games[arm][(int(m.group("seed")), int(m.group("gi")))] = score(int(m.group("wt")))
 
     if not games:
         print("no [win] lines found -- was MTG_DUMP_WINS=1 set?", file=sys.stderr)
@@ -75,4 +82,4 @@ def main(path):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1]))
+    sys.exit(main(sys.argv[1:]))
