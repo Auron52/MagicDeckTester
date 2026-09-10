@@ -1111,6 +1111,61 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             { continue; }
             emit_order.push_back(i); taken[i] = 1; break;
         }
+        // PAYLOAD COVERAGE FIRST -- one emitted plan per distinct (action, target, count).
+        //
+        // USER 2026-09-10: "sometimes the emiel or displacer can no longer choose targets". The
+        // diversity pass below keys on the sorted CAST-NAME multiset, which cannot tell "Emiel:
+        // blink Cloud of Faeries" from "Emiel: blink Peregrine Drake" -- one name, one key, ONE
+        // slot. On a fan that is mostly cast-order permutation noise the rest of the cap then fills
+        // with rank-ordered permutations of whatever sorted first, and a lower-ranked (outlet,
+        // target) pair can fall out of the emitted slice entirely. The GUI builds its target
+        // pickers from that slice (`(d.plans||[]).find(...)`), so the target stops being selectable
+        // in the viewer even though the engine enumerated it -- the same failure mode, and the same
+        // fix, as the combo_off slot reserved directly above.
+        //
+        // So: walk in rank order and take any plan that introduces a (kind, source, target, count)
+        // payload not yet represented, marking all of that plan's payloads covered. Bounded by the
+        // cap like every other pass, and it runs BEFORE the name-multiset pass so identity beats
+        // set-diversity for the scarce slots. The folded display axes are folded here too (a tutor
+        // target re-picked at resolution is not part of the identity -- otherwise this pass would
+        // re-import the very cross product the collapse above removed), and hidden plans stay
+        // hidden. Capped mode only, so the uncapped protocol checker is byte-identical.
+        auto payload_key = [](const Action& a) -> std::string
+        {
+            std::string tgt = a.tutor_target.str();
+            if (a.kind == Action::Kind::CastFromHand && !tgt.empty())
+            {
+                const CardDefinition* cd = a.def ? a.def
+                                         : CardDatabase::Instance().Lookup(a.card_name);
+                if (cd && (cd->params.tutor_mv_max_is_x || HumanPlayDefersTutorTarget(*cd)))
+                { tgt.clear(); }
+            }
+            return std::to_string(static_cast<int>(a.kind)) + "|" + a.card_name.str()
+                 + "|" + std::to_string(a.sac_source_id)
+                 + "|" + std::to_string(a.sac_victim_id)
+                 + "|" + std::to_string(a.chosen_x)
+                 + "|" + std::to_string(static_cast<int>(a.ability_mode))
+                 + "|" + std::to_string(a.enchant_target)
+                 + "|" + tgt;
+        };
+        // MTG_PLAY_CAP_PAYLOAD_COVER=0 disables this pass (the A/B control that shows the class is
+        // real: with it off, a deep EDF go-off frame drops distinct blink (outlet, target) pairs
+        // out of the emitted slice). DEFAULT ON.
+        static const bool s_cap_payload_cover = EnvOn("MTG_PLAY_CAP_PAYLOAD_COVER", true);
+        if (s_cap_payload_cover)
+        {
+            std::unordered_set<std::string> covered;
+            for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
+            {
+                if (hide_bundle[i] || taken[i]) { continue; }
+                bool novel = false;
+                for (const Action& a : plans[i].actions)
+                { if (!covered.count(payload_key(a))) { novel = true; break; } }
+                if (!novel) { continue; }
+                for (const Action& a : plans[i].actions) { covered.insert(payload_key(a)); }
+                emit_order.push_back(i); taken[i] = 1;
+            }
+        }
         for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
         {
             if (hide_bundle[i] || taken[i]) { continue; }
