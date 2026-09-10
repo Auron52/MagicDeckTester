@@ -12290,12 +12290,17 @@ inline bool BoardHasColorlessPipSink(const GameState& state, int controller)
     }
     if (HandCSinkOn() && HumanPlayActive())
     {
-        const int ceiling = LooseManaCeiling(state, controller);
+        // The ceiling is a second battlefield walk, and this predicate is consulted per candidate
+        // source per pip inside ManaSourceRank -- so it is computed LAZILY, only once a hand card
+        // with a {C}-pip activation has actually been found. For every deck but this one the hand
+        // loop finds nothing and the walk never happens.
+        int ceiling = -1;
         for (const Card& hc : state.players[controller].hand)
         {
             if (!CardHasColorlessPipActivation(state, controller, hc)) { continue; }
             const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
             if (hd == nullptr) { continue; }
+            if (ceiling < 0) { ceiling = LooseManaCeiling(state, controller); }
             if (hd->card.m_mana_cost.ManaValue() <= ceiling) { return true; }
         }
     }
