@@ -30,6 +30,11 @@ Combinations that exist and were measured (arm names from the screen):
 from day one (no model needed), which removes the presence-gating traps (hybrid activation by file
 existence; the H-cell ladder's 1.35-84.8x cliff on a missing model).
 
+> **Why each cell reads what it reads: `search-shape-mechanisms.md`.** Four mechanisms account for the whole
+> table (the rollout ladder trading depth for simulation; a model leaf widening the tree 1.1-1.8x at equal
+> depth; how often the probe PROVES its win; and one asymmetry this work introduced). Read it before
+> explaining any single row.
+
 ## THE MENU (SETTLED 2026-09-10, batches 3+4 on the fixed binary: 19 modelled decks + Fluctuator, both configurations, 8 x 500 games)
 
 User requirement: *"It would be preferable to not have more than a few options for the leaf, so 3-4 should be

@@ -3464,3 +3464,41 @@ the twice-rebased binary, 8 x 500 games on the sidecar route: d5b20 **0.433x uni
 three different engine tips, and the per-game counts move by one or two games — the shape's saving is
 structural (it is the start gate admitting a pass), not an artefact of any one engine state. Smoke under
 upstream's re-accepted GT: 80 passed, 0 failed. `check_gt_logs`: 456 consistent, 0 stale, 0 missing.
+
+### 2026-09-10m — per-deck mechanisms, from instrumentation rather than ratios (user: "worth getting a deep understanding of everything in the table one deck at a time")
+
+Full write-up: `docs/design/search-shape-mechanisms.md`. Method: 196 single-worker runs
+(`logs/shape_why/`, 60 games, `MTG_ROLLOUT_STATS=1`), one per deck x shape x cfg, so each process's counters
+describe exactly ONE cell — batch mode cannot do this, it aggregates counters across a whole process.
+
+**Four mechanisms explain every row.** (1) The rollout ladder spends its budget on simulation rather than
+depth: 2-6% of its units are search tree, and it commits 1.0-1.9 plies BELOW the shipped shape on 15 of 18
+decks while costing 1.5-20x — dominated on both axes at once. (2) **A model leaf widens the tree 1.1-1.8x at
+the same committed depth** (shape held fixed, leaf the only variable; melira 1.73x, dragons 1.63x, knights
+1.49x, antilife 0.96x the lone inversion), with committed depth unchanged to 0.05 plies and memo hit rates
+identical — so fit_nl beats fit_v on 14 of 17 decks because of the PROBE's tree, not the rollouts (hinata's
+rollout halves are 186,909 vs 186,917 units). (3) How often the probe PROVES its win decides escalation vs
+final-depth: slivers 1 single pass per 61 decisions and knights 2/62 versus fivecolour 311/646 and hinata
+77/136. (4) **Disclosure: part of the leafless advantage is an asymmetry I introduced** — the constant-leaf
+exhaustion stop cuts a leafless pass at the budget while a model pass runs to the 25x ceiling. At matched
+rules it explains 59% of the gap on dragons, more than all of it on hinata, and NONE on knights/critter
+(no pass overruns). Play is identical at 1x and 25x on all four, so applying the stop to MODEL passes is a
+candidate lever worth screening.
+
+**The two rows the user flagged.** *Slivers* is not suspicious: z +0.0 means 0 of 4000 games change win turn,
+while the decision digests differ on all 8 seeds — decisions differ, outcomes do not. Its probe proves
+essentially always (1/61), so every shape reaches the same play and differs only in waste (1.20x / 1.66x /
+13.36x). *Melira* is the genuine inversion and it is mechanism 2 plus depth: ship commits the DEEPEST (3.25
+mean vs heur's 2.50) AND expands the widest tree (3.08M nodes vs esc_nl's 1.78M), so every alternative is
+cheaper — esc_nl 0.64x, fit_nl 0.48x, heur 0.71x — and the screen shows every one is worse (z −6.1, −10.7,
+−5.7). Cost and quality are coupled on that deck, which is the whole deck-class split.
+
+**The user's hypothesis was right on exactly 3 decks.** "Is fit_v faster because we locate the win within a
+turn faster?" — yes on antilife, burn and minotaur, where fit_v runs FEWER single rollout passes (minotaur
+4 vs 11) because a trusted model claim ends the decision. On the other 14 the rollout halves are equal and
+the model's wider probe tree is the whole story, i.e. the opposite sign of cause.
+
+**Process note:** two decks (`Creature Giving`, `Melira Pod`) silently produced zero-unit runs because
+`xargs -I{} bash -c "{}"` CONSUMES the quotes in its input, so a deck path containing a space split into
+two arguments ("File not found: decks/Melira"). Re-run NUL-separated (`xargs -0`). A zero-unit run is easy
+to miss in an aggregate table — it prints as a dash, not an error.
