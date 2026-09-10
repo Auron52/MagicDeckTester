@@ -13,6 +13,7 @@
 #include <algorithm>   // std::stable_sort (OrderEntriesByEtbValue payoff-ordering primitive)
 #include <tuple>       // std::make_tuple (CombatCheatCandidates ranking key)
 #include <set>         // MTG_TUTOR_RANK_DUMP situation dedupe (diagnostic only)
+#include <chrono>
 #include <unordered_map>  // ProvenWinlessThisTurn's per-definition pool memo
 #include "DecisionProviders.h"
 
@@ -14812,6 +14813,12 @@ const bool s_edf_prospective_env = EnvOn("MTG_EDF_PROSPECTIVE", false);
 inline bool EdfProspectiveOn()
 { return heurarm::Flag(heurarm::EDF_PROSPECTIVE, s_edf_prospective_env); }
 
+// GO-OFF WORK PROXY (MTG_WINLESS_STATS). Declared here because EdfAutoGoOffAfterCasts sits above
+// the certificate's own stats block; dumped by CertWhyDumper alongside it.
+inline std::atomic<unsigned long long> g_goff_runs{0}, g_goff_iters{0}, g_goff_ns{0},
+                                       g_goff_calls{0};
+inline bool GoffStatsOn() { static const bool v = EnvOn("MTG_WINLESS_STATS"); return v; }
+
 }  // namespace
 
 // EXPORTED wrapper for the diagnostic above. The body lives inside the anonymous namespace (it needs
@@ -14846,6 +14853,22 @@ void EdfTurnTrace(const GameState& s, int controller) { EdfTurnTraceImpl(s, cont
 // outlet (RecogniseFlickerLoop's cheap gate).
 bool EdfAutoGoOffAfterCasts(GameState& s, int controller)
 {
+    // WHOLE-CALL TIMER (MTG_WINLESS_STATS): includes the recognizer's board walk, the sizing, and
+    // ApplyBlinkLoop -- i.e. everything a caller pays for reaching this function at all.
+    struct GoffTimer
+    {
+        bool on; std::chrono::steady_clock::time_point t0;
+        GoffTimer() : on(GoffStatsOn())
+        { if (on) { t0 = std::chrono::steady_clock::now(); } }
+        ~GoffTimer()
+        {
+            if (!on) { return; }
+            g_goff_ns.fetch_add(static_cast<unsigned long long>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - t0).count()), std::memory_order_relaxed);
+            g_goff_calls.fetch_add(1, std::memory_order_relaxed);
+        }
+    } _gt;
     static const bool s_on_env = EnvOn("MTG_EDF_AUTOGOFF", true);
     if (!heurarm::Flag(heurarm::EDF_AUTOGOFF, s_on_env)) { return false; }
     // Provider gate FIRST: this sits on the apply hot path of EVERY deck, and the recognizer's
@@ -14884,6 +14907,16 @@ bool EdfAutoGoOffAfterCasts(GameState& s, int controller)
                                     od->params, n,
                                     [&s](const ManaCost& c)
                                     { return TapForCostDirect(s, c, /*for_creature=*/false); });
+    // WORK PROXY (MTG_WINLESS_STATS). This is the atom of the label path's cost on this deck: an
+    // apply that reaches here runs `done` blink iterations, each re-paid through the mana solver,
+    // plus the library dig they fund. Counting them is how a label-path cut gets A/B'd on a box
+    // whose wall clock belongs to somebody else.
+    if (GoffStatsOn())
+    {
+        g_goff_runs.fetch_add(1, std::memory_order_relaxed);
+        g_goff_iters.fetch_add(static_cast<unsigned long long>(std::max(0, done)),
+                               std::memory_order_relaxed);
+    }
     return done > 0;
 }
 
@@ -15034,6 +15067,14 @@ inline std::atomic<unsigned long long> g_cert_why[static_cast<int>(CertWhy::Coun
 // search once the seed has had its turn. thread_local: one node at a time per worker.
 inline thread_local int g_cert_last_why = -1;
 inline std::atomic<unsigned long long> g_cert_residual[static_cast<int>(CertWhy::Count)] = {};
+// WAS THE LAST DECLINE A GO-OFF DECLINE? True when the fixpoint had already concluded that this
+// turn's mana is UNBOUNDED (mana_inf) by the time the certificate gave up -- i.e. the bound thinks
+// the turn is a combo turn, which is precisely the class the user blessed for dominance pruning.
+// It stays FALSE for every decline that happens before/outside that conclusion (an unmodelled
+// card, an unmodelled zone, an opponent permanent, a failure to settle, a bounded board whose
+// routes reach lethal), so a pruner keyed on it never touches "the analysis does not cover this".
+// thread_local: one node at a time per worker, same contract as g_cert_last_why.
+inline thread_local bool g_cert_last_goff = false;
 // Where the pieces of the loop that made mana_inf true actually came from. This is the conjunct
 // most likely to over-credit: a library-sourced pair means the bound believes we can dig to both
 // halves of the combo, which is a far bigger claim than "they are already in hand".
@@ -15047,6 +15088,16 @@ inline bool CertNote(CertWhy w, bool ret)
     if (CertStatsOn())
     { g_cert_why[static_cast<int>(w)].fetch_add(1, std::memory_order_relaxed); }
     return ret;
+}
+// A decline that exists ONLY because the bound concluded this turn's mana is unbounded: the three
+// sites below are unreachable with a finite mana bound (dig-inf needs mana_inf to open the whole
+// library, and both -inf routes need by_mana == kCertInf). Everything else -- an unmodelled card,
+// an unmodelled zone, a failure to settle, a bounded board whose routes already reach lethal --
+// leaves the flag FALSE, so a consumer keyed on it cannot mistake "not covered" for "combo turn".
+inline bool CertNoteGoff(CertWhy w)
+{
+    g_cert_last_goff = true;
+    return CertNote(w, false);
 }
 struct CertWhyDumper
 {
@@ -15074,6 +15125,9 @@ struct CertWhyDumper
             if (v) { std::fprintf(stderr, " %s=%llu", kName[i], v); }
         }
         std::fprintf(stderr, " ===\n");
+        std::fprintf(stderr,
+            "=== EDF GO-OFF WORK: calls=%llu looped=%llu blink-iterations=%llu total=%.2f s ===\n",
+            g_goff_calls.load(), g_goff_runs.load(), g_goff_iters.load(), g_goff_ns.load() / 1e9);
         static const char* kSrc[] = { "none", "board", "hand", "library", "tutor" };
         std::fprintf(stderr, "=== WINLESS RESIDUAL loop source:");
         for (int i = 0; i < static_cast<int>(LoopSrc::Count); ++i)
@@ -15090,6 +15144,12 @@ inline CertWhyDumper g_cert_why_dumper;
 
 // Round-6 residual attribution, called by the search when a node was neither certified nor
 // seeded. Reads the thread-local reason/provenance the last ProvenWinlessThisTurn call left.
+// See g_cert_last_goff. Valid only immediately after a ProvenWinlessThisTurn call; the search
+// clears it before every such call (WinlessCertificateActive), so a provider that does not
+// implement the certificate can never leave a stale `true` behind.
+bool EdfCertLastDeclineWasGoOff() { return g_cert_last_goff; }
+void EdfCertClearGoOffFlag()      { g_cert_last_goff = false; }
+
 void EdfCertNoteResidual()
 {
     if (!CertStatsOn()) { return; }
@@ -15104,7 +15164,8 @@ void EdfCertNoteResidual()
 bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 {
     if (me < 0 || me > 1) { return false; }
-    g_cert_loop_src = static_cast<int>(LoopSrc::None);
+    g_cert_loop_src  = static_cast<int>(LoopSrc::None);
+    g_cert_last_goff = false;
     const Player& ap  = s.players[me];
     const Player& opp = s.players[1 - me];
 
@@ -15759,7 +15820,7 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
                             ap.hand.size(), s.battlefield.size(), lib_seen);
                     }
                 }
-                return CertNote(CertWhy::DigInf, false);
+                return CertNoteGoff(CertWhy::DigInf);
             }
             const long long per_land = 1 + untap_events;
             const int per = (dig_price > 0) ? dig_price : 1;
@@ -15887,7 +15948,7 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
             // (a) Shivan Gorge: {T} in the cost, so one activation per untap of the land.
             if (pp.tap_damage_cost.has_value() && pp.tap_damage_each_opponent > 0 && red)
             {
-                if (mana_inf) { return CertNote(CertWhy::GorgeInf, false); }   // a loop untaps it
+                if (mana_inf) { return CertNoteGoff(CertWhy::GorgeInf); }   // a loop untaps it
                 const int cost = std::max(1, pp.tap_damage_cost.value().ManaValue());
                 long long acts = (cc.on_board ? 1 : 0) + untap_events;
                 acts = std::min(acts, mana / cost);
@@ -15905,7 +15966,7 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
                 long long by_c    = kCertInf;
                 if (c_pips > 0) { by_c = c_inf ? kCertInf : (c_ub / c_pips); }
                 const long long acts = std::min(by_mana, by_c);
-                if (acts >= kCertInf) { return CertNote(CertWhy::DrainInf, false); }
+                if (acts >= kCertInf) { return CertNoteGoff(CertWhy::DrainInf); }
                 extra += acts * pp.drain_amount * heads;
             }
 

@@ -1504,6 +1504,17 @@ void EdfTurnTrace(const GameState& s, int controller);
 // remaining full-search class can be read by CONJUNCT instead of guessed at. No-op without stats.
 void EdfCertNoteResidual();
 
+// GO-OFF DECLINE PROVENANCE. True when the LAST ProvenWinlessThisTurn call declined *because the
+// bound had already concluded this turn's mana is unbounded* -- the combo/go-off class, and the
+// only class the label search's dominance cut (MTG_LABEL_GOFF_DOM) is allowed to prune. Every
+// other decline -- an unmodelled card/zone, an opponent permanent, a failure to settle, a bounded
+// board whose damage routes already reach lethal -- reads FALSE, so "the analysis does not cover
+// this" can never be mistaken for "this is a combo turn". Thread-local and valid only immediately
+// after the call; the search clears it first (EdfCertClearGoOffFlag) so a provider that does not
+// implement the certificate cannot leave a stale answer behind.
+bool EdfCertLastDeclineWasGoOff();
+void EdfCertClearGoOffFlag();
+
 // SAME-MAIN GO-OFF (MTG_EDF_AUTOGOFF, default ON; USER 2026-09-08 "no extra mains to search"):
 // after a main's casts have been applied, if the board now holds a live self-funding blink loop
 // whose go-off count prices to lethal, run the loop as part of realising the plan -- the fix for

@@ -18863,11 +18863,39 @@ static std::vector<Action> BpPrepayPrefix(const GameState& state, const TurnSolv
     return out;
 }
 
+// LABEL-PATH WORK PROXY (MTG_WINLESS_STATS). Wall clock on a shared box is not a measurement --
+// the same binary and the same game measured 164 s and 246 s an hour apart purely on neighbours.
+// These counters are deterministic, so an A/B of two label-path cuts can be read off them even
+// when the box is busy. Paired with the go-off counters in DecisionProviders.cpp (the applies
+// that actually run the blink loop, and how many iterations they run), which is where the cost
+// of an apply on this deck actually lives.
+inline std::atomic<unsigned long long> g_lp_applies{0};
+// ... split by CALL SITE, because "153k applies" on its own does not say which loop to cut.
+// 0 = the ladder ROOT's pass-0 loop (every root candidate, applied to test a this-turn kill),
+// 1 = the ladder's per-pass candidate loop, 2 = FSLineWin's plan loop, 3 = the go-off seeds.
+// Anything unattributed is the enumerator's own internal applies.
+inline std::atomic<unsigned long long> g_lp_site[4] = {};
+inline thread_local int g_lp_site_tag = -1;
+struct LpSite
+{
+    int prev;
+    explicit LpSite(int t) : prev(g_lp_site_tag) { g_lp_site_tag = t; }
+    ~LpSite() { g_lp_site_tag = prev; }
+};
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
                             BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume)
 {
     PROF_INC(applyplan_calls);
+    {
+        static const bool s_lp = EnvOn("MTG_WINLESS_STATS");
+        if (s_lp)
+        {
+            g_lp_applies.fetch_add(1, std::memory_order_relaxed);
+            if (g_lp_site_tag >= 0 && g_lp_site_tag < 4)
+            { g_lp_site[g_lp_site_tag].fetch_add(1, std::memory_order_relaxed); }
+        }
+    }
     Player& ap  = state.ActivePlayer();
     int opp_idx = 1 - state.active_player_index;
 
@@ -30549,6 +30577,15 @@ inline std::atomic<unsigned long long> g_lgoff_roots{0}, g_lgoff_seedwins{0}, g_
 // Lossless by state identity. DEFAULT ON; =0 searches every candidate.
 inline bool LadderDedupOn() { static const bool v = EnvOn("MTG_LABEL_LADDER_DEDUP", true); return v; }
 inline std::atomic<unsigned long long> g_ldd_searched{0}, g_ldd_inherited{0};
+inline std::atomic<unsigned long long> g_gdom_seen{0};
+// RESIDUAL OUTCOME (MTG_WINLESS_STATS): of the residual edge nodes that pay the full enumeration,
+// how many turn out to be WINS? That is the number that decides whether the residual class may be
+// dominance-pruned at all -- a class that is ~all no-win can be dropped for nearly nothing, and a
+// class with real wins in it cannot. MTG_WINLESS_WINDUMP=<n> prints the first n winning plans, so
+// the seed set can be extended to cover them by EXECUTION instead of by approximation.
+inline std::atomic<unsigned long long> g_res_win{0}, g_res_nowin{0};
+inline int  WinDumpN() { static const int v = EnvInt("MTG_WINLESS_WINDUMP", 0); return v; }
+inline std::atomic<int> g_windumped{0};
 inline std::atomic<unsigned long long> g_cseed_tries{0}, g_cseed_wins{0}, g_cseed_plans{0};
 inline std::atomic<unsigned long long> g_seed_tries{0}, g_seed_wins{0}, g_seed_edge_tries{0},
                                        g_seed_edge_wins{0}, g_audit_violations{0},
@@ -30560,11 +30597,47 @@ inline std::atomic<unsigned long long> g_checks[2] = {}, g_fires[2] = {};
 // on the horizon edge (the only place it CAN act).
 inline std::atomic<unsigned long long> g_nodes_all{0}, g_nodes_label{0}, g_nodes_edge{0};
 inline std::atomic<unsigned long long> g_plans_all{0}, g_plans_label{0}, g_plans_edge{0};
+// LIVE PROGRESS (MTG_WINLESS_STATS_EVERY=<seconds>, default 0 = off). The counters below are dumped
+// at exit, which is no help at all on the class this whole file exists for: a game that runs six
+// hours and never finishes prints nothing. This emits the same block on a wall-clock interval, so a
+// monster can be diagnosed WHILE it runs (the box refuses gdb/perf attach, so there is no other
+// way in). Cost when off: one relaxed load per FSLineWin node.
+inline std::atomic<unsigned long long> g_prog_nodes{0};
+// WHERE the search is right now, not just how much it has done: the node currently in its plan
+// loop (turn, horizon cutoff, candidate count, how far the loop has got). A monster that reports
+// "candidate 300 of 12000 at one node" is a different problem from one reporting many nodes.
+inline std::atomic<int> g_cur_turn{0}, g_cur_cut{0};
+inline std::atomic<unsigned long long> g_cur_pre{0}, g_cur_scanned{0}, g_max_pre{0};
+inline int ProgEvery() { static const int v = EnvInt("MTG_WINLESS_STATS_EVERY", 0); return v; }
+inline void DumpCounters(const char* tag);
+inline void MaybeProgress()
+{
+    if (ProgEvery() <= 0) { return; }
+    if ((g_prog_nodes.fetch_add(1, std::memory_order_relaxed) & 0x3F) != 0) { return; }
+    static std::atomic<long long> s_next{0};
+    const long long now = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    long long want = s_next.load(std::memory_order_relaxed);
+    if (now < want) { return; }
+    if (!s_next.compare_exchange_strong(want, now + ProgEvery())) { return; }
+    std::fprintf(stderr, "=== [progress] at t%d cut=%d candidate %llu/%llu (max seen %llu) ===\n",
+                 g_cur_turn.load(), g_cur_cut.load(), g_cur_scanned.load(), g_cur_pre.load(),
+                 g_max_pre.load());
+    DumpCounters("progress");
+}
 struct Dumper
 {
     ~Dumper()
     {
         if (!StatsOn()) { return; }
+        DumpCounters("exit");
+    }
+};
+inline Dumper g_dumper;
+struct DumperBody
+{
+    static void Run()
+    {
         for (int i = 0; i < 2; ++i)
         {
             const unsigned long long c = g_checks[i].load(), f = g_fires[i].load();
@@ -30614,6 +30687,26 @@ struct Dumper
                     g_audit_violations.load());
             }
         }
+        std::fprintf(stderr,
+            "=== LABEL WORK: ApplyPlanDirect calls=%llu | root-pass0=%llu ladder-pass=%llu "
+            "fsw-plans=%llu seeds=%llu other=%llu ===\n",
+            g_lp_applies.load(), g_lp_site[0].load(), g_lp_site[1].load(), g_lp_site[2].load(),
+            g_lp_site[3].load(),
+            g_lp_applies.load() - g_lp_site[0].load() - g_lp_site[1].load()
+                - g_lp_site[2].load() - g_lp_site[3].load());
+        if (g_res_win.load() + g_res_nowin.load() != 0)
+        {
+            const unsigned long long rw = g_res_win.load(), rn = g_res_nowin.load();
+            std::fprintf(stderr,
+                "=== WINLESS RESIDUAL OUTCOME: searched=%llu wins=%llu (%.1f%%) no-wins=%llu ===\n",
+                rw + rn, rw, (rw + rn) ? (100.0 * static_cast<double>(rw) / static_cast<double>(rw + rn)) : 0.0,
+                rn);
+        }
+        if (g_gdom_seen.load() != 0)
+        {
+            std::fprintf(stderr, "=== LABEL GO-OFF DOM: residual-edge nodes=%llu ===\n",
+                         g_gdom_seen.load());
+        }
         if (g_lgoff_roots.load() != 0)
         {
             std::fprintf(stderr,
@@ -30636,7 +30729,7 @@ struct Dumper
             (dd + dc) ? (100.0 * static_cast<double>(dc) / static_cast<double>(dd + dc)) : 0.0);
     }
 };
-inline Dumper g_dumper;
+inline void DumpCounters(const char* tag) { (void)tag; DumperBody::Run(); }
 }
 // True when this node's horizon ends on THIS turn and the deck's provider can PROVE no line wins
 // it. Ordered cheapest-test-first: the turn compare, then the scope, then the flag, then the scan.
@@ -30650,6 +30743,10 @@ static inline bool WinlessCertificateActive(const GameState& s, int cutoff,
     const int si = static_cast<int>(site);
     if (winlesscert::StatsOn())
     { winlesscert::g_checks[si].fetch_add(1, std::memory_order_relaxed); }
+    // Clear the go-off-decline flag FIRST so it always describes THIS call. A provider that does
+    // not implement the certificate never writes it, and without this a stale `true` from some
+    // earlier EDF node could arm the dominance cut on a deck it was never reasoned about.
+    EdfCertClearGoOffFlag();
     const bool proven = ResolveProvider(s).ProvenWinlessThisTurn(s, s.active_player_index);
     if (proven && winlesscert::StatsOn())
     { winlesscert::g_fires[si].fetch_add(1, std::memory_order_relaxed); }
@@ -30737,6 +30834,7 @@ static inline bool WinlessDevelopActive(const GameState& s, const SearchBudget* 
 // constructed ones so both observe a kill by exactly the same route the plan loop does.
 static bool WinlessSeedApplyWins(const GameState& state, TurnSolver::Plan& seed)
 {
+    LpSite _lps(3);   // apply-site attribution (see g_lp_site)
     GameState s = state;
     std::vector<Action> bp;
     ApplyPlanDirect(s, seed, true, &bp);
@@ -32028,7 +32126,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // budget -> the suite is byte-identical.
     const bool cert_scope = (g_unbounded_label_search > 0
                              || (budget != nullptr && budget->Unlimited()));
+    // Live counter dump (MTG_WINLESS_STATS_EVERY); off by default, one relaxed load when off.
+    if (cert_scope) { winlesscert::MaybeProgress(); }
     const bool certified = WinlessCertificateActive(state, cutoff, budget, winlesscert::Site::M1);
+    // Read the decline's provenance IMMEDIATELY -- the seeds below run applies, and an apply may
+    // consult the provider again for its own reasons. See winlesscert::GoffDomOn.
+    const bool goff_decline = !certified && EdfCertLastDeclineWasGoOff();
+    // Set once the seeds below have also missed: THIS node is a residual (see g_res_win).
+    bool residual_node = false;
     if (certified)
     {
         // AUDIT (MTG_WINLESS_AUDIT, default off): the certificate says this turn cannot be won --
@@ -32182,6 +32287,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(seed_plan) } } };
             FSLineStoreWin(lc, key, win, state);
             return win;
+        }
+        // ---- GO-OFF DOMINANCE (MTG_LABEL_GOFF_DOM) ------------------------------------------
+        // This is a RESIDUAL node: horizon edge, certificate declined *as a go-off*, and both seed
+        // families executed the deck's own kill without finding one. Take the no-win instead of
+        // paying the enumeration. See winlesscert::GoffDomOn for the approximation's exact shape;
+        // the label-only scope is what keeps play and GT byte-identical.
+        if (at_edge && goff_decline && g_unbounded_label_search > 0)
+        {
+            residual_node = true;
+            if (winlesscert::StatsOn())
+            { winlesscert::g_gdom_seen.fetch_add(1, std::memory_order_relaxed); }
         }
     }
 
@@ -32354,6 +32470,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 && p.land_to_play != s_force_t1_land) { continue; }
         }
         ++scanned;
+        if (cert_scope && winlesscert::ProgEvery() > 0)
+        {
+            winlesscert::g_cur_turn.store(state.turn_number, std::memory_order_relaxed);
+            winlesscert::g_cur_cut.store(cutoff, std::memory_order_relaxed);
+            winlesscert::g_cur_pre.store(pre.size(), std::memory_order_relaxed);
+            winlesscert::g_cur_scanned.store(scanned, std::memory_order_relaxed);
+            if (pre.size() > winlesscert::g_max_pre.load(std::memory_order_relaxed))
+            { winlesscert::g_max_pre.store(pre.size(), std::memory_order_relaxed); }
+            winlesscert::MaybeProgress();
+        }
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         ConsumeAt(budget, unitsite::kFsPre);   // one interior node (plan applied)
         if (s_rollout_stats)
@@ -32361,6 +32487,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
             if (g_force_heuristic_leaf) { g_interior_nodes_esc.fetch_add(1, std::memory_order_relaxed); }
         }
+        LpSite _lps(2);   // apply-site attribution (see g_lp_site)
         LoadPlanState(s_buf, state, reuse_s);
         GameState& s = s_buf;
         std::vector<Action> bp;
@@ -32583,6 +32710,32 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         SimulateCombat(s);
         if (OpponentHasLost(s))  // win this turn -> floor
         {
+            // RESIDUAL OUTCOME (see g_res_win): the enumeration found a this-turn kill the seeds
+            // could not construct. Report WHAT won, because that is the seed set's shopping list.
+            if (residual_node)
+            {
+                if (winlesscert::StatsOn())
+                { winlesscert::g_res_win.fetch_add(1, std::memory_order_relaxed); }
+                if (winlesscert::WinDumpN() > 0
+                    && winlesscert::g_windumped.fetch_add(1, std::memory_order_relaxed)
+                       < winlesscert::WinDumpN())
+                {
+                    std::string casts;
+                    for (const Action& wa : p.actions)
+                    {
+                        casts += "k" + std::to_string(static_cast<int>(wa.kind)) + ":"
+                               + wa.card_name.str();
+                        if (wa.chosen_x > 0) { casts += "x" + std::to_string(wa.chosen_x); }
+                        casts += " ";
+                    }
+                    std::fprintf(stderr,
+                        "[res-win] t%d cut=%d rank=%zu/%zu land=%s hand=%zu bf=%zu casts=[%s]\n",
+                        state.turn_number, cutoff, scanned, pre.size(),
+                        p.land_to_play.empty() ? "-" : p.land_to_play.c_str(),
+                        state.ActivePlayer().hand.size(), state.battlefield.size(),
+                        casts.c_str());
+                }
+            }
             TurnSolver::Plan p_rec = p;
             if (dork_contested) { p_rec.atk_dork_release = 0; }
             p_rec.breakpoint_actions = std::move(bp);
@@ -33099,6 +33252,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
     }
 
+    // RESIDUAL OUTCOME (see g_res_win): a residual node that ran the full enumeration and proved
+    // no win. Its twin (g_res_win) is counted at the this-turn-win return above, so the pair adds
+    // up to every residual node this run searched.
+    if (residual_node && winlesscert::StatsOn() && best.win_turn > state.turn_number)
+    { winlesscert::g_res_nowin.fetch_add(1, std::memory_order_relaxed); }
     if (best.win_turn <= max_turns)
     {
         FSLineStoreWin(lc, key, best, state);
@@ -34724,6 +34882,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         GameState p0_buf;
         for (std::size_t i = 0; i < pre.size(); ++i)
         {
+            LpSite _lps(0);   // apply-site attribution (see g_lp_site)
             LoadPlanState(p0_buf, state, s_state_reuse);
             GameState& s = p0_buf;
             std::vector<Action> bp;
@@ -34785,6 +34944,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 // next to the search, and a plan-count that can reach the thousands makes holding
                 // one board per candidate the expensive choice. The scratch board itself IS reused
                 // across candidates though (LoadPlanState) -- that costs one board, not |candidates|.
+                LpSite _lps(1);   // apply-site attribution (see g_lp_site)
                 LoadPlanState(pass_buf, state, s_state_reuse);
                 GameState& s = pass_buf;
                 std::vector<Action> bp;
