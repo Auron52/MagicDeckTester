@@ -5284,3 +5284,59 @@ count is the number no engine-side timer can see) and `python3 test/viewer_step_
   and costs a respawn. Correct by design (the answer is argv-keyed) and rare; EDF hits none.
 * The baseline protocol sweep at d8f700bb reads `12 ok, 296 repaired, 1 play-drift, 0 enum-gap,
   0 contract-fail (309 refs)` -- the 1 play-drift predates this session.
+
+## Session 17 (2026-09-11, overnight window 01:40-05:30 UTC): integration ledger
+
+USER: *"continue running for the next 4 hours or so while I am away ... finding more cases where
+combo off is failing and fixing them, fixing any other apparently quality bugs or working on speed."*
+Seven agent landings integrated onto `phase-1-2-deck-analyzer`, each cherry-picked onto the tip and
+gated on the integrated tree before the next; nothing pushed; no generation launched.
+
+| commit | what | gate on the integrated tree |
+|---|---|---|
+| `d671f568` | Combo Off executor: draw guard taps the investigate source BEFORE pricing (`MTG_DRAW_GUARD_SELFTAP`); a failed click rolls the whole GameState back (`MTG_COMBO_OFF_ROLLBACK`); fixture 11; `viewer_protocol_check.py --only` | with `bff3ef0b`: scenarios 79, combo_off 11, smoke 73 ALL PASS, viewer PASS |
+| `bff3ef0b` | seed-6 T4 float: tap colour and generic-pip order read the LINE's remaining demand (`MTG_PAY_LINE_TAP_COLOR`, `MTG_PAY_LINE_GENERIC_ORDER`); `pay_line_color_check.py` | as above |
+| `18c404d6` | bankable count adds the floating pool (s9_gi8 T4 restored); `viewer_checks.sh` protocol sweep `--strict` | scenarios 79, combo_off 11, smoke 73, viewer strict PASS 0 play-drift |
+| `d92c5fc2` `8e61ec9b` | sweep phase 2: outlet switch + post-swap sizing (C3), sink real-trial payment + Gorge untap slot (C2), land-Aura wild counts as U/B (M1); fixtures 12-15 | scenarios 79, combo_off 15, smoke 73, viewer strict PASS |
+| `4eb7e554` | viewer per-click clock: persistent `--interactive` child survives cast-order pins and validations (`@cast-order`, `@validate-line`); layer 1g interactive parity | scenarios 79, combo_off 15, smoke 73, viewer strict PASS (routing parity 335/335 in-child) |
+| `93ad0585` `de7cbaa8` | third seed-6 defect: draw sink priced by a real trial on a state copy (`MTG_COMBO_OFF_DRAW_TRIAL`); fixture 11 now digs the wish THIRTEEN deep and wins | **consolidated**: scenarios 79, combo_off 15, FULL regression 99/99 ALL PASS byte-identical, viewer strict PASS, quick sweep synthetic b 23 -> 19 |
+| `216eadd2` `61847a4b` | perf: two per-payment heap allocations dropped; `IsPaySacSource` tests card data before its magic static (-3.55% Ir on EDF, -4.93% on the seed-9 go-off; 24 game logs identical) | scenarios 79, combo_off 15, smoke 73 ALL PASS byte-identical, viewer strict PASS (0 play-drift, 309 refs), quick sweep unchanged (synthetic a53 b19) |
+
+Three `bench:` commits in between are the auto re-bench the viewer's stale-only path runs during
+`viewer_checks.sh` (the save-parity layer starts a server, which re-benches decks whose src stamp went
+stale); every measurement was unchanged each time.
+
+### The user's two live failures, closed
+
+* **Seed 6 T4 "incorrect float"** -- payment, not untap (15c). **Seed 6 T4 Combo Off drew 13 and
+  stopped, leaving no mana up** -- three stacked executor defects (15d, 15g): the draw guard priced the
+  source it was about to tap; a failed click was not rolled back (that IS the "no mana left" report);
+  and the draw sink's pooled `CanPay` could not see a dual land's generic half being spent from under the
+  next `{C}`. The user's actual board, wish 13 down, now goes off verified: 60 blinks, 26 draws, win.
+* **Seed 9 T4** -- the empty-pool click was refused as unwinnable by the loop's own count (15b); the
+  user's later successful click at G:80 was then refused too because the count ignored the pool (15e).
+  Reference s9_gi8 replays to T4 again, strictly.
+
+### Sweep, phase-1 baseline -> end of window (one binary each time, 1051 states)
+
+wins 184 -> **206**, executor failures 84 -> **68**, `combo_off_verified` a perfect oracle at 206/206.
+GORGE 17 offers/0 wins -> 8/4 (nine false offers withdrawn: a two-untap Gorge board nets 0 a pass and
+cannot win; pinned as fixture 12 with fixture 13 as its positive control).
+
+### Open, carried forward (none blocked on)
+
+1. **Bank still inexact on the seed-9 EMPTY-pool frame** (15e): `RecogniseFlickerLoop` nets +1 because
+   the `{C}`-starved untap projection reserves Mariposa for a Displacer that is only in HAND, while the
+   Emiel outlet the WISH-DRAW path uses needs no `{C}`; true net +2 -> bank 120 >= 104. Fixture 10 still
+   asserts absent there. Same family as C3; a candidate for the trial being asked directly.
+2. **Pay-line levers jointly reorder** decision 10's plan list on s9_gi8 (38 -> 42); by-intent replay
+   repairs it. Enumeration ORDER only; recorded, not changed.
+3. **Perf: a 0.21% exact (callgrind) win in `consider()` was reverted under the "<1% is noise" rule**;
+   the measurement was exact, so the rule's rationale did not apply -- the user's call whether to bank
+   small exact wins. Not reapplied.
+4. **The replay hunt** (true-fidelity, via the `--interactive` protocol) found three `--interactive`
+   children that ran 80-100 min at 95% CPU on autonomous-line seeds 39/51/71 -- a replay that never
+   terminates. Killed as the hunt's own experiment; command lines in `logs/hunt_stuck_replays.txt`.
+   Its catalogue lands separately.
+5. **The user's play server (pid 72811) predates every server.js landing of 2026-09-10/11** (no binary
+   pin, no save audit, no persistent-child fix). Restart it before the next game.
