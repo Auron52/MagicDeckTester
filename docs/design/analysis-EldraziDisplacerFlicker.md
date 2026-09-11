@@ -5522,3 +5522,177 @@ group/plan-space caps, the unprune gates, or the blink-activation fan-out.
    cut 7^4 to 7 losslessly. It is not in this commit because it would reorder the menu on *every* EDF
    frame with two or more Displacers, which moves recorded reference indices; it belongs with a
    reference re-verification pass, not with a hang fix.
+
+## Session 19 (2026-09-11): the display rule learns the SECOND resource -- "exact, or not at all"
+
+**USER, opening the session:** *"we should be using rules as optimal and accurate as possible to
+Combo Off. Any additional work we can do to make this the case should be done."* Exact means the
+button fires on every frame where the executor's trial go-off wins, and on no frame where it
+provably cannot -- narrowed **only by exact arithmetic, never by a guess**.
+
+This session owns the RULE (`EldraziFlickerProvider::ComboOffPossible`, `comborules::*`,
+`BankableMana`, `FinishNeedMana`, the net/binding-resource projection). The executor clusters
+(C6 finisher selection, C5 finish-runs-out, C1 draw-to-find) were another agent's, concurrently.
+
+### The finding: one scalar cannot describe this loop, and the obvious correction was WRONG
+
+Session 17 carried open item 1: `RecogniseFlickerLoop` reports `net = +1` on the user's seed-9 T4
+board because the `{C}`-starved untap promotion reserves a slot for Mariposa whenever a `{C}` sink is
+merely REACHABLE -- here an Eldrazi Displacer **in hand**, a card the WISH-DRAW path never casts. That
+path runs through Emiel, which spends no `{C}`, so the note proposed the correction: untap Kitchen +
+Conservatory instead, net `+2`, bank 120, which clears the ~104-mana need. Fixture 10 would then fire.
+
+**That correction is wrong, and proving it is what this session is.** The only finisher that board
+can cast is Dimensional Infiltrator (`{1}{U}` off Kitchen; Essence Depleter is `{2}{B}` and there is
+no black anywhere), and its exile is `{1}{C}`: fifty cards is **fifty {C} PIPS** as well as fifty
+generic. Mariposa is the board's only colourless and it returns once per untap. So:
+
+* the `+2` schedule has the mana and makes **zero** pips -- it exiles nothing;
+* the `+1` schedule makes the pips and **cannot pay the generic halves**.
+
+You cannot have both, and no single number can say so. Best possible mixture: 7 on tap now +
+49x1 + 11x2 = **78 mana against 104**, before one draw is paid for. Short under EVERY schedule --
+a proof, where the old scalar's "60 < 104" was right by luck and would have broken under its own
+correction.
+
+### What shipped (all display-only, all `EnvOn(..., true)`, all `=0` one-binary A/B)
+
+* **`MTG_COMBO_OFF_EXACT`** -- the bank becomes a PAIR. `ScanUntapSet` walks the top-N lands in
+  `FlickerTopLandYields`' own order and reports yield, `{C}`-capable count and `{R}`-capable count
+  for that exact set, under both untap orders (pure yield, and one slot reserved for a `{C}` land --
+  `MTG_UNTAP_C_STARVED`'s own promotion). `Fundable(need_mana, need_pips)` then picks the schedule:
+  because `c_res >= c_yield` and `n_res <= n_yield` by construction, the pip demand sets a LOWER
+  bound on the reserved iterations and the mana is maximised exactly there -- one division, no
+  search, still O(board). Taking the best mixture is an UPPER bound on what the loop can hand the
+  path, so a refusal is a proof. `avail` (untapped sources + the floating pool) is added because it
+  is real and omitting it narrowed by omission.
+* **`FinishNeedMana` now returns the {C} PIP count** alongside the mana, and `CheapestFinishNeed`
+  is replaced by **`AnyFinishFundable`**: cheapest-by-mana is the wrong selector once two resources
+  are in play, so every reachable finisher is tested against the pair and one clearing is enough.
+* **`GorgeFundable`** -- the Gorge path priced by the resource it is really bound by, which is
+  neither mana nor `{C}`. A ping is `{T}: {2}{R}`, so it is once-per-untap (hence `acts` iterations,
+  with `ApplyBlinkLoop`'s promotion of the Gorge priced as a slot a yield land does not get), and
+  this deck's ONLY red is a land Aura's wild "one mana of any colour" **riding its host land's tap**.
+  So the ping needs a red-capable land in the set THIS untap restores, `acts` times over -- and the
+  yield order routinely drops it. That is exactly the difference between fixtures 12 and 13, and it
+  is why `HasRedSource` (a board question) could never settle it.
+* **`MTG_COMBO_OFF_FLOAT_ING`** -- the ingredient predicates read `s.floating_mana`. The BANK learned
+  the pool in 15e (`18c404d6`); the ingredients that gate WHICH rule may fire still walked the
+  battlefield only. A floated `{C}` counts toward C1/C2 (clamped at two, which is all C1/C2 ask) and
+  floated `U`/`B`/`R`/wild toward UB/R. A plain `wild` never counts for `{C}` -- a colour cannot pay a
+  colourless pip, the same asymmetry `LandAuraMakesAnyColor` already encodes.
+* **`MTG_COMBO_OFF_PROSPECTIVE`** -- L may be the loop the PLAN assembles, not only the one already
+  in play (`RecogniseFlickerLoopProspective` over the outlets/payloads in hand). Sound here rather
+  than merely permissive: `ComboOffPossible` is consulted only after the enumerator has produced a
+  plan carrying a multi-activation go-off, which is the payment machinery's own proof that the
+  assembly is affordable. A future search shortcut must re-check that precondition.
+* **Every offer names its rule** (`TurnSolver.cpp`). `co_rule` is empty whenever `rules_ok` is false,
+  and the verified arm never consulted `rules_ok` -- so a plan the TRIAL won while the table declined
+  was stamped offered with a blank badge (the hunt's ANOM-1, 45 of 1,059). It is now stamped
+  **`TRIAL`**, which is not cosmetic: that population is precisely "the rule table missed a real
+  kill", so it has to be countable. Proved reachable with `MTG_COMBO_OFF_RULES=0`.
+
+### Measured: one binary, `MTG_COMBO_OFF_EXACT=0` vs default, the SAME 1,021 sweep states
+
+| | exact off (`=0`) | exact (default) |
+|---|---:|---:|
+| a offered **and wins** | **203** | **203** |
+| b offered, click does NOT win | **68** | **29** |
+| c missed offer | 25 | 26 |
+| c' missed, combat kill | 46 | 46 |
+| **d rule TOO LOOSE** | **0** | **0** |
+| e correctly absent | 679 | 717 |
+| offers | 271 | **232** |
+| **agreement offered -> wins** | **74.9%** | **87.5%** |
+| `combo_off_verified` -> wins | 203/203 (100%) | 203/203 (100%) |
+
+**Not one winning offer was lost.** Per rule, offers/wins: DEPLOYED 117/100 -> **101/100**, IN-HAND
+33/27 -> **29/27**, WISH-DRAW 112/67 -> **93/67**, GORGE 8/8 -> 8/8, WISH-NODRAW 1/1 -> 1/1 -- every
+withdrawal is a class-(b) failure and every win count is identical. Mechanisms: `c-net-nonpositive`
+**20 -> 0**, `loop-ran-finish-never-fired` 36 -> 10, `finish-fired-short` 31 -> 18,
+`wish-in-library-dig` 20 -> 16. `MTG_COMBO_OFF_EXACT=0` reproduces the baseline **state for state**
+(1,021/1,021 identical classes), which is what makes this a clean one-binary A/B.
+
+### Measured: the replay hunt (939 TRUE-fidelity states, real pools/shuffles/exile/energy)
+
+`a=60 b=23 c=7 c'=2 e=847` -- **unchanged**; offered 83, of those 60 win (72.3%), verified 60/60.
+The only movement is rule ATTRIBUTION: **GORGE 6/4 -> 1/0 and WISH-DRAW 58/37 -> 63/41**, i.e. five
+offers that named a Gorge path the board cannot fund now name the path that actually pays, and four
+of those five win. Nothing was withdrawn and nothing was lost.
+
+The difference between the two populations IS the result: the sweep's 39 withdrawals were
+arithmetically impossible boards (the synthetic matrix over-represents them), while **on real boards
+the entire remaining disagreement is executor-side** -- C1b 18, C2 3, loop-zero 2, and zero rule
+defects. `MTG_COMBO_OFF_FLOAT_ING` and `MTG_COMBO_OFF_PROSPECTIVE` both measured **INERT** here and
+are kept as correctness (they remove a class of failure by construction), not as a claimed gain.
+
+### Fixture 10 -- adjudicated, with the executor asked directly
+
+`MTG_COMBO_OFF_BANKABLE=0` forces the offer; all 60 blinks then run and `[finish]` reports
+`calls=60 wish=0 none-found=60 no-mana=13`. Moving the Living Wish to the **top** of the library
+changes nothing -- `draw paid=2, calls=120, no-mana=116` -- because after each blink the pool holds
+about two mana and the wish + Infiltrator cast wants four in ONE payment. So the frame is not merely
+un-won, it is unwinnable at any wish depth, and the arithmetic above refuses it for that reason. The
+full derivation is now in the fixture's own comment, replacing the scalar one.
+
+### The two "missed offers" from the hunt catalogue, reclassified
+
+* **M-R1** (`RR-26ad4c4217`, `claude_s2_gi1` T4) -- **not a rule defect.** That frame enumerates
+  `n_plans = 1`: five of seven permanents are tapped, so no plan carries a go-off at all and
+  `best_any < 0` short-circuits the button before `ComboOffPossible` is ever consulted.
+* **M-R2** (`RR-bd677d04f3`, `claude_s11_gi10` T6, `{W:1,G:27,C:9}` floating) -- **already fixed on
+  the tip**, by `d92c5fc2` (land-Aura wild counts as U/B) and `18c404d6` (bank reads the pool). Re-run
+  directly: offered, **verified**, rule `WISH-DRAW`, and unchanged with either of this session's new
+  levers off. Same for **ANOM-1**: its exemplar frame now carries `combo_off_rule: "WISH-DRAW"` at
+  the tip even with `MTG_COMBO_OFF_PROSPECTIVE=0`, so the 45 blank badges were a `d8f700bb` artefact
+  of the same UB blindness. The `TRIAL` stamp closes the hole structurally rather than by luck.
+
+### New tool
+
+`test/combo_off_diff.py BEFORE.json AFTER.json` -- diffs either harness's results on the STABLE
+state ids (both result shapes accepted) and prints the class transition matrix, the offered->wins
+and verified->wins agreement rates, and per-rule offers/wins. An aggregate class table hides the two
+things a fixer needs -- how many states MOVED and in which direction -- because a net zero can be
+twelve gained and twelve lost.
+
+### Open, carried forward (none blocked on)
+
+1. **The remaining 29 sweep failures and 23 hunt failures are ALL executor-side**, and the rule
+   cannot narrow them without refusing real kills: on those boards the arithmetic genuinely funds
+   the path and the apply mis-sequences. Sweep 29 by rule: WISH-DRAW 26, IN-HAND 2, DEPLOYED 1;
+   by population synthetic 11 / reference 14 / engine 4; mechanisms `loop-stopped-early` 18,
+   `finish-fired-short` 18, `wish-in-library-dig` 16, `loop-ran-finish-never-fired` 10. Hunt 23:
+   C1b (draw-to-find eats the loop's entry price) 18, C2 (damage sink paid before `pay(c)`) 3,
+   loop-zero 2. **What the
+   rule owner needs from the executor:** `SpendSurplusOnDrawSinks` and `SpendSurplusOnDamageSinks`
+   must never spend below the next activation's price at EVERY call site (the
+   `MTG_COMBO_OFF_DRAW_TRIAL` / `MTG_COMBO_OFF_SINK_TRIAL` shape), and `ComboFinishFromHand`'s in-loop
+   `affordable` needs the wish + finisher cast to be reachable by BANKING across iterations rather
+   than out of one post-blink pool -- fixture 10's `no-mana=116` is exactly that, and it is the same
+   shape as C5.
+2. **All 26 remaining class-c "missed offers" are accounted for, and NONE is a rule defect.**
+   Sorted by re-deriving each board (`logs/classify_c.py` shape; every "other" was re-run through
+   `--scenario`):
+   * **13 -- no self-funding loop on the board** (`net <= 0`). The engine wins that turn by some
+     other route; correct absence.
+   * **9 -- a loop exists but NO multi-activation go-off plan is enumerated.** Either the current
+     pool cannot pay even one activation (6 of them: everything already tapped mid-turn) or
+     `FlickerGoOffCount` sizes nothing above the `chosen_x > 3` threshold (3 of them, confirmed by
+     re-running: not one `blink ... xN` plan appears in 26 / 53 / 526 plans). `rules_ok` is gated on
+     `best_any >= 0`, so **`ComboOffPossible` is never consulted on these frames at all** -- and it
+     should not be, because a button whose first activation is unpayable is a false promise. This is
+     the same shape as the replay hunt's M-R1. Upstream of this session's ownership.
+   * **4 -- `net_c = 0`**: the finisher's `{C}` pips can never be supplied, so the new pip
+     arithmetic refuses. The one that moved b -> c under this change (`X-885f08aed6`) had its click
+     MEASURED before the change: 16 -> 15 opponent life, one drain of sixteen. Withdrawing it is
+     right; it is labelled "missed" only because the harness's winnability oracle counts ANY win
+     that turn, including a line that plays a land the standalone go-off plan never makes.
+3. **A land in hand can change the pip supply** and `ComboOffPossible` cannot see it. Offering on
+   that basis would be a false promise today, because `offered_idx` always picks a STANDALONE plan
+   (no land drop). If land-drop-then-go-off should be offered, the OFFER has to be allowed to carry
+   the land, which is a TurnSolver change, not a rule one.
+4. **`MTG_COMBO_OFF_FLOAT_ING` and `MTG_COMBO_OFF_PROSPECTIVE` are inert on both populations today.**
+   They ship on because they are the correct reading and because the populations that would exercise
+   them (a pool-carrying frame whose battlefield lacks the colour; a frame whose loop is entirely in
+   hand) are exactly the ones a human reaches in the viewer and a sweep under-samples. If the user
+   would rather not carry inert levers, `=0` is one env var and deleting them is small.

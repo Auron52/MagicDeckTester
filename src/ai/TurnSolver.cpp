@@ -37089,7 +37089,22 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                     // or did not win", so the flag is precisely the distinction the label needs.
                     combo.combo_off_verified = (i == best && verified);
                     combo.combo_off_offered  = combo.combo_off_verified || (i == offered_idx);
-                    if (combo.combo_off_offered) { combo.combo_off_rule = co_rule; }
+                    // EVERY OFFER NAMES ITS RULE. `co_rule` is empty whenever `rules_ok` is false,
+                    // and the verified arm two lines up does not consult `rules_ok` at all -- so a
+                    // plan the trial apply WON while the display table declined was stamped offered
+                    // with a blank badge. The replay hunt counted 45 of those in 1,059 offers (4.2%,
+                    // all verified, all wins); the viewer's badge rendered empty and a saved
+                    // decision JSON could not say what had fired.
+                    //
+                    // Naming them "TRIAL" is not cosmetic: that population is exactly "the rule
+                    // table MISSED a real kill", so it has to be countable rather than blank. It is
+                    // also the only honest label -- the trial apply, not a rule, is what earned the
+                    // offer. (Re-measured on the tip 2026-09-11: the 45 do not reproduce, because
+                    // `d92c5fc2`'s land-Aura UB fix removed the `rules_ok == false` that produced
+                    // them. This closes the hole structurally instead of by luck; if it ever fires
+                    // again, the badge says so.)
+                    if (combo.combo_off_offered)
+                    { combo.combo_off_rule = co_rule.empty() ? std::string("TRIAL") : co_rule; }
                 }
             }
             if (have_combo) { kept.push_back(std::move(combo)); }

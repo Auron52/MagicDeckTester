@@ -16766,6 +16766,31 @@ inline bool HasRepeatableDrawSource(const GameState& s, int c)
 // Counts PERMANENTS that can make {C} from their own modes. EffectiveProduces so a conditional
 // producer (Aether Hub's coloured modes need energy) is judged on the board as it stands; the {C}
 // mode of every source here is unconditional.
+// MANA ALREADY FLOATING IS A SOURCE FOR THIS TURN'S GO-OFF, and until now none of the ingredient
+// predicates could see it. The BANK learned to read `s.floating_mana` in Session 15e (18c404d6) --
+// a pool of G:80 is what made the user's own s9_gi8 click legal -- but the INGREDIENTS that gate
+// which rule may fire at all still walked the battlefield only. That is the same defect one layer
+// up: a {C} already in the pool pays the finisher's pip exactly as a Mariposa untap would, and a
+// {U} in the pool casts a Dimensional Infiltrator exactly as a Kitchen would. A rule that refuses
+// on "no {C} source" while nine {C} sit in the pool is narrowing the display by an omission, not by
+// arithmetic, which is the one thing the user's doctrine forbids.
+//
+// `wild` counts for a COLOUR (one tap of a multi-colour land pays any single coloured pip) and
+// `wild_c` -- the {C}-capable subset -- counts for {C}. A plain wild NEVER counts for {C}: a colour
+// cannot pay a colourless pip (CR 107.4c), which is the same asymmetry LandAuraMakesAnyColor
+// encodes below. MTG_COMBO_OFF_FLOAT_ING=0 restores the battlefield-only ingredients.
+inline bool FloatIngredientsOn()
+{
+    static const bool on = EnvOn("MTG_COMBO_OFF_FLOAT_ING", true);
+    return on;
+}
+
+// {C} PIPS sitting in the pool right now: real colourless plus the {C}-capable share of the wild.
+inline int FloatingCPips(const ManaPool& p)
+{
+    return p.colorless + std::min(p.wild_c, p.wild);
+}
+
 inline int ColorlessSourceCount(const GameState& s, int c)
 {
     int n = 0;
@@ -16777,6 +16802,9 @@ inline int ColorlessSourceCount(const GameState& s, int c)
         for (Color col : EffectiveProduces(s, c, *d, /*in_hand=*/false))
         { if (col == Color::Colorless) { ++n; break; } }
     }
+    // Clamped at two because C1/C2 are the only questions asked of this count, so a fat pool cannot
+    // manufacture a third "source" that means nothing.
+    if (FloatIngredientsOn()) { n += std::min(2, FloatingCPips(s.floating_mana)); }
     return n;
 }
 
@@ -16805,6 +16833,27 @@ inline bool LandAuraMakesAnyColor(const CardDefinition& d)
 inline bool HasColorSource(const GameState& s, int c, const Color* want, int n_want,
                            bool aura_wild_counts)
 {
+    // The POOL first, and it is the cheapest of the three reads: a {U} already floating casts the
+    // finisher exactly as an untapped Kitchen would. A `wild` unit is one tap of a multi-colour
+    // land, so it satisfies any single COLOURED pip -- all of `want` here is coloured (UB / R), so
+    // it counts unconditionally; the {C} question is asked by ColorlessSourceCount, not here.
+    if (FloatIngredientsOn())
+    {
+        const ManaPool& f = s.floating_mana;
+        if (f.wild > 0) { return true; }
+        for (int i = 0; i < n_want; ++i)
+        {
+            switch (want[i])
+            {
+                case Color::White: if (f.white > 0) { return true; } break;
+                case Color::Blue:  if (f.blue  > 0) { return true; } break;
+                case Color::Black: if (f.black > 0) { return true; } break;
+                case Color::Red:   if (f.red   > 0) { return true; } break;
+                case Color::Green: if (f.green > 0) { return true; } break;
+                default: break;
+            }
+        }
+    }
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != c) { continue; }
@@ -16932,13 +16981,183 @@ inline long long BankableMana(const FlickerLoop& loop)
          * static_cast<long long>(FlickerMaxIterations());
 }
 
+// --- THE BANK IS TWO NUMBERS, NOT ONE (MTG_COMBO_OFF_EXACT, default on) ------------------------
+//
+// `BankableMana` above is `net x 60`, one scalar, and on this deck that is the wrong shape in a way
+// that is wrong in BOTH directions at once. The user's seed-9 T4 board is the proof and Session 17
+// carried it forward as open item 1:
+//
+//   Kitchen 3, Conservatory+WildGrowth 2, Conservatory 1, Mariposa 1; Cloud of Faeries untaps TWO;
+//   Emiel blinks for {3}. Take the two biggest yields and a pass refunds 5 for a cost of 3: net +2,
+//   and NOT ONE {C}. Reserve a slot for Mariposa -- the board's only colourless -- and the pass
+//   refunds 4: net +1, and one {C}. `RecogniseFlickerLoop` reports the SECOND of those, because
+//   `FlickerReserveC` fires whenever a {C} sink is merely REACHABLE (here an Eldrazi Displacer in
+//   HAND, a card the WISH-DRAW path never casts). So the scalar bank read 60 against a ~104 need.
+//
+// Session 15e wrote down the obvious correction -- "the WISH-DRAW path through Emiel needs no {C}
+// at all; with Kitchen + Conservatory untapped the true net is +2 and the bank 120, which clears
+// 104" -- and that correction is WRONG, which is exactly why this is arithmetic and not an opinion.
+// The finisher the WISH-DRAW path fetches is a Dimensional Infiltrator, whose exile is `{1}{C}`:
+// fifty cards is fifty {C} PIPS, and the only thing on that board that makes one is Mariposa, once
+// per untap. The 120-mana schedule makes ZERO pips and exiles nothing; the 60-mana schedule makes
+// sixty pips and cannot pay the generic halves. You cannot have both, and no single scalar can say
+// so.
+//
+// So price a path against the loop as a PAIR of resources with an explicit schedule over them:
+// `a` iterations that reserve an untap slot for a {C} land (fewer mana, more pips) and `k - a` that
+// take the pure yield order (more mana, fewer pips). Both orders are things `EtbUntapLands` really
+// does -- the reservation is `MTG_UNTAP_C_STARVED` -- and taking the best mixture is an UPPER bound
+// on what the loop can hand the path, so a refusal here is a proof and never a guess. That is the
+// user's bar: "narrowed only by exact arithmetic, never by a guess."
+//
+// On the seed-9 frame: 50 pips forces a >= 49, giving 7 + 49x1 + 11x2 = 78 mana against 104. Short
+// under EVERY schedule, which is a strictly stronger statement than the scalar's "60 < 104" and
+// survives the +2 correction that would have broken the scalar version.
+//
+// MTG_COMBO_OFF_EXACT=0 restores the single-scalar bank.
+struct UntapSet
+{
+    int yield = 0;   // mana the untap hands back, per iteration
+    int c_n   = 0;   // lands in that set that can pay a {C} pip   (one each, per tap)
+    int r_n   = 0;   // lands in that set that can pay an {R} pip  (a wild land Aura counts)
+};
+
+inline bool LandPaysC(const GameState& s, int c, const CardDefinition& d)
+{
+    for (Color col : EffectiveProduces(s, c, d, /*in_hand=*/false))
+    { if (col == Color::Colorless) { return true; } }
+    return false;
+}
+
+// Red is asked ONLY by the Gorge path, and it is asked because this deck's red exists only as a
+// land Aura's wild "one mana of any colour" -- which rides its HOST land's tap. So the question is
+// never "is red on the board" (HasRedSource answers that) but "is red in the set of lands THIS
+// untap restores", and the two differ exactly when the Aura sits on a land the yield order drops.
+inline bool LandPaysR(const GameState& s, int c, const Permanent& p, const CardDefinition& d)
+{
+    for (Color col : EffectiveProduces(s, c, d, /*in_hand=*/false))
+    { if (col == Color::Red) { return true; } }
+    return (LandAuraColorMask(s, p) & (1 << static_cast<int>(Color::Red))) != 0;
+}
+
+// The top-N lands the untap will pick, in `FlickerTopLandYields`' own order, carrying the two pip
+// counts alongside the yield so they describe exactly that set and not some other one.
+//
+// `reserve_c` models `EtbUntapLands`' {C}-starved promotion (one slot for the best {C} land when the
+// yield order would take none). `pin_id` models `ApplyBlinkLoop`'s damage-sink promotion: the Gorge
+// goes to the FRONT of the untap priority and its slot is not available to a yield land
+// (MTG_COMBO_OFF_GORGE_SLOT, which `FlickerGoOffCount` already mirrors for the count).
+inline UntapSet ScanUntapSet(const GameState& s, int c, int n, bool reserve_c, int pin_id)
+{
+    UntapSet out;
+    if (n <= 0) { return out; }
+    if (n > kFlickerMaxUntaps) { n = kFlickerMaxUntaps; }
+    int slots = n;
+    if (pin_id != 0)
+    {
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != c || p.card.m_number != pin_id) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { break; }
+            out.yield += PermanentManaYield(s, p, *d);
+            out.c_n   += LandPaysC(s, c, *d) ? 1 : 0;
+            out.r_n   += LandPaysR(s, c, p, *d) ? 1 : 0;
+            --slots;
+            break;
+        }
+    }
+    if (slots <= 0) { return out; }
+    int ty[kFlickerMaxUntaps] = {0};
+    int tc[kFlickerMaxUntaps] = {0};
+    int tr[kFlickerMaxUntaps] = {0};
+    int best_c_y = -1, best_c_r = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != c || !p.card.IsLand()) { continue; }
+        if (pin_id != 0 && p.card.m_number == pin_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        int y  = PermanentManaYield(s, p, *d);
+        int cc = LandPaysC(s, c, *d) ? 1 : 0;
+        int rr = LandPaysR(s, c, p, *d) ? 1 : 0;
+        if (cc && y > best_c_y) { best_c_y = y; best_c_r = rr; }
+        for (int i = 0; i < slots; ++i)
+        { if (y > ty[i]) { std::swap(y, ty[i]); std::swap(cc, tc[i]); std::swap(rr, tr[i]); } }
+    }
+    for (int i = 0; i < slots; ++i) { out.yield += ty[i]; out.c_n += tc[i]; out.r_n += tr[i]; }
+    // Starved: the chosen set owns no {C} at all and the board does. The executor displaces the
+    // LOWEST-yield member for the best {C} land, so price exactly that -- one slot, no more.
+    if (reserve_c && out.c_n == 0 && best_c_y >= 0)
+    {
+        out.yield += best_c_y - ty[slots - 1];
+        out.r_n   += best_c_r - tr[slots - 1];
+        out.c_n   += 1;
+    }
+    return out;
+}
+
+// What the loop can hand a path over its whole run, in the two resources that bind it.
+struct LoopSupply
+{
+    long long k       = 0;   // the go-off's iteration ceiling (FlickerMaxIterations)
+    long long avail   = 0;   // mana on tap RIGHT NOW: untapped sources + the floating pool
+    long long avail_c = 0;   // {C} pips in that same "right now"
+    long long avail_r = 0;   // {R} pips in that same "right now"
+    int n_yield = 0, c_yield = 0, r_yield = 0;   // per iteration, untap in pure yield order
+    int n_res   = 0, c_res   = 0;                // ... and with one slot reserved for a {C} land
+};
+
+// `avail` is not double counting with the refund: over k iterations the board is tapped ONCE for
+// `avail`, then each iteration returns `yield` and spends `cost`, so the total is avail + k x net.
+inline LoopSupply SupplyFor(const GameState& s, int c, const FlickerLoop& loop, int pin_id = 0)
+{
+    LoopSupply o;
+    o.k = FlickerMaxIterations();
+    // THE OUTLET THE LOOP WILL ACTUALLY RUN WITH -- lockstep with FlickerGoOffCount's `eff_net_c`.
+    // When ApplyBlinkLoop is going to swap in a pip-free outlet out of hand, this loop's own {C} pip
+    // stops being spent and the per-iteration colourless net becomes the refund outright.
+    const int c_cost = PipFreeOutletFromHandLive(s, c, loop) ? 0 : loop.c_cost;
+    const UntapSet y = ScanUntapSet(s, c, loop.untaps, /*reserve_c=*/false, pin_id);
+    const UntapSet r = ScanUntapSet(s, c, loop.untaps, /*reserve_c=*/true,  pin_id);
+    o.n_yield = y.yield - loop.cost_mv;  o.c_yield = std::max(0, y.c_n - c_cost);  o.r_yield = y.r_n;
+    o.n_res   = r.yield - loop.cost_mv;  o.c_res   = std::max(0, r.c_n - c_cost);
+    ManaPool have = AvailableManaPool(s);
+    have.AddPool(s.floating_mana);
+    o.avail   = have.Total();
+    o.avail_c = FloatingCPips(have);
+    o.avail_r = have.red + have.wild;
+    return o;
+}
+
+// Can the loop fund `need_mana` total mana AND `need_pips` colourless pips inside its ceiling?
+//
+// `c_res >= c_yield` and `n_res <= n_yield` by construction (the reservation can only displace the
+// set's lowest yield), so the pip demand sets a LOWER bound on the reserved iterations and the mana
+// is maximised at exactly that bound -- one division, no search.
+inline bool Fundable(const LoopSupply& sup, long long need_mana, long long need_pips)
+{
+    if (need_mana < 0) { return false; }
+    long long a = 0;
+    if (need_pips > sup.avail_c + sup.k * sup.c_yield)
+    {
+        if (sup.c_res <= sup.c_yield) { return false; }   // no schedule makes more pips than this
+        const long long shortfall = need_pips - sup.avail_c - sup.k * sup.c_yield;
+        const long long per_swap  = sup.c_res - sup.c_yield;
+        a = (shortfall + per_swap - 1) / per_swap;
+        if (a > sup.k) { return false; }
+    }
+    return sup.avail + a * sup.n_res + (sup.k - a) * sup.n_yield >= need_mana;
+}
+
 // What the finisher `d` costs to RUN to a kill from here: activations x per-activation cost, plus
 // its own cast when it is not on the battlefield yet, plus `setup` (a wish that still has to fetch
 // it). `on_board` prices the activation through EffectiveActivationCost (a Training Grounds is
 // real); off-board it uses the printed cost, which over-pays and so under-admits nothing.
 inline long long FinishNeedMana(const GameState& s, int c, const CardDefinition* d,
-                                bool on_board, long long setup)
+                                bool on_board, long long setup, long long* out_pips = nullptr)
 {
+    if (out_pips) { *out_pips = 0; }
     if (d == nullptr) { return -1; }
     // A FINISHER THE BOARD CANNOT CAST COSTS NOTHING TO RUN, because it never runs. Without this the
     // cheapest-path arithmetic prices Essence Depleter ({2}{B}, ~20 drains at {1}{C} = 43 mana) on a
@@ -16948,33 +17167,57 @@ inline long long FinishNeedMana(const GameState& s, int c, const CardDefinition*
     // it or the two aim at different cards. Only for a finisher NOT yet in play: one already on the
     // battlefield has had its cast paid, and its activation pips are {C}, which C1 covers.
     if (!on_board && !BoardCanPayColors(s, c, d->card.m_mana_cost)) { return -1; }
-    const auto act_mv = [&](const ManaCost& printed) -> int {
-        return on_board ? EffectiveActivationCost(s, c, d->card, printed).ManaValue()
-                        : printed.ManaValue();
+    // The ACTIVATION, priced through the same reduction the payer applies when the card is already
+    // in play. `out_c` is that activation's {C} PIP count, which is the second resource the go-off
+    // is bound by and the one no mana value can express: Essence Depleter's drain and Dimensional
+    // Infiltrator's exile are both `{1}{C}`, so a kill is as many COLOURLESS as it is mana.
+    const auto act = [&](const ManaCost& printed, int* out_c) -> int {
+        const ManaCost eff = on_board ? EffectiveActivationCost(s, c, d->card, printed) : printed;
+        *out_c = eff.colorless;
+        return eff.ManaValue();
     };
     long long need = setup + (on_board ? 0 : d->card.m_mana_cost.ManaValue());
     if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
     {
         const int life = std::max(1, s.players[1 - c].life);
         const long long acts = (life + d->params.drain_amount - 1) / d->params.drain_amount;
-        return need + acts * std::max(1, act_mv(d->params.drain_cost.value()));
+        int cp = 0;
+        const int mv = act(d->params.drain_cost.value(), &cp);
+        if (out_pips) { *out_pips = acts * cp; }
+        return need + acts * std::max(1, mv);
     }
     if (d->params.exile_opponent_top_cost.has_value())
     {
         if (!s.opponent_library_dealt || s.opponent_decked) { return -1; }
         const long long cards = static_cast<long long>(s.players[1 - c].library.size());
-        return need + cards * std::max(1, act_mv(d->params.exile_opponent_top_cost.value()));
+        int cp = 0;
+        const int mv = act(d->params.exile_opponent_top_cost.value(), &cp);
+        if (out_pips) { *out_pips = cards * cp; }
+        return need + cards * std::max(1, mv);
     }
     return -1;
 }
 
-// The cheapest finisher reachable on `where`, priced through FinishNeedMana. -1 = none reachable.
-inline long long CheapestFinishNeed(const GameState& s, int c, int where /*0=bf,1=hand,2=wish*/)
+// Is ANY finisher reachable on `where` one this loop can actually fund?
+//
+// Deliberately "any", not "the cheapest". Cheapest-by-MANA is the wrong selector once pips are in
+// the picture: Essence Depleter's twenty drains are cheaper in mana than Dimensional Infiltrator's
+// fifty exiles and cost twenty pips against fifty, but a board with plenty of {C} and a thin net
+// can be the other way round. Testing each candidate against the pair and accepting if one clears
+// can only widen the display relative to picking one first, which is the permitted direction --
+// and it is also just correct: the human picks whichever works.
+//
+// `judge` returns "this path is fundable"; `MTG_COMBO_OFF_BANKABLE=0` passes everything.
+template <typename Judge>
+inline bool AnyFinishFundable(const GameState& s, int c, int where /*0=bf,1=hand,2=wish*/,
+                              const Judge& judge)
 {
-    long long best = -1;
+    bool any = false;
     const auto take = [&](const CardDefinition* d, bool on_board, long long setup) {
-        const long long n = FinishNeedMana(s, c, d, on_board, setup);
-        if (n >= 0 && (best < 0 || n < best)) { best = n; }
+        if (any) { return; }
+        long long pips = 0;
+        const long long n = FinishNeedMana(s, c, d, on_board, setup, &pips);
+        if (n >= 0 && judge(n, pips)) { any = true; }
     };
     if (where == 0)
     {
@@ -16984,7 +17227,7 @@ inline long long CheapestFinishNeed(const GameState& s, int c, int where /*0=bf,
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (IsTlessFinisher(s, d)) { take(d, true, 0); }
         }
-        return best;
+        return any;
     }
     const Player& ap = s.players[c];
     if (where == 1)
@@ -16994,7 +17237,7 @@ inline long long CheapestFinishNeed(const GameState& s, int c, int where /*0=bf,
             const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
             if (IsTlessFinisher(s, d)) { take(d, false, 0); }
         }
-        return best;
+        return any;
     }
     long long wish_mv = -1;
     for (const Card& h : ap.hand)
@@ -17014,13 +17257,46 @@ inline long long CheapestFinishNeed(const GameState& s, int c, int where /*0=bf,
             { wish_mv = wd->card.m_mana_cost.ManaValue(); break; }
         }
     }
-    if (wish_mv < 0) { return -1; }
+    if (wish_mv < 0) { return false; }
     for (const Card& sb : ap.sideboard)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(sb);
         if (IsTlessFinisher(s, d)) { take(d, false, wish_mv); }
     }
-    return best;
+    return any;
+}
+
+// THE GORGE PATH, priced by the resource it is really bound by -- which is neither mana nor {C}.
+//
+// A Shivan Gorge ping is `{T}: {2}{R}`, so it is once-PER-UNTAP (hence `acts` iterations, and
+// ApplyBlinkLoop promotes the Gorge to the front of the untap priority so it comes back -- a slot
+// a yield land does not get, which `pin_id` prices). And this deck's ONLY red is a land Aura's wild
+// "one mana of any colour", which rides its HOST land's tap. So the ping needs a red-capable land
+// in the set THIS untap restores, `acts` times over -- and the yield order routinely drops it.
+//
+// That is the whole difference between the sweep's two Gorge fixtures, and it is why `HasRedSource`
+// (a board question) cannot settle it: `edf_co_12` has a Fertile Ground on a Brushland the two-slot
+// untap never picks (0 red a pass, 1 in the pool, 20 pings wanted -> refused), while `edf_co_13`
+// untaps FIVE and keeps it (1 red a pass -> 21 available against 20 -> offered, and it wins).
+inline bool GorgeFundable(const GameState& s, int c, const FlickerLoop& loop)
+{
+    if (loop.gorge_dmg <= 0) { return false; }
+    int pin = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != c) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.tap_damage_cost.has_value() && d->params.tap_damage_each_opponent > 0)
+        { pin = p.card.m_number; break; }              // ApplyBlinkLoop promotes exactly one
+    }
+    const long long life = std::max(1, s.players[1 - c].life);
+    const long long acts = (life + loop.gorge_dmg - 1) / loop.gorge_dmg;
+    const LoopSupply sup = SupplyFor(s, c, loop, pin);
+    if (acts > sup.k) { return false; }                // one ping per untap, capped at the ceiling
+    if (sup.avail_r + acts * sup.r_yield < acts) { return false; }                 // the {R} pips
+    const long long spend  = acts * (loop.cost_mv + std::max(1, loop.gorge_cost_mv));
+    const long long supply = sup.avail + acts * (sup.n_yield + loop.cost_mv);      // = refund
+    return supply >= spend;
 }
 }   // namespace comborules
 
@@ -17033,7 +17309,33 @@ bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller
 
     // L -- the one ingredient every rule shares. RecogniseFlickerLoop IS this predicate: outlet and
     // untapper both in play, net mana per iteration positive.
-    const FlickerLoop loop = RecogniseFlickerLoop(s, controller);
+    FlickerLoop loop = RecogniseFlickerLoop(s, controller);
+    // ...AND THE LOOP THE PLAN IS ABOUT TO ASSEMBLE. The board recognizer reads only what is already
+    // in play, so on a frame whose winning plan CASTS the outlet or the payload it returns ok=false
+    // and the whole table declines -- the button then rests entirely on the trial apply, which is
+    // why 45 of the replay hunt's 1,059 offers carry an EMPTY rule badge (all 45 verified, all 45
+    // wins; the exemplar is the user's own `claude_s1_gi0` turn 3, "cast: Cloud of Faeries, Emiel
+    // the Blessed: blink Peregrine Drake x19"). Every offer must name its rule, so the table has to
+    // be able to see the same loop the plan does.
+    //
+    // Pieces are taken from HAND without an affordability test, and that is sound HERE rather than
+    // merely permissive: `ComboOffPossible` is consulted only after the enumerator has already
+    // produced a plan carrying a multi-activation go-off (`best_any >= 0` in EnumerateMainPlans),
+    // which is the payment machinery's own proof that the assembly is affordable. Anything that
+    // calls this WITHOUT that precondition -- a future search shortcut -- must re-check it.
+    // MTG_COMBO_OFF_PROSPECTIVE=0 restores the board-only reading.
+    static const bool s_prospective = EnvOn("MTG_COMBO_OFF_PROSPECTIVE", true);
+    if (!loop.ok && s_prospective)
+    {
+        std::vector<const CardDefinition*> from_hand;
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+            if (DefIsBlinkOutlet(d) || DefIsUntapPayload(d)) { from_hand.push_back(d); }
+        }
+        if (!from_hand.empty())
+        { loop = RecogniseFlickerLoopProspective(s, controller, from_hand); }
+    }
     if (!loop.ok || loop.net <= 0) { return false; }
 
     using namespace comborules;
@@ -17058,23 +17360,35 @@ bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller
     // that display may be narrowed ONLY by exact arithmetic; a bank that cannot see the pool is
     // not exact. No new flag: this is the same lever counting correctly.
     static const bool s_bankable = EnvOn("MTG_COMBO_OFF_BANKABLE", true);
+    // MTG_COMBO_OFF_EXACT (default on) -- the PAIR. See the BankableMana / Fundable header: one
+    // scalar cannot say that a schedule with the mana has no pips and the schedule with the pips
+    // has no mana, which is precisely the shape of the user's seed-9 board.
+    static const bool s_exact = EnvOn("MTG_COMBO_OFF_EXACT", true);
     const long long bank = BankableMana(loop)
                          + static_cast<long long>(s.floating_mana.Total());
-    const auto affords = [&](long long need)
-    { return !s_bankable || (need >= 0 && need <= bank); };
+    const LoopSupply sup = s_exact ? SupplyFor(s, controller, loop) : LoopSupply{};
+    const auto affords = [&](long long need, long long pips)
+    {
+        if (!s_bankable) { return true; }
+        if (need < 0)    { return false; }
+        return s_exact ? Fundable(sup, need, pips) : (need <= bank);
+    };
+    const auto finish = [&](int where)
+    { return AnyFinishFundable(s, controller, where, affords); };
 
     if (GorgeKillLive(s, controller, loop)
-        && affords(static_cast<long long>((std::max(1, s.players[1 - controller].life)
-                                           + loop.gorge_dmg - 1) / loop.gorge_dmg)
-                   * std::max(1, loop.gorge_cost_mv)))                { return fire("GORGE"); }
+        && (!s_bankable
+            || (s_exact ? GorgeFundable(s, controller, loop)
+                        : affords(static_cast<long long>(
+                                      (std::max(1, s.players[1 - controller].life)
+                                       + loop.gorge_dmg - 1) / loop.gorge_dmg)
+                                  * std::max(1, loop.gorge_cost_mv), 0)))) { return fire("GORGE"); }
     if (FinisherInPlay(s, controller) && C1 && (D || E || C2)
-        && affords(CheapestFinishNeed(s, controller, 0)))             { return fire("DEPLOYED"); }
+        && finish(0))                                                 { return fire("DEPLOYED"); }
     if (FinisherInHand(s, controller) && C1 && UB && (D || E || C2)
-        && affords(CheapestFinishNeed(s, controller, 1)))             { return fire("IN-HAND"); }
-    if (W && D && C1 && UB
-        && affords(CheapestFinishNeed(s, controller, 2)))             { return fire("WISH-DRAW"); }
-    if (W && C1 && UB && (E || C2)
-        && affords(CheapestFinishNeed(s, controller, 2)))             { return fire("WISH-NODRAW"); }
+        && finish(1))                                                 { return fire("IN-HAND"); }
+    if (W && D && C1 && UB && finish(2))                              { return fire("WISH-DRAW"); }
+    if (W && C1 && UB && (E || C2) && finish(2))                      { return fire("WISH-NODRAW"); }
     return false;
 }
 
