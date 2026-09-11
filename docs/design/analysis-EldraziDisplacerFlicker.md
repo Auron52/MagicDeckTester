@@ -6777,3 +6777,272 @@ With both fixes the corpus reads **human 4.429 / search 5.286, 8/14 short**, and
 4. *(closed within the session -- see "The SECOND fix" below.)* `MTG_EDF_PROSPECTIVE` was
    re-measured in combination and ADOPTED; the open item is now only the user's retrospective
    sign-off on a lever whose 2026-09-03 verdict it reverses.
+
+## Session 24 (2026-09-11): the executor learns to cast mid-loop
+
+**USER's three rulings, which this session turns into things the ENGINE can do:** *"for the Blue or
+Black requirement is drawing into Fertile Ground... with infinite draw you can always draw into
+Fertile Ground and get all the colours you need"*; *"with one colourless on board, one draw land on
+board and a mana producing engine you can always win the game"*; *"some of the pieces (those to
+generate mana at least) should be on board first... most of the work happens after this point."*
+
+Session 22 built the DISPLAY half of the first two and had to ship both dark, for a reason it stated
+precisely: `ApplyBlinkLoop` had exactly three hand-cast sites and all three were `IsCreature()`-gated,
+so *"a rule that fires on a swap the executor will not make is firing on hope."* This session is the
+executor half of that sentence, plus the constant Session 22 left in the ceiling. No rule ROW
+changed; what changed is what the apply can DO, and the sizing that has to agree with it.
+
+### Gap one: a land Aura could not be cast inside the loop (`DeployLandAuraFromHand`)
+
+`ResolveEnchantTarget` is the only code that can attach a land Aura and both its callers sit on the
+ordinary `CastFromHand` resolution path the go-off apply never enters. The new sibling of
+`DeployPipFreeOutletFromHand` is called from INSIDE the iteration body, immediately after
+`ApplyBlink` -- which is the position that makes it work, because the ETB untap has just put the
+loop's whole per-iteration income on the table, and the call sits UPSTREAM of `ComboFinishFromHand`,
+so a colour bought here is spendable by the finisher's cast in the SAME iteration.
+
+Everything about it is the discipline the other in-loop spends already carry:
+
+* it pays the aura's REAL cost from the loop's REAL float through the caller's own payer -- never
+  `wild`, never a projected pool;
+* it carries the `SWITCH_TRIAL`/`DEPLOY_TRIAL` guard (`keep_payable` + `probe_pay`): the cast is
+  rehearsed on a COPY and the loop's next activation must still pay afterwards, so a decline is a
+  DELAY a fatter iteration retries, never a spend that eats the loop;
+* the HOST is the provider's own `LandAuraHostCandidates` ranking -- the same list the ordinary
+  cast's enumerator emits plan variants over -- chosen AFTER the payment so the aura rides a land
+  the payment left untapped, with `LandHasShroud` re-checked there (CR 303.4a / 702.18a);
+* it fires only for a COLOUR the kill needs. `ComboFinishMissingColor` asks the narrow question: is
+  there a reachable `{T}`-less finisher whose cast is blocked by exactly ONE coloured pip type the
+  board cannot produce? One any-colour Aura hands back one wild per host tap, so a two-pip shortfall
+  is refused rather than assumed. Casting every aura in hand would be the Session 20 defect #4 shape
+  (a Wild Growth on a green board is pure cost); this is what stops it.
+
+`MTG_COMBO_OFF_DIG_COLOR` therefore **defaults ON**.
+
+### Gap two: a drawn Emiel was never cast (`ComboOffSwitchOutlet`, mid-loop)
+
+`DeployPipFreeOutletFromHand` iterated `hand` once, before iteration 0. The pre-loop switch body is
+now `ComboOffSwitchOutlet` -- the identical four conditions and the identical real trial, extracted
+so the pre-loop path is byte-identical by construction -- and it is re-asked every iteration, so an
+Emiel the dig turns up at k=5 is cast at k=5.
+
+Three things had to move together, and each has its own fixture control:
+
+1. **the apply** -- the mid-loop call (`MTG_COMBO_OFF_MIDLOOP_OUTLET`);
+2. **the sizing** -- `PipFreeOutletFromHandLive` credited a pip-free outlet in HAND only and tested
+   the `{C}`-pip sink on the BATTLEFIELD only. Both refused exactly the boards the dig is run for: a
+   `{T}`-less finisher already in play makes `want_draw` false, so the loop never digs and a library
+   Emiel is unreachable by construction. It now also reads the library behind a live repeatable draw
+   source, counts the loop's OWN recognised sink (`drain_c_pips` / `exile_c_pips` -- hand, wish or
+   library, all of them pips the Displacer is eating), and reports what REACHING the outlet costs so
+   `FlickerGoOffCount` charges the dig as a sequential PHASE (`MTG_COMBO_OFF_DIG_OUTLET`);
+3. **the dig's own stopping rule** -- `want_draw` is DRAW ONLY TO FIND and until now the only thing
+   it could look for was a finisher. `ComboOffNeedsDrawnOutlet` adds the predicate that says the loop
+   is still one draw from the fix: this outlet spends a `{C}` pip, a `{C}`-pip sink is reachable, NO
+   pip-free outlet is in hand already, one IS in the library, and a draw source is live. The
+   draw-land untap promotion tracks the same predicate, because "the two go on and off together,
+   ALWAYS".
+
+**And the first cut of (1) was too loose, measured.** Passing the wider sink test unconditionally
+cost two winning offers on the replay hunt -- `RR-4f86e30c22` and `AA-82c1edadaa`, both
+`a_offered_wins -> b_executor_failure`, both `blink: 0`. `RR-4f86e30c22` is Session 20's defect #4 in
+a new place: Emiel was ALREADY IN HAND, `net_c` was **+1** so the Displacer loop was not starving on
+pips at all, and the swap's `{2}{W}{W}` was pure cost --
+
+```
+[edf-goff-human] t4 src=Eldrazi Displacer(18) net=2 net_c=1 lib=49 dig=0 setup=5 drain=1/2 n2=23
+[edf-loop] OUTLET SWITCH -> id=21 (pip-free, {C} sink live)
+[edf-loop] (mid-loop, k=0)
+```
+
+-- and the pre-loop call had looked at that same Emiel one instant earlier and correctly declined it.
+The mid-loop call now passes `sink_on_board_only = !dig_for_outlet`, so on a board where the swap was
+already offered and refused it reproduces the pre-loop decision exactly.
+
+### The DIG_COLOR flip needed a PRICE, and that is where the rest of the regression was
+
+With the mid-loop swap narrowed the hunt still read `a 18 -> 19, b 2 -> 5`.
+`MTG_COMBO_OFF_DIG_COLOR=0` reproduced the baseline **882 states, class for class** -- so the whole
+residual was the display lever, not the executor.
+
+The cause is one line Session 22 wrote deliberately and one consequence it could not have: *"What it
+deliberately does NOT charge is the dig itself ... The iteration count and the trial apply are where
+the dig is really priced."* The first half was fine while the lever was OFF. Turning it on made the
+second half false, because `ScanHandSinks::consider` was charging nothing either -- so **nothing
+anywhere priced the draws**. The colour credit let the sizer price Essence Depleter `{2}{B}` on a
+board with no black, the drain DISPLACED a Dimensional Infiltrator plan that was winning, and the
+count was sized as though the Fertile Ground were already in play.
+
+`EdfDigReachesAnyColorAura` now reports `(i+1)` draws at the board's cheapest repeatable draw plus the
+Aura's own cast, and that price is charged **to the candidate that needs it** -- in the count sizer
+(`aura_extra`) and in the display arithmetic (`FinishNeedMana`'s `aura_setup`), which must agree or
+the table and the price aim at different cards. A finisher the board can already pay for costs
+exactly what it always cost, so no previously-measured board moves. With the price attached both
+corpora reproduce the baseline state for state.
+
+One performance guard came with it: `ScanHandSinks` runs inside `RecogniseFlickerLoop`, i.e. millions
+of times in rollout scoring, and the walk now includes a LIBRARY scan. `HumanPlayActive()` joins the
+lever gate there -- semantically identical (the only consumer of `dig_aura` is a human-play-only
+colour test) and it keeps the autonomous arm's cost at one static bool read.
+
+### Gap three: the ceiling is the board's own number (`MTG_COMBO_OFF_EXACT_ITER`)
+
+Session 22's open item 3, in its own words: *"The ceiling is a constant (400), not the computed
+dig+kill need. `FlickerGoOffCount` has the exact number at the clamp site; making the ceiling BE it is
+two lines and removes a magic number."* Two borrowed budgets hid real wins that same week -- a
+20-card library scan and this cap at 60 -- so a constant here is the same hazard twice removed.
+
+`FlickerGoOffCount` already computes an exact requirement and then clamps it. Run that computation
+once with the clamp lifted to a sanity bound and you have the number. It is not circular: the exact
+pass is marked by a thread-local, and inside it every ceiling read returns the sanity bound, so the
+recursion is exactly one level deep and one pass per `FlickerGoOffCount`. Every consumer that has a
+loop in hand -- the count sizer, `BankableMana`, `SupplyFor`, `GorgeFundable`, `ExtraLethalDamage`,
+`ProjectsAlternateWin` -- now reads the same per-board number, which is the property Session 22
+identified as load-bearing. The DRAW-LAND route keeps `FlickerMaxIterations()`; it is search-only.
+
+**The constant survives as a FLOOR, and that is measured rather than cautious.**
+`MTG_COMBO_OFF_ITER_FLOOR=0` gives the pure exact form and it **withdraws three fixtures** -- 10, 24
+and 29, the first being the user's own seed-9 T4 board that two sessions wrongly called unwinnable.
+The mechanism is visible on fixture 10: the sizer prints the SAME `n2=158` in both arms and the plan
+is sized `x158` either way, but the DISPLAY refuses at `k=158` and accepts at `k=400`. That is the
+unsoundness stated exactly -- **the exact count is what the SIZER's chosen branch needs (the cheapest
+recognised sink), while the display prices EVERY reachable finisher through `FinishNeedMana`, which is
+a different and on these boards larger number.** So the exact count is not an upper bound on what the
+path the human clicks may want, and using it as the bank costs real kills. `max(exact, 400)` is
+therefore strictly widening: the count the plan carries is the exact requirement, uncapped above 400
+for the first time, and the display's bank is never smaller than Session 22's.
+
+`MTG_COMBO_OFF_MAX_ITER` becomes a HARD CAP rather than the operating ceiling and is unset by default;
+`=60` still reproduces the pre-Session-22 shared cap exactly (fixtures 10 and 26 use it as their
+control) and `=400` still reproduces Session 22. `MTG_COMBO_OFF_ITER_HARD` (default 2000) is the
+sanity bound, present only so a corrupt loop record cannot hang a trial apply.
+
+**And a board DOES exceed 400.** `edf_co_29` is built at the deck's own limit, not beyond it: Emiel
+blinking Cloud of Faeries (untaps TWO) for a refund of 4 against a cost of 3 -- net **+1** a pass,
+this deck's thinnest live loop -- with the only repeatable draw an Investigate at SIX mana a card, the
+Living Wish at library index 51 of 53, and a 53-card opponent library to exile at `{1}{C}`. Real work:
+312 + 4 + 106 = **422 mana at one a pass**.
+
+| | Session 22's flat 400 | the exact ceiling |
+|---|---|---|
+| count offered | `x400` | **`x685`** |
+| badge | COMBO OFF (NOT PROVEN -- may not finish) | **COMBO OFF: wins this turn** |
+| independent re-apply | opponent on 20, library 53 | **opponent lost** |
+
+685 is larger than the 422 the board really needs, and that is the sizing being honest rather than
+lucky: `MTG_EDF_GOFF_PHASES` adds the dig and the kill because they are sequential. Over-sizing is
+safe by `ApplyBlinkLoop`'s standing contract; under-sizing costs the whole kill, which is what the 400
+arm above demonstrates.
+
+### Trial cost, PAIRED -- same 29 fixtures, same 29 frames, same 23 trials, 3 reps (median)
+
+| arm | per trial | enum total |
+|---|---:|---:|
+| **default** (all Session 24 levers) | **2.417 ms** | 304.3 ms |
+| `MTG_COMBO_OFF_EXACT_ITER=0` (Session 22's flat 400) | 2.404 ms | 307.8 ms |
+| `MTG_COMBO_OFF_LAND_AURA=0 MTG_COMBO_OFF_MIDLOOP_OUTLET=0` (the two new casts off) | 2.378 ms | 306.2 ms |
+
+The exact ceiling costs **+0.013 ms a trial** and the two new in-loop casts **+0.039 ms**, against a
+run-to-run spread of about **0.10 ms** -- so the honest statement is that neither is measurable at this
+sample size, not that either is free. On the ONE board where the ceiling actually moves (`edf_co_29`,
+400 -> 685) the trial goes **4.0 ms -> 4.5 ms**: half a millisecond for 285 more iterations, and the
+4.0 ms arm does not win.
+
+### Fixtures: 26 -> 29, and every new lever fails exactly its own
+
+| fixture | pins | its control |
+|---|---|---|
+| `edf_co_24_dig_for_the_colour` (flipped) | no blue/black on board, Fertile Ground + Living Wish in the library, Investigate live: OFFERED **and VERIFIED** | `MTG_COMBO_OFF_LAND_AURA=0` -> offered, NOT verified (the Session 22 state of affairs exactly); `MTG_COMBO_OFF_DIG_COLOR=0` -> ABSENT |
+| `edf_co_25_no_aura_to_dig_absent` | same board, no any-colour Aura anywhere: ABSENT with every lever on | -- |
+| `edf_co_27_emiel_drawn_mid_loop` | one `{C}` (Mariposa), one draw land, Displacer + Drake, Essence Depleter in play, `net_c = 0`, Emiel at library index 1: `x27`, VERIFIED | `MTG_COMBO_OFF_MIDLOOP_OUTLET=0` -> offered, NOT verified; `MTG_COMBO_OFF_DIG_OUTLET=0` -> ABSENT; `MTG_COMBO_OFF_OUTLET_SWITCH=0` -> ABSENT |
+| `edf_co_28_no_pip_free_outlet_absent` | identical board, no pip-free outlet anywhere: ABSENT | -- |
+| `edf_co_29_the_ceiling_is_the_boards_own_number` | net +1, 6-mana dig, wish at index 51 of 53, 53-card opponent library: `x685`, VERIFIED | `MTG_COMBO_OFF_EXACT_ITER=0` -> `x400`, NOT PROVEN, re-apply does not win |
+
+`MTG_COMBO_OFF_ITER_FLOOR=0` fails three (10, 24, 29) -- that is the floor's evidence, not a defect.
+Every pre-existing fixture still passes, and the old levers still discriminate exactly as before
+(`MTG_COMBO_OFF_SWITCH_TRIAL=0` fails only 18; `MTG_COMBO_OFF_OUTLET_SWITCH=0` fails 14 and 27),
+which is what proves the `ComboOffSwitchOutlet` extraction kept the pre-loop path byte-identical.
+
+**Fixture 24 gained six filler cards under the Living Wish, and that is stated rather than quietly
+done.** The draw sink NEVER DRAWS THE LAST CARD (an unbounded loop must not propose its own death),
+so with the wish as card 10 of a 10-card library the Session 22 board was unwinnable for a reason
+that has nothing to do with colour -- an authoring artefact the `combo_off_verify: false` pin hid.
+`edf_co_25` takes the same filler so the pair stays matched. Forest adds no colour this board lacks.
+
+### Both corpora, one binary, diffed on stable state ids -- NOTHING MOVED, in either direction
+
+| | sweep (208, `--quick --reuse-games`) | hunt (882, `--quick`) |
+|---|---|---|
+| `a_offered_wins` | 62 -> **62** | 18 -> **18** |
+| `b_executor_failure` | 2 -> **2** | 2 -> **2** |
+| `c_missed_offer` | 12 -> **12** | 4 -> **4** |
+| `c_missed_offer_combat` | 2 -> **2** | 2 -> **2** |
+| `e_absent_unwinnable` | 130 -> **130** | 856 -> **856** |
+| `d_rule_too_loose` | **0** | **0** |
+| **FALSE FIRE** | **0** | -- |
+| `verified` -> wins | 62/62 -> 62/62 | 18/18 -> 18/18 |
+
+`combo_off_diff.py` reports `208/208` and `882/882` shared states with **zero class transitions**.
+That is the result and it should be read as it is: **this session's widenings are INERT on both
+measured corpora and are demonstrated only by the five fixtures.** The populations that exercise them
+-- a board whose finisher colour is one dig away, a Displacer loop whose Emiel is in the library, a
+net-1 loop needing 685 iterations -- are exactly the ones a human reaches in the viewer and a sweep
+under-samples, the same disposition Session 19 recorded for `MTG_COMBO_OFF_FLOAT_ING` and
+`MTG_COMBO_OFF_PROSPECTIVE`. They ship on because they are now the CORRECT reading and because the
+executor can finally walk them, not because a corpus number moved.
+
+### Gates (final binary)
+
+* `./build.sh`
+* `bash test/scenarios.sh` -- **79 passed, 0 failed, 0 error**
+* `bash test/combo_off_check.sh` -- **29 passed, 0 failed, 0 error**, plus one run per new lever at
+  its off value, each failing exactly its own fixture and nothing else
+* `build/Release/mtg-test` -- **SUCCESS**
+* `bash test/regression.sh --smoke` -- **73 passed, 0 failed, 0 new**;
+  `configs changed: 0   unchanged: 73   no-run-dir: 0`;
+  `[searched] slower=0  faster=0  play-changed=0`; `[d0      ] slower=0  faster=0  play-changed=0`;
+  **ALL PASS**
+* `bash test/combo_off_sweep.sh --quick --reuse-games` -- 208 states, `a=62 b=2 c=12 c'=2 e=130`,
+  FALSE FIRE 0, `d_rule_too_loose` 0
+* `python3 test/combo_off_replay_hunt.py --quick` -- 882 states, `a=18 b=2 c=4 c'=2 e=856`,
+  clusters `C2 2`
+* `bash test/viewer_checks.sh` (strict) -- **PASS**; protocol sweep **15 ok, 297 repaired,
+  0 play-drift, 0 shuffle-dead, 0 enum-gap, 0 mull-drift, 0 contract-fail (312 refs)**; validate-line
+  **1489 accept, 218 choose, 0 unsupported, 304 skipped, 0 known-fail, 0 REGRESSION (312 refs)** --
+  identical to Session 23's numbers, so no saved reference moved
+
+Every new path is `ComboOffFinishActive()`-gated and needs `probe_pay`, which only `TurnSolver`'s
+`ActivateBlink` apply supplies, so autonomous play, every rollout, GT, the value leaf and the keep
+tables are byte-identical by construction -- and measured so.
+
+### Open, carried forward (nothing blocked on)
+
+1. **The widenings are unmeasured on a corpus, by construction.** Nothing moved on either the
+   208-state sweep or the 882-state hunt, so the evidence for all three is fixture-level. The
+   cheapest way to turn that into a population number is a synthetic matrix row per new ingredient (a
+   library aura behind a live draw; a library Emiel on a `net_c = 0` board) in
+   `combo_off_sweep.py`'s generator -- the harness's business, not the engine's, and not attempted
+   here.
+2. **The mid-loop swap's wider sink test is licensed only by `dig_for_outlet`.** A board whose `{C}`
+   sink arrives mid-loop (wished) AND whose Emiel is also mid-loop is therefore still refused by the
+   pre-loop-equivalent test. Deliberate after the `RR-4f86e30c22` measurement, but it is a narrowing
+   chosen against two data points; if such a board turns up, the predicate to widen is
+   `ComboOffNeedsDrawnOutlet`'s condition 2, not the sink test.
+3. **The sizer's `pip_sink` is still narrower than the executor's**, by choice: it counts the loop's
+   recognised sink, the executor also accepts `ComboFinisherReachable`. The narrow sizer can only
+   UNDER-size, which `ApplyBlinkLoop`'s contract makes safe, but the two are not literally the same
+   predicate and a future reader should not assume they are.
+4. **`MTG_COMBO_OFF_ITER_FLOOR` is a lever whose default is load-bearing.** `=0` is the "no magic
+   number at all" form the user may prefer on principle; it costs three fixtures today, including
+   their own seed-9 board. Closing it properly means making the display's `FinishNeedMana` and the
+   sizer's branch selection compute the SAME requirement, after which the floor can go. That is real
+   work, not a two-line change.
+5. **A drawn PAYLOAD is still never cast.** Only the outlet half of "an outlet / a payload drawn
+   mid-loop" is done. The payload is the loop's `target_id`, fixed by the committed plan and
+   re-checked by `CanApplyBlink` every iteration, so casting a second one mid-loop would change what
+   the plan promised rather than execute it. No measured board needs it, and the user's ruling names
+   only the mana engine and Emiel.
+6. **`test/ref_bench.json` was re-stamped mid-session by the concurrent `viewer_checks.sh` run** (the
+   `src` fingerprints only; every measured number byte-identical) and was RESTORED rather than
+   committed, per Session 23's own note that the fleet must be refreshed AFTER the viewer gate, not
+   during it. Whoever integrates this branch should refresh it once, at the end.
