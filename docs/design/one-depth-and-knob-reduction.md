@@ -85,3 +85,51 @@ configuration matrix (leaf x cap) collapses to ONE axis once cap is unconditiona
    * `alpha` folded into `leaf` -- byte-identical on the 8 leafless decks by construction (all ship
      relaxed); verify by digest.
 4. Only then delete the keys and re-accept GT.
+
+## THE REAL FOOTGUN: three activation regimes, invisible from the sidecar (2026-09-11)
+
+User: *"The fact that we ended up with bad results because of not setting escalation_fresh_frac is
+another big reason I want to drop these settings. Too many ways to shoot ourselves in the foot."*
+
+The count is not the whole problem. The same sidecar has THREE different activation regimes, and
+which one a key belongs to cannot be seen in the file:
+
+| regime | keys | applies when |
+|---|---|---|
+| unconditional | `leaf`, `alpha`, `ladder`, `commit` | at sidecar LOAD, always (`MulliganProfileIO.h` apply_leaf_policy / DeckShapeScope) |
+| `drives()` | `beam_width`, `beam_leafdepth` | `target_depth > 0 && enabled` (`AIEngine.cpp:2498`) |
+| `drives()` + depth match | `escalation_cap`, `escalation_r`, `escalation_fresh_frac` | also `m_lookahead_depth == target_depth` (`AIEngine.cpp:2489`) |
+
+Three live consequences:
+
+1. **KittyEquipment is split-brained today.** It ships `enabled: false`, so adopting `leaf: none` on it
+   WORKS while adopting `escalation_cap` on it silently does NOTHING. Confirmed empirically: the
+   2026-09-11 `capctl` arm (enable alone) was byte-identical 16/16, and the `cap` arm only acted
+   because the arm also set `enabled: true`.
+2. **It explains the Hinata2 / Kitty d3-only regressions.** At d3 the depth match fails, so
+   cap/R/fresh_frac switch OFF while `leaf`/`alpha` stay ON -- the deck runs a configuration nobody
+   ever chose or measured, half of one setup and half of another. Those regressions are an artifact of
+   this split, not a property of the shape.
+3. **Keys whose ABSENCE selects a setting nobody ships** (the Melira defect class):
+   * `escalation_fresh_frac` absent => off / shared budget. 7 decks ship 0.5, none ship off. Caused
+     Melira's zero-budget depth-1 defect.
+   * `escalation_cap` absent => the full 1..D ladder, which the user has now ruled out entirely.
+   * `alpha` absent WITH `leaf: none` => **strict**, which `TurnSolver.cpp` says "stops it one depth
+     short of the win on deep-win decks (finding 11, Melira / Hinata)". All 8 leafless decks ship
+     relaxed. Documented as having already bitten -- on Melira.
+   * `beam_width` absent => off, while the beam was adopted 2026-07-18 as quality-better AND faster.
+     16 decks silently run without it. Milder: a missed win, not a defect.
+
+**Therefore hardcoding is not merely tidier -- it collapses all three regimes.** A hardcoded behaviour
+has one activation rule (always), so "did this key apply here?" stops being a question that can be
+answered wrong.
+
+## The ONE key the user is willing to keep
+
+For the no-leaf -> heuristic approach (`commit: "model"`), if it wins on Fluctuator or Melira-class
+decks. Evidence so far:
+* **Fluctuator: LOSES** +0.0068 +/- 0.0016 at 1.417x units -- putting the leaf back at the final depth
+  makes it worse, consistent with its model being the rejected 2026-09-06 candidate.
+* **treasure_hunt: WINS** -0.0013 +/- 0.0011 at 0.758x / 0.782x.
+* **Dragons: near-win** +0.0008 +/- 0.0004 at 0.398x units / 0.502x wall.
+* dstorm / goblins / mirrorwing / stompy: lose. Melira and the other 11 model-leaf decks: in flight.
