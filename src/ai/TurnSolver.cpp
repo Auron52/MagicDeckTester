@@ -14269,9 +14269,21 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
                                        int num_independent)
 {
     groupwave::g_state.call_active = false;   // set true below iff this call has a rank-R group
-    if (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap)) { return; }
-    const int cap = EffectiveGroupCap(state);
-    const int R   = groupwave::g_state.tranche_rank;   // -1 = normal (capped) mode
+    const int  R        = groupwave::g_state.tranche_rank;   // -1 = normal (capped) mode
+    const bool gate_off = GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap);
+    // ---- VIEWER PLAN-SPACE VALVE (MTG_VIEWER_PLAN_CAP; see viewerplancap in EngineFlags.h) -----
+    // `--claude-play` sets MTG_UNPRUNED for the whole session, which opens UnprunedGate::GroupCap
+    // and so returns right here -- leaving the PLAY VIEWER as the one mode with no bound at all on
+    // the odometer product. On EDF's blink loop that product doubles per Clue token minted and the
+    // click stops coming back (measured 0.6 s -> 11.3 s over ten clicks of one turn, still
+    // doubling). The valve re-arms the SAME ranked shrink for human play only, at its own (larger)
+    // bound, and records what it dropped so the menu can say it was truncated.
+    const bool valve = gate_off && R < 0 && HumanPlayActive() && viewerplancap::On();
+    if (gate_off && !valve) { return; }
+    // Unbounded group COUNT under the valve: the viewer is deliberately un-pruned, so the only
+    // thing being bounded is the PRODUCT. Everything else about this call is unchanged.
+    const int    cap  = valve ? std::numeric_limits<int>::max() : EffectiveGroupCap(state);
+    const double vcap = valve ? viewerplancap::Positions() : PlanSpaceCap();
     if (R < 0 && static_cast<int>(groups.size()) <= cap)
     {
         // Group COUNT is under the cap -- but a few very WIDE digits can still multiply to an
@@ -14281,13 +14293,15 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
         // PLAN-SPACE cap below bounds the PRODUCT with the same defer-don't-cap contract as the
         // count cap: dropped groups are recorded for the group-waves tranches, so no rank is
         // unreachable at an unbounded budget.
-        const double pcap = PlanSpaceCap();
+        const double pcap = vcap;
         if (pcap <= 0.0) { return; }
         double b = std::ldexp(1.0, std::min(num_independent, 60));
         for (const std::vector<int>& g : groups)
         { b *= 1.0 + static_cast<double>(g.size()); }
         if (b <= pcap) { return; }
         // fall through: rank groups and shrink until the product fits
+        if (valve) { viewerplancap::Acc().full_positions
+                         = std::max(viewerplancap::Acc().full_positions, b); }
     }
     if (R >= 0 && static_cast<int>(groups.size()) <= R)  { return; }   // tranche absent here -> emit nothing
 
@@ -14314,9 +14328,9 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     // (x 2^independent) stays under the cap -- always at least one group, so the top-ranked line
     // class survives any bound.
     int keep_n = (R < 0) ? std::min(cap, static_cast<int>(groups.size())) : (R + 1);
-    if (R < 0 && PlanSpaceCap() > 0.0)
+    if (R < 0 && vcap > 0.0)
     {
-        const double pcap = PlanSpaceCap();
+        const double pcap = vcap;
         double run = std::ldexp(1.0, std::min(num_independent, 60));
         int fit = 0;
         while (fit < keep_n)
@@ -14326,6 +14340,19 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
             ++fit;
         }
         keep_n = std::max(1, std::min(keep_n, fit));
+        if (valve)
+        {
+            // The MENU IS NOW SHORTER THAN THE BOARD ALLOWS -- say so rather than quietly handing
+            // the player a partial list. Max over this enumeration's per-land inner calls (they all
+            // shrink the same board); EnumerateMainPlans latches the total for the decision JSON.
+            double kept = std::ldexp(1.0, std::min(num_independent, 60));
+            for (int i = 0; i < keep_n; ++i)
+            { kept *= 1.0 + static_cast<double>(groups[ranked[i].second].size()); }
+            viewerplancap::Trunc& acc = viewerplancap::Acc();
+            acc.dropped_groups = std::max(acc.dropped_groups,
+                                          static_cast<int>(groups.size()) - keep_n);
+            acc.kept_positions = std::max(acc.kept_positions, kept);
+        }
     }
     if (R >= 0)
     {
@@ -36810,7 +36837,13 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
     std::vector<Plan> plans;
     {
         playtiming::Scope tm_base(&playtiming::T().enum_base);
+        // VIEWER PLAN-SPACE VALVE bookkeeping (EngineFlags.h): clear the accumulator around the
+        // BASE enumeration only, then latch it. The combo-off trial apply below runs whole go-offs
+        // that enumerate again, and a truncation inside one of those is not a statement about the
+        // menu this frame is offering.
+        viewerplancap::Acc() = viewerplancap::Trunc{};
         plans = EnumeratePlansWithLand(state, is_pre_combat);
+        viewerplancap::Last() = viewerplancap::Acc();
     }
     // ---- COMBO OFF gate (human play only; USER 2026-09-07) ---------------------------------------
     // "You either win or let the user do each required action. We shouldn't have weird mixed lines

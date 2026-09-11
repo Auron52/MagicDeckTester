@@ -1611,6 +1611,22 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     if (emit_chosen_extra) { emit_plan(static_cast<size_t>(chosen_index), true); }
     os << "  ],\n";
     if (plans.size() > n_emit) { os << "  \"plans_total\": " << plans.size() << ",\n"; }
+    // THE MENU IS SHORTER THAN THE BOARD ALLOWS, AND THE CLIENT IS TOLD. `plans_total` above says
+    // "the list you got is a top slice of the list the engine built"; this says "the list the
+    // engine BUILT is itself a bounded slice of the legal plan space", which is a different and
+    // stronger claim -- and one a viewer must never make silently. Emitted only when the viewer
+    // plan-space valve actually fired on this frame (EngineFlags.h viewerplancap); on every board
+    // under the bound the key is absent and the enumeration is exhaustive as before.
+    {
+        const viewerplancap::Trunc& vt = viewerplancap::Last();
+        if (vt.Fired())
+        {
+            os << "  \"plans_truncated\": { \"dropped_groups\": " << vt.dropped_groups
+               << ", \"positions\": " << static_cast<long long>(vt.kept_positions)
+               << ", \"positions_full\": " << static_cast<long long>(vt.full_positions)
+               << ", \"why\": \"viewer plan-space bound (MTG_VIEWER_PLAN_CAP=0 to lift)\" },\n";
+        }
+    }
     os << "  \"note\": \"reply with one plan index (0-based), or -1 to pass / cast nothing\"\n";
     os << "}\n";
 }
