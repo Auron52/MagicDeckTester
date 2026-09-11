@@ -17980,6 +17980,20 @@ inline bool GorgeFundable(const GameState& s, int c, const FlickerLoop& loop)
 }
 }   // namespace comborules
 
+// WHY DID THE TABLE DECLINE? -- diagnosis only, default OFF, never branches game logic.
+//
+// Every other instrument in this area prints what the EXECUTOR did (`[edf-goff]` sizes the count,
+// `[edf-loop]` traces the apply, `[finish]` counts the kill chain). Nothing printed what the RULE
+// said, so a class-c "missed offer" could only be attributed by bisecting env flags one at a time
+// -- and that cannot distinguish "row X's ingredient is absent" from "row X's ARITHMETIC refused",
+// which are opposite repairs. This prints one `[co-why]` line per evaluation: the ingredients, then
+// per row whether its ingredients held and whether its bank term held. `MTG_EDF_CO_WHY=1`.
+inline bool CoWhyOn()
+{
+    static const bool on = EnvOn("MTG_EDF_CO_WHY");
+    return on;
+}
+
 bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller,
                                               std::string* rule) const
 {
@@ -18016,7 +18030,17 @@ bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller
         if (!from_hand.empty())
         { loop = RecogniseFlickerLoopProspective(s, controller, from_hand); }
     }
-    if (!loop.ok || loop.net <= 0) { return false; }
+    if (!loop.ok || loop.net <= 0)
+    {
+        if (CoWhyOn())
+        {
+            std::cout << "[co-why] L FAILED: loop.ok=" << (loop.ok ? 1 : 0)
+                      << " net=" << loop.net << " net_c=" << loop.net_c
+                      << " untaps=" << loop.untaps << " outlet=" << loop.outlet_id
+                      << " -- no row is consulted\n";
+        }
+        return false;
+    }
 
     using namespace comborules;
     const bool D  = HasRepeatableDrawSource(s, controller);
@@ -18069,6 +18093,32 @@ bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller
     };
     const auto finish = [&](int where)
     { return AnyFinishFundable(s, controller, where, affords, AURA, AURA_SETUP); };
+
+    // DIAGNOSIS ONLY -- evaluated before the rows so a decline names its own term. Every call here
+    // is one the rows make anyway; it is behind `CoWhyOn()` so an ordinary run pays nothing.
+    if (CoWhyOn())
+    {
+        const bool Fb = FinisherInPlay(s, controller), Fh = FinisherInHand(s, controller);
+        const bool G  = GorgeKillLive(s, controller, loop);
+        std::cout << "[co-why] L ok net=" << loop.net << " net_c=" << loop.net_c
+                  << " untaps=" << loop.untaps << " cost=" << loop.cost_mv
+                  << " refund=" << loop.refund << " prospective=" << (loop.prospective ? 1 : 0)
+                  << " | D=" << D << " nC=" << nC << " UB=" << UB << " AURA=" << AURA
+                  << " E=" << E << " W=" << W << " Fb=" << Fb << " Fh=" << Fh << " G=" << G
+                  << " | sup k=" << sup.k << " avail=" << sup.avail << " avail_c=" << sup.avail_c
+                  << " n_yield=" << sup.n_yield << " c_yield=" << sup.c_yield
+                  << " n_res=" << sup.n_res << " c_res=" << sup.c_res << "\n";
+        std::cout << "[co-why]   GORGE       ing=" << G
+                  << " bank=" << (G ? (s_exact ? GorgeFundable(s, controller, loop) : 1) : 0) << "\n";
+        std::cout << "[co-why]   DEPLOYED    ing=" << (Fb && C1 && (D || E || C2))
+                  << " bank=" << (Fb ? finish(0) : 0) << "\n";
+        std::cout << "[co-why]   IN-HAND     ing=" << (Fh && C1 && UB && (D || E || C2))
+                  << " bank=" << (Fh ? finish(1) : 0) << "\n";
+        std::cout << "[co-why]   WISH-DRAW   ing=" << (W && D && C1 && UB)
+                  << " bank=" << (W ? finish(2) : 0) << "\n";
+        std::cout << "[co-why]   WISH-NODRAW ing=" << (W && C1 && UB && (E || C2))
+                  << " bank=" << (W ? finish(2) : 0) << "\n";
+    }
 
     if (GorgeKillLive(s, controller, loop)
         && (!s_bankable

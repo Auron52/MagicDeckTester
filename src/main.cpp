@@ -5706,6 +5706,40 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                   << (found >= 0 ? (" summary=\"" + SummarizePlan(plans[found], s) + "\"")
                                  : std::string())
                   << "\n";
+        // WAS THE RULE TABLE EVEN ASKED? -- a REPORT, never an assertion, and the one thing the
+        // line above cannot say. `EnumerateMainPlans` consults `ComboOffPossible` only behind its
+        // own precondition (`best_any >= 0`: some enumerated plan carries an `ActivateBlink` with
+        // `chosen_x > 3`), so `offered=0` conflates two opposite findings -- the table looked at
+        // this board and DECLINED, versus the table was never consulted because no candidate
+        // carried a go-off at all. Those need opposite repairs: the first is a rule to widen, the
+        // second is upstream of the rule entirely (the loop is not assembled on the battlefield
+        // yet and the winning line has to CAST a piece first, which no single plan expresses).
+        //
+        // Session 27 measured that distinction on the sweep's autonomous population and it is the
+        // whole of it: 11 of 12 "missed fires" are never-consulted, and on 10 of those 11 the rule
+        // would have FIRED had it been asked. Printing it makes the sweep able to say so instead
+        // of counting them all as rule defects.
+        if (j.value("combo_off_rule_probe", false))
+        {
+            // The precondition, recomputed here exactly as EnumerateMainPlans computes it, so
+            // "consulted" is the engine's own answer and not an inference from `offered`.
+            int best_k = 0;
+            for (const TurnSolver::Plan& p : plans)
+            {
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind == Action::Kind::ActivateBlink && a.chosen_x > 3)
+                    { best_k = std::max(best_k, a.chosen_x); }
+                }
+            }
+            std::string probe_rule;
+            const bool rule_says = ResolveProvider(s).ComboOffPossible(
+                s, s.active_player_index, &probe_rule);
+            std::cout << "scenario: combo_off_rule_probe says=" << (rule_says ? 1 : 0)
+                      << " rule=" << (probe_rule.empty() ? "-" : probe_rule)
+                      << " consulted=" << (best_k > 0 ? 1 : 0)
+                      << " goff_k=" << best_k << "\n";
+        }
         if (want != (found >= 0))
         {
             // The menu itself, because "offered=0" alone cannot tell the three ways to get there
