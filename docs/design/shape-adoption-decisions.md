@@ -647,10 +647,64 @@ unearned conservatism rather than a soundness requirement. Under measurement now
 off/on). **If this is the mechanism it is a one-constant fix, it needs no heuristic ladder of rollouts,
 and it plausibly generalises to the two decks where FIT currently fails on COST (breaching 1.28x,
 critter 1.29x) — those may be mis-gated in the same direction.**
+*(Outcome in §11g: confirmed on Melira, and the generalisation guess was WRONG — breaching and critter
+are unmoved by it. It is a per-deck dial, not a fleet constant.)*
 
-**Standing recommendation.** Adopt one depth everywhere it holds (19 of 20) and carry Melira as a
-known open defect — not as a reason to keep full-ladder rollouts fleet-wide. The mechanism is still
-unidentified after eliminating depth, budget, the take decision, two incumbent bounds and probe-rank
-ordering; the remaining suspect is intra-search move ordering that iterative deepening generates and
-the probe's value-leaf ranks do not reproduce. Melira Pod wins via long Birthing Pod chains, so its
-lines are unusually order-sensitive, which fits — but that is a hypothesis, not a measurement.
+### 11g. CONFIRMED held-out: `a4` closes Melira, and the dial is PER-DECK not fleet-wide
+
+Held-out base 13300000, 16x250, five decks, everything measured against the **full ladder**.
+
+**Melira — the holdout falls, and `a4` came back STRONGER than in training.**
+
+| arm | vs ladder ± se | bett/wors | units | verdict |
+|---|---|---|---|---|
+| `single` | −0.0002 ± 0.0040 | 111/121 | 0.895x | tied, cheaper |
+| `a2` | −0.0055 ± 0.0044 | 103/94 | 0.929x | cheaper |
+| **`a4`** | **−0.0125 ± 0.0040** | 100/64 | **1.006x** | **CLEAN WIN** |
+| `a8` | −0.0155 ± 0.0035 | 98/51 | 1.114x | better, costs 11% |
+
+Pooled over both bases: `a4` **−0.0074 ± 0.0026 (2.8σ) at ~1.008x**, `a8` **−0.0100 ± 0.0023 (4.4σ) at
+~1.11x**. Sign-consistent on both, so this is not the selection-bias pattern that killed three of six
+trades.
+
+**And Melira was never really a counterexample.** Plain `single` pooled over both bases is
+**+0.0032 ± 0.0031 — a 1.0σ null at 0.895x cost**. The +0.0080 that made it look like a loss was one
+seed set; on fresh seeds it is −0.0002. §11e's "1.8σ lean, not an established regression" was, if
+anything, still too generous to the ladder.
+
+**The dial is PER-DECK. Do not make it a global constant.** Where FIT already wins *for free*,
+raising alpha converts a clean win into a paid one:
+
+| deck | `single` | `a4` | `a8` |
+|---|---|---|---|
+| hinata | −0.0093 ± 0.0040 @ **0.984x** — CLEAN WIN | −0.0125 @ 1.087x — trade | −0.0160 @ 1.201x — trade |
+| fivecolour | −0.0060 ± 0.0019 @ **0.983x** — CLEAN WIN | −0.0068 @ 1.082x — trade | −0.0075 @ 1.190x — trade |
+| breaching | 0/0, 5.189x | 0/0, 5.323x | 0/0, 5.593x |
+| critter | 1/0, 1.498x | 1/0, 1.868x | 1/0, 2.270x |
+
+So `esc_fit_alpha` belongs in the per-deck `value_play`, defaulting to 1.0 (off). Melira wants 4;
+hinata and fivecolour want 1 (their free win is worth more than the extra quality at 8–20% more work,
+though that is a judgement call and both trades are real).
+
+**Caveat on the breaching/critter cost figures:** this screen ran with `MTG_ESC_FIT_LAZY_R` **off**
+(its default), so 5.19x and 1.50x are the *eager-R* numbers and are consistent with §11a's
+"breaching 4.65x → 1.28x with lazy-R" — not a new regression. Alpha neither helps nor rescues them;
+lazy-R is still their fix. Their play is unchanged across all three arms (0/0 and 1/0), so alpha is
+pure cost there.
+
+**Standing recommendation — SUPERSEDED by §11f–§11g, kept for the record.** It read: *"Adopt one depth
+everywhere it holds (19 of 20) and carry Melira as a known open defect… the remaining suspect is
+intra-search move ordering that iterative deepening generates and the probe's value-leaf ranks do not
+reproduce. Melira Pod wins via long Birthing Pod chains, so its lines are unusually order-sensitive,
+which fits — but that is a hypothesis, not a measurement."*
+
+**That hypothesis was wrong.** It was not move ordering and there is no open defect. The cause was
+FIT's affordability gate sitting at 1.10x remaining while the ladder admits ~5x over (§11f), and
+relaxing it makes one depth beat the ladder on Melira (§11g). The Birthing-Pod story was a
+plausible-sounding narrative fitted to a stale 33-decision histogram; note how much more it explained
+than it predicted. The matched-depth screen — which cost one pooled batch — settled in minutes what
+the narrative had left open for a day.
+
+**Current recommendation: one depth is adoptable on 20 of 20.** No deck now requires the full
+heuristic ladder. Per-deck settings still differ (`esc_fit_alpha` 4 on Melira, 1 elsewhere; lazy-R for
+breaching/critter), and the ordinary replication and rebaseline discipline in §2 and §10 still applies.
