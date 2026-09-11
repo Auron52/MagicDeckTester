@@ -171,6 +171,8 @@ enum Slot : int
     EDF_VAL_RAMP,             // MTG_EDF_VAL_RAMP        plan-value: a land Aura is priced by the MANA it adds
     EDF_VAL_COMBO,            // MTG_EDF_VAL_COMBO       plan-value: a creature is priced by its COMBO role, not a combat clock
     EDF_GOFF_EXACT_AUTO,      // MTG_EDF_GOFF_EXACT_AUTO the AUTONOMOUS arm gets FlickerGoOffCount's three arithmetic corrections
+    EDF_CO_ROOT,              // MTG_EDF_CO_ROOT         the ROOT decision queries ComboOffPossible + VERIFIES -> skip the rollouts
+    EDF_CO_LOOK,              // MTG_EDF_CO_LOOK         a LOOKAHEAD ply queries the same rule, no trial (~1.5us vs 0.3-0.8ms)
     COUNT
 };
 
@@ -319,6 +321,8 @@ inline const char* Name(int slot)
         "MTG_EDF_VAL_RAMP",
         "MTG_EDF_VAL_COMBO",
         "MTG_EDF_GOFF_EXACT_AUTO",
+        "MTG_EDF_CO_ROOT",
+        "MTG_EDF_CO_LOOK",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
