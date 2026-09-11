@@ -1641,3 +1641,22 @@ global perf/quality trade and not adoptable off one reference. NOTE for anyone w
 has **only d0 canaries** in every suite tier (searched cases pulled 2026-09-06, see the session
 above), so the regression harness cannot A/B a melira *searched* play change at all — the
 enumeration wall (`docs/design/pod-pair-enumeration-explosion.md`) is the blocking prerequisite.
+
+### Follow-up: the rollout is FAITHFUL — the weak thing is the greedy policy, not the simulation
+
+The depth-1 dump above is startling enough to be worth ruling out as a rollout/executor
+divergence (the `ApplyPlanDirect` class the claude-play skill exists to catch): it says casting a
+free mana dork on T1 turns a T4 win into *no win in 8*. It is not a divergence. Both of that
+pass's other predictions are reproduced EXACTLY by the real games they predict:
+
+| rollout's prediction at the T1 decision | the real game |
+|-----------------------------------------|---------------|
+| `cast nothing` → 4 | `--depth 5 --budget-ms 20` (the search DID take it) → **wt=4** |
+| `Carrion Feeder` → 6 | `--depth 0 --budget-ms 0` (greedy DOES take Feeder at T1) → **wt=6** |
+
+Two independent branches, both on the nose. So the horizon rollout simulates what it claims;
+`Ignoble Hierarch → 9` is the *greedy continuation policy* failing to assemble the combo from
+that board, not the engine mis-executing it. That is precisely what the depth-2 pass fixes, and
+it is why this is a budget story and not an evaluator or execution story. (It is also the
+territory the repo's own measured lesson warns about — three rollout-accuracy "fixes" all LOST;
+pessimism is load-bearing. Do not go tuning the greedy tail off this one game.)
