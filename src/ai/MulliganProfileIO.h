@@ -790,9 +790,25 @@ namespace bincache_detail
     { if (end - p < static_cast<std::ptrdiff_t>(sizeof(T))) { return false; } std::memcpy(&v, p, sizeof(T)); p += sizeof(T); return true; }
     inline bool GetStr(const char*& p, const char* end, std::string& s)
     { uint32_t n; if (!GetPod(p, end, n) || end - p < static_cast<std::ptrdiff_t>(n)) { return false; } s.assign(p, n); p += n; return true; }
+    // BULK read: one length check for the whole array, then a single memcpy -- instead of a
+    // per-element `end - p` test plus a 4-byte memcpy. This is the single hottest function of a
+    // batch launch (callgrind 2026-09-11: 22.4% of a short goblins run's TOTAL instructions, the
+    // composition keys of a ~600 MB .bincache), and it is a pure byte-for-byte decode, so the
+    // vectors it produces are identical. Checking the length BEFORE resize() is also strictly
+    // safer than the old order: a corrupt count used to reach `v.resize(n)` with n up to 2^32 and
+    // try to allocate 16 GB before discovering the blob was short.
     inline bool GetIVec(const char*& p, const char* end, std::vector<int>& v)
-    { uint32_t n; if (!GetPod(p, end, n)) { return false; } v.resize(n);
-      for (uint32_t i = 0; i < n; ++i) { int32_t x; if (!GetPod(p, end, x)) { return false; } v[i] = x; } return true; }
+    {
+        static_assert(sizeof(int) == sizeof(int32_t), "bincache stores ints as raw int32_t");
+        uint32_t n;
+        if (!GetPod(p, end, n)) { return false; }
+        const std::size_t bytes = static_cast<std::size_t>(n) * sizeof(int32_t);
+        if (static_cast<std::size_t>(end - p) < bytes) { return false; }
+        v.resize(n);
+        if (n != 0) { std::memcpy(v.data(), p, bytes); }
+        p += bytes;
+        return true;
+    }
 }
 
 // Serialize a parsed policy to the binary cache blob (header carries the source size+mtime for
@@ -840,13 +856,21 @@ inline bool DeserializeExhaustiveKeep(const std::string& blob, uint64_t src_size
     for (auto& bk : ek.buckets)
     { uint32_t nn; if (!GetPod(p, end, nn)) { return false; } bk.resize(nn); for (auto& n : bk) { if (!GetStr(p, end, n)) { return false; } } }
     int32_t max_mull; if (!GetPod(p, end, max_mull)) { return false; } ek.max_mull = max_mull;
+    // SORTED-APPEND insertion. Serialize walks `ek.keep` / `ek.bottom_keep` in std::map order, so
+    // the blob's composition keys arrive strictly ASCENDING -- which makes end() the correct hint
+    // and turns each insert into libstdc++'s O(1) rightmost-append path. Plain emplace() instead
+    // walked the red-black tree from the root, lexicographically comparing K-int composition
+    // vectors at every level: 28.5% of a short goblins run's total instructions (callgrind
+    // 2026-09-11). RESULT-IDENTICAL by construction and NOT dependent on the blob being sorted --
+    // a wrong hint only costs the ordinary search, and _unique emplace still rejects a duplicate
+    // key -- so a corrupt/foreign blob builds exactly the map it built before.
     uint32_t nk; if (!GetPod(p, end, nk)) { return false; }
     for (uint32_t i = 0; i < nk; ++i)
     {
         std::vector<int> comp; if (!GetIVec(p, end, comp)) { return false; }
         uint32_t nf; if (!GetPod(p, end, nf) || end - p < static_cast<std::ptrdiff_t>(nf)) { return false; }
         std::vector<char> flags(p, p + nf); p += nf;
-        ek.keep.emplace(std::move(comp), std::move(flags));
+        ek.keep.emplace_hint(ek.keep.end(), std::move(comp), std::move(flags));
     }
     uint32_t nbk; if (!GetPod(p, end, nbk)) { return false; }
     for (uint32_t i = 0; i < nbk; ++i)
@@ -855,7 +879,7 @@ inline bool DeserializeExhaustiveKeep(const std::string& blob, uint64_t src_size
         uint32_t nsub; if (!GetPod(p, end, nsub)) { return false; }
         std::vector<std::vector<int>> subs(nsub);
         for (auto& sub : subs) { if (!GetIVec(p, end, sub)) { return false; } }
-        ek.bottom_keep.emplace(std::move(comp), std::move(subs));
+        ek.bottom_keep.emplace_hint(ek.bottom_keep.end(), std::move(comp), std::move(subs));
     }
     uint8_t be; if (!GetPod(p, end, be)) { return false; } ek.bottoming_enabled = (be != 0);
     if (!GetStr(p, end, ek.commit))      { return false; }
