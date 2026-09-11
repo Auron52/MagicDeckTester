@@ -1233,6 +1233,17 @@ def main():
     if not refs:
         print("no reference games found under references/")
         return 0
+    # --only <substr>: run just the references whose path contains <substr>. The sweep is the only
+    # tool that can say whether a given change moved a given reference, and without a filter the
+    # answer costs a 30-minute whole-corpus run -- which makes the obvious A/B (flip my lever, is
+    # THIS ref still drifting?) too expensive to do, so it does not get done. Read-only and purely
+    # a selection: it cannot touch references/, and the full sweep is unchanged when absent.
+    if "--only" in sys.argv[1:]:
+        pat = sys.argv[sys.argv.index("--only") + 1]
+        refs = [p for p in refs if pat in p]
+        print(f"[only: {len(refs)} ref(s) matching {pat!r}]")
+        if not refs:
+            return 0
     # SAMPLE mode (--sample / VIEWER_PROTOCOL_SAMPLE): one reference per deck dir. Historical: the
     # serial per-step replay was multi-minute, so regression sampled. With --threads the FULL sweep
     # is seconds and test/regression.sh runs it strict in regression mode; sample mode remains for

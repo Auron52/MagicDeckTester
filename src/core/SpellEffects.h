@@ -11699,11 +11699,33 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
         else { continue; }
         // Never spend the loop's entry price -- the same projection guard the damage sink uses, and
         // for the same reason: a draw that starves the next iteration ends the loop it was funded by.
+        //
+        // ...AND THE PROJECTION HAS TO PRICE THE BOARD THE PAYMENT WILL SEE. The guard ran BEFORE
+        // the `{T}` half was paid, so `AvailableManaPool` still counted the source's OWN yield --
+        // the one mana the ability is about to spend by tapping itself. On the user's seed-6 T4
+        // board that over-count is the entire failure: Kitchen (+Overgrowth +Trace) is worth 4 and
+        // is also the investigate source, so the guard saw 8 mana against `{4}` + `{C}` and said
+        // yes; tapping Kitchen left Brushland 3 + Adarkar 1, whose FOUR units exactly paid the
+        // `{4}` -- and they are the board's only two colourless sources, so Eldrazi Displacer's
+        // `{C}` (its `{2}{C}` under Training Grounds) had nothing left to tap. `pay(c)` failed on
+        // iteration ZERO, the loop broke at done=0, and it broke having already spent the float and
+        // tapped every land: *"Even worse, that combo off failure didn't leave any mana up."*
+        //
+        // Tapping first and pricing after is both the honest order and the one the comment below
+        // already claims ("so the source cannot tap itself toward its own cost").
+        //
+        // COMBO OFF ONLY. This guard also runs in autonomous play, where its economics are a
+        // measured artifact; tightening it there would move GT and needs its own A/B.
+        // MTG_DRAW_GUARD_SELFTAP=0 restores the pre-tap projection.
+        static const bool s_guard_selftap = EnvOn("MTG_DRAW_GUARD_SELFTAP", true);
+        const bool honest_guard = s_guard_selftap && ComboOffFinishActive();
+        if (honest_guard) { state.battlefield[i].tapped = true; }
         {
             ManaPool have = AvailableManaPool(state, nullptr);
             have.AddPool(state.floating_mana);
             if (!have.CanPay(AddManaCosts(c, keep_payable)))
             {
+                if (honest_guard) { SetPermTapped(state, controller, id, false); }
                 if (finishstats::On())
                 { finishstats::g_draw_guard.fetch_add(1, std::memory_order_relaxed); }
                 continue;
@@ -12696,6 +12718,13 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         static const bool s_hold_deploy = EnvOn("MTG_HOLD_C_FOR_DEPLOY", true);
         if (!want_hold_colorless && s_hold_deploy && ComboOffFinishActive() && ComboFinishOn())
         { want_hold_colorless = ExileFinisherReachableFromHand(state, controller); }
+        // NOT SHIPPED, and recorded so nobody re-derives it: also setting the hold when the OUTLET
+        // itself carries a {C} pip (Displacer's `{2}{C}`, `{C}` under Training Grounds) is an
+        // obvious-looking extension -- the loop needs a colourless every iteration, so a draw's
+        // generic eating the last {C}-capable tap stops the loop outright. It was built and
+        // MEASURED on the user's seed-6 T4 frame and changed NOTHING (identical 6 blinks, 10 draws,
+        // 14 finish calls), so it is a lever with no measured effect and it is not worth its own
+        // flag. The remaining shortfall on that board is elsewhere -- see Session 15d.
     }
     HoldColorlessScope _hcs(want_hold_colorless ? true : g_hold_colorless_for_pips);
     // Mark the whole loop as combo mode, so the tap-ahead's mana policy can tell a live loop
