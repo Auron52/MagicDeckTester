@@ -1,0 +1,172 @@
+{
+  "active_life": 20,
+  "battlefield": [
+    {
+      "controller": 0,
+      "name": "Aether Hub",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Cloud of Faeries",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Cloud of Faeries",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Clue Token",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Conservatory",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Emiel the Blessed",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Mariposa Military Base",
+      "tapped": true
+    },
+    {
+      "controller": 0,
+      "name": "Peregrine Drake",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Peregrine Drake",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Aether Hub",
+      "name": "Trace of Abundance",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Aether Hub",
+      "name": "Wild Growth",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Conservatory",
+      "name": "Trace of Abundance",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Conservatory",
+      "name": "Wild Growth",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Mariposa Military Base",
+      "name": "Wild Growth",
+      "tapped": false
+    }
+  ],
+  "budget_ms": 20,
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "depth": 3,
+  "hand": [
+    "Living Wish",
+    "Yavimaya Coast"
+  ],
+  "library_filler": "Forest",
+  "library_size": 0,
+  "library_top": [
+    "Adarkar Wastes",
+    "Adarkar Wastes",
+    "Aether Hub",
+    "Aether Hub",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Cloud of Faeries",
+    "Conservatory",
+    "Conservatory",
+    "Conservatory",
+    "Eladamri's Call",
+    "Eldrazi Displacer",
+    "Eldrazi Displacer",
+    "Eldrazi Displacer",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Kitchen",
+    "Kitchen",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Shivan Gorge",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Training Grounds",
+    "Training Grounds",
+    "Wild Growth",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast"
+  ],
+  "on_the_play": false,
+  "opponent_library_size": 51,
+  "opponent_life": 20,
+  "turn": 3,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "expect_combo_off": true,
+  "_comment": [
+    "A LAND AURA'S WILD MANA IS A BLUE SOURCE -- the user's own reference board, and the button",
+    "did not appear on it.",
+    "",
+    "This is `references/EldraziDisplacerFlicker/claude_s1_gi0` at turn 3, reconstructed by",
+    "test/combo_off_sweep.py: Emiel, two Peregrine Drakes, two Clouds, an Aether Hub and a",
+    "Conservatory each carrying Trace of Abundance + Wild Growth, a Wild-Growth'd Mariposa, and a",
+    "LIVING WISH IN HAND. The turn the user WON. `offered=0`.",
+    "",
+    "Rules 3, 4 and 5 (IN-HAND, WISH-DRAW, WISH-NODRAW) all require `UB` -- a blue or black source",
+    "-- and comborules::HasBlueOrBlackSource walked EffectiveProduces only. The board's only blue",
+    "is the two Trace of Abundance, whose 'one mana of any color' rides the host's tap",
+    "(cards.json: land_aura_produces []). Its sibling comborules::HasRedSource, twenty lines",
+    "above it in the same file, carried exactly the clause that counts them; the blue/black one",
+    "did not. One helper now answers both (MTG_COMBO_OFF_UB_AURA).",
+    "",
+    "MEASURED, one card at a time, nothing else changed: as reconstructed offered=0; + Yavimaya",
+    "Coast offered=1; + Adarkar Wastes offered=1; + Kitchen offered=1 VERIFIED; + 2 energy (so the",
+    "Aether Hub's any-colour mode is live) offered=1 VERIFIED. After the fix the board as the user",
+    "actually had it is offered AND verified.",
+    "",
+    "A land Aura's wild can never pay a {C} pip (ManaPool credits it as `wild`, deliberately not",
+    "`wild_c`), which is why the same clause must NOT be added to ColorlessSourceCount.",
+    "",
+    "Reconstruction caveat, inherited from test/combo_off_frames.py: floating mana cannot be",
+    "staged, so this asks the frame with an EMPTY pool -- a strictly harder board than the one the",
+    "user sat in front of."
+  ]
+}

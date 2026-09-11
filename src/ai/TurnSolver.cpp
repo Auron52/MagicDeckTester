@@ -22371,10 +22371,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // executor calls the identical driver with its own payer -- lockstep by construction.
             if (a.def != nullptr)
             {
+                // The STATE-TAKING twin of the payer just below, handed to the loop so its
+                // surplus-sink guard can TRIAL a payment on a copy instead of projecting over a
+                // pool (see SpendSurplusOnDamageSinks -- sweep cluster C2, rule GORGE 17/0).
+                // Only this call site supplies it, and the guard additionally requires
+                // ComboOffFinishActive(), so both autonomous ApplyBlinkLoop call sites and every
+                // rollout are byte-identical.
+                static const StateManaPayer probe =
+                    [](GameState& s, const ManaCost& c)
+                    { return TapForCostDirect(s, c, /*for_creature=*/false); };
                 ApplyBlinkLoop(state, state.active_player_index, a.sac_source_id, a.sac_victim_id,
                                a.def->params, std::max(1, a.chosen_x),
                                [&state](const ManaCost& c)
-                               { return TapForCostDirect(state, c, /*for_creature=*/false); });
+                               { return TapForCostDirect(state, c, /*for_creature=*/false); },
+                               &probe);
             }
         }
         else if (a.kind == Action::Kind::ActivatePermAbility)

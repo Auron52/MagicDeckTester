@@ -1,0 +1,98 @@
+{
+  "_comment": [
+    "THE SHIVAN GORGE PATH EXECUTES -- the positive control for edf_co_12 and for the sweep's",
+    "cluster C2 (rule GORGE: 17 offers, 0 wins before the fix).",
+    "",
+    "USER: 'the third path would be Shivan Gorge, but that is only accessible with red mana on",
+    "board (fertile ground or trace of abundance) and Shivan Gorge already out + infinite mana.'",
+    "All three are here: the Gorge, a Fertile Ground for the red, and a live loop -- and the loop",
+    "has FIVE untap slots (Peregrine Drake), so the once-per-untap ping is genuinely repeatable",
+    "alongside four yield lands. 20 blinks, 21 pings, opponent dead.",
+    "",
+    "The other half of the fix is what lets it run at all: SpendSurplusOnDamageSinks used to guard",
+    "itself with a POOLED CanPay projection, which passed and then let the real payment take the",
+    "board's last colourless source for a generic pip -- `STOP at k=4: pay-failed`, four blinks of",
+    "twenty. It now TRIALS the payment on a copy of the state (MTG_COMBO_OFF_SINK_TRIAL)."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 49,
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    {
+      "name": "Kitchen",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Wild Growth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Conservatory"
+    },
+    {
+      "name": "Brushland",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Fertile Ground",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Brushland"
+    },
+    {
+      "name": "Shivan Gorge",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Eldrazi Displacer",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Peregrine Drake",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Dimensional Infiltrator",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [],
+  "expect_combo_off": true
+}

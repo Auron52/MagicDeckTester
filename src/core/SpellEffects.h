@@ -10718,9 +10718,51 @@ inline int SpendSurplusOnExile(GameState& state, int controller,
     }
     return exiled;
 }
+// A payer that takes the state it pays from, so a guard can TRIAL a payment on a copy
+// rather than project over a pool. Supplied only by the COMBO OFF apply path (the two
+// autonomous ApplyBlinkLoop call sites pass nullptr), which is what keeps every measured
+// arm byte-identical. See SpendSurplusOnDamageSinks' real-trial guard.
+using StateManaPayer = std::function<bool(GameState&, const ManaCost&)>;
+
+namespace blinkloop
+{
+inline bool TraceOn()
+{
+    static const bool v = EnvOn("MTG_EDF_LOOP_TRACE");
+    return v;
+}
+inline std::atomic<int> g_trace_n{0};
+inline int TraceCap()
+{
+    static const int v = EnvInt("MTG_EDF_LOOP_TRACE_N", 200);
+    return v;
+}
+inline void TraceStep(int k, const char* where, const GameState& state, int controller,
+                      const ManaCost& c)
+{
+    if (g_trace_n.fetch_add(1, std::memory_order_relaxed) >= TraceCap()) { return; }
+    ManaPool avail = AvailableManaPool(state, nullptr);
+    const ManaPool& f = state.floating_mana;
+    std::fprintf(stderr,
+                 "[edf-loop] k=%d %-17s cost=%s float{w%d u%d b%d r%d g%d c%d *%d} "
+                 "avail{w%d u%d b%d r%d g%d c%d *%d}\n",
+                 k, where, c.ToString().c_str(),
+                 f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild,
+                 avail.white, avail.blue, avail.black, avail.red, avail.green,
+                 avail.colorless, avail.wild);
+}
+inline void TraceStop(bool on, int k, const char* why)
+{
+    if (!on) { return; }
+    std::fprintf(stderr, "[edf-loop] STOP at k=%d: %s\n", k, why);
+}
+
+}   // namespace blinkloop
+
 
 inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const ManaCost& keep_payable,
-                                     const std::function<bool(const ManaCost&)>& pay)
+                                     const std::function<bool(const ManaCost&)>& pay,
+                                     const StateManaPayer* probe_pay = nullptr)
 {
     int dealt = 0;
     // Collect the candidate sinks as m_numbers FIRST, then re-find each by id before using it.
@@ -10750,13 +10792,75 @@ inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const Man
             || d->params.tap_damage_each_opponent <= 0) { continue; }
         const ManaCost c = EffectiveActivationCost(state, controller, state.battlefield[i].card,
                                                    d->params.tap_damage_cost.value());
-        // Never spend the loop's entry price: only fire if the board could still pay BOTH this
-        // ability and the next iteration. A projection check, not a trial payment, so a decline
-        // leaves no tapped land behind -- and it is the same pool the enumerator reasons over.
+        // NEVER SPEND THE LOOP'S ENTRY PRICE: only fire if the board can still pay BOTH this
+        // ability and the next iteration.
+        //
+        // THE PROJECTION LIES, AND THAT IS THE WHOLE OF THE SWEEP'S CLUSTER C2 (rule GORGE: 17
+        // offers, 0 wins -- docs/design/combo-off-sweep-catalogue.md). The original guard asked
+        // `ManaPool::CanPay(sink_cost + keep_payable)` over a POOLED AvailableManaPool. A pooled
+        // answer cannot model two things these boards do:
+        //   * one land serves ONE of its modes (Brushland taps for {C} OR {G}/{W}, not both), and
+        //   * the SEQUENTIAL payment picks its sources greedily, so paying `{2}{R}` first can take
+        //     the very source the pending `{2}{C}` needed for its pip.
+        // Measured with MTG_EDF_LOOP_TRACE on the sweep_3 board: the guard says yes, the ping
+        // fires, and the next line is
+        //     k=4 post-damage-sink  cost={2}{C} float{g5} avail{g5 c0 *0}
+        //     STOP at k=4: pay-failed
+        // -- the loop dead at four of twenty iterations with the opponent still on 19.
+        //
+        // TWO NARROWER REPAIRS WERE TRIED FIRST AND BOTH MEASURED INERT, recorded so the next
+        // attempt does not repeat them: (a) reserving the {C}-capable sources across the spend via
+        // g_plan_reserved_sources -- reserve-then-fallback releases them again, and on these
+        // boards the sink's payment genuinely needs one of them; (b) re-running the SAME pooled
+        // projection AFTER tapping the sink. (b) fixes a real bug on its own terms -- `{T}` is in
+        // the sink's cost, so a pool built before that tap credits mana the activation is about to
+        // destroy, and Shivan Gorge taps for {C} -- but it is not THIS bug: the guard still fired
+        // at k=4 and the payment still stranded.
+        //
+        // So the guard is now a REAL TRIAL. On a copy of the state it taps the sink, pays the
+        // sink's cost through the same payer the loop itself uses, and then requires
+        // `keep_payable` to pay as well. That is the actual question -- "after this ping, can I
+        // still blink?" -- put to the actual mana solver, with no pooling approximation in it.
+        //
+        // COMBO OFF ONLY (MTG_COMBO_OFF_SINK_TRIAL=0 opts out), for two reasons. The state copy is
+        // not free, and more importantly the identical defect on the AUTONOMOUS path would move
+        // the measured drain/deck-out economics and therefore GT, the value leaf and the keep
+        // tables. `probe_pay` is null at both autonomous call sites and `ComboOffFinishActive()`
+        // is false in every autonomous run, in every rollout and in ordinary human play, so
+        // autonomous play is byte-identical by construction; the autonomous half is written up in
+        // the catalogue as a separate, measured decision.
+        static const bool s_sink_trial = EnvOn("MTG_COMBO_OFF_SINK_TRIAL", true);
+        const bool real_trial = s_sink_trial && probe_pay != nullptr && ComboOffFinishActive();
+        if (real_trial)
         {
+            GameState probe = state;
+            SetPermTapped(probe, controller, sink, true);
+            const bool ok = (*probe_pay)(probe, c) && (*probe_pay)(probe, keep_payable);
+            if (!ok)
+            {
+                if (blinkloop::TraceOn())
+                {
+                    std::fprintf(stderr, "[edf-loop]   damage-sink DECLINED (real trial): "
+                                         "sink=%d cost=%s keep=%s\n",
+                                 sink, c.ToString().c_str(), keep_payable.ToString().c_str());
+                }
+                continue;
+            }
+        }
+        else
+        {
+            // A projection check, not a trial payment, so a decline leaves no tapped land behind
+            // -- and it is the same pool the enumerator reasons over.
             ManaPool have = AvailableManaPool(state, nullptr);
             have.AddPool(state.floating_mana);
             if (!have.CanPay(AddManaCosts(c, keep_payable))) { continue; }
+        }
+        if (blinkloop::TraceOn())
+        {
+            std::fprintf(stderr,
+                         "[edf-loop]   damage-sink FIRING sink=%d cost=%s keep=%s trial=%d\n",
+                         sink, c.ToString().c_str(), keep_payable.ToString().c_str(),
+                         real_trial ? 1 : 0);
         }
         // Pay the {T} half FIRST so the sink cannot tap itself toward its own mana cost.
         state.battlefield[i].tapped = true;
@@ -11946,11 +12050,87 @@ inline int EtbUntapPriorityRank(int number)
 //   4. Blink: the target leaves and re-enters, re-firing both ETB cascades.
 // BREAKS the moment an iteration cannot be paid or the target is gone -- so an over-large K from
 // the provider costs nothing but a loop that stops early.
+// ---- MTG_EDF_LOOP_TRACE: inside the go-off loop ------------------------------------------------
+//
+// Default OFF, zero cost when off (one cached bool per process), and it NEVER branches game logic.
+// Prints, per iteration: the activation being paid, the floating pool and the still-available pool
+// at four points in the iteration body, and -- the line that matters -- WHY the loop stopped.
+//
+// It exists because the sweep found 29 go-offs that promised a long chain and ran ZERO blinks, and
+// no instrument could see inside: `[edf-goff]` prints the count that was SIZED and `[finish]`
+// counts the kill chain, but between them sits a loop whose every break is silent. The four
+// checkpoints are placed so the answer is readable off the pool deltas -- a sink spend that takes
+// the mana the activation then cannot pay shows up as `post-damage-sink` / `post-draw-sink`
+// dropping a pip that `enter` had.
+
+// SWITCH TO A PIP-FREE OUTLET WHEN {C} IS THE BINDING CONSTRAINT (COMBO OFF only).
+//
+// USER, writing rule 4 of the Combo Off table: *"the 1 colourless source works even when you have
+// displacer out because you can draw into Emiel and cast it if you can draw your deck."* The rule
+// table already believes that; the EXECUTOR never did it. Eldrazi Displacer's blink is `{2}{C}`
+// and Emiel the Blessed's is `{3}` -- same mana value, and one of them spends a colourless PIP
+// every single pass. On a board whose untap restores one {C} a pass, the Displacer loop nets ZERO
+// colourless, so a `{1}{C}` drain or library-exile is fed only by the board's opening supply.
+//
+// Measured across the sweep (docs/design/combo-off-sweep-catalogue.md): of 268 offers,
+// `loop.net_c <= 0` produced 42 offers and ZERO wins, while `net_c > 0` won 81.4%. Per outlet:
+// Displacer 62.0%, Emiel 79.4%. The pip is the whole difference.
+//
+// THE SHAPE IS A RECOVERY, NOT A PREFERENCE, and that is deliberate. Switching pre-emptively would
+// pay Emiel's `{2}{W}{W}` on boards whose loop was already fine and would move lines that already
+// win -- including the ten green fixtures in test/combo_off/. This runs ONLY where the loop was
+// about to die: `pay(c)` has just failed, so the iteration is lost either way, and the only
+// question left is whether the loop can continue at all. On a board where nothing is wrong it is
+// never reached.
+//
+// Returns the new outlet's card number (0 = no switch). `def_out` receives its params.
+inline int DeployPipFreeOutletFromHand(GameState& state, int controller,
+                                       const std::function<bool(const ManaCost&)>& pay,
+                                       const CardParams** def_out)
+{
+    Player& ap = state.players[controller];
+    for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        if (d == nullptr || !d->card.IsCreature()) { continue; }
+        if (!d->params.blink_cost.has_value()) { continue; }
+        // A PIP-FREE blink cost is the whole point -- Training Grounds cannot remove a {C} pip
+        // (its one-mana floor keeps it), so an outlet that prints one always demands one.
+        if (EffectiveActivationCost(state, controller, d->card,
+                                    d->params.blink_cost.value()).colorless > 0) { continue; }
+        // Producibility, not the current pool: inside the loop the pool is unbounded, but a colour
+        // the board cannot make stays unmakeable. Same test ComboFinishFromHand applies to its own
+        // candidates, so the two never disagree about what is castable.
+        if (!BoardCanPayColors(state, controller, d->card.m_mana_cost)) { continue; }
+        const std::string name = ap.hand[i].m_name.str();
+        if (!pay(d->card.m_mana_cost)) { continue; }
+        // Re-check the index after the payment, for the reason ComboFinishFromHand states: `pay`
+        // runs the whole payment machinery and can move permanents.
+        if (i >= static_cast<int>(ap.hand.size()) || ap.hand[i].m_name.str() != name) { return 0; }
+        const int num = ap.hand[i].m_number;
+        if (!DeployCreatureFromHand(state, controller, i)) { return 0; }
+        if (def_out) { *def_out = &d->params; }
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "cast",
+                          "\xE2\x9A\xA1 combo outlet: " + name + " (colourless-free blink)");
+        }
+        return num;
+    }
+    return 0;
+}
+
 inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int target_id,
                           const CardParams& outlet, int iterations,
-                          const std::function<bool(const ManaCost&)>& pay)
+                          const std::function<bool(const ManaCost&)>& pay,
+                          const StateManaPayer* probe_pay = nullptr)
 {
     if (!outlet.blink_cost.has_value()) { return 0; }
+    // The outlet can CHANGE mid-loop (see DeployPipFreeOutletFromHand): a Displacer loop that runs
+    // out of colourless switches to a held Emiel rather than dying. Everything below reads these
+    // two rather than the parameters, so an unswitched loop is byte-identical.
+    const CardParams* cur_outlet = &outlet;
+    int cur_source = source_id;
     // The sinks this loop wants back every iteration, MOST WANTED FIRST. Fixed for the whole loop:
     // lands do not move, so it need not be recomputed per iteration.
     //
@@ -12134,22 +12314,118 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     // DRAW ONLY TO FIND -- see SpendSurplusOnDrawSinks. Evaluated once here and re-evaluated only
     // after a draw actually lands, because nothing else in the loop can change the answer.
     bool want_draw = LoopDrawSinkOn() && !ComboFinisherReachable(state, controller);
+    // MTG_EDF_LOOP_TRACE -- WHY a go-off stopped after `done` of `iterations`. Diagnosis only; it
+    // never branches game logic and prints nothing when off.
+    //
+    // The sweep (docs/design/combo-off-sweep-catalogue.md) found 29 states whose plan promised a
+    // long chain and whose apply ran ZERO blinks, and no existing instrument could tell the three
+    // ways that happens apart: the blink became illegal, the source vanished, or the activation
+    // could not be paid -- and if it could not be paid, whether a sink spend earlier in the SAME
+    // iteration is what took the mana. `[finish]` counts the kill chain and `[edf-goff]` prints the
+    // count that was SIZED; neither can see inside the loop that runs it.
+    const bool lt = blinkloop::TraceOn();
+    if (lt)
+    {
+        std::fprintf(stderr, "[edf-loop] begin iters=%d outlet=%d payload=%d cash=%d "
+                             "want_draw=%d hold_c=%d sinks=%d\n",
+                     iterations, source_id, target_id, cash_sinks ? 1 : 0, want_draw ? 1 : 0,
+                     want_hold_colorless ? 1 : 0, static_cast<int>(sinks.size()));
+    }
+    // SWITCH TO A PIP-FREE OUTLET BEFORE THE FIRST ITERATION (COMBO OFF only).
+    //
+    // See DeployPipFreeOutletFromHand for the measurement. The trigger is deliberately narrow and
+    // it is a PRE-LOOP decision rather than a death-recovery, because the failure it repairs does
+    // not kill the loop: the loop runs its whole sized count and the FINISHER starves. Measured on
+    // test/combo_off/sweep/sweep_4: fourteen blinks, all fourteen executed, and nine drains of the
+    // twenty the kill needs -- `pay(c)` never fails, so nothing downstream ever notices. (A
+    // recovery hook placed at the `pay(c)` break was tried first and proved unreachable on every
+    // board that could be constructed for it; recorded so it is not tried again.)
+    //
+    // ALL FOUR CONDITIONS ARE REQUIRED, and together they cannot hold on a board that is already
+    // fine:
+    //   1. the button (ComboOffFinishActive) -- never autonomous, never a rollout, never ordinary
+    //      human play, so every measured arm is byte-identical by construction;
+    //   2. THIS outlet spends a colourless pip per activation (Eldrazi Displacer {2}{C}; Training
+    //      Grounds cannot remove it);
+    //   3. a SEPARATE {C}-pip sink is on the battlefield -- the drain or the library exile -- so
+    //      the pips the outlet eats are pips the kill needed. Without a sink there is nothing to
+    //      starve and the switch would be pure cost;
+    //   4. a pip-free outlet is in hand AND the board can produce its colours.
+    // On the sweep's evidence that is exactly the losing population: `loop.net_c <= 0` produced 42
+    // offers and zero wins, and the same boards with Emiel in play instead of the Displacer are
+    // verified wins. MTG_COMBO_OFF_OUTLET_SWITCH=0 opts out.
+    {
+        static const bool s_switch = EnvOn("MTG_COMBO_OFF_OUTLET_SWITCH", true);
+        if (s_switch && ComboOffFinishActive() && iterations > 1)
+        {
+            const Permanent* src = nullptr;
+            for (const Permanent& p : state.battlefield)
+            { if (p.card.m_number == cur_source) { src = &p; break; } }
+            const bool pip_outlet =
+                src != nullptr
+                && EffectiveActivationCost(state, controller, src->card,
+                                           cur_outlet->blink_cost.value()).colorless > 0;
+            bool pip_sink = false;
+            if (pip_outlet)
+            {
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != controller) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                    if (d == nullptr) { continue; }
+                    const std::optional<ManaCost>* sinks_c[] = {
+                        &d->params.drain_cost, &d->params.exile_opponent_top_cost };
+                    for (const std::optional<ManaCost>* sc : sinks_c)
+                    {
+                        if (!sc->has_value()) { continue; }
+                        if (EffectiveActivationCost(state, controller, p.card,
+                                                    sc->value()).colorless > 0)
+                        { pip_sink = true; break; }
+                    }
+                    if (pip_sink) { break; }
+                }
+            }
+            if (pip_outlet && pip_sink)
+            {
+                const CardParams* swapped = nullptr;
+                const int new_src = DeployPipFreeOutletFromHand(state, controller, pay, &swapped);
+                if (new_src != 0 && swapped != nullptr)
+                {
+                    if (lt)
+                    {
+                        std::fprintf(stderr,
+                                     "[edf-loop] OUTLET SWITCH -> id=%d (pip-free, {C} sink live)\n",
+                                     new_src);
+                    }
+                    cur_source = new_src;
+                    cur_outlet = swapped;
+                }
+            }
+        }
+    }
     int done = 0;
+    struct LoopTraceEnd
+    {
+        bool on; const int& done_ref; const int iters;
+        ~LoopTraceEnd()
+        { if (on) { std::fprintf(stderr, "[edf-loop] end done=%d/%d\n", done_ref, iters); } }
+    } _lte{ lt, done, iterations };
     for (int k = 0; k < iterations; ++k)
     {
-        if (!CanApplyBlink(state, controller, source_id, target_id, outlet.blink_own_only)) { break; }
+        if (!CanApplyBlink(state, controller, cur_source, target_id, cur_outlet->blink_own_only))
+        { blinkloop::TraceStop(lt, k, "blink-illegal"); break; }
         const Card* src_card = nullptr;
         const CardDefinition* tgt_def = nullptr;
         for (const Permanent& p : state.battlefield)
         {
-            if (p.card.m_number == source_id) { src_card = &p.card; }
+            if (p.card.m_number == cur_source) { src_card = &p.card; }
             if (p.card.m_number == target_id) { tgt_def = CardDatabase::Instance().LookupCached(p.card); }
         }
-        if (src_card == nullptr) { break; }
+        if (src_card == nullptr) { blinkloop::TraceStop(lt, k, "outlet-gone"); break; }
         const Card src_copy = *src_card;   // ApplyBlink push_backs; no battlefield pointer survives
         const int untaps = (tgt_def != nullptr) ? tgt_def->params.etb_untap_lands : 0;
         const ManaCost c = EffectiveActivationCost(state, controller, src_copy,
-                                                   outlet.blink_cost.value());
+                                                   cur_outlet->blink_cost.value());
         // ORDER MATTERS. The sink fires BEFORE the tap-ahead: the tap-ahead would otherwise tap the
         // Gorge for its one {C} and the damage ability would find it already tapped -- turning the
         // deck's kill into a rounding error on the mana. Firing it first also means the Gorge is
@@ -12161,7 +12437,9 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // point at the opponent's face does not make it the human's decision. The Gorge keeps its own
         // ActivatePermAbility action, so nothing becomes unreachable by hand -- it stops being
         // automatic. The search never sets HumanPlayActive, so every point of the measurement stands.
-        if (cash_sinks) { SpendSurplusOnDamageSinks(state, controller, c, pay); }
+        if (lt) { blinkloop::TraceStep(k, "enter", state, controller, c); }
+        if (cash_sinks) { SpendSurplusOnDamageSinks(state, controller, c, pay, probe_pay); }
+        if (lt) { blinkloop::TraceStep(k, "post-damage-sink", state, controller, c); }
         // The DRAW sinks ride the same position, and for the identical reason: {T} is in their cost,
         // so the tap-ahead would tap Mariposa for its one {C} and the draw ability would find its
         // own source already tapped. Behind the damage sinks in the same pass, matching their rank in
@@ -12175,6 +12453,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
             if (SpendSurplusOnDrawSinks(state, controller, c, pay) > 0)
             { want_draw = !ComboFinisherReachable(state, controller); }
         }
+        if (lt) { blinkloop::TraceStep(k, "post-draw-sink", state, controller, c); }
         // BANK THE COLOUR THE FINISH IS WAITING ON, AND THEN DO NOT SPEND IT (COMBO OFF only).
         //
         // TWO SITES, and only fixing both closes it. The land the untap is about to recharge should
@@ -12214,7 +12493,8 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
             EtbUntapTapAheadIntoFloat(state, controller, untaps, /*reserve_color_mask=*/0,
                                       pend ? &pend_cost : nullptr);
         }
-        if (!pay(c)) { break; }
+        if (lt) { blinkloop::TraceStep(k, "post-tapahead", state, controller, c); }
+        if (!pay(c)) { blinkloop::TraceStop(lt, k, "pay-failed"); break; }
         // Emiel's optional {G/W} counter trigger fires inside ApplyBlink's ETB cascade; hand it this
         // loop's payer so its mana is on the same books as the activation's (see
         // PayOptionalTriggerCost). Restored on scope exit. The untap priority puts the damage sink
@@ -12238,7 +12518,8 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
                 [](const ManaCost&) { return false; };
             EtbOptionalPayerScope   _eops(last_pass ? &pay : &decline);
             EtbUntapPriorityScope   _eups(sinks.empty() ? nullptr : &sinks);
-            ApplyBlink(state, controller, source_id, target_id, outlet.blink_returns_tapped);
+            ApplyBlink(state, controller, cur_source, target_id,
+                       cur_outlet->blink_returns_tapped);
         }
         ++done;
         // CASH THE SURPLUS ON A {T}-LESS DRAIN SINK -- and the PLACEMENT is the whole fix.

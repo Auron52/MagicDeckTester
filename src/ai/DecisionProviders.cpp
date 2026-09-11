@@ -14719,6 +14719,61 @@ static bool DrawLandGoOffOn()
     return heurarm::Flag(heurarm::EDF_DRAWLAND_GOFF, env_on);
 }
 
+// Would ApplyBlinkLoop swap this loop's outlet for a pip-free one out of hand?
+//
+// MUST STAY IN LOCKSTEP with the pre-loop switch in ApplyBlinkLoop (SpellEffects.h,
+// MTG_COMBO_OFF_OUTLET_SWITCH) -- same four conditions, same card data. The recognizer has to
+// know, because the count it sizes is the count that loop will run, and after the swap the loop's
+// colourless net is no longer `c_refund - c_cost` but `c_refund` outright: Emiel the Blessed's
+// blink is `{3}` and spends no pip at all.
+//
+// Measured on test/combo_off/sweep/sweep_4 with an Emiel added to hand: the swap fires and the
+// drain goes from 9 activations to 17 -- `c_refund` (1) per iteration across 14 iterations plus
+// the board's opening 3 -- against the 20 the kill needs. The loop is doing the right thing and
+// was simply sized too short, because `c_iterations` is gated on the PRE-SWAP net_c of zero.
+inline bool PipFreeOutletFromHandLive(const GameState& s, int controller, const FlickerLoop& loop)
+{
+    // HUMAN PLAY, not ComboOffFinishActive(), and the difference is load-bearing: this runs during
+    // ENUMERATION (EnumerateGoOffCounts), which is outside the ComboOffFinishScope the projection
+    // and the trial apply open. Gating it on the scope made it read false at exactly the moment
+    // the count is sized, so the swap happened and the loop was still sized three drains short.
+    // HumanPlayActive() is false in every autonomous run and every rollout, and a multi-iteration
+    // count is only ever committed through the COMBO OFF plan in the first place (the human fold
+    // collapses an ordinary blink to one activation and re-prompts), so this sizes exactly the
+    // loop the button will run.
+    static const bool s_switch = EnvOn("MTG_COMBO_OFF_OUTLET_SWITCH", true);
+    if (!s_switch || !HumanPlayActive()) { return false; }
+    if (loop.c_cost <= 0) { return false; }           // this outlet spends no pip: nothing to fix
+    // A {C}-pip SINK must be live, or the swap is pure cost (condition 3 of the four).
+    bool pip_sink = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const std::optional<ManaCost>* sinks_c[] = { &d->params.drain_cost,
+                                                     &d->params.exile_opponent_top_cost };
+        for (const std::optional<ManaCost>* sc : sinks_c)
+        {
+            if (!sc->has_value()) { continue; }
+            if (EffectiveActivationCost(s, controller, p.card, sc->value()).colorless > 0)
+            { pip_sink = true; break; }
+        }
+        if (pip_sink) { break; }
+    }
+    if (!pip_sink) { return false; }
+    for (const Card& h : s.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (d == nullptr || !d->card.IsCreature() || !d->params.blink_cost.has_value()) { continue; }
+        if (EffectiveActivationCost(s, controller, d->card,
+                                    d->params.blink_cost.value()).colorless > 0) { continue; }
+        if (!BoardCanPayColors(s, controller, d->card.m_mana_cost)) { continue; }
+        return true;
+    }
+    return false;
+}
+
 int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
 {
     if (!loop.ok) { return 0; }
@@ -14727,7 +14782,49 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
     if (loop.gorge_dmg > 0)
     {
         // The loop must fund the sink as well as itself, or the damage never fires.
-        if (loop.refund > loop.cost_mv + loop.gorge_cost_mv)
+        //
+        // ...AND THE SINK EATS AN UNTAP SLOT, which `loop.refund` does not know. A Gorge ping has
+        // `{T}` in its cost, so it is once-per-untap: ApplyBlinkLoop promotes the damage sink to
+        // the FRONT of `g_etb_untap_priority` precisely so the loop gets it back, and that slot is
+        // then NOT available to a yield land. `loop.refund` is the top-`untaps` land yields with no
+        // such reservation, so on a two-untap board it credits Kitchen (5) AND a Conservatory (2)
+        // when the iteration really gets Kitchen (5) and the Gorge (1).
+        //
+        // The consequence is the second half of the sweep's cluster C2 (rule GORGE: 17 offers, 0
+        // wins). With the refund over-counted the branch sizes `life` iterations -- one ping each
+        // -- on a board whose real per-iteration budget is `5 + 1 - 3 (blink) - 3 (ping) = 0`, so
+        // the loop coasts on its opening float and stops less than half way. Measured on the
+        // sweep_3 board at opponent life 20: 20 blinks, 10 pings, no kill; at life 5: 5 blinks, 3
+        // pings, no kill. The same board with Peregrine Drake instead of Cloud of Faeries -- five
+        // untap slots, so the Gorge AND four yield lands come back -- WINS at 20 life and at 10.
+        //
+        // So this is not a display preference, it is arithmetic, and the same precedent as Session
+        // 14c's MTG_COMBO_OFF_BANKABLE: a rule the user wrote is right in KIND and could not COUNT.
+        // Reserving the slot makes the two-untap boards correctly ABSENT and leaves every board
+        // that can really do it offered -- which is what "aggressive, but accurate" asks for.
+        //
+        // HUMAN PLAY ONLY (MTG_COMBO_OFF_GORGE_SLOT=0 restores the unreserved refund). The
+        // autonomous arm's go-off economics are measured artifacts; HumanPlayActive() is false in
+        // every autonomous run and every rollout, so GT, the value leaf and the keep tables are
+        // byte-identical by construction.
+        static const bool s_gorge_slot = EnvOn("MTG_COMBO_OFF_GORGE_SLOT", true);
+        int refund = loop.refund;
+        if (s_gorge_slot && HumanPlayActive() && loop.untaps > 0)
+        {
+            const int me = s.active_player_index;
+            int sink_yield = 0;
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != me) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr || !d->params.tap_damage_cost.has_value()
+                    || d->params.tap_damage_each_opponent <= 0) { continue; }
+                sink_yield = ManaProducedPerTap(*d) + LandAuraBonus(s, p);
+                break;                              // ApplyBlinkLoop promotes exactly one
+            }
+            refund = FlickerTopLandYields(s, me, loop.untaps - 1) + sink_yield;
+        }
+        if (refund > loop.cost_mv + loop.gorge_cost_mv)
         { return std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, FlickerMaxIterations()); }
     }
 
@@ -14754,7 +14851,14 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
     // beside it: a resource the loop supplies PER ITERATION, so the count is a max, not a sum.
     // Autonomous sizing is untouched -- that arm's economics are measured artifacts.
     static const bool s_goff_c_iters = EnvOn("MTG_EDF_GOFF_C_ITERS", true);
-    const bool c_iters_on = s_goff_c_iters && HumanPlayActive() && loop.net_c > 0;
+    // ...AND THE OUTLET THE LOOP WILL ACTUALLY RUN WITH. When ApplyBlinkLoop is going to swap in a
+    // pip-free outlet (see PipFreeOutletFromHandLive), this loop's own `c_cost` is about to stop
+    // being spent, so the per-iteration colourless net becomes `c_refund` rather than `net_c`.
+    // Sizing on the pre-swap number is what left the measured sweep_4+Emiel board three drains
+    // short of the kill with the swap working perfectly.
+    const bool swap_live  = PipFreeOutletFromHandLive(s, s.active_player_index, loop);
+    const int  eff_net_c  = swap_live ? loop.c_refund : loop.net_c;
+    const bool c_iters_on = s_goff_c_iters && HumanPlayActive() && eff_net_c > 0;
     // `hand_setup_mv` is charged against the PIP budget as well as the mana one. It is generic (the
     // wish's {1}{G}, the finisher's {1}{U}), so in the worst case every point of it is settled out
     // of the colourless bank -- and on these boards the bank is exactly one pip per iteration, so a
@@ -14765,7 +14869,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
     const auto c_iterations = [&](long long pips_needed) -> int {
         if (!c_iters_on || pips_needed <= 0) { return 0; }
         pips_needed += loop.hand_setup_mv;
-        const long long it = (pips_needed + loop.net_c - 1) / loop.net_c;
+        const long long it = (pips_needed + eff_net_c - 1) / eff_net_c;
         return static_cast<int>(std::min<long long>(it, FlickerMaxIterations()));
     };
     if (loop.drain_amount > 0 && loop.drain_cost_mv >= 0)
@@ -16676,7 +16780,30 @@ inline int ColorlessSourceCount(const GameState& s, int c)
     return n;
 }
 
-inline bool HasBlueOrBlackSource(const GameState& s, int c)
+// A land Aura's "one mana of any color" rides its HOST's tap and is WILD (cards.json, Fertile
+// Ground / Trace of Abundance: `land_aura_produces: []`). It can pay any COLOURED pip and it can
+// never pay a {C} pip -- ManaPool credits it as `wild`, deliberately not as `wild_c`.
+//
+// ONE helper for every colour question, because the asymmetry this replaces was a real defect.
+// `HasRedSource` carried this clause and `HasBlueOrBlackSource`, twenty lines above it, did not --
+// so a board whose only blue was a Trace of Abundance read as having no {U}/{B} at all, and `UB`
+// gates THREE of the five rules (IN-HAND, WISH-DRAW, WISH-NODRAW). Measured on the user's own
+// `references/EldraziDisplacerFlicker/claude_s1_gi0` turn 3 -- the turn they WON -- whose board
+// holds two Trace of Abundance and no other blue: `offered=0`, and adding any single real blue
+// source (Yavimaya Coast / Adarkar Wastes / Kitchen) or simply giving the Aether Hub its energy
+// makes the button appear, verified and winning. Nothing else on that board changes.
+//
+// Display-side only (ComboOffPossible is reached exclusively under `HumanPlayActive()`, see
+// EnumerateMainPlans), so autonomous play is byte-identical by construction.
+// MTG_COMBO_OFF_UB_AURA=0 restores the old blue/black-blind form for a one-binary A/B.
+inline bool LandAuraMakesAnyColor(const CardDefinition& d)
+{
+    return d.params.is_land_aura && d.params.land_aura_produces.empty()
+        && d.params.land_aura_extra_mana > 0;
+}
+
+inline bool HasColorSource(const GameState& s, int c, const Color* want, int n_want,
+                           bool aura_wild_counts)
 {
     for (const Permanent& p : s.battlefield)
     {
@@ -16684,28 +16811,23 @@ inline bool HasBlueOrBlackSource(const GameState& s, int c)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr) { continue; }
         for (Color col : EffectiveProduces(s, c, *d, /*in_hand=*/false))
-        { if (col == Color::Blue || col == Color::Black) { return true; } }
+        { for (int i = 0; i < n_want; ++i) { if (col == want[i]) { return true; } } }
+        if (aura_wild_counts && LandAuraMakesAnyColor(*d)) { return true; }
     }
     return false;
 }
 
+inline bool HasBlueOrBlackSource(const GameState& s, int c)
+{
+    static const bool s_ub_aura = EnvOn("MTG_COMBO_OFF_UB_AURA", true);
+    static const Color kUB[] = { Color::Blue, Color::Black };
+    return HasColorSource(s, c, kUB, 2, /*aura_wild_counts=*/s_ub_aura);
+}
+
 inline bool HasRedSource(const GameState& s, int c)
 {
-    for (const Permanent& p : s.battlefield)
-    {
-        if (p.controller_index != c) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d == nullptr) { continue; }
-        for (Color col : EffectiveProduces(s, c, *d, /*in_hand=*/false))
-        { if (col == Color::Red) { return true; } }
-        // A land Aura's "one mana of any color" rides its HOST's tap and is wild -- it is this
-        // deck's only real red (Fertile Ground, Trace of Abundance), so it counts here even though
-        // it can never count for {C}.
-        if (d->params.is_land_aura && d->params.land_aura_produces.empty()
-            && d->params.land_aura_extra_mana > 0)
-        { return true; }
-    }
-    return false;
+    static const Color kR[] = { Color::Red };
+    return HasColorSource(s, c, kR, 1, /*aura_wild_counts=*/true);
 }
 
 // A DIFFERENT question from ColorlessSourceCount: does the loop's OUTLET carry no {C} pip? Emiel

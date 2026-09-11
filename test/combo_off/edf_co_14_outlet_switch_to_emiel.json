@@ -1,0 +1,100 @@
+{
+  "_comment": [
+    "THE LOOP SWAPS ITS OWN OUTLET when colourless is the binding resource.",
+    "",
+    "USER, writing rule 4 of the Combo Off table: 'the 1 colourless source works even when you",
+    "have displacer out because you can draw into Emiel and cast it if you can draw your deck.'",
+    "The rule table believed that; the executor never did it.",
+    "",
+    "Eldrazi Displacer's blink is {2}{C} and Emiel the Blessed's is {3} -- same mana value, and",
+    "one of them spends a colourless PIP every pass. Cloud of Faeries untaps two lands and the",
+    "{C}-starved reservation makes exactly one of them colourless, so the Displacer loop nets ZERO",
+    "colourless and Essence Depleter's {1}{C} is fed only by the board's opening supply.",
+    "",
+    "MEASURED on this exact board: without the swap, 14 blinks and NINE drains of the twenty the",
+    "kill needs; with it, 20 blinks and 20 drains, opponent dead. Both halves are required --",
+    "MTG_COMBO_OFF_OUTLET_SWITCH deploys the held Emiel and switches mid-loop, and the recognizer",
+    "then sizes the count on the POST-SWAP colourless net (PipFreeOutletFromHandLive), without",
+    "which the swap works perfectly and the loop still stops three drains short at 17.",
+    "",
+    "Across the sweep, `loop.net_c <= 0` produced 42 offers and ZERO wins while `net_c > 0` won",
+    "81.4% -- the pip is the whole difference (docs/design/combo-off-sweep-catalogue.md, C3)."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 49,
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    {
+      "name": "Kitchen",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Wild Growth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Conservatory"
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Adarkar Wastes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Yavimaya Coast",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Eldrazi Displacer",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Cloud of Faeries",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Essence Depleter",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Emiel the Blessed"
+  ],
+  "expect_combo_off": true
+}
