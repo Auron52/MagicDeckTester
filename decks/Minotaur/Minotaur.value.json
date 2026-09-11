@@ -14621,6 +14621,9 @@
  },
  "value_trust_depth": 5,
  "value_play": {
+  "leaf": "none",
+  "alpha": "relaxed",
+  "leaf_note": "ADOPTED 2026-09-11: NO-LEAF escalation (shape #2). Better on quality at both d5 configs, neutral at d3, and units never above 1.000x. Paired sign test: d5b20 19 better / 2 worse z +3.71 at 0.971x units / 0.959x wall and d5b40 13/1 z +3.21 at 0.999x/1.003x (16 blocks x 500 = 8,000 games each, seeds 9,800,000+); d3b10 0 better/0 worse at 0.994x/0.987x and d3b20 0/0 at 0.996x/0.989x (4,000 games each, seeds 9,500,000+); d0b0 byte-identical. NOTE the first screen read d5b40 units as 1.009x on 4,000 games; the 8,000-game re-measure puts it at 0.999x, so that apparent unit regression was sample size. Wall at d5b40 is 1.003x, i.e. +0.3%, below wall's noise floor in a pooled batch while the deterministic units axis is cheaper. See docs/design/per-deck-search-shape.md (fleet leaf-necessity screen, 2026-09-11)",
   "mull_gen_depth": 1,
   "mull_gen_budget_ms": 3,
   "expected_buckets": 16

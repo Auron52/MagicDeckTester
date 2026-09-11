@@ -397,7 +397,7 @@ were screened at the same 4,000 games per cell.
 |---|---|---|---|---|---|
 | Mirrorwing Dragon | +1.41, 0.987x/0.964x | — | **+5.60** (37/2), 0.914x/0.848x | — | **ADOPTED** |
 | Dragons | 0/0, 0.995x/0.977x | 0/0, 0.995x/0.993x | +0.58, 0.944x/0.863x | −0.58, 0.942x/0.873x | **ADOPTED** |
-| Minotaur | 0/0, 0.994x | 0/0, 0.996x | **+3.00** (9/0), 0.969x/0.946x | +2.65 (7/0), **1.009x**/0.998x | STAGED (trade) |
+| Minotaur | 0/0, 0.994x | 0/0, 0.996x | **+3.71** (19/2), 0.971x/0.959x | **+3.21** (13/1), 0.999x/1.003x | **ADOPTED** (re-measured at 8,000 games) |
 | KittyEquipment | **−3.46** (0/12), 0.964x | −1.34, 0.975x | 0/0, 0.874x | +1.51, 0.833x | rejected |
 
 **Mirrorwing Dragon is the strongest leaf-is-a-net-negative result measured** -- 37 better against 2 worse at
@@ -408,12 +408,27 @@ unhelpful but actively misleading.
 (z −3.46). Two of the fourteen decks screened now show this exact depth-split signature, which is what makes
 the unconditional application of shape keys a real design question rather than a one-off.
 
-**Minotaur and slivers_vial are TRADES, deliberately not adopted.** Both buy a significant quality gain with
-a small UNITS increase at one configuration -- Minotaur +2.65 for 1.009x at d5b40, slivers_vial **+4.58
-(21 better / 0 worse over 8,000 games)** for 1.020x at d3b10 -- while wall time is cheaper at every
-configuration for both. By the standing rule (a clean win regresses on NO axis) these are the user's call, not
-an agent's. The recommendation is to take both: the units axis is a proxy for cost and the real-time axis
-moved the other way.
+**Minotaur's apparent unit regression was SAMPLE SIZE, and re-measuring flipped it to an adoption.** At 4,000
+games d5b40 read 1.009x units; at 8,000 games (16 x 500, seeds 9,800,000+) it reads **0.999x** with quality
+z **+3.21**, and d5b20 firmed to z **+3.71** at 0.971x/0.959x. ADOPTED. The lesson is narrow but useful: a
+~1% units ratio is within sampling noise even though units are *deterministic per game* -- determinism makes a
+given game's cost exact, it does not make the game SET representative.
+
+**slivers_vial remains a TRADE, deliberately not adopted -- the user's call.** Its d5b20 side is a pure win
+(0.914x units, **0.709x wall**, z +1.00, 9 of 16 blocks byte-identical, 8,000 games), but d3b10 buys z **+4.58**
+(21 better / 0 worse over 8,000 games) for **1.020x units** -- reproduced at two sample sizes, so unlike
+Minotaur's this one is real. Wall is cheaper at both configurations (0.988x / 0.709x). By the standing rule
+(a clean win regresses on NO axis) this is not an agent's call; the recommendation is to take it, since the
+adverse axis is the proxy and real time moved the other way.
+
+### Dragonstorm's staged `nl_sres2` candidate is now REJECTED, and that is a lesson about additive reading
+
+The 2026-09-10 record staged shape #3 for Dragonstorm at 0.958x (d5b20) against the MODEL-leaf baseline, with a
+warning that it must be re-measured jointly rather than added to another change. Re-measured against the
+leafless baseline now shipped (16 x 500 = 8,000 games per cell, seeds 9,800,000+): **d5b20 1.091x units** --
+it has become more EXPENSIVE than the baseline it was meant to improve -- and **d3b10 z -3.05** (17 better /
+40 worse) despite 0.763x units. The two changes overlap in what they remove, so their savings were never
+additive. Staged candidate closed.
 
 ## FLEET STATE after 2026-09-11 (7 of 20 decks now run leafless)
 
