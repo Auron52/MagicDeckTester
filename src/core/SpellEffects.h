@@ -10616,7 +10616,7 @@ inline bool TlessSinkTrialOn()
 inline bool SinkKeepsLoopPayable(const GameState& state, const ManaCost& c_sink,
                                  const ManaCost& keep_payable, const StateManaPayer* probe_pay)
 {
-    if (probe_pay != nullptr && ComboOffFinishActive() && TlessSinkTrialOn())
+    if (probe_pay != nullptr && ComboOffExactApplyActive() && TlessSinkTrialOn())
     {
         GameState probe = state;
         return (*probe_pay)(probe, c_sink) && (*probe_pay)(probe, keep_payable);
@@ -10944,7 +10944,7 @@ inline int SpendSurplusOnDamageSinks(GameState& state, int controller, const Man
         // autonomous play is byte-identical by construction; the autonomous half is written up in
         // the catalogue as a separate, measured decision.
         static const bool s_sink_trial = EnvOn("MTG_COMBO_OFF_SINK_TRIAL", true);
-        const bool real_trial = s_sink_trial && probe_pay != nullptr && ComboOffFinishActive();
+        const bool real_trial = s_sink_trial && probe_pay != nullptr && ComboOffExactApplyActive();
         if (real_trial)
         {
             GameState probe = state;
@@ -11043,7 +11043,7 @@ inline bool LoopDrawSinkOn()
     // button whose line the apply then declines to walk. ComboOffFinishActive() is reachable only
     // through the button (false in every autonomous run, in every rollout, and in ordinary human
     // play), so ordinary human turns and every saved reference still never draw a card unasked.
-    if (HumanPlayActive() && !ComboOffFinishActive()) { return false; }
+    if (HumanPlayActive() && !ComboOffExactApplyActive()) { return false; }
     static const bool env_on = EnvOn("MTG_EDF_LOOP_DRAW", true);
     return heurarm::Flag(heurarm::EDF_LOOP_DRAW, env_on);
 }
@@ -11087,7 +11087,7 @@ inline int CrackCluesForCards(GameState& state, int controller, const ManaCost& 
         // that the sequential payment picks greedily. A Clue crack is only {2}, and on the seed-6
         // board those two generic pips were paid off the board's last colourless source, leaving
         // Eldrazi Displacer's {C} unpayable.
-        if (probe_pay != nullptr && ComboOffFinishActive() && DrawTrialOn())
+        if (probe_pay != nullptr && ComboOffExactApplyActive() && DrawTrialOn())
         {
             GameState probe = state;
             if (!((*probe_pay)(probe, c) && (*probe_pay)(probe, keep_payable))) { break; }
@@ -11339,7 +11339,7 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
     int pre_drawn = 0;
     {
         static const bool s_crack_first = EnvOn("MTG_COMBO_OFF_CRACK_FIRST", true);
-        if (s_crack_first && ComboOffFinishActive())
+        if (s_crack_first && ComboOffExactApplyActive())
         { pre_drawn = CrackCluesForCards(state, controller, keep_payable, pay, probe_pay); }
     }
 
@@ -11432,11 +11432,11 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
         // see the header) and therefore GT, the value leaf and the keep tables are untouched.
         // MTG_COMBO_OFF_DRAW_TRIAL=0 restores the projection guard.
         static const bool s_guard_selftap = EnvOn("MTG_DRAW_GUARD_SELFTAP", true);
-        const bool honest_guard = s_guard_selftap && ComboOffFinishActive();
+        const bool honest_guard = s_guard_selftap && ComboOffExactApplyActive();
         if (honest_guard) { state.battlefield[i].tapped = true; }
         {
             bool ok;
-            if (probe_pay != nullptr && ComboOffFinishActive() && DrawTrialOn())
+            if (probe_pay != nullptr && ComboOffExactApplyActive() && DrawTrialOn())
             {
                 GameState probe = state;          // the source is already tapped on this copy
                 if (!honest_guard) { SetPermTapped(probe, controller, id, true); }
@@ -11547,7 +11547,7 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
     // win outright, so deploying the finisher out of their hand is exactly what they consented to --
     // and the verify must run the same deploy the apply will, or its "wins this turn" is a guess.
     // Ordinary human play is untouched: ComboOffFinishActive() is false everywhere else.
-    if (!ComboFinishOn() || (HumanPlayActive() && !ComboOffFinishActive())) { return false; }
+    if (!ComboFinishOn() || (HumanPlayActive() && !ComboOffExactApplyActive())) { return false; }
     if (state.players[1 - controller].life <= 0) { return false; }
     if (finishstats::On()) { finishstats::g_fin_call.fetch_add(1, std::memory_order_relaxed); }
 
@@ -11582,7 +11582,7 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
     static const bool s_deploy_trial = EnvOn("MTG_COMBO_OFF_DEPLOY_TRIAL", true);
     const auto keeps_loop = [&](const ManaCost& cost) {
         if (!s_deploy_trial || keep_payable == nullptr || probe_pay == nullptr
-            || !ComboOffFinishActive()) { return true; }
+            || !ComboOffExactApplyActive()) { return true; }
         GameState probe = state;
         return (*probe_pay)(probe, cost) && (*probe_pay)(probe, *keep_payable);
     };
@@ -11651,7 +11651,7 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
         // Outside the button this is unreachable (ComboOffFinishActive()), so the search keeps the
         // guard its measurement was taken under. MTG_COMBO_OFF_EARLY_DEPLOY=0 restores it here too.
         static const bool s_early_deploy2 = EnvOn("MTG_COMBO_OFF_EARLY_DEPLOY", true);
-        if (s_early_deploy2 && ComboOffFinishActive())
+        if (s_early_deploy2 && ComboOffExactApplyActive())
         { return static_cast<long long>(have.Total()) >= cast_mv; }
         const int acts = is_drain
             ? (std::max(1, state.players[1 - controller].life) + std::max(1, drain_amount) - 1)
@@ -12492,7 +12492,7 @@ inline int DeployLandAuraFromHand(GameState& state, int controller,
                                   const StateManaPayer* probe_pay)
 {
     static const bool s_land_aura = EnvOn("MTG_COMBO_OFF_LAND_AURA", true);
-    if (!s_land_aura || !ComboOffFinishActive() || !ComboFinishOn()) { return 0; }
+    if (!s_land_aura || !ComboOffExactApplyActive() || !ComboFinishOn()) { return 0; }
     Color want = Color::Colorless;
     if (!ComboFinishMissingColor(state, controller, &want)) { return 0; }
     // A host must EXIST before anything is paid for -- an aura with nowhere to go is a dead cast.
@@ -12728,7 +12728,7 @@ inline bool ComboOffNeedsDrawnOutlet(const GameState& state, int controller,
                                      int source_id, const CardParams& outlet)
 {
     static const bool s_dig_outlet = EnvOn("MTG_COMBO_OFF_DIG_OUTLET", true);
-    if (!s_dig_outlet || !ComboOffFinishActive() || !outlet.blink_cost.has_value())
+    if (!s_dig_outlet || !ComboOffExactApplyActive() || !outlet.blink_cost.has_value())
     { return false; }
     const Permanent* src = nullptr;
     for (const Permanent& p : state.battlefield)
@@ -12837,7 +12837,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     // measured loss in the opposite direction -- a dig whose sources never come back untapped.
     const bool promote_draw_lands =
         LoopDrawSinkOn()
-        && (!s_draw_promote || !ComboOffFinishActive()
+        && (!s_draw_promote || !ComboOffExactApplyActive()
             || !ComboFinisherReachable(state, controller)
             || ComboOffNeedsDrawnOutlet(state, controller, cur_source, *cur_outlet));
     // The DAMAGE-only prefix, kept so the draw promotion can be withdrawn mid-loop -- see
@@ -12878,7 +12878,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // is false in every autonomous run, in every rollout, and in ordinary human play, so the
         // measured drain/deck-out economics and every saved reference are untouched.
         static const bool s_hold_deploy = EnvOn("MTG_HOLD_C_FOR_DEPLOY", true);
-        if (!want_hold_colorless && s_hold_deploy && ComboOffFinishActive() && ComboFinishOn())
+        if (!want_hold_colorless && s_hold_deploy && ComboOffExactApplyActive() && ComboFinishOn())
         { want_hold_colorless = ExileFinisherReachableFromHand(state, controller); }
         // NOT SHIPPED, and recorded so nobody re-derives it: also setting the hold when the OUTLET
         // itself carries a {C} pip (Displacer's `{2}{C}`, `{C}` under Training Grounds) is an
@@ -13013,7 +13013,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     // verified wins. MTG_COMBO_OFF_OUTLET_SWITCH=0 opts out.
     {
         static const bool s_switch = EnvOn("MTG_COMBO_OFF_OUTLET_SWITCH", true);
-        if (s_switch && ComboOffFinishActive() && iterations > 1)
+        if (s_switch && ComboOffExactApplyActive() && iterations > 1)
         {
             // ...AND THE SWITCH MUST LEAVE A LOOP BEHIND (MTG_COMBO_OFF_SWITCH_TRIAL, default ON).
             //
@@ -13124,7 +13124,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // deployed (after which nothing is owed and the historical order returns).
         // MTG_COMBO_OFF_HOLD_CAST_COLOR=0 restores the un-signalled loop.
         ManaCost pend_cost;
-        const bool pend = ComboOffFinishActive() && ComboFinishOn()
+        const bool pend = ComboOffExactApplyActive() && ComboFinishOn()
                        && PendingComboFinishCost(state, controller, &pend_cost);
         static const bool s_hold_cast_color = EnvOn("MTG_COMBO_OFF_HOLD_CAST_COLOR", true);
         const ManaCost saved_line = g_line_unpaid_cost;
@@ -13195,7 +13195,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
             // this branch is never taken and the measured promotion arm is byte-identical.
             static const bool s_unpromote = EnvOn("MTG_COMBO_OFF_DRAW_UNPROMOTE", true);
             const bool draw_promo_live =
-                !(s_unpromote && ComboOffFinishActive() && promote_draw_lands && !want_draw);
+                !(s_unpromote && ComboOffExactApplyActive() && promote_draw_lands && !want_draw);
             const std::vector<int>& prio = draw_promo_live ? sinks : sinks_damage_only;
             if (lt && !draw_promo_live && promote_draw_lands)
             {
@@ -13291,7 +13291,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // cast makes true), and `ComboOffSwitchOutlet` returns at its first condition once the
         // outlet no longer prints a `{C}` pip. After one success each, both are two board scans.
         static const bool s_midloop_aura = EnvOn("MTG_COMBO_OFF_LAND_AURA", true);
-        if (cash_sinks && s_midloop_aura && ComboOffFinishActive() && k + 1 < iterations)
+        if (cash_sinks && s_midloop_aura && ComboOffExactApplyActive() && k + 1 < iterations)
         { DeployLandAuraFromHand(state, controller, pay, &c, probe_pay); }
         // A DRAWN EMIEL. The pre-loop swap reads `hand` once, before iteration 0; the user's
         // ruling is about an outlet the DIG turns up (*"you can draw into Emiel and cast it if you
@@ -13320,7 +13320,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // is reachable only on the board this widening is for.
         static const bool s_midloop_outlet = EnvOn("MTG_COMBO_OFF_MIDLOOP_OUTLET", true);
         static const bool s_switch2        = EnvOn("MTG_COMBO_OFF_OUTLET_SWITCH", true);
-        if (cash_sinks && s_midloop_outlet && s_switch2 && ComboOffFinishActive()
+        if (cash_sinks && s_midloop_outlet && s_switch2 && ComboOffExactApplyActive()
             && k + 1 < iterations)
         {
             if (ComboOffSwitchOutlet(state, controller, &cur_source, &cur_outlet, pay, probe_pay,
@@ -13329,7 +13329,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
             { std::fprintf(stderr, "[edf-loop] (mid-loop, k=%d)\n", k); }
         }
         static const bool s_early_deploy = EnvOn("MTG_COMBO_OFF_EARLY_DEPLOY", true);
-        if (cash_sinks && s_early_deploy && ComboOffFinishActive()
+        if (cash_sinks && s_early_deploy && ComboOffExactApplyActive()
             && k + 1 < iterations && !ComboFinisherReachableOnBoard(state, controller))
         { ComboFinishFromHand(state, controller, pay, &c, probe_pay); }
         if (cash_sinks)
@@ -13354,7 +13354,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // colour on a drain's or a draw's generic pip -- the identical burn, one step later.
         static const bool s_hold_cast_color2 = EnvOn("MTG_COMBO_OFF_HOLD_CAST_COLOR", true);
         ManaCost   tail_pend;
-        const bool tail_hold = s_hold_cast_color2 && ComboOffFinishActive() && ComboFinishOn()
+        const bool tail_hold = s_hold_cast_color2 && ComboOffExactApplyActive() && ComboFinishOn()
                             && PendingComboFinishCost(state, controller, &tail_pend);
         const ManaCost tail_saved = g_line_unpaid_cost;
         struct TailLineCostRestore

@@ -1,5 +1,6 @@
 #pragma once
 #include "EnvFlags.h"
+#include "../ai/HeuristicArm.h"   // per-job lever overrides (EdfExactExecutorOn's arm slot)
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -1221,3 +1222,71 @@ struct ComboOffFinishScope
     ComboOffFinishScope(const ComboOffFinishScope&)            = delete;
     ComboOffFinishScope& operator=(const ComboOffFinishScope&) = delete;
 };
+
+// ---- THE EXACT EXECUTOR (MTG_EDF_EXACT_EXECUTOR) ----------------------------------------------
+// ONE lever. It makes the AUTONOMOUS go-off apply run the same machinery the COMBO OFF button's
+// apply runs, so "the rule says this board wins" and "the executor can walk it" stop being two
+// different questions.
+//
+// WHY IT EXISTS -- the measurement, not a hunch. Session 25 wired the search to `ComboOffPossible`
+// and then counted how often the rule's promise survived the search's own trial apply, on 100
+// autonomous games:
+//
+//     committed ROOT : rule accepts   131, trial verifies    18  -> 86.3% false positive
+//     LOOKAHEAD  ply : rule accepts 17337, trial verifies   252  -> 98.6% false positive
+//
+// against the SAME rule table scoring a perfect oracle in the viewer (FALSE FIRE 0 on 1074 + 939
+// states). Same function, same arithmetic, opposite verdict -- so the gap is not the rule. It is
+// that five of Session 20's executor repairs, plus Session 24's two mid-loop casts and the exact
+// iteration ceiling, are `ComboOffFinishActive()`-gated, and that flag is FALSE in every autonomous
+// run and every rollout. `MTG_EDF_CO_SCOPE_PROBE` re-ran each refuted trial inside the scope and
+// measured the size of the executor's share directly: 15 of 113 at root, 2442 of 17085 in
+// lookahead -- roughly one in seven of the rule's "false" fires is not a rule error at all.
+//
+// SCOPE. `ComboOffFinishActive()` stays exactly what it was; this widens the predicate the in-loop
+// repairs read, and only OUTSIDE human play. Ordinary human turns keep the "the engine must not
+// spend out of a human's hand uninvited" discipline (`HumanPlayActive() && !...` reads identically
+// under this predicate), and the button's own apply is unchanged because the scope is already true
+// there -- so the viewer path is byte-identical by construction.
+//
+// INERT FOR EVERY OTHER DECK, also by construction: every gate it opens sits inside `ApplyBlinkLoop`
+// or `RecogniseFlickerLoop`, which need `blink_cost` / `etb_untap_lands` / `is_land_aura`, and no
+// decklist in `test/regression_cases.sh` carries any of the three.
+// Carries a heurarm slot so ONE pooled `mtg --batch` can run the executor-off and executor-on arms
+// together -- the alternative is a per-arm batch, which is the barrier the repo's pooling rule
+// forbids.
+inline bool EdfExactExecutorOn()
+{
+    static const bool env_on = EnvOn("MTG_EDF_EXACT_EXECUTOR", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::EDF_EXACT_EXECUTOR, env_on);
+}
+
+// TWO PREDICATES, AND THEY ARE NOT THE SAME ONE. Conflating them is not a style slip -- it silently
+// WITHDRAWS every widening the button already had, and it cost nine viewer fixtures before the
+// gate caught it (10, 14, 24, 26, 27, 29, 30, 31, 32).
+//
+//  * the APPLY half was gated on `ComboOffFinishActive()`, a scope entered only while the button's
+//    plan is being verified or applied;
+//  * the SIZING half -- the iteration ceiling, the outlet-swap sizing, the dig-for-a-colour walk --
+//    was gated on `HumanPlayActive()`, deliberately, because it runs during ENUMERATION, which is
+//    OUTSIDE that scope. `PipFreeOutletFromHandLive` says so in its own comment: *"HUMAN PLAY, not
+//    ComboOffFinishActive(), and the difference is load-bearing."*
+//
+// So the lever widens each of them in its own shape, and in AUTONOMOUS play the two collapse to the
+// same answer (both are just `EdfExactExecutorOn()` there), which is why the measured arms are
+// unaffected by the distinction and human play is entirely what it protects.
+
+// THE APPLY: the button's apply, OR -- under the lever -- autonomous play and every rollout.
+// Human play outside the button is deliberately excluded, so the "do not spend out of a human's
+// hand uninvited" gates (`HumanPlayActive() && !...`) read exactly as they did.
+inline bool ComboOffExactApplyActive()
+{
+    return g_combo_off_finish || (EdfExactExecutorOn() && !HumanPlayActive());
+}
+
+// THE SIZING: every human frame (as before, scope or no scope), OR -- under the lever -- the
+// autonomous arm. Same shape as `GoffExactHere()`, which is the sizing lever this one joins.
+inline bool ComboOffExactSizingActive()
+{
+    return HumanPlayActive() || EdfExactExecutorOn();
+}

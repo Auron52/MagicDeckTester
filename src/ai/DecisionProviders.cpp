@@ -14352,7 +14352,7 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
     // the deploy. Without this the projection that gates the trial apply cannot see the very route
     // the count was sized on, so a winnable go-off is never verified and ships as a mislabelled bank
     // (EDF seed 10 T4). ComboOffFinishActive() is reachable only under human play -- see the scope.
-    if (HumanPlayActive() && !for_human_count_sizing && !ComboOffFinishActive()) { return; }
+    if (HumanPlayActive() && !for_human_count_sizing && !ComboOffExactApplyActive()) { return; }
     if (best->drain_amount > 0 || best->exile_cost_mv > 0) { return; }   // already on the board
     static const bool s_on = EnvOn("MTG_EDF_COMBO_FINISH", true);
     if (!heurarm::Flag(heurarm::EDF_COMBO_FINISH, s_on)) { return; }
@@ -14377,7 +14377,12 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
     // below now includes a LIBRARY scan. While the lever was default-OFF the static bool read was
     // the whole cost; flipping it to ON in Session 24 would otherwise have handed the autonomous
     // arm a per-node library walk for an answer it never reads.
-    if (EdfDigColorOn() && HumanPlayActive())
+    // `ComboOffExactApplyActive()` replaces the bare `HumanPlayActive()` here for the same reason
+    // the colour test itself does: under `MTG_EDF_EXACT_EXECUTOR` the AUTONOMOUS apply can cast the
+    // Aura (`DeployLandAuraFromHand`), so `dig_aura` is no longer "an answer it never reads". The
+    // performance argument survives intact in the OFF position and in ordinary human play -- the
+    // predicate is one static bool read there, exactly as before.
+    if (EdfDigColorOn() && ComboOffExactSizingActive())
     {
         // The board's CHEAPEST repeatable draw, priced exactly as the library route below prices it
         // (an Investigate costs its activation PLUS the Clue's own {2} crack). 0 = no draw source,
@@ -14423,8 +14428,17 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
         // ONLY because the line will dig up a Fertile Ground has to pay for the digging and for the
         // Aura, or the count is sized for a board state the loop has not reached yet (the two
         // hunt regressions in EdfDigReachesAnyColorAura's header).
+        //
+        // ...AND UNDER `MTG_EDF_EXACT_EXECUTOR` IT IS LIVE AUTONOMOUSLY TOO, which is the half of
+        // that sentence that had to move with it. `dig_aura` is computed above under the same
+        // predicate; if this test kept the bare `HumanPlayActive()` the autonomous arm would pay
+        // for the library walk and then never read the answer -- and worse, would go on sizing a
+        // finisher whose colour the board cannot produce, which is exactly the "sized for a card
+        // the apply will decline to cast" failure the paragraph above names. The apply now DOES
+        // cast the Aura (`DeployLandAuraFromHand`), so the veto and the price finally describe the
+        // same machine. `MTG_COMBO_FINISH_COLOR=0` restores both halves, as before.
         int aura_extra = 0;
-        if (s_fin_color && HumanPlayActive()
+        if (s_fin_color && ComboOffExactSizingActive()
             && !BoardCanPayColors(s, controller, d->card.m_mana_cost))
         {
             if (!EdfCastColorReachable(s, controller, d->card.m_mana_cost, dig_aura)) { return; }
@@ -14519,8 +14533,18 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
     // without it rule WISH-DRAW would offer a button whose line the count cannot express.
     static const bool s_lib_route = EnvOn("MTG_EDF_LIB_ROUTE", false);
     static const bool s_lib_co    = EnvOn("MTG_EDF_LIB_ROUTE_COMBO_OFF", true);
-    const bool for_combo_off = s_lib_co && HumanPlayActive()
-                            && (ComboOffFinishActive() || for_human_count_sizing);
+    // ...AND UNDER `MTG_EDF_EXACT_EXECUTOR` THE AUTONOMOUS APPLY IS THAT SAME EXECUTOR, so it reads
+    // this route too. The objections quoted above are all about the SEARCH'S PLAN RANKING under the
+    // *blanket* `MTG_EDF_LIB_ROUTE` (shadowing the draw-land fallback, a startability test the
+    // scoring path then fails, rollout-wide damage) -- and they are the reason the lever is still a
+    // lever and the measurement below is the whole point, not a formality. What makes it coherent
+    // to lift is Session 25's count: the rule accepts 131 root / 17,337 lookahead states whose kill
+    // the search's own trial apply cannot walk, and the library route is one of the two named
+    // causes (the other is the 60-iteration ceiling). A route the rule prices and the executor
+    // cannot reach is a button that never verifies.
+    const bool for_combo_off = s_lib_co
+                            && (ComboOffExactApplyActive()
+                                || (HumanPlayActive() && for_human_count_sizing));
     if (!for_combo_off && !heurarm::Flag(heurarm::EDF_LIB_ROUTE, s_lib_route)) { return; }
     if (HumanPlayActive() && !for_combo_off) { return; }
     int draw_mv = 0;
@@ -15145,8 +15169,15 @@ inline bool PipFreeOutletFromHandLive(const GameState& s, int controller, const 
     // count is only ever committed through the COMBO OFF plan in the first place (the human fold
     // collapses an ordinary blink to one activation and re-prompts), so this sizes exactly the
     // loop the button will run.
+    //
+    // ...AND `MTG_EDF_EXACT_EXECUTOR` IS WHAT LICENSES LIFTING IT. Session 23 excluded this
+    // function from `MTG_EDF_GOFF_EXACT_AUTO` for one precise reason -- *"its paired apply-side
+    // swap is `ComboOffFinishActive()`-gated, so lifting the sizing half alone would size a swap
+    // that never happens."* The lever removes the premise: `ComboOffSwitchOutlet` now runs in the
+    // autonomous apply, pre-loop and mid-loop. The two halves go on and off together, which is the
+    // only state in which either is correct.
     static const bool s_switch = EnvOn("MTG_COMBO_OFF_OUTLET_SWITCH", true);
-    if (!s_switch || !HumanPlayActive()) { return false; }
+    if (!s_switch || !ComboOffExactSizingActive()) { return false; }
     if (loop.c_cost <= 0) { return false; }           // this outlet spends no pip: nothing to fix
     // A {C}-pip SINK must be live, or the swap is pure cost (condition 3 of the four).
     //
@@ -15688,10 +15719,21 @@ bool EdfAutoGoOffAfterCasts(GameState& s, int controller)
         { od = CardDatabase::Instance().LookupCached(p.card); break; }
     }
     if (od == nullptr || !od->params.blink_cost.has_value()) { return false; }
+    // THE STATE-TAKING TWIN OF THE PAYER (MTG_EDF_EXACT_EXECUTOR). Every in-loop spend guard that
+    // asks "after paying for this, can the loop still blink?" needs a payer it can rehearse on a
+    // COPY -- a flat `ManaPool` cannot see that Brushland taps for {C} OR {G}/{W}, nor that the
+    // sequential payment picks greedily. Until now only `TurnSolver`'s ActivateBlink apply supplied
+    // one, so the autonomous executor ran every one of those guards on the projection it was
+    // measured to get wrong. Supplying it here costs nothing when the lever is off: each guard
+    // additionally tests `ComboOffExactApplyActive()`.
+    static const StateManaPayer probe =
+        [](GameState& st, const ManaCost& c)
+        { return TapForCostDirect(st, c, /*for_creature=*/false); };
     const int done = ApplyBlinkLoop(s, controller, loop.outlet_id, loop.payload_id,
                                     od->params, n,
                                     [&s](const ManaCost& c)
-                                    { return TapForCostDirect(s, c, /*for_creature=*/false); });
+                                    { return TapForCostDirect(s, c, /*for_creature=*/false); },
+                                    &probe);
     // WORK PROXY (MTG_WINLESS_STATS). This is the atom of the label path's cost on this deck: an
     // apply that reaches here runs `done` blink iterations, each re-paid through the mana solver,
     // plus the library dig they fund. Counting them is how a label-path cut gets A/B'd on a box

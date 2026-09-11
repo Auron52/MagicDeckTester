@@ -4447,6 +4447,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // because the loop's untaps change the board between iterations.
             if (a.def != nullptr)
             {
+                // THE STATE-TAKING TWIN OF THE PAYER (MTG_EDF_EXACT_EXECUTOR), built out of the
+                // SAME payer the loop itself uses so the rehearsal and the real payment cannot
+                // disagree. This is the committed line's real apply: if the search's trial verified
+                // a kill with the in-loop guards live and this executor ran them on a flat pool,
+                // the engine would report a win turn the replay does not reproduce. Every guard
+                // that reads it additionally tests `ComboOffExactApplyActive()`, so with the lever
+                // off this is one unused std::function per ActivateBlink action.
+                const StateManaPayer probe =
+                    [this](GameState& st, const ManaCost& c)
+                    {
+                        ManaPool avail = AvailableManaPool(st);
+                        return TapForCost(st, c, avail, /*for_creature=*/false);
+                    };
                 const int done = ApplyBlinkLoop(
                     state, state.active_player_index, a.sac_source_id, a.sac_victim_id,
                     a.def->params, std::max(1, a.chosen_x),
@@ -4454,7 +4467,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     {
                         ManaPool avail = AvailableManaPool(state);
                         return TapForCost(state, c, avail, /*for_creature=*/false);
-                    });
+                    },
+                    &probe);
                 if (m_logger && done > 0)
                 {
                     m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
