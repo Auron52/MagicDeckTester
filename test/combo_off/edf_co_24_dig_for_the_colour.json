@@ -13,7 +13,7 @@
   "depth": 3,
   "hand": [],
   "library_filler": "Forest",
-  "library_size": 0,
+  "library_size": 6,
   "library_top": [
     "Brushland",
     "Conservatory",
@@ -31,14 +31,13 @@
   "opponent_life": 16,
   "turn": 5,
   "env": {
-    "MTG_HUMAN_PLAY": "1",
-    "MTG_COMBO_OFF_DIG_COLOR": "1"
+    "MTG_HUMAN_PLAY": "1"
   },
   "expect_combo_off": true,
   "_comment": [
-    "INFINITE DRAW IS A COLOUR SOURCE -- MTG_COMBO_OFF_DIG_COLOR, and this fixture is the only",
-    "thing that exercises it, because the lever ships DEFAULT OFF (the `env` block pins it on, so",
-    "it is tested rather than dead code).",
+    "INFINITE DRAW IS A COLOUR SOURCE -- and since Session 24 the EXECUTOR can run it, so this",
+    "fixture pins the whole line end to end: OFFERED, and the harness's independent re-apply",
+    "through the public TurnSolver::ApplyPlan kills the opponent.",
     "",
     "USER, 2026-09-11: 'Another thing that should be possible for the Blue or Black requirement is",
     "drawing into Fertile Ground. If you have infinite draw you can always draw into Fertile",
@@ -54,22 +53,25 @@
     "",
     "A Fertile Ground is still in the library, and a Living Wish behind it. With a repeatable draw",
     "source live (Conservatory's {4},{T}: Investigate) the line reaches both, so the colour the",
-    "finisher's cast needs is one dig away. DigReachesAnyColorAura says so and FinishNeedMana",
-    "stops vetoing on the one colour an any-colour Aura supplies.",
+    "finisher's cast needs is one dig away. DigReachesAnyColorAura says so, FinishNeedMana stops",
+    "vetoing on the one colour an any-colour Aura supplies, and DeployLandAuraFromHand then CASTS",
+    "it mid-loop -- on a land the payment left untapped, so its wild is available to the Essence",
+    "Depleter cast in the same iteration. [finish] reads `wish=1 hand=1`.",
     "",
-    "WHY THE LEVER IS DEFAULT OFF, and it is not the arithmetic. ApplyBlinkLoop has exactly three",
-    "hand-cast sites -- DeployPipFreeOutletFromHand (src/core/SpellEffects.h:12272),",
-    "ComboFinishFromHand route 1 (:11653) and route 2 (:11714) -- and every one is gated on",
-    "IsCreature() (:12280, :11523). The only code that can ATTACH a land Aura is",
-    "ResolveEnchantTarget (:2547), reachable solely from the ordinary CastFromHand resolution,",
-    "which the go-off apply never enters. So the engine cannot yet run the line the user",
-    "describes, and firing on it by default would be firing on hope. `combo_off_verify` is false",
-    "here for exactly that reason: the OFFER is what this fixture pins, and it is what the",
-    "widening is. The day a DeployLandAuraFromHand sibling exists and is called from the iteration",
-    "loop, flip the default and set combo_off_verify back to true.",
+    "ITS CONTROL IS THE EXECUTOR HALF: CO_ENV='MTG_COMBO_OFF_LAND_AURA=0' -> still offered (the",
+    "display is untouched) and NOT VERIFIED, which is precisely the state of affairs Session 22",
+    "recorded and shipped the display lever OFF for. CO_ENV='MTG_COMBO_OFF_DIG_COLOR=0' withdraws",
+    "the offer entirely. Both fail ONLY this fixture.",
+    "",
+    "SIX FILLER CARDS SIT BELOW THE LIVING WISH, and that is stated rather than quietly chosen.",
+    "The draw sink NEVER DRAWS THE LAST CARD (an unbounded loop must not propose its own death),",
+    "so with the wish as card 10 of a 10-card library the board was unwinnable for a reason that",
+    "has nothing to do with colour -- an authoring artefact of the Session 22 cut, which pinned",
+    "`combo_off_verify: false` and so never noticed. The filler makes the wish REACHABLE; it adds",
+    "no colour (Forest is green, which this board already makes in quantity).",
     "",
     "Its negative control is edf_co_25 -- the same board with every any-colour Aura gone from the",
-    "library, which must stay ABSENT with the lever still on."
+    "library, which must stay ABSENT."
   ],
-  "combo_off_verify": false
+  "combo_off_verify": true
 }
