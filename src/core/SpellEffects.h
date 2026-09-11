@@ -12387,6 +12387,381 @@ inline int DeployPipFreeOutletFromHand(GameState& state, int controller,
     return 0;
 }
 
+// ---- THE COLOUR THE KILL IS MISSING, AND THE AURA THAT SUPPLIES IT ----------------------------
+//
+// USER, 2026-09-11: *"Another thing that should be possible for the Blue or Black requirement is
+// drawing into Fertile Ground. If you have infinite draw you can always draw into Fertile Ground
+// and get all the colours you need."*
+//
+// Session 22 built the DISPLAY half of that (`MTG_COMBO_OFF_DIG_COLOR`) and had to ship it OFF,
+// because `ApplyBlinkLoop` had three hand-cast sites and all three were `IsCreature()`-gated: the
+// engine could believe the line and could not run it. This pair is the executor half.
+//
+// `ComboFinishMissingColor` answers the narrow question the aura cast is allowed to act on: is
+// there a reachable {T}-less finisher -- in hand, or one Living Wish away -- whose CAST is blocked
+// by exactly ONE coloured pip type the board cannot produce? One any-colour Aura hands back one
+// wild per host tap, so it closes a shortfall of one and no more; a two-colour shortfall is refused
+// rather than assumed, exactly as the display's `EdfUnpayableColorPips` refuses it.
+//
+// Deliberately NOT "cast every land aura in hand". A Wild Growth on a board that already makes
+// green is pure cost, and the outlet-switch measurement (MTG_COMBO_OFF_SWITCH_TRIAL) is the
+// standing evidence for what pure cost does to a loop: it ate all fifty iterations of a fifty-blink
+// go-off. The aura is cast for a COLOUR the kill needs, or not at all.
+inline bool ComboFinishMissingColor(const GameState& state, int controller, Color* out)
+{
+    if (ComboFinisherReachableOnBoard(state, controller)) { return false; }
+    // The one colour a cast is short of, or false when it is short of none or of more than one.
+    const auto short_by_one = [&](const ManaCost& cost, Color* miss) {
+        const std::pair<int, Color> pips[] = {
+            { cost.white, Color::White }, { cost.blue,  Color::Blue }, { cost.black, Color::Black },
+            { cost.red,   Color::Red   }, { cost.green, Color::Green } };
+        int n = 0;
+        for (const auto& pc : pips)
+        {
+            if (pc.first <= 0 || BoardCanProduceColor(state, controller, pc.second)) { continue; }
+            n += pc.first;                       // multiplicity: {U}{U} needs two, not one
+            *miss = pc.second;
+        }
+        return n == 1;
+    };
+    const auto is_sink = [&](const CardDefinition* d) {
+        if (d == nullptr || !d->card.IsCreature()) { return false; }
+        if (d->params.drain_cost.has_value() && d->params.drain_amount > 0) { return true; }
+        return d->params.exile_opponent_top_cost.has_value()
+            && state.opponent_library_dealt && !state.opponent_decked;
+    };
+    const Player& ap = state.players[controller];
+    for (const Card& h : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (is_sink(d) && short_by_one(d->card.m_mana_cost, out)) { return true; }
+    }
+    // ...and the WISH route. The wish's own cost is payable by construction wherever the loop got
+    // this far, so only the FETCHED card's colour can be the blocker -- which is the case the user
+    // describes (a green-and-colourless board that has to reach {U} for Dimensional Infiltrator).
+    for (const Card& h : ap.hand)
+    {
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(h);
+        if (wd == nullptr || !wd->params.tutor_to_hand || !wd->params.wish_from_sideboard)
+        { continue; }
+        if (!BoardCanPayColors(state, controller, wd->card.m_mana_cost)) { continue; }
+        for (const Card& sb : ap.sideboard)
+        {
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(sb);
+            if (is_sink(sd) && short_by_one(sd->card.m_mana_cost, out)) { return true; }
+        }
+    }
+    return false;
+}
+
+// Does this land Aura supply `want` when its host is tapped? An "any colour" Aura
+// (`land_aura_produces` empty) supplies every COLOUR and never {C} -- the same asymmetry
+// `BoardCanProduceColor` and `LandAuraMakesAnyColor` already encode (CR 107.4c).
+inline bool LandAuraSuppliesColor(const CardDefinition& d, Color want)
+{
+    if (!d.params.is_land_aura || d.params.land_aura_extra_mana <= 0) { return false; }
+    if (want == Color::Colorless) { return false; }
+    if (d.params.land_aura_produces.empty()) { return true; }
+    for (Color c : d.params.land_aura_produces) { if (c == want) { return true; } }
+    return false;
+}
+
+// CAST A LAND AURA FROM HAND, INSIDE THE LOOP (MTG_COMBO_OFF_LAND_AURA, default ON, COMBO OFF only).
+//
+// The sibling of `DeployPipFreeOutletFromHand` that Session 22's open item 1 asked for. Everything
+// about it is the same discipline as the other two in-loop casts:
+//
+//   * it pays the aura's REAL cost out of the loop's REAL float through the caller's own payer --
+//     never `wild`, never a projected pool;
+//   * it carries the SWITCH_TRIAL/DEPLOY_TRIAL guard (`keep_payable` + `probe_pay`): the cast is
+//     rehearsed on a COPY and the loop's next activation must still be payable afterwards, so a
+//     decline is a DELAY, not a refusal -- a net-positive loop retries next pass with more float;
+//   * the HOST is the provider's own ranking (`LandAuraHostCandidates`: `PermanentManaYield * 4`,
+//     `+2` untapped, `-100` for a Karoo that can bounce the aura away), which is exactly the list
+//     the ordinary cast's enumerator emits plan variants over. Falling back to
+//     `ResolveEnchantTarget(..., land_aura=true)` keeps a provider that declines to narrow working.
+//   * the host is chosen AFTER the payment, so the aura lands on a land the payment did not tap --
+//     which is what makes its bonus spendable on the finisher cast that follows it in the same
+//     iteration. `LandHasShroud` is re-checked at that point (CR 303.4a / 702.18a: an Aura spell
+//     targets its host, and a Trace of Abundance already on a land forbids a second aura there).
+//
+// Returns the aura's card number (0 = nothing cast).
+inline int DeployLandAuraFromHand(GameState& state, int controller,
+                                  const std::function<bool(const ManaCost&)>& pay,
+                                  const ManaCost* keep_payable,
+                                  const StateManaPayer* probe_pay)
+{
+    static const bool s_land_aura = EnvOn("MTG_COMBO_OFF_LAND_AURA", true);
+    if (!s_land_aura || !ComboOffFinishActive() || !ComboFinishOn()) { return 0; }
+    Color want = Color::Colorless;
+    if (!ComboFinishMissingColor(state, controller, &want)) { return 0; }
+    // A host must EXIST before anything is paid for -- an aura with nowhere to go is a dead cast.
+    bool any_host = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+        if (LandHasShroud(p, state)) { continue; }
+        any_host = true;
+        break;
+    }
+    if (!any_host) { return 0; }
+
+    // Pick the aura: it must supply the missing colour, the board must be able to PRODUCE its own
+    // cost's colours (producibility, not the current pool -- the same test the other two in-loop
+    // casts apply), and among those prefer the one that does not shroud its host (a Trace of
+    // Abundance closes that land to every later aura), then the cheapest, then the lowest number.
+    int best_i = -1;
+    const CardDefinition* best_d = nullptr;
+    for (int i = 0; i < static_cast<int>(state.players[controller].hand.size()); ++i)
+    {
+        const Card& h = state.players[controller].hand[i];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (d == nullptr || !LandAuraSuppliesColor(*d, want)) { continue; }
+        if (!BoardCanPayColors(state, controller, d->card.m_mana_cost)) { continue; }
+        if (best_d != nullptr)
+        {
+            const int s_new = (d->params.land_aura_grants_shroud ? 1 : 0);
+            const int s_old = (best_d->params.land_aura_grants_shroud ? 1 : 0);
+            if (s_new > s_old) { continue; }
+            if (s_new == s_old
+                && d->card.m_mana_cost.ManaValue() > best_d->card.m_mana_cost.ManaValue())
+            { continue; }
+        }
+        best_i = i; best_d = d;
+    }
+    if (best_i < 0 || best_d == nullptr) { return 0; }
+
+    // THE REAL TRIAL -- the loop that funds this cast still has to run afterwards.
+    if (keep_payable != nullptr && probe_pay != nullptr)
+    {
+        GameState probe = state;
+        if (!(*probe_pay)(probe, best_d->card.m_mana_cost)
+            || !(*probe_pay)(probe, *keep_payable))
+        { return 0; }                      // a DELAY: the next iteration retries with more float
+    }
+    const std::string name = state.players[controller].hand[best_i].m_name.str();
+    if (!pay(best_d->card.m_mana_cost)) { return 0; }
+    // Index re-check after the payment, for the reason ComboFinishFromHand states: `pay` runs the
+    // whole payment machinery and can move permanents (and, one day, cards out of hand).
+    Player& ap = state.players[controller];
+    if (best_i >= static_cast<int>(ap.hand.size()) || ap.hand[best_i].m_name.str() != name)
+    { return 0; }
+    // HOST, chosen on the POST-PAYMENT board so the aura rides a land the payment left untapped.
+    int host = 0;
+    {
+        const std::vector<int> cand =
+            ResolveProvider(state).LandAuraHostCandidates(state, controller);
+        for (int n : cand)
+        {
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.card.m_number != n || p.controller_index != controller) { continue; }
+                if (!p.card.IsLand() || p.tapped || LandHasShroud(p, state)) { break; }
+                host = n;
+                break;
+            }
+            if (host != 0) { break; }
+        }
+        // Nothing untapped among the narrowed set (or no narrowing at all): the shared heuristic
+        // fallback, which ranks by the host's per-tap yield and re-checks shroud on both arms.
+        if (host == 0) { host = ResolveEnchantTarget(state, controller, 0, /*land_aura=*/true); }
+    }
+    if (host == 0) { return 0; }           // paid and nowhere legal to go: cannot happen (any_host)
+    const int num = ap.hand[best_i].m_number;
+    Permanent perm;
+    perm.card              = best_d->card;
+    perm.card.m_number     = num;                       // per-copy ID, as DeployCreatureFromHand
+    perm.controller_index  = controller;
+    perm.owner_index       = controller;
+    perm.entered_this_turn = true;
+    ap.hand.erase(ap.hand.begin() + static_cast<std::ptrdiff_t>(best_i));
+    state.battlefield.push_back(perm);
+    const int slot = static_cast<int>(state.battlefield.size()) - 1;
+    // Attach BEFORE the cascades, exactly as EffectHandler's and the rollout's aura-enter branches
+    // do (PerformLightPawsAttach push_backs, so `slot` must already be attached). Same order, so
+    // the go-off apply and the ordinary cast put the identical permanent on the battlefield.
+    state.battlefield[slot].aura_attached_to = host;
+    PerformLightPawsAttach(state, controller, best_d->card.m_mana_cost.ManaValue(), "COMBO-OFF");
+    FireEtbWatchers(state, controller, slot);
+    FireOwnEtbTriggers(state, controller, slot);
+    if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
+    { EnforceLegendRule(state, controller); }
+    if (g_play_event_sink)
+    {
+        EmitPlayEvent(state.turn_number, "cast",
+                      "\xE2\x9A\xA1 combo colour: " + name + " (land Aura, mid-loop)");
+    }
+    return num;
+}
+
+// THE PIP-FREE OUTLET SWAP, AS ONE ROUTINE -- so the loop can run it MID-FLIGHT as well as before
+// iteration 0 (MTG_COMBO_OFF_MIDLOOP_OUTLET, default ON, COMBO OFF only).
+//
+// USER, writing rule 4 of the Combo Off table: *"the 1 colourless source works even when you have
+// displacer out because you can draw into Emiel and cast it if you can draw your deck"*, and again
+// 2026-09-11: *"with one colourless on board, one draw land on board and a mana producing engine
+// you can always win the game."* Both sentences are about an Emiel that is NOT in hand yet. The
+// pre-loop call iterates `hand` once, before iteration 0, so an Emiel the dig turns up at iteration
+// five was never cast and the Displacer loop went on eating its one colourless a pass forever.
+//
+// The four conditions and the real trial are unchanged from the pre-loop form -- this is that code,
+// extracted, so the pre-loop path is byte-identical by construction:
+//   1. the button (ComboOffFinishActive), never autonomous, never a rollout;
+//   2. THIS outlet spends a colourless pip per activation (Displacer's {2}{C}; Training Grounds
+//      cannot remove it -- its one-mana floor keeps the pip);
+//   3. a {C}-pip SINK the pips are wanted for -- on the battlefield, or one this very loop is about
+//      to deploy out of hand/sideboard (ComboFinisherReachable). Without a sink there is nothing to
+//      starve and the swap is pure cost;
+//   4. a pip-free outlet in hand whose colours the board can produce.
+//   ...and the swap must LEAVE A LOOP BEHIND (MTG_COMBO_OFF_SWITCH_TRIAL): rehearsed on a copy,
+//   with the NEW outlet's first activation required to pay afterwards.
+//
+// Condition 3 is the one place this is wider than the pre-loop form, and it is the widening the
+// user's ruling needs: mid-loop the wish has usually not resolved yet, so a board-only test would
+// refuse the swap on precisely the boards the dig is being run for. It is still a REACHABILITY
+// fact, not a hope -- ComboFinisherReachable is the same predicate the draw sink is gated on.
+// `sink_on_board_only` reproduces the old test for the pre-loop call.
+inline bool ComboOffSwitchOutlet(GameState& state, int controller, int* cur_source,
+                                 const CardParams** cur_outlet,
+                                 const std::function<bool(const ManaCost&)>& pay,
+                                 const StateManaPayer* probe_pay, bool lt,
+                                 bool sink_on_board_only)
+{
+    const Permanent* src = nullptr;
+    for (const Permanent& p : state.battlefield)
+    { if (p.card.m_number == *cur_source) { src = &p; break; } }
+    if (src == nullptr || !(*cur_outlet)->blink_cost.has_value()) { return false; }
+    if (EffectiveActivationCost(state, controller, src->card,
+                                (*cur_outlet)->blink_cost.value()).colorless <= 0)
+    { return false; }                                   // condition 2
+    bool pip_sink = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const std::optional<ManaCost>* sinks_c[] = {
+            &d->params.drain_cost, &d->params.exile_opponent_top_cost };
+        for (const std::optional<ManaCost>* sc : sinks_c)
+        {
+            if (!sc->has_value()) { continue; }
+            if (EffectiveActivationCost(state, controller, p.card, sc->value()).colorless > 0)
+            { pip_sink = true; break; }
+        }
+        if (pip_sink) { break; }
+    }
+    if (!pip_sink && !sink_on_board_only)
+    { pip_sink = ComboFinisherReachable(state, controller); }
+    if (!pip_sink) { return false; }                    // condition 3
+
+    static const bool s_switch_trial = EnvOn("MTG_COMBO_OFF_SWITCH_TRIAL", true);
+    if (s_switch_trial && probe_pay != nullptr)
+    {
+        GameState probe = state;
+        const CardParams* probe_def = nullptr;
+        const std::function<bool(const ManaCost&)> probe_payer =
+            [&](const ManaCost& c) { return (*probe_pay)(probe, c); };
+        const int probe_src = DeployPipFreeOutletFromHand(probe, controller, probe_payer, &probe_def);
+        bool keeps_looping = false;
+        if (probe_src != 0 && probe_def != nullptr && probe_def->blink_cost.has_value())
+        {
+            const Card* np = nullptr;
+            for (const Permanent& p : probe.battlefield)
+            { if (p.card.m_number == probe_src) { np = &p.card; break; } }
+            if (np != nullptr)
+            {
+                const ManaCost nc = EffectiveActivationCost(probe, controller, *np,
+                                                            probe_def->blink_cost.value());
+                keeps_looping = (*probe_pay)(probe, nc);
+            }
+        }
+        if (!keeps_looping)
+        {
+            if (lt)
+            {
+                std::fprintf(stderr, "[edf-loop] OUTLET SWITCH DECLINED (real trial): "
+                                     "the swap leaves the loop unpayable\n");
+            }
+            return false;
+        }
+    }
+    const CardParams* swapped = nullptr;
+    const int new_src = DeployPipFreeOutletFromHand(state, controller, pay, &swapped);
+    if (new_src == 0 || swapped == nullptr) { return false; }
+    if (lt)
+    {
+        std::fprintf(stderr, "[edf-loop] OUTLET SWITCH -> id=%d (pip-free, {C} sink live)\n",
+                     new_src);
+    }
+    *cur_source = new_src;
+    *cur_outlet = swapped;
+    return true;
+}
+
+// DOES THE DIG STILL HAVE SOMETHING TO FIND, EVEN THOUGH THE FINISHER IS REACHABLE?
+// (MTG_COMBO_OFF_DIG_OUTLET, default ON, COMBO OFF only.)
+//
+// `want_draw` is DRAW ONLY TO FIND, and until Session 24 the only thing it could be looking for was
+// a {T}-less finisher: `want_draw = LoopDrawSinkOn() && !ComboFinisherReachable(...)`. That is the
+// right gate as long as the finisher is the only missing piece, and on the board the user describes
+// it is not. USER, 2026-09-11: *"with one colourless on board, one draw land on board and a mana
+// producing engine you can always win the game"*, and earlier: *"the 1 colourless source works even
+// when you have displacer out because you can draw into Emiel and cast it if you can draw your
+// deck."*
+//
+// On exactly that board the Displacer eats the single `{C}` every pass, so `net_c` is ZERO and the
+// `{1}{C}` kill is fed only by the board's opening stock -- no count of iterations fixes it. The
+// piece that does is a pip-free OUTLET, and it is in the library. With the old gate the dig stopped
+// the instant the finisher became reachable and the Emiel behind it was never drawn, so the swap
+// `ComboOffSwitchOutlet` can now make had nothing to switch to.
+//
+// Narrow on purpose -- all five conditions, so it can only be true on a board that is genuinely
+// pip-starved and genuinely one draw from the fix:
+//   1. THIS outlet spends a colourless pip per activation (Training Grounds cannot remove it);
+//   2. a `{C}`-pip sink is reachable at all, so the pips are pips the kill needs;
+//   3. no pip-free outlet in HAND already (the pre-loop swap owns that case);
+//   4. one IS in the library, and the board can produce its colours;
+//   5. the board actually has a repeatable draw source to reach it with.
+// Condition 3 is what stops this from being a licence to draw forever: the moment the outlet is in
+// hand this goes false again and the finisher gate resumes control.
+inline bool ComboOffNeedsDrawnOutlet(const GameState& state, int controller,
+                                     int source_id, const CardParams& outlet)
+{
+    static const bool s_dig_outlet = EnvOn("MTG_COMBO_OFF_DIG_OUTLET", true);
+    if (!s_dig_outlet || !ComboOffFinishActive() || !outlet.blink_cost.has_value())
+    { return false; }
+    const Permanent* src = nullptr;
+    for (const Permanent& p : state.battlefield)
+    { if (p.card.m_number == source_id) { src = &p; break; } }
+    if (src == nullptr) { return false; }
+    if (EffectiveActivationCost(state, controller, src->card,
+                                outlet.blink_cost.value()).colorless <= 0) { return false; }   // 1
+    if (!ColorlessPipSinkReachable(state, controller)
+        && !ComboFinisherReachable(state, controller)) { return false; }                        // 2
+    const auto pip_free = [&](const CardDefinition* d) {
+        if (d == nullptr || !d->card.IsCreature() || !d->params.blink_cost.has_value())
+        { return false; }
+        if (EffectiveActivationCost(state, controller, d->card,
+                                    d->params.blink_cost.value()).colorless > 0) { return false; }
+        return BoardCanPayColors(state, controller, d->card.m_mana_cost);
+    };
+    const Player& ap = state.players[controller];
+    for (const Card& h : ap.hand)
+    { if (pip_free(CardDatabase::Instance().LookupCached(h))) { return false; } }               // 3
+    bool in_lib = false;
+    for (const Card& l : ap.library)
+    { if (pip_free(CardDatabase::Instance().LookupCached(l))) { in_lib = true; break; } }
+    if (!in_lib) { return false; }                                                             // 4
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && (d->params.tap_draw_cost.has_value()
+                  || d->params.tap_investigate_cost.has_value())) { return true; }              // 5
+    }
+    return false;
+}
+
 inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int target_id,
                           const CardParams& outlet, int iterations,
                           const std::function<bool(const ManaCost&)>& pay,
@@ -12456,10 +12831,15 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     // measurement was taken under -- there `LoopDrawSinkOn()` is unconditional and this is inert.
     // MTG_COMBO_OFF_DRAW_PROMOTE=0 restores the unconditional promotion here too.
     static const bool s_draw_promote = EnvOn("MTG_COMBO_OFF_DRAW_PROMOTE", true);
+    // ...and it tracks `want_draw` EXACTLY, including the Session 24 term: "the two go on and off
+    // together, ALWAYS". A loop digging for a pip-free outlet (ComboOffNeedsDrawnOutlet) is a loop
+    // that WILL cash its draw lands, so withholding the promotion from it would be the same
+    // measured loss in the opposite direction -- a dig whose sources never come back untapped.
     const bool promote_draw_lands =
         LoopDrawSinkOn()
         && (!s_draw_promote || !ComboOffFinishActive()
-            || !ComboFinisherReachable(state, controller));
+            || !ComboFinisherReachable(state, controller)
+            || ComboOffNeedsDrawnOutlet(state, controller, cur_source, *cur_outlet));
     // The DAMAGE-only prefix, kept so the draw promotion can be withdrawn mid-loop -- see
     // MTG_COMBO_OFF_DRAW_UNPROMOTE below. Byte-identical when nothing is ever withdrawn.
     const std::vector<int> sinks_damage_only = sinks;
@@ -12583,7 +12963,14 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
     const bool cash_sinks = !HumanPlayActive() || iterations > 1 || s_human_autocash;
     // DRAW ONLY TO FIND -- see SpendSurplusOnDrawSinks. Evaluated once here and re-evaluated only
     // after a draw actually lands, because nothing else in the loop can change the answer.
-    bool want_draw = LoopDrawSinkOn() && !ComboFinisherReachable(state, controller);
+    // Is this loop DIGGING FOR ITS OUTLET? Computed once, before iteration 0, and it is what
+    // licenses the mid-loop swap's wider sink test below -- see the call site for the measurement
+    // that forced the narrowing. The answer cannot change for the worse mid-loop: the only thing
+    // that makes it false again is the outlet arriving in hand, which is the swap firing.
+    const bool dig_for_outlet =
+        ComboOffNeedsDrawnOutlet(state, controller, cur_source, *cur_outlet);
+    bool want_draw = LoopDrawSinkOn()
+                  && (!ComboFinisherReachable(state, controller) || dig_for_outlet);
     // MTG_EDF_LOOP_TRACE -- WHY a go-off stopped after `done` of `iterations`. Diagnosis only; it
     // never branches game logic and prints nothing when off.
     //
@@ -12628,33 +13015,6 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         static const bool s_switch = EnvOn("MTG_COMBO_OFF_OUTLET_SWITCH", true);
         if (s_switch && ComboOffFinishActive() && iterations > 1)
         {
-            const Permanent* src = nullptr;
-            for (const Permanent& p : state.battlefield)
-            { if (p.card.m_number == cur_source) { src = &p; break; } }
-            const bool pip_outlet =
-                src != nullptr
-                && EffectiveActivationCost(state, controller, src->card,
-                                           cur_outlet->blink_cost.value()).colorless > 0;
-            bool pip_sink = false;
-            if (pip_outlet)
-            {
-                for (const Permanent& p : state.battlefield)
-                {
-                    if (p.controller_index != controller) { continue; }
-                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                    if (d == nullptr) { continue; }
-                    const std::optional<ManaCost>* sinks_c[] = {
-                        &d->params.drain_cost, &d->params.exile_opponent_top_cost };
-                    for (const std::optional<ManaCost>* sc : sinks_c)
-                    {
-                        if (!sc->has_value()) { continue; }
-                        if (EffectiveActivationCost(state, controller, p.card,
-                                                    sc->value()).colorless > 0)
-                        { pip_sink = true; break; }
-                    }
-                    if (pip_sink) { break; }
-                }
-            }
             // ...AND THE SWITCH MUST LEAVE A LOOP BEHIND (MTG_COMBO_OFF_SWITCH_TRIAL, default ON).
             //
             // The swap casts a creature out of hand -- Emiel is `{2}{W}{W}`, four mana -- and it did
@@ -12679,54 +13039,12 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
             //
             // Needs `probe_pay`, so it is COMBO OFF only by construction; the two autonomous call
             // sites pass nullptr and never reach this block anyway (ComboOffFinishActive()).
-            static const bool s_switch_trial = EnvOn("MTG_COMBO_OFF_SWITCH_TRIAL", true);
-            if (pip_outlet && pip_sink && s_switch_trial && probe_pay != nullptr)
-            {
-                GameState probe = state;
-                const CardParams* probe_def = nullptr;
-                const std::function<bool(const ManaCost&)> probe_payer =
-                    [&](const ManaCost& c) { return (*probe_pay)(probe, c); };
-                const int probe_src =
-                    DeployPipFreeOutletFromHand(probe, controller, probe_payer, &probe_def);
-                bool keeps_looping = false;
-                if (probe_src != 0 && probe_def != nullptr && probe_def->blink_cost.has_value())
-                {
-                    const Card* np = nullptr;
-                    for (const Permanent& p : probe.battlefield)
-                    { if (p.card.m_number == probe_src) { np = &p.card; break; } }
-                    if (np != nullptr)
-                    {
-                        const ManaCost nc = EffectiveActivationCost(probe, controller, *np,
-                                                                    probe_def->blink_cost.value());
-                        keeps_looping = (*probe_pay)(probe, nc);
-                    }
-                }
-                if (!keeps_looping)
-                {
-                    if (lt)
-                    {
-                        std::fprintf(stderr, "[edf-loop] OUTLET SWITCH DECLINED (real trial): "
-                                             "the swap leaves the loop unpayable\n");
-                    }
-                    pip_sink = false;   // fall through to the unswitched loop
-                }
-            }
-            if (pip_outlet && pip_sink)
-            {
-                const CardParams* swapped = nullptr;
-                const int new_src = DeployPipFreeOutletFromHand(state, controller, pay, &swapped);
-                if (new_src != 0 && swapped != nullptr)
-                {
-                    if (lt)
-                    {
-                        std::fprintf(stderr,
-                                     "[edf-loop] OUTLET SWITCH -> id=%d (pip-free, {C} sink live)\n",
-                                     new_src);
-                    }
-                    cur_source = new_src;
-                    cur_outlet = swapped;
-                }
-            }
+            //
+            // The body is now `ComboOffSwitchOutlet` -- the identical four conditions and the
+            // identical trial, extracted so the loop can also run it MID-FLIGHT (see the drawn-Emiel
+            // call below). `sink_on_board_only=true` here pins the pre-loop test exactly as it was.
+            ComboOffSwitchOutlet(state, controller, &cur_source, &cur_outlet, pay, probe_pay, lt,
+                                 /*sink_on_board_only=*/true);
         }
     }
     int done = 0;
@@ -12777,7 +13095,10 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         if (cash_sinks && want_draw)
         {
             if (SpendSurplusOnDrawSinks(state, controller, c, pay, probe_pay) > 0)
-            { want_draw = !ComboFinisherReachable(state, controller); }
+            {
+                want_draw = !ComboFinisherReachable(state, controller)
+                         || ComboOffNeedsDrawnOutlet(state, controller, cur_source, *cur_outlet);
+            }
         }
         if (lt) { blinkloop::TraceStep(k, "post-draw-sink", state, controller, c); }
         // BANK THE COLOUR THE FINISH IS WAITING ON, AND THEN DO NOT SPEND IT (COMBO OFF only).
@@ -12946,6 +13267,67 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // iteration that cannot afford the deploy simply declines and the next one retries. Reachable
         // ONLY through the button (ComboOffFinishActive() is false in every autonomous run, in every
         // rollout, and in ordinary human play), so nothing measured moves.
+        // ---- THE TWO CASTS THE LOOP COULD NOT MAKE (Session 24) -----------------------------
+        //
+        // Both sit HERE, immediately after ApplyBlink and before the finisher deploy, and the
+        // position is the whole of why they work. The ETB untap has just put the loop's entire
+        // per-iteration income back on the table, so this is the one point in the iteration where
+        // a cast can be paid for out of a full board -- and it is upstream of
+        // `ComboFinishFromHand`, so a colour bought here is a colour the finisher's cast can
+        // spend in the SAME iteration.
+        //
+        // ORDER: colour first, then the outlet, then the kill. USER, 2026-09-04: *"The top
+        // priority is always keeping the combo going"* -- the aura and the outlet are both about
+        // the loop still being able to run, and the deploy is the payoff. Each carries its own
+        // real trial against `c` (this iteration's activation), so an unaffordable one is a DELAY
+        // that the next, fatter iteration retries, never a spend that eats the loop.
+        //
+        // Both are `ComboOffFinishActive()`-gated and both need `probe_pay`, which only
+        // TurnSolver's ActivateBlink apply supplies -- so autonomous play, every rollout, GT, the
+        // value leaf and the keep tables are byte-identical by construction.
+        //
+        // Self-limiting, which is what keeps them off the hot path: `DeployLandAuraFromHand`
+        // returns at its first line once the kill's colour is producible (which the aura it just
+        // cast makes true), and `ComboOffSwitchOutlet` returns at its first condition once the
+        // outlet no longer prints a `{C}` pip. After one success each, both are two board scans.
+        static const bool s_midloop_aura = EnvOn("MTG_COMBO_OFF_LAND_AURA", true);
+        if (cash_sinks && s_midloop_aura && ComboOffFinishActive() && k + 1 < iterations)
+        { DeployLandAuraFromHand(state, controller, pay, &c, probe_pay); }
+        // A DRAWN EMIEL. The pre-loop swap reads `hand` once, before iteration 0; the user's
+        // ruling is about an outlet the DIG turns up (*"you can draw into Emiel and cast it if you
+        // can draw your deck"*, *"with one colourless on board, one draw land on board and a mana
+        // producing engine you can always win the game"*). Re-asked every iteration so a card that
+        // arrives at k=5 is cast at k=5.
+        //
+        // `sink_on_board_only = !dig_for_outlet`, AND THAT NARROWING IS MEASURED, NOT CAUTIOUS.
+        // The first cut passed `false` unconditionally -- i.e. the mid-loop swap accepted any
+        // REACHABLE {C}-pip sink, where the pre-loop form wants one on the battlefield -- and it
+        // cost two winning offers on the replay hunt (`RR-4f86e30c22`, `AA-82c1edadaa`, both
+        // a_offered_wins -> b_executor_failure, both `blink: 0`). `RR-4f86e30c22` is Session 20's
+        // defect #4 exactly, in a new place: Emiel was ALREADY IN HAND, the board's `net_c` was
+        // **+1** so the Displacer loop was not starving on pips at all, and the swap's `{2}{W}{W}`
+        // was pure cost --
+        //
+        //   [edf-goff-human] t4 src=Eldrazi Displacer(18) net=2 net_c=1 ... n2=23
+        //   [edf-loop] OUTLET SWITCH -> id=21 (pip-free, {C} sink live)
+        //   [edf-loop] (mid-loop, k=0)
+        //
+        // -- and the pre-loop call had looked at the same Emiel one instant earlier and correctly
+        // declined it. `dig_for_outlet` is the predicate that tells the two cases apart:
+        // `ComboOffNeedsDrawnOutlet` requires, among five conditions, that NO pip-free outlet is in
+        // hand and one IS in the library. So on a board where the swap was already offered and
+        // refused, the mid-loop call reproduces the pre-loop decision exactly; the wider sink test
+        // is reachable only on the board this widening is for.
+        static const bool s_midloop_outlet = EnvOn("MTG_COMBO_OFF_MIDLOOP_OUTLET", true);
+        static const bool s_switch2        = EnvOn("MTG_COMBO_OFF_OUTLET_SWITCH", true);
+        if (cash_sinks && s_midloop_outlet && s_switch2 && ComboOffFinishActive()
+            && k + 1 < iterations)
+        {
+            if (ComboOffSwitchOutlet(state, controller, &cur_source, &cur_outlet, pay, probe_pay,
+                                     lt, /*sink_on_board_only=*/!dig_for_outlet)
+                && lt)
+            { std::fprintf(stderr, "[edf-loop] (mid-loop, k=%d)\n", k); }
+        }
         static const bool s_early_deploy = EnvOn("MTG_COMBO_OFF_EARLY_DEPLOY", true);
         if (cash_sinks && s_early_deploy && ComboOffFinishActive()
             && k + 1 < iterations && !ComboFinisherReachableOnBoard(state, controller))
@@ -12990,6 +13372,12 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // the draw sinks just put there. Re-run the two {T}-less spends afterwards, because the sink
         // it deployed did not exist when they ran. No-op (and byte-identical for every other deck)
         // when nothing was deployed.
+        //
+        // ...AND THE COLOUR IT MIGHT STILL NEED. The loop is over, so there is no next activation
+        // to protect and no trial to run (both guards are null, exactly as the four surplus spends
+        // above pass an empty `ManaCost{}` here). A no-op unless the draws left a land Aura in hand
+        // and the kill is short of exactly one colour -- see DeployLandAuraFromHand.
+        DeployLandAuraFromHand(state, controller, pay, nullptr, nullptr);
         if (ComboFinishFromHand(state, controller, pay))
         {
             SpendSurplusOnDrain(state, controller, ManaCost{}, pay);
