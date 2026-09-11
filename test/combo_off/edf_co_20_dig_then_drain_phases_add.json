@@ -1,0 +1,137 @@
+{
+  "_comment": [
+    "THE DIG AND THE KILL ARE SEQUENTIAL PHASES, SO THEIR ITERATION COUNTS ADD --",
+    "MTG_EDF_GOFF_PHASES.",
+    "",
+    "Reconstructed from an autonomous turn-5 board (COMBO OFF sweep state X-2d1c5c7375, engine game",
+    "29 of the sweep's own 57-game corpus).  Emiel the Blessed + Peregrine Drake, net +7 a pass,",
+    "net_c +3, Living Wish still in the LIBRARY: rule WISH-DRAW.",
+    "",
+    "FlickerGoOffCount used to size such a loop as",
+    "     max(iterations by MANA, dig_draws, iterations by {C} PIPS)",
+    "which is right for three demands on ONE resource and wrong for two phases that cannot overlap.",
+    "A finisher fetched out of the library is not on the battlefield until the dig has found the",
+    "Living Wish, so not one of its {C} pips can be spent during the dig -- the iterations that supply",
+    "those pips are the ones AFTER the deploy.  The max therefore sizes the loop to whichever phase is",
+    "longer instead of to both, and the apply spends the whole count digging and then has nothing left",
+    "to drain with.  (Raising MTG_EDF_MAX_ITER does NOT help, and that is the tell: the count is not",
+    "being clamped, it is being computed wrong.)",
+    "",
+    "A/B on this fixture (one binary) -- note the COUNT, which is the lever's own signature:",
+    "    default                  -> blink Peregrine Drake x35, COMBO OFF verified, opponent dead",
+    "    MTG_EDF_GOFF_PHASES=0    -> blink Peregrine Drake x22, offered but NOT verified, no win",
+    "",
+    "The same lever on the user's own replayed `claude_s1_gi0` turn 3 (replay-hunt ids RR-9261bc55b5,",
+    "RR-1402c9760d, RR-53d4d2273c and their siblings, ordinals 6..8 of that turn): the click goes from",
+    "winning on turn 6 to winning on turn 3, the turn it is offered on."
+  ],
+  "active_life": 14,
+  "battlefield": [
+    {
+      "controller": 0,
+      "name": "Yavimaya Coast",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Mariposa Military Base",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Yavimaya Coast",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Emiel the Blessed",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Cloud of Faeries",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Cloud of Faeries",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Peregrine Drake",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Yavimaya Coast",
+      "name": "Wild Growth",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Yavimaya Coast",
+      "name": "Wild Growth",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Yavimaya Coast",
+      "name": "Fertile Ground",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Mariposa Military Base",
+      "name": "Trace of Abundance",
+      "tapped": false
+    }
+  ],
+  "budget_ms": 20,
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "depth": 3,
+  "hand": [
+    "Conservatory",
+    "Aether Hub",
+    "Kitchen",
+    "Conservatory",
+    "Adarkar Wastes",
+    "Shivan Gorge",
+    "Brushland",
+    "Eldrazi Displacer"
+  ],
+  "library_filler": "Forest",
+  "library_size": 1,
+  "library_top": [
+    "Adarkar Wastes",
+    "Aether Hub",
+    "Brushland",
+    "Brushland",
+    "Cloud of Faeries",
+    "Conservatory",
+    "Eladamri's Call",
+    "Fertile Ground",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Trace of Abundance",
+    "Training Grounds",
+    "Wild Growth",
+    "Yavimaya Coast"
+  ],
+  "on_the_play": false,
+  "opponent_library_size": 49,
+  "opponent_life": 15,
+  "turn": 5,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "expect_combo_off": true
+}

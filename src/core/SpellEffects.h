@@ -11099,6 +11099,45 @@ inline ManaCost AddManaCosts(const ManaCost& a, const ManaCost& b)
 
 inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode);
 
+// A payer that takes the state it pays from, so a guard can TRIAL a payment on a copy
+// rather than project over a pool. Supplied only by the COMBO OFF apply path (the two
+// autonomous ApplyBlinkLoop call sites pass nullptr), which is what keeps every measured
+// arm byte-identical. See SpendSurplusOnDamageSinks' real-trial guard.
+// (Declared here rather than beside that guard because the {T}-less sinks below want it too.)
+using StateManaPayer = std::function<bool(GameState&, const ManaCost&)>;
+
+// THE {T}-LESS SINKS' SHARE OF THE REAL-TRIAL REPAIR -- MTG_COMBO_OFF_TLESS_TRIAL (default ON).
+//
+// SpendSurplusOnDamageSinks and SpendSurplusOnDrawSinks both had their pooled `CanPay` guard
+// replaced by a trial payment on a copy of the state, because `ManaPool::CanPay` answers over a
+// POOL: it cannot see that one land serves ONE of its modes (Brushland taps for {C} OR {G}/{W}),
+// and it cannot see that the sequential payment picks greedily. The drain and the library exile
+// were left on the pooled projection, and they are the two sinks that run LAST in an iteration --
+// i.e. the two that can eat the very colourless the NEXT blink needs. That is replay-hunt cluster
+// C5 ("the finish fires and runs out", 61 states): the chain works, the drain fires once or twice,
+// and the loop it was funded by dies at the next `pay(c)`.
+inline bool TlessSinkTrialOn()
+{
+    static const bool v = EnvOn("MTG_COMBO_OFF_TLESS_TRIAL", true);
+    return v;
+}
+
+// "After spending `c_sink`, can `keep_payable` still be paid?" -- asked of the real mana solver on
+// a COPY when the COMBO OFF apply supplied a state-taking payer, and of the flat pool otherwise
+// (which is every autonomous call site, byte-identically).
+inline bool SinkKeepsLoopPayable(const GameState& state, const ManaCost& c_sink,
+                                 const ManaCost& keep_payable, const StateManaPayer* probe_pay)
+{
+    if (probe_pay != nullptr && ComboOffFinishActive() && TlessSinkTrialOn())
+    {
+        GameState probe = state;
+        return (*probe_pay)(probe, c_sink) && (*probe_pay)(probe, keep_payable);
+    }
+    ManaPool have = AvailableManaPool(state, nullptr);
+    have.AddPool(state.floating_mana);
+    return have.CanPay(AddManaCosts(c_sink, keep_payable));
+}
+
 // Spend surplus mana on a REPEATABLE DRAIN (Essence Depleter: "{1}{C}: Target opponent loses 1 life
 // and you gain 1 life"). Returns the life drained.
 //
@@ -11116,7 +11155,8 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
 //     draw-breakpoint recursion once did.
 // The keep_payable guard mirrors the damage version: never spend the loop's own entry price.
 inline int SpendSurplusOnDrain(GameState& state, int controller, const ManaCost& keep_payable,
-                               const std::function<bool(const ManaCost&)>& pay)
+                               const std::function<bool(const ManaCost&)>& pay,
+                               const StateManaPayer* probe_pay = nullptr)
 {
     int drained = 0;
     std::vector<int> ids;
@@ -11149,12 +11189,11 @@ inline int SpendSurplusOnDrain(GameState& state, int controller, const ManaCost&
             if (!d || !d->params.drain_cost.has_value()) { continue; }
             const ManaCost c = EffectiveActivationCost(state, controller, state.battlefield[i].card,
                                                        d->params.drain_cost.value());
-            // Projection check first, so a decline leaves no half-spent pool behind.
-            {
-                ManaPool have = AvailableManaPool(state, nullptr);
-                have.AddPool(state.floating_mana);
-                if (!have.CanPay(AddManaCosts(c, keep_payable))) { continue; }
-            }
+            // Guard first, so a decline leaves no half-spent pool behind. Under COMBO OFF this is a
+            // REAL TRIAL on a copy (see SinkKeepsLoopPayable): the drain runs at the very END of a
+            // blink iteration, so a pooled "yes" that the sequential payment then contradicts takes
+            // the colourless the NEXT activation needed and kills the loop that funds the kill.
+            if (!SinkKeepsLoopPayable(state, c, keep_payable, probe_pay)) { continue; }
             if (!pay(c)) { continue; }
             ApplyPermAbility(state, controller, id, PermAbilityMode::Drain);
             drained += d->params.drain_amount;
@@ -11202,7 +11241,8 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
 inline int SpendSurplusOnExile(GameState& state, int controller,
                                const std::function<bool(const ManaCost&)>& pay,
                                const ManaCost& keep_payable = ManaCost{},
-                               int loop_iters_left = 0)
+                               int loop_iters_left = 0,
+                               const StateManaPayer* probe_pay = nullptr)
 {
     // Inert unless the opponent's library is modelled at all: a goldfish opponent with no library
     // cannot be decked, so every activation would buy exactly nothing (see opponentdeck).
@@ -11300,24 +11340,16 @@ inline int SpendSurplusOnExile(GameState& state, int controller,
     for (int i = 0; i < left; ++i)
     {
         if (!PermAbilitySourceLive(state, controller, best_id, PermAbilityMode::ExileTop)) { break; }
-        // Projection first so a decline leaves no half-spent pool (the drain's discipline).
-        {
-            ManaPool have = AvailableManaPool(state, nullptr);
-            have.AddPool(state.floating_mana);
-            if (!have.CanPay(AddManaCosts(best_cost, keep_payable))) { break; }
-        }
+        // Guard first so a decline leaves no half-spent pool (the drain's discipline), and under
+        // COMBO OFF it is the same REAL TRIAL the drain now uses -- an instalment paid out of the
+        // colourless the next blink needed ends the loop the instalments depend on.
+        if (!SinkKeepsLoopPayable(state, best_cost, keep_payable, probe_pay)) { break; }
         if (!pay(best_cost)) { break; }
         ApplyPermAbility(state, controller, best_id, PermAbilityMode::ExileTop);
         ++exiled;
     }
     return exiled;
 }
-// A payer that takes the state it pays from, so a guard can TRIAL a payment on a copy
-// rather than project over a pool. Supplied only by the COMBO OFF apply path (the two
-// autonomous ApplyBlinkLoop call sites pass nullptr), which is what keeps every measured
-// arm byte-identical. See SpendSurplusOnDamageSinks' real-trial guard.
-using StateManaPayer = std::function<bool(GameState&, const ManaCost&)>;
-
 namespace blinkloop
 {
 inline bool TraceOn()
@@ -11785,6 +11817,44 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
     if (state.players[controller].library.size() <= 1)
     { return CrackCluesForCards(state, controller, keep_payable, pay, probe_pay); }
 
+    // CRACK THE CLUES YOU ALREADY HAVE BEFORE MAKING ANOTHER ONE (COMBO OFF only).
+    //
+    // The crack used to run only at the BOTTOM of this routine, after every {T} source had been
+    // activated, and on a board whose per-iteration budget is smaller than activation + crack that
+    // ordering draws ZERO cards, forever. Replay-hunt cluster C6 (103 states, the largest one) is
+    // exactly this, and MTG_EDF_LOOP_TRACE on its exemplar (`claude_s10_gi9` T4 ordinal 4) prints
+    // the same two lines eighteen times running:
+    //
+    //   k=N enter           cost={C} float{}  avail{g1 c1 *4}   <- six mana on the board
+    //   k=N post-draw-sink  cost={C} float{}  avail{c1}         <- five went into ONE Investigate
+    //
+    // Kitchen's Investigate is `{4}` plus its own `{T}`, so it takes five of the six; the Clue's
+    // `{2}` then cannot be paid alongside the blink's `{C}`, so the Clue is banked -- and next
+    // iteration the ETB untap refills the board and the SAME Investigate is activated again, in
+    // front of the Clue that is still sitting there. Eighteen iterations, eighteen Clues, ZERO cards
+    // drawn, no Living Wish found, `[finish] calls=18 none-found=18 wish=0`: the loop is healthy,
+    // the mana is there, and the dig produced nothing at all. (This is why C6 reads as a "finisher
+    // selection" defect from the [finish] counters alone -- the selection is fine, it is never given
+    // a card to select.)
+    //
+    // Cracking first is not a heuristic trade, it is strictly cheaper: a Clue in play is a card
+    // already paid for except for {2}, so it buys a card at a QUARTER of what a fresh Investigate
+    // costs. It cannot starve the loop either -- CrackCluesForCards carries the same `keep_payable`
+    // real trial the rest of this routine does. On the C6 board the iteration then alternates
+    // (crack, Investigate, crack, ...) and the dig actually runs.
+    //
+    // COMBO OFF ONLY. The trailing crack below is unchanged, so a Clue made THIS iteration is still
+    // cracked when there is mana for both; this only adds the leading pass. ComboOffFinishActive()
+    // is false in every autonomous run, in every rollout and in ordinary human play, so the measured
+    // draw economics, GT, the value leaf and the keep tables are byte-identical by construction.
+    // MTG_COMBO_OFF_CRACK_FIRST=0 restores the crack-last-only order.
+    int pre_drawn = 0;
+    {
+        static const bool s_crack_first = EnvOn("MTG_COMBO_OFF_CRACK_FIRST", true);
+        if (s_crack_first && ComboOffFinishActive())
+        { pre_drawn = CrackCluesForCards(state, controller, keep_payable, pay, probe_pay); }
+    }
+
     // Collect ids FIRST, then re-find each by id before use: pay() can tap sources and remove
     // permanents, so no index or reference survives a payment (SpendSurplusOnDamageSinks' hazard).
     std::vector<int> ids;
@@ -11795,7 +11865,7 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
         if (d && (d->params.tap_draw_cost.has_value() || d->params.tap_investigate_cost.has_value()))
         { ids.push_back(p.card.m_number); }
     }
-    int drawn = 0;
+    int drawn = pre_drawn;
     for (int id : ids)
     {
         if (state.players[controller].library.size() <= 1) { break; }
@@ -11977,8 +12047,13 @@ inline bool DeployCreatureFromHand(GameState& state, int controller, int hand_id
 // NOT IN HUMAN PLAY. Spending a human's float on a sink they own is one thing (the deck runs the
 // combo for you); casting spells out of their hand without asking is another, and the human already
 // has every one of these plays available as an ordinary plan action.
+// `keep_payable` + `probe_pay` are the IN-LOOP deploy's guard -- see the `keeps_loop` lambda below.
+// Both default to null, which is every caller except ApplyBlinkLoop's early-deploy, so the post-loop
+// kill chain and every autonomous path are unchanged.
 inline bool ComboFinishFromHand(GameState& state, int controller,
-                                const std::function<bool(const ManaCost&)>& pay)
+                                const std::function<bool(const ManaCost&)>& pay,
+                                const ManaCost* keep_payable = nullptr,
+                                const StateManaPayer* probe_pay = nullptr)
 {
     // ...EXCEPT inside the COMBO OFF verify/apply. Pressing that button is the human asking for the
     // win outright, so deploying the finisher out of their hand is exactly what they consented to --
@@ -11987,6 +12062,42 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
     if (!ComboFinishOn() || (HumanPlayActive() && !ComboOffFinishActive())) { return false; }
     if (state.players[1 - controller].life <= 0) { return false; }
     if (finishstats::On()) { finishstats::g_fin_call.fetch_add(1, std::memory_order_relaxed); }
+
+    // THE DEPLOY IS A SPEND, AND INSIDE A LOOP IT MUST NOT EAT THE NEXT ACTIVATION
+    // (MTG_COMBO_OFF_DEPLOY_TRIAL, default ON; inert wherever `keep_payable` is null).
+    //
+    // MTG_COMBO_OFF_EARLY_DEPLOY deliberately relaxed the "bountiful mana" bar to "can I pay the
+    // CAST", because waiting for the whole kill's worth of mana is what starves a pip-fed deck-out.
+    // What it did not add was the other half: the loop that is paying for all of this still has to
+    // run. The early deploy fires immediately after ApplyBlink, when the ETB untap has just put the
+    // whole board back, so it sees the loop's entire per-iteration income and spends it.
+    //
+    // Measured on the COMBO OFF sweep's `R-2681076122` (the user's own `claude_s7_gi6` decision 17,
+    // turn 5; rule WISH-DRAW, 24 blinks promised): four mana lands and Peregrine Drake, net +3 a
+    // pass. At k=0 the deploy cast TWO Living Wishes and deployed BOTH finishers -- nine mana out
+    // of the six the board had just untapped -- and the loop died at `k=1: pay-failed` with one
+    // blink run, the opponent on 17 and 49 cards still in their library.
+    //
+    //   [edf-loop] k=0 post-tapahead  cost={2}{C} float{g2 c2 *2} avail{g2 c2 *2}
+    //   [edf-loop] k=1 enter          cost={2}{C} float{}         avail{}
+    //   [edf-loop] STOP at k=1: pay-failed
+    //
+    // So each cast is now put to the real mana solver on a COPY first: pay the cast, then require
+    // the loop's own next activation to pay as well. A decline is not a refusal, it is a DELAY --
+    // the loop banks another pass and the very next iteration retries with more float, which on a
+    // net-positive loop always arrives. And if it never does, ApplyBlinkLoop's post-loop call has
+    // no `keep_payable` at all, so the deploy still happens at the end exactly as it used to.
+    //
+    // COMBO OFF only by construction: `probe_pay` is supplied at one call site (TurnSolver's
+    // ActivateBlink apply) and ComboOffFinishActive() is false in every autonomous run, in every
+    // rollout and in ordinary human play.
+    static const bool s_deploy_trial = EnvOn("MTG_COMBO_OFF_DEPLOY_TRIAL", true);
+    const auto keeps_loop = [&](const ManaCost& cost) {
+        if (!s_deploy_trial || keep_payable == nullptr || probe_pay == nullptr
+            || !ComboOffFinishActive()) { return true; }
+        GameState probe = state;
+        return (*probe_pay)(probe, cost) && (*probe_pay)(probe, *keep_payable);
+    };
 
     // A sink of this KIND already on the battlefield needs no second copy: the first one's activation
     // count is bounded by mana, not by how many of it we control.
@@ -12116,6 +12227,13 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
                 } _pfm;
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[best_i]);
                 const std::string name  = ap.hand[best_i].m_name.str();
+                // The in-loop guard (see keeps_loop): a deploy that strands the next activation
+                // trades the whole rest of the go-off for one creature.
+                if (d != nullptr && !keeps_loop(d->card.m_mana_cost))
+                {
+                    _pfm.ok = true;   // not a payment failure -- a deliberate, retryable delay
+                    break;
+                }
                 // RE-CHECK THE INDEX AFTER THE PAYMENT. `pay` runs the whole payment machinery --
                 // it taps sources and can sacrifice permanents -- so a hand index taken before it is
                 // not automatically valid after it. Nothing in this deck moves a card out of hand
@@ -12178,6 +12296,10 @@ inline bool ComboFinishFromHand(GameState& state, int controller,
             {
                 const CardDefinition* wd = CardDatabase::Instance().LookupCached(ap.hand[wish_i]);
                 const std::string     wname = ap.hand[wish_i].m_name.str();
+                // The in-loop guard, on the WISH's own cast: the wish plus the finisher it fetches
+                // is the most expensive thing this routine does, and it fires at the exact moment
+                // the ETB untap has put the loop's whole per-iteration income on the table.
+                if (wd != nullptr && !keeps_loop(wd->card.m_mana_cost)) { break; }
                 if (wd != nullptr && pay(wd->card.m_mana_cost)
                     && wish_i < static_cast<int>(ap.hand.size())
                     && ap.hand[wish_i].m_name.str() == wname)   // index re-check; see route 1
@@ -13116,6 +13238,62 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
                     if (pip_sink) { break; }
                 }
             }
+            // ...AND THE SWITCH MUST LEAVE A LOOP BEHIND (MTG_COMBO_OFF_SWITCH_TRIAL, default ON).
+            //
+            // The swap casts a creature out of hand -- Emiel is `{2}{W}{W}`, four mana -- and it did
+            // so with no guard at all, on the reading that a pip-free outlet is always the better
+            // one to be holding. On a board that is not yet flooded that payment is the WHOLE BOARD,
+            // and the loop it was meant to rescue then runs ZERO times. Measured on the sweep's
+            // `R-b655effc8b` (the user's own `claude_s2_gi1` turn-4 frame, rule DEPLOYED, 50 blinks
+            // promised) -- and note `loop.net_c` there is **+1**, i.e. the Displacer loop was not
+            // starving on pips at all, so the swap was pure cost:
+            //
+            //   [edf-loop] OUTLET SWITCH -> id=9 (pip-free, {C} sink live)
+            //   [edf-loop] k=0 enter  cost={3} float{} avail{}          <- Emiel ate the board
+            //   [edf-loop] STOP at k=0: pay-failed
+            //
+            // So the switch gets the same REAL TRIAL the sinks now carry: deploy it on a COPY of the
+            // state through the loop's own payer, and require the NEW outlet's first activation to
+            // be payable afterwards. If it is not, the swap is declined and the loop keeps the
+            // outlet it already had -- which on that frame is the difference between 0 blinks and a
+            // loop that runs. A declined swap only over-sizes the count (the recognizer's
+            // PipFreeOutletFromHandLive mirror assumed it), and an over-sized count is safe by
+            // ApplyBlinkLoop's standing contract.
+            //
+            // Needs `probe_pay`, so it is COMBO OFF only by construction; the two autonomous call
+            // sites pass nullptr and never reach this block anyway (ComboOffFinishActive()).
+            static const bool s_switch_trial = EnvOn("MTG_COMBO_OFF_SWITCH_TRIAL", true);
+            if (pip_outlet && pip_sink && s_switch_trial && probe_pay != nullptr)
+            {
+                GameState probe = state;
+                const CardParams* probe_def = nullptr;
+                const std::function<bool(const ManaCost&)> probe_payer =
+                    [&](const ManaCost& c) { return (*probe_pay)(probe, c); };
+                const int probe_src =
+                    DeployPipFreeOutletFromHand(probe, controller, probe_payer, &probe_def);
+                bool keeps_looping = false;
+                if (probe_src != 0 && probe_def != nullptr && probe_def->blink_cost.has_value())
+                {
+                    const Card* np = nullptr;
+                    for (const Permanent& p : probe.battlefield)
+                    { if (p.card.m_number == probe_src) { np = &p.card; break; } }
+                    if (np != nullptr)
+                    {
+                        const ManaCost nc = EffectiveActivationCost(probe, controller, *np,
+                                                                    probe_def->blink_cost.value());
+                        keeps_looping = (*probe_pay)(probe, nc);
+                    }
+                }
+                if (!keeps_looping)
+                {
+                    if (lt)
+                    {
+                        std::fprintf(stderr, "[edf-loop] OUTLET SWITCH DECLINED (real trial): "
+                                             "the swap leaves the loop unpayable\n");
+                    }
+                    pip_sink = false;   // fall through to the unswitched loop
+                }
+            }
             if (pip_outlet && pip_sink)
             {
                 const CardParams* swapped = nullptr;
@@ -13310,16 +13488,16 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         static const bool s_early_deploy = EnvOn("MTG_COMBO_OFF_EARLY_DEPLOY", true);
         if (cash_sinks && s_early_deploy && ComboOffFinishActive()
             && k + 1 < iterations && !ComboFinisherReachableOnBoard(state, controller))
-        { ComboFinishFromHand(state, controller, pay); }
+        { ComboFinishFromHand(state, controller, pay, &c, probe_pay); }
         if (cash_sinks)
         {
-            SpendSurplusOnDrain(state, controller, c, pay);
+            SpendSurplusOnDrain(state, controller, c, pay, probe_pay);
             // The library-exile sink rides the same position for the same reason. It gets the loop
             // context (`c` as keep_payable + the iterations still to run) because its all-or-nothing
             // unit is the LOOP, not one payment: a {C} pip is per-untap supply, so the whole-library
             // gulp could never fire on a real board and the deck-out is paid in instalments the
             // remaining iterations are projected to cover -- see SpendSurplusOnExile's header.
-            SpendSurplusOnExile(state, controller, pay, c, iterations - k - 1);
+            SpendSurplusOnExile(state, controller, pay, c, iterations - k - 1, probe_pay);
         }
     }
     // One last damage-sink pass with nothing held back: the loop is over, so there is no next

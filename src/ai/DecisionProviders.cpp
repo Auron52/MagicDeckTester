@@ -15082,6 +15082,43 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         const long long it = (pips_needed + eff_net_c - 1) / eff_net_c;
         return static_cast<int>(std::min<long long>(it, FlickerMaxIterations()));
     };
+    // THE DIG AND THE KILL ARE SEQUENTIAL PHASES, SO THEIR COUNTS ADD (human play only;
+    // MTG_EDF_GOFF_PHASES=0 restores the flat max).
+    //
+    // The three terms below are a `max`, which is right for three DEMANDS ON THE SAME RESOURCE and
+    // wrong for two PHASES that cannot overlap. A finisher fetched out of the library is not on the
+    // battlefield until the dig has found the Living Wish, so not one of its `{C}` pips can be spent
+    // during the dig -- the iterations that supply the pips are the ones AFTER the deploy, not the
+    // same ones.
+    //
+    // Measured on the user's own `claude_s1_gi0` T3, replay-hunt ids RR-9261bc55b5 and its nine
+    // siblings (ordinals 6..16 of that one turn): Emiel + Peregrine Drake, net +3, two {C} sources,
+    // opponent on 20. The old max sized 25 -- `max(24 by mana, 5 digs, 25 pips)` -- and the apply
+    // spends most of those 25 digging, deploys Essence Depleter near the end and drains about ten
+    // times. Raising `MTG_EDF_MAX_ITER` does NOT help and that is the tell: the count is not being
+    // clamped, it is being computed as though the pips and the digs were drawn from the same
+    // iterations. `dig + pips` sizes the loop the kill actually needs.
+    //
+    // The dig phase is `max(cards, mana/net)` -- the draw-land route's own shape -- because a {T}
+    // draw source yields one activation per untap AND the cards have to be paid for; on a board
+    // whose net is smaller than a card's price the mana half is the binding one (the claude_s8_gi7
+    // board takes four iterations per card at net +2 against a 6-mana Investigate+crack).
+    //
+    // Over-sizing stays safe by this function's standing contract -- ApplyBlinkLoop re-prices every
+    // activation and stops at the first it cannot pay, so a too-large count realises only what is
+    // payable and can never invent a win. HumanPlayActive() is false in every autonomous run and
+    // every rollout, so GT, the value leaf and the keep tables are byte-identical by construction.
+    static const bool s_goff_phases = EnvOn("MTG_EDF_GOFF_PHASES", true);
+    const bool phases_on = s_goff_phases && HumanPlayActive();
+    const int  dig_iters = phases_on
+        ? std::max(loop.dig_draws, FlickerIterationsForMana(loop.hand_setup_mv, loop.net))
+        : loop.dig_draws;
+    const auto size_for = [&](int mana_iters, int pip_iters) {
+        const int want = phases_on
+            ? std::max({ mana_iters, dig_iters, dig_iters + pip_iters })
+            : std::max({ mana_iters, loop.dig_draws, pip_iters });
+        return std::clamp(want, 1, FlickerMaxIterations());
+    };
     if (loop.drain_amount > 0 && loop.drain_cost_mv >= 0)
     {
         const int activations = (life + loop.drain_amount - 1) / loop.drain_amount;
@@ -15094,10 +15131,8 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         // completes and stalls with the finisher still in the library.
         if (iters > 0)
         {
-            const int want = std::max({ iters, loop.dig_draws,
-                                        c_iterations(static_cast<long long>(activations)
-                                                     * loop.drain_c_pips) });
-            return std::clamp(want, 1, FlickerMaxIterations());
+            return size_for(iters, c_iterations(static_cast<long long>(activations)
+                                                * loop.drain_c_pips));
         }
     }
     if (loop.exile_cost_mv > 0 && s.opponent_library_dealt)
@@ -15109,10 +15144,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
                                                    loop.net);
         if (iters > 0)
         {
-            const int want = std::max({ iters, loop.dig_draws,
-                                        c_iterations(static_cast<long long>(cards)
-                                                     * loop.exile_c_pips) });
-            return std::clamp(want, 1, FlickerMaxIterations());
+            return size_for(iters, c_iterations(static_cast<long long>(cards) * loop.exile_c_pips));
         }
     }
 

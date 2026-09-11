@@ -1,0 +1,152 @@
+{
+  "_comment": [
+    "REPLAY-HUNT CLUSTER C5 -- 'the finish fires and runs out' (61 of its 295 failures), and the",
+    "sweep's single largest residual family before this fix (18 of the 24 states the executor pass",
+    "repaired are owned by this lever).",
+    "",
+    "Reconstructed from the user's own reference `claude_s5_gi4`, decision 44 (turn 4); it is the",
+    "COMBO OFF sweep's state R-0d27093ca5.  Eldrazi Displacer's printed {2}{C} with Peregrine Drake",
+    "untapping all the lands: net +4 a pass, net_c +2, and the kill is Living Wish -> Essence",
+    "Depleter -> twenty drains at {1}{C}.",
+    "",
+    "WHAT USED TO HAPPEN.  The drain runs at the very END of an iteration, after pay(c) and after the",
+    "ETB untap, and it guarded itself with a POOLED `AvailableManaPool + floating vs CanPay`.  That is",
+    "the same flat-pool lie MTG_COMBO_OFF_SINK_TRIAL fixed for the damage sink and",
+    "MTG_COMBO_OFF_DRAW_TRIAL fixed for the draw sink: a pool cannot see that one land serves ONE of",
+    "its modes (Brushland taps for {C} OR {G}/{W}), and it cannot see that the sequential payment",
+    "picks greedily.  So the guard said 'the next blink is still payable', the drain took the",
+    "colourless that blink needed, and the loop that funds the kill died -- the fetched Essence",
+    "Depleter draining a couple of times and stopping.",
+    "",
+    "MTG_COMBO_OFF_TLESS_TRIAL gives both {T}-less sinks (the drain, and the library exile's",
+    "instalment route) the same real trial on a copy of the state: pay the sink's cost through the",
+    "loop's own payer, then require keep_payable to pay as well.",
+    "",
+    "A/B on this fixture (one binary):",
+    "    default                          -> COMBO OFF verified, opponent dead",
+    "    MTG_COMBO_OFF_TLESS_TRIAL=0      -> offered but NOT verified, the apply does not win",
+    "",
+    "The same lever on the real replay (hunt exemplar RR-9f29089519, `claude_s3_gi2` T4, the hunt's",
+    "own C5 repro): default wins on turn 4 with 15 blinks and 20 drains; at 0 the click does not win",
+    "and the game runs past turn 7."
+  ],
+  "active_life": 17,
+  "battlefield": [
+    {
+      "controller": 0,
+      "name": "Brushland",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Conservatory",
+      "tapped": true
+    },
+    {
+      "controller": 0,
+      "name": "Eldrazi Displacer",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Mariposa Military Base",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Peregrine Drake",
+      "tapped": true
+    },
+    {
+      "controller": 0,
+      "name": "Yavimaya Coast",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Brushland",
+      "name": "Trace of Abundance",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Conservatory",
+      "name": "Trace of Abundance",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Yavimaya Coast",
+      "name": "Trace of Abundance",
+      "tapped": false
+    }
+  ],
+  "budget_ms": 20,
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "depth": 3,
+  "hand": [
+    "Cloud of Faeries",
+    "Emiel the Blessed",
+    "Living Wish"
+  ],
+  "library_filler": "Forest",
+  "library_size": 0,
+  "library_top": [
+    "Adarkar Wastes",
+    "Adarkar Wastes",
+    "Aether Hub",
+    "Aether Hub",
+    "Aether Hub",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Cloud of Faeries",
+    "Cloud of Faeries",
+    "Conservatory",
+    "Conservatory",
+    "Conservatory",
+    "Eladamri's Call",
+    "Eldrazi Displacer",
+    "Eldrazi Displacer",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Kitchen",
+    "Kitchen",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Shivan Gorge",
+    "Trace of Abundance",
+    "Training Grounds",
+    "Training Grounds",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast"
+  ],
+  "on_the_play": false,
+  "opponent_library_size": 50,
+  "opponent_life": 20,
+  "turn": 4,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "expect_combo_off": true
+}
