@@ -271,3 +271,52 @@ Batches now run at 32 workers with `MTG_TT_CAP=3000000 MTG_FSL_CAP=500000 MTG_FS
 (`logs/emul_screen/launch_fix2.sh`), a pid watchdog (`memwatch.sh`, 2.5 GB floor) and a 30 s RSS trend
 that names the in-flight games (`memtrend.sh`). Verified inert on normal games: identical units and play
 for ship, escnl and nl_sres on Melira 802768 with and without the caps.
+
+## THE ON-POLICY RE-SCREEN (2026-09-11): the 5 decks the menu measured at the wrong configuration
+
+The coverage caveat above ("a deck that locks d6 should be re-screened at d6 before its row is trusted")
+is now discharged. The five decks whose locked configuration the 2026-09-10 menu never ran were re-screened
+**on-policy** -- no `--depth`, no `--budget-ms`, no `--ignore-play-profile`, so each deck's own `value_play`
+drives -- with three arms in ONE pooled batch (480 jobs, 32 x 250 games per cell, fresh seeds 7,000,000+):
+
+* `ship`   -- the deck exactly as committed.
+* `escnl`  -- shape #2: `leaf: "none"` + relaxed alpha, **on the sidecar route** (the deck's tuned
+  `escalation_cap` / `escalation_r` / `escalation_fresh_frac` / `beam_width` stay LIVE, which is what the
+  deck would actually ship). NOT `value_profile: "noleaf"` -- see finding 12.
+* `single` -- shape #3: the same leafless probe plus the FIT final-depth pass.
+
+| deck | on-policy config | `escnl` quality | `escnl` units / wall | `single` quality | `single` units / wall |
+|---|---|---|---|---|---|
+| StompySurprise | d6b20 | 28/5, **z +4.00**, d_avg −0.0034 | **0.753x / 0.730x** | 25/16, z +1.41 | 1.010x / 0.939x |
+| Goblins | d6b40 | 0/0, d_avg **0.0000** | **0.914x / 0.939x** | 0/0 | 1.290x / 1.525x |
+| Hinata2 | d5b30 | 70/120, z −3.63 | 0.804x / 0.798x | 143/138, **z +0.30**, d_avg −0.0028 | **0.799x / 0.777x** |
+| burn | d6b20 | 0/3, z −1.73 | 1.087x / 0.969x | 1/4, z −1.34 | 1.169x / 1.003x |
+| FiveColour | d6b20 | 56/103, z −3.73 | 1.298x / 1.751x | 54/134, z −5.83 | 0.734x / 0.722x |
+
+**Three candidates, and each is the shape the mechanisms doc predicts for that deck.** The predictor is
+`search-shape-mechanisms.md` mechanism 3 -- *how often the probe PROVES its win* (single passes per ladder
+decision at d5b20) -- and it calls all five rows correctly:
+
+| probe-failure rate | decks | what wins | measured |
+|---|---|---|---|
+| LOW (leaf not load-bearing) | goblins 5/65, fluct 6/66 | **shape #2**: drop the leaf, nothing to replace | Goblins 0/0 at 0.914x; Fluctuator adopted 2026-09-10 |
+| HIGH (escalation runs constantly) | hinata 77/136, fivecolour 311/646 | **shape #3**: one pass at the end beats escalating at every depth | Hinata2 0.799x at z +0.30 |
+| HIGH **and** the leaf is load-bearing | fivecolour 311/646 | neither -- ship stays | escnl z −3.73, single z −5.83 |
+
+So the menu's three shapes are not interchangeable options to screen blindly; which one fits is PREDICTABLE
+from one counter, and the screen confirms the prediction rather than discovering it.
+
+**StompySurprise is the sharpest result: its value leaf is a NET NEGATIVE.** Removing it is 25% cheaper on
+both axes AND better on quality (z +4.00 on 33 discordant pairs). A model leaf that loses on quality is not a
+tuning problem, it is a miscalibrated model actively misleading the search: with `leaf: "none"` only PROVEN
+in-horizon wins are banked and everything else escalates to the heuristic, so the trust escalation can no
+longer commit an unverified line the crossover table then keeps. This is the first deck measured where the
+leaf costs quality as well as time.
+
+**FiveColour is the control that proves the leaf can earn its keep** -- and it retires a scare number. Its
+leafless arm costs 1.298x units / 1.751x wall here, NOT the ~49x once read off the `value_profile: "noleaf"`
+route; that cliff was the stand-in discarding the deck's tuned cap/beam/R, not the leafless probe itself.
+
+**burn rejects both shapes on the UNITS axis while looking fine on wall** (escnl 1.087x units but 0.969x
+wall). Units is the deterministic axis and the decision axis; wall falls because skipped leaf evaluations are
+unmetered. Do not read a wall-only improvement as a saving.
