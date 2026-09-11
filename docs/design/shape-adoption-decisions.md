@@ -329,3 +329,52 @@ This also retires the "fast decks need a depth ceiling" recommendation from §1.
 hidden breaching's 3 rejectable passes instead of preventing them, and would have capped dragons
 where FIT is already correct. The right fix is the crossover the engine had already measured and was
 ignoring.
+
+### 11a. The gates measured: cost SOLVED, but they expose that the crossover tables are wrong
+
+640 jobs / 160,000 games, all 20 decks, `ship` vs `single`, both gates ON, at the original screen's
+seeds (9900000). The `ship` control is **byte-identical in 250 of 250 cells** to the original screen,
+which is what makes the cross-batch comparison of `single` valid.
+
+**Cost: solved outright.** Every expensive FIT cell collapsed to ~1.0x, several byte-identically:
+
+| deck | ungated units | gated units | play |
+|---|---|---|---|
+| breaching | **4.655x** | **1.000x** | IDENTICAL 16/16 |
+| critter | 1.490x | 0.946x | IDENTICAL 16/16 |
+| knights | 1.489x | 1.015x | IDENTICAL 16/16 |
+| slivers | 1.439x | 1.024x | 15/16 |
+| goblins | 1.435x | 1.012x | 14/16 |
+| auras | 1.364x | 1.080x | 15/16 |
+| burn | 1.331x | 1.080x | 15/16 |
+| stompy | 1.308x | 1.074x | 14/16 |
+
+**Quality: lost on exactly the decks where FIT was winning.**
+
+| deck | ungated Δ | gated Δ |
+|---|---|---|
+| melira | +0.0032 ± 0.0034 | **+0.0248 ± 0.0028** |
+| fivecolour | **−0.0055 ± 0.0011** | +0.0025 ± 0.0017 |
+| cgiving | −0.0030 ± 0.0018 | +0.0065 ± 0.0023 |
+| kitty | −0.0023 ± 0.0009 | +0.0003 ± 0.0003 |
+| hinata | **−0.0082 ± 0.0025** | −0.0037 ± 0.0032 |
+
+**The mechanism, and it is not what I expected.** Where a table is strict the gate does not make FIT
+smarter — it makes FIT **not run**. Eight decks are now `0/0` byte-identical to ship, i.e. FIT is
+effectively disabled on them, which is precisely why their cost reverted to ~1.0x. That is the
+correct outcome where FIT was wasting (breaching's 3 rejectable passes) and the wrong outcome where
+FIT was winning.
+
+**And on Melira the measurement now contradicts its own table.** Melira's `take_at[c] = c` for c ≤ 5,
+so the table asserts a heuristic line shallower than the committed depth is worse than the value
+line. Honouring that scores **+0.0248**; ignoring it (ungated FIT) scores **+0.0032**. The table is
+wrong, by a wide and significant margin — exactly what its own provenance warned
+(*"the OLD ones until the regenerated matrix lands"*).
+
+**Consequence for the programme.** The gate is only as good as the table it honours, and **14 of 20
+decks ship a table flagged stale**. So *regenerate the crossover matrices* is no longer a Melira
+footnote — it is the critical path for ONE DEPTH. Until then the two gates must not be adopted
+together as-is: they trade a large cost win for real quality on five decks.
+
+Note the correlation with the stale flag is imperfect (fivecolour lost quality without the flag;
+fluct/stompy/th improved with it), so this is table MIS-CALIBRATION generally, not simply age.
