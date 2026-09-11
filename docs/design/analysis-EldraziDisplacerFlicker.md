@@ -7238,18 +7238,18 @@ is "a Living Wish is still in the library".
 
 | fixture | frame | pins |
 |---|---|---|
-| `edf_co_27_s9_gi8_t4_ord5_shallow` | s9_gi8 T4 ord 5 | offered, rule WISH-DRAW, **NOT verified** |
-| `edf_co_28_s14_gi13_t5_ord5_shallow` | s14_gi13 T5 ord 5 | offered + **VERIFIED**, `blink Peregrine Drake x387` |
-| `edf_co_29_s15_gi14_t6_ord8_shallow` | s15_gi14 T6 ord 8 | offered + **VERIFIED**, `blink Peregrine Drake x227` |
+| `edf_co_30_s9_gi8_t4_ord5_shallow` | s9_gi8 T4 ord 5 | offered, rule WISH-DRAW, **NOT verified** |
+| `edf_co_31_s14_gi13_t5_ord5_shallow` | s14_gi13 T5 ord 5 | offered + **VERIFIED**, `blink Peregrine Drake x387` |
+| `edf_co_32_s15_gi14_t6_ord8_shallow` | s15_gi14 T6 ord 8 | offered + **VERIFIED**, `blink Peregrine Drake x227` |
 
-`edf_co_27` pins what is TRUE rather than what would have been tidier, and it is the "display
+`edf_co_30` pins what is TRUE rather than what would have been tidier, and it is the "display
 aggressive, execution exact" split in one board: the recording's own ordinal-5 menu carries
 `combo_off: true, WISH-DRAW` with **no** `combo_off_verified`, and the user went on to bank
 twenty-eight hand-blinks (`{G:80}` floating) before the click won on turn 4. Checked, not inferred --
 moving a Living Wish to the TOP of the library does not make it verify either (x109, opponent still
 on 20), so the refusal is the board's net-1 loop against fifty `{C}` pips, not the synthetic library
 order. It guards both directions: a withdrawal of the offer, and a false "wins this turn".
-`edf_co_29` states its own limit: the real frame carried `{C:1}` floating and a `--scenario` board is
+`edf_co_32` states its own limit: the real frame carried `{C:1}` floating and a `--scenario` board is
 always asked with an empty pool, so it is a deliberate LOWER BOUND.
 
 ### 7. Gates (run in BOTH lever positions; identical in both)
