@@ -15280,11 +15280,23 @@ inline bool TreasurePaySourceEnabled()
 // A sac source the PAYMENT solver owns. `produces.empty()` keeps this to the sources that carry no
 // colour of their own today (the whole reason they are invisible to the payment path: pay_produces()
 // comes back empty, `makes` is false, and every source scan skips them).
+// CARD-DATA TEST FIRST, FLAG LAST (perf, 2026-09-11; pure `&&` reorder of three side-effect-free
+// reads, so the value is identical for every input -- byte-identical by construction).
+// This predicate sits in the payment's innermost loop: PaySacSpendableNow opens with it, and
+// `usable()` calls THAT once per permanent per pip, so it runs tens of millions of times a game.
+// With the flag read first, every one of those calls paid the function-local static's thread-safe
+// -init guard before looking at the card -- the same cost the note on ManaPayment.cpp's
+// g_float_trace ("a magic static would add a guard check to each") and CardDatabase::Instance()
+// ("~6% of a search game in guard-acquire loads") already record. `sac_for_mana_amount` is a plain
+// int on a CardDefinition the caller has in hand and is 0 for every card in decks that run no
+// pay-sac source, so testing it first short-circuits before both the guard and the vector read.
+// Measured on EldraziDisplacerFlicker (no pay-sac source at all): PaySacSpendableNow alone was
+// 2.97% of all instructions (callgrind, seed 1 games 0-3), essentially all of it this guard.
 inline bool IsPaySacSource(const CardDefinition& def)
 {
-    return TreasurePaySourceEnabled()
-        && def.params.sac_for_mana_amount == 1
-        && def.params.produces.empty();
+    return def.params.sac_for_mana_amount == 1
+        && def.params.produces.empty()
+        && TreasurePaySourceEnabled();
 }
 
 // Cracking a Treasure SACRIFICES it; the payment path can only tap. Erasing mid-payment is unsafe
