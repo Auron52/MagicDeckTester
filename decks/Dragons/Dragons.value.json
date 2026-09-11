@@ -15678,6 +15678,9 @@
   "adoption_ab": "phase E, 8 held-out seeds x 1000 games paired: -0.00212 turns vs no sidecar, paired t=-4.43, 7 better / 0 worse / 1 tied, 0.87x search cost"
  },
  "value_play": {
+  "leaf": "none",
+  "alpha": "relaxed",
+  "leaf_note": "ADOPTED 2026-09-11: NO-LEAF escalation (shape #2). Quality neutral, cheaper on both axes everywhere. 4,000 games per cell, seeds 9,500,000+: d5b20 2/1 z +0.58 at 0.944x units / 0.863x wall; d5b40 1/2 z -0.58 at 0.942x/0.873x; d3b10 0 better/0 worse at 0.995x/0.977x; d3b20 0/0 at 0.995x/0.993x; d0b0 byte-identical. See docs/design/per-deck-search-shape.md (fleet leaf-necessity screen, 2026-09-11)",
   "mull_gen_depth": 1,
   "mull_gen_budget_ms": 3,
   "expected_buckets": 17

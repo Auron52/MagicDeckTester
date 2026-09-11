@@ -1,6 +1,6 @@
-# Regression ground truth -- commit c42007bd  date 2026-09-11
+# Regression ground truth -- commit a6723100  date 2026-09-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-09-11): 2026-09-11 leaf:none adoption on goblins/stompy/th/dragonstorm. Overnight NET IMPROVES: 17 games faster vs 6 slower over 58,400 games, every config's avg win turn unchanged or better. Of the 6 slower, 4 are churn (recover at 4x/16x budget). The 2 PERSISTS are both treasure_hunt: d5_s4004 gi524 (5->6) has DIVERGENT DRAWS (16 vs 17 draw steps - a different line reveals different cards off the top, so not a same-draws slowdown), and d5_s6006 gi232 (6->7) does not reproduce standalone (T7 both arms; a bare --seed base+gi does not reproduce the batch global game index that drives opponent spawns). Per-config screen: th z +1.51 at d5b20 and +1.34 at d5b80 on 4,000 games each.
+# accepted-with-regressions (overnight, 2026-09-11): 2026-09-11 leaf:none adoption on goblins/stompy/th/dragonstorm. Overnight NET IMPROVES: 17 games faster vs 6 slower over 58,400 games, every config's avg win turn unchanged or better. Of the 6 slower, 4 are churn (recover at 4x/16x budget). The 2 PERSISTS are both treasure_hunt: d5_s4004 gi524 (5->6) has DIVERGENT DRAWS (16 vs 17 draw steps - a different line reveals different cards off the top, so not a same-draws slowdown), and d5_s6006 gi232 (6->7) does not reproduce standalone (T7 both arms; a bare --seed base+gi does not reproduce the batch global game index that drives opponent spawns). Per-config screen: th z +1.51 at d5b20 and +1.34 at d5b80 on 4,000 games each. || 2026-09-11 (second adoption) leaf:none on mirrorwing/dragons. Overnight NET IMPROVES AGAIN: 10 games faster vs 2 slower over 24 re-run cases; both slower are CHURN (mirrorwing_overnight_d5_s5005 gi193 7->loss and gi264 4->5, each recovering at 4x AND 16x budget). Mirrorwing avgs all improved (4.2433->4.2367, 4.2400->4.2300, 4.3100->4.2733). Per-config screen: mirrorwing d5b20 37 better/2 worse z +5.60 on 4,000 games.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -37,7 +37,7 @@ creature_giving_smoke_d3_s1001=4.7067/317ddbb0d6d2d226
 creature_giving_smoke_d5_s1001=4.6667/83cad4c4966b22ca
 mirrorwing_smoke_d0_s1001=5.8750/7b10f802e622da62
 mirrorwing_smoke_d3_s1001=4.2467/8e2ef89150e46a84
-mirrorwing_smoke_d5_s1001=4.3467/b617b12c4b88218a
+mirrorwing_smoke_d5_s1001=4.3333/036eca1757a6048b
 fivecolour_smoke_d0_s1001=5.7830/3fcfb0a295fe3a1b
 fivecolour_smoke_d3_s1001=4.9600/94247794612f3f57
 fivecolour_smoke_d5_s1001=5.0933/6797e71eac795925
@@ -138,10 +138,10 @@ creature_giving_regression_d3_s3003=4.6867/c8ea1a9f8eb7639e
 creature_giving_regression_d5_s2002=4.6400/94dc196ba30a38cc
 creature_giving_regression_d5_s3003=4.6680/f971c2aca6a4adce
 mirrorwing_regression_d0_s2002=5.9840/c39bf2c349003386
-mirrorwing_regression_d3_s2002=4.3050/2ee2962715011c56
+mirrorwing_regression_d3_s2002=4.3050/cca95ea9c7a1ac0a
 mirrorwing_regression_d3_s3003=4.1500/1258926e35d43b9b
-mirrorwing_regression_d5_s2002=4.3400/c426b2c4d510c53e
-mirrorwing_regression_d5_s3003=4.1900/8af827166fa4599c
+mirrorwing_regression_d5_s2002=4.3200/5fec06b3d93178e5
+mirrorwing_regression_d5_s3003=4.1800/29da57385a235cfe
 fivecolour_regression_d0_s2002=5.8350/5524af389ebde0f7
 fivecolour_regression_d3_s2002=4.8600/f880c396740b33b0
 fivecolour_regression_d3_s3003=4.9250/1d35f3face14029a
@@ -325,10 +325,10 @@ mirrorwing_overnight_d3_s4004=4.2125/16d337b80a010cad
 mirrorwing_overnight_d3_s5005=4.2475/32618c4130153972
 mirrorwing_overnight_d3_s6006=4.2400/93e5a1ef8b0cfede
 mirrorwing_overnight_d3_s7007=4.2925/f9f1372eaf556973
-mirrorwing_overnight_d5_s4004=4.2433/6987e57f3e7cb1e6
-mirrorwing_overnight_d5_s5005=4.2300/4d0dec70176be5bd
-mirrorwing_overnight_d5_s6006=4.2400/c60b7b6cf5f82c89
-mirrorwing_overnight_d5_s7007=4.3100/3f6569f3b7654a1b
+mirrorwing_overnight_d5_s4004=4.2367/05a9a691ccce3404
+mirrorwing_overnight_d5_s5005=4.2333/b6c78983ba0c57ee
+mirrorwing_overnight_d5_s6006=4.2300/358727f3caac9e33
+mirrorwing_overnight_d5_s7007=4.2733/066e6a1a267581e4
 fivecolour_overnight_d0_s4004=5.7475/984c04b6bc70a42f
 fivecolour_overnight_d0_s6006=5.7835/bd5a3386d5cfd85a
 fivecolour_overnight_d0_s8008=5.7590/f617bd6d81e45033
@@ -384,10 +384,10 @@ dragons_overnight_d0_s10010=6.0055/79e8864c466d72f3
 dragons_overnight_d3_s4004=5.5310/bcd1e340ea0aab87
 dragons_overnight_d3_s5005=5.6200/773c873baf8db647
 dragons_overnight_d3_s6006=5.5600/ea99cbf600466dbf
-dragons_overnight_d3_s7007=5.6020/6fdd9f929a91ad8c
+dragons_overnight_d3_s7007=5.6020/57a59789887b4eed
 dragons_overnight_d5_s4004=5.5340/19c2a5531a517a8a
 dragons_overnight_d5_s5005=5.6300/0f9121bbe04e6c26
-dragons_overnight_d5_s6006=5.5920/da2bd41ac07b1c9c
+dragons_overnight_d5_s6006=5.5900/e789357559eeaf21
 dragons_overnight_d5_s7007=5.6140/bf315f5e66a9d178
 breaching_overnight_d0_s4004=4.8710/3b8802cea3ff3b75
 breaching_overnight_d0_s6006=4.8055/55eba3aca18a77b0

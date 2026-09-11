@@ -14108,6 +14108,9 @@
   "note": "eval_model retrained on rows dumped at SHIPPED play WITH the deck profile, so the exhaustive keep model was live. Labels are searched K=3 for every deck (a pooled dump forces one label mode). value_leaf_table/crossover here are the OLD ones until the regenerated matrix lands."
  },
  "value_play": {
+  "leaf": "none",
+  "alpha": "relaxed",
+  "leaf_note": "ADOPTED 2026-09-11: NO-LEAF escalation (shape #2). This deck's value leaf was a NET NEGATIVE -- the strongest such result measured. Paired sign test, 4,000 games per cell, seeds 9,500,000+: d5b20 37 better / 2 worse z +5.60 (d_avg -0.0135) at 0.914x units / 0.848x wall; d3b10 2/0 z +1.41 at 0.987x/0.964x; d0b0 byte-identical (greedy). Better on quality AND cheaper on both axes at every configuration this deck is played at. See docs/design/per-deck-search-shape.md (fleet leaf-necessity screen, 2026-09-11)",
   "mull_gen_depth": 2,
   "mull_gen_budget_ms": 3,
   "expected_buckets": 16

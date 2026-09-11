@@ -386,3 +386,31 @@ escalation budget the shared remainder and was measured starving it (StompySurpr
 
 So the starvation is real in the counters and inert in the play. Neither deck needed repair, and the
 `units==0` counter is not by itself evidence of a defect -- a conclusion only digest equality could deliver.
+
+### The last four decks (2026-09-11, second pooled screen: 264 jobs / 136,000 games, seeds 9,500,000+)
+
+Mirrorwing, Minotaur, Dragons and KittyEquipment were the modelled decks the first screen missed. All four
+turned out CHEAP at d5b20 (36-72 ms/game; the `TIMINGS.md` figures for them predate the perf work), so they
+were screened at the same 4,000 games per cell.
+
+| deck | d3b10 | d3b20 | d5b20 | d5b40 | verdict |
+|---|---|---|---|---|---|
+| Mirrorwing Dragon | +1.41, 0.987x/0.964x | — | **+5.60** (37/2), 0.914x/0.848x | — | **ADOPTED** |
+| Dragons | 0/0, 0.995x/0.977x | 0/0, 0.995x/0.993x | +0.58, 0.944x/0.863x | −0.58, 0.942x/0.873x | **ADOPTED** |
+| Minotaur | 0/0, 0.994x | 0/0, 0.996x | **+3.00** (9/0), 0.969x/0.946x | +2.65 (7/0), **1.009x**/0.998x | STAGED (trade) |
+| KittyEquipment | **−3.46** (0/12), 0.964x | −1.34, 0.975x | 0/0, 0.874x | +1.51, 0.833x | rejected |
+
+**Mirrorwing Dragon is the strongest leaf-is-a-net-negative result measured** -- 37 better against 2 worse at
+d5b20 (d_avg −0.0135) while also 0.914x units / 0.848x wall. Like StompySurprise, its model was not merely
+unhelpful but actively misleading.
+
+**KittyEquipment is the second Hinata2.** Good at depth 5 (0/0 at 0.874x, +1.51 at 0.833x), **bad at depth 3**
+(z −3.46). Two of the fourteen decks screened now show this exact depth-split signature, which is what makes
+the unconditional application of shape keys a real design question rather than a one-off.
+
+**Minotaur and slivers_vial are TRADES, deliberately not adopted.** Both buy a significant quality gain with
+a small UNITS increase at one configuration -- Minotaur +2.65 for 1.009x at d5b40, slivers_vial **+4.58
+(21 better / 0 worse over 8,000 games)** for 1.020x at d3b10 -- while wall time is cheaper at every
+configuration for both. By the standing rule (a clean win regresses on NO axis) these are the user's call, not
+an agent's. The recommendation is to take both: the units axis is a proxy for cost and the real-time axis
+moved the other way.
