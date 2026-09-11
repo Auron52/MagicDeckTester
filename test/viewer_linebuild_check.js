@@ -384,6 +384,31 @@ function checkStackedActivations() {
 // chain -- so this file, which drives the real browser queue logic headlessly, is the layer that
 // can see them at all. The engine half (the `need=` untap promotion, and that each segment really
 // lands) is test/viewer_line_macros_check.py.
+// MANUAL TAP/PAY token (docs/design/viewer-manual-tap-pay.md). The `+<AURA>` suffix carries the
+// colour the human chose for each "one mana of any color" land Aura on the host. Pinned HERE because
+// this file owns the encoder and nothing else can see the string: the engine parses whatever it is
+// handed, so an encoder that stopped writing the suffix would silently restore the `wild` credit
+// this feature exists to remove -- and every reference above would keep passing, since none has one.
+function checkPreTapToken() {
+  const fails = [];
+  const tok = p => LB.encodeLine([Object.assign({ kind: 'pretap' }, p)]);
+  const cases = [
+    // [entry, expected] -- the no-aura form is FIRST because it is the back-compat guarantee:
+    // every line recorded before this feature must still encode byte-for-byte as it did.
+    [{ name: 'Conservatory', num: 7, color: 'W' }, 'tap=Conservatory#7:W'],
+    [{ name: 'Conservatory', num: 7, color: 'W', auraColors: [] }, 'tap=Conservatory#7:W'],
+    [{ name: 'Brushland', num: 6, color: 'W', auraColors: ['U'] }, 'tap=Brushland#6:W+U'],
+    [{ name: 'Brushland', num: 6, color: 'C', auraColors: ['R', 'G'] }, 'tap=Brushland#6:C+R+G'],
+    // A wildcard copy id still works with the suffix (a hand-written line / a fixture).
+    [{ name: 'Aether Hub', num: 0, color: 'C', auraColors: ['R'] }, 'tap=Aether Hub#0:C+R'],
+  ];
+  for (const [entry, want] of cases) {
+    const got = tok(entry);
+    if (got !== want) { fails.push(`${JSON.stringify(entry)} -> ${got}, expected ${want}`); }
+  }
+  return fails;
+}
+
 function checkLineMacros() {
   const fails = [];
   const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -630,8 +655,13 @@ function main() {
   macroFails.forEach(m => console.log(`  FAIL  line macro: ${m}`));
   console.log(`Viewer line macros: ${macroFails.length ? 'WRONG' : 'repeat xN and investigate&crack expand into ordinary segments'} ` +
               `(${macroFails.length} FAIL)`);
+  const tapFails = checkPreTapToken();
+  tapFails.forEach(m => console.log(`  FAIL  pre-tap token: ${m}`));
+  console.log(`Viewer pre-tap token: ${tapFails.length ? 'WRONG' : "the land's face, plus a +<C> per any-colour Aura; absent when none"} ` +
+              `(${tapFails.length} FAIL)`);
   return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length
-          + mixFails.length + hostFails.length + stackFails.length + macroFails.length) ? 1 : 0;
+          + mixFails.length + hostFails.length + stackFails.length + macroFails.length
+          + tapFails.length) ? 1 : 0;
 }
 
 process.exit(main());

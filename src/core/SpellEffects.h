@@ -1160,6 +1160,28 @@ inline void TapDripLandsIfUseful(GameState& state, int controller_index)
 inline bool PainlandCModeEnabled()
 { static const bool v = EnvOn("MTG_PAINLAND_C", true); return v; }
 
+// ENERGY-gated coloured mode (Aether Hub: "{T}: Add {C}." / "{T}, Pay {E}: Add one mana of any
+// color."). THE THIRD INSTANCE OF THE SAME SHAPE as the Grove drip and the painland above: two
+// SEPARATE abilities where the coloured one carries a real cost and the colourless one is free. A
+// GENERIC pip does not need a colour, so taking the coloured mode for it spends {E} for nothing.
+//
+// USER-found, 2026-09-11 (logs/play/rejections/..._s13_gi12_t4.json): "I should have the energy to
+// drake, but I cannot". The T3 Overgrowth ({2}{G}) payment tapped Brushland for {G} (the pip),
+// Mariposa for {C}, and then Aether Hub for *GREEN* -- two green taps for a one-green cost, so the
+// second went to the {2} and burned the board's only energy counter. Next turn the Hub read as a
+// plain {C} land, and Peregrine Drake ({4}{U}) was Illegal "no untapped source produces blue mana":
+// the Hub's energy mode WAS the deck's blue.
+//
+// Why it fired only for a human: the coloured pick handed in here is `LineDemandAnyPipColor`, which
+// is HumanPlayActive-gated and replaces the produces-order default with "a colour this line still
+// owes" -- {G}. Autonomous play keeps prod[0], and Aether Hub's produces list leads with {C}, so
+// the autonomous payment was already taking the free mode. The fix is nonetheless placed HERE, with
+// the other two, because it is a MODELLING truth rather than a play preference (the free ability
+// exists and costs nothing), so it must hold on whichever path reaches it.
+// MTG_ENERGY_C_MODE=0 restores the coloured tap for a one-binary A/B.
+inline bool EnergyCModeEnabled()
+{ static const bool v = EnvOn("MTG_ENERGY_C_MODE", true); return v; }
+
 inline Color DripLandAnyPipColor(const GameState& state, int active,
                                  const CardDefinition& def, Color colored_pick)
 {
@@ -1176,6 +1198,15 @@ inline Color DripLandAnyPipColor(const GameState& state, int active,
     // MTG_PAINLAND_C=0 restores the coloured-first taps (the one-binary A/B hatch; it also gates
     // the backtracker's {C}-first order + per-branch pain guard in SpellEffects.cpp).
     if (PainlandCModeEnabled() && def.params.tap_self_damage > 0)
+    {
+        for (Color c : def.params.produces)
+        { if (c == Color::Colorless) { return Color::Colorless; } }
+    }
+    // ENERGY-gated coloured mode (Aether Hub) -- see EnergyCModeEnabled above for the s13_gi12
+    // trace. Same guard shape as the painland branch, and the same STATIC `produces` read for the
+    // same reason: the energy strip removes only the COLOURED modes, never the {C} one, so a Hub
+    // that is already spent out still answers here (and already had nothing else to offer).
+    if (EnergyCModeEnabled() && def.params.energy_per_colored_tap > 0)
     {
         for (Color c : def.params.produces)
         { if (c == Color::Colorless) { return Color::Colorless; } }
@@ -9948,13 +9979,55 @@ inline int LandAuraBonus(const GameState& state, const Permanent& land)
     return bonus;
 }
 
+// Is this an "additional ONE MANA OF ANY COLOR" land Aura (Fertile Ground, Trace of Abundance)?
+// Empty land_aura_produces is how cards.json spells "any colour"; a named list (Wild Growth {G},
+// Overgrowth {G}{G}) is a FIXED bonus and therefore not a choice at all.
+//
+// This is the predicate that decides whether the viewer ASKS the human for a colour when they hand
+// tap the host (docs/design/viewer-manual-tap-pay.md), so it lives beside the crediting code rather
+// than being re-derived at the JSON emitter or in the client.
+inline bool IsAnyColorLandAura(const CardDefinition& d)
+{
+    return d.params.is_land_aura && d.params.land_aura_extra_mana > 0
+        && d.params.land_aura_produces.empty();
+}
+
+// The ANY-COLOUR land Auras attached to `land`, in battlefield order -- which is exactly the order
+// LandAuraAddToPool credits them in. THE ORDER IS THE CONTRACT: a human's `tap=` token carries a
+// POSITIONAL list of chosen colours (one per any-colour aura), so "the second +X is the second
+// aura" has to mean the same thing at the legality test, at the credit, and in the decision JSON
+// the viewer builds its dialog from. One walk, three readers.
+inline std::vector<const Permanent*> AnyColorLandAuras(const GameState& state, const Permanent& land)
+{
+    std::vector<const Permanent*> out;
+    if (!land.card.IsLand()) { return out; }
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.aura_attached_to != land.card.m_number) { continue; }
+        if (a.controller_index != land.controller_index) { continue; }
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
+        if (ad && IsAnyColorLandAura(*ad)) { out.push_back(&a); }
+    }
+    return out;
+}
+
 // Credit each attached land aura's additional mana into `pool`, in the aura's own colour. An EMPTY
 // land_aura_extra_color is "one mana of any colour" -- credited as `wild` but deliberately NOT as
 // `wild_c`, because a colour cannot pay a {C} pip (ManaPool::wild_c). A named colour is credited
 // exactly ({G} for Wild Growth, {G}{G} for Overgrowth).
-inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Permanent& land)
+//
+// `chosen` (default nullptr -> every existing caller byte-identical) is the HUMAN's positional pick,
+// one Color-as-int per ANY-COLOUR aura in AnyColorLandAuras order. It exists because `wild` in a
+// REAL pool is a doctrine violation: pools hold typed mana, and wild is the search's optimism (see
+// ManaPool). When the human hand-taps the host they make the choice the rules make them make
+// (CR 106.1b: the mana's colour is chosen as the ability resolves), so the unit lands TYPED. A short
+// or absent list falls back to `wild` for the auras it does not cover, which is what keeps every
+// saved reference's colourless `tap=` token replaying exactly as it did before.
+inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Permanent& land,
+                              const std::vector<int>* chosen = nullptr)
 {
     if (!land.card.IsLand()) { return; }
+    std::size_t next_choice = 0;
     for (const Permanent& a : state.battlefield)
     {
         if (a.aura_attached_to != land.card.m_number) { continue; }
@@ -9962,7 +10035,16 @@ inline void LandAuraAddToPool(ManaPool& pool, const GameState& state, const Perm
         const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
         if (!ad || !ad->params.is_land_aura || ad->params.land_aura_extra_mana <= 0) { continue; }
         const std::vector<Color>& prod = ad->params.land_aura_produces;
-        if (prod.empty())        { pool.wild += ad->params.land_aura_extra_mana; }
+        if (prod.empty())
+        {
+            // The human's pick, if they made one for THIS aura. `next_choice` advances per
+            // any-colour aura only, so a fixed-colour aura in between never consumes a pick.
+            int pick = -1;
+            if (chosen != nullptr && next_choice < chosen->size()) { pick = (*chosen)[next_choice]; }
+            ++next_choice;
+            if (pick >= 0 && pick < 5) { pool.Add(static_cast<Color>(pick), ad->params.land_aura_extra_mana); }
+            else                       { pool.wild += ad->params.land_aura_extra_mana; }
+        }
         else if (prod.size() == 1) { pool.Add(prod[0], ad->params.land_aura_extra_mana); }
         else                     { pool.wild += ad->params.land_aura_extra_mana; }
     }

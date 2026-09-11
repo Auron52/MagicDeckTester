@@ -113,7 +113,13 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
     struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; int idx; bool tapped;
                  int num; bool is_aura; bool is_equip; int attached_to;
                  std::string printed;      // copy-entrant's PRINTED card name ("" = not a copy)
-                 std::string taps; };      // MANUAL TAP/PAY faces ("GU"); "" = not hand-tappable
+                 std::string taps;         // MANUAL TAP/PAY faces ("GU"); "" = not hand-tappable
+                 // The ANY-COLOUR land Auras riding this source's tap (Fertile Ground / Trace of
+                 // Abundance), (name, legal letters), in the order a `tap=` token's `+<AURA>`
+                 // suffixes are matched. Empty for every source with no such Aura.
+                 std::vector<HumanPreTapAura> tap_auras;
+                 // Energy ONE coloured tap of this source costs (Aether Hub: 1); 0 = free.
+                 int tap_energy; };
     std::vector<Row> rows;
     for (int pi = 0; pi < static_cast<int>(s.battlefield.size()); ++pi)
     {
@@ -164,11 +170,21 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // class the engine keeps for itself (filters, feed-cost lands, one-shot sac sources,
         // restricted mana). Absent for the whole board when MTG_HUMAN_PRE_TAP=0.
         std::string taps;
+        // ...and, for a land carrying an "adds an additional ONE MANA OF ANY COLOR" Aura (Fertile
+        // Ground, Trace of Abundance), the Auras whose colour the human must ALSO choose when they
+        // hand-tap it -- straight from the same engine function ApplyHumanPreTap enforces, for the
+        // same one-rule-no-drift reason as `taps` itself. USER, 2026-09-11: "Tap mana doesn't work
+        // for Fertile Ground. There should be a choice there."
+        std::vector<HumanPreTapAura> tap_auras;
         if (controller == s.active_player_index && HumanPreTapEnabled())
-        { taps = HumanPreTapFaces(s, p); }
+        { taps = HumanPreTapFaces(s, p); tap_auras = HumanPreTapAuraFaces(s, p); }
+        // ...and what ONE coloured tap of it costs in energy (Aether Hub's {E}), so the dialog can
+        // say which of its two abilities the player is about to use rather than leaving the spend
+        // to be discovered afterwards. Absent (0) for every source in every other deck.
+        const int tap_energy = d ? d->params.energy_per_colored_tap : 0;
         rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped,
                          p.card.m_number, is_aura, is_equip, att, p.copy_printed_name.str(),
-                         std::move(taps) });
+                         std::move(taps), std::move(tap_auras), tap_energy });
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -190,6 +206,22 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         os << ", \"is_land\": " << (rows[i].is_land ? "true" : "false");
         if (rows[i].is_le) { os << ", \"is_le\": true"; }
         if (!rows[i].taps.empty()) { os << ", \"taps\": "; JsonStr(os, rows[i].taps); }
+        // Both additive and both emitted only when they say something: a source with no any-colour
+        // Aura and no energy cost publishes neither key, so every other deck's frame is unchanged.
+        if (!rows[i].tap_auras.empty())
+        {
+            os << ", \"tap_auras\": [";
+            for (size_t j = 0; j < rows[i].tap_auras.size(); ++j)
+            {
+                if (j) { os << ", "; }
+                os << "{ \"name\": "; JsonStr(os, rows[i].tap_auras[j].name);
+                os << ", \"num\": " << rows[i].tap_auras[j].num;
+                os << ", \"faces\": "; JsonStr(os, rows[i].tap_auras[j].faces);
+                os << " }";
+            }
+            os << "]";
+        }
+        if (rows[i].tap_energy > 0) { os << ", \"tap_energy\": " << rows[i].tap_energy; }
         if (!rows[i].counters.empty())
         {
             os << ", \"counters\": [";
@@ -717,9 +749,30 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     // Energy counters. Aether Hub's COLOURED modes are energy-gated ("{T}, Pay {E}: Add one mana of
     // any colour") while its "{T}: Add {C}" is free -- so with zero energy a Hub is a colourless
     // source and nothing else (see EffectiveProduces' strip). Without this the player cannot tell
-    // which of those two lands they are looking at. Emitted only when nonzero -> absent for every
-    // deck without an energy card.
-    if (me.energy_counters > 0) { os << ", \"energy\": " << me.energy_counters; }
+    // which of those two lands they are looking at.
+    //
+    // ZERO IS THE NUMBER THAT MATTERS, AND IT USED TO BE THE ONE NOT SENT. The original emit was
+    // `> 0`, so a board with a spent-out Hub published nothing at all and the viewer rendered
+    // nothing -- indistinguishable from a deck that has no energy in it. USER, 2026-09-11: "I
+    // cannot see my energy for Aether Hub." That is exactly the case: their Hub's one counter had
+    // been spent (see EnergyCModeEnabled -- a generic pip was taking the coloured mode), and the
+    // one display that would have said so was suppressed precisely because it had hit zero.
+    //
+    // So the gate is now the BOARD, not the count: emit whenever the player holds energy OR
+    // controls a permanent that gains or spends it. Every deck without an energy card still
+    // publishes no key at all, so this is additive and no other deck's frame moves.
+    {
+        bool energy_relevant = me.energy_counters > 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (energy_relevant) { break; }
+            if (p.controller_index != s.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && (d->params.etb_energy > 0 || d->params.energy_per_colored_tap > 0))
+            { energy_relevant = true; }
+        }
+        if (energy_relevant) { os << ", \"energy\": " << me.energy_counters; }
+    }
     if (reveal_count > 0)
     {
         // Optional partial clairvoyance (--reveal N): the next N draws, in draw order

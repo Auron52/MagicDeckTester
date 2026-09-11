@@ -490,12 +490,24 @@ public:
     // `color` is a Color cast to int, or -1 for "not stated" -- which is REJECTED rather than
     // guessed (see ApplyHumanPreTap): a silently-fixed pre-tap is exactly the mis-allocation this
     // feature exists to let the human correct.
+    //
+    // `aura_colors` is the second half of the same choice, and it exists because a land Aura can be
+    // a CHOICE too: Fertile Ground / Trace of Abundance add "an additional one mana of any color"
+    // when the enchanted land taps, and CR 106.1b makes that colour a decision at resolution, not a
+    // property of the permanent. Before this the human picked the LAND's face and the Aura's mana
+    // silently arrived as `wild` -- a pool unit of a kind the user's own doctrine says only the
+    // SEARCH may hold ("Generic mana exists only in COSTS"). One entry per any-colour Aura on the
+    // host, POSITIONALLY matched against AnyColorLandAuras (battlefield order). EMPTY means "not
+    // stated", which keeps today's `wild` credit and is what makes every already-saved reference
+    // replay unchanged; a STATED colour that the Aura cannot make is rejected, never guessed, on the
+    // same argument as `color` above.
     struct PreTap
     {
         std::string name;        // the permanent's card name (display + the wildcard match key)
         int         num   = 0;   // Card::m_number -- WHICH copy. 0 = "any untapped copy of `name`"
         int         color = -1;  // static_cast<int>(Color) of the face to tap for; -1 = unstated
         int         position = 0;// declared ordered entries that precede it (LineSpec leaves it 0)
+        std::vector<int> aura_colors;   // one Color-as-int per ANY-COLOUR land Aura on the host
     };
 
     struct Plan

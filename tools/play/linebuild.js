@@ -388,8 +388,19 @@
   // arguments -- the `--validate-line` spec and the `--cast-order` full-order list -- and the
   // engine parses both with one reader (ParseHumanPreTapToken). Two producers is how the two
   // arguments would come to disagree about the same tap.
+  //
+  // `auraColors` is the human's colour for each ANY-COLOUR land Aura on the host (Fertile Ground,
+  // Trace of Abundance -- "adds an additional one mana of any color"), appended as '+<C>' suffixes
+  // in the engine's AnyColorLandAuras order: `tap=Brushland#7:W+U`. ABSENT WHEN EMPTY, which is what
+  // keeps every line ever recorded encoding byte-for-byte as it did -- the engine reads a token with
+  // no '+' exactly as before (the bonus credits as `wild`). The '+' is only ever written INSIDE the
+  // colour field, past the final ':', so a card name containing one is unaffected.
   function isPreTap(p) { return p.kind === 'pretap'; }
-  function preTapToken(p) { return 'tap=' + p.name + '#' + (p.num || 0) + ':' + (p.color || ''); }
+  function preTapToken(p) {
+    const ac = (p.auraColors || []).filter(c => c);
+    return 'tap=' + p.name + '#' + (p.num || 0) + ':' + (p.color || '')
+         + (ac.length ? '+' + ac.join('+') : '');
+  }
 
   function encodeLine(plan) {
     const parts = []; const l = planLand(plan); if (l) parts.push('land=' + l.name);

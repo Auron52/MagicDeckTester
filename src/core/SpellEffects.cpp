@@ -2569,6 +2569,28 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                         order_ptr = &s_pain_order;
                     }
                 }
+                // ENERGY {C}-mode FIRST -- the exact twin of the painland hoist above, for the exact
+                // same reason (see EnergyCModeEnabled in SpellEffects.h): Aether Hub's "{T}: Add {C}"
+                // is a separate, FREE ability, so a generic pip must not burn {E} just because a
+                // colour sorted first. Aether Hub's own `produces` already leads with {C}, so this
+                // only bites when the flow-order reorder above has moved a colour in front of it --
+                // which is why it is a hoist rather than a filter, and why every coloured branch is
+                // still explored for a pip that genuinely needs one.
+                static thread_local std::vector<Color> s_energy_order;
+                if (EnergyCModeEnabled() && def->params.energy_per_colored_tap > 0
+                    && !order_ptr->empty() && (*order_ptr)[0] != Color::Colorless)
+                {
+                    bool has_c = false;
+                    for (Color c : *order_ptr) { if (c == Color::Colorless) { has_c = true; break; } }
+                    if (has_c)
+                    {
+                        s_energy_order.clear();
+                        s_energy_order.push_back(Color::Colorless);
+                        for (Color c : *order_ptr)
+                        { if (c != Color::Colorless) { s_energy_order.push_back(c); } }
+                        order_ptr = &s_energy_order;
+                    }
+                }
                 // KAROO / bundle source ("{T}: Add {W}{U}" -- Azorius Chancery, Izzet Boilerworks):
                 // a per-tap yield > 1 across MULTIPLE colours is one mana of EACH, not `amt` of any
                 // one. The per-colour loop below prices it as amt-of-one-colour, which offers a
