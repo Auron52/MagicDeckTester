@@ -40177,8 +40177,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // consumed the SAME draws, which is the comparability precondition. See the helper above.
         std::vector<dominance::DomSnap> dom_archive;
         // Candidate-collapse census (MTG_CAND_CENSUS; diagnostic, off by default -- see the
-        // namespace). Per PASS, like every other set here.
-        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> census_seen;
+        // namespace). Per PASS, like every other set here. Deliberately SEPARATE from the
+        // MTG_DEDUP_CENSUS twin above: the two diagnostics answer different questions and must
+        // not see each other's insertions when both are armed.
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> cand_census_seen;
         const int census_slot = (sub_depth >= 0 && sub_depth < 8) ? sub_depth : 7;
         if (candcensus::On())
         { candcensus::g_nodes[census_slot].fetch_add(1, std::memory_order_relaxed); }
@@ -40220,7 +40222,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (candcensus::On())
                 {
                     candcensus::g_cands[census_slot].fetch_add(1, std::memory_order_relaxed);
-                    if (census_seen.insert(BuildDedupKey(copy)).second)
+                    if (cand_census_seen.insert(BuildDedupKey(copy)).second)
                     { candcensus::g_distinct[census_slot].fetch_add(1, std::memory_order_relaxed); }
                 }
                 // Count-bounder: skip this candidate's rollout if its post-apply state was already scored
@@ -40277,7 +40279,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (candcensus::On())
                 {
                     candcensus::g_cands[census_slot].fetch_add(1, std::memory_order_relaxed);
-                    if (census_seen.insert(BuildDedupKey(copy)).second)
+                    if (cand_census_seen.insert(BuildDedupKey(copy)).second)
                     { candcensus::g_distinct[census_slot].fetch_add(1, std::memory_order_relaxed); }
                 }
                 // Count-bounder (post-combat main): dedup by post-apply state AFTER the win check so a
