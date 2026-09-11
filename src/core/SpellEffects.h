@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <limits>
 #include <optional>
+#include <string_view>   // CardMatchesTypeName: size-first literal compares (no strlen per probe)
 #include <unordered_map>
 #include <unordered_set>
 
@@ -1252,12 +1253,21 @@ inline bool PlayableAsLand(const CardDefinition* def) { return LandFaceDefOf(def
 // "Creature"/"Land"/"Instant"/"Sorcery"). Used by tutor type filters.
 inline bool CardMatchesTypeName(const Card& card, const std::string& type_name)
 {
-    if (type_name == "Enchantment") { return card.HasType(CardType::Enchantment); }
-    if (type_name == "Artifact")    { return card.HasType(CardType::Artifact); }
-    if (type_name == "Creature")    { return card.IsCreature(); }
-    if (type_name == "Land")        { return card.IsLand(); }
-    if (type_name == "Instant")     { return card.IsInstant(); }
-    if (type_name == "Sorcery")     { return card.IsSorcery(); }
+    // string_view compares, not `std::string == const char*`. The latter is an out-of-line
+    // `operator==(const basic_string&, const CharT*)` that calls strlen on the literal and then
+    // compares -- SIX of them per probe, and this runs once per library card per tutor
+    // enumeration (callgrind 2026-09-11: strlen 2.56% + string== 2.14% of a dragonstorm in-game
+    // run, most of it here, because "Dragon" misses all six before reaching the subtype scan).
+    // A string_view literal carries its length at compile time, so each test is a size compare
+    // that usually rejects immediately. Same six names, same order, same fallback => identical.
+    using namespace std::string_view_literals;
+    const std::string_view tn(type_name);
+    if (tn == "Enchantment"sv) { return card.HasType(CardType::Enchantment); }
+    if (tn == "Artifact"sv)    { return card.HasType(CardType::Artifact); }
+    if (tn == "Creature"sv)    { return card.IsCreature(); }
+    if (tn == "Land"sv)        { return card.IsLand(); }
+    if (tn == "Instant"sv)     { return card.IsInstant(); }
+    if (tn == "Sorcery"sv)     { return card.IsSorcery(); }
     // Fallback: a SUBTYPE filter (Dragonstorm's tutor_types=["Dragon"]; also Sliver/Goblin/... tutors).
     // Reached only for names that are not one of the card TYPES above, so every existing type-name tutor
     // (Idyllic=Enchantment, Enlightened=Artifact/Enchantment) returns before here -> byte-identical.
@@ -14863,14 +14873,24 @@ inline int RitualFloatAmount(const GameState& state, const CardDefinition& def, 
 inline void AddColorToPool(ManaPool& pool, const std::string& col, int amt)
 {
     if (amt <= 0) { return; }
-    if (col.empty())      { pool.wild      += amt; }
-    else if (col == "W")  { pool.white     += amt; }
-    else if (col == "U")  { pool.blue      += amt; }
-    else if (col == "B")  { pool.black     += amt; }
-    else if (col == "R")  { pool.red       += amt; }
-    else if (col == "G")  { pool.green     += amt; }
-    else if (col == "C")  { pool.colorless += amt; }
-    else                  { pool.wild      += amt; }  // unknown -> wild
+    // Dispatch on the single character rather than six `std::string == "X"` compares (each an
+    // out-of-line operator== that strlen's the literal first -- this sits on the mana-pool build
+    // path, so it runs constantly). Byte-identical: the six one-character names are the only ones
+    // the chain ever matched, and empty / anything else still lands on wild.
+    if (col.size() == 1)
+    {
+        switch (col[0])
+        {
+            case 'W': pool.white     += amt; return;
+            case 'U': pool.blue      += amt; return;
+            case 'B': pool.black     += amt; return;
+            case 'R': pool.red       += amt; return;
+            case 'G': pool.green     += amt; return;
+            case 'C': pool.colorless += amt; return;
+            default:  break;
+        }
+    }
+    pool.wild += amt;   // empty (no colour chosen) or unknown -> wild
 }
 
 inline void AddChosenColorFloat(GameState& state, const std::string& col, int amt)
