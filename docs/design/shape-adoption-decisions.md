@@ -188,7 +188,15 @@ frac gain is attributable to frac alone and not to enabling the block.
 Melira (`cap` +0.0208 ± 0.0027, 8 better / 77 worse) and Creature Giving (`nocap` gains −0.0045)
 both prefer the ladder. The causes are **opposite**, which is why no single constant fixes both:
 
-* **Melira — the crossover is being defeated.** Its `value_fallback_crossover` is
+> **CORRECTION (2026-09-11, later the same day).** The Melira bullet below is **REFUTED by §11c
+> test 1** and is kept only for the depth histograms. Its mechanism — "the ladder wins by committing
+> too shallow to pass `take_at`, preserving a line the crossover would otherwise discard" — predicts
+> that forcing the ladder to take every escalation would destroy its edge. Forcing it
+> (`MTG_VALUE_TRUST_OFFSET=9`) left the average **identical** (4.9333 vs 4.9333). So the take
+> decision is not the source of the ladder's edge on Melira, and the Creature Giving bullet was
+> separately answered by lazy-R (§11b). **Neither half of this section is a live explanation.**
+
+* **Melira — the crossover is being defeated.** ~~Refuted, see above.~~ Its `value_fallback_crossover` is
   `take_heuristic_at_hdepth = [1, 2, 3, 4, 5, 5, 6, 6]`, the identity for c ≤ 5, where **every other
   deck in the repo starts `[1, 1, 1, 2, …]`**. Melira therefore prefers its **value** line far more
   strongly than any other deck. Measured commit depths: the ladder commits mean **1.39**
@@ -524,6 +532,58 @@ lever touches both arms.
 
 **Best single-depth variant found: `cap5 + beam 8` at +0.0137**, closing ~27% of the gap at 0.988x
 units. Still short of the ladder.
+
+### 11e. Melira: a depth CEILING on FIT is refuted, and depth is MONOTONE (2026-09-11)
+
+User: *"I don't understand what the current issue is with single-depth. If it is performance we should
+just avoid going to a depth beyond where the ladder would."*
+
+**First, the framing correction: it is not performance.** FIT is the *cheaper* arm on Melira — 0.905x
+units ungated, 0.88x with lazy-R. There is no cost to buy back; the flag is quality.
+
+**Second, the ceiling had never actually been measured ON FIT.** The §11c depth sweep moved
+`escalation_cap`, which drives the **cold-predictor** path (`eff_single_deck`) and is documented inert
+under FIT (§7). So "don't go deeper than the ladder would" was an open question, not a closed one.
+`MTG_ESC_FIT_DEPTH_CAP` / per-job `esc_fit_depth_cap` clamps FIT's pass depth (`d1`, hence `dpass`,
+which only ever steps shallower). Melira, base 12500000, 16x250, absolute avg win turn:
+
+| arm | abs avg | vs `single` ± se | bett/wors | units | digest |
+|---|---|---|---|---|---|
+| ship (ladder) | **4.8232** | −0.0080 ± 0.0047 | 125/90 | 1.111x | — |
+| `fit1` (cap 1) | 4.8427 | **+0.0115 ± 0.0019** | 15/61 | 0.987x | 0/16 |
+| `fit2` (cap 2) | 4.8318 | +0.0005 ± 0.0003 | 0/2 | 0.997x | 3/16 |
+| `fit3` (cap 3) | 4.8315 | +0.0002 ± 0.0002 | 0/1 | 1.000x | 12/16 |
+| `single` (uncapped) | 4.8312 | — | — | 0.900x vs ship | — |
+| `fit9` (cap 9) | 4.8312 | 0.0000 | 0/0 | 1.000x | **16/16** |
+
+`fit9` is the **control**: a ceiling above every depth reached must not bind, and it is byte-identical
+16/16 — so the arm is wired correctly and the other rows are results, not artifacts.
+
+**Conclusion: within FIT, depth is MONOTONE — deeper is better.** A ceiling is strictly worse the
+lower it goes. So:
+* "Shallower is better on Melira" is **REFUTED**. The search is *not* depth-pathological, which was
+  the worrying reading (user: *"That's truly messy if so"*). It isn't messy.
+* The ladder's shallow commit depth (1.39 vs FIT's 2.30) is therefore **not** the source of its edge.
+
+**And this sharpens the paradox into something testable.** The ladder commits shallower yet wins,
+while within FIT shallower loses. Both together mean **the ladder's line is better than FIT's at the
+same depth** — compare `fit1` (4.8427, always depth 1) against the ladder (4.8232, modally depth 1–2).
+So the difference is the ladder's *machinery*, not its depth: iterative deepening 1..D, the incumbent
+it carries into the deeper pass, and the crossover take decision FIT never reaches. The matched-depth
+screen (`lcapD` vs `fitD`, same seeds, same final depth) isolates exactly that.
+
+**Also correct the SIZE of this gap.** Pooled over both seed bases, plain FIT on Melira is
+**+0.0048 ± 0.0028 (1.8σ) at 0.900x units** — *not* a statistically established regression. The large
+numbers belong to other arms: lazy-R (+0.0126 ± 0.0025) and the cold predictor (+0.0208 ± 0.0027).
+Melira's FIT "failure" is a lean, and it is bought with 10% less work.
+
+**A warm leaf table is NOT a candidate, and the user's objection is why.** *"A single pass should
+still win even if a cache it added, because we literally do less work."* Correct: `TurnSolver.cpp:35003`
+asserts the leaf table is *"byte-identical to nullptr (SimulateToEnd is a pure function of its key);
+the table only skips recompute"*. A sound memo can only act through **cost**, and cost is precisely
+what FIT measures before choosing its depth — so it cannot make a line better. The only memo features
+that could transfer an *answer* rather than a speedup are the **order-free** ones (`of_wave`,
+`memo_win_orderfree`, both default ON), and those are measured in the same pool.
 
 **Standing recommendation.** Adopt one depth everywhere it holds (19 of 20) and carry Melira as a
 known open defect — not as a reason to keep full-ladder rollouts fleet-wide. The mechanism is still

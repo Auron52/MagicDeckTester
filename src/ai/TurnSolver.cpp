@@ -38610,7 +38610,20 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         TranspositionTable single_tt1_local;
         TranspositionTable* single_tt1 = (tt != nullptr) ? tt : &single_tt1_local;
         SearchBudget        single_budget1;   // unlimited: the pass at D must complete
-        const int d1 = std::max(1, committed);
+        // MTG_ESC_FIT_DEPTH_CAP=D: never run the single pass deeper than D, even when the probe committed
+        // deeper and the fit says it is affordable. This is the "do not go beyond where the ladder would"
+        // ceiling: the ladder rarely REACHES its user depth (Melira: h1:215 h2:152 h3:34 h4:20 h5:50) while
+        // FIT lands at the fitted depth every time (h2:83 h3:149 h4:146 h5:89), so a ceiling is the direct
+        // way to ask whether that depth difference is what the ladder's edge is made of. NOT the same lever
+        // as `escalation_cap`, which drives the cold-predictor path (eff_single_deck) and is inert under FIT.
+        // `committed` itself is deliberately untouched -- it is the crossover's index and the reported ID
+        // depth; only the pass depth is clamped. 0 = off (default), so unset is byte-identical.
+        static const int s_fit_depth_cap_env = []{ const char* e = std::getenv("MTG_ESC_FIT_DEPTH_CAP");
+                                                   return (e && *e) ? std::atoi(e) : 0; }();
+        const int fit_depth_cap = (valuearm::t_arm.esc_fit_depth_cap >= 0)   // arm > env, as everywhere else
+                                ? valuearm::t_arm.esc_fit_depth_cap : s_fit_depth_cap_env;
+        const int d1_uncapped = std::max(1, committed);
+        const int d1 = (fit_depth_cap > 0) ? std::min(d1_uncapped, fit_depth_cap) : d1_uncapped;
         SearchLine hl;
         if (single_mode >= 1 && budget != nullptr && !budget->Unlimited())
         {
@@ -39357,8 +39370,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // and we live with that), it just never spends budget past convergence -- which also frees budget so
             // MORE decisions reach the useful depth. Keeps the ladder's incumbent + move-ordering (unlike a cold
             // single pass). 0 = off = byte-identical.
-            static const int s_esc_depth_cap = []{ const char* e = std::getenv("MTG_ESC_DEPTH_CAP");
-                                                   return (e && *e) ? std::atoi(e) : 0; }();
+            static const int s_esc_depth_cap_env = []{ const char* e = std::getenv("MTG_ESC_DEPTH_CAP");
+                                                       return (e && *e) ? std::atoi(e) : 0; }();
+            const int s_esc_depth_cap = (valuearm::t_arm.esc_depth_cap >= 0)   // arm > env, as everywhere else
+                                      ? valuearm::t_arm.esc_depth_cap : s_esc_depth_cap_env;
             const int esc_depth = (s_esc_depth_cap > 0) ? std::min(depth, s_esc_depth_cap) : depth;
             const long long used_before = (s_esc_measure && esc_budget) ? esc_budget->Used() : 0;
             hline = FullSearchLine(state, esc_depth, max_turns, second_main, tt, esc_budget, &hcommitted);

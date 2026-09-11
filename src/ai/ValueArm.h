@@ -46,6 +46,18 @@ struct Arm
     // On an overrun a partial line that rated a win is kept (anytime), else the heuristic escalation runs.
     int         constant_alpha_relaxed = -1;   // -1 unset | 0 strict | 1 a constant-leaf ladder keeps the relaxed value alpha (MTG_CONSTANT_ALPHA_RELAXED)
     int         esc_single_reserve = -1;
+    // CEILING on the FIT single pass's depth (MTG_ESC_FIT_DEPTH_CAP): "never run the rollout deeper than
+    // where the ladder would have got to". Distinct from value_play.escalation_cap, which drives the
+    // COLD-PREDICTOR path (eff_single_deck) and is inert under FIT. Per-job for this file's usual reason:
+    // the question is a depth SWEEP (1/2/3/off), and an env static pins one depth per process, so four
+    // arms would cost four batch invocations and four tails.
+    int         esc_fit_depth_cap  = -1;    // -1 unset | 0 no cap | >0 the ceiling
+    // Ceiling on the LADDER's escalation depth (MTG_ESC_DEPTH_CAP). Paired with esc_fit_depth_cap so a
+    // MATCHED-DEPTH comparison is possible: `esc_depth_cap=D` vs `esc_fit_depth_cap=D` end at the same
+    // depth, so whatever separates them is the ladder's machinery (iterative deepening, the incumbent,
+    // the crossover take decision) and not its depth. That pairing is the whole point of having both
+    // per-job: the two arms must run at the same seeds in the same pool to be comparable.
+    int         esc_depth_cap      = -1;    // -1 unset | 0 no cap | >0 the ceiling
     // CONSTANT-LEAF EXHAUSTION MULTIPLE (MTG_CONSTANT_EXHAUST_MULT, default 1): a leafless pass stops at
     // used >= mult x the decision budget. The MODEL pass has no such stop (it runs to the proportional overrun
     // ceiling, 25x, because its truncated line is still rated); a leafless pass past exhaustion can only pay off
