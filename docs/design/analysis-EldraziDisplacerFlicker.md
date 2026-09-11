@@ -6446,20 +6446,25 @@ claude_s12_gi11.json          12   11 |     4       6       6  | SHORTFALL +2
 claude_s14_gi13.json          14   13 |     5       7       6  | SHORTFALL +1
 claude_s15_gi14.json          15   14 |     6       6       6  |
 claude_s1_gi0.json             1    0 |     3       5       5  | SHORTFALL +2
-claude_s2_gi1.json             2    1 |     4       5       5  | SHORTFALL +1
+claude_s2_gi1.json             2    1 |     4       5       4  |   <- MATCHED
 claude_s3_gi2.json             3    2 |     4       4       4  |
 claude_s4_gi3.json             4    3 |     6       6       6  |
-claude_s5_gi4.json             5    4 |     4       5       5  | SHORTFALL +1
+claude_s5_gi4.json             5    4 |     4       5       4  |   <- MATCHED
 claude_s6_gi5.json             6    5 |     4       6       5  | SHORTFALL +1
 claude_s7_gi6.json             7    6 |     5       5       5  |
 claude_s8_gi7.json             8    7 |     3       6       6  | SHORTFALL +3
 claude_s9_gi8.json             9    8 |     4       7       5  | SHORTFALL +1
-AVG                                   | 4.429   5.714   5.429  | 10/14 short, 0 HAND-MISMATCH
+AVG                                   | 4.429   5.714   5.286  | 8/14 short, 0 HAND-MISMATCH
 ```
 
-**Zero HAND-MISMATCH on every row**, so every comparison is play and none is mulligan drift. Three
-references gained a turn (s9 two turns), none lost one, and the corpus mean closes 0.286 t of the
-1.286 t gap. All ten shortfalls remain shortfalls; what changed is their size.
+**Zero HAND-MISMATCH on every row**, so every comparison is play and none is mulligan drift.
+**Five references gained a turn (s9 two), none lost one, and two -- `s2_gi1` and `s5_gi4` -- are now
+MATCHED exactly by the shipped search.** Shortfalls 10 -> 8; the corpus mean closes 0.429 t of the
+1.286 t gap. Two fixes did it, and they are written up separately below because the second one only
+works because of the first.
+
+*(The AFTER column is both fixes. The intermediate column -- exact-sizing alone, mean 5.429, short
+10 -- is in the adoption tables further down, because the two levers must be read as a pair.)*
 
 ### The discriminator: ONE pooled batch, 126 jobs, five budgets x four lever arms
 
@@ -6471,20 +6476,21 @@ Virtual ms is deterministic, so a contended box cannot move a cell.
 |---|---|---|---|---|---|---|---|---|---|---|
 | s10/9  | 4 | 5 | 5 | 5 | 5 | 5 | 5 | 5 | 5 | 5 |
 | s11/10 | 6 | 7 | 7 | **6** | 6 | 6 | 7 | 7 | 7 | — |
-| s12/11 | 4 | 6 | 6 | — | — | — | 6 | 6 | 6 | — |
+| s12/11 | 4 | 6 | 6 | 6 | 6 | **6** | 6 | 6 | 6 | 6 |
 | s14/13 | 5 | 7 | 7 | 7 | 7 | **7** | 7 | 7 | 7 | 7 |
 | s1/0   | 3 | 5 | 5 | 5 | **4** | 4 | 5 | 5 | 5 | 5 |
 | s2/1   | 4 | 5 | **4** | 4 | 4 | 4 | 5 | 5 | 5 | 5 |
 | s5/4   | 4 | 5 | **4** | 4 | 4 | 4 | 5 | 5 | 5 | 5 |
-| s6/5   | 4 | 6 | 6 | — | — | — | 6 | 6 | 6 | — |
+| s6/5   | 4 | 6 | 6 | **6** | — | — | 6 | 6 | 6 | 5 |
 | s8/7   | 3 | 6 | 6 | 6 | 6 | **6** | 6 | 6 | 6 | 6 |
-| s9/8   | 4 | 7 | 6 | **5** | 5 | — | 6 | 7 | 7 | — |
-| MEAN (all 14) | 4.429 | 5.714 | 5.500 | | | | 5.643 | 5.714 | 5.714 | 6.429 |
+| s9/8   | 4 | 7 | 6 | **5** | 5 | 5 | 6 | 7 | 7 | 6 |
+| MEAN (all 14) | 4.429 | 5.714 | 5.500 | 5.357 | | | 5.643 | 5.714 | 5.714 | 5.571 |
 
 The six non-shortfall rows are unmoved by every arm and are omitted. `—` = the cell was still
 running when this was written: EDF has single games that take 10-20 minutes at a 10 s virtual budget,
-which is the deck's known tail, not a scheduling artifact. **`MTG_EDF_M2` is worse or equal on every
-reference it moved** and is not revisited -- the user closed that route in Session 8.
+which is the deck's known tail, not a scheduling artifact. **`MTG_EDF_M2` moves only s6/5 (6 -> 5)
+and costs s9/8 a turn against the 500 ms column**; it is not revisited either way -- the user closed
+that route in Session 8 (*"we don't have extra mains to search"*).
 
 ### Class (C) -- the shared 60-iteration cap -- MEASURED ABSENT on every reference
 
@@ -6561,7 +6567,8 @@ multi-activation plan is proposed, and the apply's mid-loop dig never gets a loo
 **(E) EVALUATION -- 2 of 10: `s12_gi11` and `s6_gi5`.** Both are a main-phase pair the tail cannot
 separate, decided on plan value, and both cost a land drop two turns later.
 
-  * **`s12_gi11` (human 4, search 6).** Search T2: `CAST_SPELL Living Wish {1}{G}` →
+  * **`s12_gi11` (human 4, search 6; budget-IMMUNE at 20/100/500/2000/10000 ms).** Search T2:
+    `CAST_SPELL Living Wish {1}{G}` →
     `REVEAL kept=[Dimensional Infiltrator]`, cast T3. Human T2: `Living Wish → Azorius Chancery`
     (`tutor_etb chosen=0`), played as the T3 land. The engine's KILL tier went live because mode 2's
     `have_outlet && have_payload` counted a 5-mv Peregrine Drake and a 3-mv Eldrazi Displacer sitting
@@ -6570,7 +6577,8 @@ separate, decided on plan value, and both cost a land drop two turns later.
     Dimensional Infiltrator`, no `PLAY_LAND`) and reaches T4 on three lands where the human has four,
     one of them a Karoo making two. **Measured, and the built gate is not the fix:** the `castgate`
     arm leaves s12 at 6, and the `narrowgate` 2x2 makes it 7.
-  * **`s6_gi5` (human 4, search 6 -> 5).** Search T2: `PLAY_LAND Brushland; CAST_SPELL Living Wish`
+  * **`s6_gi5` (human 4, search 6 -> 5; still 6 at 500 ms, so budget alone does not settle it).**
+    Search T2: `PLAY_LAND Brushland; CAST_SPELL Living Wish`
     → `REVEAL kept=[Eldrazi Displacer]`. Human T2: `land=Brushland; cast: Fertile Ground →
     Brushland`. On two lands the two are mutually exclusive at two mana, and the ramp is what makes
     **Overgrowth `{2}{G}` castable on T3** -- the search, one mana short there, casts Fertile Ground
@@ -6696,18 +6704,58 @@ multi-activation go-off (that precondition is the payment machinery's own proof 
 affordable), and a shortcut must key on **`combo_off_verified`, never on `combo_off_offered`** --
 the trial apply is 268/268 right in both directions while the display rule is 87.5%.
 
-### Gates (on the adopted binary)
+### The SECOND fix: `MTG_EDF_PROSPECTIVE` was refuted ALONE and wins IN COMBINATION
 
-* `bash test/scenarios.sh` -- **79 passed, 0 failed, 0 error**.
-* `bash test/combo_off_check.sh` -- **21 passed, 0 failed, 0 error**.
+The recognizer that lets the go-off projection see a loop the PLAN assembles (rather than one
+already on the battlefield) has shipped OFF since 2026-09-03, on a held-out block that read
+`-0.0088 +- 0.0099, t = -0.88`. Its own code comment invited exactly this re-test: *"If EDF ever
+gets a value leaf ... the horizon that made it inert moves, and this is worth re-measuring with one
+flag."* `MTG_EDF_GOFF_EXACT_AUTO` moved that horizon, and the pair is not the sum of its parts:
+
+| arm (14 references, d5/20 ms) | mean | short | what moved |
+|---|---:|---:|---|
+| shipped at session start | 5.714 | 10 | — |
+| `MTG_EDF_PROSPECTIVE` **alone** | 5.857 | 8 | s2 4, s5 4, **but s7 5 -> 6** -- not a strict improvement |
+| `MTG_EDF_GOFF_EXACT_AUTO` alone | 5.429 | 10 | s9 -2, s14 -1, s6 -1 |
+| **both** | **5.286** | **8** | s2 **4**, s5 **4**, s6 5, s9 5, s14 6, **s7 stays at 5** |
+
+**The s7_gi6 regression that refuted this lever in 2026-09-03 does not happen in company.** That is
+the repo's standing "sweep levers in COMBINATION" lesson landing again: +0.143 t alone, -0.143 t on
+top of the other fix. Deck average, 200 games, seeds 3001/3061 x 50, both arms chunk-interleaved in
+ONE pooled queue: **5.450 -> 5.460** (+0.010 t; 1 chunk better, 2 worse, 7 tied -- neutral), and
+**21% CHEAPER in summed wall** (5,399 s -> 4,278 s), because a prospective projection lets the search
+commit its go-off a turn earlier and going off ends the fat games. Reference replay is untouched:
+`MTG_EDF_PROSPECTIVE=1 test/viewer_protocol_check.py --only EldraziDisplacerFlicker --strict` gives
+**4 ok, 10 repaired, 0 play-drift, 0 enum-gap, 0 contract-fail**, every recorded win turn reproduced.
+
+Adopted default ON. `MTG_EDF_PROSPECTIVE=0` restores the 2026-09-03 baseline exactly. **This
+reverses a previously-recorded verdict, so it is flagged for the user's retrospective sign-off**
+rather than treated as settled.
+
+With both fixes the corpus reads **human 4.429 / search 5.286, 8/14 short**, and for the first time
+`claude_s2_gi1` and `claude_s5_gi4` are MATCHED exactly by the shipped search.
+
+### Gates (run TWICE -- once with only the exact-sizing lever, once on the final binary with both)
+
+* `bash test/scenarios.sh` -- **79 passed, 0 failed, 0 error** (both).
+* `bash test/combo_off_check.sh` -- **21 passed, 0 failed, 0 error** (both).
 * `bash test/regression.sh --smoke` -- **73 passed, 0 failed, 0 new**;
-  `configs changed: 0   unchanged: 73`; `[searched] slower=0 faster=0 play-changed=0`.
-  Byte-identity for every other deck proved (and expected: none routes to this provider).
-* `bash test/viewer_checks.sh` -- protocol `--strict` over every reference: reported in the session
-  closeout. Human play is unaffected by the lever in either position, because `GoffExactHere()`
-  short-circuits on `HumanPlayActive()`.
-* `scripts/ref_bench.py --json test/ref_bench.json` refreshed; EDF now reads `n=14, human 4.4286,
-  search 5.4286, short 10, hand_mismatch 0`.
+  `configs changed: 0   unchanged: 73`; `[searched] slower=0 faster=0 play-changed=0`;
+  `[d0] slower=0 faster=0 play-changed=0` (both). Byte-identity for every other deck proved -- and
+  expected, since no deck in the suite routes to this provider.
+* `bash test/viewer_checks.sh` -- **PASS**, both times, with identical numbers. Protocol `--strict`
+  over **312 refs: 15 ok, 297 repaired, 0 play-drift, 0 shuffle-dead, 0 enum-gap, 0 mull-drift,
+  0 contract-fail**; validate-line **1489 accept, 218 choose, 0 unsupported, 304 skipped,
+  0 REGRESSION**. Human play cannot see the exact-sizing lever at all (`GoffExactHere()`
+  short-circuits on `HumanPlayActive()`), and the prospective lever was separately proved harmless
+  to reference replay before it was adopted.
+* `scripts/ref_bench.py --json test/ref_bench.json` refreshed over the WHOLE fleet (345 games, 22
+  decks) so every `src` stamp matches `HEAD:src`. EDF now reads `n=14, human 4.4286, search 5.2857,
+  short 8, hand_mismatch 0`; **every other deck's numbers are unchanged**, which is an independent
+  confirmation that neither lever touches anything outside this provider.
+  (Note for whoever refreshes this artifact next: `tools/play/server.js` auto-invokes
+  `ref_bench.py --stale-only --json` per deck, so a CONCURRENT `viewer_checks.sh` run will re-stamp
+  decks against whatever HEAD it sees. Refresh the fleet AFTER the viewer gate, not during it.)
 
 ### Open, carried forward (none blocked on)
 
@@ -6726,20 +6774,6 @@ the trial apply is 268/268 right in both directions while the display rule is 87
    ranking does bind measured worse on two other references. This is the tutor-axis lesson from the
    Goblins saga in a new place: `rank1 == rank2` in effect, so the discriminator has to be the eval,
    not the list.
-4. **`MTG_EDF_PROSPECTIVE` IS THE NEXT ADOPTION, and only in COMBINATION -- measured, not adopted
-   here.** Alone it recovers `s2_gi1` and `s5_gi4` to the human's T4 at the shipped 20 ms but costs
-   `s7_gi6` a turn (5 -> 6), so on its own it is not a strict improvement (mean 5.857). **On top of
-   `MTG_EDF_GOFF_EXACT_AUTO` the s7 regression disappears** and the arm is a strict improvement over
-   the adopted lever: mean **5.286**, `short` **10 -> 8**, with `s2_gi1` 5 -> **4** and `s5_gi4`
-   5 -> **4** (both now MATCHING the human) and every other cell identical. That is the repo's
-   standing "sweep levers in COMBINATION" lesson landing again -- +0.143 t alone-and-in-the-wrong-
-   direction, -0.143 t in combination.
-   Verified safe for the viewer: `MTG_EDF_PROSPECTIVE=1 python3 test/viewer_protocol_check.py --only
-   EldraziDisplacerFlicker --strict` gives **4 ok, 10 repaired, 0 play-drift, 0 enum-gap,
-   0 contract-fail**, i.e. every saved reference still reproduces its recorded win turn.
-   What is NOT done is the deck-average A/B (`logs/edf_ladder/manifest5.json`: `poff` = shipped,
-   `pon` = `+MTG_EDF_PROSPECTIVE`, 200 games, seeds 3001/3061, chunk-interleaved) -- it was still
-   running when this session closed, at 5 paired chunks NET ZERO (-0.1, 0, 0, 0, +0.1). Adopting is
-   one line (`EnvOn("MTG_EDF_PROSPECTIVE", true)` in `s_edf_prospective_env`) plus the usual gate
-   set; **the decision is the user's**, and the recommendation is to take it if that A/B closes
-   neutral-or-better.
+4. *(closed within the session -- see "The SECOND fix" below.)* `MTG_EDF_PROSPECTIVE` was
+   re-measured in combination and ADOPTED; the open item is now only the user's retrospective
+   sign-off on a lever whose 2026-09-03 verdict it reverses.
