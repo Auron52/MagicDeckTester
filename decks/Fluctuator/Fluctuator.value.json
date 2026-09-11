@@ -14552,7 +14552,9 @@
     "ladder": "escalation",
     "leaf": "none",
     "alpha": "relaxed",
-    "note": "ADOPTED 2026-09-10: NO-LEAF escalation with the RELAXED start-gate alpha. leaf \"none\" was adopted earlier the same day (screen: 0.38x/0.42x the heuristic ladder's units at d5b20/d3b10); `alpha` was added once the strict/relaxed split was understood (finding 11) -- a LEAFLESS ladder defaulted to the STRICT alpha, which refuses the very pass that finds the win, while the model ladder has always run relaxed. Measured on the SIDECAR route (what this deck actually plays), 8 x 500 games vs this same file without `alpha`: d5b20 0.433x units, 24 games better / 3 worse (sign test z +4.0), mean win turn -0.0035; d3b10 0.786x units, 19/5 (z +2.9), -0.0047 -- better on BOTH axes at BOTH configurations. The `ladder: \"single\"` alternative was measured on the same route and is cheaper at d3b10 (0.647x) but worse on the mean (+0.0025), so it was not taken. The eval_model below is the REJECTED 2026-09-06 candidate, kept for reference only; leaf \"none\" swaps it for the stand-in."
+    "note": "ADOPTED 2026-09-10: NO-LEAF escalation with the RELAXED start-gate alpha. leaf \"none\" was adopted earlier the same day (screen: 0.38x/0.42x the heuristic ladder's units at d5b20/d3b10); `alpha` was added once the strict/relaxed split was understood (finding 11) -- a LEAFLESS ladder defaulted to the STRICT alpha, which refuses the very pass that finds the win, while the model ladder has always run relaxed. Measured on the SIDECAR route (what this deck actually plays), 8 x 500 games vs this same file without `alpha`: d5b20 0.433x units, 24 games better / 3 worse (sign test z +4.0), mean win turn -0.0035; d3b10 0.786x units, 19/5 (z +2.9), -0.0047 -- better on BOTH axes at BOTH configurations. The `ladder: \"single\"` alternative was measured on the same route and is cheaper at d3b10 (0.647x) but worse on the mean (+0.0025), so it was not taken. The eval_model below is the REJECTED 2026-09-06 candidate, kept for reference only; leaf \"none\" swaps it for the stand-in.",
+    "mull_gen_depth": 1,
+    "mull_gen_budget_ms": 3
   }
 
 }

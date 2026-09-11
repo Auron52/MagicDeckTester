@@ -10649,6 +10649,8 @@
     "enabled": true,
     "regime": "light",
     "note": "MEASURED: d5=d6=d7 flat LP => no depth benefit; d5 = current play.",
-    "escalation_cap": 5
+    "escalation_cap": 5,
+    "mull_gen_depth": 5,
+    "mull_gen_budget_ms": 3
   }
 }
