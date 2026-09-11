@@ -747,3 +747,57 @@ byte-identical by construction — `HumanPlayActive()` for the display/sizing si
 `./build.sh` clean; `scenarios.sh` **79/79**; `combo_off_check.sh` **15/15** (11 inherited + the 4
 promoted here, every positive one verified); `regression.sh --smoke` **ALL PASS 73/73, 0 configs
 changed** — byte-identical, which is the proof the gating holds.
+
+
+## 2.9 C1a/C1b CLOSED — the draw sink gets the same real trial (`MTG_COMBO_OFF_DRAW_TRIAL`)
+
+§2.5 above left this located and unfixed, as another agent's call site. It is fixed now, and it is
+the C2 repair verbatim, one call site below.
+
+`MTG_DRAW_GUARD_SELFTAP` had already corrected a real over-count in this guard -- it counted the
+source's own yield, which the `{T}` half was about to spend -- and the guard still passed while the
+payment still stranded. The bisection in §2.5 is what proved the remaining cause was the projection
+itself and not the dig: **identical numbers at every wish depth past the cliff.**
+
+So the guard becomes a real trial on a copy of the state, and it is applied to **both** halves of
+"draw a card" so they cannot disagree — the `{T}` draw/investigate sources and `CrackCluesForCards`,
+which carried the same pooled guard for its `{2}`.
+
+| wish depth | before | after |
+|---:|---|---|
+| 1 / 2 / 4 | 31 / 37 / 49 blinks, WIN | unchanged |
+| **6** | 6 blinks, no kill | **60 blinks, WIN** |
+| **9 / 11 / 12** | 6 blinks, no kill | **60 blinks, WIN** |
+| **13 — the user's real depth** | 6 blinks, no kill | **60 blinks, 26 draws, WIN** |
+
+`[finish] guard-refused=12` on that board is the trial working as intended: it declines the draws
+that would starve the loop and pays the 26 that would not. `edf_co_11_seed6_t4_draw_the_deck.json`
+is now set to thirteen cards down — strictly subsuming the one-draw chain it pinned before — and
+with `MTG_COMBO_OFF_DRAW_TRIAL=0` that same fixture does not win.
+
+**One binary, 1051 states, this lever alone:**
+
+| | OFF | ON |
+|---|---:|---:|
+| **won** | 198 | **206** |
+| offered but did not win | 76 | **68** |
+| offered | 274 | 274 |
+
+**Nothing else moved** — identical offers per rule (DEPLOYED 119, WISH-DRAW 113, IN-HAND 33,
+GORGE 8, WISH-NODRAW 1) — because this is purely an execution fix. It converts failures into wins
+without touching the display at all, which is the cleanest shape a fix in this area can have.
+
+Mechanism counts: `draw-to-find-starves-loop` 13 → **0**, `apply-did-nothing` 9 → **0**,
+`loop-zero-iterations` 14 → **1**, `draw-loop-stopped-early` 22 → 8,
+`damage-sink-starves-loop` 5 → **1**, `wish-never-cast` 13 → 8.
+
+### Where the branch now stands
+
+Against the phase-1 baseline of **184 wins / 84 failures**, and counting both agents' work on this
+tip: **206 wins / 68 failures.** `combo_off_verified` remains a perfect oracle — 206/206 verified
+offers won, 0 of 68 unverified did.
+
+The residue is dominated by `loop-ran-finish-never-fired` (36) and `finish-fired-short` (31), both
+of which sit on the `net_c <= 0` axis that §2.2's outlet swap only reaches when a pip-free outlet
+is actually available. On the synthetic matrix it is not (the generator fills libraries with
+Forests); on real boards it now can be, because the draw engine works.
