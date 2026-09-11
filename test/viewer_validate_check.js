@@ -35,6 +35,14 @@
 // between them is precisely how this check sat at 141 stale failures unnoticed
 // (docs/design/viewer-validate-stream-alignment.md).
 //
+// SECOND AXIS, not baseline-gated (2026-09-11): every accept/choose must carry `matched_plans` for
+// every plan it can COMMIT — the accept's own plan, and each `choose` variant's. That is the only
+// source the viewer has for a plan past the display cap (`decision.plans` is a ranked top slice),
+// and without it the client cannot compare the queued entries against the plan's actions, emits no
+// `*` full-order pin, and the human's declared sequence reverts to enumerator order
+// (docs/design/viewer-pass-guard.md). A missing key is never a v1 CheckLine limitation, so it fails
+// the run outright rather than joining the baseline.
+//
 // Usage:  node test/viewer_validate_check.js [--update-baseline] [deckFilter ...]
 'use strict';
 const fs = require('fs');
@@ -181,6 +189,10 @@ function main() {
   if (!refs.length) { console.log('no references found'); return 0; }
   const tally = { accept: 0, choose: 0, unsupported: 0, skipped: 0 };
   const fails = [];
+  // EMITTER-CONTRACT gaps (2026-09-11), tracked apart from `fails` and NOT baseline-gated: a
+  // missing `matched_plans` entry is never a v1 CheckLine limitation, it is the emitter dropping a
+  // field the client depends on. See the block that fills it.
+  const contractGaps = [];
   let unaligned = 0;   // refs/frames the resolver could not place (reported, never silent)
   const aligned = resolveAlignment(refs.map(r => r.file));
   for (const { deck, file } of refs) {
@@ -271,6 +283,26 @@ function main() {
       const choices = al.resolved.slice(0, fr.prefix_len);
       const v = runValidate(dk, ref.seed, ref.game_index, maxTurns, choices, line, extra, force);
       const verdict = v.verdict;
+      // THE MATCHED-PLAN VIEW MUST COVER EVERY PLAN THE VERDICT CAN COMMIT — the accept's own plan,
+      // and each `choose` variant's (CheckLine sets plan_index = -1 for a choose, so the variants
+      // ARE the committable set). `matched_plans` is the ONLY source the viewer has for a plan past
+      // the display cap, because `decision.plans` is a ranked top slice; without it applyAccepted
+      // cannot compare the queued entries against the plan's actions, emits no `*` full-order pin,
+      // and the human's declared sequence silently reverts to enumerator order
+      // (docs/design/viewer-pass-guard.md, docs/design/human-line-order-as-is.md). Checked over
+      // every played line of every reference because that breadth is the point: the client check
+      // pins one frame, this pins the shape wherever a real game went.
+      if (verdict === 'accept' || verdict === 'choose') {
+        const want = verdict === 'accept' ? [v.plan_index]
+                                          : (v.variants || []).map(x => x.plan_index);
+        const have = new Set((v.matched_plans || []).map(p => p && p.index));
+        const gaps = want.filter(i => i >= 0 && !have.has(i));
+        if (gaps.length) {
+          contractGaps.push(`${rel} | T${d.turn}/${d.phase} | ${line} | ${verdict} carries no `
+                          + `matched_plans for ${JSON.stringify(gaps.slice(0, 5))}`
+                          + (gaps.length > 5 ? ` (+${gaps.length - 5} more)` : ''));
+        }
+      }
       if (verdict === 'accept' || verdict === 'choose' || verdict === 'unsupported') { tally[verdict]++; }
       else {
         const sig = `${rel} | T${d.turn}/${d.phase} | ${line}`;
@@ -305,7 +337,13 @@ function main() {
     console.log('  CheckLine regression. If intended, inspect then rebaseline: node test/viewer_validate_check.js --update-baseline');
   }
   if (fixed.length) { console.log(`  (${fixed.length} baseline known-fail(s) now pass -- rebaseline to drop them.)`); }
-  return regressions.length ? 1 : 0;
+  if (contractGaps.length) {
+    console.log(`  CONTRACT: ${contractGaps.length} verdict(s) carry no matched_plans for a plan they can commit`);
+    contractGaps.slice(0, 8).forEach(g => console.log('    ' + g));
+    console.log('  Without it the viewer cannot pin the human\'s declared order for a plan past the');
+    console.log('  display cap (MTG_PLAY_PLANS_CAP) -- see docs/design/viewer-pass-guard.md.');
+  }
+  return (regressions.length || contractGaps.length) ? 1 : 0;
 }
 
 process.exit(main());

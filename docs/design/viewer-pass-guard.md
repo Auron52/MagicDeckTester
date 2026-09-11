@@ -101,19 +101,57 @@ other plan*, whose `actions` then drove the multiset guard that decides whether 
 Fixed by looking up by `.index` (`planByIndex`), which is a strict improvement and can never be
 worse: on an uncapped frame position and index agree, so nothing moves.
 
-### What is still open
+### Past the cap: CLOSED (2026-09-11)
 
-`planByIndex` does **not** recover the pin when the committed plan is *past* the cap — it is not in
-the list at all, so `plan0` is null and no pin is emitted. On rich combo frames (which is where this
-deck lives) the human's declared order therefore still reverts silently to enumerator order, which
-is the defect `human-line-order-as-is.md` exists to prevent, reappearing through the plan cap.
+`planByIndex` could not recover the pin when the committed plan was *past* the cap — the plan is not
+in the list at all, so `plan0` was null, the multiset guard could not run, and **no pin was emitted**.
+On rich combo frames (which is where this deck lives) the human's declared order therefore reverted
+silently to enumerator order: the defect `human-line-order-as-is.md` exists to prevent, reappearing
+through the plan cap.
 
-Closing it needs the **accept validation** to carry the matched plan's own `actions` /
-`cast_order_canonical` — the client already knows the plan index and the queued order, and is only
-missing the engine's view of that one plan. That is an emitter change (`src/main.cpp`), so it is
-recorded here rather than half-done in the client: guessing the plan's actions from the queue would
-make the multiset guard tautological and pin every line unconditionally, which is precisely the
-check it exists to be.
+**Measured before the fix**, seed 16 / gi 15, turn 4, ordinal 62 (772 plans, 200 emitted): committing
+the two-Aura line left `S.castOrder` **`{}`** — not a wrong pin, no pin at all.
+
+**The mechanism.** `WriteValidation` (`src/main.cpp`) now emits **`matched_plans`**: for every plan
+the verdict can commit, that plan's own `actions` (`[{card}]`, in the enumerator's order) and
+`cast_order_canonical`. `tools/play/index.html` threads the matching entry into `applyAccepted` as
+`planView` and **prefers it** over `planByIndex` — the two describe the same `Plan` out of the same
+enumerated vector (one function serialises both), so they cannot disagree, and preferring the
+verdict's own answer makes the past-cap route the ordinary route instead of a branch that only runs
+on a 700-plan frame. Callers with no verdict (the enumerated-plan buttons, `fireDig`, Combo Off) pass
+nothing and keep `planByIndex`; those indices come from the emitted list by construction.
+
+Three things the shape is deliberate about:
+
+* **Every committable plan, not just the accept's.** A `choose` sets `plan_index = -1` and the
+  human's plan is one of the *variants* — and on this deck the sub-decision dialog is how a line
+  normally commits. The user's own frame proves it: the two-Aura line is a `choose` over variants
+  734…750, and **eight of those nine are outside the emitted slice**.
+* **Not derived from the queue, ever.** Synthesising the plan's actions client-side would make the
+  multiset guard compare the queue with itself — it would pin every line unconditionally, which is
+  precisely the check it exists to be. `matched_plans` therefore carries the *engine's* order, which
+  is usually **not** the human's, and the test asserts exactly that.
+* **Additive and partial.** Two fields, no summary/land/variant params — it is not a second plan
+  serialiser. `server.js` needed no change (both validation routes already spread the parsed block),
+  and `SERVER_API`/`CLIENT_API` were **not** bumped: the dependency is on the engine binary (which is
+  session-pinned), and a missing key degrades to `planByIndex`, i.e. the old behaviour, not an error.
+
+**Guard:** `test/viewer_client_check.js` → `testPastCapOrderPin()`, on the same frame, driving the
+line whose order **no plan expresses** — `Emiel: blink Cloud of Faeries` *then* `Overgrowth →
+Brushland #1`. A census of that frame's 772 plans finds 385 mixing a cast with an activation and the
+activation **last in every one** (activations come out in battlefield-index order), so
+activation-first exists only through the pin. It resolves to plan **759**, which is not in the
+emitted slice (758 and 761 are; 759/760/762/763 are not). Before the fix the test reports
+`NO cast-order pin was emitted for a plan past the emit cap`; after it, the pin is
+`["*","Emiel the Blessed","Overgrowth"]` and reaches argv as
+`--cast-order 62:*|Emiel the Blessed|Overgrowth`.
+
+And the engine applies it — `--choices …,759`, `MTG_LINE_ORDER_TRACE=1`:
+
+| | trace |
+|---|---|
+| no pin | `plan searched=0 human=0 vector: Overgrowth Emiel the Blessed` → `trailing Emiel the Blessed` |
+| pinned | `plan searched=1 human=1 vector: Emiel the Blessed Overgrowth` → `activate Emiel the Blessed`, `cast Overgrowth` |
 
 ## Deliberately not done
 

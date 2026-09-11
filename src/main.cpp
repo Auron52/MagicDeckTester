@@ -3424,6 +3424,65 @@ void ClaudePlayHarness::WriteValidation(std::ostream& os, const std::string& lin
         os << "] }";
     }
     os << "],\n";
+    // MATCHED-PLAN VIEW: the engine's own `actions` / `cast_order_canonical` for every plan THIS
+    // VERDICT CAN COMMIT -- the accepted plan, and each `choose` variant's. Purely ADDITIVE: every
+    // key above is untouched, and a consumer that ignores this one behaves exactly as before.
+    //
+    // WHY THE VALIDATION HAS TO CARRY IT. The viewer decides whether to pin the human's declared
+    // sequence by comparing the queued entries against the matched plan's ACTIONS (index.html's
+    // applyAccepted; docs/design/human-line-order-as-is.md). It used to find that plan in the
+    // decision JSON's `plans` list -- but that list is a RANKED TOP SLICE once a frame exceeds
+    // MTG_PLAY_PLANS_CAP (200 by default; `plans_total` carries the real count), so a plan past the
+    // cap is not in it at all, the comparison could not be made, and NO pin was emitted: the
+    // human's order silently reverted to enumerator order on exactly the rich combo frames where
+    // sequencing is the whole point. Measured on EldraziDisplacerFlicker seed 16 / game-index 15,
+    // turn 4, main_ordinal 62 (the user's own frame): 772 plans, 200 emitted, and the two-Aura
+    // line's nine `choose` variants are 734..750 -- eight of the nine outside the slice, including
+    // the 742 the human resolves to.
+    //
+    // THE CLIENT CANNOT FILL THIS IN FOR ITSELF. Deriving the plan's actions from the queue would
+    // make the multiset comparison compare the queue against itself -- it would pin every line
+    // unconditionally, which is precisely the check it exists to be.
+    //
+    // DELIBERATELY PARTIAL, and not a second plan serialiser: ONLY the two fields that guard reads.
+    // No summary, no land, no per-action variant params -- anything needing those must use
+    // `decision.plans`, which is the one full serialisation and stays the one full serialisation.
+    os << "  \"matched_plans\": [";
+    {
+        std::vector<int> want;
+        if (chk.plan_index >= 0) { want.push_back(chk.plan_index); }
+        for (const TurnSolver::LineVariant& lv : chk.variants)
+        { if (lv.plan_index >= 0) { want.push_back(lv.plan_index); } }
+        std::sort(want.begin(), want.end());
+        want.erase(std::unique(want.begin(), want.end()), want.end());
+        bool first_mp = true;
+        for (int idx : want)
+        {
+            if (static_cast<size_t>(idx) >= plans.size()) { continue; }
+            const TurnSolver::Plan& mp = plans[static_cast<size_t>(idx)];
+            if (!first_mp) { os << ", "; }
+            first_mp = false;
+            os << "{ \"index\": " << idx << ", \"actions\": [";
+            for (size_t a = 0; a < mp.actions.size(); ++a)
+            {
+                if (a) { os << ", "; }
+                os << "{ \"card\": "; JsonStr(os, mp.actions[a].card_name); os << " }";
+            }
+            os << "]";
+            // Same >=2 gate as the `plans` entry above, so the two views of one plan agree field
+            // for field: below that the client's cast-only fallback pin does not apply anyway.
+            std::vector<std::string> canon = TurnSolver::CanonicalNonSacCastOrder(s, mp);
+            if (canon.size() >= 2)
+            {
+                os << ", \"cast_order_canonical\": [";
+                for (size_t ci = 0; ci < canon.size(); ++ci)
+                { if (ci) { os << ", "; } JsonStr(os, canon[ci]); }
+                os << "]";
+            }
+            os << " }";
+        }
+    }
+    os << "],\n";
     os << "  \"decision\": ";
     WriteDecisionJson(os, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log,
                       this_main_ordinal, reveal_log);

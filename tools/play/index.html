@@ -2555,7 +2555,12 @@ function renderChooseDialog(v, line){
   }
   // One survivor after the filter is no longer a choice -- commit it instead of opening a dialog
   // whose every remaining dimension has a single value.
-  if (variants.length === 1) { hideDecPanel(); return applyAccepted(variants[0].plan_index, variants[0].label); }
+  // EVERY commit out of this dialog carries the verdict's own view of the variant's plan
+  // (matched_plans): a `choose` is where the past-cap case actually bites, because CheckLine sets
+  // plan_index=-1 for it and the human's plan is one of the VARIANTS -- measured on the user's
+  // seed-16 T4 frame, eight of the nine variants (734..750) are outside the emitted slice.
+  if (variants.length === 1) { hideDecPanel(); return applyAccepted(variants[0].plan_index, variants[0].label,
+                                                                   validationPlanView(v, variants[0].plan_index)); }
   // NO FLAT FALLBACK (USER 2026-09-01: "I would actually like to kill every one of those confusing
   // and ugly dialogs with overlapping text and random pictures, for all decklists"). The old
   // renderChooseFlat dumped every variant into one grid of card art labelled by its FULL line
@@ -2606,13 +2611,15 @@ function renderChooseDialog(v, line){
   });
 
   function stepChoose(remaining, picks){
-    if (remaining.length===1){ hideDecPanel(); return applyAccepted(remaining[0].plan_index, remaining[0].label); }
+    if (remaining.length===1){ hideDecPanel(); return applyAccepted(remaining[0].plan_index, remaining[0].label,
+                                                                   validationPlanView(v, remaining[0].plan_index)); }
     // First dimension (by priority) that still has more than one distinct choice is the one to ask.
     const nd = LB.nextDimension(remaining);
     let dim = nd ? nd.dim : null, choices = nd ? nd.choices : null;
     // No distinguishing dimension left (shouldn't happen — distinct variants differ in some sub) —
     // commit the first remaining plan defensively.
-    if (!dim){ hideDecPanel(); return applyAccepted(remaining[0].plan_index, remaining[0].label); }
+    if (!dim){ hideDecPanel(); return applyAccepted(remaining[0].plan_index, remaining[0].label,
+                                                    validationPlanView(v, remaining[0].plan_index)); }
     // Crackle target-count / Soulfire own-target-count are NOT a separate dialog: the count is a
     // sub-decision the search enumerates as "+0", "+1", ... variants, but forcing the user to pick
     // between otherwise-identical card thumbnails ("+0 own" vs "+1 own") makes no sense. Auto-commit
@@ -2762,7 +2769,21 @@ function planByIndex(dec, idx) {
   const plans = (dec && dec.plans) || [];
   return plans.find(p => p && p.index === idx) || null;
 }
-function applyAccepted(planIndex, label) {
+// THE VALIDATION'S OWN view of one plan: the `matched_plans` entry the engine emits for every plan
+// the verdict in hand can commit (the accepted plan, and each `choose` variant's) -- see
+// src/main.cpp WriteValidation. It is the ONLY source for a plan PAST THE EMIT CAP, which
+// planByIndex above cannot see at all: `decision.plans` is a ranked top slice, so on a rich combo
+// frame the plan the human actually commits is simply absent (seed 16 T4 ordinal 62: 772 plans,
+// 200 emitted, and eight of that line's nine variants outside the slice). DELIBERATELY PARTIAL --
+// it carries `actions[].card` and `cast_order_canonical` and nothing else, which is exactly what
+// applyAccepted's order guard reads; anything wanting a summary/land/variant params must use
+// `decision.plans`. A server too old to emit the key returns null, i.e. the pre-2026-09-11
+// behaviour, so no handshake bump is needed.
+function validationPlanView(v, idx) {
+  const mp = (v && v.matched_plans) || [];
+  return mp.find(p => p && p.index === idx) || null;
+}
+function applyAccepted(planIndex, label, planView) {
   // DISPLAY-ONLY RELABEL (USER 2026-09-05, seed 2: fifty-seven blink activations each logged as
   // "cast: Eldrazi Displacer"). The engine's summary uses one verb for the whole list, so a line
   // made ONLY of board activations ("Outlet: blink …", "Land: investigate") still reads "cast:".
@@ -2822,14 +2843,23 @@ function applyAccepted(planIndex, label) {
   // seed-16 turn-4 frame, 200 plans were emitted carrying indices up to 771. `plans[planIndex]`
   // therefore returned SOME OTHER PLAN -- whose `actions` then drove the multiset guard below, so
   // the human's full-order pin was decided against a line the engine was not applying.
-  // KNOWN GAP, deliberately not papered over here: when the committed plan is past the cap it is
-  // not in this list at all, so `plan0` is undefined and NO pin is emitted -- the queued order
-  // silently reverts to enumerator order on exactly the rich combo frames that overflow the cap
-  // (docs/design/viewer-pass-guard.md, "what is still open"). Closing that needs the accept
-  // VALIDATION to carry the matched plan's own `actions`/`cast_order_canonical`, which is an
-  // emitter change, not a client one.
+  // ...and PAST the cap the plan is not in that list at all, so `planByIndex` alone returned null
+  // and NO pin was emitted -- the queued order silently reverted to enumerator order on exactly the
+  // rich combo frames that overflow the cap. Closed 2026-09-11 by `planView`: the verdict's own
+  // `matched_plans` entry for this index (src/main.cpp WriteValidation), which is the engine's view
+  // of the one plan being committed and is emitted whether or not that plan made the display slice.
+  //
+  // THE VALIDATION'S VIEW WINS when there is one. Both describe the same Plan out of the same
+  // enumerated vector -- WriteValidation serialises `matched_plans` from the very list it then
+  // writes `decision.plans` from -- so they cannot disagree, and preferring the verdict's own
+  // answer makes the past-cap path the ORDINARY path rather than a branch that only runs on a
+  // 700-plan frame. (A path taken only in the rare case is a path nothing routinely exercises,
+  // which is how this gap survived in the first place.) Callers with no verdict at all -- the
+  // "click an enumerated plan" buttons, fireDig, Combo Off -- pass nothing and keep planByIndex.
+  // Only `.actions[].card` and `.cast_order_canonical` are read off it below, which is exactly the
+  // pair `matched_plans` carries.
   const dec0 = S.decision;
-  const plan0 = planByIndex(dec0, planIndex);
+  const plan0 = planView || planByIndex(dec0, planIndex);
   const canon = plan0 && plan0.cast_order_canonical;
   // The queued entries that name a plan ACTION: the land is its own field (plan0.land) and a
   // Land's Edge discard is a count, so neither is an action and neither can be sequenced here.
@@ -2910,7 +2940,10 @@ function applyAccepted(planIndex, label) {
   renderHistory(); hideVerdict(); step();
 }
 function handleVerdict(v, line) {
-  if (v.verdict==='accept') return applyAccepted(v.plan_index, v.matched_summary || line);
+  // The third argument is the verdict's OWN view of the plan it matched (matched_plans), which is
+  // the only way applyAccepted can run its order guard when that plan is past the display cap.
+  if (v.verdict==='accept') return applyAccepted(v.plan_index, v.matched_summary || line,
+                                                 validationPlanView(v, v.plan_index));
   if (v.verdict==='choose') return renderChooseDialog(v, line);   // central image dialog, not the side panel
   // REJECT (illegal / legal_not_enumerated / unsupported): the committed line did NOT play, so a
   // pending "Pass turn" skip (S.commitTurn, set by the Commit-turn button) must be dropped -- otherwise
