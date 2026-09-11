@@ -37967,6 +37967,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 // whether the heuristic redo fired, so we can tell WHY a redo happens -- probe landed at depth K-1 (a
 // start-gate nudge could finish it) vs way down at depth 1-2 (interior-node cost alone blows the budget,
 // no nudge helps). Printed once at process exit. Off => zero overhead. See learned-d0-policy.md.
+inline std::atomic<long long>& FitSkips() { static std::atomic<long long> v{0}; return v; }
+inline std::atomic<long long>& CalibCount() { static std::atomic<long long> v{0}; return v; }
+inline std::atomic<long long>& CalibUnits() { static std::atomic<long long> v{0}; return v; }
+
 namespace
 {
     struct HybridStats
@@ -38072,6 +38076,18 @@ namespace
                 std::cerr << "[hybrid-stats] MEASURED heuristic units per probe leaf (Rsample): mean "
                           << (esc_rs_milli.load() / 1000.0 / esc_rs_cnt.load())
                           << " over " << esc_rs_cnt.load() << " first-fit passes (frozen prior 120)\n";
+            }
+            if (CalibCount().load() > 0)
+            {
+                std::cerr << "[hybrid-stats] FIT R-calibration: " << CalibCount().load()
+                          << " per-game calibrations costing " << CalibUnits().load()
+                          << " units total (paid BEFORE the probe, so paid even when no pass runs)\n";
+            }
+            if (FitSkips().load() > 0)
+            {
+                std::cerr << "[hybrid-stats] FIT passes SKIPPED by the crossover gate: "
+                          << FitSkips().load() << " (MTG_ESC_FIT_CROSSOVER; each one a rollout the"
+                          << " measured take_at would have discarded)\n";
             }
         }
     };
@@ -38195,6 +38211,25 @@ static TurnSolver::SearchLine FSLineWinComplete(const GameState& state, int dept
     return out;
 }
 
+// Clamped per-committed-depth crossover lookup: hc*, the shallowest heuristic depth at which the
+// escalation's line beats the value-leaf line committed at `c`. Mirrors MulliganProfile::FallbackTakeAt
+// (which has no callers) and the inline clamp at the escalation's own take decision -- ONE definition
+// so the FIT gate below and that take decision cannot drift apart.
+static int TakeAtForCommitted(const std::vector<int>& take_at, int committed)
+{
+    const int hi = static_cast<int>(take_at.size()) - 1;   // max measured committed depth
+    const int c  = committed < 1 ? 1 : (committed > hi ? hi : committed);
+    return take_at[static_cast<std::size_t>(c)];
+}
+// MTG_ESC_FIT_CROSSOVER (default OFF pending the A/B): make the single/FIT pass honour the measured
+// crossover. The FIT path replaces `line` UNCONDITIONALLY and returns early, so it never reaches the
+// escalation's `taken = hcommitted >= take_at[committed]` -- i.e. it throws the table away. Where the
+// table says a pass at `dpass` could NOT be taken, running it is provably wasted: the ladder would
+// compute the identical line and discard it. Measured consequences of ignoring it: breaching has
+// take_at[5]=6 while FIT reaches at most 5, so all 3 of its passes were rejectable (~92% of its search
+// time, byte-identical play); Melira ships the repo's strictest table ([1,2,3,4,5,5,6,6]) and FIT
+// discards the value line the table would have kept (+0.0027 +/- 0.0027 at 0.90x units). Dragons has
+// take_at[1..3]=1, so the table takes nearly everything and this gate should not touch it.
 TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, int depth,
                                                         int max_turns, bool second_main,
                                                         TranspositionTable* tt, SearchBudget* budget,
@@ -38405,31 +38440,49 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                           : (s_single_fit_env ? 2 : (s_single_reserve_env ? 1 : 0));
     const bool single_reserve = (single_mode == 1);
     if (single_mode >= 1) { g_probe_recording = true; }   // the reserve / fit read the probe's per-depth costs and leaves
+    // MTG_ESC_FIT_LAZY_R (default OFF pending the A/B): the R calibration below runs once per GAME and
+    // sits BEFORE the probe, so it is paid whether or not a FIT pass ever runs. Measured on breaching:
+    // 120 calibrations costing 32,090 units for 3 passes (0 after the crossover gate) -- the dominant
+    // cost of FIT on a fast deck, and its second half IS a rollout, i.e. exactly the "leaf entries that
+    // are not valuable" waste. Deferring it to first use is NOT result-neutral (the calibration charges
+    // `budget`, so moving it gives the probe more to spend), hence its own flag and its own A/B.
+    static const bool s_fit_lazy_r = EnvOn("MTG_ESC_FIT_LAZY_R");
+    auto calibrate_single_R = [&]()
+    {
+        if (g_single_R_n != 0 || depth < 1) { return; }
+        // CALIBRATION pass: d1 leafless then d1 rollout, both on fresh caches, charged to the decision.
+        long long t1 = 0, h1 = 0, l1 = 0;
+        {
+            ForceConstantLeafGuard _c(true); ConstantLeafPassGuard _p(true);
+            FSLineCache c1; const long long u0 = budget ? budget->Used() : 0; const long long lv0 = g_fs_leaf_evals;
+            (void)FSLineWin(state, 1, max_turns, max_turns + 1, second_main, tt, &c1, budget);
+            t1 = (budget ? budget->Used() : 0) - u0; l1 = g_fs_leaf_evals - lv0;
+        }
+        {
+            ForceHeuristicLeafGuard _h(true);
+            FSLineCache c2; const long long u0 = budget ? budget->Used() : 0;
+            (void)FSLineWin(state, 1, max_turns, max_turns + 1, second_main, tt, &c2, budget);
+            h1 = (budget ? budget->Used() : 0) - u0;
+        }
+        if (l1 > 0 && h1 > t1) { g_single_R = static_cast<double>(h1 - t1) / static_cast<double>(l1); g_single_R_n = 1; }
+        else { g_single_R = (escalation_r > 0.0) ? escalation_r : 120.0; g_single_R_n = 1; }
+        // Telemetry (MTG_HYBRID_STATS): this calibration is per GAME and runs BEFORE the probe, so it
+        // is paid whether or not a FIT pass ever runs. On breaching that is 120 calibrations for 3
+        // passes -- suspected dominant cost, measured here rather than assumed.
+        CalibCount().fetch_add(1, std::memory_order_relaxed);
+        CalibUnits().fetch_add(t1 + h1, std::memory_order_relaxed);
+    };
     if (single_mode >= 1)
     {
         const std::string rkey = valuearm::t_deck_key + '|' + valuearm::t_arm.value_profile + '|' + std::to_string(state.game_seed);
         if (g_single_R_key != rkey) { g_single_R_key = rkey; g_single_R = 0.0; g_single_R_n = 0; }
-        if (g_single_R_n == 0 && depth >= 1)
-        {
-            // CALIBRATION pass: d1 leafless then d1 rollout, both on fresh caches, charged to the decision.
-            long long t1 = 0, h1 = 0, l1 = 0;
-            {
-                ForceConstantLeafGuard _c(true); ConstantLeafPassGuard _p(true);
-                FSLineCache c1; const long long u0 = budget ? budget->Used() : 0; const long long lv0 = g_fs_leaf_evals;
-                (void)FSLineWin(state, 1, max_turns, max_turns + 1, second_main, tt, &c1, budget);
-                t1 = (budget ? budget->Used() : 0) - u0; l1 = g_fs_leaf_evals - lv0;
-            }
-            {
-                ForceHeuristicLeafGuard _h(true);
-                FSLineCache c2; const long long u0 = budget ? budget->Used() : 0;
-                (void)FSLineWin(state, 1, max_turns, max_turns + 1, second_main, tt, &c2, budget);
-                h1 = (budget ? budget->Used() : 0) - u0;
-            }
-            if (l1 > 0 && h1 > t1) { g_single_R = static_cast<double>(h1 - t1) / static_cast<double>(l1); g_single_R_n = 1; }
-            else { g_single_R = (escalation_r > 0.0) ? escalation_r : 120.0; g_single_R_n = 1; }
-        }
+        // mode 1 (RESERVE) needs R BEFORE the probe -- its start gate reads g_single_reserve_R to
+        // decide which passes to admit -- so only FIT (mode 2) can defer.
+        if (!(s_fit_lazy_r && single_mode == 2)) { calibrate_single_R(); }
     }
-    const double single_R = (g_single_R_n > 0) ? g_single_R : ((escalation_r > 0.0) ? escalation_r : 120.0);
+    const auto single_R_now = [&]() -> double
+    { return (g_single_R_n > 0) ? g_single_R : ((escalation_r > 0.0) ? escalation_r : 120.0); };
+    const double single_R = single_R_now();
     static const bool s_nl_commit_env    = EnvOn("MTG_LADDER_EMUL_COMMIT_MODEL");
     static const bool s_nl_warm_none_env = EnvOn("MTG_LADDER_EMUL_WARM_NONE");
     static const bool s_nl_emul_env      = EnvOn("MTG_LADDER_EMULATED");
@@ -38559,12 +38612,27 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // rated a win is kept (anytime); nothing rated => the heuristic escalation below.
             static const double s_sres_mult = []{ const char* e = std::getenv("MTG_OVERRUN_MULT");
                                                   return (e && *e) ? std::atof(e) : 25.0; }();
+            // R-FREE CROSSOVER GATE. dpass <= d1 always (FIT's overrun path only steps SHALLOWER), so if a
+            // pass at d1 could not be taken then no pass at any depth can be -- decidable without R, and
+            // therefore BEFORE the calibration. That ordering is the point: it is what collapses
+            // breaching's 120 per-game calibrations to 0 rather than merely skipping its 3 rollouts.
+            static const bool s_fit_crossover = EnvOn("MTG_ESC_FIT_CROSSOVER");
+            const bool xo_live = s_fit_crossover && !line_constant && !value_fallback_take_at.empty();
+            const int  xo_need = xo_live ? TakeAtForCommitted(value_fallback_take_at, committed) : 0;
+            if (xo_live && d1 < xo_need)
+            {
+                FitSkips().fetch_add(1, std::memory_order_relaxed);
+                if (out_committed_depth) { *out_committed_depth = committed; }
+                RecordIdDepth(committed);
+                return line;
+            }
+            if (s_fit_lazy_r && single_mode == 2) { calibrate_single_R(); }
             int dpass = d1;
             if (single_mode == 2)
             {
                 // FIT: the deepest probe depth whose rollout twin fits what is left. R = the deck's frozen
                 // escalation_r else 120 (the same constant the reserve uses).
-                const double R = single_R;
+                const double R = single_R_now();
                 const double rem = static_cast<double>(std::max<long long>(0, budget->Remaining()));
                 dpass = 1;
                 for (int d = std::min(d1, 15); d >= 1; --d)
@@ -38572,6 +38640,19 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                     const double est_h = static_cast<double>(g_probe_cost[d]) + R * static_cast<double>(std::max<long long>(0, g_probe_leaves[d]));
                     if (g_probe_cost[d] > 0 && est_h <= kStartGateAlpha * rem) { dpass = d; break; }
                 }
+            }
+            // TIGHTER GATE, now that dpass is known: the affordable depth may be shallower than d1, so a
+            // pass that passed the R-free gate can still be unacceptable. Faithful to `taken == false` --
+            // keep the value-leaf line and the probe's committed depth, exactly as the escalation does
+            // when it discards its result; the only difference is that we never pay for the rollout.
+            // `line_constant` is excluded because there the rule is `hcommitted >= 1` (any heuristic line
+            // beats a leafless one), so nothing is ever skippable.
+            if (xo_live && dpass < xo_need)
+            {
+                FitSkips().fetch_add(1, std::memory_order_relaxed);
+                if (out_committed_depth) { *out_committed_depth = committed; }
+                RecordIdDepth(committed);
+                return line;
             }
             static const bool s_sres_anytime = EnvOn("MTG_ID_ANYTIME", true);
             for (;;)
@@ -39325,9 +39406,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         if (line_constant) { taken = (hcommitted >= 1); }   // a leafless line is beaten by any heuristic line
         else if (!value_fallback_take_at.empty() && s_vto_override < 0)
         {
-            const int hi = static_cast<int>(value_fallback_take_at.size()) - 1;   // max measured committed depth
-            const int c  = committed < 1 ? 1 : (committed > hi ? hi : committed);
-            taken = (hcommitted >= value_fallback_take_at[static_cast<std::size_t>(c)]);
+            // Shared with the FIT crossover gate (TakeAtForCommitted) so the two cannot drift: the gate
+            // skips exactly the passes this test would have rejected.
+            taken = (hcommitted >= TakeAtForCommitted(value_fallback_take_at, committed));
         }
         else
         {
