@@ -5038,3 +5038,103 @@ is why the bench commit `b02908ce` folded s9_gi8 in as T4 with the drift already
 `build/Release/mtg` resolves `src/cards/data/cards.json` relative to the CURRENT DIRECTORY. Two
 bisect runs launched from `logs/s9drift/` loaded no card data, so every decision collapsed to a
 single pass plan and the "divergence" they showed was fiction. Run the engine from the repo root.
+
+## Session 15f (2026-09-11): the COMBO OFF sweep, and the four things it caught
+
+**USER:** *"We should do a bunch of testing of Combo Off states and fix any case that fails to go
+off."* And, on what the machinery is ultimately for: *"Especially as the intention is to use the
+same logic to skip work for the search."*
+
+### Phase 1 -- the sweep (`test/combo_off_sweep.{py,sh}`, catalogue in docs/design/)
+
+`combo_off_check.sh` pins ten hand-authored boards. This sweeps **1051**, over three populations:
+a synthetic matrix across the rule table's own ingredients (226), every main-phase frame of the
+user's eleven saved references (260, read-only), and every main-phase frame of **sixty autonomous
+games at the deck's shipped settings** (565) -- the last being the population a search shortcut
+would actually face. Each state goes through `EnumerateMainPlans` under `MTG_HUMAN_PLAY` and, when
+a button appears, is re-applied through the public `ApplyPlan` exactly as a click does. A third,
+independent oracle in python re-derives the loop arithmetic from `cards.json` so it can *disagree*
+with the rule table.
+
+**268 offers; 184 won and 84 did not -- a 31.3% failure rate on the click.** That is the user's
+complaint, quantified. Six mechanism clusters, each with a minimal repro fixture and the engine
+trace that names it.
+
+**The result that governs everything after it:** across all 1051 states and all three populations,
+`combo_off_verified` was right **268/268, with zero exceptions in either direction**, while
+`combo_off_offered` was right 68.7%. The trial apply is a sound and complete oracle; the display
+rule is not. Two predicates covered 65% of the failures and each separated perfectly: `rule ==
+GORGE` (17 offers, 0 wins) and `loop.net_c <= 0` (42 offers, 0 wins). **Class (d) rule-too-loose:
+none** -- Session 14c's bankable arithmetic holds, and every failure is an *execution* failure.
+
+### Phase 2 -- four fixes, measured as a one-binary A/B
+
+Each sits behind its own `EnvOn` flag, default ON, gated so autonomous play is byte-identical.
+
+* **`MTG_EDF_LOOP_TRACE`** (default off, diagnosis only). `[edf-goff]` prints the count a go-off was
+  *sized* at and `[finish]` counts the kill chain; between them sat `ApplyBlinkLoop`, whose every
+  break was silent. All four fixes below were found by reading one of its lines.
+* **`MTG_COMBO_OFF_SINK_TRIAL`** -- `SpendSurplusOnDamageSinks` guarded itself with a pooled
+  `CanPay`, which cannot see that one land serves one of its modes nor that the sequential payment
+  picks greedily. It passed; the ping then took the board's last colourless source and the loop
+  died at four blinks of twenty. The guard is now a **real trial** on a copy of the state. 4 -> 25
+  blinks. Two narrower repairs measured inert first and are recorded in the code.
+* **`MTG_COMBO_OFF_GORGE_SLOT`** -- a ping is once-per-untap, so the sink is promoted to the front
+  of the untap priority and that slot is *not* a yield land. `loop.refund` did not know, so the
+  branch sized `life` iterations on a board whose real budget was zero a pass. Reserving the slot
+  makes two-untap Gorge boards honestly absent and leaves the five-untap ones winning: **GORGE
+  4/17 -> 4/8, every win kept and nine false offers withdrawn.**
+* **`MTG_COMBO_OFF_OUTLET_SWITCH` + `PipFreeOutletFromHandLive`** -- this is the item Session 15d
+  closed on (*"the rationale behind the user's rule 4 is NOT something the executor can currently
+  do ... it will bite on a Displacer-only board that runs out of colourless"*). It does now: the
+  loop deploys a held pip-free outlet and switches, and the recognizer sizes the count on the
+  post-swap colourless net. Both halves are needed -- no swap 9 drains of 20, swap only 17, swap
+  plus sizing **20 and the kill**.
+* **`MTG_COMBO_OFF_UB_AURA`** -- `HasBlueOrBlackSource` ignored a land Aura's wild "one mana of any
+  color" while `HasRedSource`, twenty lines above it, counted it. `UB` gates three of the five
+  rules, so the user's own `claude_s1_gi0` turn 3 -- **the turn they won**, two Trace of Abundance
+  its only blue -- offered nothing. It is now offered and verified.
+
+**One binary, 1051 identical states, levers off vs on:** offered 271 -> 274, **won 194 -> 198**,
+failures 77 -> 76, GORGE 4/17 -> 4/8, WISH-DRAW 59/102 -> 64/113. Four missed offers became wins
+and four failures became correct absences; six correct absences became honest *unproven* offers,
+which is the aggressive-display trade working as asked. Against the phase-1 baseline, and counting
+this session's seed-6 executor work alongside: **184 -> 198 wins, 84 -> 76 failures.**
+`combo_off_verified` is still perfect: 198/198.
+
+### The third seed-6 defect: LOCATED (not fixed -- another agent's call site)
+
+Bisecting the Living Wish's depth in `edf_co_11_seed6_t4_draw_the_deck.json` gives a cliff between
+4 and 6 cards down, and **identical numbers at every depth past it** (6 blinks, 10 draws, no wish)
+-- so the failure is not depth-dependent at all. `MTG_EDF_LOOP_TRACE`:
+
+```
+k=6 enter             cost={C} float{c1} avail{g3 c1 *5}
+k=6 post-draw-sink    cost={C} float{}   avail{}
+STOP at k=6: pay-failed
+```
+
+`SpendSurplusOnDrawSinks` spends the pool to zero without preserving the loop's next activation --
+which costs **one mana** there. It is the damage-sink defect one call site below, and the fix is a
+three-line mirror of `MTG_COMBO_OFF_SINK_TRIAL`; the `StateManaPayer probe_pay` plumbing it needs
+is already in scope at that call site.
+
+### Not touched
+
+`BankableMana` and the `affords` gate are unmodified here (verified by diff), so the s9_gi8
+floating-pool narrowing is free to be fixed on the tip. The only `comborules` functions this
+session changes are the colour predicates.
+
+### Fixtures
+
+`combo_off_check.sh` 11 -> **15**: `edf_co_12_gorge_two_untaps_absent` (correctly ABSENT, with the
+arithmetic in its comment), `edf_co_13_gorge_drake_wins` (its positive control), `edf_co_14_
+outlet_switch_to_emiel`, `edf_co_15_ub_from_land_aura`. A negative and its positive control
+together are what make the GORGE narrowing safe to ship.
+
+### Open
+
+Rules 2/3's `(D or E or C2)` rider is still inference, not the user's words; rule 4 still has no
+graveyard-Emiel guard; the search shortcut is deferred (the table fires on 3.2% of autonomous
+states and, at first fire, the engine is already 0.29 turns from its own win -- so it saves almost
+nothing until the rules widen, and it must key on `verified`, never on `offered`).

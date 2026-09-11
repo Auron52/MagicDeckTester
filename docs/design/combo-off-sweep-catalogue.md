@@ -511,3 +511,239 @@ Re-run after each fix with `bash test/combo_off_sweep.sh --reuse-games` and diff
 4. Still open from Session 15/15b and untouched here: rules 2/3's `(D or E or C2)` rider is
    inference, not your words; rule 4 has no graveyard-Emiel guard; "bankable" vs raising
    `MTG_EDF_MAX_ITER`.
+
+
+---
+
+# PHASE 2 — the fixes, and what they moved
+
+Phase 1 above is the measurement; this is what was done about it. Everything below was measured as
+a **one-binary A/B on the same 1051 states**: the four mechanism levers off versus on, same build,
+same mined games. That is the only honest before/after, and it is what the tables here report.
+
+Measured on the rebased tree — this branch's four fixes sit on top of the seed-6 executor work
+(`d671f568`, `bff3ef0b`), so the OFF arm already contains those.
+
+## 2.0 The instrument that found all four: `MTG_EDF_LOOP_TRACE`
+
+Default OFF, zero cost when off, and it never branches game logic. `[edf-goff]` prints the count a
+go-off was **sized** at and `[finish]` counts the kill chain; between them sat `ApplyBlinkLoop`,
+whose every break was silent. Phase 1 had 29 states whose plan promised a long chain and whose
+apply ran **zero** blinks, and nothing could say which of the three breaks fired or why.
+
+The trace prints, per iteration, the floating and available pools at four points — `enter`,
+`post-damage-sink`, `post-draw-sink`, `post-tapahead` — and then `STOP at k=N: <reason>`. Every fix
+below was found by reading one of its lines, and the two mistaken hypotheses it killed are recorded
+in the code beside the fixes so they are not tried again.
+
+## 2.1 C2 — the damage sink (rule GORGE: 17 offers, 0 wins)
+
+**Two independent defects, both in the guard, both now fixed.**
+
+**`MTG_COMBO_OFF_SINK_TRIAL`.** `SpendSurplusOnDamageSinks` guarded itself with a pooled
+`ManaPool::CanPay(sink_cost + keep_payable)`. A pooled answer cannot see that one land serves one
+of its modes (Brushland taps for `{C}` **or** `{G}`/`{W}`), nor that the sequential payment picks
+greedily. So it passed, and the ping then took the board's last colourless source for a generic
+pip:
+
+```
+k=4 enter             cost={2}{C} float{g1} avail{g5 c1 *3}
+k=4 post-damage-sink  cost={2}{C} float{g5} avail{g5 c0 *0}
+STOP at k=4: pay-failed
+```
+
+Four blinks of twenty. The guard is now a **real trial**: on a copy of the state it taps the sink,
+pays the sink's cost through the loop's own payer, and requires the activation to pay as well. That
+needed one new piece of plumbing — `StateManaPayer`, an optional state-taking payer that only the
+COMBO OFF apply path supplies (both autonomous `ApplyBlinkLoop` call sites pass `nullptr`).
+**Measured on that board: 4 blinks → 25.**
+
+Two narrower repairs were tried first and **both measured inert**; both are recorded in the code.
+(a) Reserving the {C}-capable sources across the spend through `g_plan_reserved_sources` —
+reserve-then-fallback releases them again, and the sink's payment genuinely needs one. (b)
+Re-running the *same* pooled projection after tapping the sink. (b) fixes a real bug on its own
+terms — `{T}` is in the sink's cost, so a pool built before that tap credits mana the activation is
+about to destroy, and Shivan Gorge taps for `{C}` — but it is not *this* bug: the guard still fired
+at k=4 and the payment still stranded.
+
+**`MTG_COMBO_OFF_GORGE_SLOT`.** A ping is once-per-untap, so `ApplyBlinkLoop` promotes the sink to
+the front of the untap priority — and that slot is then **not** a yield land. `loop.refund` is the
+top-`untaps` land yields with no such reservation, so on a two-untap board it credits Kitchen (5)
+*and* a Conservatory (2) when the iteration really gets Kitchen (5) and the Gorge (1). With the
+refund over-counted the branch sized `life` iterations on a board whose real per-iteration budget is
+`5 + 1 − 3 (blink) − 3 (ping) = 0`.
+
+| board | before | after |
+|---|---|---|
+| Cloud of Faeries (2 untaps), opp life 20 | 20 blinks, 10 pings, no kill | **not offered** |
+| Cloud of Faeries, opp life 10 / 5 | 5 blinks, 3 pings, no kill | **offered, WINS** |
+| Peregrine Drake (5 untaps), opp life 20 / 10 | wins | wins |
+
+Same precedent as Session 14c's `MTG_COMBO_OFF_BANKABLE`: a rule the user wrote, right in **kind**
+and unable to **count**. Across the sweep the effect is `GORGE 4/17 → 4/8` — **every win kept, nine
+false offers withdrawn.**
+
+Fixtures: `edf_co_12_gorge_two_untaps_absent.json` (correctly ABSENT, with the arithmetic in its
+comment) and `edf_co_13_gorge_drake_wins.json` (offered and verified) — a negative and its positive
+control, which is what makes the narrowing safe to ship.
+
+## 2.2 C3 — the {C} pip supply (`net_c <= 0`: 39 offers, 0 wins)
+
+**USER, writing rule 4:** *"the 1 colourless source works even when you have displacer out because
+you can draw into Emiel and cast it if you can draw your deck."* The rule table believed that; the
+executor never did it.
+
+Eldrazi Displacer's blink is `{2}{C}` and Emiel the Blessed's is `{3}` — the same mana value, and
+one of them spends a colourless **pip** every pass. Cloud of Faeries untaps two lands and the
+`{C}`-starved reservation makes exactly one of them colourless, so the Displacer loop nets **zero**
+colourless and a `{1}{C}` drain is fed only by the board's opening supply.
+
+**`MTG_COMBO_OFF_OUTLET_SWITCH`** deploys a held pip-free outlet and switches the loop to it, under
+four conditions that cannot all hold on a healthy board: the button is active, *this* outlet spends
+a `{C}` pip, a **separate** `{C}`-pip sink is on the battlefield, and a pip-free outlet is in hand
+whose colours the board can produce.
+
+**`PipFreeOutletFromHandLive`** then makes the recognizer size the count on the **post-swap**
+colourless net. Both halves are required, and the measurement says so exactly:
+
+| arm | blinks | drains | result |
+|---|---:|---:|---|
+| no swap | 14 | 9 of 20 | no kill |
+| swap only | 14 | **17** of 20 | no kill |
+| swap + post-swap sizing | 20 | **20** | **WINS** |
+
+The swap works perfectly and the loop still stops three drains short, because `c_iterations` was
+gated on the *pre-swap* `net_c` of zero. Fixture: `edf_co_14_outlet_switch_to_emiel.json`.
+
+**A death-recovery form was tried first and proved unreachable**, and the reason is the cluster's
+real shape: the loop does **not** die. It runs its whole sized count and the *finisher* starves —
+`pay(c)` never fails, so nothing downstream ever notices. That is recorded in the code.
+
+**What is still open here.** `sweep_4` as authored has no Emiel anywhere — not on the battlefield,
+not in hand, and not in the library (the synthetic matrix fills libraries with Forests). The user's
+own route for that board is rule 4's *draw* into Emiel, so it waits on §2.5's defect. The swap it
+needs is already in place and will fire on the drawn copy.
+
+## 2.3 M1 — a land Aura's wild mana is a blue source (`MTG_COMBO_OFF_UB_AURA`)
+
+`comborules::HasBlueOrBlackSource` walked `EffectiveProduces` only, while
+`comborules::HasRedSource` **twenty lines above it in the same file** explicitly counted a land
+Aura's *"one mana of any color"*. `UB` gates three of the five rules (IN-HAND, WISH-DRAW,
+WISH-NODRAW), so a board whose only blue is a Fertile Ground or a Trace of Abundance could not fire
+any of them. One helper now answers both colour questions.
+
+Found on the user's own `references/EldraziDisplacerFlicker/claude_s1_gi0` **turn 3 — the turn they
+won** — whose two Trace of Abundance are its only blue. Measured one card at a time, nothing else
+changed:
+
+| board | offered | verified |
+|---|---|---|
+| as reconstructed (before) | **0** | — |
+| + Yavimaya Coast / + Adarkar Wastes | 1 | 0 |
+| + Kitchen / + 2 energy (Aether Hub live) | 1 | **1 (wins)** |
+| **as reconstructed (after the fix)** | **1** | **1 (wins)** |
+
+The same clause must **not** be added to `ColorlessSourceCount`: a land Aura's wild can never pay a
+`{C}` pip (`ManaPool` credits it as `wild`, deliberately not `wild_c`). Fixture:
+`edf_co_15_ub_from_land_aura.json`.
+
+## 2.4 The numbers — one binary, 1051 states, levers off vs on
+
+| | OFF | ON |
+|---|---:|---:|
+| offered | 271 | **274** |
+| **won** | 194 | **198** |
+| offered but did not win | 77 | **76** |
+| missed offers | 28 | **25** |
+| correctly absent | 709 | 706 |
+
+Per rule (wins / offers):
+
+| rule | OFF | ON |
+|---|---|---|
+| `DEPLOYED` | 103/119 | 102/119 |
+| `WISH-DRAW` | 59/102 | **64/113** |
+| `IN-HAND` | 26/31 | **27/33** |
+| **`GORGE`** | **4/17** | **4/8** |
+| `WISH-NODRAW` | 1/1 | 1/1 |
+
+Class transitions: **4 missed offers became wins**, 1 correct absence became a win, **4 failures
+became correct absences**, and 6 correct absences became honest *unproven* offers — the
+aggressive-display trade, working as the doctrine asks.
+
+**Read the last row of that honestly.** The count of "offered but did not win" barely moves (77 →
+76) because the fixes *remove* false offers while M1's widening *adds* unproven ones. That is not a
+wash, because the two are not the same thing: `combo_off_verified` remains a **perfect oracle** —
+198/198 verified offers won, 0 of 76 unverified did, zero exceptions in either direction across all
+three populations. A verified offer has never once lied. An unverified one says so on the button
+("not yet proven"), which is exactly what the user asked for.
+
+Against the phase-1 baseline (this branch's fixes **plus** the seed-6 executor work):
+**184 → 198 wins, 84 → 76 failures.**
+
+## 2.5 STILL OPEN — the draw-to-find spend is unbudgeted (located, not fixed)
+
+The coordinator's open question — *"with Living Wish 13 cards down the draw-to-find loop reaches 10
+draws and stops even though +7 a pass against a 6-mana-per-card engine should reach it inside 60
+iterations"* — is **located**, and it is the C2 defect one sink over.
+
+Bisecting the wish's depth in `edf_co_11_seed6_t4_draw_the_deck.json`:
+
+| wish depth | blinks | draws paid | wish cast | won |
+|---:|---:|---:|---:|---|
+| 1 (top) | 31 | 2 | 2 | yes |
+| 2 | 37 | 4 | 2 | yes |
+| 4 | 49 | 8 | 2 | yes |
+| **6** | **6** | **10** | 0 | **no** |
+| 9 / 11 / 12 / 13 | 6 | 10 | 0 | no |
+
+**The numbers past the cliff are IDENTICAL at every depth**, which is the whole tell: the failure is
+not depth-dependent at all. The loop always dies at iteration 6 having paid exactly 10 draws; when
+the wish is within four cards the draws happen to reach it first, and past that they never do.
+`MTG_EDF_LOOP_TRACE` shows the cause in one line:
+
+```
+k=6 enter             cost={C} float{c1} avail{g3 c1 *5}     <- nine mana and a {C}
+k=6 post-damage-sink  cost={C} float{c1} avail{g3 c1 *5}     <- damage sink: no change
+k=6 post-draw-sink    cost={C} float{}   avail{}             <- the draw sink took EVERYTHING
+STOP at k=6: pay-failed
+```
+
+`SpendSurplusOnDrawSinks` spends the pool to zero without preserving the loop's next activation —
+and that activation costs **one mana** here. Same shape as C2's damage sink, same guard weakness,
+one call site below it.
+
+**The fix is a three-line mirror of §2.1's and the plumbing is already landed**: `probe_pay` (the
+`StateManaPayer`) is in scope at that exact call site, so the draw spend can take the same real
+trial the damage spend now takes. Left unimplemented deliberately — `SpendSurplusOnDrawSinks` and
+the `want_draw` route are another agent's active area, and the standing protocol is to report
+rather than collide.
+
+## 2.6 NOT TOUCHED — `BankableMana` and the floating pool
+
+The s9_gi8 play-drift (`BankableMana` ignoring the floating pool: `max(0,net)*60 = 60 < ~104`, while
+`60 + 80` banked clears it) is **not** touched by this branch. `BankableMana`, the `affords` gate,
+`CheapestFinishNeed` and `ComboOffPossible` itself are all unmodified here — verified by diff. The
+only `comborules` functions this branch changes are the colour predicates (`HasBlueOrBlackSource`,
+`HasRedSource`, and the new shared `HasColorSource` / `LandAuraMakesAnyColor`), which sit adjacent
+to `BankableMana` but do not read or write it. Safe to fix on the tip.
+
+## 2.7 Flags added
+
+Every one is default **ON** with `=0` as the opt-out, and every one is gated so autonomous play is
+byte-identical by construction — `HumanPlayActive()` for the display/sizing side,
+`ComboOffFinishActive()` (plus a null `probe_pay`) for the executor side.
+
+| flag | what it gates |
+|---|---|
+| `MTG_COMBO_OFF_SINK_TRIAL` | the damage sink's real-trial guard (C2) |
+| `MTG_COMBO_OFF_GORGE_SLOT` | reserving the untap slot the damage sink takes (C2) |
+| `MTG_COMBO_OFF_OUTLET_SWITCH` | swapping to a pip-free outlet, and the post-swap sizing (C3) |
+| `MTG_COMBO_OFF_UB_AURA` | a land Aura's wild counting as a blue/black source (M1) |
+| `MTG_EDF_LOOP_TRACE` / `_N` | diagnosis only, default **OFF** |
+
+## 2.8 Gates (rebased tree)
+
+`./build.sh` clean; `scenarios.sh` **79/79**; `combo_off_check.sh` **15/15** (11 inherited + the 4
+promoted here, every positive one verified); `regression.sh --smoke` **ALL PASS 73/73, 0 configs
+changed** — byte-identical, which is the proof the gating holds.
