@@ -14849,7 +14849,7 @@
     "note": "ADOPTED: play d6/b40 trust-with-shallow-fallback; gen d3/b3 (H3 rollouts, fast+good; budget 10->3 user-directed 2026-08-15 -- takes effect on the NEXT regeneration, and note the gen budget also feeds equivalence DISCOVERY, so buckets can move).",
     "mull_gen_depth": 3,
     "mull_gen_budget_ms": 3,
-    "escalation_r": 74.0,
+    "escalation_r": 240.0, "escalation_r_note": "RECALIBRATED 2026-09-11 from 74 (frozen 2026-09-04, commit 6a938099). 74 was measured on that engine and no longer holds: Rsample now measures ~207-243 across 3 disjoint seed blocks, and 74 is far enough below the true cost that the predictor starts a pass it cannot afford, aborts it and falls back a depth -- burning units to commit the SAME line 240 commits directly. Held-out A/B 8000 games (seeds 2000000+, 32 blocks): 0 better / 0 worse, d_avg 0.0000, 1 of 8000 games differing in play at the same win turn, units 0.869x, wall 0.830x. GT-neutral: the cap is on-policy only (depth == target_depth 6) and no suite tier runs goblins deeper than d5, verified byte-identical digests at d0b0/d3b10/d5b20/d5b40. See docs/design/escalation-budget-investigation.md Session 4.",
     "escalation_fresh_frac": 0.5
   }
 }
