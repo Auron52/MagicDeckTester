@@ -60,7 +60,7 @@ once, and the key disappears.
 | `beam_leafdepth` | 4 | `2` | same |
 | `commit` | 0 | -- | unused in production |
 | `exhaust_mult` | 0 | -- | unused in production |
-| `escalation_cap` | 12 | 5, 6 | always target_depth or one below, and DERIVABLE from `value_leaf_table.heuristic_lp` (the convergence depth). Under "always 1 depth" it stops being a choice: compute at load |
+| `escalation_cap` | 12 | 5, 6 | `= target_depth` on 10 of 12; `target_depth - 1` on exactly 2 (fivecolour 5/6, stompy 5/6). NOT derivable -- goblins and burn have the same 5-entry `heuristic_lp` and target 6 yet cap 6, so the two exceptions are hand-set. But the ceiling appears INERT: across 26 diagnosed escalations `daff` was 1/2/3 against a cap of 5 and never reached it. Test `cap = target_depth` on fivecolour + stompy by digest; if inert, cap becomes the constant "always on, ceiling target_depth" |
 | `escalation_r` | 7 | 7 distinct | a genuine per-deck CALIBRATION, but stale and not a fixed point. Should be EMITTED by generation, not hand-set |
 | `leaf` | 8 | `"none"` only | never `"model"` => a boolean, not a string enum |
 | `target_depth`, `budget_ms` | 13 | 5/6, 20/30/40 | REAL per-deck policy |
@@ -133,3 +133,49 @@ decks. Evidence so far:
 * **treasure_hunt: WINS** -0.0013 +/- 0.0011 at 0.758x / 0.782x.
 * **Dragons: near-win** +0.0008 +/- 0.0004 at 0.398x units / 0.502x wall.
 * dstorm / goblins / mirrorwing / stompy: lose. Melira and the other 11 model-leaf decks: in flight.
+
+## THE LIST: testably necessary vs constant vs deleted (user framing, 2026-09-11)
+
+> *"we want to come up with a list that is testably necessary, force those to be set and tested as
+> part of our processes and delete or replace the rest with constants."*
+> *"We also want good defaults for these prior to them being set."*
+
+Both halves are needed and they are complementary: the DEFAULT carries a new deck through the
+pipeline; the REQUIREMENT stops a shipped deck from silently riding that default untested.
+"Necessary" = some deck measurably wants a different value.
+
+### Necessary -- set + verified before a deck ships
+
+| key | good default | why that default | necessity evidence |
+|---|---|---|---|
+| `target_depth` | 5 | 9 of 13 ship it; `BuiltinDefaultPlay` already says 5 | fivecolour/goblins/burn/stompy want 6 |
+| `budget_ms` | 20 | 11 of 13 ship it | hinata adopted 30, goblins 40 |
+| `leaf` | model | 12 of 20 | both directions strongly: fluctuator leafless 0.433x units z+4.0; breaching/critter leafless 2.9-4.0x WORSE |
+| `mull_gen_depth` + `mull_gen_budget_ms` | the deck's PLAY settings | derive_mullgen rule 1 (trusted => no override; play settings often the cheapest arm) | deck-shaped: on fivecolour a LOWER depth is 2.4x MORE expensive |
+| `expected_buckets` | as discovered, no policy | bucket rulings are the user's alone | per-deck by construction |
+
+### Replace with constants (one value fleet-wide; the alternative is documented-harmful in two cases)
+
+* `alpha` -> relaxed whenever leafless (8/8; strict = "stops one depth short of the win")
+* `escalation_fresh_frac` -> 0.5 always (7/7; OFF caused the melira defect). Measurement in flight.
+* `escalation_cap` -> unconditional, ceiling `target_depth` (see the corrected row above; test the 2
+  exceptions for inertness first)
+* `beam_width` 3 / `beam_leafdepth` 2 (4/4) -- needs a digest check on the 16 decks that lack them
+
+### Delete
+
+`regime` (dead), `ladder` (no-op: its only value IS the default), `enabled` (implied by adoption),
+plus `commit` / `exhaust_mult` unless the 2026-09-11 batches earn them.
+
+### `escalation_r`: necessity is UNTESTED
+
+7 decks ship 7 distinct values, but the 120,000-game A/B only ever moved **goblins** (74 -> 240).
+Whether the other six beat the plain 120 prior has never been tested. Cheap test: R = 120 on all
+seven. If neutral, R collapses to "a constant plus goblins" and leaves the necessary list.
+
+### Enforcement -- copy an existing pattern
+
+`test/keepmodel_exhaustive_ab.sh` already FAILS on `bottoming_enabled != true`. The same shape works
+here: a sidecar validator walking every deck in `regression_cases.sh`'s `DECK_FILE` that fails if a
+necessary key is absent. That is what makes a good default safe -- the default carries a new deck,
+the validator guarantees no deck SHIPS on it untested.
