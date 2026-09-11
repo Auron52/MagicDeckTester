@@ -430,18 +430,18 @@ it has become more EXPENSIVE than the baseline it was meant to improve -- and **
 40 worse) despite 0.763x units. The two changes overlap in what they remove, so their savings were never
 additive. Staged candidate closed.
 
-## FLEET STATE after 2026-09-11 (7 of 20 decks now run leafless)
+## FLEET STATE after 2026-09-11 (8 of 20 decks now run leafless)
 
 | shape | decks |
 |---|---|
-| `{leaf: none, alpha: relaxed}` (shape #2) | Fluctuator, **StompySurprise, Goblins, treasure_hunt, Dragonstorm, Mirrorwing Dragon, Dragons** (7) |
-| default (escalation + model leaf, shape #1) | Anti-Lifegain, Auras, BreachingDragonstorm, Creature Giving, CritterLifegain, FiveColour, Hinata2, KittyEquipment, Knights, Melira Pod, Minotaur, burn, slivers_vial (13) |
+| `{leaf: none, alpha: relaxed}` (shape #2) | Fluctuator, **StompySurprise, Goblins, treasure_hunt, Dragonstorm, Mirrorwing Dragon, Dragons, Minotaur** (8) |
+| default (escalation + model leaf, shape #1) | Anti-Lifegain, Auras, BreachingDragonstorm, Creature Giving, CritterLifegain, FiveColour, Hinata2, KittyEquipment, Knights, Melira Pod, burn, slivers_vial (12) |
 
-**AN OPERATIONAL CONSEQUENCE WORTH ACTING ON: those 7 decks no longer need their value leaf REGENERATED.**
+**AN OPERATIONAL CONSEQUENCE WORTH ACTING ON: those 8 decks no longer need their value leaf REGENERATED.**
 `leaf: "none"` is applied in `AttachValueSidecar`'s `apply_leaf_policy()`, which parses the sidecar and then
 replaces `value_model` with `MidGameEvaluator::Constant()` and sets `value_trust_depth = 0`. The 120-tree
 model is therefore loaded and immediately discarded -- never consulted for any decision. So when a play-logic
-change invalidates the fleet's value sidecars (the usual trigger for a regeneration sweep), these 7 decks can
+change invalidates the fleet's value sidecars (the usual trigger for a regeneration sweep), these 8 decks can
 be SKIPPED: only their `value_play` block and the keep table matter.
 
 **But the FILE must stay.** Sidecar presence is what activates the hybrid at all, and the H-cell ladder is
@@ -451,4 +451,4 @@ exactly why these adoptions set `leaf: "none"` instead of renaming to `.value.DI
 **One caveat on the adopted decks, and a possible further gain.** Each deck's exhaustive keep table and its
 `mull_gen` settings were fitted under the MODEL-leaf play, and the shape keys apply during mulligan generation
 too. Every measurement above was taken WITH the shipped keep table live, so the results are valid for what
-ships; but a keep table re-fitted to the leafless play could add further gain on these 7 decks. Untested.
+ships; but a keep table re-fitted to the leafless play could add further gain on these 8 decks. Untested.
