@@ -15,7 +15,9 @@
     "causes; this fixture is the frame, and it must be OFFERED and VERIFIED."
   ],
   "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
-  "env": { "MTG_HUMAN_PLAY": "1" },
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
   "turn": 4,
   "on_the_play": false,
   "active_life": 20,
@@ -24,36 +26,129 @@
   "library_filler": "Forest",
   "library_size": 18,
   "_library_comment": [
-    "WHAT THIS FIXTURE PINS, AND WHAT IT DELIBERATELY DOES NOT. The Living Wish is on top, so the",
-    "loop has to draw ONE card to reach it. That pins the whole finish CHAIN on the user's real",
-    "board: bank -> Kitchen investigate -> crack the Clue -> draw -> cast Living Wish -> fetch",
-    "Dimensional Infiltrator (blue, since the board makes no black) -> deploy it inside the loop ->",
-    "exile fifty cards. It wins at x31.",
+    "WHAT THIS FIXTURE PINS. The Living Wish is THIRTEEN CARDS DOWN -- where the user's actually",
+    "was -- so the loop has to dig the whole way to it and then still run the finish CHAIN on their",
+    "real board: bank -> Kitchen investigate -> crack the Clue -> draw -> (x13) -> cast Living Wish",
+    "-> fetch Dimensional Infiltrator (blue, since the board makes no black) -> deploy it inside the",
+    "loop -> exile fifty cards. It runs the full sixty iterations, pays 26 draws, and wins.",
     "",
-    "It does NOT pin the DEEP dig. With the same wish thirteen cards down -- where the user's",
-    "actually was -- the loop reaches ten draws and then stops, and that shortfall is an OPEN item",
-    "recorded in Session 15d, not something this fixture papers over. Two causes were found and",
-    "fixed on the way here (see MTG_DRAW_GUARD_SELFTAP); a third is still out there."
+    "IT USED TO PIN ONLY THE SHALLOW CASE (wish on top, one draw, x31), because the deep dig did",
+    "not work: the loop reached ten draws and stopped. Session 15d found and fixed two causes and",
+    "recorded a third as open. That third one is fixed now -- MTG_COMBO_OFF_DRAW_TRIAL -- so the",
+    "fixture is set to the depth the user actually had, which strictly subsumes the shallow chain.",
+    "",
+    "THE BISECTION THAT LOCATED IT, kept because the shape of the evidence is the lesson. Walking",
+    "the wish's depth gave a cliff between 4 and 6 cards down and then IDENTICAL numbers at every",
+    "depth past it -- 6 blinks, 10 draws, no wish, every time. A dig that is genuinely too deep",
+    "degrades with depth; one that is constant is not about the dig at all. MTG_EDF_LOOP_TRACE:",
+    "",
+    "    k=6 enter             cost={C} float{c1} avail{g3 c1 *5}",
+    "    k=6 post-draw-sink    cost={C} float{}   avail{}",
+    "    STOP at k=6: pay-failed",
+    "",
+    "Nine mana and a colourless went in, nothing came out, and the activation the guard was there",
+    "to protect costs ONE MANA. SpendSurplusOnDrawSinks' guard was a POOLED ManaPool::CanPay, which",
+    "cannot see that one land serves one of its modes (Brushland taps for {C} OR {G}/{W}) nor that",
+    "the sequential payment picks greedily -- so `{4}` was paid off the very sources the pending",
+    "`{C}` needed. It is now a REAL TRIAL on a copy of the state, the same repair",
+    "MTG_COMBO_OFF_SINK_TRIAL made for the damage sink.",
+    "",
+    "AFTER, by wish depth (1, 2, 4 were already green; 6 and deeper were not):",
+    "    depth  1 -> 31 blinks, WIN      depth  9 -> 60 blinks, WIN",
+    "    depth  2 -> 37 blinks, WIN      depth 11 -> 60 blinks, WIN",
+    "    depth  4 -> 49 blinks, WIN      depth 12 -> 60 blinks, WIN",
+    "    depth  6 -> 60 blinks, WIN      depth 13 -> 60 blinks, 26 draws, WIN   <- this fixture",
+    "",
+    "`[finish] guard-refused=12` on this board is the trial doing its job: it declines the draws",
+    "that would starve the loop and pays the 26 that would not."
   ],
-  "library_top": ["Living Wish", "Aether Hub", "Cloud of Faeries", "Conservatory", "Overgrowth",
-                  "Yavimaya Coast", "Shivan Gorge", "Overgrowth", "Yavimaya Coast",
-                  "Emiel the Blessed", "Eldrazi Displacer", "Fertile Ground", "Living Wish"],
+  "library_top": [
+    "Brushland",
+    "Aether Hub",
+    "Cloud of Faeries",
+    "Conservatory",
+    "Overgrowth",
+    "Yavimaya Coast",
+    "Shivan Gorge",
+    "Overgrowth",
+    "Yavimaya Coast",
+    "Emiel the Blessed",
+    "Eldrazi Displacer",
+    "Fertile Ground",
+    "Living Wish"
+  ],
   "depth": 3,
   "budget_ms": 20,
   "battlefield": [
-    { "name": "Kitchen",              "controller": 0, "tapped": false },
-    { "name": "Brushland",            "controller": 0, "tapped": false },
-    { "name": "Adarkar Wastes",       "controller": 0, "tapped": false },
-    { "name": "Overgrowth",           "controller": 0, "tapped": false, "equips": "Kitchen" },
-    { "name": "Trace of Abundance",   "controller": 0, "tapped": false, "equips": "Kitchen" },
-    { "name": "Fertile Ground",       "controller": 0, "tapped": false, "equips": "Brushland" },
-    { "name": "Wild Growth",          "controller": 0, "tapped": false, "equips": "Brushland" },
-    { "name": "Peregrine Drake",      "controller": 0, "tapped": false },
-    { "name": "Peregrine Drake",      "controller": 0, "tapped": false },
-    { "name": "Cloud of Faeries",     "controller": 0, "tapped": false },
-    { "name": "Eldrazi Displacer",    "controller": 0, "tapped": false },
-    { "name": "Training Grounds",     "controller": 0, "tapped": false }
+    {
+      "name": "Kitchen",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Brushland",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Adarkar Wastes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Trace of Abundance",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Fertile Ground",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Brushland"
+    },
+    {
+      "name": "Wild Growth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Brushland"
+    },
+    {
+      "name": "Peregrine Drake",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Peregrine Drake",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Cloud of Faeries",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Eldrazi Displacer",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Training Grounds",
+      "controller": 0,
+      "tapped": false
+    }
   ],
-  "hand": ["Eldrazi Displacer", "Mariposa Military Base", "Mariposa Military Base"],
+  "hand": [
+    "Eldrazi Displacer",
+    "Mariposa Military Base",
+    "Mariposa Military Base"
+  ],
   "expect_combo_off": true
 }
