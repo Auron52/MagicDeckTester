@@ -7295,3 +7295,72 @@ always asked with an empty pool, so it is a deliberate LOWER BOUND.
 5. **The residual on this corpus is still the value leaf** (Session 23 item 1, unchanged). Eight
    shortfalls, of which six are H-construct / `net_c == 0` and immune to a shortcut by construction:
    the state a shortcut must fire on does not exist until the bank -> dig -> wish chain has run.
+
+## Session 26 (2026-09-11, 12:15-17:30 UTC): integration ledger -- the references versus the search, closed at the user's word
+
+The user's brief for the window: *"continue to sort out all of these issues overnight. You can also
+check that the references are matched by the search."* Closed early at *"Let's wrap things up as we
+are getting low on usage."* Nothing pushed; no generation launched; the play server was restarted
+at the user's word (12:16Z, pins the engine per game, port 8080).
+
+### Landed on `phase-1-2-deck-analyzer` (each through scenarios 79, Combo Off fixtures, the FULL
+99-config regression byte-identical, `viewer_checks.sh --strict` 0 play-drift over 312 refs, quick sweep FALSE FIRE 0)
+
+| commit | what |
+|---|---|
+| 2048d43e | user references s14_gi13 (T5), s15_gi14 (T6) committed; replay clean |
+| b59ef34c | tap dialog colour choice per any-colour land Aura (`tap=Land#n:FACE+AURA`), energy shown at zero, a generic pip no longer burns Aether Hub's {E} (the s13 rejection) |
+| b9dd00c8 | seed-16 "phase jump" = the Commit Line button becoming Pass phase under a fast click; a pass that discards floating mana now takes a confirming click; `planByIndex` |
+| 2906c417 | Session 22: earliest fire -- `MTG_EDF_GOFF_LIB_DEPTH`, `MTG_COMBO_OFF_MAX_ITER` (viewer-only); fixture 10 flipped (the seed-9 board WINS at x158) |
+| c4213de1 | Session 23: references vs search -- `MTG_EDF_GOFF_EXACT_AUTO`, `MTG_EDF_PROSPECTIVE` adopted; bench 10/14 -> 8/14 short |
+| 84f0a9c8 | melira_pod s8_gi7 / mirrorwing s2_gi1 shortfalls = search-budget starvation, not defects (2x budget deck-wide: -0.001t for +29% thread time) |
+| c1061bb8 | the human's declared order survives the plan emit cap (`matched_plans` on the validation) |
+| 80ed5f22 | Session 24: mid-loop land-Aura / drawn-Emiel casts, exact ceiling (400 = widening-only floor; fixture 29 wins at x685); Session 25: the search shortcut `MTG_EDF_CO_ROOT`/`MTG_EDF_CO_LOOK` shipped OFF (bench cell-identical); fixtures 32 |
+
+### The bench (scripts/ref_bench.py, EDF, 14 references, exact opening hands)
+
+| | human | search | short |
+|---|---|---|---|
+| morning (e7a8c199) | 4.429 | 5.714 | 10/14 |
+| tip (80ed5f22 / 4e967ed3) | 4.429 | **5.286** | **8/14** (s1 +2, s6 +1, s8 +3, s9 +1, s10 +1, s11 +1, s12 +2, s14 +1) |
+
+Every other deck is green except melira_pod (1) and mirrorwing_dragon (1), both budget-local.
+
+### The finding that sets the next step (Session 25)
+
+The exact rule is right (FALSE FIRE 0 on 1,074 + 939 states) but the AUTONOMOUS executor cannot carry
+out 86% (root) / 98.6% (lookahead) of the states the rule accepts, because five Session-20 repairs,
+the Session-24 casts and the exact ceiling are `ComboOffFinishActive()`-gated and the autonomous cap
+is 60. That, not the rule, is why the search trails the references. EDF has no regression cell,
+value leaf or keep table, so lifting them re-prices nothing frozen.
+
+### UN-LANDED work, stopped at the user's word (committed in agent worktrees, NOT gated, NOT measured by the coordinator)
+
+* `worktree-agent-a69ca9552c87b74c8` -- the executor lift: 2c6705ef `MTG_EDF_EXACT_EXECUTOR`
+  (autonomous go-off apply gets the button's finish machinery), b679d265 exact iteration ceiling
+  for autonomous play. Fixtures 32/32 byte-identical in both lever positions per its last message;
+  the four-arm bench, 200-game average and false-positive table were NOT run. Resume: rebase onto
+  the tip, measure per the Session 26 brief (bench x {executor, shortcut}), adopt only on strict
+  improvement.
+* `worktree-agent-ab30a2a6e5e490981` -- speed pass (callgrind): 30fadf1a bincache load -57%,
+  05328b4d hot env reads cached, 91634244 string_view dispatch (-5.4% dragonstorm); a fourth
+  (ComputeLordBonus guard) uncommitted. Each claims byte-identity on smoke; the FULL regression and
+  the wall-clock A/B were not run by the coordinator.
+* `worktree-agent-ac91edb1799352c19` -- missed-fire audit: 04893ec6 `MTG_EDF_CO_WHY` +
+  `combo_off_rule_probe` (separates "rule declined" from "rule never asked"); fixture 33 in
+  progress, uncommitted.
+
+### Decisions for the user (all taken by the documented default and running)
+
+1. `MTG_EDF_PROSPECTIVE` reverses the 2026-09-03 "measured and refuted" verdict; adopted because in
+   combination it is corpus-positive, average-neutral, 21% cheaper. `=0` reverts.
+2. The search shortcut is OFF (bench identical, wall -1.3%); flip ON is two words and every gate ran
+   in both positions -- but it only pays once the executor lift lands.
+3. The 400 ceiling floor: pure-exact (`MTG_COMBO_OFF_ITER_FLOOR=0`) withdraws fixtures 10/24/29
+   today because `FinishNeedMana` and the sizer's branch price different requirements.
+4. 297/312 references replay as "repaired" (stale indices); a bulk re-save through the viewer is a
+   user-only action.
+5. melira_pod has no searched suite cell since 2026-09-06; its shortfall cannot be A/B'd by the
+   harness until the pod enumeration-wall work restores them.
+6. Value-leaf generation for EDF: the residual 0.86t is horizon; still awaiting the user's word.
+7. Inert levers `MTG_COMBO_OFF_FLOAT_ING` / viewer `MTG_COMBO_OFF_PROSPECTIVE`: keep or delete.
