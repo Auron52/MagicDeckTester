@@ -3648,3 +3648,63 @@ adopted.
 because wall is contention-sensitive, but here both came from the same pooled batch, so the disagreement is
 real: a leafless pass does more real work per metered unit. **Report both axes; a units-only read would have
 called `nlrelax` a 11% saving when it is a 40% slowdown.**
+## SESSION 2026-09-11 — `ref_bench` shortfall `claude_s8_gi7` diagnosed: SEARCH BUDGET, no defect
+
+`scripts/ref_bench.py --deck melira_pod` (10 references, `--force-mulligan`, committed play
+policy) is 9/10 matched-or-better and has exactly one standing shortfall:
+
+```
+claude_s8_gi7.json             8    7 |      3      4 | SHORTFALL +1
+AVG                                   |  4.500  4.500 |
+```
+
+**First divergence: TURN 1.** The human played `[1] land=Llanowar Wastes; cast: Ignoble Hierarch`;
+the search plays the land and casts NOTHING. The dork is the whole game: with it the curve is
+1 / 3 / 4 mana, so `Murderous Redcap` ({2}{B}{B}) lands on T3 alongside Melira + Carrion Feeder
+and the persist loop kills that turn. Without it the curve is 1 / 2 / 3 / 4 and Redcap lands T4.
+
+**It is NOT an enumeration gap.** A live `--claude-play` dump at that decision offers the human's
+plan at the same index the reference recorded:
+
+```
+ [0] land=Llanowar Wastes; cast: Carrion Feeder
+ [1] land=Llanowar Wastes; cast: Ignoble Hierarch      <- the human's pick, still offered
+ ...
+ [4] land=Llanowar Wastes; cast: (nothing)             <- the search's pick
+```
+
+**It is NOT depth, and it is NOT the evaluator.** `MTG_FS_ROOT_DUMP=1` at that decision shows the
+search is one iterative-deepening pass short. At the shipped `d5/budget-20` only the depth-1 pass
+completes, and depth-1 ranks the plans wrong:
+
+```
+[fs-root] tail win=4 ... val=0:                 (cast nothing)
+[fs-root] tail win=9 ... val=400: Ignoble Hierarch
+```
+
+At `--budget-ms 40` a second pass runs and re-scores the same plans correctly:
+
+```
+[fs-root] tail win=3 ... val=400: Ignoble Hierarch
+```
+
+The depth/budget ladders say the same thing from both directions (single game, `--threads 1`):
+
+| axis | result |
+|------|--------|
+| `--depth 3,4,5,6,7 --budget-ms 20` | wt=4, wt=4, wt=4, wt=4, wt=4 — depth buys NOTHING |
+| `--depth 5 --budget-ms 20/40/80/…/2560/0` | wt=4, then **wt=3 at every budget from 40 up** |
+| `--budget-ms 0` at `--depth 0/1/2/3` | 6 / **4** / **3** / 3 |
+
+So the shipped cell delivers a *depth-1* decision (wt=4 = the d1 result) where depth 2 suffices
+(wt=3 = the human's turn). Classic starvation, and it matches the deck's known cost problem: the
+`[rollout-stats] id_depth` histogram at b=20 is `1:2 2:1` against a nominal depth of 5. The
+recovered b=40 line is the human's line turn for turn (T1 Wastes+Hierarch, T2 Pathway+Feeder+Melira,
+T3 Thicket+Redcap → loop → T3).
+
+**Verdict: no fix.** Nothing is modelled wrong, no plan is missing, and the evaluator ranks the
+human's play first as soon as it is allowed to look. The cure is search budget, which is a
+global perf/quality trade and not adoptable off one reference. NOTE for anyone who tries: melira
+has **only d0 canaries** in every suite tier (searched cases pulled 2026-09-06, see the session
+above), so the regression harness cannot A/B a melira *searched* play change at all — the
+enumeration wall (`docs/design/pod-pair-enumeration-explosion.md`) is the blocking prerequisite.
