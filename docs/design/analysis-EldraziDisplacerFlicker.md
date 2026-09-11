@@ -5340,3 +5340,15 @@ cannot win; pinned as fixture 12 with fixture 13 as its positive control).
    Its catalogue lands separately.
 5. **The user's play server (pid 72811) predates every server.js landing of 2026-09-10/11** (no binary
    pin, no save audit, no persistent-child fix). Restart it before the next game.
+
+### Session 17 addendum: the replay hunt landed (`abc98686`)
+
+`docs/design/combo-off-replay-hunt.md` -- 6,173 states at TRUE fidelity (real pools, shuffles, exile,
+energy) through the stateless protocol, measured on `d8f700bb` BEFORE this window's executor fixes:
+1,059 offered, 295 click failures (27.9%), `combo_off_verified` => win **721/721**, zero new cluster
+shapes, and phase-1's synthetic C3 (`net_c <= 0`) **never occurs on a real board**. Largest real
+cluster is C6 (103: loop completes, wish seen, finisher never becomes a candidate -- a selection bug,
+not mana). 173 of the 295 "failures" still win within a median +2 turns (the button fired early).
+Three `--interactive` replays that never terminated (seeds 39/51/71) are recorded as HANG repros.
+On this tip its `--quick` mode (939 states, 13 s) reads a=60 b=23 (C1b 18, C2 3, loop-zero 2),
+c=7 -- the baseline for the next executor pass; re-run diffs on stable state ids.
