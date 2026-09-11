@@ -6428,3 +6428,318 @@ The raised ceiling moves no saved reference.
    is red *in the set the untap restores each pass*, which a not-yet-drawn Aura cannot be proved to
    join; crediting it would be firing on hope. The one remaining hunt GORGE offer is a net-0 board
    the ping cannot fund at any ceiling.
+## Session 23 (2026-09-11): the references versus the search
+
+**USER:** *"check that the references are matched by the search."* `scripts/ref_bench.py`
+reconstructs each saved reference's exact opening hand (`--force-mulligan`) and replays it with the
+SHIPPED autonomous policy, so what it prints is PLAY, not mulligan. Fifteen references exist and
+fourteen are benchable (`claude_s13_gi12` was never saved). `references/` read-only throughout;
+nothing pushed; no generation launched.
+
+### BEFORE and AFTER -- the tip (`b59ef34c`), `d5 / 20 ms`, `max_turns 8`
+
+```
+reference                   seed   gi | human  BEFORE   AFTER  | flags (AFTER)
+claude_s10_gi9.json           10    9 |     4       5       5  | SHORTFALL +1
+claude_s11_gi10.json          11   10 |     6       7       7  | SHORTFALL +1
+claude_s12_gi11.json          12   11 |     4       6       6  | SHORTFALL +2
+claude_s14_gi13.json          14   13 |     5       7       6  | SHORTFALL +1
+claude_s15_gi14.json          15   14 |     6       6       6  |
+claude_s1_gi0.json             1    0 |     3       5       5  | SHORTFALL +2
+claude_s2_gi1.json             2    1 |     4       5       5  | SHORTFALL +1
+claude_s3_gi2.json             3    2 |     4       4       4  |
+claude_s4_gi3.json             4    3 |     6       6       6  |
+claude_s5_gi4.json             5    4 |     4       5       5  | SHORTFALL +1
+claude_s6_gi5.json             6    5 |     4       6       5  | SHORTFALL +1
+claude_s7_gi6.json             7    6 |     5       5       5  |
+claude_s8_gi7.json             8    7 |     3       6       6  | SHORTFALL +3
+claude_s9_gi8.json             9    8 |     4       7       5  | SHORTFALL +1
+AVG                                   | 4.429   5.714   5.429  | 10/14 short, 0 HAND-MISMATCH
+```
+
+**Zero HAND-MISMATCH on every row**, so every comparison is play and none is mulligan drift. Three
+references gained a turn (s9 two turns), none lost one, and the corpus mean closes 0.286 t of the
+1.286 t gap. All ten shortfalls remain shortfalls; what changed is their size.
+
+### The discriminator: ONE pooled batch, 126 jobs, five budgets x four lever arms
+
+`logs/edf_ladder/manifest.json` -- every reference x {20, 100, 500, 2000, 10000 ms} and x {shipped,
+`MTG_EDF_LIB_ROUTE`, K-axes un-narrowed, tutor width 8, `MTG_EDF_M2`}, all in one `mtg --batch`.
+Virtual ms is deterministic, so a contended box cannot move a cell.
+
+| ref | human | 20 | 100 | 500 | 2000 | 10000 | lib | kmax-off | width-8 | m2 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| s10/9  | 4 | 5 | 5 | 5 | 5 | 5 | 5 | 5 | 5 | 5 |
+| s11/10 | 6 | 7 | 7 | **6** | 6 | 6 | 7 | 7 | 7 | — |
+| s12/11 | 4 | 6 | 6 | — | — | — | 6 | 6 | 6 | — |
+| s14/13 | 5 | 7 | 7 | 7 | 7 | **7** | 7 | 7 | 7 | 7 |
+| s1/0   | 3 | 5 | 5 | 5 | **4** | 4 | 5 | 5 | 5 | 5 |
+| s2/1   | 4 | 5 | **4** | 4 | 4 | 4 | 5 | 5 | 5 | 5 |
+| s5/4   | 4 | 5 | **4** | 4 | 4 | 4 | 5 | 5 | 5 | 5 |
+| s6/5   | 4 | 6 | 6 | — | — | — | 6 | 6 | 6 | — |
+| s8/7   | 3 | 6 | 6 | 6 | 6 | **6** | 6 | 6 | 6 | 6 |
+| s9/8   | 4 | 7 | 6 | **5** | 5 | — | 6 | 7 | 7 | — |
+| MEAN (all 14) | 4.429 | 5.714 | 5.500 | | | | 5.643 | 5.714 | 5.714 | 6.429 |
+
+The six non-shortfall rows are unmoved by every arm and are omitted. `—` = the cell was still
+running when this was written: EDF has single games that take 10-20 minutes at a 10 s virtual budget,
+which is the deck's known tail, not a scheduling artifact. **`MTG_EDF_M2` is worse or equal on every
+reference it moved** and is not revisited -- the user closed that route in Session 8.
+
+### Class (C) -- the shared 60-iteration cap -- MEASURED ABSENT on every reference
+
+`MTG_EDF_MAX_ITER=400`, the same 14 references, same d5/20 ms (`logs/edf_ladder/manifest4.json`):
+**mean 5.714, cell for cell identical to the shipped 60.** Not one shortfall is the cap. The trace
+agrees: the largest count any reference's search asked for was `[edf-loop] begin iters=47` and the
+largest it ran was `done=45/45`, both under the ceiling, so the clamp never bound. **Do not raise
+the shared cap** -- nothing on this corpus wants it, and the one frame that does (the seed-16 viewer
+frame that needs 400) is a COMBO OFF frame, i.e. the Combo-Off-only budget another agent is adding.
+
+### The ten shortfalls, one class each
+
+**(H) HORIZON -- 8 of 10.** Two sub-shapes, and the budget ladder is what separates them.
+
+**H-budget (the tail is not computed): `s2_gi1`, `s5_gi4`, `s11_gi10`, `s9_gi8`, half of `s1_gi0`.**
+The human's plan IS enumerated at the divergence node and loses to a tail estimate the 20 ms solve
+never computes; a bigger virtual budget alone recovers the human's turn (s2 and s5 at 100 ms, s11
+and s9 at 500 ms). Session 9 named this class ("pure 20 ms budget starvation, the class the value
+leaf exists for") and EDF still has no value sidecar. s2 and s5 are already written up in
+`docs/design/edf-shortfall-classification.md`; this session reproduces both ladders exactly.
+
+  * **`s9_gi8` (human 4, search 7 -> 5) is the new one, and its divergence is turn TWO.** Replayed
+    through the engine's own enumeration with the shipped pruning
+    (`MTG_CLAUDE_PLAY_SHIPPED_PRUNING=1`), the T2 menu contains
+    ```
+       5  land=Conservatory; cast: Wild Growth → Kitchen
+      20  land=Mariposa Military Base (enters tapped, +rad); cast: (nothing)
+    ```
+    and the search commits **20**. The human casts the Aura. The cost lands two turns later:
+    ```
+    [edf-turn] t5 lands=4 auras=1 untapper=1 outlet=1 | ok=0 untaps=0 refund=0 cost=0 net=0
+    ```
+    Cloud of Faeries AND Emiel are on the battlefield and there is **no loop** -- the top-two land
+    yields (3) only equal Emiel's `{3}`. The human's two Aura drops (Wild Growth T2 onto
+    Conservatory, Overgrowth T3 onto Kitchen) make the same two lands yield 5, i.e. net **+2**, and
+    that is the whole T4 kill.
+
+**H-construct (not priceable at ANY budget): `s10_gi9`, `s8_gi7`, `s14_gi13`, the other half of
+`s1_gi0`.** Byte-immune to 500x the budget. In three of them the missing construct is identical:
+**bank -> dig -> wish -> deploy -> sink inside ONE main phase**, with the finisher in the LIBRARY
+behind loop draws. `ScanHandSinks` prices a sink on the battlefield, in hand, or wishable *from
+hand*; it does not price one the loop's own draws will find, so `FlickerGoOffCount` returns 0, no
+multi-activation plan is proposed, and the apply's mid-loop dig never gets a loop to ride.
+
+  * **`s8_gi7` (human 3, search 6 at 20/100/500/2000/10000 ms)** is the cleanest instance. The
+    autonomous turn trace, on the turn after the pieces land:
+    ```
+    [edf-turn] t4 lands=3 auras=2 untapper=1 outlet=1 drawland=1 wish=0 |
+               ok=1 untaps=2 refund=4 cost=3 net=1 pool=5 gorge=0/0 drain=0/0 exile=0
+    ```
+    `ok=1 net=1` -- live and self-funding. `gorge=0/0 drain=0/0 exile=0 wish=0` -- no sink on the
+    board, none in hand, and no wish in hand to fetch one. The human's T3, on the same pieces, is
+    `Conservatory: investigate, Mariposa Military Base: draw a card, Eldrazi Displacer: blink Cloud
+    of Faeries, Clue Token: sacrifice: draw a card` repeated until the Living Wish turns up, then
+    `Living Wish → Essence Depleter` and the drain.
+  * **`s10_gi9`** and **`s1_gi0`** are the same shape and already classified (the classification doc
+    and Session 8). `MTG_EDF_LIB_ROUTE=1` -- the implemented, default-OFF pricing for exactly this
+    construct -- is byte-identical on both here, as its own note predicts, and adds nothing on top of
+    this session's lever either.
+  * **`s14_gi13` (human 5, search 7 -> 6, budget-immune to 10 s)** is the one H-construct case that
+    is NOT the library route: it is a wish-target call. Search T3, from the game log:
+    ```
+    CAST_SPELL Living Wish {1}{G}
+    REVEAL kept=[Mariposa Military Base]   source="Living Wish (searched)"
+    PLAY_LAND Mariposa Military Base
+    ```
+    The human's T3 wish takes **Eldrazi Displacer** -- the board's only missing piece -- casts it T4
+    and goes off T5. `TutorCandidates` already ranks it correctly (a missing outlet scores 90 against
+    the land tier's `30 + land_want*5` = 50), but the wish axis ships at **width 8**
+    (`MTG_EDF_TUTOR_NARROW` default off), so the ranking does not bind: the search evaluates all
+    eight fetches and its d5 tail prefers the land at every budget from 20 ms to 10 s. **Narrowing
+    is not the fix** -- the width-3 arm measured WORSE (s14 7->8, s15 6->8, mean 5.714 -> 5.929).
+
+**(E) EVALUATION -- 2 of 10: `s12_gi11` and `s6_gi5`.** Both are a main-phase pair the tail cannot
+separate, decided on plan value, and both cost a land drop two turns later.
+
+  * **`s12_gi11` (human 4, search 6).** Search T2: `CAST_SPELL Living Wish {1}{G}` →
+    `REVEAL kept=[Dimensional Infiltrator]`, cast T3. Human T2: `Living Wish → Azorius Chancery`
+    (`tutor_etb chosen=0`), played as the T3 land. The engine's KILL tier went live because mode 2's
+    `have_outlet && have_payload` counted a 5-mv Peregrine Drake and a 3-mv Eldrazi Displacer sitting
+    in HAND on a **two-land** board -- precisely the shape `MTG_EDF_WISH_CAST_GATE` was written for
+    and never adopted. Consequence: the search has NO land to play on T3 (`T3 MAIN_1 CAST_SPELL
+    Dimensional Infiltrator`, no `PLAY_LAND`) and reaches T4 on three lands where the human has four,
+    one of them a Karoo making two. **Measured, and the built gate is not the fix:** the `castgate`
+    arm leaves s12 at 6, and the `narrowgate` 2x2 makes it 7.
+  * **`s6_gi5` (human 4, search 6 -> 5).** Search T2: `PLAY_LAND Brushland; CAST_SPELL Living Wish`
+    → `REVEAL kept=[Eldrazi Displacer]`. Human T2: `land=Brushland; cast: Fertile Ground →
+    Brushland`. On two lands the two are mutually exclusive at two mana, and the ramp is what makes
+    **Overgrowth `{2}{G}` castable on T3** -- the search, one mana short there, casts Fertile Ground
+    instead and never catches up. It then plays no land at all on T3 or T4 because it holds none;
+    a wish for a LAND would itself have been the land drop, which is exactly what the human does on
+    T4 with both wishes.
+
+**(D) DEPLOY/SEQUENCING appears only as a SECONDARY**, on `s10_gi9`: the T2/T3 plan-value tiebreak
+deploys a **second** Eldrazi Displacer (a redundant outlet) and pushes the enters-tapped Kitchen from
+T3 to T4, which costs exactly the one mana that makes the human's T4 `Training Grounds + Peregrine
+Drake` affordable -- `MTG_FS_ROOT_DUMP=4` shows that pair ABSENT from the search's plan set, not as
+an enumeration hole but as unaffordable. The primary stays H-construct: even handed the human's
+board, the search cannot price that turn's kill.
+
+**(M) MANA -- none found.** No shortfall traced to a payment misallocation. The one known
+energy-on-a-generic-pip defect (`b59ef34c`) fires only under `LineDemandAnyPipColor`, which is
+`HumanPlayActive`-gated and so cannot reach the search; the two turns where a colour looked scarce
+(s10 T4's single `{U}`, s6 T3's `{2}{G}`) are one-mana arithmetic shortfalls, not allocation errors.
+
+**(O) -- none.**
+
+### FIXED: the search was sizing its go-offs with arithmetic we had already disproved
+
+Sessions 15f and 19 found three counting errors in `FlickerGoOffCount` and repaired all three --
+and scoped **every** repair `HumanPlayActive()`, so GT, the value leaf and the keep tables would stay
+byte-identical. **That scoping buys byte-identity for decks that do not exist.**
+`DetectDecisionProvider` routes here on `blink_cost | etb_untap_lands | is_land_aura`, and not one of
+the 19 decklists in `test/regression_cases.sh` carries any of the three (every list scanned against
+`cards.json`; `logs/edf_ladder/sig.py`). The whole cost of the gate was being paid by the one deck
+that does route here:
+
+1. the **Gorge** refund credits a yield land in the untap slot `ApplyBlinkLoop`'s damage-sink
+   promotion has already taken -- and that promotion is **not** COMBO-OFF-scoped (`sinks` is passed
+   unconditionally), so the autonomous projection over-counts the loop's per-pass budget;
+2. **`{C}` pips** are sized by mana value, so a loop can end with the bank full and the pips short,
+   and `SpendSurplusOnExile` is all-or-nothing, so the deck-out then fires zero times;
+3. the **dig** and the **kill** are folded into one `max` when they are sequential phases that cannot
+   overlap, which under-sizes every bank-then-deploy line.
+
+**`MTG_EDF_GOFF_EXACT_AUTO` (`6ec8b9fe`, adopted default ON in `1e031175`)** makes all three
+reachable from the autonomous arm. It carries its own heurarm slot, so both arms rode ONE pooled
+batch (`logs/edf_ladder/manifest2.json`: nine lever arms x 14 references), and the `base2` control
+reproduced the shipped column cell for cell -- which is what makes this a clean one-binary A/B.
+`PipFreeOutletFromHandLive` is deliberately excluded: its paired apply-side swap is
+`ComboOffFinishActive()`-gated, so lifting the sizing half alone would size a swap that never happens.
+
+| arm (all at d5/20 ms, 14 references) | mean | vs shipped |
+|---|---:|---|
+| shipped (`base2` control) | 5.714 | — |
+| **`MTG_EDF_GOFF_EXACT_AUTO`** | **5.429** | **-0.286, 3 better / 0 worse** |
+| ... + `MTG_EDF_LIB_ROUTE` | 5.429 | the library route adds nothing |
+| `MTG_EDF_LIB_ROUTE` alone | 5.643 | s9 only |
+| `MTG_EDF_WISH_SINK_FLOOR` | 5.714 | inert |
+| `MTG_EDF_PROSPECTIVE` | 5.857 | s2 4 and s5 4, but s7 5 -> 6: not a strict improvement |
+| `MTG_EDF_TUTOR_NARROW` (width 3) | 5.929 | worse |
+| `MTG_EDF_TUTOR_NARROW` + `MTG_EDF_WISH_CAST_GATE` | 5.929 | worse |
+| `MTG_EDF_VAL_RAMP` + `MTG_EDF_VAL_COMBO` | 6.000 | worse (breaks s3_gi2, as its own doc records) |
+| `MTG_EDF_GOFF_EXACT_AUTO` at **100 ms** | **5.286** | the lever and the budget are complementary |
+
+**Why `s9_gi8` moves two turns.** The sizing feeds `BlinkActivationCounts` and
+`EdfAutoGoOffAfterCasts`, so a correctly-sized go-off changes what the rollouts realise and therefore
+the tail estimate the T2 ranking is decided on. The line changes from turn two: it now casts Wild
+Growth on T2 and Overgrowth on T3 and T4 instead of banking two rad counters, and the T5 board goes
+off (`UNTAP_SOURCES x50`, then Emiel + Living Wish + Dimensional Infiltrator) instead of stalling at
+a net-zero loop.
+
+**Deck average is not harmed.** 200 games, seeds 3001/3061 x 50, both arms chunk-interleaved in ONE
+pooled queue (the arm-major starvation lesson from `edf-plan-value-mana-equivalents.md`). Paired
+10-game chunks, complete:
+
+| chunk | off | on | | chunk | off | on |
+|---|---:|---:|---|---|---:|---:|
+| 3001+0  | 5.7 | 5.7 | | 3061+0  | 5.8 | 5.7 |
+| 3001+10 | 6.1 | 6.0 | | 3061+10 | 5.0 | 5.0 |
+| 3001+20 | 6.0 | 6.1 | | 3061+20 | 5.0 | 4.9 |
+| 3001+30 | 5.6 | 5.5 | | 3061+30 | 5.3 | 5.2 |
+| 3001+40 | 5.2 | 5.2 | | 3061+40 | 5.1 | 5.2 |
+
+**off 5.480, on 5.450 -- mean paired delta -0.030 turns** in the lever's favour (5 chunks better, 2
+worse, 3 tied; paired t = -1.15, i.e. NOT significant at n=10 chunks). Summed wall clock 5,314 s off
+vs 5,633 s on, **+6%**, and it is concentrated in one chunk (3061+30: 1,718 s -> 2,269 s) -- realising
+a bigger loop costs apply time inside every rollout, the same trade `MTG_EDF_AUTOGOFF` disclosed when
+it was adopted. The deck average is reported as "not harmed", NOT as a second gain; the load-bearing
+evidence is the reference corpus.
+
+### For the SEARCH-SHORTCUT builder: the fixture list
+
+Every state below is a frame the USER reached, read straight out of their own saved recordings
+(`logs/edf_ladder/comboff.py`): the first main-phase decision of that game whose menu carried a
+`combo_off` plan, i.e. the rule table firing on a real board. `rule=—` means the recording predates
+Session 19's `co_rule` stamp, not that no rule fired.
+
+| reference | seed | gi | human wins | rule fires at | rule | the winning plan |
+|---|---|---|---|---|---|---|
+| `claude_s9_gi8`   | 9  | 8  | T4 | **T4, main ordinal 5**  | WISH-DRAW | `Emiel: blink Cloud of Faeries x60` |
+| `claude_s14_gi13` | 14 | 13 | T5 | **T5, main ordinal 5**  | WISH-DRAW | `Displacer: blink Peregrine Drake x60` |
+| `claude_s15_gi14` | 15 | 14 | T6 | T6, main ordinal 8      | WISH-DRAW | `Displacer: blink Peregrine Drake x60` |
+| `claude_s3_gi2`   | 3  | 2  | T4 | T4, main ordinal 27     | —         | `Essence Depleter, Displacer: blink Drake x15` |
+| `claude_s10_gi9`  | 10 | 9  | T4 | T4, main ordinal 34     | —         | `Displacer: blink Peregrine Drake x9` |
+| `claude_s1_gi0`   | 1  | 0  | T3 | T3, main ordinal 40     | —         | `Emiel: blink Peregrine Drake x4` |
+| `claude_s12_gi11` | 12 | 11 | T4 | T4, main ordinal 42     | WISH-DRAW | `Emiel: blink Peregrine Drake x60` |
+| `claude_s11_gi10` | 11 | 10 | T6 | T6, main ordinal 48     | —         | `Emiel: blink Peregrine Drake x6` |
+| `claude_s6_gi5`   | 6  | 5  | T4 | T4, main ordinal 60     | WISH-DRAW | `Displacer: blink Peregrine Drake x60` |
+| `claude_s8_gi7`   | 8  | 7  | T3 | T3, main ordinal 63     | —         | `Displacer: blink Peregrine Drake x8` |
+| `claude_s2_gi1`, `claude_s4_gi3`, `claude_s5_gi4`, `claude_s7_gi6` | | | | never offered | | the human won without the button |
+
+**The ORDINAL is the message, and it splits the ten into two jobs.**
+
+* **Shallow ordinals (5, 5, 8) -- `s9_gi8` T4, `s14_gi13` T5, `s15_gi14` T6.** The rule fires within
+  the first handful of main-phase decisions, i.e. right after the plan that assembles the loop. A
+  shortcut that consults the table at plan-apply time reaches these directly, and two of the three
+  are live shortfalls today (s9 at +1, s14 at +1). **Start here.**
+* **Deep ordinals (27-63) -- `s8_gi7` T3 (63), `s6_gi5` T4 (60), `s11_gi10` T6 (48), `s12_gi11` T4
+  (42), `s1_gi0` T3 (40), `s10_gi9` T4 (34).** The button only appears after dozens of hand-played
+  sub-decisions of banking and digging. A shortcut keyed on the rule table will NOT see these from a
+  single main-phase plan: the state it must fire on does not exist until the bank->dig->wish chain
+  has already run. These are the H-construct class above, and the shortcut is **not** their fix --
+  the same-main dig has to become priceable first.
+
+Two further constraints the shortcut must honour, both already recorded by the rule owner:
+`ComboOffPossible` is sound only *after* the enumerator has produced a plan carrying a
+multi-activation go-off (that precondition is the payment machinery's own proof the assembly is
+affordable), and a shortcut must key on **`combo_off_verified`, never on `combo_off_offered`** --
+the trial apply is 268/268 right in both directions while the display rule is 87.5%.
+
+### Gates (on the adopted binary)
+
+* `bash test/scenarios.sh` -- **79 passed, 0 failed, 0 error**.
+* `bash test/combo_off_check.sh` -- **21 passed, 0 failed, 0 error**.
+* `bash test/regression.sh --smoke` -- **73 passed, 0 failed, 0 new**;
+  `configs changed: 0   unchanged: 73`; `[searched] slower=0 faster=0 play-changed=0`.
+  Byte-identity for every other deck proved (and expected: none routes to this provider).
+* `bash test/viewer_checks.sh` -- protocol `--strict` over every reference: reported in the session
+  closeout. Human play is unaffected by the lever in either position, because `GoffExactHere()`
+  short-circuits on `HumanPlayActive()`.
+* `scripts/ref_bench.py --json test/ref_bench.json` refreshed; EDF now reads `n=14, human 4.4286,
+  search 5.4286, short 10, hand_mismatch 0`.
+
+### Open, carried forward (none blocked on)
+
+1. **The residual is the value leaf.** `MTG_EDF_GOFF_EXACT_AUTO` at 100 ms scores **5.286** against
+   5.429 at 20 ms and 5.500 for the budget alone, so the lever and the search budget are
+   complementary and the remaining gap is squarely the horizon this deck has never had a value
+   sidecar for. That is the classification doc's item 1 and it is still item 1.
+2. **`s12_gi11` wants a wish-for-a-land the engine will not take, and the built gate does not give
+   it.** `MTG_EDF_WISH_CAST_GATE` is the right diagnosis (an uncastable hand piece should not make
+   the KILL tier live) and the wrong remedy as written -- at capacity 2 it also strikes the outlet
+   and payload tiers, so the wish fetches a duplicate of the piece already in hand. A capacity test
+   that says "castable within a turn or two", not "castable off a full untap right now", is the shape
+   to try, and it should be measured jointly with the width as its own note requires.
+3. **`s14_gi13` says the wish RANKING is right and the wish EVAL is wrong.** The missing outlet is
+   already ranked 90 against the land's 50; at width 8 the ranking never binds, and narrowing so the
+   ranking does bind measured worse on two other references. This is the tutor-axis lesson from the
+   Goblins saga in a new place: `rank1 == rank2` in effect, so the discriminator has to be the eval,
+   not the list.
+4. **`MTG_EDF_PROSPECTIVE` IS THE NEXT ADOPTION, and only in COMBINATION -- measured, not adopted
+   here.** Alone it recovers `s2_gi1` and `s5_gi4` to the human's T4 at the shipped 20 ms but costs
+   `s7_gi6` a turn (5 -> 6), so on its own it is not a strict improvement (mean 5.857). **On top of
+   `MTG_EDF_GOFF_EXACT_AUTO` the s7 regression disappears** and the arm is a strict improvement over
+   the adopted lever: mean **5.286**, `short` **10 -> 8**, with `s2_gi1` 5 -> **4** and `s5_gi4`
+   5 -> **4** (both now MATCHING the human) and every other cell identical. That is the repo's
+   standing "sweep levers in COMBINATION" lesson landing again -- +0.143 t alone-and-in-the-wrong-
+   direction, -0.143 t in combination.
+   Verified safe for the viewer: `MTG_EDF_PROSPECTIVE=1 python3 test/viewer_protocol_check.py --only
+   EldraziDisplacerFlicker --strict` gives **4 ok, 10 repaired, 0 play-drift, 0 enum-gap,
+   0 contract-fail**, i.e. every saved reference still reproduces its recorded win turn.
+   What is NOT done is the deck-average A/B (`logs/edf_ladder/manifest5.json`: `poff` = shipped,
+   `pon` = `+MTG_EDF_PROSPECTIVE`, 200 games, seeds 3001/3061, chunk-interleaved) -- it was still
+   running when this session closed, at 5 paired chunks NET ZERO (-0.1, 0, 0, 0, +0.1). Adopting is
+   one line (`EnvOn("MTG_EDF_PROSPECTIVE", true)` in `s_edf_prospective_env`) plus the usual gate
+   set; **the decision is the user's**, and the recommendation is to take it if that A/B closes
+   neutral-or-better.
