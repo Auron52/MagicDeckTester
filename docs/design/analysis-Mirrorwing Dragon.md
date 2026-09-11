@@ -650,3 +650,75 @@ Frozen at `da5aad3a`, src-tree `d10440440fcc`, play digest `1a04ebebfad8`.
    treating the top-up as necessary.
 6. Commit the profile AND the gzipped `.raw.json.gz` — the raw is the poolable unit, and without
    it the top-up/fill-out option does not exist.
+
+## 2026-09-11 — `ref_bench` shortfall `claude_s2_gi1` diagnosed: SEARCH BUDGET, no defect
+
+`scripts/ref_bench.py --deck mirrorwing_dragon` (the 5 references on the SHIPPING list,
+`--force-mulligan`, committed play policy) leaves exactly one shortfall:
+
+```
+claude_s2_gi1.json             2    1 |      6      7 | SHORTFALL +1
+AVG                                   |  4.400  4.600 |
+```
+
+(The two archived-list folders are clean: `v1_twinflame_anger` 24/24, `v2_instigator_entrance` 9/9.)
+
+**First divergence: TURN 2.** T1 is identical on both sides (Game Trail + Elvish Mystic). On T2 the
+human took `[4] land=Mountain; cast: Frontline Heroism`; the search took `[0] land=Gruul Turf;
+cast: Fortifying Draught → Elvish Mystic`. The search cashes the Draught for 3 damage with no
+copy-magnet on board; the human deploys the magnet first, so every later solo-target trick becomes
+"make a 1/1 hasty Soldier, then copy the spell onto it". That converts the human's T5 Draught into
+a 10-damage turn (opp 15 → 5) and kills on T6. The search deploys Heroism a turn late and kills T7.
+
+**It is NOT an enumeration gap.** A live `--claude-play` dump at that decision reproduces the
+reference's plan list index for index, the human's pick included:
+
+```
+ [0] land=Gruul Turf; cast: Fortifying Draught → Elvish Mystic    <- the search's pick
+ ...
+ [4] land=Mountain; cast: Frontline Heroism                        <- the human's pick, still offered
+```
+
+**It is NOT depth — deeper is WORSE at the shipped budget**, which is the starvation signature
+(single game, `--threads 1`, `--ignore-play-profile`):
+
+| axis | result |
+|------|--------|
+| `--depth 3/4/5/6/7 --budget-ms 20` | **6**, 7, 7, 7, 7 — d3 is already right; d4+ regress |
+| `--depth 5 --budget-ms 20/40/…/1280/0` | 7, then **6 at every budget from 40 up**, incl. unlimited |
+| `--budget-ms 0` at `--depth 0/1/2/3/4/5` | 7 / 6 / 6 / 6 / 6 / 6 — every searched depth finds T6 |
+
+So at the shipped `d5/budget-20` the deck plays this game at its **d0 greedy** answer (wt=7);
+one ID pass more and it matches the human. The recovered `b=40` line is not merely equal to the
+human's, it is stronger mid-game — T2 Heroism, then T3 Draught UNDER the Heroism for 9 damage
+(opp 19 → 10) — converging on the same T6 kill.
+
+**Verdict: no fix.** No rules/modelling error, no missing plan, no mana misallocation; the
+evaluator prefers the human's play as soon as the search is allowed one more pass. The cure is
+search budget, a global perf/quality trade that one reference cannot justify. Mirrorwing does
+carry full d0/d3/d5 suite coverage in all three tiers, so a budget proposal here IS measurable —
+unlike melira, whose searched cases are pulled.
+
+### The obvious remedy is REFUTED: 2x budget buys nothing deck-wide (measured, 2026-09-11)
+
+Before proposing "raise the shipped budget" off the back of one reference, it was measured. ONE
+pooled batch (`logs/mw_budget_ab/manifest.json`, 8 jobs, 4000 games, no waves), both arms on the
+SAME 2000 games — 4 blocks of 500, base seeds 200000/200500/201000/201500 spaced by `games` so the
+effective seed ranges never overlap. `depth` omitted on both arms exactly as the suite's d5 jobs do
+(`[play] depth=5 budget=Xms source=default(depth)+cli(budget)`), so budget is the ONLY difference:
+
+| base seed | b=20 avg | b=40 avg | delta | b=20 ms | b=40 ms |
+|-----------|----------|----------|-------|---------|---------|
+| 200000 | 4.3200 | 4.3240 | +0.0040 | 89641 | 109958 |
+| 200500 | 4.2460 | 4.2420 | −0.0040 | 101798 | 129353 |
+| 201000 | 4.2620 | 4.2580 | −0.0040 | 111126 | 148053 |
+| 201500 | 4.2120 | 4.2120 | 0.0000 | 92648 | 121960 |
+| **mean** | **4.2600** | **4.2590** | **−0.0010** | 395213 | 509324 |
+
+**−0.0010 turns for +28.9% thread-time.** Paired over the four blocks the per-seed deltas are
++0.004 / −0.004 / −0.004 / 0.000 — they cancel; se 0.0019, **t = −0.52**. Nothing.
+
+So `claude_s2_gi1` is a *budget-local churn game*, NOT evidence that the deck is under-budgeted.
+Doubling the budget fixes that one reference and pays ~29% CPU for no measurable win-turn gain
+anywhere else. Do not reach for the budget knob on the strength of a reference row; the
+per-reference recovery at b=40 diagnoses the miss, it does not motivate a global change.
