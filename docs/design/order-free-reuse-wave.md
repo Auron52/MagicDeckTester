@@ -186,6 +186,26 @@ is decisive pooled. **The pick is therefore `0.001`: the LARGEST share still ind
 unsound engine** (p=0.44 vs 0.049 at 0.002), which is the original convergence tie-break applied to a
 curve that now has enough data to have a shape.
 
+### Every residual loss is CHURN — 36 of 36 recover with budget
+
+The acceptance bar is *"unreachable at ANY budget = BUG; reachable but needing MORE budget =
+acceptable CHURN"*, so each of the 36 games the sound engine loses to the unsound one at b20 was
+laddered over b20/b80/b320/b1280/b5120 at BOTH shares (360 single-game jobs, pooled):
+
+**36 of 36 recover, at both 0.005 and 0.001. Zero games stuck at every budget.** The three that no
+share repairs at b20 — `kitty gi=0`, `mirrorwing gi=1156` (the one outright LOSS: won turn 8 unsound,
+no win at b20), `mirrorwing gi=1760` — come back at b320, b320 and b80 respectively. `creature_giving
+gi=818` overshoots, going 7 -> 5 at b80 where the unsound engine gets 7.
+
+That is the whole soundness argument closed empirically: the sound engine gives up nothing that more
+search cannot recover, which is exactly what the unsound memo could NOT say (gi232 was unreachable at
+d5..d40 with unlimited budget).
+
+**Verified against the rebased tree.** Upstream landed `escalation_r 74 -> 240` for Goblins plus
+`MTG_ESC_DECK_R` / `MTG_ESC_SINGLE_DIAG` in `TurnSolver.cpp` mid-measurement. Rebuilt at the rebased
+HEAD and re-ran 20 decks x 200 games x 3 arms: **60 of 60 arms byte-identical, per-game digests
+included** (Goblins too — confirming their "identical play" claim). The numbers above stand at HEAD.
+
 **Why lowering the share is not a soundness concession.** The gate is `twin_units > share x Remaining()`.
 For ANY share > 0, `Remaining() -> inf` drives the threshold to infinity, so reuse vanishes and the
 search converges on the exact answer. Share sets HOW FAST that happens, not WHETHER. Only `share = 0`
