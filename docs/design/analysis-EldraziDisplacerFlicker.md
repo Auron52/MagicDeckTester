@@ -4977,3 +4977,64 @@ papered over: fixture 11 pins the chain, and the deep dig is the next thing to i
   board that runs out of colourless.
 * The dig prices at Kitchen's `{4}` investigate plus the Clue's own `{2}` -- six mana a card. Any
   rule that assumes "draw the deck" should be read against that number, not against "free".
+
+## Session 15e (2026-09-11): the s9_gi8 drift -- BankableMana could not see the floating pool
+
+Both Session 15c/15d agents reported, independently and without touching the file, that the
+user's reference `claude_s9_gi8` (saved at `b3189f50` as **won T4**) replayed to **won T8**, and
+proved it predated their commits. This session root-caused it with a frame-by-frame bisect of the
+raw `--choices` replay against the reference's own recorded frames (`logs/s9drift/bisect*.py`).
+
+### What the bisect showed
+
+* Frames 1..52 replay **byte-identical** (hand, battlefield, tapped state, pool, library size).
+* At decision 53 the user had **G:80 floating** (28 hand-blinks of banking) and their binary offered
+  plan 315 as `blink Cloud of Faeries x60 -- COMBO OFF: wins this turn` (verified). They clicked it
+  and won T4: Living Wish -> Dimensional Infiltrator, library exiled, `{G:1}` left.
+* The same frame on the committed tree enumerates the same 316 plans, but 315 is `x60 (bank)` with
+  **no combo plan at all**. Session 15b's `BankableMana` = max(0, net) x 60 = **60** against
+  WISH-DRAW's ~104-mana need and refused -- while 60 + 80 already banked = 140 clears it. The
+  recorded picks then bank instead of going off and the game drifts to a T8 combat win.
+* The reference's own recorded frames show the user's binary offering `[WISH-DRAW]` (unproven) from
+  **decision 12 with an EMPTY pool** -- i.e. their session ran the pre-BANKABLE rule table for those
+  clicks (old server, no binary pin; Session 15b landed mid-game). The verified label appeared only at
+  G:80, where the trial go-off first succeeded.
+
+### Fix
+
+`ComboOffPossible`: `bank = BankableMana(loop) + s.floating_mana.Total()`. No new flag -- it is the
+same `MTG_COMBO_OFF_BANKABLE` lever counting correctly. Display-only (`HumanPlayActive`), so autonomous
+play and GT are untouched (smoke byte-identical). The empty-pool seed-9 fixture 10 stays `offered=0`
+exactly as before (60 < 104). Strict by-intent replay of s9_gi8 now: **won T4, 0 play-drift**.
+
+### The gate that should have caught it
+
+`test/viewer_checks.sh` ran the protocol sweep NON-strict: a saved reference replaying to a
+different outcome was "informational -- re-save when satisfied". That contradicts the standing rule
+that a user's hand-played win turn is invariant (the same clicks replaying to a different turn is
+an ENGINE defect, never a file to re-save), and `test/regression.sh` already ran the sweep
+`--strict`. `viewer_checks.sh` now passes `--strict` too (play-drift / ENUM-GAP are red).
+`scripts/ref_bench.py`'s "human" column is the reference's RECORDED win turn, not a replay, which
+is why the bench commit `b02908ce` folded s9_gi8 in as T4 with the drift already present.
+
+### Two things noticed on the way, not fixed here
+
+* **The bank is still not exact.** `RecogniseFlickerLoop` reports `net = +1` on this board because the
+  `{C}`-starved untap promotion spends one of Cloud's two untap slots on Mariposa (the only `{C}`
+  source) whenever a `{C}` sink is *reachable* -- here Eldrazi Displacer in HAND. The WISH-DRAW path
+  through Emiel needs no `{C}` at all; with Kitchen + Conservatory untapped the true net is +2 and the
+  bank 120, which clears 104 with an empty pool. So the display still refuses the empty-pool seed-9
+  frame the user first clicked on, and it may be winnable there after all (the trial is the oracle;
+  it was never asked because the rule said no). This is the same "size by the binding resource /
+  choose the pip-free outlet" question as sweep cluster C3, handed to the phase-2 agent.
+* **The two pay-line levers (Session 15c) jointly reorder decision 10's plan list** on s9_gi8
+  (`cast: Cloud of Faeries, Emiel the Blessed` moved 38 -> 42; either lever alone leaves it at 38).
+  Raw-index replay of the saved game therefore picks a different plan there; by-intent replay
+  repairs it ("1 stale index repaired") and wins T4. Recorded as a joint-lever effect on enumeration
+  ORDER, not a payment defect.
+
+### Tool trap, for the next bisect
+
+`build/Release/mtg` resolves `src/cards/data/cards.json` relative to the CURRENT DIRECTORY. Two
+bisect runs launched from `logs/s9drift/` loaded no card data, so every decision collapsed to a
+single pass plan and the "divergence" they showed was fiction. Run the engine from the repo root.
