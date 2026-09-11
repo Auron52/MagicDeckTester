@@ -15063,7 +15063,17 @@ inline int FlickerIterationCeiling()
         const char* v = std::getenv("MTG_COMBO_OFF_MAX_ITER");
         return (v && *v) ? std::atoi(v) : 0;        // 0 / unset = no constant cap
     }();
-    if (!HumanPlayActive()) { return FlickerMaxIterations(); }
+    // `MTG_EDF_EXACT_EXECUTOR` extends this to the AUTONOMOUS arm, and it is the second of the two
+    // causes Session 25 named for the rule outrunning the search's executor: the button sizes a
+    // board's go-off against that board's own requirement while the search was sizing the same
+    // board against 60. A rule that says "this wins" and a plan that carries `x60` are not
+    // describing the same line. The number is still the BOARD's -- `FlickerMaxIterations()` is the
+    // floor of the clamp in the two-argument form, so a board whose exact need is under 60 is
+    // unchanged and the cost is paid only where the requirement is genuinely larger.
+    //
+    // SIZING-shaped, not scope-shaped: this runs during ENUMERATION, outside `ComboOffFinishScope`,
+    // so `ComboOffExactApplyActive()` here would withdraw the ceiling from the button itself.
+    if (!ComboOffExactSizingActive()) { return FlickerMaxIterations(); }
     const int base = (co > 0) ? co
                               : (FlickerExactIterOn() ? FlickerCeilingHardBound() : 400);
     return std::max(base, FlickerMaxIterations());
@@ -15076,7 +15086,7 @@ inline int FlickerIterationCeiling(const GameState& s, const FlickerLoop& loop)
 {
     if (g_flicker_ceiling_exact > 0) { return g_flicker_ceiling_exact; }   // already in the pass
     const int cap = FlickerIterationCeiling();
-    if (!FlickerExactIterOn() || !HumanPlayActive() || !loop.ok) { return cap; }
+    if (!FlickerExactIterOn() || !ComboOffExactSizingActive() || !loop.ok) { return cap; }
     int exact = 0;
     {
         FlickerExactCeilingScope _s(std::max(cap, FlickerMaxIterations()));
