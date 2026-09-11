@@ -34143,6 +34143,215 @@ inline thread_local int    g_emul_Gn[16] = {0};
 inline thread_local double    g_climb_cmeas[16] = {0};
 inline thread_local int       g_climb_start = 0;
 
+// ==== THE SEARCH QUERIES THE COMBO OFF RULE =====================================================
+//
+// USER, 2026-09-11: *"The key here is that the sooner the Combo Off line kicks in the better. The
+// reason is that the search should have an easy way to query it and be able to skip a huge chain of
+// operations."* This is that query, on the AUTONOMOUS side. The viewer has consulted
+// `DecisionProvider::ComboOffPossible` since Session 14; the search never has.
+//
+// WHAT IT KEYS ON, AND WHY THAT AND NOTHING ELSE.
+//
+//   1. `ComboOffPossible` -- the EXACT (mana, pips) arithmetic (`comborules::Fundable` over
+//      `SupplyFor`'s per-untap-schedule yield / `{C}`-capable / `{R}`-capable triple), NOT a plan
+//      that merely got offered. The distinction is the whole reason this is safe to key on: on
+//      1,074 sweep states and 939 replay-hunt states the "FALSE FIRE" count (offered where the
+//      arithmetic refutes) is **0**, while `offered -> wins` is only 96.2%. The arithmetic is the
+//      trustworthy half of the button; the offer is not.
+//   2. A candidate carrying a MULTI-ACTIVATION go-off (`ActivateBlink` with `chosen_x > 3` -- the
+//      same ">3 means recognized" rule every other go-off site uses). This is not a convenience
+//      filter, it is `ComboOffPossible`'s DOCUMENTED PRECONDITION: the rule takes combo pieces out
+//      of hand without an affordability test because it is only ever consulted after the enumerator
+//      has produced such a plan, which is the payment machinery's own proof that the assembly is
+//      affordable. Its comment says in as many words that "a future search shortcut must re-check
+//      that precondition". This is that re-check.
+//   3. At the ROOT, a TRIAL APPLY that actually wins. `combo_off_verified` has been a perfect
+//      oracle on every population ever measured (268/268, 206/206, 304/304, 84/84); the rule is
+//      merely near-perfect. The user's doctrine is "display aggressive, execution exact", and a
+//      committed root move is execution. In LOOKAHEAD the trial is skipped -- that is the point:
+//      the rule is ~1.5us a call and a trial apply is 0.3-0.8 ms, so a turn-2 decision can price a
+//      turn-4 kill without simulating the loop.
+//
+// WHAT IT SKIPS. At the root, `SolveWithLookahead` otherwise runs iterative deepening over EVERY
+// candidate at sub_depth 0..depth-1, each pass playing rollouts to the horizon. Returning a
+// verified this-turn win short-circuits all of it -- and it is sound for the same reason the three
+// sibling cuts above are: a turn-winning plan dominates every other plan this turn.
+//
+// BYTE-IDENTICAL FOR EVERY OTHER DECK, by two independent gates: `HasExtraLethalModel()` is false
+// for most providers, and `DecisionProvider::ComboOffPossible`'s base implementation returns false
+// unconditionally -- only EldraziFlickerProvider overrides it. The `chosen_x > 3` scan finds
+// nothing for a deck with no blink outlet, so the rule is not even called there.
+//
+// NOT IN HUMAN PLAY. `EnumerateMainPlans`' own gate owns the button; this must not double-fire
+// inside a viewer frame (it would commit the go-off instead of offering it).
+namespace edfco
+{
+// DEFAULT ON for both halves; `=0` disables one half without touching the other, and both carry a
+// heurarm slot so a lever sweep rides ONE pooled batch (CLAUDE.md's one-tail rule).
+inline bool RootOn()
+{
+    static const bool v = EnvOn("MTG_EDF_CO_ROOT", true);
+    return heurarm::Flag(heurarm::EDF_CO_ROOT, v);
+}
+inline bool LookOn()
+{
+    static const bool v = EnvOn("MTG_EDF_CO_LOOK", true);
+    return heurarm::Flag(heurarm::EDF_CO_LOOK, v);
+}
+// MTG_EDF_CO_LOOK_TRIAL (DEFAULT ON) -- does the LOOKAHEAD arm pay for the trial apply, or take the
+// rule's word?
+//
+// The user's framing was the cheap one: *"a leaf or node state the rule accepts is scored as wins
+// this turn cheaply"* (~1.5 us against 0.3-0.8 ms). MEASURED, and it does not hold on this corpus:
+// rule-only in the rollout's `SolveWithLookahead` host scored the 14 references 5.429 against the
+// verified 5.286 -- it LOST `claude_s2_gi1` and `claude_s3_gi2`, both of which the shipped search
+// already matched. An unverified accept mis-RANKS the rollout's plan (the rollout still applies it
+// for real, so nothing is fabricated), and on those two games the go-off it picks is not the line
+// that wins soonest.
+//
+// So the cheap half is real but it lives one level up: the RULE is the pre-filter that declines in
+// microseconds and thereby decides whether a trial is paid for at all, which is what makes the
+// trial affordable at every node instead of only at the root. `=0` restores the rule-only reading
+// for a one-binary A/B of exactly that claim. (In FSLineWin the trial is NOT optional -- its win
+// turn is what the committed line is scored on.)
+inline bool LookTrialOn() { static const bool v = EnvOn("MTG_EDF_CO_LOOK_TRIAL", true); return v; }
+// MTG_EDF_CO_AUDIT (diagnostic, default off): pay for the trial apply in the LOOKAHEAD arm too,
+// purely so the rule's false-positive rate against the trial can be counted on the full autonomous
+// population rather than only on the root frames the shipped path already verifies. The lever's
+// RETURN policy is unchanged -- the audit only counts.
+inline bool AuditOn() { static const bool v = EnvOn("MTG_EDF_CO_AUDIT"); return v; }
+inline bool StatsOn() { static const bool v = EnvOn("MTG_EDF_CO_STATS"); return v; }
+// MTG_EDF_CO_SCOPE_PROBE (diagnostic, default off, count-only -- see the probe's own comment).
+inline bool ScopeProbeOn() { static const bool v = EnvOn("MTG_EDF_CO_SCOPE_PROBE"); return v; }
+
+// root/look x {node reached, a go-off candidate existed, rule accepted, trial won, trial refuted}.
+// `nodes` and `ask` are separate on purpose: "the rule said no" and "the rule was never asked"
+// look identical from outside and have opposite fixes -- the same distinction Session 22's `sized`
+// mark exists for.
+inline std::atomic<std::uint64_t> g_nodes[2], g_ask[2], g_yes[2], g_win[2], g_refuted[2],
+                                  g_scope_win[2];
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!StatsOn()) { return; }
+        for (int i = 0; i < 2; ++i)
+        {
+            const std::uint64_t n = g_nodes[i].load(), a = g_ask[i].load();
+            const std::uint64_t y = g_yes[i].load(), w = g_win[i].load(), r = g_refuted[i].load();
+            std::fprintf(stderr,
+                         "[edf-co] %s nodes=%llu goff_cand=%llu rule_yes=%llu trialled=%llu "
+                         "verified=%llu refuted=%llu fp=%.2f%% scope_would_win=%llu\n",
+                         i == 0 ? "root" : "look", (unsigned long long)n,
+                         (unsigned long long)a, (unsigned long long)y,
+                         (unsigned long long)(w + r), (unsigned long long)w,
+                         (unsigned long long)r,
+                         (w + r) ? 100.0 * static_cast<double>(r)
+                                       / static_cast<double>(w + r) : 0.0,
+                         (unsigned long long)g_scope_win[i].load());
+        }
+    }
+};
+inline Dumper g_dumper;
+
+inline int GoffCount(const TurnSolver::Plan& p)
+{
+    int k = 0;
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::ActivateBlink && a.chosen_x > 3) { k = std::max(k, a.chosen_x); } }
+    return k;
+}
+}   // namespace edfco
+
+// Returns the index of a candidate the COMBO OFF rule says wins this turn, or -1.
+// `verify` -> the index is returned only when a trial `ApplyPlanDirect` actually kills the opponent.
+// `at_root` only selects the counter bucket, so root and lookahead firing rates are separable.
+int TurnSolver::EdfComboOffShortcut(const GameState& state, const std::vector<Plan>& candidates,
+                                    bool is_pre_combat, bool verify, bool at_root)
+{
+    if (HumanPlayActive()) { return -1; }
+    const DecisionProvider& prov = ResolveProvider(state);
+    if (!prov.HasExtraLethalModel()) { return -1; }
+    const int stat = at_root ? 0 : 1;
+    if (edfco::StatsOn()) { edfco::g_nodes[stat].fetch_add(1, std::memory_order_relaxed); }
+
+    // THE PRECONDITION FIRST, because it is the cheap half and it is what makes the rule sound
+    // here. Ordered exactly as the viewer's own offer path orders its trial candidates (fewest
+    // extra actions first, then the biggest count): the cheapest shape is the most common one and
+    // the least likely to have a sub-decision the trial and the real apply could resolve
+    // differently.
+    struct Cand { int idx; int k; int extra; };
+    std::vector<Cand> cands;
+    for (int i = 0; i < static_cast<int>(candidates.size()); ++i)
+    {
+        const int k = edfco::GoffCount(candidates[i]);
+        if (k == 0) { continue; }
+        const int extra = static_cast<int>(candidates[i].actions.size()) - 1
+                        + (candidates[i].land_to_play.empty() ? 0 : 1);
+        cands.push_back(Cand{ i, k, extra });
+    }
+    if (cands.empty()) { return -1; }
+    std::stable_sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b)
+                     {
+                         if (a.extra != b.extra) { return a.extra < b.extra; }
+                         if (a.k     != b.k)     { return a.k > b.k; }
+                         return a.idx < b.idx;
+                     });
+
+    if (edfco::StatsOn()) { edfco::g_ask[stat].fetch_add(1, std::memory_order_relaxed); }
+    // THE RULE. One call per node, not one per candidate: `ComboOffPossible` is a question about
+    // the STATE, not about a plan.
+    if (!prov.ComboOffPossible(state, state.active_player_index, nullptr)) { return -1; }
+    if (edfco::StatsOn()) { edfco::g_yes[stat].fetch_add(1, std::memory_order_relaxed); }
+
+    if (!verify && !edfco::AuditOn()) { return cands.front().idx; }
+
+    // EXECUTION EXACT. The trial runs under the same finish scope the apply will (`ApplyBlinkLoop`'s
+    // in-loop wish/finisher deploy is autonomous-live already, so no scope is opened here -- opening
+    // one would make the trial run a line the real apply does not).
+    for (const Cand& c : cands)
+    {
+        GameState copy = state;
+        ApplyPlanDirect(copy, candidates[c.idx], is_pre_combat);
+        const bool won = OpponentHasLost(copy);
+        if (edfco::StatsOn())
+        {
+            (won ? edfco::g_win[stat] : edfco::g_refuted[stat])
+                .fetch_add(1, std::memory_order_relaxed);
+        }
+        // SCOPE PROBE (MTG_EDF_CO_SCOPE_PROBE, diagnostic, default OFF, COUNT-ONLY).
+        //
+        // Answers the one question the raw refutation count cannot: is the rule WRONG about this
+        // board, or is the AUTONOMOUS EXECUTOR simply weaker than the one the rule was written
+        // against? The COMBO OFF button's apply runs inside `ComboOffFinishScope`, and five of
+        // Session 20's repairs are gated on it (`MTG_COMBO_OFF_DEPLOY_TRIAL`,
+        // `MTG_COMBO_OFF_DRAW_TRIAL`, `MTG_COMBO_OFF_SINK_TRIAL`, the Clue crack-first pass,
+        // `MTG_EDF_LIB_ROUTE_COMBO_OFF`) -- every one false in every autonomous run. So re-run the
+        // SAME refuted trial inside the scope and count how many would then have won.
+        //
+        // IT MUST NEVER GATE THE RETURN, and that is not caution, it is correctness: the REAL
+        // apply of a committed line runs outside the scope, so a kill that needs the scope is a
+        // kill this engine will not execute. Returning one would make FSLineWin report a win turn
+        // the replay does not reproduce -- the exact failure its "no projected-wins_this_turn
+        // shortcut" comment exists to prevent.
+        if (!won && edfco::StatsOn() && edfco::ScopeProbeOn())
+        {
+            GameState probe = state;
+            ComboOffFinishScope co_finish;
+            ApplyPlanDirect(probe, candidates[c.idx], is_pre_combat);
+            if (OpponentHasLost(probe))
+            { edfco::g_scope_win[stat].fetch_add(1, std::memory_order_relaxed); }
+        }
+        if (won) { return c.idx; }
+        // ONE trial, exactly as the viewer's `rules_ok && !plausible` arm takes one: a second is
+        // paid at every node of every rollout and the first is the shape the rule describes.
+        break;
+    }
+    // The audit arm counts the refutation but still returns what the lever asks for, so turning the
+    // audit on cannot move play.
+    return (!verify && edfco::AuditOn()) ? cands.front().idx : -1;
+}
+
 static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int max_turns,
                                         int cutoff, bool second_main, TranspositionTable* tt,
                                         FSLineCache* lc, SearchBudget* budget);
@@ -35611,6 +35820,37 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // Groups the breadth cap dropped from THIS node's enumeration (max over the per-land inner
     // calls) -- the group-wave phase below walks one tranche per dropped group.
     const int gw_dropped = groupwave::g_state.max_dropped;
+
+    // ---- THE SEARCH QUERIES THE COMBO OFF RULE (see EdfComboOffShortcut) -----------------------
+    // THIS is the "huge chain of operations" the user means. Below this point the node applies
+    // EVERY plan in `pre` (26-526 of them on a live EDF combo turn), simulates combat for each and
+    // recurses into FSLineTail -- and the loop cannot stop early on a *projection*, by deliberate
+    // design ("lethality is decided by actually simulating each plan below"). So the only thing
+    // that can skip it is a plan that has ALREADY been simulated and won, which is exactly what
+    // this pre-pass produces: the exact (mana, pips) rule picks ONE candidate for ~1.5 us, one
+    // trial ApplyPlanDirect adjudicates it for 0.3-0.8 ms, and a kill returns the line at
+    // `state.turn_number` -- the absolute floor, so no plan below could have beaten it anyway.
+    //
+    // The rule is the PRE-FILTER, not the oracle: it is what makes the trial affordable here (it
+    // declines in microseconds on every node that cannot go off), and the trial is what makes the
+    // answer exact. Same two-stage discipline as the viewer's "CHEAP PROJECTION FIRST" gate, with
+    // the exact arithmetic in place of the optimistic projection.
+    //
+    // Scoped by node: `bp_root` (g_fsline_nest == 0) is the COMMITTED decision -> MTG_EDF_CO_ROOT;
+    // every deeper ply is lookahead -> MTG_EDF_CO_LOOK. Both VERIFY, and in this host that is not
+    // a choice: FSLineWin's returned win turn is the number the committed line is scored on, so an
+    // unverified claim would report a win the replay does not produce.
+    if (bp_root ? edfco::RootOn() : edfco::LookOn())
+    {
+        const int co = TurnSolver::EdfComboOffShortcut(state, pre, /*is_pre_combat=*/true,
+                                                       /*verify=*/true, /*at_root=*/bp_root);
+        if (co >= 0)
+        {
+            TurnSolver::SearchLine win = { state.turn_number, { { true, pre[co] } } };
+            FSLineStoreWin(lc, key, win, state);
+            return win;
+        }
+    }
 
     // VALUE-RANKED BEAM: reorder `pre` by the PROBE's recorded value-win-turns for this node, so the beam-cap
     // below keeps the top-W lines the VALUE pass rated best (not the static MoveOrderPlans order). The probe
@@ -39708,6 +39948,33 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     for (const Plan& p : candidates)
     {
         if (p.wins_this_turn) { report(state.turn_number, depth - 1); return p; }
+    }
+
+    // ---- THE SEARCH QUERIES THE COMBO OFF RULE (see EdfComboOffShortcut above) -----------------
+    // Placed AFTER the projection loop on purpose: `ExtraLethalDamage` / `ProjectsAlternateWin`
+    // already catch every go-off they can price, and they are free. This costs ~1.5 us only on the
+    // nodes they DECLINED -- which is exactly the population the exact (mana, pips) arithmetic
+    // exists to re-adjudicate (the projection prices a one-gulp deck-out; the apply runs the
+    // instalment route, and fixture `edf_co_9` is that disagreement in the viewer).
+    //
+    // ROOT vs LOOKAHEAD is `enforce_budget`, which is true only at the committed decision. The root
+    // pays for the trial apply ("execution exact"); an interior rollout ply takes the rule's word
+    // ("the sooner the Combo Off line kicks in the better"). An over-claim in a rollout is the same
+    // class of error ExtraLethalDamage already makes by contract -- it mis-RANKS a plan, it cannot
+    // report a win the game did not produce, because SimulateToEndImpl applies the plan for real
+    // and reads the resulting state.
+    if (enforce_budget ? edfco::RootOn() : edfco::LookOn())
+    {
+        const int co = EdfComboOffShortcut(state, candidates, is_pre_combat,
+                                           /*verify=*/enforce_budget || edfco::LookTrialOn(),
+                                           /*at_root=*/enforce_budget);
+        if (co >= 0)
+        {
+            Plan win = candidates[co];
+            win.wins_this_turn = true;   // keep the returned plan self-consistent with the loop above
+            report(state.turn_number, depth - 1);
+            return win;
+        }
     }
 
     if (candidates.empty()) { report(max_turns + 1, 0); return Plan{}; }

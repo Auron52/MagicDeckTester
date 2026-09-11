@@ -885,6 +885,14 @@ public:
     // interiors only) memoizes this per decision -- see namespace solvememo in TurnSolver.cpp.
     static Plan SolveUncached(const GameState& state, bool is_pre_combat);
 
+    // THE SEARCH'S QUERY INTO THE COMBO OFF RULE TABLE (MTG_EDF_CO_ROOT / MTG_EDF_CO_LOOK).
+    // Index of a candidate `DecisionProvider::ComboOffPossible` says wins this turn, or -1.
+    // `verify` re-checks it with a trial ApplyPlanDirect (the root's "execution exact" arm);
+    // without it the rule alone answers, which is the ~1.5us-vs-0.3-0.8ms lookahead trade.
+    // Full rationale -- what it keys on and why -- at the definition in TurnSolver.cpp.
+    static int EdfComboOffShortcut(const GameState& state, const std::vector<Plan>& candidates,
+                                   bool is_pre_combat, bool verify, bool at_root);
+
     // MTG_CANTRIP_ORDER (canonical cantrip ordering, default off) plumbing: binds the cantrip
     // whose breakpoint continuation is being enumerated on this thread, so CollectActions can
     // suppress canonically-earlier cantrips (permutation dedup). Used by BOTH worlds -- the
