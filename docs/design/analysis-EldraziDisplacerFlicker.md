@@ -7046,3 +7046,252 @@ tables are byte-identical by construction -- and measured so.
    `src` fingerprints only; every measured number byte-identical) and was RESTORED rather than
    committed, per Session 23's own note that the fleet must be refreshed AFTER the viewer gate, not
    during it. Whoever integrates this branch should refresh it once, at the end.
+## Session 25 (2026-09-11): the search queries the rule
+
+**USER, the standing brief:** *"check that the references are matched by the search"*; *"the sooner
+the Combo Off line kicks in the better. The reason is that the search should have an easy way to
+query it and be able to skip a huge chain of operations"*; *"we should be using rules as optimal and
+accurate as possible to Combo Off"*; doctrine **"display aggressive, execution exact"**.
+
+Sessions 14-23 built the COMBO OFF rule table and made the VIEWER fire it early. This session wires
+the **autonomous search** to the same rule, measures what that buys, and -- the part worth reading --
+measures how far the rule's promise is from what the search's own executor can actually run.
+
+Branch base `c4213de1` (re-measured, not assumed: `ref_bench` reads 8/14 short, mean **5.2857**).
+Nothing pushed, no generation launched, `references/` untouched throughout.
+
+### 1. The mechanism, and what it keys on
+
+`TurnSolver::EdfComboOffShortcut(state, candidates, is_pre_combat, verify, at_root)` -- a pre-pass
+over an already-enumerated candidate list. Three keys, in cost order:
+
+1. **The PRECONDITION, first, because it is free and because it is what makes the rule sound here.**
+   A candidate must carry a multi-activation go-off (`ActivateBlink` with `chosen_x > 3`, the same
+   ">3 means recognized" rule every other go-off site uses). This is not a convenience filter:
+   `ComboOffPossible` takes combo pieces out of hand *without an affordability test*, and its own
+   comment says why that is sound -- it is consulted only after the enumerator produced such a plan,
+   which is the payment machinery's proof the assembly is affordable -- and then says in as many
+   words that *"a future search shortcut must re-check that precondition"*. This is that re-check.
+2. **THE EXACT ARITHMETIC, not a plan that got offered.** `ComboOffPossible` itself: `Fundable` over
+   `SupplyFor`'s per-untap-schedule (yield, `{C}`-capable, `{R}`-capable) triple. The reason to key
+   on the arithmetic and not on `combo_off_offered` is measured, not aesthetic: **FALSE FIRE**
+   (offered where the arithmetic refutes) is **0** on 1,074 sweep and 939 hunt states, while
+   `offered -> wins` is only 96.2%. One call per node, not per candidate -- it is a question about
+   the STATE.
+3. **A TRIAL `ApplyPlanDirect` that actually kills.** `combo_off_verified` has been a perfect oracle
+   on every population ever measured (268/268, 304/304, 84/84); the rule is only near-perfect.
+
+**Where it goes, and why that site.** `FSLineWin` -- the shipped commit-the-line root, *not*
+`SolveWithLookahead`, which the first cut wrongly targeted (AIEngine routes through
+`FullSearchLineHybrid`; the shortcut sat there reading `nodes=0`). Below the insertion point the node
+applies **every** plan in `pre` (26-526 on a live combo turn), simulates combat for each and recurses
+into `FSLineTail` -- and its loop cannot stop on a *projection*, by deliberate design (*"lethality is
+decided by actually simulating each plan below"*). So the only thing that can skip that chain is a
+plan that has already been simulated and won. The rule is the ~1.5 us pre-filter that makes ONE
+0.3-0.8 ms trial affordable at every node; the trial is what makes the answer exact. `bp_root`
+(`g_fsline_nest == 0`) splits the committed decision (**`MTG_EDF_CO_ROOT`**) from every deeper ply
+(**`MTG_EDF_CO_LOOK`**). The same pre-pass is also placed in `SolveWithLookahead`, the host the
+rollout leaf uses.
+
+Byte-identical for every other deck by two independent gates: `HasExtraLethalModel()`, and
+`DecisionProvider::ComboOffPossible`'s base implementation returning false unconditionally. A deck
+with no blink outlet has no `chosen_x > 3` candidate, so the rule is not even called.
+`HumanPlayActive()` is excluded: `EnumerateMainPlans`' own gate owns the button, and this must not
+commit the go-off inside a viewer frame instead of offering it.
+
+### 2. THE CHEAP LOOKAHEAD WAS TRIED AND IT LOSES REFERENCES
+
+The user's framing for half (b) was explicitly the cheap one -- *a node the rule accepts is scored as
+"wins this turn" cheaply*, 1.5 us against 0.3-0.8 ms. Measured, one binary, same 14 references:
+
+| lookahead arm | mean | short | what moved |
+|---|---:|---:|---|
+| rule + trial (shipped shape) | **5.2857** | **8** | -- |
+| rule only, no trial | 5.4286 | 10 | **LOST `claude_s2_gi1` and `claude_s3_gi2`** (4 -> 5 each) |
+
+Nothing is fabricated by an unverified accept -- `SimulateToEndImpl` applies the plan for real, so
+the rollout still reports the turn the game actually ended. What breaks is the RANKING: on those two
+games the go-off the rule blesses is not the line that wins soonest, and both were references the
+shipped search already MATCHED. `MTG_EDF_CO_LOOK_TRIAL=0` restores the rule-only reading for a
+one-binary A/B of exactly that claim.
+
+**The cheap query survives, one level up.** The rule declining in microseconds is what decides
+whether a trial is paid for at all -- on the autonomous population it declines on 23% of the nodes
+that carry a go-off candidate, and it is never reached at all on the 89.5% of nodes that carry none.
+That is the pre-filter the user asked for; it just cannot be the oracle.
+
+### 3. THE NUMBER THE SESSION IS ABOUT: the rule is 98.6% wrong about the SEARCH's executor
+
+`MTG_EDF_CO_STATS=1`, the SAME 100 autonomous games the deck-average arm played (seeds 3001/3061,
+10x10, one pooled batch; digests identical to that arm, so the counters are count-only):
+
+| | committed ROOT | LOOKAHEAD ply |
+|---|---:|---:|
+| nodes reached | 3,117 | 215,911 |
+| ... carrying a go-off candidate | 153 (4.9%) | 22,586 (10.5%) |
+| ... the RULE accepts | 131 | 17,337 |
+| ... the TRIAL then **verifies** | **18** | **252** |
+| ... the TRIAL **refutes** | 113 | 17,085 |
+| **false-positive rate, rule vs trial** | **86.26%** | **98.55%** |
+
+Set that against the VIEWER's numbers for the same rule table: FALSE FIRE **0**, `offered -> wins`
+**96.2%**, `combo_off_verified` a perfect oracle. Same function, same board arithmetic, opposite
+verdict. Both are true, and the difference is not the rule.
+
+#### Why -- measured, with `MTG_EDF_CO_SCOPE_PROBE`
+
+The button's apply runs inside `ComboOffFinishScope`, and **five of Session 20's repairs are gated on
+it** -- `MTG_COMBO_OFF_DEPLOY_TRIAL`, `MTG_COMBO_OFF_DRAW_TRIAL`, `MTG_COMBO_OFF_SINK_TRIAL`, the
+Clue crack-first pass, and `MTG_EDF_LIB_ROUTE_COMBO_OFF` -- every one of them **false in every
+autonomous run, every rollout and ordinary human play**. So the probe re-runs each REFUTED trial
+inside the scope and counts (count-only, default off; it must never gate the return, because the
+real apply of a committed line runs outside the scope and a kill that needs it is a kill this engine
+will not execute):
+
+| | refuted | would have won under the scope |
+|---|---:|---:|
+| ROOT | 113 | **15 (13.3%)** |
+| LOOKAHEAD | 17,085 | **2,442 (14.3%)** |
+
+**So roughly one in seven of the rule's "false" fires is not a rule error at all.** The rule is right
+about the position; the SEARCH's executor is a weaker machine than the one the rule was written
+against. The other six in seven are a genuine rule/board gap (the autonomous `FlickerIterationCeiling`
+is 60, not the button's 400, and `ScanHandSinks`' library route is search-disabled by default) -- and
+those two facts are precisely why the rule's promise outruns the count the plan carries.
+
+**This reframes "make the rules as accurate as possible to Combo Off".** On the viewer the rule is
+already as accurate as the executor it describes. Making it accurate *for the search* is not more
+arithmetic; it is either (a) keeping the trial as the arbiter, which is what shipped, or (b) giving
+the autonomous apply the button's finish machinery -- five named flags, all currently
+`ComboOffFinishActive()`-scoped.
+
+### 4. What it buys -- BENCH, WORK, DECK AVERAGE, WALL
+
+**`scripts/ref_bench.py --deck eldrazidisplacerflicker`, 14 references, d5/20 ms, four arms in ONE
+pooled 56-job batch (heurarm slots, so no arm-major barrier):**
+
+| reference | human | off | root | look | both |
+|---|---|---|---|---|---|
+| claude_s10_gi9 | 4 | 5 | 5 | 5 | 5 |
+| claude_s11_gi10 | 6 | 7 | 7 | 7 | 7 |
+| claude_s12_gi11 | 4 | 6 | 6 | 6 | 6 |
+| claude_s14_gi13 | 5 | 6 | 6 | 6 | 6 |
+| claude_s15_gi14 | 6 | 6 | 6 | 6 | 6 |
+| claude_s1_gi0 | 3 | 5 | 5 | 5 | 5 |
+| claude_s2_gi1 | 4 | 4 | 4 | 4 | 4 |
+| claude_s3_gi2 | 4 | 4 | 4 | 4 | 4 |
+| claude_s4_gi3 | 6 | 6 | 6 | 6 | 6 |
+| claude_s5_gi4 | 4 | 4 | 4 | 4 | 4 |
+| claude_s6_gi5 | 4 | 5 | 5 | 5 | 5 |
+| claude_s7_gi6 | 5 | 5 | 5 | 5 | 5 |
+| claude_s8_gi7 | 3 | 6 | 6 | 6 | 6 |
+| claude_s9_gi8 | 4 | 5 | 5 | 5 | 5 |
+| **MEAN** | **4.4286** | **5.2857** | **5.2857** | **5.2857** | **5.2857** |
+| short | -- | 8 | 8 | 8 | 8 |
+
+**CELL FOR CELL IDENTICAL.** The `off` arm reproduces `c4213de1` exactly, which is what makes this a
+clean one-binary A/B. One digest moves (`claude_s8_gi7` under `root` and `both`) -- the line changes,
+the win turn does not.
+
+**Deterministic work, same 14 games** (`MTG_ROLLOUT_STATS`, which is a count and not a clock):
+`units_total` 650,918 -> **649,775 (-0.18%)**; rollout `calls` 122,558 -> 122,257;
+`interior_nodes` 2,901 -> 2,900.
+
+**Deck average -- 200 games (100 per arm), seeds 3001/3061 x 50, chunk-interleaved in ONE pooled
+queue** (Session 23's design, so the numbers are comparable):
+
+| chunk | off | on | | chunk | off | on |
+|---|---:|---:|---|---|---:|---:|
+| 3001+0 | 5.6 | 5.6 | | 3061+0 | 5.7 | 5.7 |
+| 3001+10 | 6.0 | 6.0 | | 3061+10 | 5.1 | 5.1 |
+| 3001+20 | 6.1 | 6.1 | | 3061+20 | 5.0 | 5.0 |
+| 3001+30 | 5.5 | 5.5 | | 3061+30 | 5.2 | 5.2 |
+| 3001+40 | 5.2 | 5.2 | | 3061+40 | 5.2 | 5.2 |
+
+**off 5.4600, on 5.4600 -- the paired delta is exactly 0.0000 on all ten chunks.** Four of the ten
+carry a DIFFERENT digest, so the committed line really does move; the win turn never does. Summed
+wall **3,506 s -> 3,462 s (-1.3%)**, i.e. the 270 verified short-circuits more than pay for the
+17,198 refuted trials they cost. (The 56-job reference pool showed -9.4% wall, which is contention
+noise on a shared box -- the deterministic work counter above says the honest figure is a fraction of
+a percent there, and the 100-game paired wall says -1.3%. Reported both ways rather than quoting the
+flattering one.)
+
+### 5. SHIPPED **DEFAULT OFF**, and the reason is the bar, not a doubt
+
+The adoption bar set for this work was *"ships default ON only if the bench STRICTLY improves (more
+references matched, none lost)"*. It does not improve: it is identical. What the evidence actually
+supports is **"provably no quality change, measurably less wall"** -- a COST win, which is not what
+the bar asks for. So `MTG_EDF_CO_ROOT` and `MTG_EDF_CO_LOOK` both ship **default OFF**, and flipping
+them is a two-word change (`EnvOn("...", true)`); every gate below was run in BOTH positions.
+**Open for the user: do you want the cost win?** The mechanism is sound, verified-only, and inert on
+every measurement that is not a clock.
+
+### 6. Fixtures -- 26 -> 29
+
+Session 23's fixture list splits the ten reference frames the button fires on by MAIN ORDINAL and
+says the split is the message. The SHALLOW three are the only ones a plan-apply shortcut can reach;
+nothing pinned them. Each board is read straight out of the user's own recording, and each stages the
+REAL remaining library via `library_top` (decklist minus battlefield/hand/graveyard, MAIN zone only)
+-- checked, not asserted: 49 / 51 / 49 cards against the recordings' own `library_size` of 49 / 51 /
+49. `library_filler: "Forest"` cannot represent rule WISH-DRAW at all, since its whole W ingredient
+is "a Living Wish is still in the library".
+
+| fixture | frame | pins |
+|---|---|---|
+| `edf_co_27_s9_gi8_t4_ord5_shallow` | s9_gi8 T4 ord 5 | offered, rule WISH-DRAW, **NOT verified** |
+| `edf_co_28_s14_gi13_t5_ord5_shallow` | s14_gi13 T5 ord 5 | offered + **VERIFIED**, `blink Peregrine Drake x387` |
+| `edf_co_29_s15_gi14_t6_ord8_shallow` | s15_gi14 T6 ord 8 | offered + **VERIFIED**, `blink Peregrine Drake x227` |
+
+`edf_co_27` pins what is TRUE rather than what would have been tidier, and it is the "display
+aggressive, execution exact" split in one board: the recording's own ordinal-5 menu carries
+`combo_off: true, WISH-DRAW` with **no** `combo_off_verified`, and the user went on to bank
+twenty-eight hand-blinks (`{G:80}` floating) before the click won on turn 4. Checked, not inferred --
+moving a Living Wish to the TOP of the library does not make it verify either (x109, opponent still
+on 20), so the refusal is the board's net-1 loop against fifty `{C}` pips, not the synthetic library
+order. It guards both directions: a withdrawal of the offer, and a false "wins this turn".
+`edf_co_29` states its own limit: the real frame carried `{C:1}` floating and a `--scenario` board is
+always asked with an empty pool, so it is a deliberate LOWER BOUND.
+
+### 7. Gates (run in BOTH lever positions; identical in both)
+
+* `bash test/scenarios.sh` -- **79 passed, 0 failed, 0 error  (79 total)**
+* `bash test/combo_off_check.sh` -- **29 passed, 0 failed, 0 error  (29 total)** (was 26)
+* `bash test/regression.sh --smoke` -- **Result: 73 passed, 0 failed, 0 new**;
+  `configs changed: 0   unchanged: 73   no-run-dir: 0`;
+  `[searched] slower=0  faster=0  play-changed=0`; `[d0      ] slower=0  faster=0  play-changed=0`.
+  Every other deck byte-identical, as expected -- no deck in the suite routes to this provider.
+* `bash test/viewer_checks.sh` -- **viewer checks: PASS**. Protocol `--strict`: **15 ok, 297
+  repaired, 0 play-drift, 0 shuffle-dead, 0 enum-gap, 0 mull-drift, 0 contract-fail  (312 refs)**;
+  validate-line **1489 accept, 218 choose, 0 unsupported, 304 skipped (non-hand cast), 0
+  known-fail(v1 limits), 0 REGRESSION  (312 refs)**. Identical to Session 23.
+* `bash test/combo_off_sweep.sh --quick` -- **208 states: a=62 b=2 c=12 c'=2 e=130**,
+  `FALSE FIRE 0 (0.00%)`, `MISSED FIRE 12 (11.32%)`, offered 4 of 106 autonomous states, 3 verified.
+  **Byte-for-byte identical with both levers forced off**, which is the point: the shortcut is
+  invisible to the display path.
+* `python3 test/combo_off_replay_hunt.py --quick` -- **882 states (76 reference, 806 driven):
+  a=18 b=2 c=4 c'=2 e=856**, clusters `C2 2`. **Identical in both lever positions.**
+* `scripts/ref_bench.py --json test/ref_bench.json` re-stamped by the viewer gate: all 44 changed
+  lines are `"src"` lines and nothing else -- 22 decks, not one `human` / `search` / `short` /
+  `shortfalls` value moved, EDF included (n=14, 4.4286 / 5.2857, short 8, hand_mismatch 0).
+
+### 8. Open, carried forward (nothing blocked on)
+
+1. **Do you want the cost win?** Both levers are default OFF per the stated bar (§5). The evidence
+   for ON is: bench cell-identical, deck average delta exactly 0.0000 over 100 paired games, viewer
+   gate unchanged over 312 references, smoke byte-identical, wall -1.3%. Two words to flip.
+2. **The 6-in-7 rule/search gap is the real finding, and it has two named causes** (§3): the
+   autonomous `FlickerIterationCeiling()` is 60 where the button's is 400, and `ScanHandSinks`'
+   library route is off outside human play (`MTG_EDF_LIB_ROUTE` default off, measured negative twice
+   as a *sizing* change). A rule keyed on the candidate's OWN `chosen_x` rather than on the ceiling
+   would narrow it exactly and cost nothing -- but `ComboOffPossible`'s signature has no place to put
+   the count, so that is an interface change, not a one-liner.
+3. **The 1-in-7 executor gap is five named flags** (§3), all `ComboOffFinishActive()`-scoped. Lifting
+   any of them into autonomous play re-prices every go-off the engine plans for itself, so it moves
+   GT, the value leaf and the keep tables -- a deliberate decision, not a default to drift into.
+4. **`WishReachesFinisher` reads the whole library for PRESENCE.** That is deck-composition
+   knowledge a real player has (how many wishes are left), not card-ORDER knowledge, so it is not
+   clairvoyance in the sense `MTG_SHUFFLE_SALT_SEARCH` guards -- but it is now read by the SEARCH and
+   not only by the viewer, so it is recorded here rather than left implicit.
+5. **The residual on this corpus is still the value leaf** (Session 23 item 1, unchanged). Eight
+   shortfalls, of which six are H-construct / `net_c == 0` and immune to a shortcut by construction:
+   the state a shortcut must fire on does not exist until the bank -> dig -> wish chain has run.

@@ -34186,16 +34186,27 @@ inline thread_local int       g_climb_start = 0;
 // inside a viewer frame (it would commit the go-off instead of offering it).
 namespace edfco
 {
-// DEFAULT ON for both halves; `=0` disables one half without touching the other, and both carry a
-// heurarm slot so a lever sweep rides ONE pooled batch (CLAUDE.md's one-tail rule).
+// BOTH DEFAULT **OFF**, and the reason is the ADOPTION BAR, not a doubt about the mechanism.
+//
+// The bar this work was set was "ships default ON only if the bench STRICTLY IMPROVES (more
+// references matched, none lost)". It does not: on the 14 references the four arms
+// (off / root / look / both) score 5.2857, 8 short, CELL FOR CELL IDENTICAL, and the 200-game
+// deck average is off 5.4600 / on 5.4600 with a paired delta of exactly 0.0000 on all ten chunks.
+// So the measured effect is "provably no quality change, 1.3% less wall" -- which is a COST win,
+// and a cost win is not what the bar asks for. Shipping OFF with the numbers is the prescribed
+// outcome for exactly this result; flipping the two defaults to `true` is the whole change if the
+// user wants the cost win, and every gate in Session 25 was run in BOTH positions.
+//
+// `=1` on either enables one half without touching the other, and both carry a heurarm slot so a
+// lever sweep rides ONE pooled batch (CLAUDE.md's one-tail rule).
 inline bool RootOn()
 {
-    static const bool v = EnvOn("MTG_EDF_CO_ROOT", true);
+    static const bool v = EnvOn("MTG_EDF_CO_ROOT");
     return heurarm::Flag(heurarm::EDF_CO_ROOT, v);
 }
 inline bool LookOn()
 {
-    static const bool v = EnvOn("MTG_EDF_CO_LOOK", true);
+    static const bool v = EnvOn("MTG_EDF_CO_LOOK");
     return heurarm::Flag(heurarm::EDF_CO_LOOK, v);
 }
 // MTG_EDF_CO_LOOK_TRIAL (DEFAULT ON) -- does the LOOKAHEAD arm pay for the trial apply, or take the
