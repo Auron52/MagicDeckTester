@@ -475,3 +475,59 @@ exactly the anytime-climbing single pass, and Melira is now its clearest case �
 need for it on Creature Giving, but not here. Leading hypothesis, not proven: the decisive test
 (run the passes, discard every result, measure) needs a flag that does not exist yet, because FIT's
 early return puts it out of reach of `MTG_VALUE_TRUST_OFFSET`.
+
+### 11d. Melira: five mechanisms eliminated, gap not closed (user directive: no full-ladder rollouts)
+
+User, 2026-09-11: *"I can tell you 100% that I do not want full-ladder heuristic rollouts. We should
+be able to prevent the 'cold start' other ways."* and *"The value-leaf escalation effectiveness on
+other decks proved that the cold start is a solvable issue."*
+
+**Both points are supported by the data.** Cold single passes demonstrably work: 10 of the 12 capped
+decks are quality-neutral-or-better on the cold path, and FIT + lazy-R is neutral-or-better on 19 of
+20. Melira is not evidence that a cold start is unfixable — it is one deck-specific failure.
+
+Everything below is on Melira, held-out base 9920000 / 9990000, 16x250 per cell, ABSOLUTE avg win
+turn against the plain ladder at the same seeds (lower is better).
+
+| arm | avg | vs ladder |
+|---|---|---|
+| ship (plain ladder) | 4.8235 | — |
+| ship + beam 999 | **4.8223** | **−0.0012** |
+| cap5 + beam 8 | 4.8372 | +0.0137 |
+| cap5 (cold) | 4.8422 | +0.0187 |
+| cap5 + beam 999 | 4.8425 | +0.0190 |
+| cap5 + bound3 | 4.8475 | +0.0240 |
+| ship + beam 8 | 4.8488 | +0.0253 |
+
+**Eliminated, with the measurement that did it:**
+
+1. **Escalation depth** — cap1/2/3/5 with a FRESH budget: +0.0240 / +0.0250 / +0.0250 / +0.0247.
+   Flat. (The first depth sweep, on the shared budget, was **inert** — cap2/3/4/5 were identical
+   because `target` floors to 1 when the probe has eaten the budget, so the cap never binds. That
+   confounded the first version of this conclusion; it is re-established here unstarved.)
+2. **Budget starvation** — a fresh escalation budget (`frac`) makes Melira **worse**, not better
+   (+0.0245 vs the starved +0.0187). So starvation is real but is not the cause.
+3. **The take decision** — `MTG_VALUE_TRUST_OFFSET=9` forces the ladder to TAKE every escalation:
+   avg 4.9333 vs the default ladder's 4.9333. Identical. Not the source of the ladder's edge.
+4. **Incumbent bounds** — `MTG_ESC_SINGLE_BOUND=2` (sparse d2 seed) is **byte-identical 16/16**, i.e.
+   it never fires, for the same `target == 1` reason as (1). Mode 3 (one deep rollout, which the code
+   credits as *"the user's 'one rollout at the value-leaf's max depth' made concrete"*) DOES fire and
+   is worse: +0.0240 at 1.99x units / 3.3x wall — because the bound charges the same exhausted
+   `esc_budget` it was meant to help.
+5. **Probe-rank move ordering** — `MTG_ESC_BEAM=999` (reorder, negligible pruning) gives +0.0190 vs
+   the cold +0.0187. No effect.
+
+**Trap to record:** `MTG_ESC_BEAM` wraps the PROBE as well as the escalation, so it moves the `ship`
+baseline too. `beam=8` looked like a −0.0115 *win* for the single pass, but only because it degrades
+the ladder (+0.0253) more than the single pass (+0.0137). Always compare ABSOLUTE averages when the
+lever touches both arms.
+
+**Best single-depth variant found: `cap5 + beam 8` at +0.0137**, closing ~27% of the gap at 0.988x
+units. Still short of the ladder.
+
+**Standing recommendation.** Adopt one depth everywhere it holds (19 of 20) and carry Melira as a
+known open defect — not as a reason to keep full-ladder rollouts fleet-wide. The mechanism is still
+unidentified after eliminating depth, budget, the take decision, two incumbent bounds and probe-rank
+ordering; the remaining suspect is intra-search move ordering that iterative deepening generates and
+the probe's value-leaf ranks do not reproduce. Melira Pod wins via long Birthing Pod chains, so its
+lines are unusually order-sensitive, which fits — but that is a hypothesis, not a measurement.
