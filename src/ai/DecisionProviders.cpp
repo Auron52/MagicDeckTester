@@ -15203,6 +15203,39 @@ inline bool PipFreeOutletFromHandLive(const GameState& s, int controller, const 
     return false;
 }
 
+// MTG_EDF_GOFF_EXACT_AUTO -- the AUTONOMOUS arm gets this function's three ARITHMETIC corrections.
+//
+// Sessions 15f/19 proved three counting errors in the sizing below and repaired all three, but
+// every repair was scoped `HumanPlayActive()` so that GT, the value leaf and the keep tables stayed
+// byte-identical. That scoping bought byte-identity for decks that do not exist: `DetectDecisionProvider`
+// routes to `EldraziFlickerProvider` on `blink_cost | etb_untap_lands | is_land_aura`, and NO deck in
+// `test/regression_cases.sh` carries any of the three (verified by scanning all 19 decklists against
+// `cards.json`). So the price of the gate is paid entirely by the one deck that does route here --
+// the search sizes its go-offs with arithmetic this repo has already proven wrong:
+//
+//   * the Gorge refund credits a yield land in the slot ApplyBlinkLoop's UNCONDITIONAL damage-sink
+//     promotion has already taken (that promotion is not COMBO-OFF-scoped -- see `sinks` in
+//     ApplyBlinkLoop), so the autonomous projection over-counts the loop's budget on every Gorge board;
+//   * `{C}` pips are sized by MANA, so a loop ends with the bank full and the pips short and the
+//     all-or-nothing exile fires zero times;
+//   * the dig and the kill are counted as ONE `max` when they are sequential PHASES that cannot
+//     overlap, which under-sizes every bank-then-deploy line.
+//
+// Kept behind its own lever (and its own heurarm slot, so both arms ride ONE pooled batch) because it
+// is the first change to this deck's autonomous go-off economics since they were measured.
+// `PipFreeOutletFromHandLive` is deliberately NOT included: its paired apply-side swap in
+// ApplyBlinkLoop is `ComboOffFinishActive()`-gated, so lifting only the sizing half would size a swap
+// that never happens.
+static bool GoffExactAutoOn()
+{
+    static const bool env_on = EnvOn("MTG_EDF_GOFF_EXACT_AUTO", false);   // DEFAULT OFF; =1 enables
+    return heurarm::Flag(heurarm::EDF_GOFF_EXACT_AUTO, env_on);
+}
+
+// Does this call get the corrected arithmetic? Human play always did; the autonomous arm only under
+// the lever above.
+static bool GoffExactHere() { return HumanPlayActive() || GoffExactAutoOn(); }
+
 int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
 {
     if (!loop.ok) { return 0; }
@@ -15232,13 +15265,13 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         // Reserving the slot makes the two-untap boards correctly ABSENT and leaves every board
         // that can really do it offered -- which is what "aggressive, but accurate" asks for.
         //
-        // HUMAN PLAY ONLY (MTG_COMBO_OFF_GORGE_SLOT=0 restores the unreserved refund). The
-        // autonomous arm's go-off economics are measured artifacts; HumanPlayActive() is false in
-        // every autonomous run and every rollout, so GT, the value leaf and the keep tables are
-        // byte-identical by construction.
+        // HUMAN PLAY, plus the autonomous arm under MTG_EDF_GOFF_EXACT_AUTO (see GoffExactAutoOn --
+        // the promotion this reservation mirrors is itself unconditional, so the autonomous
+        // projection has the same over-count). MTG_COMBO_OFF_GORGE_SLOT=0 restores the unreserved
+        // refund on both arms.
         static const bool s_gorge_slot = EnvOn("MTG_COMBO_OFF_GORGE_SLOT", true);
         int refund = loop.refund;
-        if (s_gorge_slot && HumanPlayActive() && loop.untaps > 0)
+        if (s_gorge_slot && GoffExactHere() && loop.untaps > 0)
         {
             const int me = s.active_player_index;
             int sink_yield = 0;
@@ -15278,7 +15311,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
     // `SpendSurplusOnExile` is all-or-nothing, so the deck-out then fires ZERO times and the
     // COMBO OFF verify (correctly) refuses to promise a win. Same shape as the `dig_draws` term
     // beside it: a resource the loop supplies PER ITERATION, so the count is a max, not a sum.
-    // Autonomous sizing is untouched -- that arm's economics are measured artifacts.
+    // Autonomous sizing gets this too under MTG_EDF_GOFF_EXACT_AUTO (see GoffExactAutoOn).
     static const bool s_goff_c_iters = EnvOn("MTG_EDF_GOFF_C_ITERS", true);
     // ...AND THE OUTLET THE LOOP WILL ACTUALLY RUN WITH. When ApplyBlinkLoop is going to swap in a
     // pip-free outlet (see PipFreeOutletFromHandLive), this loop's own `c_cost` is about to stop
@@ -15287,7 +15320,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
     // short of the kill with the swap working perfectly.
     const bool swap_live  = PipFreeOutletFromHandLive(s, s.active_player_index, loop);
     const int  eff_net_c  = swap_live ? loop.c_refund : loop.net_c;
-    const bool c_iters_on = s_goff_c_iters && HumanPlayActive() && eff_net_c > 0;
+    const bool c_iters_on = s_goff_c_iters && GoffExactHere() && eff_net_c > 0;
     // `hand_setup_mv` is charged against the PIP budget as well as the mana one. It is generic (the
     // wish's {1}{G}, the finisher's {1}{U}), so in the worst case every point of it is settled out
     // of the colourless bank -- and on these boards the bank is exactly one pip per iteration, so a
@@ -15325,10 +15358,11 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
     //
     // Over-sizing stays safe by this function's standing contract -- ApplyBlinkLoop re-prices every
     // activation and stops at the first it cannot pay, so a too-large count realises only what is
-    // payable and can never invent a win. HumanPlayActive() is false in every autonomous run and
-    // every rollout, so GT, the value leaf and the keep tables are byte-identical by construction.
+    // payable and can never invent a win. The autonomous arm reaches this under
+    // MTG_EDF_GOFF_EXACT_AUTO (see GoffExactAutoOn); no deck in the regression suite routes to this
+    // provider, so GT, the value leaf and the keep tables are byte-identical either way.
     static const bool s_goff_phases = EnvOn("MTG_EDF_GOFF_PHASES", true);
-    const bool phases_on = s_goff_phases && HumanPlayActive();
+    const bool phases_on = s_goff_phases && GoffExactHere();
     const int  dig_iters = phases_on
         ? std::max(loop.dig_draws, FlickerIterationsForMana(loop.hand_setup_mv, loop.net))
         : loop.dig_draws;
