@@ -5990,3 +5990,40 @@ the only thing under test. `combo_off_check.sh` 20 -> **21**, and the six-lever 
 `CRACK_FIRST` owns 16, `TLESS_TRIAL` owns 17/19/20/21, `GOFF_PHASES` owns 20, `SWITCH_TRIAL` owns 18,
 `DEPLOY_TRIAL` owns 19/21, `DRAW_UNPROMOTE` owns 21 -- every lever has at least one fixture that
 fails when it alone is switched off, and all 21 pass by default.
+
+## Session 21 (2026-09-11, 05:30-10:15 UTC): the exactness round, integrated
+
+USER: *"we should be using rules as optimal and accurate as possible to Combo Off. Any additional
+work we can do to make this the case should be done."* Three agents on the tip, each landed and
+gated on the integrated tree; nothing pushed; no generation launched.
+
+| commit | what | gate |
+|---|---|---|
+| `7d58bfe3` | viewer plan-space bound (`MTG_VIEWER_PLAN_CAP`, reports the cut): the 448,195-plan / 15.75 s click returns in 1.67 s; `test/viewer_plan_space_check.py` (Session 18) | scenarios 79, fixtures 15, smoke 73 byte-identical, viewer strict PASS, plan-space PASS |
+| `d4306825` | display rule prices the BINDING resource: bank is a (mana, pips) pair with the untap schedule chosen exactly; Gorge bound by red-capable lands in the untap set; ingredients read the pool; every offer names its rule; fixture 10 provably unwinnable (Session 19) | scenarios 79, fixtures 15, smoke 73, viewer strict PASS; quick sweep synthetic b 19 -> 3 with a unchanged |
+| `da3101ec` `c61764f0` | executor: six in-loop spends priced by the real solver (crack Clues FIRST, `{T}`-less instalments, phases ADD for dig-then-kill, guarded outlet swap and in-loop deploy, draw promotion stands down); fixtures 16-21 (Session 20) | **final consolidated**: scenarios 79, fixtures 21, FULL regression 99/99 ALL PASS byte-identical, viewer strict PASS (0 play-drift / 309 refs), plan-space PASS |
+
+### Where the numbers stand (one binary each, stable ids)
+
+* Sweep (1021 reconstructed states): offered->wins agreement **74.9% -> 87.5%** (rule), then
+  offered+lost **68 -> 44** (executor) with **227** wins; `verified` perfect both directions.
+* Replay hunt `--quick` (939 true-fidelity states): **a 60 -> 81, b 23 -> 2, c 7**. The two left are
+  GORGE boards netting 0/+1 a pass against a `{2}{R}` ping that the trial correctly declines.
+* Quick sweep on the tip: engine population **0 offered-but-lost, 3/3 offers verified**; synthetic
+  b 2 (from 25 at the start of the overnight window).
+* Fixture count 10 -> 21; all 15 earlier negatives still pass.
+
+### Still approximate, named (from the two agents' own reports)
+
+1. `net_c <= 0` separates the sweep perfectly (all 227 wins have `net_c > 0`) but is NOT safe as a
+   veto on replayed boards -- a real pool holds colourless the per-pass net does not model. The
+   honest predicate is `net_c <= 0 AND no {C}-capable mana in the pool`. 39 synthetic/engine states,
+   zero reference.
+2. The GORGE rule row does not consult `MTG_COMBO_OFF_GORGE_SLOT`'s per-pass count (the 2 hunt
+   failures).
+3. `RecogniseFlickerLoop`'s library route leaves `exile_cost_mv` unset on the human count-sizing
+   path, so the sizer prices no kill (5 synthetic states, count pinned at x9).
+4. `MTG_EDF_GOFF_DEBUG` never prints from the human count-sizing path: 6 missed offers with untapped
+   lands (two Gorge boards where the branch should return 5) are one trace line away.
+5. `MTG_COMBO_OFF_FLOAT_ING` and `MTG_COMBO_OFF_PROSPECTIVE` measure inert on both populations and
+   ship ON as the correct reading; deleting them is small if inert levers are unwanted.
