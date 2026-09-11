@@ -7,6 +7,8 @@
 #include "../core/EnvFlags.h"
 #include "HeuristicArm.h"
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 
@@ -775,3 +777,90 @@ inline bool HumanUntapDemandEnabled()
     static const bool v = EnvOn("MTG_UNTAP_LINE_DEMAND", true);
     return v;
 }
+
+// ---- VIEWER STEP TIMING (MTG_PLAY_STEP_TIMING; DIAGNOSTIC, DEFAULT OFF) ----------------------
+//
+// Where does one play-viewer click GO? The stateless protocol re-simulates the whole --choices
+// prefix, so a click's cost is the SUM over every already-decided frame of (enumerate + apply) --
+// and that sum is invisible from outside: /usr/bin/time gives one number for the whole replay and
+// perf does not work in this container (no hardware counters, and `perf record` fails to write).
+// Without a split, every attempt to attribute the cost is guesswork, which is how "the combo-off
+// trial is the expensive part" came to be assumed rather than measured (it is not, on the frames
+// measured 2026-09-11 -- the base enumeration is).
+//
+// Shared reader + shared accumulator per the lockstep rule: the enumerator half lives in
+// TurnSolver::EnumerateMainPlans and the apply half in AIEngine's external-chooser segment loop,
+// and a split that measured only one of them would mis-attribute the other's cost to it.
+//
+// Off (the default) every Scope is one predictable branch and no clock read. Printed once at
+// process exit, to stderr, so it never contaminates the decision JSON the viewer parses.
+//
+// SINGLE-THREADED BY ASSUMPTION, stated rather than enforced: it is for a --claude-play viewer
+// replay, which is one game on one thread. The accumulator is a plain struct, so setting this on a
+// pooled `--batch` run would race the counters. That would spoil the numbers, nothing else -- the
+// flag changes no behaviour -- but do not read a batch's line as a measurement.
+namespace playtiming
+{
+inline bool On()
+{
+    static const bool v = EnvOn("MTG_PLAY_STEP_TIMING");
+    return v;
+}
+
+struct Totals
+{
+    double    enum_total = 0;   // all of EnumerateMainPlans
+    double    enum_base  = 0;   //   ... of which EnumeratePlansWithLand (the fan itself)
+    double    co_rules   = 0;   //   ... of which the provider's ComboOffPossible rule table
+    double    co_project = 0;   //   ... of which the cheap lethal projection
+    double    co_trial   = 0;   //   ... of which the trial ApplyPlanDirect verifies
+    double    apply      = 0;   // TurnSolver::ApplyPlan on the committed plan
+    long long frames     = 0;   // main-phase frames enumerated
+    long long trials     = 0;   // trial applies run
+};
+
+inline Totals& T()
+{
+    static Totals t;
+    return t;
+}
+
+// Accumulate into `sink` for the lifetime of the scope. Nested scopes are fine: each bucket is
+// reported on its own, and the "of which" buckets are subsets of enum_total by construction.
+struct Scope
+{
+    double*                               sink;
+    bool                                  on;
+    std::chrono::steady_clock::time_point t0;
+    explicit Scope(double* s) : sink(s), on(On())
+    {
+        if (on) { t0 = std::chrono::steady_clock::now(); }
+    }
+    ~Scope()
+    {
+        if (!on) { return; }
+        *sink += std::chrono::duration<double, std::milli>(
+                     std::chrono::steady_clock::now() - t0).count();
+    }
+    Scope(const Scope&)            = delete;
+    Scope& operator=(const Scope&) = delete;
+};
+
+// Printed from a static destructor, which std::exit(70) -- the protocol's "more input needed"
+// exit -- still runs. Same idiom as enummemo::Dumper.
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!On()) { return; }
+        const Totals& t     = T();
+        const double  other = t.enum_total - t.enum_base - t.co_rules - t.co_project - t.co_trial;
+        std::fprintf(stderr,
+                     "[play-timing] frames=%lld trials=%lld | enum=%.1fms (base=%.1f rules=%.1f "
+                     "project=%.1f trial=%.1f other=%.1f) apply=%.1fms\n",
+                     t.frames, t.trials, t.enum_total, t.enum_base, t.co_rules, t.co_project,
+                     t.co_trial, other, t.apply);
+    }
+};
+inline Dumper g_dumper;
+}   // namespace playtiming

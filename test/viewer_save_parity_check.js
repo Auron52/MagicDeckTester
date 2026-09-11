@@ -30,6 +30,14 @@
 //      Plus a NEGATIVE CONTROL: re-save with the cast-order side channel DROPPED. If the pin was
 //      load-bearing, the audit must REFUSE that save -- which is the property "a carrier that stops
 //      threading through is caught", stated as a test rather than as a hope.
+//      Layer B also asks each main-phase frame for a /api/validate verdict BOTH WAYS -- through
+//      runValidateCached (served by the live interactive child via `@validate-line`, 2026-09-11)
+//      and through the stateless runValidate spawn -- and requires the two bodies to be identical.
+//      That is a ROUTING assertion, and it belongs here because nothing else makes it:
+//      viewer_client_check.js calls the stateless helpers directly, the protocol sweep never
+//      validates at all, and interactive_parity_check.py proves only that the ENGINE answers the
+//      same, not that the server decides correctly, per click, that the child is parked on this
+//      very frame. A wrong decision there is a verdict about a line the human is not looking at.
 //   C. BINARY PINNING -- start a session, then DESTROY the binary the session started from, and
 //      require the save to still succeed. It can only do that by running the pinned copy, which is
 //      the whole fix for the 2026-09-10 incident.
@@ -69,6 +77,17 @@ fs.copyFileSync(REAL_BIN, THROWAWAY);
 fs.chmodSync(THROWAWAY, 0o755);
 process.env.MTG_BIN = THROWAWAY;
 process.env.PLAY_PIN_BIN = '1';        // pinning is off for require()d checks unless asked for
+
+// ENGINE SPAWN COUNTER, installed BEFORE server.js is require()d (it destructures
+// { spawnSync, spawn } at load time). Two validations that agree because BOTH of them respawned
+// prove nothing about the fast path -- a routing guard that never fires is a green test over dead
+// code. Counting spawns is the only way to tell the two apart from out here, and it is also what
+// the whole change is FOR, so layer B asserts a floor on the cached ones.
+const _cp = require('child_process');
+let nSpawn = 0;
+const _origSpawn = _cp.spawn, _origSpawnSync = _cp.spawnSync;
+_cp.spawn = function (...a) { nSpawn++; return _origSpawn.apply(this, a); };
+_cp.spawnSync = function (...a) { nSpawn++; return _origSpawnSync.apply(this, a); };
 
 const server = require(path.join(ROOT, 'tools', 'play', 'server.js'));
 
@@ -176,6 +195,18 @@ function mainPick(d) {
   return -1;
 }
 
+// A parseable --validate-line for a pending main-phase frame: the plan the driver is about to
+// commit, re-encoded the way linebuild.js would. Only the SHAPE matters here -- the assertion is
+// that both validation routes answer the same question the same way, not that the line is good.
+function lineFor(d, planIndex) {
+  const pl = (d.plans || []).find(x => x.index === planIndex) || (d.plans || [])[0];
+  if (!pl) return null;
+  const parts = [];
+  if (pl.land) parts.push('land=' + pl.land);
+  for (const n of (pl.cast_order_canonical || pl.casts || [])) parts.push('cast=' + n);
+  return parts.length ? parts.join(';') : 'pass';
+}
+
 // Play one game to its end through the SERVER's own step entry point, recording each frame exactly
 // as the live bridge does. Returns the finished session body + what it managed to exercise.
 async function playGame(base, opts) {
@@ -183,7 +214,8 @@ async function playGame(base, opts) {
   // multiExtra: the ints a MULTI-int answer contributes beyond its first. Each one is its own engine
   // decision (London bottoming emits one frame per bottom_step) but the human answered the batch in
   // one click, so those frames are never served and legitimately have no ledger entry.
-  const seen = { types: new Set(), multi: 0, multiExtra: 0, pins: 0, decisions: 0 };
+  const seen = { types: new Set(), multi: 0, multiExtra: 0, pins: 0, decisions: 0,
+                 validations: 0, validateCached: 0, validateMismatch: null };
   let mulliganed = false;
   for (let n = 0; n < 600; n++) {
     const out = await server.runStepCached(p, null);
@@ -211,6 +243,35 @@ async function playGame(base, opts) {
     let plan = null;
     if (d.type === 'main_phase') {
       plan = mainPick(d);
+      // /api/validate ROUTING parity (2026-09-11). `Commit Line` validates BEFORE it steps, and
+      // that validation is now answered by the LIVE interactive child (`@validate-line`) rather
+      // than by a fresh full-prefix spawn -- so per click the server decides whether the child is
+      // parked on exactly this frame. Get that wrong and the human gets a verdict about a line
+      // they are not looking at. Nothing else can see it: viewer_client_check.js calls the
+      // STATELESS helpers directly, the protocol sweep never validates, and
+      // interactive_parity_check.py proves only that the ENGINE answers the same -- not that the
+      // server routes to it at the right moment. Both routes, same body, same bytes.
+      //
+      // Asked here, before the pin is recorded, because that is the browser's own order: the pin
+      // for this decision is written by applyAccepted, i.e. AFTER the verdict comes back.
+      if (opts.validate !== false) {
+        const line = lineFor(d, plan);
+        if (line) {
+          const before = nSpawn;
+          const fast = await server.runValidateCached(p, line);
+          // ZERO engine spawns means the LIVE CHILD answered -- the path under test. Counted, not
+          // assumed: if the routing guard stopped firing, both arms would be stateless spawns and
+          // the byte comparison below would pass over dead code.
+          if (nSpawn === before) seen.validateCached++;
+          const slow = server.runValidate(p, line);
+          seen.validations++;
+          if (!seen.validateMismatch && JSON.stringify(fast) !== JSON.stringify(slow)) {
+            seen.validateMismatch = { ordinal: d.main_ordinal, turn: d.turn, line,
+                                      fast: JSON.stringify(fast).slice(0, 300),
+                                      slow: JSON.stringify(slow).slice(0, 300) };
+          }
+        }
+      }
       // CAST-ORDER PIN, built exactly the way index.html builds the "*" full-order form: the plan's
       // own action sequence, REVERSED, so the pin is load-bearing rather than a no-op restatement.
       if (opts.pin && typeof d.main_ordinal === 'number' && d.main_ordinal >= 0) {
@@ -242,6 +303,14 @@ async function testGame(label, base, opts, coverage) {
   seen.types.forEach(t => coverage.types.add(t));
   coverage.multi += seen.multi;
   coverage.pins += seen.pins;
+  coverage.validations += seen.validations;
+  coverage.validateCached += seen.validateCached;
+  if (seen.validateMismatch) {
+    const m = seen.validateMismatch;
+    fail(`${label}: /api/validate served from the live child disagreed with the stateless spawn `
+       + `at main_ordinal ${m.ordinal} (turn ${m.turn}, line "${m.line}")`
+       + `\n      child:     ${m.fast}\n      stateless: ${m.slow}`);
+  }
 
   // --- the SAVE, audited ---
   const dir = destDirFor(label.replace(/[^A-Za-z0-9]+/g, '_'));
@@ -265,7 +334,8 @@ async function testGame(label, base, opts, coverage) {
        + `won=${result.won} win_turn=${result.win_turn}`);
   }
   ok(`${label}: ${r.verified} decisions verified, won=${saved.won} win_turn=${saved.win_turn}, `
-   + `pins=${seen.pins} multi-int=${seen.multi} types=${seen.types.size}`);
+   + `pins=${seen.pins} multi-int=${seen.multi} types=${seen.types.size} `
+   + `validate-parity=${seen.validations} (${seen.validateCached} answered by the live child)`);
 
   // --- NEGATIVE CONTROL: drop the cast-order carrier and re-save ---
   // This is the (a)-class failure stated as a test: if a side channel stops reaching the save
@@ -443,7 +513,8 @@ function tryRefusal(sess) {
 async function main() {
   testAudit();
 
-  const coverage = { types: new Set(), multi: 0, pins: 0, controlLive: 0, controlInert: 0 };
+  const coverage = { types: new Set(), multi: 0, pins: 0, controlLive: 0, controlInert: 0,
+                     validations: 0, validateCached: 0 };
   // Deck-agnostic by construction, but the carriers this check exists for are only reachable on a
   // board that OFFERS them, so the set is chosen for coverage, not for any deck-specific claim:
   //   Goblins s1 -- multi-cast turns, i.e. the cast-order pin and its carrier-drop control;
@@ -479,6 +550,8 @@ async function main() {
   console.log(`  decision types driven: ${Array.from(coverage.types).sort().join(', ')}`);
   console.log(`  cast-order pins: ${coverage.pins}   multi-int answers: ${coverage.multi}   `
             + `carrier-drop controls: ${coverage.controlLive} live / ${coverage.controlInert} inconclusive`);
+  console.log(`  /api/validate routing parity: ${coverage.validations} frames asked both ways, `
+            + `${coverage.validateCached} answered by the live child (0 engine spawns)`);
   // Coverage shortfalls are NOTES, not failures: which carriers a game reaches is a property of the
   // boards it plays into, and a brittle red gate on that is worse than none (same rule as
   // human_line_order_check.py). A carrier that goes UNEXERCISED is still reported, loudly.
@@ -487,6 +560,14 @@ async function main() {
     console.log('  NOTE: no tutor resolution pick was reachable -- carrier (b) went unexercised.');
   }
   if (!coverage.multi) console.log('  NOTE: no multi-int answer was reachable -- carrier (c) went unexercised.');
+  if (!coverage.validations) {
+    console.log('  NOTE: no main-phase frame was validated -- the /api/validate routing went unexercised.');
+  } else if (!coverage.validateCached) {
+    // A real gate, not a note: every validation falling back to a spawn means the fast path is
+    // dead and the parity assertion above compared a stateless spawn with a stateless spawn.
+    fail('not one /api/validate was served by the live interactive child -- the fast path never '
+       + 'fired, so its parity assertion proved nothing');
+  }
   if (!coverage.controlLive && coverage.pins) {
     console.log('  NOTE: every cast-order pin was inert, so the carrier-drop control proved nothing.');
   }

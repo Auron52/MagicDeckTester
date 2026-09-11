@@ -40436,7 +40436,14 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& state,
                                                              bool is_pre_combat)
 {
-    std::vector<Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
+    // MTG_PLAY_STEP_TIMING (diagnostic, default off -- one branch when off). See EngineFlags.h.
+    playtiming::Scope tm_enum(&playtiming::T().enum_total);
+    if (playtiming::On()) { ++playtiming::T().frames; }
+    std::vector<Plan> plans;
+    {
+        playtiming::Scope tm_base(&playtiming::T().enum_base);
+        plans = EnumeratePlansWithLand(state, is_pre_combat);
+    }
     // ---- COMBO OFF gate (human play only; USER 2026-09-07) ---------------------------------------
     // "You either win or let the user do each required action. We shouldn't have weird mixed lines
     // that are halfway in-between." A recognized go-off count (ActivateBlink chosen_x > 3 -- the
@@ -40547,13 +40554,18 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
         // apply to earn the stronger "wins this turn" label. A board the rules accept always gets
         // its verify attempt.
         std::string co_rule;
-        const bool rules_ok =
-            (best_any >= 0)
-            && ResolveProvider(state).ComboOffPossible(state, state.active_player_index, &co_rule);
+        bool rules_ok = false;
+        {
+            playtiming::Scope tm_rules(&playtiming::T().co_rules);
+            rules_ok = (best_any >= 0)
+                    && ResolveProvider(state).ComboOffPossible(state, state.active_player_index,
+                                                              &co_rule);
+        }
         static const bool s_co_project = EnvOn("MTG_COMBO_OFF_PROJECT", true);
         bool plausible = true;
         if (best_any >= 0 && s_co_project)
         {
+            playtiming::Scope tm_project(&playtiming::T().co_project);
             // SEE THE ROUTE THE COUNT WAS SIZED ON. The blink count is sized through ScanHandSinks'
             // human bypass (the Living Wish -> Essence Depleter deploy), but the provider's lethal
             // projection is NOT -- so on a sink-less board it answered "no kill in reach", `plausible`
@@ -40597,6 +40609,8 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             for (int cand : to_try)
             {
                 if (cand < 0) { continue; }
+                playtiming::Scope tm_trial(&playtiming::T().co_trial);
+                if (playtiming::On()) { ++playtiming::T().trials; }
                 // The APPLY half of the symmetric pair opened around the projection above: the trial
                 // must deploy the finisher exactly as the real apply will, or "wins this turn" is an
                 // assertion about a line nobody runs.
