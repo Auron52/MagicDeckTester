@@ -1,0 +1,136 @@
+{
+  "_comment": [
+    "SESSION 23's THIRD SHALLOW ORDINAL. The user's claude_s15_gi14, turn 6, main-phase ordinal",
+    "EIGHT -- the last of the three frames a plan-apply shortcut can reach directly (the other seven",
+    "reference frames only exist after 27-63 hand-played banking/digging sub-decisions, which is",
+    "Session 23's H-construct class and NOT what a shortcut fixes).",
+    "",
+    "Board: Eldrazi Displacer + Peregrine Drake over Adarkar Wastes, two Brushlands (one carrying",
+    "Fertile Ground) and two Conservatories, with a Clue Token already made. Opponent on 14.",
+    "",
+    "ONE THING THE FIXTURE CANNOT STAGE, stated rather than glossed: the real frame carried {C:1}",
+    "floating, and a --scenario board is always asked with an EMPTY pool (see",
+    "test/combo_off_frames.py's header -- the reconstruction is a deliberate LOWER BOUND). So this",
+    "board is strictly weaker than the one the user sat in front of, and an offer here is therefore",
+    "an offer there. The recording's own ordinal-8 menu is 60-odd plans deep and the user took the",
+    "combo-off entry at index 63."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 6,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 14,
+  "opponent_library_size": 48,
+  "library_filler": "Forest",
+  "library_top": [
+    "Eldrazi Displacer",
+    "Eldrazi Displacer",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Cloud of Faeries",
+    "Cloud of Faeries",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Brushland",
+    "Brushland",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Adarkar Wastes",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Conservatory",
+    "Conservatory",
+    "Kitchen",
+    "Kitchen",
+    "Shivan Gorge",
+    "Training Grounds",
+    "Training Grounds",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Eladamri's Call",
+    "Aether Hub",
+    "Aether Hub"
+  ],
+  "library_size": 0,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    {
+      "name": "Adarkar Wastes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Brushland",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Fertile Ground",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Brushland"
+    },
+    {
+      "name": "Brushland",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Eldrazi Displacer",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Peregrine Drake",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Clue Token",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Aether Hub",
+    "Cloud of Faeries",
+    "Yavimaya Coast"
+  ],
+  "expect_combo_off": true
+}

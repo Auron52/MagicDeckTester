@@ -1,0 +1,144 @@
+{
+  "_comment": [
+    "SESSION 23's FIRST SHALLOW ORDINAL, pinned -- and it pins the OTHER half of the user's doctrine.",
+    "The user's own claude_s9_gi8, turn 4, main-phase ordinal FIVE: the fifth decision of the turn,",
+    "i.e. right after the plan that assembles the loop, not fifty banking clicks later. Session 23's",
+    "fixture list splits the ten reference frames the button fires on into SHALLOW ordinals (5, 5, 8)",
+    "and DEEP ones (27-63); the shallow three are the only ones a plan-apply shortcut can reach at",
+    "all, because the state it must fire on EXISTS in a single main-phase decision's menu.",
+    "",
+    "Board, read straight out of the recording: Cloud of Faeries + Emiel the Blessed over four lands",
+    "-- Kitchen carrying Overgrowth (1+2), Conservatory carrying Wild Growth (1+1), a second",
+    "Conservatory already tapped, and Mariposa Military Base as the only colourless AND the only",
+    "repeatable draw. `library_top` is the deck minus battlefield/hand, which comes to exactly the",
+    "49 the recording records -- so the CONTENTS are exact (four Living Wishes among them, which is",
+    "what rule WISH-DRAW's W ingredient reads) while the ORDER is canonical, not the real shuffle.",
+    "",
+    "IT IS OFFERED AND NOT VERIFIED, and that is the assertion -- `combo_off_verify: false`.",
+    "The recording agrees: its own ordinal-5 menu carries `combo_off: true, rule WISH-DRAW` with NO",
+    "`combo_off_verified`, and the user went on to bank twenty-eight hand-blinks ({G:80} floating)",
+    "before the click actually won on turn 4. So this frame is the 'display aggressive, execution",
+    "exact' split itself: the arithmetic says a combo off is reachable from this position, and the",
+    "trial apply honestly declines to promise it THIS instant. Checked, not assumed -- moving a",
+    "Living Wish to the top of the library does not make it verify either (x109, still no kill), so",
+    "the refusal is the board's net-1 loop against fifty {C} pips, not the synthetic library order.",
+    "",
+    "What it guards: a change that WITHDREW this offer (the user's 'we simply do not get the Combo",
+    "Off button in enough cases') and, equally, a change that made it claim 'wins this turn' here."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 50,
+  "library_filler": "Forest",
+  "library_top": [
+    "Eldrazi Displacer",
+    "Eldrazi Displacer",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Cloud of Faeries",
+    "Cloud of Faeries",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Overgrowth",
+    "Overgrowth",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Adarkar Wastes",
+    "Adarkar Wastes",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Conservatory",
+    "Conservatory",
+    "Kitchen",
+    "Shivan Gorge",
+    "Training Grounds",
+    "Training Grounds",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Eladamri's Call",
+    "Aether Hub",
+    "Aether Hub",
+    "Aether Hub"
+  ],
+  "library_size": 0,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Wild Growth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Conservatory"
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": true
+    },
+    {
+      "name": "Kitchen",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Cloud of Faeries",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Emiel the Blessed",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Eldrazi Displacer",
+    "Emiel the Blessed",
+    "Overgrowth"
+  ],
+  "expect_combo_off": true,
+  "combo_off_verify": false
+}

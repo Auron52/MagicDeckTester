@@ -1,0 +1,137 @@
+{
+  "_comment": [
+    "SESSION 23's SECOND SHALLOW ORDINAL. The user's claude_s14_gi13, turn 5, main-phase ordinal",
+    "FIVE -- and this one the recording already stamps `combo_off_verified: true`, rule WISH-DRAW,",
+    "on `Eldrazi Displacer: blink Peregrine Drake x60`. So it pins the strongest form: offered, and",
+    "the harness's own INDEPENDENT re-apply (TurnSolver::ApplyPlan, not a re-read of the gate's",
+    "flag) has to kill the opponent.",
+    "",
+    "Board: Eldrazi Displacer + Peregrine Drake (untaps FIVE) over Yavimaya Coast carrying Trace of",
+    "Abundance, Aether Hub carrying Wild Growth AND Trace of Abundance, and a bare Conservatory as",
+    "the repeatable draw. The two auras share the Hub in the recording, and the order here is the",
+    "order that is LEGAL to have reached: Wild Growth first, then Trace -- Trace grants shroud, and",
+    "an Aura targets its host (CR 303.4a), so the reverse could never have been cast (CR 702.18a).",
+    "The Hub is staged with its energy counter, which is what makes it a {U}/{B} source at all --",
+    "rule WISH-DRAW's UB ingredient reads a conditional producer only while its condition holds.",
+    "",
+    "This is also a live SEARCH shortfall (s14_gi13: human 5, search 6), which is why it is worth a",
+    "fixture rather than a line in a report: whatever a search shortcut does to this position, the",
+    "viewer's answer on it must not move."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 18,
+  "opponent_life": 20,
+  "opponent_library_size": 49,
+  "library_filler": "Forest",
+  "library_top": [
+    "Eldrazi Displacer",
+    "Eldrazi Displacer",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Cloud of Faeries",
+    "Cloud of Faeries",
+    "Cloud of Faeries",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Adarkar Wastes",
+    "Adarkar Wastes",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Trace of Abundance",
+    "Conservatory",
+    "Conservatory",
+    "Conservatory",
+    "Kitchen",
+    "Kitchen",
+    "Shivan Gorge",
+    "Training Grounds",
+    "Training Grounds",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Eladamri's Call",
+    "Aether Hub",
+    "Aether Hub"
+  ],
+  "library_size": 0,
+  "energy_counters": 1,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    {
+      "name": "Yavimaya Coast",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Trace of Abundance",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Yavimaya Coast"
+    },
+    {
+      "name": "Aether Hub",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Wild Growth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Aether Hub"
+    },
+    {
+      "name": "Trace of Abundance",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Aether Hub"
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Eldrazi Displacer",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Peregrine Drake",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Trace of Abundance"
+  ],
+  "expect_combo_off": true
+}
