@@ -179,3 +179,40 @@ seven. If neutral, R collapses to "a constant plus goblins" and leaves the neces
 here: a sidecar validator walking every deck in `regression_cases.sh`'s `DECK_FILE` that fails if a
 necessary key is absent. That is what makes a good default safe -- the default carries a new deck,
 the validator guarantees no deck SHIPS on it untested.
+
+## BATCH MEMORY SETTINGS -- always set these (2026-09-11, after two OOMs)
+
+The 23 GB box was OOM-killed twice during this screen, both times on Melira cells. Root cause:
+**`MTG_PLAN_CACHE_KB` defaults to 0 and `plancache::Fits()` returns `b <= 0 || ...`, so UNSET means
+UNBOUNDED.** `TurnSolver.cpp:30476` documents the same failure: *"combo-turn decision promoting such
+entries spiked a 12-worker phase A from 5 GB to 23 GB in ~2 minutes and the kernel shot it (2026-09-06;
+the fifth OOM of that generation). The same deck ran flat at 2.6-3.8 GB with the memo off."* Melira is
+that deck (`TurnSolver.cpp:32052`: *"Melira's combo-turn SearchLines ... run ~3-4 KB/entry"*).
+
+**Every batch must set:**
+```
+MTG_PLAN_CACHE_KB=262144   # PER THREAD: 256 MB x 32 workers = 8 GB ceiling
+MTG_FSL_POOL=1000000       # GLOBAL, and it is in KB not entries => 0.95 GB
+```
+Both are result-neutral ("a refused store just recomputes... play is identical at ANY budget; only wall
+clock may move"), so there is no measurement reason to leave them off. Budget at 32 workers: 8.0 +
+0.95 + ~2.2 (base + per-worker state, measured ~70 MB/worker) = ~11.2 GB of 23 GB.
+
+Calibrated on the slowest game in the screen (the 175 s fivecolour monster, `--seed 9982205
+--game-index 205 --games 1`): unbounded 68.10 s / 200 MB peak, capped at 262144 68.69 s / 200 MB peak,
+`MTG_ENUM_HIWATER_KB` silent. So the cap costs ~0.9% and never BINDS on any reproducible game -- it is a
+guard, not a tuning parameter. NOTE: we still have no memory-pathological repro, because the games that
+spike are the ones that kill the process before the slow-game logger can name them.
+
+**`MTG_FSL_POOL` IS IN KB, NOT ENTRIES** (`TurnSolver.cpp:32029`). Passing 4000000 is a 3.8 GB pool.
+Mis-reading this as an entry count contributed to both OOMs.
+
+### Recommended improvement: make the plan-cache budget GLOBAL, like the FSL pool
+
+The plan cache budget is `thread_local` (`t_enum_bytes + t_bp_bytes`), so an 8 GB ceiling is really
+"250 MB each, 31 of which sit idle while the one monster decision is strangled". That is exactly the
+anti-pattern the FSL pool was made global to avoid -- *"a uniform cap cost the 6.4 h monster 3.3x while
+most of the budget sits unused"*. Converting plancache to an atomic global pool with the same
+acquire/release + `Fits()` contract would let one monster draw 4-6 GB under a fixed ceiling. Small,
+well-precedented, result-neutral either way. USER: has ordered +16 GB for the container; a global pool
+scales with that automatically instead of needing the per-thread number re-tuned.
