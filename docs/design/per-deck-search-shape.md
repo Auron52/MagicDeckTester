@@ -452,3 +452,105 @@ exactly why these adoptions set `leaf: "none"` instead of renaming to `.value.DI
 `mull_gen` settings were fitted under the MODEL-leaf play, and the shape keys apply during mulligan generation
 too. Every measurement above was taken WITH the shipped keep table live, so the results are valid for what
 ships; but a keep table re-fitted to the leafless play could add further gain on these 8 decks. Untested.
+
+## OPEN: three mode cells that are NOT measured on the current binary (2026-09-11, user-identified)
+
+The 2026-09-11 screens varied essentially ONE axis (leaf on/off) on most decks, plus the final-depth single
+pass on seven. The user asked why the "value-leaf probe -> finish with the HEURISTIC" family has no numbers
+here. It does have numbers, but not current ones, and the gaps are worth naming precisely.
+
+### (1) `emul` -- model warm-ups, HEURISTIC committing pass -- never re-screened post-fix
+
+This is the arm the user meant. It WAS run (batch 2, 4,000 games per cell, 18 decks, d5b20 + d3b10) and it
+loses, mostly on WALL, because the committing pass is a full heuristic ROLLOUT at the committed depth -- the
+exact cost the value leaf exists to avoid. You pay the model's generation cost AND the rollout.
+
+| deck | d5b20 dturns | d5b20 wall | | deck | d5b20 dturns | d5b20 wall |
+|---|---|---|---|---|---|---|
+| breaching | 0.0000 | **37.2x** | | mirrorwing | +0.0097 | 3.3x |
+| slivers | +0.0008 | **13.2x** | | kitty | +0.0077 | 3.3x |
+| knights | +0.0008 | **12.5x** | | dragons | +0.0025 | 2.6x |
+| critter | −0.0002 | **12.2x** | | dragonstorm | +0.0030 | 1.9x |
+| minotaur | +0.0025 | 7.4x | | hinata | +0.0200 | 1.7x |
+| auras | +0.0035 | 7.3x | | **melira** | **+0.0225** | **1.02x** |
+| goblins | +0.0040 | 6.8x | | antilife | +0.0010 | 4.7x |
+| stompy | +0.0175 | 3.6x | | burn | +0.0018 | 4.5x |
+| th | +0.0150 | 4.2x | | fivecolour | +0.0067 | 3.9x |
+
+**THE CAVEAT THAT MAKES THIS OPEN:** batch 2 predates the escalation-hijack fix, and the post-fix re-screen
+(`logs/emul_screen/decide_fix.txt`) carries only `escnl / emulv / emulnlv / escnlv` -- **the `emul` column is
+absent**. So the one shape the user asked about is the one shape not re-measured on the fixed binary. Melira
+is where a re-measure is cheapest to justify (1.02x wall there, against 3-37x elsewhere).
+
+Its sibling `emulnl` (leafless warm-ups -> heuristic commit) was measured and IS the heuristic ladder (16 of
+4,000 Melira games differ), so it is not a separate candidate.
+
+### (2) `escalation_cap` on the 7 decks that lack it
+
+"A cheaper escalation ladder that skips the rollouts that are not relevant" is already shipped -- it is
+`escalation_cap`, one heuristic pass at the budget-affordable depth instead of the full 1..D re-ladder. It is
+live on **12 of 20** decks, so for those it is IN the `ship` baseline of every table above.
+
+* has it: antilife (R 16), auras (unset), creature_giving (R 21), dragonstorm (R 81), fivecolour (R 86),
+  goblins (R 240), hinata (R 40), knights (unset), stompy (unset), burn (R 50), slivers (unset), th (unset)
+* lacks it: breaching, critter, dragons, **fluctuator**, kitty, **melira**, minotaur, mirrorwing
+
+**Melira was measured with it and lost** (0.910x units, 2 better / 41 worse), and the obvious explanation was
+ruled out: cap at R=120 / R=12 / R=16 is BYTE-IDENTICAL in all 16 blocks, because Melira's escalations land at
+d1-d2 either way. The 9% saving comes from skipping the ladder's DEEPER passes and so does the quality loss.
+**The other 7 were never measured with it at all.**
+
+### (3) The cap axis crossed with the leaf axis
+
+Every 2026-09-11 adoption changed `leaf` with the deck's cap setting left as-is. `{leaf: none} x {cap on/off}`
+is unmeasured everywhere, as is `{cap} x {ladder: single}`.
+
+## OPEN: why slivers_vial is HELD rather than adopted (user challenge, 2026-09-11)
+
+The user's objection: slivers has strong trust (`value_trust_depth: 5`, equal to its `target_depth`), so trust
+should be load-bearing, and a leafless arm measuring BETTER would be evidence that trust is being accepted
+wrongly. That is the right question, and the config split answers it -- in trust's favour.
+
+`TurnSolver.cpp:36405`: `escalate = (value_min_depth > 0 && value_active && committed < value_min_depth &&
+!verified) || ...`. So trust only KEEPS an unverified line committed **at or above** the trust depth.
+
+| config | can trust fire? | leaf:none result |
+|---|---|---|
+| d5b20 | **yes** (committed can reach 5) | 0 better / 0 worse at 4,000 games; 3/1 at 8,000 -- identical play |
+| d3b10 | **no** (committed <= 3 < 5, both arms escalate everything) | **21 better / 0 worse**, 1.020x units |
+
+Were trust being mis-accepted, the damage would show at d5b20 where trust operates. It does not. The whole
+gain sits at a config where trust is structurally disabled in BOTH arms, so this result is not evidence about
+trust at all.
+
+The likely d3 mechanism -- READING, not established: a model leaf widens the tree 1.1-1.8x at equal depth and
+reorders moves, so the probe commits at a different depth, and that depth feeds the crossover rule (slivers'
+`take_heuristic_at_hdepth` is `[1,1,2,2,3,6,6,6]`, i.e. take the heuristic almost always at shallow c). The
+leafless probe spends 2% more units and hands the escalation a better starting point.
+
+**DECISION: hold slivers_vial until the 21 improved games at d3b10 are instrumented per decision and the
+mechanism is NAMED.** It is otherwise a clean win at d5b20 (0.914x units / 0.709x wall at identical play).
+
+## OPEN: the shape depth-gate for Hinata2 + KittyEquipment
+
+Both measure ~20% off both axes at their own depth and a real regression at the shallow d3b10 sanity tier
+(Hinata2 +0.0097 +/- 0.0023, Kitty +0.0030 +/- 0.0010). Shape keys apply unconditionally at sidecar-load while
+`escalation_cap` and `escalation_fresh_frac` are gated on-policy (`vp_here`). Gating shape likewise unblocks
+both with the d3 tiers untouched by construction. `vp_here` cannot be reused verbatim: it requires
+`value_play.drives()` and **Fluctuator locks no depth**, so that gate would silently switch Fluctuator's
+adopted shape off. Two designs:
+
+* **(a)** gate on `target_depth > 0 && depth == target_depth`, and treat "locks nothing" (Fluctuator, Melira)
+  as always-on-policy so nothing changes for them. Less machinery, matches the intent. **Recommended.**
+* **(b)** a separate `shape_min_depth` key, default off, set only where a depth split is measured. More
+  explicit, cannot surprise a third deck.
+
+## Next measurements, in priority order
+
+1. Re-screen `emul` on the current binary, ON-POLICY, Melira and Fluctuator included -- the only shape family
+   never re-measured post-fix.
+2. Measure `escalation_cap` on the 7 decks that lack it.
+3. Instrument slivers' 21 improved d3b10 games; name the mechanism before adopting.
+4. Implement the shape depth-gate, design (a), for Hinata2 + KittyEquipment.
+
+1 and 2 pool into a single batch.
