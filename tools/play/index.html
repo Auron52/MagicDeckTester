@@ -115,6 +115,10 @@
                  color:#0c1116; background:#e07a5f; }
   .staleserver code { background:rgba(0,0,0,.18); border-radius:4px; padding:0 4px; }
   .staleserver button { margin-left:8px; }
+  /* ARMED pass (passNeedsConfirm): the primary button is one click from discarding a floating pool,
+     and it only became a pass because the committed line emptied the queue under it. Alpha-red, the
+     same colour the stale-server banner uses for "this is about to cost you something". */
+  button.primary.confirm { background:#e07a5f; color:#0c1116; }
 
   .thumb { width:90px; text-align:center; position:relative; }
   .thumb.sm { width:62px; }
@@ -842,7 +846,7 @@ function retargetPlanAura(planIdx, num) {
   renderBoard();
   return true;
 }
-function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.tapMode=false; S.tapPick=null; S.repeatPick=null; S.loopPick=null; S.macroRun=null; hideVerdict(); renderBoard(); }
+function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.tapMode=false; S.tapPick=null; S.repeatPick=null; S.loopPick=null; S.macroRun=null; S.passArm=null; hideVerdict(); renderBoard(); }
 
 // ---- rendering -------------------------------------------------------------
 // Colored counter badges for a permanent {counters:[{kind,label,count}]}. One circle per kind.
@@ -2078,8 +2082,13 @@ function renderPlanbar() {
     : '';
   // Buttons FIRST (left edge, next to the hand) so Commit/Clear are within easy reach while
   // you build the line; the Turn-plan label + chips follow and the chips flex to fill the rest.
-  pb.innerHTML = `<button id="commit" class="primary" title="${empty?'Pass just THIS phase — you\'ll still get Main 2 to cast in (use Pass turn to skip the whole turn)':'Commit this line; you stay in this phase to re-decide if it draws a card or opens an ability (e.g. a same-turn Horizon Canopy sac)'}">${empty?'Pass phase':'Commit Line'}</button>`+
-    `<button id="committurn" class="primary" title="${empty?'Do nothing this turn and skip to the next turn':'Commit this line, then auto-pass the rest of this turn (skip Main 2 / any re-prompts)'}">${empty?'Pass turn':'Commit turn'}</button>`+
+  // ARMED: this button is one click from throwing a floating pool away, and it only got that
+  // meaning because the line you just committed emptied the queue under it (see passNeedsConfirm).
+  // Say so ON the button -- a hint alone is easy to click straight through, which is the very
+  // failure being fixed.
+  const armed = empty && !!S.passArm && floatingTotal(S.decision) > 0;
+  pb.innerHTML = `<button id="commit" class="primary${armed?' confirm':''}" title="${empty?'Pass just THIS phase — you\'ll still get Main 2 to cast in (use Pass turn to skip the whole turn)':'Commit this line; you stay in this phase to re-decide if it draws a card or opens an ability (e.g. a same-turn Horizon Canopy sac)'}">${armed?`Pass phase — lose ${esc(floatingText(S.decision))}?`:(empty?'Pass phase':'Commit Line')}</button>`+
+    `<button id="committurn" class="primary${armed?' confirm':''}" title="${empty?'Do nothing this turn and skip to the next turn':'Commit this line, then auto-pass the rest of this turn (skip Main 2 / any re-prompts)'}">${empty?'Pass turn':'Commit turn'}</button>`+
     (empty?'':`<button id="clearp" class="ghost">Clear</button>`)+
     // LINE MACROS: repeat the queued block. Offered only when the block really is repeatable (see
     // repeatableBlock), so it is never a dead control -- the same rule the ⛏ Tap mana toggle follows.
@@ -2423,8 +2432,80 @@ function activateAbility(name, kind) {
 }
 
 // ---- commit / validate -----------------------------------------------------
+// THE BUTTON THAT CHANGES MEANING UNDER YOUR FINGER (USER 2026-09-11, seed 16 T4: "it goes to the
+// 2nd phase for no reason and I can't finish the combo").
+// ============================================================================================
+// `#commit` is ONE button whose label is `empty ? 'Pass phase' : 'Commit Line'`. The instant a line
+// commits, S.plan empties, renderPlanbar redraws, and the same element -- same id, same position,
+// same class="primary" -- becomes a PHASE PASS, which throws the floating pool away. A player
+// grinding a 60-segment Emiel/Cloud loop is clicking that one pixel over and over; the click that
+// lands just after a commit resolves ends the main phase instead of committing anything.
+//
+// Reproduced exactly at the user's frame (seed 16 gi 15, T4 ordinal 62, the two-Aura line on
+// Brushland #1): commit appends `742` and stays in pre_main with {G:6,C:2} floating -- ONE further
+// click on the same button appends `-1` and lands post_main with the pool gone. The engine is
+// innocent; `commitLine`'s `if (S.busy) return` only swallows clicks DURING the round trip, and the
+// dangerous one arrives just after it, which a slow frame (772 plans + a choose-walk) makes likelier.
+//
+// THE GUARD, scoped to exactly the destructive case: a pass that would DISCARD FLOATING MANA needs a
+// confirming second click. Three rules, and each is load-bearing:
+//   * a click within PASS_REARM_MS of the frame arriving does not even ARM -- that is the
+//     rapid-grind click, and treating it as "arm" would let a double-click arm and confirm;
+//   * a confirming click must be at least PASS_DWELL_MS after the arming one; anything faster
+//     RE-ARMS instead, so mashing the button can never pass however fast you click;
+//   * the arm dies with the frame (advanceTo), with Clear, and the moment anything is queued.
+// A pass with an EMPTY pool stays one click: nothing is thrown away and undo covers a misclick.
+// No modal -- the user's standing objection to pop-ups ("it's kind of a pain to constantly have
+// pop-ups") applies, and this is a confirmation, not a decision.
+const PASS_REARM_MS = 700;    // dead time after a frame lands, before a pass can even be armed
+const PASS_DWELL_MS = 400;    // a confirming click must be at least this long after the arming one
+const PASS_ARM_MS   = 8000;   // ...and no later than this, or the arm has gone stale
+function floatingTotal(dec) {
+  const f = (dec && dec.me && dec.me.floating_mana) || {};
+  return Object.keys(f).reduce((n, k) => n + (+f[k] || 0), 0);
+}
+function floatingText(dec) {
+  const f = (dec && dec.me && dec.me.floating_mana) || {};
+  return Object.keys(f).filter(k => +f[k] > 0).map(k => `{${k}}×${f[k]}`).join(' ');
+}
+// Is THIS click a guarded pass, and should it be refused (with a reason) rather than performed?
+// Returns true when the caller must stop. Mutates the arm state -- it is the whole state machine.
+function passNeedsConfirm() {
+  if ((S.plan || []).length) { S.passArm = null; return false; }   // not a pass at all
+  const dec = S.decision;
+  if (!dec || dec.type !== 'main_phase') return false;
+  // NEVER guard the client's OWN automation. advanceTo marks each of its auto-commits with
+  // `_autoStep` -- the dead-opponent auto-pass, the "Commit turn" skip, the multi-segment chain --
+  // and those are not a human clicking a button that just changed under them. Guarding them would
+  // stall a decided game on its own confirmation prompt and break Commit turn outright, which is a
+  // far worse bug than the one being fixed.
+  if (dec._autoStep) { S.passArm = null; return false; }
+  const total = floatingTotal(dec);
+  if (total <= 0) { S.passArm = null; return false; }              // nothing to throw away
+  const now = Date.now();
+  if (now - (S.frameAt || 0) < PASS_REARM_MS) {
+    S.passArm = null; renderBoard();
+    flashHint(`That click landed right after your line committed — the button had just changed from `
+            + `“Commit Line” to “Pass phase”. Nothing was passed. You still have ${floatingText(dec)} `
+            + `floating; click Pass phase again if you really do want to end this phase.`);
+    return true;
+  }
+  if (!S.passArm || (now - S.passArm) < PASS_DWELL_MS || (now - S.passArm) > PASS_ARM_MS) {
+    S.passArm = now; renderBoard();
+    flashHint(`Pass this phase and LOSE ${floatingText(dec)} floating? Click Pass phase again to `
+            + `confirm. (Queue anything, or press Clear, to cancel.)`);
+    return true;
+  }
+  S.passArm = null;                                                // confirmed -> let it through
+  return false;
+}
 async function commitLine() {
-  if (S.busy) return; S.busy=true;
+  if (S.busy) return;
+  // A guarded pass stops HERE, before S.busy / the validate round trip -- and it must also void a
+  // pending "Pass turn", or advanceTo's commit-turn skip would pass the whole turn on the next
+  // frame anyway and the guard would have protected nothing.
+  if (passNeedsConfirm()) { S.commitTurn = null; S.commitTurnPasses = 0; return; }
+  S.busy=true;
   const btn=$('commit'); if(btn){btn.disabled=true; btn.textContent='Checking…';}
   // A plan holding TWO land drops (a Scale the Heights bonus) is committed as consecutive SEGMENTS:
   // the engine's Plan carries one land, and committing does not end the phase, so "land, land, then
@@ -2670,6 +2751,17 @@ function renderChooseDialog(v, line){
 // ['A','BC'] compare equal, and the whole point of the check is that the queued line and the
 // matched plan hold exactly the same actions before an order is pinned for them.
 const msKey = a => a.slice().sort().join('\u0001');
+// A plan by its ENGINE index. Given a name (rather than inlined) because the naive
+// `decision.plans[i]` is wrong and LOOKS right: `plans` is a RANKED TOP SLICE once a frame exceeds
+// the emit cap (MTG_PLAY_PLANS_CAP, 200 by default; `plans_total` carries the real count), so
+// position and index stop agreeing altogether -- measured on the user's seed-16 turn-4 frame, 200
+// plans were emitted carrying indices up to 771. Anything indexing positionally therefore reads
+// SOME OTHER PLAN on exactly the rich combo boards this deck lives on. Returns null when the plan
+// is past the cap and simply absent, which callers must read as "unknown", never as "no actions".
+function planByIndex(dec, idx) {
+  const plans = (dec && dec.plans) || [];
+  return plans.find(p => p && p.index === idx) || null;
+}
 function applyAccepted(planIndex, label) {
   // DISPLAY-ONLY RELABEL (USER 2026-09-05, seed 2: fifty-seven blink activations each logged as
   // "cast: Eldrazi Displacer"). The engine's summary uses one verb for the whole list, so a line
@@ -2724,7 +2816,20 @@ function applyAccepted(planIndex, label) {
   // forms ride the same S.castOrder map, the same `co` step marker and the same --cast-order arg,
   // so undo, the recorded reference and viewer_protocol_check.py need no new concept.
   let coKey = null;
-  const dec0 = S.decision, plan0 = dec0 && dec0.plans && dec0.plans[planIndex];
+  // LOOK THE PLAN UP BY ITS `index`, NEVER BY ARRAY POSITION. `decision.plans` is a RANKED TOP
+  // SLICE once a frame exceeds the emit cap (MTG_PLAY_PLANS_CAP, 200 by default -- `plans_total`
+  // carries the real count), so position and index stop agreeing entirely: measured on the user's
+  // seed-16 turn-4 frame, 200 plans were emitted carrying indices up to 771. `plans[planIndex]`
+  // therefore returned SOME OTHER PLAN -- whose `actions` then drove the multiset guard below, so
+  // the human's full-order pin was decided against a line the engine was not applying.
+  // KNOWN GAP, deliberately not papered over here: when the committed plan is past the cap it is
+  // not in this list at all, so `plan0` is undefined and NO pin is emitted -- the queued order
+  // silently reverts to enumerator order on exactly the rich combo frames that overflow the cap
+  // (docs/design/viewer-pass-guard.md, "what is still open"). Closing that needs the accept
+  // VALIDATION to carry the matched plan's own `actions`/`cast_order_canonical`, which is an
+  // emitter change, not a client one.
+  const dec0 = S.decision;
+  const plan0 = planByIndex(dec0, planIndex);
   const canon = plan0 && plan0.cast_order_canonical;
   // The queued entries that name a plan ACTION: the land is its own field (plan0.land) and a
   // Land's Edge discard is a count, so neither is an action and neither can be sequenced here.
@@ -4337,6 +4442,10 @@ function autoResolveDecision(dec){
 }
 function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n));
   S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.repeatPick=null; S.loopPick=null; S.boardSel=null; S._selFor=null;
+  // When THIS frame arrived, and a fresh pass-arm. Both belong to the frame: `frameAt` is what makes
+  // "that click landed right after your line committed" answerable at all, and an arm raised on the
+  // previous frame describes a pool that no longer exists (see passNeedsConfirm).
+  S.frameAt = Date.now(); S.passArm = null;
   S.actPick=null;   // a half-open activation picker belongs to the decision it was opened on
   // ...and so does an armed MANUAL TAP/PAY mode or a half-open face picker: `taps` is computed
   // per frame off the board the engine just sent, so carrying either across a decision would

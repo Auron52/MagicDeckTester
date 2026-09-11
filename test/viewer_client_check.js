@@ -726,6 +726,146 @@ function testLoopMacro(win) {
   return fails;
 }
 
+// THE PRIMARY BUTTON THAT CHANGES MEANING UNDER YOUR FINGER (USER 2026-09-11, seed 16 T4:
+// "it goes to the 2nd phase for no reason and I can't finish the combo").
+// =================================================================================================
+// `#commit` is ONE button labelled `empty ? 'Pass phase' : 'Commit Line'`. The instant a line
+// commits, S.plan empties, renderPlanbar redraws, and the same element -- same id, same position,
+// same class -- becomes a PHASE PASS that discards the floating pool. Grinding a 60-segment
+// Emiel/Cloud loop means clicking that one pixel over and over, so the click that lands just after a
+// commit resolves ends the main phase instead of committing anything.
+//
+// DRIVEN AT THE USER'S OWN FRAME (seed 16 / gi 15, turn 4, main_ordinal 62 -- the two-Aura line
+// `Overgrowth → Brushland #1, Wild Growth → Brushland #1`, plan 742). Pre-fix this appended
+// `[742, -1]` and landed post_main with the pool gone; the engine replay of `...,742` alone stays in
+// pre_main at ordinal 63 with {G:6,C:2}, so the extra pass was purely the client's.
+//
+// ONLY A DOM CAN SEE IT. The protocol sweep replays plan indices, the save audit replays a finished
+// stream, and the line-builder knows nothing of buttons -- none of them can produce a click that
+// lands on a button whose label changed a moment earlier. The four assertions below are the guard's
+// whole contract, and three of them are ways the guard could be worse than useless:
+//   * the rapid click is refused AND SAYS WHY (the bug);
+//   * a genuine pass still works in two deliberate clicks (not a lockout);
+//   * a DOUBLE-click never passes, however fast -- a naive arm/confirm would let click 1 arm and
+//     click 2 confirm, reproducing the bug through the fix;
+//   * a pass with an EMPTY pool stays ONE click (the common case must not grow a confirmation).
+const AURA_PREFIX = ('1,0,-1,-1,24,-1,-1,55,-1,-1,4,0,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,'
+  + '2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,2,6,13,12,29,30,62,125,364,365,366')
+  .split(',').map(Number);
+
+async function testPassGuard() {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const win = buildDom(); await settle(win);
+  const $ = (id) => win.document.getElementById(id);
+  const opt = Array.from($('deck').options).find(o => o.value.replace(/\.[^.]+$/, '') === 'EldraziDisplacerFlicker');
+  if (!opt) { console.log('  SKIP pass guard: EldraziDisplacerFlicker not listed'); return fails; }
+  $('deck').value = opt.value; $('seed').value = '16'; win.fillVersions();
+  const st = S(win);
+  // Inject the prefix rather than replay 65 clicks: the bug is about ONE click on ONE frame, and
+  // the frame is reached identically either way (the protocol is a stateless replay from choices).
+  st.choices = AURA_PREFIX.slice();
+  st.steps = AURA_PREFIX.map(() => ({ n: 1 }));
+  await win.step(); await settle(win);
+  const d0 = st.decision;
+  if (!d0 || d0.type !== 'main_phase' || d0.main_ordinal !== 62) {
+    console.log('  SKIP pass guard: seed 16 no longer reaches T4 ordinal 62 at this prefix'
+                + (d0 ? ` (got ${d0.type} ord=${d0.main_ordinal})` : ' (no decision)'));
+    return fails;
+  }
+  const bru = (d0.me.battlefield || []).find(o => o.name === 'Brushland');
+  if (!bru) { console.log('  SKIP pass guard: no Brushland on that board'); return fails; }
+  win.tryEnchantDrop('Overgrowth', 'permanent', bru.num);
+  win.tryEnchantDrop('Wild Growth', 'permanent', bru.num);
+  chk(st.plan.length === 2, `the two Auras queued (${st.plan.length} entries)`);
+  chk($('commit').textContent === 'Commit Line', 'the primary button reads "Commit Line" with a line queued');
+  const n0 = st.choices.length;
+  await win.commitLine(); await settle(win);
+  chk(st.choices.length === n0 + 1 && st.choices[n0] === 742,
+      `the two-Aura line committed as plan 742 (appended ${JSON.stringify(st.choices.slice(n0))})`);
+  const d1 = st.decision;
+  chk(d1 && d1.phase === 'pre_main', `the commit stays in pre_main (got ${d1 && d1.phase})`);
+  const pool1 = win.floatingTotal(d1);
+  chk(pool1 > 0, `there is still a floating pool to lose (${pool1})`);
+  // ...and the button has silently become a phase pass. This is the setup, not the bug.
+  chk($('commit').textContent === 'Pass phase',
+      `the same button now reads "${$('commit').textContent}" -- the meaning flip this guards`);
+
+  // ADJACENT, FOUND WHILE REPRODUCING: `decision.plans` is a RANKED TOP SLICE past the emit cap,
+  // so array POSITION and `.index` stop agreeing -- this frame emits 200 plans carrying indices up
+  // to 771. applyAccepted used to read `plans[planIndex]`, i.e. some OTHER plan, and decide the
+  // human's full-order pin against a line the engine was not applying. Pinned on the real frame
+  // because a synthetic one always has position == index and can never show it.
+  chk(d0.plans_total && d0.plans.length < d0.plans_total,
+      `this frame no longer overflows the emit cap (${d0.plans.length}/${d0.plans_total}) -- `
+      + 'the positional-lookup hazard is not being exercised');
+  chk(d0.plans.some((p, i) => p.index !== i),
+      'the emitted plan list is in index order here, so position==index and the lookup is untested');
+  chk(d0.plans[742] === undefined && !d0.plans.some(p => p.index === 742),
+      'plan 742 is unexpectedly present; the cap-overflow case moved');
+  // ...and the fix itself, on this real frame. The emitted list is a contiguous head followed by
+  // ranked EXTRAS with high indices (measured here: positions 0..176 match, then 177 holds index
+  // 216, 178 holds 432, ...). That gives both failure modes of a positional read, and both are
+  // pinned:
+  const pos = d0.plans.findIndex((p, i) => p.index !== i);
+  chk(pos > 0, 'the emitted plan list is wholly in index order here -- the hazard is not exercised');
+  if (pos > 0) {
+    const extra = d0.plans[pos];
+    //  (a) RECOVERED: a ranked extra's index is past the array, so `plans[idx]` read undefined and
+    //      NO pin was emitted for it. planByIndex finds it, so the pin fires again.
+    chk(d0.plans[extra.index] === undefined,
+        `plans[${extra.index}] is addressable positionally -- the recovery case moved`);
+    chk(win.planByIndex(d0, extra.index) === extra,
+        `planByIndex(${extra.index}) did not return the plan carrying that index`);
+    //  (b) WRONG PLAN: position `pos` holds a plan whose index is NOT `pos`, so committing plan
+    //      `pos` used to read that stranger's actions and decide the pin against them.
+    chk(d0.plans[pos].index !== pos, `plans[${pos}].index is ${pos} -- the wrong-plan case moved`);
+    chk(win.planByIndex(d0, pos) === null,
+        `planByIndex(${pos}) must be null (that index is not emitted), not a stranger`);
+  }
+  chk(win.planByIndex(d0, 742) === null, 'planByIndex must return null for a plan past the cap');
+  if (fails.length) return fails;
+
+  // 1) THE BUG: a click landing right after the commit must not pass, and must say why.
+  $('commit').click(); await settle(win);
+  chk(st.choices.length === n0 + 1,
+      `the immediate click PASSED THE PHASE (choices ${JSON.stringify(st.choices.slice(n0))})`);
+  chk(st.decision.phase === 'pre_main', `the immediate click advanced to ${st.decision.phase}`);
+  chk(win.floatingTotal(st.decision) === pool1, 'the immediate click discarded the floating pool');
+  chk(/right after your line committed/.test($('verdict').textContent || ''),
+      'the refusal does not explain itself (a silent no-op reads as a frozen viewer)');
+
+  // 2) A DOUBLE-click, past the dead time, must STILL not pass: the confirming click has to dwell.
+  await sleep(800);
+  $('commit').click(); $('commit').click(); await settle(win);
+  chk(st.choices.length === n0 + 1,
+      `a double-click passed the phase (choices ${JSON.stringify(st.choices.slice(n0))})`);
+  chk(st.decision.phase === 'pre_main', 'a double-click advanced the phase');
+
+  // 3) A DELIBERATE pass still works: arm, dwell, confirm.
+  chk($('commit').textContent.indexOf('lose') > 0,
+      `the armed button does not say what is at stake (reads "${$('commit').textContent}")`);
+  await sleep(500);
+  $('commit').click(); await settle(win);
+  chk(st.choices.length === n0 + 2 && st.choices[n0 + 1] === -1,
+      `a deliberate second click did NOT pass (choices ${JSON.stringify(st.choices.slice(n0))})`);
+  chk(st.decision && st.decision.phase === 'post_main',
+      `the deliberate pass did not reach post_main (got ${st.decision && st.decision.phase})`);
+
+  // 4) A pass with an EMPTY pool stays ONE click -- the common case must not grow a confirmation.
+  const d3 = st.decision;
+  if (win.floatingTotal(d3) === 0 && d3.type === 'main_phase') {
+    const n1 = st.choices.length;
+    await sleep(800);
+    $('commit').click(); await settle(win);
+    chk(st.choices.length > n1, 'a pass with NO floating mana was needlessly guarded (one click must do)');
+  } else {
+    console.log('  note: post-pass frame still holds mana; the empty-pool arm is covered by unit logic only');
+  }
+  return fails;
+}
+
 // STALE SERVER HANDSHAKE (tools/play/server.js SERVER_API <-> index.html CLIENT_API).
 // index.html is re-read from disk on every load; `node server.js` is not, so a viewer left open
 // across a server.js change runs a NEW client against an OLD server -- same routes, same payloads,
@@ -1209,6 +1349,15 @@ async function testColorlessFirstTapOrder() {
     const emFails = testEquipMoveRendersOnce(win);
     if (emFails.length) { anyFail = true; console.log(`✗ equip move: ${emFails.length} fail`); emFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ equip move (re-host to the SECOND same-named creature; drawn once, not in two places)'); }
+  }
+  // The primary button must not pass the phase because a commit emptied the queue under it
+  // (needs a real frame with a floating pool, so it runs on its own).
+  {
+    let pgFails;
+    try { pgFails = await testPassGuard(); }
+    catch (e) { console.error(`✗ pass guard: harness error: ${e.stack || e}`); process.exit(2); }
+    if (pgFails.length) { anyFail = true; console.log(`✗ pass guard: ${pgFails.length} fail`); pgFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ pass guard (a click right after a commit cannot discard the floating pool; two deliberate clicks still can)'); }
   }
   // Board-activated ability reachable + resolving (needs a real game walk, so it runs on its own).
   {

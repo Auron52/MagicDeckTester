@@ -74,6 +74,22 @@ usually the very thing that untaps that land again. Undo is unchanged: every ite
 committed line and steps back one at a time. Full design + the failure modes:
 `docs/design/viewer-line-macros.md`.
 
+### Why "Pass phase" sometimes asks twice
+
+The plan bar's primary button is one button: it reads **Commit Line** while a line is queued and
+**Pass phase** when the queue is empty. That means the moment a line commits, the button under your
+finger changes meaning — and in a go-off, where you are clicking Commit over and over, the click
+that lands just after a commit used to end the main phase and throw the floating pool away. (Seed 16
+turn 4, 2026-09-11: *"it goes to the 2nd phase for no reason and I can't finish the combo"*.)
+
+So a pass that would **discard floating mana** now takes two deliberate clicks. The first arms it —
+the button turns red and says what you are about to lose (`Pass phase — lose {G}×6 {C}×2?`) — and a
+second click, a moment later, does it. Clicking fast never passes: a click that lands right after a
+commit is refused outright with an explanation, and a double-click re-arms rather than confirms.
+Queue anything, or press **Clear**, to cancel. A pass with **no** floating mana is still one click,
+and **Commit turn** and the automatic passes (a decided game, the multi-segment chain) are
+untouched. Full design: `docs/design/viewer-pass-guard.md`.
+
 ### "The play server is out of date — restart it"
 
 Your browser re-reads `index.html` from disk on every load; `node server.js` does **not** — it keeps
