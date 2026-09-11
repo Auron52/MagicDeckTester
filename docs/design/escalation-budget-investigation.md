@@ -423,3 +423,64 @@ byte-identical on all 16 seed blocks.** The `[esc1]` trace shows why — R does 
 to beat the value-leaf line, so the committed play never changes. The cap's 9% saving comes from
 skipping the ladder's DEEPER passes and the quality loss comes from exactly those passes. A
 recalibrated R is therefore a no-op on Melira; the shape is simply wrong for the deck.
+
+### The adoption A/B: 120,000 games, and only ONE candidate survives
+
+Train set 48,000 games (6 decks x {ship, fixed-point R} x 16 blocks x 250, seeds 1000000+), then a
+held-out confirmation of the three live candidates at 72,000 games (32 blocks x 250, seeds 2000000+).
+Both pooled into ONE `mtg --batch` via the new `esc_deck_r` job key; quality is the paired sign test
+over per-game `.wins` (z = net/sqrt(better+worse)), cost is deterministic search units plus wall.
+
+**Train (4000 games/arm):**
+
+| deck | R ship->cand | d_avg | better/worse | z | units | wall |
+|---|---|---|---|---|---|---|
+| Dragonstorm | 81->35 | -0.0030 | 12/1 | **+3.05** | 1.017x | 0.993x |
+| Goblins | 74->240 | 0.0000 | 0/0 | 0.00 | **0.864x** | **0.824x** |
+| FiveColour | 86->224 | +0.0017 | 0/7 | **-2.65** | 0.965x | 0.940x |
+| Anti-Lifegain | 16->5.5 | 0.0000 | 1/1 | 0.00 | 1.034x | 1.041x |
+| Creature Giving | 21->7 | -0.0008 | 7/4 | +0.90 | 1.019x | 1.018x |
+| Hinata2 | 40->22 | +0.0013 | 9/14 | -1.04 | 1.017x | 1.020x |
+
+**Held-out (8000 games/arm):**
+
+| deck | arm | d_avg | better/worse | z | units | wall | play differs |
+|---|---|---|---|---|---|---|---|
+| Goblins | r120 | 0.0000 | 0/0 | 0.00 | 0.925x | 0.909x | 0/8000 |
+| Goblins | **r240** | **0.0000** | **0/0** | 0.00 | **0.869x** | **0.830x** | 1/8000 |
+| Dragonstorm | r45 | -0.0005 | 6/3 | +1.00 | 1.011x | 1.000x | 29/8000 |
+| Dragonstorm | r35 | -0.0010 | 8/3 | +1.51 | 1.025x | 1.003x | 35/8000 |
+| FiveColour | r110 | +0.0003 | 0/2 | -1.41 | 0.989x | 0.985x | 3/8000 |
+| FiveColour | r130 | +0.0009 | 0/7 | **-2.65** | 0.980x | 0.968x | 12/8000 |
+
+**ADOPTED: Goblins 74 -> 240** (commit `95033f93`). Identical outcomes on every axis, 17% less wall
+— the clean-win shape, so adopted under the standing 2026-09-03 directive. GT-neutral and therefore
+no rebaseline: `escalation_cap` is on-policy only and no tier runs goblins past d5, verified
+byte-identical at all four suite shapes plus a clean 80/80 smoke after the edit. On the adopted
+artifact, 400 games: R=240 gives `abort_first=0 wasted=0` where R=74 gave `3 / 109,827`.
+
+**NOT adopted, and the two refutations are the interesting part:**
+
+* **FiveColour's aborts are not waste — they are PRIMING.** Raising R to the fixed point removes 74
+  aborts and 1.35M discarded units and is reliably WORSE (held-out z=-2.65 reproducing train
+  z=-2.65 exactly; monotone in R: r110 -1.41, r130 -2.65). The mechanism is in the code: an aborted
+  pass is explicitly **NOT anytime-rescued** (TurnSolver.cpp ~36899 — the retry one depth shallower
+  overwrites `hline`), but the retry reuses the SAME `single_tt` and `single_cache`, so the aborted
+  deep attempt leaves the memo WARM. Under a fixed budget a warm memo searches more tree for the
+  same units, so the shallower retry plays BETTER than a cold pass targeted straight at that depth.
+  Cf. [[memo-flags-change-play-under-budget]]: a memo is only result-neutral when the budget is not
+  binding. **`wasted_units_in_aborted_passes` is therefore a misleading name** — it measures units
+  the pass did not finish with, not units that bought nothing.
+* **Dragonstorm did not confirm.** Train z=+3.05 (12/1, including two no-win -> turn-8 flips) fell to
+  z=+1.51 (8/3) held-out, at +2.5% units. Direction is consistent in both halves and the pooled
+  20/4 would read z=+3.27, but held-out alone does not clear the bar and the units axis regresses,
+  so it stays shipped as a LEAN. If it is ever revisited, note that Dragonstorm also has a staged
+  shape candidate (the 2026-09-10 `nl_sres2` arm at 0.958x) and the two levers interact — R feeds the
+  escalation path that the shape change rewrites, so they must be measured jointly, not added.
+
+**The methodological lesson: the self-consistent fixed point is NOT the target.** It bounds where R
+could sit; only a held-out A/B says where it should. Of six decks whose frozen R is provably stale,
+exactly one wanted the new number, one wanted to stay put for a reason invisible to the estimator
+(priming), and four simply did not care. A fleet-wide "re-freeze R at the measured value" sweep --
+the obvious reading of the drift finding -- would have shipped one win, one regression and four
+pointless slowdowns.
