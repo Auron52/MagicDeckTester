@@ -884,9 +884,21 @@ function floatingManaHtml(me) {
 // Energy counters, beside the Lands header: Aether Hub's coloured modes cost {E} while its "{T}: Add
 // {C}" is free, so at zero energy a Hub is a colourless source and nothing else. Absent for decks
 // with no energy card.
+//
+// KEYED ON THE KEY'S PRESENCE, NOT ON THE COUNT, and that is the whole fix. This read was `e <= 0 ->
+// render nothing`, so a board whose Hub had spent its last counter showed no energy display at all --
+// which is also what a deck with no energy in it looks like. USER, 2026-09-11: "I cannot see my
+// energy for Aether Hub." Their Hub was at zero, and zero is precisely the number worth seeing: it
+// is the difference between a rainbow land and a Wastes. The engine now publishes `energy` whenever
+// the board can gain or spend it (src/main.cpp), so absence here means "this deck has no energy",
+// and 0 means "you have none left".
 function energyHtml(me) {
-  const e = me.energy|0; if (e <= 0) return '';
-  return `<span class="floatmana"><span class="mpip" style="background:#8fd6c0" title="${e} energy counter${e===1?'':'s'} — Aether Hub spends 1 to make a COLOURED mana; its {C} mode is free">⚡${e}</span></span>`;
+  if (me.energy == null) return '';
+  const e = me.energy|0;
+  const t = e > 0
+    ? `${e} energy counter${e===1?'':'s'} — Aether Hub spends 1 to make a COLOURED mana; its {C} mode is free`
+    : `NO energy — Aether Hub can only make {C} until you get another counter (its coloured "one mana of any color" mode costs {E})`;
+  return `<span class="floatmana"><span class="mpip" style="background:${e>0?'#8fd6c0':'#5a6b66'}" title="${t}">⚡${e}</span></span>`;
 }
 // Dig abilities (human play). The engine enumerates cycling (a land in HAND, e.g. Lonely Sandbar /
 // Forgotten Cave) and sac-to-draw (a land in play, e.g. Fiery Islet) as standalone ONE-action plans
@@ -1257,33 +1269,91 @@ function toggleTapMode(){
   flashHint('Tap mana armed — click your untapped sources to tap them yourself. Everything you DON’T tap is still allocated by the engine. Click “Tap mana” again to finish.');
   renderBoard();
 }
-// Commit one hand-forced tap of the permanent `num`. One face -> queue it; several -> the face
-// picker (a central dialog, per the play-viewer decision principle -- never the history panel).
+// THE LAND'S FACE IS NOT THE ONLY CHOICE ON THE TAP. A land carrying Fertile Ground or Trace of
+// Abundance ("whenever enchanted land is tapped for mana, its controller adds an additional ONE MANA
+// OF ANY COLOR") makes a SECOND mana whose colour the rules also make you choose, as the ability
+// resolves (CR 106.1b). The viewer never asked, so the bonus silently arrived as `wild` -- a pool
+// unit the user's own doctrine reserves for the search. USER, 2026-09-11: "Tap mana doesn't work for
+// Fertile Ground. There should be a choice there."
+//
+// So one tap can need SEVERAL picks: the land's face, then one per any-colour Aura on it. They run
+// as STEPS OF THE SAME DIALOG (`pick.picks` accumulates; `pick.step` is which question is showing),
+// because they are one gesture -- a half-answered tap must not be queueable. `tap_auras` comes from
+// the engine (HumanPreTapAuraFaces), like `taps`, so there is no aura rule mirrored here to drift.
+function preTapAuras(src){ return (src && src.tap_auras) || []; }
+// ...and the Aura's OWN card is a live target while armed, routing to its host. An Aura is not a
+// mana source, so it published no `taps` and a click on it did nothing at all -- which is one of the
+// two things "Tap mana doesn't work for Fertile Ground" meant. Nothing about the rule moves: the tap
+// that happens is the HOST's, with the same dialog, and a click on an Aura whose host is not
+// hand-tappable still does nothing (there is no legal tap to route to).
+function preTapHostOfAura(num){
+  const src = preTapSources().find(o => preTapAuras(o).some(a => a.num === num));
+  return src ? src.num : 0;
+}
+// Commit one hand-forced tap of the permanent `num`. Nothing to ask (one face, no any-colour Aura)
+// -> queue it straight away; otherwise the picker (a central dialog, per the play-viewer decision
+// principle -- never the history panel).
 function preTapAt(num){
-  const src = preTapSources().find(o => o.num === num);
+  let src = preTapSources().find(o => o.num === num);
+  // Clicked the Aura rather than the land it is on -> tap the land (see preTapHostOfAura).
+  if (!src) {
+    const host = preTapHostOfAura(num);
+    if (host) { src = preTapSources().find(o => o.num === host); }
+  }
   if (!src) return false;
   const faces = String(src.taps);
-  if (faces.length === 1) { queuePreTap(src, faces); return true; }
-  S.tapPick = { name:src.name, num:src.num, faces:faces.split('') };
+  const auras = preTapAuras(src);
+  if (faces.length === 1 && !auras.length) { queuePreTap(src, faces, []); return true; }
+  S.tapPick = { name:src.name, num:src.num, faces:faces.split(''), auras,
+                energy:src.tap_energy|0, picks:[], step:(faces.length===1?1:0) };
+  if (faces.length === 1) { S.tapPick.picks.push(faces); }   // face settled, ask only the Aura(s)
   renderBoard();
   return true;
 }
-function queuePreTap(src, color){
+function queuePreTap(src, color, auraColors){
   S.tapPick = null;
   // Queued at the END of the current line, which IS its declared position: the engine performs it
   // after the entries already queued and before the ones added next (Plan::human_pre_taps carries
   // the index). So "crack the Clue, tap Kitchen for {G}, then blink" is built by clicking in that
   // order, and is committed as ONE line.
-  S.plan.push({ kind:'pretap', name:src.name, num:src.num, color });
-  flashHint(`Tapping ${src.name} for {${color}} by hand — it goes into your pool before the rest of this line is paid. ✕ on the chip undoes it.`);
+  const ac = (auraColors || []).slice();
+  S.plan.push({ kind:'pretap', name:src.name, num:src.num, color, auraColors:ac });
+  flashHint(`Tapping ${src.name} for {${color}}${ac.length?` (+ {${ac.join('} + {')}} off its Aura${ac.length>1?'s':''})`:''} by hand — it goes into your pool before the rest of this line is paid. ✕ on the chip undoes it.`);
   renderBoard();
+}
+// The colours the human's STILL-QUEUED line wants, as a letter set -- the same notion (and the same
+// function) the `need=` continuation token is built from, which is exactly what "default sensibly"
+// means here: of the five colours an any-colour Aura could make, the useful one is the one the rest
+// of the queue is short of. Offered as ORDER + a "needed" tag, never as an auto-pick: this dialog
+// exists because the engine choosing for the human was the bug.
+function preTapNeededColors(){
+  try { return LB.untapNeed(S.plan || [], entryPips) || ''; } catch (e) { return ''; }
 }
 function tapPickerHtml(pick){
   const NAMES = { W:'White', U:'Blue', B:'Black', R:'Red', G:'Green', C:'Colourless' };
-  let h=`<h3>${esc(pick.name)} — tap it for which mana?</h3>`;
-  h+=`<div class="sub">This source makes more than one kind of mana. The unit you pick goes into your floating pool and the line’s payments spend it first; anything you leave untapped is still the engine’s to allocate.</div>`;
-  h+=`<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
-  pick.faces.forEach(c=>{ h+=`<button class="primary" data-tapface="${esc(c)}">{${esc(c)}} ${esc(NAMES[c]||c)}</button>`; });
+  const need = preTapNeededColors();
+  const aura = pick.step > 0 ? pick.auras[pick.step - 1] : null;
+  let faces, h;
+  if (!aura) {
+    faces = pick.faces;
+    h = `<h3>${esc(pick.name)} — tap it for which mana?</h3>`;
+    h += `<div class="sub">This source makes more than one kind of mana. The unit you pick goes into your floating pool and the line’s payments spend it first; anything you leave untapped is still the engine’s to allocate.`;
+    if (pick.energy > 0) {
+      h += ` <b>${esc(pick.name)} pays {E} for a COLOURED tap</b> (you have ${S.decision&&S.decision.me&&S.decision.me.energy!=null?S.decision.me.energy:'?'} energy); its {C} mode is free.`;
+    }
+    h += `</div>`;
+  } else {
+    faces = String(aura.faces).split('');
+    h = `<h3>${esc(aura.name)} — the bonus mana is which colour?</h3>`;
+    h += `<div class="sub">${esc(aura.name)} on ${esc(pick.name)} adds <b>an additional one mana of any color</b> when that land is tapped, and the colour is yours to choose. Picking {${esc(pick.picks[0]||'?')}} for the land itself does not decide it.</div>`;
+  }
+  h += `<div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`;
+  // Needed colours first, so the useful answer is under the cursor; the rest keep their order.
+  const ordered = faces.filter(c => need.indexOf(c) >= 0).concat(faces.filter(c => need.indexOf(c) < 0));
+  ordered.forEach(c=>{
+    const want = need.indexOf(c) >= 0;
+    h += `<button class="${want?'primary':'ghost'}" data-tapface="${esc(c)}">{${esc(c)}} ${esc(NAMES[c]||c)}${want?' — needed':''}</button>`;
+  });
   h+=`<button class="ghost" data-tapface="">Cancel</button></div>`;
   return h;
 }
@@ -1293,8 +1363,13 @@ function renderTapPicker(){
   panel.className='show modal'; panel.innerHTML=tapPickerHtml(pick);
   panel.querySelectorAll('[data-tapface]').forEach(el=>{
     el.onclick=()=>{ const c=el.dataset.tapface;
+      // Cancel abandons the WHOLE tap, half-answered or not: a tap with its Aura colour unchosen is
+      // not a weaker version of the gesture, it is a different one (the engine would credit `wild`).
       if (!c) { S.tapPick=null; renderBoard(); return; }
-      queuePreTap({ name:pick.name, num:pick.num }, c); };
+      pick.picks.push(c);
+      pick.step += 1;
+      if (pick.step <= pick.auras.length) { renderBoard(); return; }   // next Aura's colour
+      queuePreTap({ name:pick.name, num:pick.num }, pick.picks[0], pick.picks.slice(1)); };
   });
 }
 // ---- LINE MACROS (docs/design/viewer-line-macros.md) -----------------------------------------
@@ -1517,7 +1592,7 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
     (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
     (eqDrag?`<span class="eqbadge" title="drag onto one of your creatures to equip it">⚔ drag${eqN?` ×${eqN}`:''}</span>`:'')+
     (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
-    ((o.taps&&S.tapMode)?`<span class="pretapbadge" title="click to tap ${esc(o.name)} yourself for {${esc(String(o.taps).split('').join('} or {'))}}">⛏${tapN?` ×${tapN}`:''}</span>`:'')+
+    ((o.taps&&S.tapMode)?`<span class="pretapbadge" title="click to tap ${esc(o.name)} yourself for {${esc(String(o.taps).split('').join('} or {'))}}${(o.tap_auras||[]).length?` — you will also pick the colour of ${esc((o.tap_auras||[]).map(a=>a.name).join(' and '))}’s bonus mana`:''}${o.tap_energy?` — a COLOURED tap costs ${o.tap_energy} energy, its {C} mode is free`:''}">⛏${tapN?` ×${tapN}`:''}</span>`:'')+
     // Copy-entrant provenance (Sakashima's Protege): the art/name ARE the copied card — without
     // this badge a Protege-copy of Boarding Party is indistinguishable from a real one and the
     // player can't find their Protege on the board (user-reported 2026-09-03).
@@ -1947,8 +2022,12 @@ function renderPlanbar() {
     // chips is meaningful -- the engine performs the tap exactly there in the committed line -- so
     // it renders inline with everything else rather than collapsing into a summary like Land's Edge.
     if (LB.isPreTap(p)) {
+      // The Aura colours are part of what this tap DOES (Fertile Ground's "+ one mana of any
+      // color"), so the chip names them: the chip is the only pre-commit surface that says what the
+      // human chose, and an unnamed bonus colour is the silent choice this feature removes.
+      const ac = (p.auraColors || []);
       return `<span class="chip pretap"><span class="n">${i+1}</span>`+
-        `<span class="nm" data-name="${esc(p.name)}">⛏ tap ${esc(p.name)} → {${esc(p.color)}}</span>`+
+        `<span class="nm" data-name="${esc(p.name)}">⛏ tap ${esc(p.name)} → {${esc(p.color)}}${ac.length?` +{${esc(ac.join('} +{'))}}`:''}</span>`+
         `<span class="x" data-rm="${i}">✕</span></span>`;
     }
     const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend')?'act':(p.kind==='land'?'land':'spell');
@@ -2227,6 +2306,14 @@ function wireBoard() {
   if (tapBtn) { tapBtn.onclick = e => { e.stopPropagation(); toggleTapMode(); }; }
   if (S.tapMode) {
     $('board').querySelectorAll('#playfield .thumb[data-taps]').forEach(t=>{
+      t.classList.add('selectable');
+      t.onclick = e => { e.stopPropagation(); preTapAt(+t.dataset.num); };
+    });
+    // ...and the any-colour land Auras, which route to the land they enchant (preTapHostOfAura).
+    // Selected by NUM rather than by a new attribute so the aura row needs no render change.
+    $('board').querySelectorAll('#playfield .thumb[data-num]').forEach(t=>{
+      if (t.hasAttribute('data-taps')) return;
+      if (!preTapHostOfAura(+t.dataset.num)) return;
       t.classList.add('selectable');
       t.onclick = e => { e.stopPropagation(); preTapAt(+t.dataset.num); };
     });

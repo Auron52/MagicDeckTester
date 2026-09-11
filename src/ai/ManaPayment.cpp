@@ -199,7 +199,8 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
 // `available` is the executor's turn-scoped accounting pool, decremented as the source taps;
 // nullptr for callers that keep no such pool (the rollout, and the pre-tap).
 void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDefinition& def,
-                        Color col, ManaPool& floating, ManaPool* available, bool for_creature)
+                        Color col, ManaPool& floating, ManaPool* available, bool for_creature,
+                        const std::vector<int>* aura_colors)
 {
     CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
     // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): every real tap with source, colour and energy.
@@ -317,7 +318,10 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     if (LandAuraBonus(state, p) > 0)
     {
         ManaPool bonus;
-        LandAuraAddToPool(bonus, state, p);
+        // `aura_colors` is the human pre-tap's positional pick for the "one mana of any color"
+        // Auras (Fertile Ground / Trace of Abundance); nullptr for every payment caller, which is
+        // what keeps the allocator's credit -- and therefore GT -- byte-identical.
+        LandAuraAddToPool(bonus, state, p, aura_colors);
         floating.AddPool(bonus);
         if (available)
         {
@@ -2840,13 +2844,35 @@ bool ParseHumanPreTapToken(const std::string& tok, TurnSolver::PreTap& out)
     const std::size_t colon = val.rfind(':');
     if (colon != std::string::npos)
     {
-        const std::string c = val.substr(colon + 1);
+        std::string c = val.substr(colon + 1);
         val = val.substr(0, colon);
-        if (c.size() == 1)
+        // The colour FIELD may carry '+'-separated extras: the land's own face, then one colour per
+        // ANY-COLOUR land Aura on it ("W+U" = tap for {W}, take the Fertile Ground's bonus as {U}).
+        // Split happens only here, INSIDE the field, so a card name containing '+' ("+2 Mace") is
+        // untouched -- everything left of the final ':' was already taken as the name.
+        //
+        // An unrecognised letter leaves the slot at -1 and is rejected downstream WITH A MESSAGE
+        // rather than silently defaulting to white. Same rule for the aura slots as for the face:
+        // guessing is the failure this fallback exists to fix, and an aura slot the human did not
+        // write at all is a different thing entirely (absent -> the historical `wild` credit).
+        std::vector<std::string> fields;
+        std::size_t start = 0;
+        for (;;)
         {
-            const char* hit = std::strchr(kPreTapColorLetters, c[0]);
-            if (hit != nullptr) { t.color = static_cast<int>(hit - kPreTapColorLetters); }
+            const std::size_t plus = c.find('+', start);
+            if (plus == std::string::npos) { fields.push_back(c.substr(start)); break; }
+            fields.push_back(c.substr(start, plus - start));
+            start = plus + 1;
         }
+        auto letter_to_color = [](const std::string& s) -> int
+        {
+            if (s.size() != 1) { return -1; }
+            const char* hit = std::strchr(kPreTapColorLetters, s[0]);
+            return hit != nullptr ? static_cast<int>(hit - kPreTapColorLetters) : -1;
+        };
+        if (!fields.empty()) { t.color = letter_to_color(fields[0]); }
+        for (std::size_t i = 1; i < fields.size(); ++i)
+        { t.aura_colors.push_back(letter_to_color(fields[i])); }
     }
     const std::size_t hash = val.rfind('#');
     if (hash != std::string::npos)
@@ -2894,6 +2920,21 @@ std::string HumanPreTapFaces(const GameState& state, const Permanent& p)
         if (faces.find(letter) == std::string::npos) { faces.push_back(letter); }
     }
     return faces;
+}
+
+// The ANY-COLOUR land Auras on `p`, (name, legal letters), in AnyColorLandAuras order -- see
+// ManaPayment.h. WUBRG and deliberately NOT {C}: "one mana of any COLOR" and {C} is not a colour
+// (CR 105.1), exactly as LandAuraColorMask sets five bits and LandAuraAddToPool credits `wild`
+// without `wild_c`. Offered only for a land the human may tap at all, so the dialog cannot ask for
+// an Aura colour on a tap the engine is about to refuse for an unrelated reason.
+std::vector<HumanPreTapAura>
+HumanPreTapAuraFaces(const GameState& state, const Permanent& p)
+{
+    std::vector<HumanPreTapAura> out;
+    if (HumanPreTapFaces(state, p).empty()) { return out; }
+    for (const Permanent* a : AnyColorLandAuras(state, p))
+    { out.push_back({ a->card.m_name.str(), a->card.m_number, "WUBRG" }); }
+    return out;
 }
 
 // The stderr witness (MTG_PRE_TAP_TRACE, default OFF, zero cost when off). Without it a pre-tap is
@@ -2954,14 +2995,55 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
     }
     const CardDefinition* def = CardDatabase::Instance().LookupCached(found->card);
     if (def == nullptr) { return reject("'" + t.name + "' has no card definition"); }
+    // ---- the land Aura's colour, when the human stated one ------------------------------------
+    // "Whenever enchanted land is tapped for mana, its controller adds an additional one mana of
+    // any color" is a CHOICE the rules make at resolution (CR 106.1b), and before this the engine
+    // made it for them by crediting `wild`. Every rejection below reports its reason verbatim, for
+    // the same reason the face's do: this fallback exists because a silently-made mana choice is
+    // the defect, so a silently-DROPPED one would be the same defect wearing a different hat.
+    const std::vector<HumanPreTapAura> auras = HumanPreTapAuraFaces(state, *found);
+    if (!t.aura_colors.empty())
+    {
+        if (auras.empty())
+        {
+            return reject("'" + t.name + "' carries no land Aura that adds one mana of any colour, "
+                          "so there is no Aura colour to choose");
+        }
+        if (t.aura_colors.size() > auras.size())
+        {
+            return reject("'" + t.name + "' carries " + std::to_string(auras.size())
+                          + " any-colour land Aura(s) but the tap names "
+                          + std::to_string(t.aura_colors.size()) + " Aura colour(s)");
+        }
+        for (std::size_t i = 0; i < t.aura_colors.size(); ++i)
+        {
+            const int ac = t.aura_colors[i];
+            if (ac < 0 || ac >= 6)
+            {
+                return reject("the Aura bonus on '" + t.name + "' (" + auras[i].name
+                              + ") names no colour -- write tap=<name>#<num>:<FACE>+<W|U|B|R|G>");
+            }
+            const char al = kPreTapColorLetters[ac];
+            if (auras[i].faces.find(al) == std::string::npos)
+            {
+                return reject(std::string("'") + auras[i].name + "' on '" + t.name
+                              + "' adds one mana of any COLOR, so it cannot add {" + al
+                              + "} (it makes {" + auras[i].faces + "})");
+            }
+        }
+    }
     TapSourceIntoFloat(state, active, *found, *def, static_cast<Color>(t.color),
-                       state.floating_mana, /*available=*/nullptr, /*for_creature=*/false);
+                       state.floating_mana, /*available=*/nullptr, /*for_creature=*/false,
+                       t.aura_colors.empty() ? nullptr : &t.aura_colors);
     if (PreTapTraceOn())
     {
         const ManaPool& f = state.floating_mana;
+        std::string extra;
+        for (int ac : t.aura_colors)
+        { extra += '+'; extra += (ac >= 0 && ac < 6) ? kPreTapColorLetters[ac] : '?'; }
         std::fprintf(stderr,
-                     "[pre-tap] tap %s#%d as %c -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
-                     t.name.c_str(), found->card.m_number, letter,
+                     "[pre-tap] tap %s#%d as %c%s -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
+                     t.name.c_str(), found->card.m_number, letter, extra.c_str(),
                      f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild);
     }
     return std::string();

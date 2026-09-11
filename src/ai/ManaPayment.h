@@ -346,16 +346,27 @@ void ActivateTapTokensShared(GameState& state, ManaPool* available);
 // TapForCostSharedOnce's `tap_source` lambda so the payment and the human pre-tap below share one
 // implementation -- see the definition's header for why a second copy is four rules bugs.
 // `available` = the executor's turn-scoped accounting pool, decremented alongside; nullptr = none.
+// `aura_colors` (default nullptr -> byte-identical for every payment caller) is the HUMAN's chosen
+// colour per ANY-COLOUR land Aura on the host; only the pre-tap passes it. See LandAuraAddToPool.
 void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDefinition& def,
-                        Color col, ManaPool& floating, ManaPool* available, bool for_creature);
+                        Color col, ManaPool& floating, ManaPool* available, bool for_creature,
+                        const std::vector<int>* aura_colors = nullptr);
 
 // ---- The viewer's MANUAL TAP/PAY fallback (docs/design/viewer-manual-tap-pay.md) ---------------
-// ONE token format -- `tap=<card name>#<m_number>:<W|U|B|R|G|C>` -- and ONE parser for it, because
-// the token appears in TWO places (a `--validate-line` spec token and a `--cast-order` full-order
-// entry) and two parsers is two chances for validation and execution to read the same string
-// differently. `#<m_number>` picks WHICH copy (0 = any untapped copy of that name); `:<COLOUR>` is
-// the face to tap for and is mandatory in practice -- an unstated colour parses to -1 and is
-// REJECTED by ApplyHumanPreTap rather than guessed.
+// ONE token format -- `tap=<card name>#<m_number>:<FACE>[+<AURA>...]` -- and ONE parser for it,
+// because the token appears in TWO places (a `--validate-line` spec token and a `--cast-order`
+// full-order entry) and two parsers is two chances for validation and execution to read the same
+// string differently. `#<m_number>` picks WHICH copy (0 = any untapped copy of that name); `<FACE>`
+// is the land's own face to tap for and is mandatory in practice -- an unstated colour parses to -1
+// and is REJECTED by ApplyHumanPreTap rather than guessed.
+//
+// `+<AURA>` (zero or more, W|U|B|R|G only) is one colour per ANY-COLOUR land Aura attached to the
+// host, in AnyColorLandAuras order: `tap=Brushland#7:W+U` is "tap Brushland for {W}, and take {U}
+// off the Fertile Ground on it". OMITTING them is legal and keeps the old behaviour (the bonus
+// credits as `wild`), which is exactly what makes every reference saved before this replay
+// unchanged. `+` is parsed ONLY inside the colour field -- everything left of the final ':' is the
+// name -- so a card whose NAME contains '+' ("+2 Mace") is unaffected, the same argument the '#'
+// and ':' separators already rely on.
 bool IsHumanPreTapToken(const std::string& tok);   // cheap discriminator: does it start "tap="?
 bool ParseHumanPreTapToken(const std::string& tok, TurnSolver::PreTap& out);
 
@@ -370,6 +381,23 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t);
 // decision JSON's per-permanent `taps`) AND the legality test ApplyHumanPreTap enforces -- one
 // function, so the viewer can never offer a tap the engine will refuse.
 std::string HumanPreTapFaces(const GameState& state, const Permanent& p);
+
+// The ANY-COLOUR land Auras on `p` -- name, m_number and the letters its bonus may be taken as --
+// in the order a `tap=` token's `+<AURA>` suffixes are matched against. Empty for every land with no
+// such Aura, i.e. for every source in every deck but this one's Fertile Ground / Trace of Abundance.
+// Same contract as HumanPreTapFaces: it is BOTH what the decision JSON publishes (`tap_auras`, the
+// dialog the viewer builds) and what ApplyHumanPreTap enforces, so the offer and the rule are one
+// function and cannot drift. `num` is carried so the viewer can make the AURA's own card route a
+// click to its host -- "Tap mana doesn't work for Fertile Ground" was in part a player clicking the
+// Aura, which is not a mana source and so had no affordance at all.
+struct HumanPreTapAura
+{
+    std::string name;
+    int         num = 0;      // the Aura permanent's Card::m_number
+    std::string faces;        // "WUBRG" -- any COLOUR, and {C} is not one (CR 105.1)
+};
+std::vector<HumanPreTapAura>
+HumanPreTapAuraFaces(const GameState& state, const Permanent& p);
 
 // ---- The viewer's QUEUED-CONTINUATION untap demand (docs/design/viewer-line-macros.md) --------
 // `need=<COLOURS>` -- e.g. `need=UC` -- declares the colours the human's REMAINING QUEUED LINE
