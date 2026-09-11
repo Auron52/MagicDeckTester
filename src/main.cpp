@@ -5406,6 +5406,16 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //                                    // TurnSolver::ApplyPlan and require OpponentHasLost -- the
 //                                    // verified-finish guarantee, re-derived independently of the
 //                                    // gate's own trial.
+//     "combo_off_rule_probe": true,  // optional: ALSO ask DecisionProvider::ComboOffPossible
+//                                    // directly, bypassing EnumerateMainPlans' `best_any >= 0`
+//                                    // precondition, and report `says` / `rule` / `consulted`
+//                                    // (does any enumerated plan carry ActivateBlink x>3) /
+//                                    // `goff_k`. Without this an `expect_combo_off: false` cannot
+//                                    // say WHICH absence it pins -- the table declining, or the
+//                                    // table never being evaluated at all.
+//     "expect_rule_says": true,      // optional: pin the direct answer of the rule table ...
+//     "expect_rule_consulted": false,//   ... and whether the menu made it reachable ...
+//     "expect_rule_name": "DEPLOYED",//   ... and which row answered. All need combo_off_rule_probe.
 //     "log_out": "logs/play/scenario.json" }            // optional: write the per-turn trace
 static int RunScenario(const std::filesystem::path& scenario_path)
 {
@@ -5739,6 +5749,32 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                       << " rule=" << (probe_rule.empty() ? "-" : probe_rule)
                       << " consulted=" << (best_k > 0 ? 1 : 0)
                       << " goff_k=" << best_k << "\n";
+            // ...and the three ASSERTIONS a fixture can pin on it. Each is checked only when the
+            // fixture carries it, so every existing fixture is unaffected. `expect_rule_consulted`
+            // is the one with no other home: it is the only observable that separates "the table
+            // declined" from "the table was never evaluated", and without it a fixture pinning
+            // `expect_combo_off: false` cannot say WHICH of the two it is pinning -- so a later
+            // change that silently broke the rule would keep the fixture green.
+            const auto pin = [&](const char* key, bool got) {
+                if (!j.contains(key)) { return true; }
+                const bool exp = j.at(key).get<bool>();
+                if (exp == got) { return true; }
+                std::cout << "scenario: FAIL " << key << " expected " << (exp ? 1 : 0)
+                          << ", got " << (got ? 1 : 0) << "\n";
+                return false;
+            };
+            if (!pin("expect_rule_says", rule_says))      { return 1; }
+            if (!pin("expect_rule_consulted", best_k > 0)) { return 1; }
+            if (j.contains("expect_rule_name"))
+            {
+                const std::string exp = j.at("expect_rule_name").get<std::string>();
+                if (exp != probe_rule)
+                {
+                    std::cout << "scenario: FAIL expect_rule_name expected \"" << exp
+                              << "\", got \"" << probe_rule << "\"\n";
+                    return 1;
+                }
+            }
         }
         if (want != (found >= 0))
         {

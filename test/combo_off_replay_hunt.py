@@ -255,6 +255,31 @@ def combo_plans(dec):
     return [p for p in (dec.get("plans") or []) if p.get("combo_off")]
 
 
+# `<card>: blink <target> xN` -- SummarizePlan's own wording (src/main.cpp, ActivateBlink).
+BLINK_RE = re.compile(r": blink .* x(\d+)")
+
+
+def goff_in_menu(dec):
+    """Does this frame's menu carry a MULTI-ACTIVATION go-off -- `ActivateBlink` with
+    `chosen_x > 3`?  That is `EnumerateMainPlans`' own `best_any >= 0` precondition, and it is what
+    decides whether `ComboOffPossible` is consulted AT ALL.  Without it, an absent button says
+    nothing about the rule table: no row of it was evaluated.
+
+    Returns (consulted, exact).  `exact` is false when the emitted plan slice was TRUNCATED by
+    MTG_PLAY_PLANS_CAP (driven walks use the viewer's own cap of 200), in which case a False
+    answer is a lower bound -- the reference walks run uncapped, so theirs is exact.
+    """
+    plans = dec.get("plans") or []
+    n_true = dec.get("n_plans", len(plans))
+    hit = False
+    for p in plans:
+        m = BLINK_RE.search(p.get("summary") or "")
+        if m and int(m.group(1)) > 3:
+            hit = True
+            break
+    return hit, bool(hit or n_true <= len(plans))
+
+
 def compact_frame(dec):
     """Drop the plan list down to what a probe actually reads, before the frame is RETAINED.
 
@@ -461,7 +486,7 @@ def click(seed, gi, force, side, prefix, plan_index, max_turns, taps=None, main_
 # Classification -- combo_off_sweep's own functions, over a record of the same shape.
 # ---------------------------------------------------------------------------------------------
 def sweep_record(dec, offered, verified, rule, apply_win, opp_life_after, opp_lib_after,
-                 line_win_turn, error=None):
+                 line_win_turn, error=None, consulted=None, kill_step=None):
     """Build the `rec` dict combo_off_sweep.classify()/mechanism() expect, from a LIVE frame.
 
     The fixture is reconstructed with the sweep's own `fixture_from_snapshot`, purely so the
@@ -503,6 +528,11 @@ def sweep_record(dec, offered, verified, rule, apply_win, opp_life_after, opp_li
         "offer": {"offered": offered, "verified": verified, "rule": rule,
                   "apply_win": apply_win, "opp_life_after": opp_life_after,
                   "opp_lib_after": opp_lib_after, "error": error,
+                  # `consulted` is EnumerateMainPlans' own `best_any >= 0` precondition, read off
+                  # this frame's menu (goff_in_menu).  combo_off_sweep.classify() splits class (c)
+                  # on it, so a frame where no plan carries a go-off -- i.e. where the rule table
+                  # was never evaluated -- is not counted as a rule defect.
+                  "consulted": consulted,
                   "plans": dec.get("n_plans", len(dec.get("plans") or [])), "summary": None},
         "arith": a,
         "untap_confound": any(p.get("tapped") for p in fix["battlefield"]),
@@ -519,7 +549,11 @@ def sweep_record(dec, offered, verified, rule, apply_win, opp_life_after, opp_li
         # on turn T.  That is a strict LOWER bound (the line played is one line, not the best
         # one), where the sweep's probe_win is an UPPER bound -- the two bracket the truth from
         # opposite sides, which is worth saying out loud when the two harnesses are compared.
-        "win": {"auto_win_turn": turn if (line_win_turn == turn) else None},
+        # `kill_step` is the sweep's exact combat split.  This harness has no game log to read it
+        # out of (it replays through the stateless protocol, not --scenario), so it is left None
+        # and classify() falls back to the `combat_lethal` proxy exactly as it always did here.
+        "win": {"auto_win_turn": turn if (line_win_turn == turn) else None,
+                "kill_step": kill_step},
         "fixture": fix,
     }
 
@@ -635,9 +669,13 @@ def probe_frame(ctx, prefix, dec, line_win_turn, frame_argv):
             rec["trace_repro"] = repro_cmd(tr["argv"], tr["env"])
     # ---- classification ---------------------------------------------------------------------
     apply_win = rec.get("click", {}).get("won_this_turn") if cos else None
+    consulted, consulted_exact = goff_in_menu(dec)
+    rec["consulted"] = consulted
+    rec["consulted_exact"] = consulted_exact
     srec = sweep_record(dec, bool(cos), rec.get("verified", False), rec.get("rule"),
                         apply_win, rec.get("click", {}).get("opp_life"), None,
-                        line_win_turn, error=rec.get("click", {}).get("error"))
+                        line_win_turn, error=rec.get("click", {}).get("error"),
+                        consulted=consulted)
     if srec is None:
         rec["class"] = "x_error"
         rec["anomalies"].append("could not reconstruct a fixture for the arithmetic oracle")
@@ -898,7 +936,7 @@ def verify_repro(rec):
                 "won_this_turn": won_tt}
     if cls == "a_offered_wins":
         return {"ok": won_tt, "rc": p.returncode, "won_this_turn": won_tt}
-    if cls in ("c_missed_offer", "c_missed_offer_combat"):
+    if cls in ("c_missed_offer", "c_missed_offer_combat", "c_missed_offer_unconsulted"):
         ok = (isinstance(dec, dict) and dec.get("type") == "main_phase"
               and not combo_plans(dec))
         return {"ok": ok, "rc": p.returncode,
@@ -1248,7 +1286,8 @@ def report(path):
             print("  (%s)" % cols)
 
     pops = sorted({r["population"] for r in st})
-    order = ["a_offered_wins", "b_executor_failure", "c_missed_offer", "c_missed_offer_combat",
+    order = ["a_offered_wins", "b_executor_failure", "c_missed_offer",
+             "c_missed_offer_unconsulted", "c_missed_offer_combat",
              "d_rule_too_loose", "e_absent_unwinnable", "x_error"]
     rows = []
     for k in order:
@@ -1301,13 +1340,15 @@ def report(path):
         print("    CHANGED %s %s: won=%s (plain differs)" % (cid, arm, f.get("won")))
 
     miss = [r for r in st if r.get("c_kind") == "c_never_offered_that_turn"]
-    print("\n== MISSED OFFERS (class c, combat kills split out) ==")
+    print("\n== MISSED OFFERS (class c; combat kills and never-consulted frames split out) ==")
     print("  %d class-c total: %d NEVER offered that turn (the real signal), %d before the "
           "turn's first offer (the turn was still assembling -- not a rule defect); "
-          "%d combat-lethal split out"
+          "%d combat-lethal split out; %d the rule was NEVER CONSULTED (no plan in the menu "
+          "carries an ActivateBlink x>3, so no row of the table was evaluated)"
           % (sum(1 for r in st if r["class"] == "c_missed_offer"), len(miss),
              sum(1 for r in st if r.get("c_kind") == "c_before_first_offer"),
-             sum(1 for r in st if r["class"] == "c_missed_offer_combat")))
+             sum(1 for r in st if r["class"] == "c_missed_offer_combat"),
+             sum(1 for r in st if r["class"] == "c_missed_offer_unconsulted")))
     for r in miss[:40]:
         print("   %s %s t%s %s ord=%s  wish_in_lib_only=%s finisher_reachable=%s float=%s"
               % (r["id"], r.get("ref") or "seed%s" % r["seed"], r["turn"], r["phase"],
@@ -1745,8 +1786,8 @@ def main():
     # Verify every repro we are going to print.
     if not args.no_verify:
         need = [r for r in records
-                if r["class"] in ("a_offered_wins", "b_executor_failure",
-                                  "c_missed_offer", "c_missed_offer_combat")]
+                if r["class"] in ("a_offered_wins", "b_executor_failure", "c_missed_offer",
+                                  "c_missed_offer_unconsulted", "c_missed_offer_combat")]
         print("[hunt] verifying %d repros" % len(need), flush=True)
         with futures.ThreadPoolExecutor(max_workers=args.workers) as ex:
             for r, v in zip(need, ex.map(verify_repro, need)):
@@ -1803,7 +1844,8 @@ def main():
           % (len(records), sum(1 for r in records if r["population"] == "reference"),
              sum(1 for r in records if r["population"] == "autonomous")))
     for k in ("a_offered_wins", "b_executor_failure", "c_missed_offer",
-              "c_missed_offer_combat", "d_rule_too_loose", "e_absent_unwinnable", "x_error"):
+              "c_missed_offer_unconsulted", "c_missed_offer_combat", "d_rule_too_loose",
+              "e_absent_unwinnable", "x_error"):
         if classes.get(k):
             print("  %-24s %5d" % (k, classes[k]))
     if clusters:

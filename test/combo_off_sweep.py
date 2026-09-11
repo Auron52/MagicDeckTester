@@ -10,13 +10,24 @@ the rule holds -- and **execution must be EXACT** -- a click wins.  Those are tw
 questions and this harness asks them separately, over three state populations, and sorts every
 answer into one of five classes:
 
-    a  offered + apply WINS                    -- good
-    b  offered + apply does NOT win            -- EXECUTOR FAILURE  (the user's target)
-    c  not offered + the position DOES win     -- MISSED OFFER      (rule too tight)
-    d  offered + provably unwinnable           -- RULE TOO LOOSE    (report, never silently narrow)
-    e  not offered + unwinnable                -- good
+    a   offered + apply WINS                    -- good
+    b   offered + apply does NOT win            -- EXECUTOR FAILURE  (the user's target)
+    c   not offered + the position DOES win     -- MISSED OFFER      (rule too tight)
+    c'  ... and the ATTACK STEP is what killed  -- a combat kill, not what the button is for
+    c'' ... and the rule was NEVER CONSULTED    -- upstream of the rule (see below)
+    d   offered + provably unwinnable           -- RULE TOO LOOSE    (report, never silently narrow)
+    e   not offered + unwinnable                -- good
 
 Class (d) is REPORTED, never acted on: narrowing the display is the user's ruling, not ours.
+
+THE TWO (c) SPLITS ARE NOT BOOKKEEPING -- they are the difference between a rule a widening can
+fix and one it provably cannot.  `EnumerateMainPlans` consults the rule table only behind
+`best_any >= 0`: some enumerated plan must already carry an `ActivateBlink` with `chosen_x > 3`,
+and an `ActivateBlink` needs BOTH the outlet and the payload on the battlefield.  On a frame whose
+winning line has to CAST a piece first, no plan carries a go-off at all, so no row of the table is
+ever evaluated and no change to any row can move the state.  `combo_off_rule_probe` asks the table
+DIRECTLY on those boards, so the sweep can report what it WOULD have said -- which is the number
+that sizes the precondition, and is not the same question as "is the rule too tight".
 
 --- THE THREE POPULATIONS ------------------------------------------------------------------------
 
@@ -397,6 +408,8 @@ OFFER_RE = re.compile(r"^scenario: combo_off plans=(\d+) offered=(\d) verified=(
 NOWIN_RE = re.compile(r"^scenario: FAIL combo_off plan applied but did NOT win"
                       r" \(opponent life (-?\d+), library (\d+)\)", re.M)
 WIN_RE = re.compile(r"^scenario: win_turn=(\S+) opponent_life=(-?\d+) active_life=(-?\d+)", re.M)
+RULEPROBE_RE = re.compile(r"^scenario: combo_off_rule_probe says=(\d) rule=(\S+) consulted=(\d)"
+                          r" goff_k=(\d+)", re.M)
 
 
 def run_scenario(fix, env_extra=None):
@@ -418,11 +431,18 @@ def run_scenario(fix, env_extra=None):
 
 def probe_offer(fix, show_history=False, env_extra=None):
     """Rule table + the click.  `expect_combo_off: true` so an ABSENT button reports as a FAIL we
-    parse rather than an exception; the flag is a question here, not an assertion."""
+    parse rather than an exception; the flag is a question here, not an assertion.
+
+    `combo_off_rule_probe` rides along for free (one extra ComboOffPossible call, no extra engine
+    invocation) and is what makes an ABSENT button readable.  `EnumerateMainPlans` consults the
+    rule table only behind `best_any >= 0` -- some enumerated plan carries an `ActivateBlink` with
+    `chosen_x > 3` -- so `offered=0` conflates "the table DECLINED this board" with "the table was
+    never ASKED".  Those need opposite repairs and only the second one is upstream of the rule."""
     f = dict(fix)
     f["env"] = {"MTG_HUMAN_PLAY": "1"}
     f["expect_combo_off"] = True
     f["combo_off_verify"] = True
+    f["combo_off_rule_probe"] = True
     f["expect_history_no_macro"] = False          # not the question this sweep asks
     if show_history:
         f["combo_off_show_history"] = True
@@ -430,7 +450,14 @@ def probe_offer(fix, show_history=False, env_extra=None):
     m = OFFER_RE.search(out)
     res = {"offered": False, "verified": False, "rule": None, "plans": None,
            "summary": None, "apply_win": None, "opp_life_after": None,
-           "opp_lib_after": None, "error": None}
+           "opp_lib_after": None, "error": None,
+           "consulted": None, "rule_says": None, "rule_would": None, "goff_k": None}
+    rp = RULEPROBE_RE.search(out)
+    if rp:
+        res["rule_says"] = rp.group(1) == "1"
+        res["rule_would"] = None if rp.group(2) == "-" else rp.group(2)
+        res["consulted"] = rp.group(3) == "1"
+        res["goff_k"] = int(rp.group(4))
     if not m:
         res["error"] = (out.strip().splitlines() or ["(no output)"])[-1][:200]
         return res, out
@@ -524,21 +551,74 @@ def probe_trace(fix):
     return tr
 
 
+def kill_step_from_log(path, turn):
+    """WHICH STEP KILLED -- read out of the engine's own game log, never inferred from the board.
+
+    The split this answers used to be a PROXY: `board_power >= opponent_life`.  That proxy is
+    wrong in both directions and was measured wrong on the autonomous population -- an EDF board
+    with 8 power facing 10 life drained twice off an Essence Depleter already in play and then
+    attacked for the last 8, which is a combat kill the proxy scored as a combo MISSED OFFER
+    (sweep state `X-0eb9a192d4`).  The log records the attack step's own `oppLife` after damage,
+    so "did the ATTACK finish it" is a fact and not an estimate.
+
+    Returns one of:
+      "COMBAT"  the opponent's life reached <= 0 in the combat step;
+      "MAIN"    it reached <= 0 in a main phase (a drain / Gorge go-off);
+      "DECK"    it never reached <= 0 and the game was still won -- i.e. the opponent was decked.
+    """
+    try:
+        g = json.load(open(path))
+    except Exception:
+        return None
+    prev = None
+    for pe in g.get("turns") or []:
+        if pe.get("turn") != turn:
+            continue
+        for a in pe.get("actions") or []:
+            if a.get("type") == "ATTACK" and a.get("oppLife") is not None:
+                if int(a["oppLife"]) <= 0:
+                    return "COMBAT"
+        b = pe.get("boardAfter") or {}
+        if b.get("opponentLife") is not None:
+            life = int(b["opponentLife"])
+            if life <= 0:
+                return "COMBAT" if pe.get("phase") == "COMBAT" else "MAIN"
+            prev = life
+    return "DECK" if prev is not None else None
+
+
 def probe_win(fix, env_extra=None):
     """Winnability oracle: the AUTONOMOUS engine plays exactly this turn.  UPPER BOUND -- it steps
-    into `turn` through an untap and a draw the offer probe never sees."""
+    into `turn` through an untap and a draw the offer probe never sees.
+
+    It also writes the turn's GAME LOG, because "the engine won" is not one finding: a combat kill,
+    a drain/Gorge go-off and a deck-out are three different answers to "should the Combo Off button
+    have been here", and only the log can tell them apart exactly."""
     f = dict(fix)
     f.pop("env", None)
     f["max_turns"] = f["turn"]
     f["depth"] = 5
     f["budget_ms"] = 100
-    rc, out = run_scenario(f, env_extra)
-    m = WIN_RE.search(out)
-    if not m:
-        return {"auto_win_turn": None, "error": (out.strip().splitlines() or ["?"])[-1][:200]}, out
-    wt = m.group(1)
-    return {"auto_win_turn": (None if wt == "none" else int(wt)),
-            "auto_opp_life": int(m.group(2)), "error": None}, out
+    fd, log = tempfile.mkstemp(suffix=".wlog.json", dir=OUTDIR, text=True)
+    os.close(fd)
+    f["log_out"] = log
+    try:
+        rc, out = run_scenario(f, env_extra)
+        m = WIN_RE.search(out)
+        if not m:
+            return ({"auto_win_turn": None, "kill_step": None,
+                     "error": (out.strip().splitlines() or ["?"])[-1][:200]}, out)
+        wt = m.group(1)
+        won = wt != "none"
+        return ({"auto_win_turn": (None if not won else int(wt)),
+                 "auto_opp_life": int(m.group(2)),
+                 "kill_step": kill_step_from_log(log, fix["turn"]) if won else None,
+                 "error": None}, out)
+    finally:
+        try:
+            os.unlink(log)
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1041,14 +1121,39 @@ def classify(rec):
         if a["unwinnable"]:
             return "d_rule_too_loose"
         return "b_executor_failure"
-    # --- not offered.  The winnability oracle is the autonomous engine, and it counts ANY win --
-    # including a plain COMBAT kill, which is not what the Combo Off button is for.  A board with
-    # five power facing five life "wins this turn" without a combo in sight, so crediting that as
-    # a missed OFFER would manufacture class (c) out of ordinary attacking.  Split it off rather
-    # than dropping it: a combat-lethal board is still worth knowing about, it is just not a rule
-    # defect.
+    # --- not offered.  The winnability oracle is the autonomous engine and it counts ANY win, so
+    # three quite different findings arrive here wearing one label.  Separate them by EVIDENCE,
+    # because they call for three different repairs and only the last is a rule defect:
+    #
+    #   c'  COMBAT KILL -- the attack step is what took the opponent to <= 0.  Not what the Combo
+    #       Off button is for; crediting it would manufacture the class out of ordinary attacking.
+    #       Read from the game log's own ATTACK record (`kill_step`), NOT from the old
+    #       `board_power >= opponent_life` proxy, which was measured wrong in both directions:
+    #       `X-0eb9a192d4` has 8 power against 10 life, drains twice off a deployed Essence
+    #       Depleter and then attacks for the last 8 -- a combat kill the proxy called a combo
+    #       miss.  `combat_lethal` is still recorded, as the proxy it always was.
+    #
+    #   c'' RULE NEVER CONSULTED -- `EnumerateMainPlans` asks the table only when some enumerated
+    #       plan already carries an `ActivateBlink` with `chosen_x > 3`, and an `ActivateBlink`
+    #       needs BOTH the outlet and the payload already on the battlefield.  So on a frame whose
+    #       winning line CASTS a piece first, no plan carries a go-off, the table is never asked,
+    #       and no widening of any row can change the outcome.  This is upstream of the rule, and
+    #       a search shortcut keyed on the rule (TurnSolver::EdfComboOffShortcut) carries the very
+    #       same precondition -- so it is equally blind here, which is exactly why it has to be
+    #       counted apart from a rule defect rather than folded into one.  `rule_would` records
+    #       what the table WOULD have said, which is the number that sizes the precondition.
+    #
+    #   c   what remains: the table was asked, it declined, and the engine won that turn by
+    #       something other than combat.  THIS is MISSED FIRE, and it is the only bucket a rule
+    #       change can move.
     if rec["win"].get("auto_win_turn") is not None:
-        return "c_missed_offer_combat" if rec["combat_lethal"] else "c_missed_offer"
+        if rec["win"].get("kill_step") == "COMBAT":
+            return "c_missed_offer_combat"
+        if rec["win"].get("kill_step") is None and rec["combat_lethal"]:
+            return "c_missed_offer_combat"        # log unreadable: fall back to the old proxy
+        if o.get("consulted") is False:
+            return "c_missed_offer_unconsulted"
+        return "c_missed_offer"
     return "e_absent_unwinnable"
 
 
@@ -1244,6 +1349,9 @@ def main():
         verified = [r for r in offered if (r.get("offer") or {}).get("verified")]
         false_fire = [r for r in offered if r.get("class") == "d_rule_too_loose"]
         missed = [r for r in eng if r.get("class") == "c_missed_offer"]
+        unconsulted = [r for r in eng if r.get("class") == "c_missed_offer_unconsulted"]
+        combat = [r for r in eng if r.get("class") == "c_missed_offer_combat"]
+        would = [r for r in unconsulted if (r.get("offer") or {}).get("rule_says")]
         # First firing state per game, and the work a shortcut would have saved from there.
         first = {}
         for r in sorted(eng, key=lambda x: (x["meta"]["game"], x["meta"]["turn"])):
@@ -1261,8 +1369,22 @@ def main():
                  len(verified), 100.0 * len(verified) / max(1, len(offered))))
         print("     FALSE FIRE  (offered, arithmetic refutes): %d  (%.2f%% of states)"
               % (len(false_fire), 100.0 * len(false_fire) / max(1, len(eng))))
-        print("     MISSED FIRE (absent, engine wins that turn): %d  (%.2f%% of states)"
-              % (len(missed), 100.0 * len(missed) / max(1, len(eng))))
+        print("     MISSED FIRE (absent, rule ASKED and declined, non-combat win): %d  "
+              "(%.2f%% of states)" % (len(missed), 100.0 * len(missed) / max(1, len(eng))))
+        # The two buckets a rule change cannot move, reported beside it so the headline number
+        # stays a rule number.  `rule_would` on the unconsulted set is the one that sizes the
+        # precondition: it is how many of them the table would have fired on, had it been asked.
+        print("     ... rule NEVER CONSULTED (no enumerated plan carries a go-off): %d"
+              "   [the rule would have fired on %d of them]"
+              % (len(unconsulted), len(would)))
+        rw = {}
+        for r in would:
+            k = (r.get("offer") or {}).get("rule_would") or "?"
+            rw[k] = rw.get(k, 0) + 1
+        if rw:
+            print("         would-fire by rule: %s"
+                  % ", ".join("%s %d" % (k, rw[k]) for k in sorted(rw, key=lambda x: -rw[x])))
+        print("     ... COMBAT kill (the attack step is what killed): %d" % len(combat))
         print("     games with any fire: %d/%d" % (len(first), len(games)))
         if saved:
             print("     at FIRST fire: mean %.2f further main-phase decisions and %.2f further "
