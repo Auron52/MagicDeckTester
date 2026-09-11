@@ -93,6 +93,11 @@ struct Arm
     // ladder (legacy unsound -> guard -> split keys -> split keys + wave) can be measured as ONE
     // pooled batch instead of four env-pinned invocations, each stranding cores on its own tail.
     int         fsl_split_keys = -1;        // -1 unset | 0 off (single canonical key) | 1 on
+    // FROZEN cost-per-probe-leaf R for the adopted per-deck escalation cap (sidecar
+    // value_play.escalation_r). Here for the usual reason: R is a PER-DECK constant, so sweeping it
+    // via MTG_ESC_DECK_R pins one value process-wide and forces one `mtg --batch` per arm -- and the
+    // alternative (a scratch deck dir per arm) copies multi-hundred-MB sidecar trees per value.
+    double      esc_deck_r        = -1.0;   // <=0 unset                   (MTG_ESC_DECK_R)
     double      trust_slack       = -1.0;   // <=0 unset                   (kTrustPathSlack override)
     // Empty => unset (fall back to env, then to the deck-adjacent <stem>.value.json auto-detect).
     // "none"/"off"/"0" => explicitly NO sidecar, which is how an H-arm job asks for the pure

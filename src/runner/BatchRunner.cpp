@@ -611,6 +611,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("constant_alpha_relaxed")) { j.arm.constant_alpha_relaxed = jspec["constant_alpha_relaxed"].get<bool>() ? 1 : 0; }
     if (jspec.contains("constant_exhaust_mult")) { j.arm.constant_exhaust_mult = jspec["constant_exhaust_mult"].get<double>(); }
     if (jspec.contains("esc_single_reserve")) { const json& v = jspec["esc_single_reserve"]; j.arm.esc_single_reserve = v.is_number() ? v.get<int>() : (v.get<bool>() ? 1 : 0); }
+    if (jspec.contains("esc_deck_r"))   { j.arm.esc_deck_r   = jspec["esc_deck_r"].get<double>(); }
     if (jspec.contains("ladder_emulated")) { j.arm.ladder_emulated = jspec["ladder_emulated"].get<bool>() ? 1 : 0; }
     if (jspec.contains("ladder_emul_direct")) { j.arm.ladder_emul_direct = jspec["ladder_emul_direct"].get<bool>() ? 1 : 0; }
     if (jspec.contains("ladder_emul_commit_model")) { j.arm.ladder_emul_commit = jspec["ladder_emul_commit_model"].get<bool>() ? 1 : 0; }

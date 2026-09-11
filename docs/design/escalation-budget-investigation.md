@@ -308,3 +308,118 @@ big budget. Result: **quality recovery PASSES everywhere, and improves with budg
 
 Status: measurement complete on the current engine; the adoption decision (7 clean decks —
 al/brn/cg/ds/fc/gob/hin — vs also ss/th whose R ~= prior) remains the user's.
+
+---
+
+## Session 4 (2026-09-11): the calibrated R has DRIFTED, and it was never a fixed point
+
+The 2026-09-04 calibration (commit `6a938099`) froze a per-deck `value_play.escalation_r` from
+`MTG_HYBRID_STATS`' `Rsample`. This session re-ran **the same estimator on today's engine** and the
+numbers have moved a long way — coherently, and in opposite directions for beam and no-beam decks.
+
+### Apparatus
+
+Two research knobs were added (both `<=0`/unset => byte-identical, verified):
+
+* `MTG_ESC_SINGLE_DIAG=1` — prints, per escalation, the predictor's own inputs and verdict:
+  `[esc1] cap= committed= pmax= R= units= daff= target= chat=... leaves=...`. This is what makes the
+  affordability walk auditable; before it, "R is miscalibrated" could only be inferred.
+* `MTG_ESC_DECK_R=<v>` / manifest key **`esc_deck_r`** — overrides the ADOPTED per-deck path's frozen
+  R. `MTG_ESC_SINGLE_R` does NOT do this (it only reaches the env research path), and the alternative
+  — a scratch deck dir per R value — copies 140 MB–805 MB of sidecars per arm. The manifest key
+  matters for the same reason every other `ValueArm` entry does: R is a per-deck constant, so an
+  env-only knob pins one value process-wide and forces one `mtg --batch` per arm.
+
+Control equivalence checked both ways: arm unset and `esc_deck_r` == the sidecar's value produce the
+identical job digest (`04751e79…`), and the audit run reproduces byte-for-byte under the patched
+binary (AL `Rsample` 7.07547 over 47 passes, twice).
+
+### R measured now vs R frozen on 2026-09-04 (300 games x 3 DISJOINT seed blocks, on-policy)
+
+| deck | shipped R | 09-04 | per-block R (n) | pooled now | shipped/now |
+|---|---|---|---|---|---|
+| Anti-Lifegain | 16 | 16 | 7.1(47) 8.7(28) 10.7(40) | **8.7** | 1.84x high |
+| Creature Giving | 21 | 21 | 8.7(103) 10.4(88) 8.8(88) | **9.2** | 2.27x high |
+| Dragonstorm | 81 | 81 | 35.6(73) 46.4(54) 54.6(63) | **45.0** | 1.80x high |
+| Hinata2 | 40 | 40 | 27.4(248) 32.2(253) 23.7(254) | **27.8** | 1.44x high |
+| FiveColour | 86 | 86 | 217(107) 206(135) 248(133) | **224** | 0.38x = 2.6x LOW |
+| Goblins | 74 | 74 | 242(3) 185(1) 180(3) | 207 | 0.36x (n too small) |
+| StompySurprise | (120 prior) | 132 | 113(12) 188(4) 118(5) | 128 | 0.94x — fine |
+| treasure_hunt | (120 prior) | 127 | 106(40) 119(41) 104(37) | 110 | 1.09x — fine |
+
+The two decks the 09-04 session deliberately left on the prior (`ss`/`th`, "measured R ~= 120") still
+measure ~120 — so the estimator itself is stable and the seeds are not the story. What moved is the
+**beam** decks (all four now ~1.4–2.3x lower) and FiveColour/Goblins (~2.6–3x higher).
+
+### The important part: R was never a FIXED POINT
+
+`Rsample` is measured **at the depth the predictor chose**, and that depth is a function of R. So a
+calibrated R is only trustworthy if re-measuring at it reproduces it. It does not. Sweeping
+`MTG_ESC_DECK_R` (300 games, seed 900000):
+
+| deck | set R -> measured R | fixed point | aborts / wasted units at shipped R |
+|---|---|---|---|
+| Anti-Lifegain | 16->7.1, 12->6.7, 9->6.2, 7->5.9, 5.5->5.7, 4.5->5.3 | **~5.5** | 0 / 0 at every R |
+| Creature Giving | 21->8.7, 15->7.7, 11->7.0, 9->6.2, 7->4.2, 5.5->3.8 | < 5.5 | 0 / 0 at every R |
+| Dragonstorm | 81->35.7, 60->31.9, 45->33.2, 35->32.6, 27->31.1 | **~35** | 0 / 0 at every R |
+| Hinata2 | 40->27.4, 32->24.7, 27->21.7, 22->19.4, 18->17.7 | **~18-22** | 1 / 54k at ship; 12 / 378k at 18 |
+| FiveColour | 86->217, 130->230, 180->246, 224->263, 280->281 | **~280** | **74 / 1,352,480 at ship** |
+| Goblins | 74->242, 120->242, 180->258, 240->243 | ~240 | 1 / 36k at ship |
+
+Lowering R deepens the target and the deeper pass amortizes BETTER per probe leaf, so measured R
+falls with set R — the iteration converges from above. The shipped values sit well off that fixed
+point in both directions.
+
+### What this costs, per deck
+
+The predictor errs in exactly one of two ways, and the `abort_first`/`wasted_units` counters separate
+them cleanly:
+
+* **R too HIGH => silent under-search, no waste.** AL/CG/DS record `abort_first=0 fellback=0
+  wasted=0` at *every* R swept. They are paying for a safety margin that buys nothing: the passes
+  they decline would have fit. AL's target histogram goes `t1:3 t2:18 t3:14 t4:9 t5:11` (R=16) ->
+  `t2:14 t3:13 t4:11 t5:16` (R=5.5) — the d1 targets disappear entirely.
+* **R too LOW => the pass is started, aborts, and the work is thrown away.** FiveColour at its
+  shipped R=86 **aborts 74 escalations and discards 1,352,480 units**; walking R up to the fixed
+  point reduces this monotonically (86: 74/1.35M -> 130: 52/954k -> 180: 34/628k -> 224: 33/610k ->
+  280: 31/574k). This is the mechanism behind FC's known 1.23x-at-B500 wall regression.
+* **Hinata2 is a genuine TRADE-OFF, not a free win.** Its shipped R=40 wastes 54k units; its fixed
+  point (18-22) wastes 297-378k. Deeper search, bought with aborted work. It must be judged on
+  measured quality, not on self-consistency.
+
+### Also confirmed: the 5 uncalibrated cap decks were left out CORRECTLY
+
+An independent audit of all 12 `escalation_cap` decks (300 games each, on-policy) reproduces the
+09-04 commit's stated reasons for skipping five of them — this config is deliberate, not neglected:
+
+| deck | decisions | escalations | verdict |
+|---|---|---|---|
+| Knights | 303 | **0 (0.0%)** | cap is DEAD CONFIG — never exercised |
+| slivers_vial | 302 | 1 (0.3%) | effectively dead |
+| Auras | 317 | 11 (3.5%) | ~never; all targets d1 |
+| burn | 316 | 10 (3.2%) | ~never (calibrated, but R unmeasurable: n=0 first-fit) |
+| Goblins | 312 | 7 (2.2%) | ~never |
+| StompySurprise | 355 | 55 (15.5%) | operative; R ~= prior, but **21.8% of escalations arrive with units==0** |
+| treasure_hunt | 856 | 77 (9.0%) | operative; R ~= prior, **20.8% units==0** |
+
+`units==0` occurs ONLY on the decks without `escalation_fresh_frac`: without it `esc_budget` is the
+shared budget's REMAINING units (TurnSolver.cpp ~36511), so one escalation in five arrives with
+nothing left and is forced to `target=1` regardless of R. The 09-04 session measured frac on ss/th
+and found it bought no quality at +4% wall, so this is a known, accepted cost — recorded here
+because the counter now names it precisely.
+
+**Knights / slivers_vial ship an `escalation_cap: 5` that never fires.** Harmless, but it is actively
+misleading when reading a per-deck shape table — it looks like a configured shape and is not one.
+(It also explains why every alternative shape appeared to beat slivers' baseline in the 2026-09-10
+menu screen: on slivers the cap is not in play at all, so those columns differ for other reasons.)
+
+### Melira Pod: the cap is wrong for this deck, and R cannot fix it
+
+Melira ships NO cap (correctly). The 2026-09-10 finding that a synthetic `escalation_cap: 5` measured
+2 better / 41 worse (z=-5.9) at 0.910x units was re-tested against the R hypothesis with 80 pooled
+jobs (5 arms x 16 seeds x 250 games, seeds 870000+): **cap@R120, cap@R12 and cap@R16 are
+byte-identical on all 16 seed blocks.** The `[esc1]` trace shows why — R does move the target
+(R=12 -> daff=2 where R=120 -> daff=1) but Melira's escalations land at d1-d2 either way, too shallow
+to beat the value-leaf line, so the committed play never changes. The cap's 9% saving comes from
+skipping the ladder's DEEPER passes and the quality loss comes from exactly those passes. A
+recalibrated R is therefore a no-op on Melira; the shape is simply wrong for the deck.

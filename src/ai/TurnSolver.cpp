@@ -36721,7 +36721,17 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             static const double s_esc_single_r = []{ const char* e = std::getenv("MTG_ESC_SINGLE_R");
                                                      return (e && *e) ? std::atof(e) : 0.0; }();
             const bool   frozen_R = eff_single_deck || (s_esc_single_r > 0.0);
-            const double R_fixed  = eff_single_deck ? ((escalation_r > 0.0) ? escalation_r : 120.0)
+            // RESEARCH override for the ADOPTED per-deck path's frozen R (MTG_ESC_DECK_R=<v>; <=0/unset =>
+            // use the sidecar's escalation_r). Same deterministic contract as MTG_ESC_SINGLE_R (which applies
+            // only to the env research path and is IGNORED here), so R can be swept per deck WITHOUT copying
+            // multi-hundred-MB sidecar trees. Needed to test R's SELF-CONSISTENCY: Rsample is measured at the
+            // depth the predictor chose, and that depth is a function of R, so the calibrated value is only
+            // trustworthy if it is a FIXED POINT (re-measuring at R' reproduces R').
+            static const double s_esc_deck_r = []{ const char* e = std::getenv("MTG_ESC_DECK_R");
+                                                   return (e && *e) ? std::atof(e) : 0.0; }();
+            const double deck_R   = (valuearm::t_arm.esc_deck_r > 0.0) ? valuearm::t_arm.esc_deck_r   // arm > env > sidecar
+                                  : (s_esc_deck_r > 0.0)                ? s_esc_deck_r : escalation_r;
+            const double R_fixed  = eff_single_deck ? ((deck_R > 0.0) ? deck_R : 120.0)
                                                     : ((s_esc_single_r > 0.0) ? s_esc_single_r : 120.0);
             // PREDICTED-AFFORDABILITY target (MTG_ESC_SINGLE_PREDICT): run ONE pass at the depth the LADDER
             // would commit to (its budget-affordable depth), capped at `cap`. Estimated from the value-leaf
@@ -36759,6 +36769,22 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                     daff = d; rem -= chat[d];
                 }
                 target = std::min(cap, std::max(1, daff));
+                // DIAGNOSTIC ONLY (MTG_ESC_SINGLE_DIAG=1): why the predicted target landed where it did.
+                // Answers "is R even live here?" -- R can only move `target` when the affordability walk
+                // stops strictly below `cap`; if pmax collapses (committed==1) or chat[1] already blows the
+                // budget, every R gives the same target and an R recalibration is a no-op on play.
+                static const bool s_single_diag = EnvOn("MTG_ESC_SINGLE_DIAG");
+                if (s_single_diag)
+                {
+                    std::fprintf(stderr, "[esc1] cap=%d committed=%d pmax=%d R=%.1f units=%lld daff=%d target=%d chat=",
+                                 cap, committed, pmax, R, esc_units, daff, target);
+                    for (int d = 1; d <= pmax && d < 16; ++d)
+                    { std::fprintf(stderr, "%.0f%s", chat[d], (d < pmax ? "/" : "")); }
+                    std::fprintf(stderr, " leaves=");
+                    for (int d = 1; d <= pmax && d < 16; ++d)
+                    { std::fprintf(stderr, "%lld%s", g_probe_leaves[d], (d < pmax ? "/" : "")); }
+                    std::fprintf(stderr, "\n");
+                }
             }
             FSLineCache single_cache;
             // BUGFIX: FSLineWin memoizes leaf rollouts only through a non-null tt. In normal play the
