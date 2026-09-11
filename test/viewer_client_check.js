@@ -866,6 +866,133 @@ async function testPassGuard() {
   return fails;
 }
 
+// THE ORDER PIN MUST SURVIVE THE EMIT CAP (docs/design/viewer-pass-guard.md, "what is still open" —
+// closed 2026-09-11).
+// =================================================================================================
+// `decision.plans` is a RANKED TOP SLICE once a frame overflows MTG_PLAY_PLANS_CAP (200 by default),
+// so a plan PAST the cap is not in it at all. applyAccepted decides whether to emit the human's `*`
+// full-order pin by comparing the queued entries against the matched plan's ACTIONS — so with no
+// plan object there was no comparison, no pin, and the declared sequence silently reverted to
+// enumerator order. On the deck this matters for, that is the common case, not the edge: the user's
+// own seed-16 turn-4 frame (main_ordinal 62) enumerates 772 plans and emits 200.
+//
+// DRIVEN ON A LINE WHOSE ORDER NO PLAN EXPRESSES, because an order the enumerator already offers
+// would be honoured by picking that plan and the pin's loss would be invisible: queue
+// `Emiel: blink Cloud of Faeries` FIRST and `Overgrowth → Brushland #1` second. A census of that
+// frame's 772 plans finds 385 mixing a cast with an activation and the activation LAST in every one
+// (the enumerator emits board activations in battlefield-index order — human-line-order-as-is.md),
+// so activation-first exists ONLY through the pin. The line resolves to plan 759, which is NOT in
+// the emitted slice (758 and 761 are; 759/760/762/763 are not), so `planByIndex` returns null and
+// the ONLY source for that plan's actions is the verdict's own `matched_plans`.
+//
+// Measured on this engine, same prefix, `--choices …,759` (MTG_LINE_ORDER_TRACE=1):
+//   no pin  → `plan searched=0 human=0 vector: Overgrowth Emiel the Blessed` / `trailing Emiel …`
+//   pinned  → `plan searched=1 human=1 vector: Emiel the Blessed Overgrowth` / `activate Emiel …`
+//             then `cast Overgrowth`
+// i.e. the pin is exactly what turns the declared sequence into the applied one.
+//
+// A `choose` VERDICT, deliberately: CheckLine sets plan_index = -1 there and the human's plan is one
+// of the VARIANTS, so a fix that only carried the accept's own plan would leave this open — and on
+// this deck the sub-decision dialog is the normal way a line commits.
+//
+// THE GUARD MUST NOT BECOME TAUTOLOGICAL, so this also pins that the plan's actions come from the
+// ENGINE and not from the queue read back: `matched_plans` for the committed plan must carry the
+// engine's own order (Overgrowth, then Emiel) — the OPPOSITE of what the human queued. A client
+// that synthesised the actions from its own queue would pass every other assertion here and pin
+// every line unconditionally, which is precisely the check it exists to be.
+async function testPastCapOrderPin() {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const win = buildDom(); await settle(win);
+  const $ = (id) => win.document.getElementById(id);
+  const opt = Array.from($('deck').options).find(o => o.value.replace(/\.[^.]+$/, '') === 'EldraziDisplacerFlicker');
+  if (!opt) { console.log('  SKIP past-cap order pin: EldraziDisplacerFlicker not listed'); return fails; }
+  $('deck').value = opt.value; $('seed').value = '16'; win.fillVersions();
+  const st = S(win);
+  st.choices = AURA_PREFIX.slice();
+  st.steps = AURA_PREFIX.map(() => ({ n: 1 }));
+  await win.step(); await settle(win);
+  const d0 = st.decision;
+  if (!d0 || d0.type !== 'main_phase' || d0.main_ordinal !== 62) {
+    console.log('  SKIP past-cap order pin: seed 16 no longer reaches T4 ordinal 62 at this prefix'
+                + (d0 ? ` (got ${d0.type} ord=${d0.main_ordinal})` : ' (no decision)'));
+    return fails;
+  }
+  const cloud = (d0.me.battlefield || []).find(o => o.name === 'Cloud of Faeries');
+  const bru   = (d0.me.battlefield || []).find(o => o.name === 'Brushland');
+  if (!cloud || !bru) {
+    console.log('  SKIP past-cap order pin: that board no longer holds Cloud of Faeries + Brushland');
+    return fails;
+  }
+  // PRECONDITION — without an overflowing frame this test proves nothing.
+  chk(d0.plans_total && d0.plans.length < d0.plans_total,
+      `this frame no longer overflows the emit cap (${d0.plans.length}/${d0.plans_total})`);
+
+  // Queue the ACTIVATION FIRST, then the cast. toggleActivate queues directly when the outlet has a
+  // single blink target (one Cloud of Faeries here) and arms for a board click when it has several —
+  // both routes end in the same queued entry, so take whichever this board offers.
+  win.__blink.arm('Emiel the Blessed');
+  if (st.blinkMode) { win.__blink.at(cloud.num); }
+  win.tryEnchantDrop('Overgrowth', 'permanent', bru.num);
+  chk(st.plan.length === 2 && st.plan[0].name === 'Emiel the Blessed' && st.plan[0].kind === 'activate'
+      && st.plan[1].name === 'Overgrowth',
+      `the activation-first line did not queue (${JSON.stringify(st.plan.map(p => p.name + ':' + p.kind))})`);
+  if (fails.length) return fails;
+
+  // THE EMITTER CONTRACT, checked against the REAL route before the commit consumes the frame: the
+  // validation carries each committable plan's own actions / cast_order_canonical (main.cpp
+  // WriteValidation's `matched_plans`), including plans the decision JSON does not contain.
+  const seg = win.LineBuild.encodeSegments(st.plan)[0];
+  const v = server.runValidate(win.cfg({}), seg);
+  chk(v && (v.verdict === 'choose' || v.verdict === 'accept'),
+      `the activation-first line no longer validates (got ${v && v.verdict}: ${v && v.reason})`);
+  const committable = (v && v.verdict === 'accept') ? [v.plan_index]
+                                                    : ((v && v.variants) || []).map(x => x.plan_index);
+  chk(committable.length > 0, 'the verdict names no committable plan at all');
+  const missing = committable.filter(i => !((v.matched_plans || []).some(p => p && p.index === i)));
+  chk(missing.length === 0,
+      `the validation carries no matched_plans entry for plan(s) ${JSON.stringify(missing)} it can commit `
+      + `(keys: ${v ? Object.keys(v).join(',') : 'none'}) -- the client cannot run the order guard for them`);
+  const pastCap = committable.filter(i => win.planByIndex(d0, i) === null);
+  chk(pastCap.length > 0,
+      `every committable plan (${JSON.stringify(committable)}) is inside the emitted slice -- the `
+      + 'past-cap case moved and this test is inert');
+
+  const n0 = st.choices.length;
+  await win.commitLine(); await settle(win);
+  const idx = st.choices[n0];
+  chk(st.choices.length === n0 + 1 && committable.indexOf(idx) >= 0,
+      `the line committed as ${JSON.stringify(st.choices.slice(n0))}, none of ${JSON.stringify(committable)}`);
+  chk(win.planByIndex(d0, idx) === null,
+      `the committed plan ${idx} is in the emitted slice, so the OLD positional/planByIndex route `
+      + 'would have found it -- this run does not exercise the past-cap path');
+  // NOT TAUTOLOGICAL: the engine's view of that plan is the enumerator's order, not the queue's.
+  const mp = ((v && v.matched_plans) || []).find(p => p && p.index === idx) || null;
+  chk(mp && JSON.stringify((mp.actions || []).map(a => a.card))
+            === JSON.stringify(['Overgrowth', 'Emiel the Blessed']),
+      `matched_plans[${idx}] carries ${JSON.stringify(mp && (mp.actions || []).map(a => a.card))}, not the `
+      + `ENGINE's own order ["Overgrowth","Emiel the Blessed"] -- if it ever equals the queue, the `
+      + 'multiset guard is comparing the queue with itself and pins every line unconditionally');
+
+  // THE FIX: a pin is emitted at all, and it is the human's queued order, marked `*` (the whole
+  // line, casts and activations interleaved) rather than the cast-only fallback.
+  const pin = (st.castOrder || {})['62'] || null;
+  chk(!!pin, 'NO cast-order pin was emitted for a plan past the emit cap -- the human\'s declared '
+           + 'order reverts to enumerator order (viewer-pass-guard.md, "what is still open")');
+  chk(JSON.stringify(pin) === JSON.stringify(['*', 'Emiel the Blessed', 'Overgrowth']),
+      `the pin is ${JSON.stringify(pin)}, not the queued ['*','Emiel the Blessed','Overgrowth']`);
+  // ...and it really reaches the engine: the same argv builder the live server spawns with.
+  const argv = server.buildArgs(win.cfg({}), null, null, false);
+  const at = argv.indexOf('--cast-order');
+  chk(at > 0 && argv[at + 1] === '62:*|Emiel the Blessed|Overgrowth',
+      `the pin does not reach argv (--cast-order ${at > 0 ? argv[at + 1] : 'ABSENT'})`);
+  // Undo must drop it, like every other pin (the `co` step marker) -- a pin left behind describes a
+  // decision that no longer happened, and would reorder whatever is committed there next.
+  await win.undo(); await settle(win);
+  chk(!((S(win).castOrder || {})['62']), 'undo left the past-cap pin behind');
+  return fails;
+}
+
 // STALE SERVER HANDSHAKE (tools/play/server.js SERVER_API <-> index.html CLIENT_API).
 // index.html is re-read from disk on every load; `node server.js` is not, so a viewer left open
 // across a server.js change runs a NEW client against an OLD server -- same routes, same payloads,
@@ -1358,6 +1485,14 @@ async function testColorlessFirstTapOrder() {
     catch (e) { console.error(`✗ pass guard: harness error: ${e.stack || e}`); process.exit(2); }
     if (pgFails.length) { anyFail = true; console.log(`✗ pass guard: ${pgFails.length} fail`); pgFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ pass guard (a click right after a commit cannot discard the floating pool; two deliberate clicks still can)'); }
+  }
+  // The human's declared order must survive the plan EMIT CAP (needs a real 772-plan frame).
+  {
+    let pcFails;
+    try { pcFails = await testPastCapOrderPin(); }
+    catch (e) { console.error(`✗ past-cap order pin: harness error: ${e.stack || e}`); process.exit(2); }
+    if (pcFails.length) { anyFail = true; console.log(`✗ past-cap order pin: ${pcFails.length} fail`); pcFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ past-cap order pin (a plan past MTG_PLAY_PLANS_CAP still pins the human\'s queued order, from the validation\'s own view)'); }
   }
   // Board-activated ability reachable + resolving (needs a real game walk, so it runs on its own).
   {

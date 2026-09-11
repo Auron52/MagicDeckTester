@@ -359,7 +359,9 @@ if [ "$MODE" = full ]; then
     else
       echo "--- viewer validate-line check (engine CheckLine) ---"
       if MTG_BIN="$BIN" node "$HERE/viewer_validate_check.js"; then :; else
-        echo "FAIL: a line a human actually played no longer validates (CheckLine regression)."
+        echo "FAIL: a line a human actually played no longer validates (CheckLine regression), or a"
+        echo "      verdict no longer carries matched_plans for a plan it can commit (the viewer then"
+        echo "      cannot pin the human's declared order past the display cap)."
         rc=1
       fi
     fi

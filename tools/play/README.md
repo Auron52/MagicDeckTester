@@ -239,10 +239,17 @@ UI does not change.** That is why the GUI is built against the protocol, not the
 - `POST /api/step` — `{deck, seed, gameIndex, maxTurns, choices[]}` → next decision or result.
 - `POST /api/validate` — same body + `line` (encoded `"land=X;cast=Y;..."` or `"pass"`); runs
   `--validate-line` to reconcile the hand-assembled line at the current main phase →
-  `{verdict, plan_index, matched_summary, reason, failed_action, variants[], decision}`
+  `{verdict, plan_index, matched_summary, reason, failed_action, variants[], matched_plans[], decision}`
   (`<<<CLAUDE_VALIDATION>>>`, exit 71). On **accept** the GUI appends `plan_index` to `choices`
   and steps; on **choose** it lists `variants` (each a `plan_index` + label) for the human to
   pick (the pick is just that index); otherwise it shows the classified reject.
+  **`matched_plans`** (added 2026-09-11) carries `{index, actions:[{card}], cast_order_canonical?}`
+  for every plan this verdict can commit — the accepted plan, and each variant's. It exists because
+  `decision.plans` is a **ranked top slice** past `MTG_PLAY_PLANS_CAP` (200), so the plan the human
+  actually commits on a big combo frame is often absent from it, and the client needs that plan's
+  own actions to decide whether to pin the human's declared order (`--cast-order`, see below). It is
+  deliberately partial — only those two fields, never a second plan serialiser — and additive, so a
+  consumer that ignores it (or an older engine that does not emit it) behaves exactly as before.
 - `POST /api/reject-artifact` — persists a rejected line to `logs/play/rejections/<deck>_s<seed>_gi<gi>_t<turn>.json`.
 - `POST /api/save-reference` — clean game → tracked `references/<deck>/claude_s<seed>_gi<gi>.json`;
   with `suboptimal:true` → `references/suboptimal/<deck>/…` (a "should-be-faster" target).
