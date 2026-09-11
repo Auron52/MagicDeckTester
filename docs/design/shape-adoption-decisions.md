@@ -120,23 +120,34 @@ budget of `max(1, round(0 × budget_ms))` = **1 ms**, a pathological sliver
 A constant applied at **every** depth is broader than anything measured. Under one depth the
 distinction collapses, which is a further reason to settle §1 first.
 
-## 4. TRADES — real quality gain at real cost. These need your ruling.
+## 4. TRADES — every one re-measured on held-out seeds, and **three did not replicate**
 
-| deck | change | Δ turn ± se | bett/wors | units |
-|---|---|---|---|---|
-| **melira** | `frac` | **−0.0035 ± 0.0014** (held-out) | 20/7 | 1.159x |
-| cgiving | `nocap` (*more* ladder) | −0.0045 ± 0.0016 | 28/9 | 1.119x |
-| kitty | `ladder: single` | −0.0023 ± 0.0009 | 12/3 | 1.177x |
-| fluct | `exhaust_mult: 4` | −0.0020 ± 0.0005 | 8/0 | 1.259x |
-| stompy | `exhaust_mult: 4` | −0.0015 ± 0.0005 | 6/0 | 1.183x |
-| fluct | `cap` | −0.0010 ± 0.0004 | 4/0 | 1.027x |
-| stompy | `exhaust_mult: 2` | −0.0010 ± 0.0004 | 4/0 | 1.089x |
+Each trade was re-run on a third seed set (base 9910000). This mattered: the cells you have to rule
+on were the *least* well-measured on the board, and half of them shrank or vanished.
 
-`exhaust_mult` is monotonic in both arms on both decks (2 → 4 buys more quality for more work), so it
-is a well-behaved dial that **no deck currently uses**. Deleting it forgoes a real option; that is a
-choice, not a cleanup. This corrects an earlier claim that it "earned nothing".
+| deck | change | training | held-out | **POOLED** | units | verdict |
+|---|---|---|---|---|---|---|
+| cgiving | `nocap` (*more* ladder) | −0.0045 ± 0.0016 (28/9) | −0.0045 ± 0.0019 (24/10) | **−0.0045 ± 0.0012** (3.7σ) | 1.13x | **replicates exactly** |
+| fluct | `exhaust_mult: 4` | −0.0020 ± 0.0005 (8/0) | −0.0008 ± 0.0004 (3/0) | −0.0013 ± 0.0003 (4.1σ) | 1.28x | halved but real |
+| stompy | `exhaust_mult: 4` | −0.0015 ± 0.0005 (6/0) | −0.0007 ± 0.0004 (3/0) | −0.0010 ± 0.0003 (3.2σ) | 1.19x | halved but real |
+| kitty | `ladder: single` | −0.0023 ± 0.0009 (12/3) | **−0.0005 ± 0.0012 (8/6)** | −0.0017 ± 0.0007 (2.3σ) | 1.18x | **shrank to a null on held-out** |
+| fluct | `cap` | −0.0010 ± 0.0004 (4/0) | **+0.0000, 0/0 games changed** | **NOT REPRODUCED** | 1.02x | **reject** |
+| melira | `ladder: single` | +0.0032 ± 0.0034 (100/121) | +0.0018 ± 0.0043 (93/108) | +0.0027 ± 0.0027 (1.0σ) | 0.90x | null both times (contingency, §6) |
 
-cgiving `nocap` points **against** ONE DEPTH: Creature Giving measurably prefers the full ladder.
+**Only cgiving `nocap` survives as a clean, replicated trade.** Notes on the rest:
+
+* **fluct `cap` is dead.** The training effect was 4 changed games out of 4,000; on held-out seeds
+  **not one game of 4,000 changed** while costing 1.8% more units. Do not adopt.
+* **kitty `single` did not hold.** You had leaned toward adopting it on the play-settings number, but
+  held-out is −0.0005 ± 0.0012 (0.4σ, 8 better / 6 worse) at 1.19x units. The pooled 2.3σ is
+  driven entirely by the training half. **My recommendation is now: do not adopt** — but this is your
+  call, and it reverses the lean you expressed, so I have flagged it rather than assumed it.
+* **`exhaust_mult` halved on both decks** but stays significant pooled (4.1σ / 3.2σ) at 1.19–1.28x
+  units. It is monotonic in the dial (2 → 4 buys more for more) and **no deck uses it**. Still a real
+  option, just a dearer one than the first screen suggested.
+
+cgiving `nocap` points **against** ONE DEPTH: Creature Giving measurably prefers the full ladder,
+and it is the one trade that replicated precisely.
 
 ## 5. Melira — what tomorrow's mulligan gen depends on
 
@@ -245,6 +256,28 @@ Consequences that already bit us:
 * **`escalation_r` necessity as a standalone per-deck value.** A prior 120k-game A/B moved only
   Goblins (74 → 240). Left alone per "r is probably okay" — and §1 suggests FIT retires it anyway.
 * **Unconditional frac** (all depths, not just `target_depth`) — see §3.
-* **Melira `single` on held-out seeds.** Training +0.0032 ± 0.0034 (100/121) at 0.905x is a churny
-  null. Not run because Melira ships the ladder regardless, but it is the number to get if ONE
-  DEPTH is forced on Melira before its crossover is fixed.
+* ~~Melira `single` on held-out seeds~~ — **now measured** (§4): +0.0018 ± 0.0043 held-out,
+  pooled **+0.0027 ± 0.0027 (1.0σ)** at 0.90x units. So forcing one-depth-via-FIT on Melira is
+  roughly neutral and ~10% cheaper, versus +0.0208 for the cold-predictor `cap`. That is the
+  contingency number if ONE DEPTH is forced before the crossover is regenerated.
+
+## 10. Rebaseline scope, if you adopt
+
+All ten decks under discussion are in **all three** suite tiers (smoke 40 decks, regression 27,
+overnight 27), each at depths 0/3/5. So any adoption needs GT re-accepted. The scope differs by key,
+because of the activation tiers in §8:
+
+* **`ladder`** is applied **unconditionally at load** (tier 1), so `ladder: single` changes play at
+  **d3 as well as d5**. That is exactly why `hind3 single` moved (+0.0125 ± 0.0023) while play-depth
+  hinata improved. Expect d3 *and* d5 cases to move; d0 has no search and should be untouched.
+* **`escalation_fresh_frac`** is `vp_here`-gated, so it changes play only where
+  `lookahead_depth == target_depth` — the **d5 cases only** for a target_depth-5 deck, with d0/d3
+  unchanged. For Melira specifically, the `en` control is byte-identical 16/16 on two seed sets, so
+  enabling the block to reach frac moves nothing by itself.
+
+Predicted from the activation rules, not measured — worth confirming against the first rebaseline
+diff rather than trusting.
+
+**The plan-cache global pool (commit `e839f489`) is already validated against the suite:** smoke is
+80/80 with the per-game audit reporting **0 of 80 configs changed, 0 play-changed**. It is
+result-neutral and needs no rebaseline.
