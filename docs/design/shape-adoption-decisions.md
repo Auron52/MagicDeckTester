@@ -378,3 +378,58 @@ together as-is: they trade a large cost win for real quality on five decks.
 
 Note the correlation with the stale flag is imperfect (fivecolour lost quality without the flag;
 fluct/stompy/th improved with it), so this is table MIS-CALIBRATION generally, not simply age.
+
+### 11b. Attribution: it is LAZY-R that wins, not the crossover gate
+
+Three arms, same decks, same seeds, `ship` vs `single`: ungated / lazy-R only / both gates. Then
+lazy-R re-run on held-out seeds (base 9940000). 1,920 jobs, 480,000 games total.
+
+**Lazy-R alone is the win, and it replicates precisely:**
+
+| deck | ungated | lazy-R train | lazy-R held-out | **pooled** | units |
+|---|---|---|---|---|---|
+| hinata | −0.0082 ± 0.0025 | −0.0128 ± 0.0026 | −0.0125 ± 0.0024 | **−0.0126 ± 0.0018** (7σ) | 1.17x |
+| fivecolour | −0.0055 ± 0.0011 | −0.0055 ± 0.0011 | −0.0083 ± 0.0017 | **−0.0063 ± 0.0009** (7σ) | 1.00x |
+| cgiving | −0.0030 ± 0.0018 | −0.0058 ± 0.0020 | −0.0065 ± 0.0024 | **−0.0061 ± 0.0015** (4.1σ) | 1.25x |
+| kitty | −0.0023 ± 0.0009 | −0.0030 ± 0.0008 | −0.0040 ± 0.0012 | **−0.0033 ± 0.0006** (5.5σ) | 1.09x |
+| auras | −0.0008 ± 0.0004 | −0.0008 ± 0.0004 | −0.0005 ± 0.0003 | −0.0006 ± 0.0003 | 1.13x |
+| **melira** | +0.0032 ± 0.0034 | +0.0127 ± 0.0035 | +0.0125 ± 0.0036 | **+0.0126 ± 0.0025** | 0.88x |
+
+Ten decks are `0/0` — not one game of 4,000 changed — and their cost improved anyway: breaching
+4.65x → 1.28x, knights 1.49x → 1.07x, slivers 1.44x → 1.03x, goblins 1.43x → 0.96x, stompy
+1.31x → 1.06x, burn 1.33x → 1.13x, minotaur 0.97x → 0.90x, th 1.06x → 0.97x.
+
+**Why deferring a calibration IMPROVES quality:** it stops stealing the probe's budget for work that
+may never be needed, so the probe commits deeper and the lines are better. That is a real effect,
+not an artifact — and it is the same "don't spend leaf entries that are not valuable" principle,
+applied to the calibration's own d1 rollout.
+
+**This resolves the Creature Giving counterexample of §6.** FIT + lazy-R scores **−0.0061 ± 0.0015**
+against the full ladder's −0.0045 ± 0.0012. The memo-priming case we thought needed an
+anytime-climbing single pass is answered by not pre-paying for R. Cost is still 1.25x vs the ladder's
+1.13x, so it is a quality win, not a domination.
+
+**The crossover gate should NOT be adopted.** It is strictly worse than lazy-R alone on every deck
+where FIT wins (fivecolour −0.0063 → +0.0025; cgiving −0.0061 → +0.0065; hinata −0.0126 → −0.0037;
+kitty −0.0033 → +0.0003; melira +0.0126 → +0.0248). It buys the last of breaching's cost
+(1.28x → 1.00x) by turning FIT off, and pays for it with real quality elsewhere. Keep the flag,
+default OFF, as the instrument that proved the tables are miscalibrated.
+
+**Standing after all of this — FIT + lazy-R vs the ladder, on the 8 decks the ladder still owns:**
+
+| | decks |
+|---|---|
+| FIT **dominates** (quality ≥, cost ≤) | dragons (0/0 @ 0.73x), minotaur (0/0 @ 0.90x), fluct (−0.0001 @ 0.97x) |
+| quality gain at a cost | kitty (−0.0033 @ 1.09x) |
+| fails on COST only | breaching (0/0 @ 1.28x), critter (0/0 @ 1.29x) |
+| fails on QUALITY | **melira** (+0.0126 @ 0.88x) |
+| parity | mirrorwing (−0.0005 @ 1.01x) |
+
+So the user's "the ladder should always be dominated" now holds or is neutral on 19 of 20 decks, with
+**Melira the single genuine holdout** — and note its mechanism is still not pinned down: *every* FIT
+variant loses there (ungated +0.0032, lazy-R +0.0126, gated +0.0248), yet the ladder wins, so it is
+not simply "FIT ignores the crossover". That is the open question for the morning.
+
+**Caveat on scope:** no deck currently ships `ladder: single`, so `MTG_ESC_FIT_LAZY_R` is inert in
+production today. It is a prerequisite that makes FIT worth adopting, not a standalone production
+gain.
