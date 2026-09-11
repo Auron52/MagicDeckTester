@@ -2984,8 +2984,23 @@ inline std::pair<int,int> ComputeLordBonus(
     // source is not an IsLordPermanent (its static power_bonus is 0), so it is absent from the
     // caller's pre-filtered controlled_lord_idx list and must be scanned separately. The bonus is
     // SELF-INCLUSIVE ("Minotaurs you control", not "other"), so there is no self-exclusion here.
-    // The scan is skipped entirely unless the state actually holds such a permanent, so every
-    // deck without one pays a single bool test per call and is byte-identical.
+    //
+    // GUARDED BY THE CARD DATA'S OWN CEILING. The comment here used to claim the scan was "skipped
+    // entirely unless the state actually holds such a permanent" -- it was not; the walk ran
+    // unconditionally over the whole battlefield, LookupCached per controller-owned permanent,
+    // on every ComputeLordBonus call, for a clause exactly ONE card in cards.json carries
+    // (Neheb, the Worthy, threshold 1). Measured (callgrind 2026-09-11) at ~1.8% of a
+    // KittyEquipment in-game run, and ComputeLordBonus is the single largest caller of
+    // LookupCached on every deck profiled.
+    //
+    // Every iteration below ends in `if (hand_size > hand_size_anthem_max) continue;`, so when the
+    // controller's hand exceeds the LARGEST hand_size_anthem_max in the loaded card data, no
+    // permanent can pass and the walk is provably a no-op. MaxHandSizeAnthemMax() is that bound:
+    // a derived constant of cards.json (-1 when no card has the clause at all), refreshed by
+    // RebuildInternedIndex and immutable during play. Nothing about the deck or the game state is
+    // assumed -- only what the process loaded -- so this is byte-identical by construction.
+    if (static_cast<int>(state.players[controller_index].hand.size())
+        <= CardDatabase::Instance().MaxHandSizeAnthemMax())
     {
         const std::size_t hand_size = state.players[controller_index].hand.size();
         for (const Permanent& src : battlefield)

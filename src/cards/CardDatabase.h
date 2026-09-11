@@ -2208,6 +2208,19 @@ public:
         return it == m_by_name_ptr.end() ? nullptr : it->second;
     }
 
+    // Largest CardParams::hand_size_anthem_max over every loaded definition (-1 = no card has a
+    // conditional hand-size anthem at all). A pure DERIVED CONSTANT of the loaded card data,
+    // refreshed by RebuildInternedIndex at the end of every LoadFromJson/Register and immutable
+    // during play.
+    //
+    // It exists for ComputeLordBonus (core/SpellEffects.h), whose conditional-anthem pass walked
+    // the WHOLE battlefield -- LookupCached per permanent -- on every call, for a clause exactly
+    // one card in cards.json carries (Neheb, the Worthy, threshold 1). Every iteration of that
+    // walk ends in `if (hand_size > sd->params.hand_size_anthem_max) continue;`, so when the
+    // controller's hand is larger than this maximum, NO permanent can pass and the walk is
+    // provably a no-op. Measured (callgrind 2026-09-11) at ~1.8% of a KittyEquipment in-game run.
+    int MaxHandSizeAnthemMax() const { return m_max_hand_anthem; }
+
     bool IsImplemented(const std::string& name) const;
 
     // Returns all registered card names — used by the analyzer to check coverage.
@@ -2241,6 +2254,7 @@ private:
     // Rebuilt at the end of every LoadFromJson/Register, so it is complete and IMMUTABLE during
     // play (values point into m_cards nodes, which never move). Lock-free reads are safe.
     std::unordered_map<const std::string*, const CardDefinition*> m_by_name_ptr;
+    int m_max_hand_anthem = -1;   // see MaxHandSizeAnthemMax(); maintained by RebuildInternedIndex
     void RebuildInternedIndex();
 
     static CardDatabase s_instance;   // eager singleton storage (see Instance())
