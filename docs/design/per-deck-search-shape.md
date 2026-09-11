@@ -277,7 +277,7 @@ for ship, escnl and nl_sres on Melira 802768 with and without the caps.
 The coverage caveat above ("a deck that locks d6 should be re-screened at d6 before its row is trusted")
 is now discharged. The five decks whose locked configuration the 2026-09-10 menu never ran were re-screened
 **on-policy** -- no `--depth`, no `--budget-ms`, no `--ignore-play-profile`, so each deck's own `value_play`
-drives -- with three arms in ONE pooled batch (480 jobs, 32 x 250 games per cell, fresh seeds 7,000,000+):
+drives -- with three arms in ONE pooled batch (480 jobs, 120,000 games: 32 x 250 per cell, fresh seeds 7,000,000+):
 
 * `ship`   -- the deck exactly as committed.
 * `escnl`  -- shape #2: `leaf: "none"` + relaxed alpha, **on the sidecar route** (the deck's tuned
