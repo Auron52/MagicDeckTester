@@ -3472,7 +3472,12 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
         order.push_back(j);
     }
     if (order.empty()) { return true; }
-    const bool _dbg = EnvOn("MTG_DBG_SEQ");
+    // STATIC: this walk is priced per candidate subset, so a live EnvOn() re-walked `environ`
+    // millions of times per game for a tracer nobody has on (callgrind 2026-09-11: the three
+    // MTG_DBG_SEQ reads plus BuildColorFeasibility's MTG_DOMAIN_WIDEN were 1.2-2.3% of an
+    // in-game run's TOTAL instructions). Function-local (not file-scope) so the read still
+    // happens after ApplyHeuristicDefaults, exactly like every other flag in this file.
+    static const bool _dbg = EnvOn("MTG_DBG_SEQ");
     if (_dbg) { std::fprintf(stderr, "[dbgseq] enter n=%zu:", order.size());
                 for (int j : order) { std::fprintf(stderr, " %s", cands[j].card_name.str().c_str()); }
                 std::fprintf(stderr, "\n"); }
@@ -25795,7 +25800,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 if (static_cast<int>(pool.Total()) + aura_bonus < combined.ManaValue())
                 { _ct.label = "ef-aura-scalar"; return false; }
             }
-            if (EnvOn("MTG_DBG_SEQ")) { std::fprintf(stderr, "[dbgseq] gate interacts=%d\n", (int)interacts); }
+            // STATIC for the same reason as the walk's own tracer read (see SubsetPayableSequential):
+            // this rescue is evaluated per candidate subset, and a live EnvOn() is a getenv walk.
+            static const bool s_dbg_seq = EnvOn("MTG_DBG_SEQ");
+            if (s_dbg_seq) { std::fprintf(stderr, "[dbgseq] gate interacts=%d\n", (int)interacts); }
             if (!interacts) { _ct.label = "ef-no-interact"; return false; }
             // Sound scalar ceiling: sequencing realises colours/timing and LIVE discounts, never
             // new total mana -- but a live discount can forgive up to the whole GENERIC part
@@ -25811,7 +25819,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // same division of labour the Hinata generic term relies on.
             if (static_cast<int>((credited ? eff : pool).Total()) + aura_bonus
                 < combined.ManaValue() - combined.generic)
-            { if (EnvOn("MTG_DBG_SEQ")) { std::fprintf(stderr, "[dbgseq] scalar reject\n"); }
+            { if (s_dbg_seq) { std::fprintf(stderr, "[dbgseq] scalar reject\n"); }
               _ct.label = "ef-scalar"; return false; }
             if (SubsetPayableSequential(state, cands, sel)) { exec_feas = 1; }
             else { _ct.label = "ef-walk-fail"; }

@@ -1957,7 +1957,11 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
             && UntapLandBurstNet(state, active, *d) > 0) { return f; }
     }
 
-    const bool widen = EnvOn("MTG_DOMAIN_WIDEN", true);   // mirrors TurnSolver's DomainWidenEnabled
+    // STATIC, like every other flag read in this file: BuildColorFeasibility runs per candidate
+    // subset, so a live EnvOn() here re-walked `environ` on every call -- measured (callgrind
+    // 2026-09-11) at 0.25-0.88% of an in-game run's TOTAL instructions across four decks, for a
+    // value that cannot change inside a process.
+    static const bool widen = EnvOn("MTG_DOMAIN_WIDEN", true);   // mirrors TurnSolver's DomainWidenEnabled
     bool has_multi   = false;
     int  gy_fuel     = -1;   // Deathrite fuel, counted lazily exactly as AvailableManaPool does
 
