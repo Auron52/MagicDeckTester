@@ -127,6 +127,71 @@ which means a high-budget run gets more of the exact, sound search. Paying ~3% m
 shipped budget to buy that is the right side of *"how this scales should always be done based on
 using our budget as well as possible"*.
 
+### ...AND THAT SIZING WAS UNDERPOWERED. Re-done at 40,000 games (2026-09-11)
+
+**The table above is not a plateau, it is a sample too small to see the effect.** Every share <= 0.005
+reads 5.7950 because 200 games of one deck CANNOT resolve a difference that lives at roughly one game
+in a thousand — the same blindness that made the per-deck soundness cost look concentrated in 4 decks
+when it is spread across most of them. Re-sized on 20 decks x 2,000 games, paired against the UNSOUND
+arm on identical seeds (seed base 200000, b20, `test/paired_arms.py`):
+
+| share | delta vs unsound | +/- se | better | worse | sign p | units |
+|---|---|---|---|---|---|---|
+| 0.0002 | -0.0000 | 0.0001 | 6 | 5 | 1.000 | 0.956x |
+| 0.0005 | -0.0001 | 0.0001 | 7 | 5 | 0.774 | 0.959x |
+| 0.001 | +0.0001 | 0.0001 | 6 | 8 | 0.791 | 0.966x |
+| **0.002** | **+0.0002** | 0.0001 | 9 | 15 | **0.307** | 0.975x |
+| 0.005 (shipped) | +0.0008 | 0.0002 | 7 | 36 | 0.000 | 0.982x |
+| 0.01 | +0.0011 | 0.0002 | 8 | 48 | 0.000 | 0.980x |
+| 0.02 | +0.0014 | 0.0002 | 9 | 61 | 0.000 | 0.986x |
+| 0.05 | +0.0016 | 0.0003 | 13 | 72 | 0.000 | 1.000x |
+| 0.10 | +0.0016 | 0.0003 | 14 | 74 | 0.000 | 1.009x |
+| wave off (`split`) | +0.0019 | 0.0003 | 16 | 84 | 0.000 | 1.290x |
+
+Monotone, and it lands the whole ladder: **the soundness cost falls to ZERO around share 0.0005-0.002**,
+where the sound engine is indistinguishable from the unsound one (p >= 0.31) at ~2-4% LESS work.
+Head-to-head on the same 40,000 games, `0.002` beats `0.005` **24 games better / 1 worse** (p<0.001,
+-0.0006 t, 0.99x units).
+
+**The tie-break rule was right; it was applied to a plateau that was an artifact.** Re-applying it to
+the real curve: the no-measurable-cost plateau spans 0.0002-0.002, and the LARGEST value on it is
+**0.002**, so that is the candidate. Going lower buys nothing measurable in quality and only defers
+soundness to a higher budget (the gate closes at budget proportional to `1/share`).
+
+**Lowering the share does NOT reintroduce the failure that started all this.** `hinata gi232` (seed
+6006+232, the game the old unsound reuse made unreachable at ANY budget) returns the sound turn-5 kill
+at EVERY share in 0.0002..0.005 and EVERY budget in b20/b80/b320/b1280/b5120/unlimited — byte-identical
+digests down the whole grid. That is the acceptance test, and share does not move it.
+
+### Held-out confirmation of the re-sizing, and the candidate: `share = 0.001`
+
+The curve above is fitted on seed base 200000, so it was re-measured on a fresh **seed base 300000**
+(20 decks x 2,000 games, arms `unsound` / 0.005 / 0.002 / 0.001). Pooled over BOTH bases = 80,000
+paired games per arm:
+
+| share | delta vs unsound | sign p | units | head-to-head vs 0.005 |
+|---|---|---|---|---|
+| **0.001** | **+0.0001** | **0.442** | 0.923x | **-0.0005 [-0.0007,-0.0002], 54 better / 19 worse, p<0.001** |
+| 0.002 | +0.0002 | 0.049 | 0.934x | -0.0003 [-0.0005,-0.0001], 35 / 10, p<0.001 |
+| 0.005 (shipped) | +0.0005 | 0.000 | 0.940x | — |
+
+**One result did NOT replicate, and it is the one the training base shouted loudest about.** On seed
+base 200000, `0.002` beat `0.005` **24 games better / 1 worse**; held out it is **11 / 9, p=0.82 — a
+wash**. Per deck the training win was mostly hinata (8/0) and melira (5/0) with zero losses anywhere;
+held out, fivecolour goes 2/6 the other way and cancels it. Treat any single-base head-to-head at this
+effect size as provisional.
+
+`0.001` holds direction on both bases independently (train -0.0007, 32/5; held out -0.0002, 22/14) and
+is decisive pooled. **The pick is therefore `0.001`: the LARGEST share still indistinguishable from the
+unsound engine** (p=0.44 vs 0.049 at 0.002), which is the original convergence tie-break applied to a
+curve that now has enough data to have a shape.
+
+**Why lowering the share is not a soundness concession.** The gate is `twin_units > share x Remaining()`.
+For ANY share > 0, `Remaining() -> inf` drives the threshold to infinity, so reuse vanishes and the
+search converges on the exact answer. Share sets HOW FAST that happens, not WHETHER. Only `share = 0`
+would break it (threshold pinned at 0 => reuse always), which is why the flag must stay strictly
+positive.
+
 ## Why this cannot introduce nondeterminism
 
 Worth stating explicitly, because a mechanism that reads the memo and changes what the search returns
@@ -167,19 +232,77 @@ units:
 | `split` (split keys, no wave) | 4.4242 | +0.0033 | 1.243x |
 | **`shipped` (split keys + wave)** | **4.4225** | **+0.0017** | **0.976x** |
 
-**The soundness cost is +0.0017 avg turns — 0.04% of one turn — and the sound engine is CHEAPER than
-the unsound one it replaced (0.976x units).** 16 of 20 decks are bit-identical to the unsound arm; the
-residual is 4 decks at roughly one game each (stompy +0.0166, minotaur +0.0084, hinata +0.0083, th
-+0.0083) against fivecolour -0.0084, i.e. about 4 game-turns out of 2,400 games.
+**The soundness cost is +0.0017 avg turns — 0.04% of one turn.** 16 of 20 decks are bit-identical to
+the unsound arm; the residual is 4 decks at roughly one game each (stompy +0.0166, minotaur +0.0084,
+hinata +0.0083, th +0.0083) against fivecolour -0.0084, i.e. about 4 game-turns out of 2,400 games.
 
 Read the ladder left to right and it is the story of the whole arc: the naive guard cost +0.0042 at
-**1.56x** the work, split keys took it to +0.0033 at 1.24x, and the wave takes it to +0.0017 at 0.976x
--- below the unsound engine's own cost.
+**1.56x** the work, split keys took it to +0.0033 at 1.24x, and the wave takes it to +0.0017 at 0.976x.
 
-**BEWARE THE NORMALIZATION, because I got this wrong reporting it once.** The suite's "NET" is a SUM
-of per-key deltas over the keys that MOVED; quoting it without the denominator (`+0.0688` over 11
-moved keys of 108) makes the cost look material when the per-deck mean is +0.0017. Same data, and the
-sum over these 20 decks is +0.0332. Always say which one you mean.
+**THE UNITS COLUMN IS TOTAL WORK, AND THE TOTAL IS TWO DECKS.** "The sound engine is cheaper than the
+unsound one" is TRUE units-weighted (0.976x) and MISLEADING unweighted: fivecolour and melira dominate
+the sum, and the MEDIAN deck pays **+12%** for soundness (per-deck mean 1.120x, median 1.116x, worst
+1.424x on critter). Say both. The wave's OWN cost win survives either normalization -- 0.785x weighted,
+0.833x per-deck mean, no deck above 1.000x -- which is why the wave is the part that pays for itself.
+
+**BEWARE THE NORMALIZATION, because I got this wrong reporting it TWICE (once each way).** The suite's
+"NET" is a SUM of per-key deltas over the keys that MOVED; quoting it without the denominator
+(`+0.0688` over 11 moved keys of 108) makes the cost look material when the per-deck mean is +0.0017.
+Same data, and the sum over these 20 decks is +0.0332. Then the units column above, where the
+aggregate flattered the change instead. Always say which one you mean.
+
+## READ THE LADDER PAIRED -- the mean is a summary, not the test
+
+`test/paired_arms.py <wins_dir> --base unsound --arm shipped` compares the two arms GAME BY GAME (both
+arms play the same seeds, so it is a paired design). On the 2,400-game run above:
+
+**6 of 2,400 games moved AT ALL** -- 5 worse, 1 better, sign-test p=0.22, and the 95% CI on the paired
+mean delta is **[-0.0003, +0.0037]**, which INCLUDES ZERO. So "+0.0017" was never distinguishable from
+noise at that sample size; it is five individual games. A deck-level mean of +0.0083 over 120 games is
+by construction ONE game moving ONE turn, and no mean can tell that from chance.
+
+And the per-game decomposition relocates the question entirely:
+
+| deck | gi | unsound | guard | split | shipped |
+|---|---|---|---|---|---|
+| stompy | 75 | 5 | 6 | 6 | 6 |
+| stompy | 110 | 5 | 6 | 6 | 6 |
+| hinata | 5 | 6 | 7 | 7 | 7 |
+| minotaur | 107 | 4 | 5 | 5 | 5 |
+| th | 12 | 5 | 6 | 6 | 6 |
+| fivecolour | 46 | 6 | 6 | 6 | **5** |
+
+**Every worse game moves at the GUARD/SPLIT step; the wave costs nothing on any of them, and the one
+better game is the wave's doing.**
+
+### The 40,000-game reproduction (seed base 200000, 2026-09-11) — and what it overturned
+
+USER: *"Let's take a look at whether these losses are reproducible on a larger set."* Same design at
+**20 decks x 2,000 games** per arm:
+
+| arm | delta vs unsound | 95% CI | moved | better | worse | sign p | units |
+|---|---|---|---|---|---|---|---|
+| `guard` | +0.0027 | [+0.0020, +0.0033] | 135 | 20 | 115 | <0.001 | 1.558x |
+| `split` | +0.0019 | [+0.0014, +0.0025] | 100 | 16 | 84 | <0.001 | 1.290x |
+| `shipped` (0.005) | **+0.0008** | [+0.0004, +0.0011] | 43 | 7 | 36 | <0.001 | 0.982x |
+| the wave ALONE (shipped vs split) | **-0.0011** | [-0.0016, -0.0007] | 65 | **52** | 13 | <0.001 | **0.761x** |
+
+Three corrections fall out, and all three are about SAMPLE SIZE:
+
+1. **The per-deck concentration was an artifact.** minotaur went +0.0084 -> **exactly 0.0000**, stompy
+   +0.0166 -> +0.0025, hinata +0.0083 -> +0.0040, th +0.0083 -> +0.0020; meanwhile creature_giving,
+   melira, mirrorwing, antilife and kitty — all flat 0.0000 at 120 games — now show losses. It is a
+   thin ~1-in-1,000 rate across MOST decks, not 4 bad decks. No deck survives multiple-comparison
+   correction (best raw p = 0.031 over 20 decks).
+2. **The cost is HALF what was reported: +0.0008, not +0.0017.** Regression to the mean, exactly as
+   that CI (which included zero) warned.
+3. **The wave is far stronger than the 120-game run could show**: 52 better / 13 worse at 0.761x units,
+   where the small run saw only "better 2 / worse 0" on deck keys.
+
+The claim "the wave costs nothing on the worse games, the fix must be search-side" was drawn from six
+games and **it is wrong**: at 40,000 games the wave's share IS the dial, it just runs the other way
+(see the re-sizing table above — a SMALLER share means MORE reuse, because the threshold it must clear
+is smaller).
 
 ## What it cost in ground truth, attributed honestly
 
