@@ -1,0 +1,136 @@
+{
+  "_comment": [
+    "THE NEGATIVE CONTROL FOR MTG_EDF_GOFF_LIB_DEPTH -- the same board, and no wish to find.",
+    "",
+    "edf_co_22's board exactly (the user's claude_s6_gi5 ordinal 8: Eldrazi Displacer under",
+    "Training Grounds, two Peregrine Drakes, a Cloud of Faeries, three lands worth six, empty",
+    "hand), with every Living Wish REMOVED from the library.  Nothing else differs.",
+    "",
+    "This is what makes the widening safe to ship rather than merely favourable.  Scanning the",
+    "whole library instead of its top twenty must find a finisher route that is REALLY THERE; on a",
+    "board whose library holds no wish and no {T}-less finisher, ScanHandSinks still returns",
+    "nothing, FlickerGoOffCount still sizes nothing, and the button must still be absent -- with",
+    "the lever ON, which is the state this fixture runs in.",
+    "",
+    "It also pins the second half of the same claim: the widening did NOT quietly enable",
+    "FlickerGoOffCount's DRAW-LAND route in human play.  That route ('loop, draw my own library",
+    "down to one card') would size a count on this very board -- Kitchen is a {4},{T} Investigate",
+    "and the loop untaps it every pass -- and it is deliberately search-only",
+    "(DrawLandGoOffOn: `if (HumanPlayActive()) { return false; }`), because it prices no kill",
+    "whatsoever.  If it ever leaks into human play this fixture goes red."
+  ],
+  "active_life": 19,
+  "battlefield": [
+    {
+      "controller": 0,
+      "name": "Adarkar Wastes",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Brushland",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Brushland",
+      "name": "Fertile Ground",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Kitchen",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Kitchen",
+      "name": "Overgrowth",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Cloud of Faeries",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Peregrine Drake",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Peregrine Drake",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Eldrazi Displacer",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Training Grounds",
+      "tapped": false
+    }
+  ],
+  "budget_ms": 20,
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "depth": 3,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "expect_combo_off": false,
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 0,
+  "library_top": [
+    "Adarkar Wastes",
+    "Aether Hub",
+    "Aether Hub",
+    "Aether Hub",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Cloud of Faeries",
+    "Cloud of Faeries",
+    "Conservatory",
+    "Conservatory",
+    "Conservatory",
+    "Conservatory",
+    "Eladamri's Call",
+    "Eldrazi Displacer",
+    "Eldrazi Displacer",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Kitchen",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Shivan Gorge",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Training Grounds",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast"
+  ],
+  "on_the_play": true,
+  "opponent_library_size": 49,
+  "opponent_life": 16,
+  "turn": 4
+}

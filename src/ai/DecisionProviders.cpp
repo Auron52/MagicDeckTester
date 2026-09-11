@@ -14188,6 +14188,105 @@ static void ScanBoardSinks(const GameState& s, int controller, FlickerLoop* best
     }
 }
 
+// --- "INFINITE DRAW IS A COLOUR SOURCE" (MTG_COMBO_OFF_DIG_COLOR, DEFAULT OFF) -----------------
+//
+// USER, 2026-09-11: *"Another thing that should be possible for the Blue or Black requirement is
+// drawing into Fertile Ground. If you have infinite draw you can always draw into Fertile Ground
+// and get all the colours you need."*
+//
+// This deck's any-colour mana is a LAND AURA -- Fertile Ground `{1}{G}` and Trace of Abundance
+// `{R/W}{G}`, both `land_aura_produces: []` with `land_aura_extra_mana: 1`, i.e. "one mana of any
+// color" riding its host land's tap. Eight in sixty cards. `comborules::HasColorSource` already
+// counts one that is ON the battlefield (MTG_COMBO_OFF_UB_AURA, Session 15f). The same card one
+// zone away -- in hand, or in the library with a repeatable draw engine live -- was invisible, and
+// that is the identical omission: rule WISH-DRAW's whole premise is that the loop DRAWS ITS DECK,
+// so a card behind a live draw engine is a card the line reaches, exactly as `WishReachesFinisher`
+// already argues for the Living Wish itself.
+//
+// Two consumers, and they MUST move together or the table and the price aim at different cards:
+// the rule table's `UB` ingredient (comborules), and the finisher's cast-colour veto -- which
+// lives in BOTH `ScanHandSinks::consider` (the COUNT sizer) and `comborules::FinishNeedMana` (the
+// display arithmetic). Widening only the ingredient leaves the lever inert, because the sizer then
+// refuses to price the finisher and no go-off plan is ever built. Measured that way first.
+//
+// EXACTNESS, as conditions rather than hope: a repeatable draw source must be live for the LIBRARY
+// half (in hand counts unconditionally, being castable this turn); the board must be able to pay
+// for the Aura itself (`BoardCanPayColors` -- green is this deck's native colour, and a Trace
+// `{R/W}{G}` on a board with neither red nor white is refused); and there must be a HOST, a land
+// this player controls that is not already shrouded, since an Aura spell targets its host
+// (CR 303.4a) and shroud stops that (CR 702.18a). `LandHasShroud` is the same predicate the real
+// host-selection sites consult, so this cannot admit a cast the executor would refuse on legality.
+//
+// DEFAULT OFF, AND THE REASON IS THE EXECUTOR, NOT THE ARITHMETIC. `ApplyBlinkLoop` has exactly
+// three hand-cast sites -- `DeployPipFreeOutletFromHand` (src/core/SpellEffects.h:12272),
+// `ComboFinishFromHand` route 1 (:11653) and route 2 (:11714) -- and every one of them is gated on
+// `IsCreature()` (:12280, :11523). The only code that can ATTACH a land Aura is
+// `ResolveEnchantTarget` (:2547), reachable solely from the ordinary `CastFromHand` resolution
+// (TurnSolver's `apply_one`, EffectHandler), which the go-off apply never enters. So the line the
+// user describes -- dig to a Fertile Ground, cast it on a loop land, then cast the finisher -- is
+// not one this engine can run yet, and firing on it by default would be firing on hope, which is
+// the one thing this table is not allowed to do. `MTG_COMBO_OFF_DIG_COLOR=1` turns it on today
+// (fixture edf_co_24 pins it that way, so it is tested rather than dead code); it should become
+// the default the day a `DeployLandAuraFromHand` sibling of `DeployPipFreeOutletFromHand` exists
+// and is called from inside the iteration loop.
+inline bool EdfDigColorOn()
+{
+    static const bool on = EnvOn("MTG_COMBO_OFF_DIG_COLOR", false);
+    return on;
+}
+
+inline bool EdfDefIsAnyColorLandAura(const CardDefinition& d)
+{
+    return d.params.is_land_aura && d.params.land_aura_produces.empty()
+        && d.params.land_aura_extra_mana > 0;
+}
+
+inline bool EdfDigReachesAnyColorAura(const GameState& s, int c, bool draws)
+{
+    if (!EdfDigColorOn()) { return false; }
+    bool host = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != c || !p.card.IsLand() || LandHasShroud(p, s)) { continue; }
+        host = true;
+        break;
+    }
+    if (!host) { return false; }
+    const auto castable = [&](const CardDefinition* d) {
+        return d != nullptr && EdfDefIsAnyColorLandAura(*d)
+            && BoardCanPayColors(s, c, d->card.m_mana_cost);
+    };
+    const Player& ap = s.players[c];
+    for (const Card& h : ap.hand)
+    { if (castable(CardDatabase::Instance().LookupCached(h))) { return true; } }
+    if (!draws) { return false; }
+    for (const Card& l : ap.library)
+    { if (castable(CardDatabase::Instance().LookupCached(l))) { return true; } }
+    return false;
+}
+
+// How many COLOURED pips of `cost` the board cannot produce today, counting multiplicity. One
+// any-colour Aura hands back ONE wild per host tap, so it can close a shortfall of one and no more
+// -- two would need two Auras, which this deliberately refuses to assume.
+inline int EdfUnpayableColorPips(const GameState& s, int c, const ManaCost& cost)
+{
+    int n = 0;
+    const std::pair<int, Color> pips[] = {
+        { cost.white, Color::White }, { cost.blue,  Color::Blue }, { cost.black, Color::Black },
+        { cost.red,   Color::Red   }, { cost.green, Color::Green } };
+    for (const auto& pc : pips)
+    { if (pc.first > 0 && !BoardCanProduceColor(s, c, pc.second)) { n += pc.first; } }
+    return n;
+}
+
+// The one colour test both the sizer and the display arithmetic ask: can this card's cast be paid,
+// now or after the dig the line is already committed to?
+inline bool EdfCastColorReachable(const GameState& s, int c, const ManaCost& cost, bool dig_aura)
+{
+    if (BoardCanPayColors(s, c, cost)) { return true; }
+    return dig_aura && EdfUnpayableColorPips(s, c, cost) <= 1;
+}
+
 // THE HAND AND THE SIDEBOARD, when the BOARD has no {T}-less sink. The recognizer half of the kill
 // chain (ComboFinishFromHand does the deploying): a finisher held in hand, or one a Living Wish can
 // still fetch, is a real route to cashing the loop, and until now nothing could see it. That gap is
@@ -14217,6 +14316,30 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
     if (!heurarm::Flag(heurarm::EDF_COMBO_FINISH, s_on)) { return; }
 
     const Player& ap = s.players[controller];
+    // Computed ONCE, and gated on a live repeatable draw source rather than assumed. The LIBRARY
+    // half of EdfDigReachesAnyColorAura is only real if something can go and get the card, and
+    // `consider` is called for HAND candidates too -- before this function has established there
+    // is a draw engine at all -- so passing `draws=true` unconditionally would admit a finisher on
+    // the strength of an Aura nothing could ever draw. (Returns false in one branch when
+    // MTG_COMBO_OFF_DIG_COLOR is off, which is the default, so this costs nothing by default.)
+    // LEVER-GATED BEFORE THE WALK, not inside it: ScanHandSinks is called from
+    // RecogniseFlickerLoop, which runs millions of times inside rollout scoring, so an
+    // unconditional extra battlefield walk here would be a real autonomous perf cost for a lever
+    // that is off. With it off this is one static bool read.
+    bool dig_aura = false;
+    if (EdfDigColorOn())
+    {
+        bool board_draws = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != controller) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd && (pd->params.tap_draw_cost.has_value()
+                       || pd->params.tap_investigate_cost.has_value()))
+            { board_draws = true; break; }
+        }
+        dig_aura = EdfDigReachesAnyColorAura(s, controller, board_draws);
+    }
     // `setup` is the mana already committed on the way to this candidate: 0 from hand, the wish's
     // own cost when it has to be fetched first.
     const auto consider = [&](const CardDefinition* d, int setup)
@@ -14227,8 +14350,14 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
         // recognizer and the deploy must agree about WHICH finisher is reachable, or the count is
         // sized for a card the apply will decline to cast. MTG_COMBO_FINISH_COLOR=0 restores both.
         static const bool s_fin_color = EnvOn("MTG_COMBO_FINISH_COLOR", true);
+        // ...and "the board can pay" includes the colour the line is about to DIG for. See
+        // EdfDigReachesAnyColorAura: widening comborules' UB ingredient without widening THIS test
+        // leaves the lever inert, because the sizer then refuses to price the finisher, no
+        // multi-activation plan is built, and `best_any >= 0` means ComboOffPossible is never even
+        // called. `dig_aura` is false unless MTG_COMBO_OFF_DIG_COLOR is on, so this is a no-op by
+        // default and autonomous play never reaches it anyway (the whole test is HumanPlayActive).
         if (s_fin_color && HumanPlayActive()
-            && !BoardCanPayColors(s, controller, d->card.m_mana_cost)) { return; }
+            && !EdfCastColorReachable(s, controller, d->card.m_mana_cost, dig_aura)) { return; }
         const int cast_mv = setup + d->card.m_mana_cost.ManaValue();
         if (d->params.drain_cost.has_value() && d->params.drain_amount > 0)
         {
@@ -14340,7 +14469,47 @@ static void ScanHandSinks(const GameState& s, int controller, FlickerLoop* best,
         if (draw_mv == 0 || mv < draw_mv) { draw_mv = mv; }
     }
     if (draw_mv <= 0) { return; }   // no repeatable draw sink on board: nothing can dig
-    const int lib_cap = std::min<int>(20, static_cast<int>(ap.library.size()));
+    // THE TWENTY-CARD CAP IS A SEARCH ECONOMY, AND ON THE BUTTON'S PATH IT IS A BLINDFOLD
+    // (MTG_EDF_GOFF_LIB_DEPTH, default on, `=0` restores the flat 20).
+    //
+    // The cap's own rationale, six paragraphs up, is about the SEARCH: *"a deeper dig costs more
+    // setup mana than FlickerMaxIterations of any real board's net can bank, and the cap bounds
+    // this scan on the recognizer's hot path."* Both halves stop being true the moment the caller
+    // is the COMBO OFF count sizer. The scan is no longer hot -- it runs once per human main-phase
+    // frame, not once per rollout node -- and "more setup than the loop can bank" is an assumption
+    // about `net`, not a fact: the bank is `avail + FlickerMaxIterations x net` and the dig is
+    // `(i+1) x draw_mv`, so a net-5 board with a 6-mana dig funds a 25-deep wish out of 300 banked
+    // mana with 150 to spare. The cap never priced anything; it just stopped looking.
+    //
+    // WHAT THAT COST, on the user's own `claude_s6_gi5` (saved 2026-09-11, won T4, 71 decisions).
+    // Their mana engine -- Eldrazi Displacer under Training Grounds, Peregrine Drake x2, Cloud of
+    // Faeries, three lands worth six -- is on the battlefield from main ordinal 8, and the
+    // recognizer says so on every frame after it (`ok=1 net=5 refund=6 cost=1`). The Living Wish
+    // sat at library index 24. So for FIFTY-TWO consecutive decisions this scan found no sink,
+    // `FlickerGoOffCount` returned 0, no plan carried a multi-activation blink, and
+    // `EnumerateMainPlans`' `best_any >= 0` short-circuit meant `ComboOffPossible` WAS NEVER
+    // CALLED -- neither the rule table nor the trial apply was ever asked the question. The button
+    // appeared at ordinal 60, when five Clue cracks had pulled the wish to index 19 and it slid
+    // under the cap. Nothing about the board's ability to win changed at ordinal 60; only the
+    // scan's reach did. USER, on why that gap is the metric: *"the sooner the Combo Off line kicks
+    // in the better ... the search should have an easy way to query it and be able to skip a huge
+    // chain of operations."*
+    //
+    // WIDENING IS NOT LOOSENING. The route still PRICES what it finds -- (i+1) draws at the
+    // board's cheapest repeatable draw sink, plus the wish and the finisher casts, all charged as
+    // `hand_setup_mv` -- `FlickerGoOffCount` still has to size an affordable count out of it, the
+    // rule table's `Fundable` (mana, pips) pair still has to clear, and `ApplyBlinkLoop` re-prices
+    // every activation and stops at the first it cannot pay. A deeper wish simply costs more
+    // setup, and the arithmetic already knows how to refuse that.
+    //
+    // Scoped to `for_combo_off`, which requires HumanPlayActive() -- so the SEARCH's own reading of
+    // this route (MTG_EDF_LIB_ROUTE, default off, measured negative twice) keeps its 20-card bound
+    // exactly, and autonomous play, rollouts, GT, the value leaf and the keep tables are
+    // byte-identical by construction.
+    static const bool s_lib_depth = EnvOn("MTG_EDF_GOFF_LIB_DEPTH", true);
+    const int lib_reach = (for_combo_off && s_lib_depth)
+                              ? static_cast<int>(ap.library.size()) : 20;
+    const int lib_cap = std::min<int>(lib_reach, static_cast<int>(ap.library.size()));
     for (int i = 0; i < lib_cap; ++i)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
@@ -14692,11 +14861,61 @@ inline int FlickerMaxIterations()
     return n;
 }
 
+// ...AND THE COMBO OFF BUTTON GETS ITS OWN, BIGGER ONE (MTG_COMBO_OFF_MAX_ITER, default 400;
+// `=0` or `=60` restores the shared ceiling for a one-binary A/B).
+//
+// USER, 2026-09-11: *"with one colourless on board, one draw land on board and a mana producing
+// engine you can always win the game."* Once `MTG_EDF_GOFF_LIB_DEPTH` stopped the sizer being
+// blindfolded past library index 20, the ceiling above became the LAST thing that can make that
+// sentence false. It is not a rules bound -- a net-positive loop is unbounded -- it is a cost
+// bound, and the cost it was chosen against is the SEARCH's, where the same 60 is paid inside
+// every rollout of every game.
+//
+// The user's own seed-16 board is the proof and it is not a corner case: Emiel + Cloud of Faeries
+// on board, Kitchen as the draw land, Adarkar Wastes carrying Fertile Ground + Trace of Abundance,
+// Yavimaya Coast, pool `{G:17 C:2}`, Living Wish somewhere in a 46-card library. Net is **+1** a
+// pass through Emiel and a dig costs **6 a card** (Kitchen's `{4}` Investigate plus the Clue's
+// `{2}`), so the wish is simply deeper than sixty iterations can reach. The rule fired WISH-DRAW,
+// unproven, and the click failed twice. Measured on the tip: `MTG_EDF_MAX_ITER=60` -> does not
+// finish; `=400` -> **WIN T4**; `=1000` -> WIN T4; and the whole replay including the trial apply
+// takes 0.2 s either way. Nothing was broken but the budget.
+//
+// WHY IT CANNOT JUST BE RAISED. `FlickerMaxIterations` feeds `FlickerGoOffCount`, which the SEARCH
+// calls through `BlinkActivationCounts` and `EdfAutoGoOffAfterCasts` on every autonomous turn and
+// inside every rollout. Raising it globally re-prices every go-off the engine plans for itself:
+// ground truth, the value leaf and the keep tables all move. So this ceiling is
+// `HumanPlayActive()`-gated -- false in every autonomous run and inside every `HumanPlaySuppress`
+// scope -- and autonomous play is byte-identical by construction.
+//
+// EVERY CONSUMER MUST USE THE SAME NUMBER or the display and the promise disagree: the count sizer
+// (`FlickerGoOffCount`), the exact (mana, pips) bank (`BankableMana` / `SupplyFor` / `GorgeFundable`)
+// and the cheap lethal projection that decides whether a trial apply is paid for at all
+// (`ExtraLethalDamage` / `ProjectsAlternateWin`). A bank sized at 400 behind a projection still
+// bounded at 60 would show a button and never verify it. The one deliberate exception is
+// `FlickerGoOffCount`'s DRAW-LAND route, which is search-only (`DrawLandGoOffOn` returns false
+// under human play) and keeps the shared ceiling.
+//
+// 400 rather than "as many as it takes": the count is still an EXACT requirement that every route
+// computes and clamps, so on a board that needs 30 this changes nothing at all; it only binds where
+// the requirement genuinely exceeds 60, which is a deep dig plus a 40-50 card deck-out. It is a
+// ceiling on a cost that is already paid lazily -- `ApplyBlinkLoop` re-prices every activation and
+// stops at the first it cannot pay, and a trial that fails is rolled back whole
+// (`MTG_COMBO_OFF_ROLLBACK`), so an over-large ceiling costs time and nothing else.
+inline int FlickerIterationCeiling()
+{
+    static const int co = []() {
+        const char* v = std::getenv("MTG_COMBO_OFF_MAX_ITER");
+        return (v && *v) ? std::atoi(v) : 400;
+    }();
+    if (co > 0 && HumanPlayActive()) { return std::max(co, FlickerMaxIterations()); }
+    return FlickerMaxIterations();
+}
+
 // Iterations needed to bank `want_mana` of surplus, given the loop's per-iteration net.
 static int FlickerIterationsForMana(int want_mana, int net)
 {
     if (net <= 0 || want_mana <= 0) { return 0; }
-    return std::clamp((want_mana + net - 1) / net, 1, FlickerMaxIterations());
+    return std::clamp((want_mana + net - 1) / net, 1, FlickerIterationCeiling());
 }
 
 // MTG_EDF_DRAWLAND_GOFF -- see the draw-land branch below. DEFAULT ON: it more than DOUBLES the
@@ -14825,7 +15044,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
             refund = FlickerTopLandYields(s, me, loop.untaps - 1) + sink_yield;
         }
         if (refund > loop.cost_mv + loop.gorge_cost_mv)
-        { return std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, FlickerMaxIterations()); }
+        { return std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, FlickerIterationCeiling()); }
     }
 
     // THE TWO {T}-LESS SINKS. Sized by MANA rather than by iterations, which is the structural
@@ -14870,7 +15089,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         if (!c_iters_on || pips_needed <= 0) { return 0; }
         pips_needed += loop.hand_setup_mv;
         const long long it = (pips_needed + eff_net_c - 1) / eff_net_c;
-        return static_cast<int>(std::min<long long>(it, FlickerMaxIterations()));
+        return static_cast<int>(std::min<long long>(it, FlickerIterationCeiling()));
     };
     // THE DIG AND THE KILL ARE SEQUENTIAL PHASES, SO THEIR COUNTS ADD (human play only;
     // MTG_EDF_GOFF_PHASES=0 restores the flat max).
@@ -14907,7 +15126,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         const int want = phases_on
             ? std::max({ mana_iters, dig_iters, dig_iters + pip_iters })
             : std::max({ mana_iters, loop.dig_draws, pip_iters });
-        return std::clamp(want, 1, FlickerMaxIterations());
+        return std::clamp(want, 1, FlickerIterationCeiling());
     };
     if (loop.drain_amount > 0 && loop.drain_cost_mv >= 0)
     {
@@ -15030,7 +15249,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         const int want_mana = static_cast<int>(s.players[s.active_player_index].library.size())
                             + d->card.m_mana_cost.ManaValue();
         const int iters = (want_mana + loop.net - 1) / loop.net;
-        return std::clamp(iters, 1, FlickerMaxIterations());
+        return std::clamp(iters, 1, FlickerIterationCeiling());
     }
     return 0;   // no way to cash the mana -> no go-off candidate
 }
@@ -16424,6 +16643,25 @@ std::vector<int> EldraziFlickerProvider::BlinkActivationCounts(const GameState& 
         FlickerLoop sized = loop;
         ScanHandSinks(s, source.controller_index, &sized, /*for_human_count_sizing=*/true);
         const int n2 = FlickerGoOffCount(s, sized);
+        // THE SIZING PATH THAT ACTUALLY DECIDES THE BUTTON, and until now it printed NOTHING.
+        // Session 21 carried this as open item 4: `[edf-goff]` above fires from the board-only
+        // recognizer, so on every frame whose count comes from the HAND/LIBRARY route the trace
+        // said `n=0` and stopped -- which reads as "the sizer refused" when the truth may be "the
+        // sizer was never given a sink to price". The two are opposite diagnoses and they were
+        // indistinguishable from outside. `dig=` is how many draws deep the library route had to
+        // go, `setup=` the mana it charged for getting there, and `n2=` what came out.
+        if (dbg)
+        {
+            std::fprintf(stderr,
+                         "[edf-goff-human] t%d src=%s(%d) net=%d net_c=%d lib=%d dig=%d setup=%d "
+                         "drain=%d/%d exile=%d/%d kmax=%d n2=%d\n",
+                         s.turn_number, source.card.m_name.str().c_str(), source.card.m_number,
+                         sized.net, sized.net_c,
+                         static_cast<int>(s.players[source.controller_index].library.size()),
+                         sized.dig_draws, sized.hand_setup_mv,
+                         sized.drain_amount, sized.drain_cost_mv,
+                         sized.exile_cost_mv, sized.exile_c_pips, kmax, n2);
+        }
         if (n2 > kmax) { out.push_back(n2); }
     }
     return out;   // n == 0 (nothing to cash the mana on) falls through to the generic counts
@@ -16599,7 +16837,7 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
         if (loop.refund > loop.cost_mv + loop.gorge_cost_mv
             && startable(loop.cost_mv + loop.gorge_cost_mv))
         {
-            const long long dmg = static_cast<long long>(FlickerMaxIterations()) * loop.gorge_dmg;
+            const long long dmg = static_cast<long long>(FlickerIterationCeiling()) * loop.gorge_dmg;
             return dmg > 1000000 ? 1000000 : static_cast<int>(dmg);
         }
     }
@@ -16617,7 +16855,7 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
         // projection never claims a kill the deploy would have eaten.
         if (loop.net > 0 && startable(loop.cost_mv + per + loop.hand_setup_mv))
         {
-            const long long bank = static_cast<long long>(FlickerMaxIterations()) * loop.net
+            const long long bank = static_cast<long long>(FlickerIterationCeiling()) * loop.net
                                  - loop.hand_setup_mv;
             long long acts = bank > 0 ? bank / per : 0;
             // ...AND THE DRAIN'S {C} PIP HAS ITS OWN BUDGET. Total mana is not the binding
@@ -16634,7 +16872,7 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
             if (s_c_budget && loop.drain_c_pips > 0)
             {
                 const long long c_bank =
-                    static_cast<long long>(FlickerMaxIterations()) * loop.net_c;
+                    static_cast<long long>(FlickerIterationCeiling()) * loop.net_c;
                 const long long c_acts = c_bank > 0 ? c_bank / loop.drain_c_pips : 0;
                 acts = std::min(acts, c_acts);
             }
@@ -16692,7 +16930,7 @@ bool EldraziFlickerProvider::ProjectsAlternateWin(
     // the zone. Below that it is a clock, not a kill, and the ordinary search can price it.
     const long long cards = static_cast<long long>(s.players[1 - s.active_player_index].library.size());
     const long long need  = cards * loop.exile_cost_mv + loop.hand_setup_mv;
-    if (need > static_cast<long long>(FlickerMaxIterations()) * loop.net) { return false; }
+    if (need > static_cast<long long>(FlickerIterationCeiling()) * loop.net) { return false; }
     // The exile's {C} pip has its own budget, exactly as the drain's does above: emptying the zone
     // needs `cards` colourless pips, and only `net_c` of one is bankable per iteration.
     static const bool s_c_budget_env = EnvOn("MTG_EDF_C_BUDGET", true);
@@ -16700,7 +16938,7 @@ bool EldraziFlickerProvider::ProjectsAlternateWin(
     if (s_c_budget && loop.exile_c_pips > 0)
     {
         const long long c_need = cards * loop.exile_c_pips;
-        if (c_need > static_cast<long long>(FlickerMaxIterations()) * loop.net_c) { return false; }
+        if (c_need > static_cast<long long>(FlickerIterationCeiling()) * loop.net_c) { return false; }
     }
     return true;
 }
@@ -16911,6 +17149,47 @@ inline bool HasRedSource(const GameState& s, int c)
     return HasColorSource(s, c, kR, 1, /*aura_wild_counts=*/true);
 }
 
+// INFINITE DRAW *IS* A COLOUR SOURCE (MTG_COMBO_OFF_DIG_COLOR, default on, `=0` restores the
+// board-and-pool-only reading).
+//
+// USER, 2026-09-11: *"Another thing that should be possible for the Blue or Black requirement is
+// drawing into Fertile Ground. If you have infinite draw you can always draw into Fertile Ground
+// and get all the colours you need."* And: *"So, the requirements for the combo are actually
+// relatively easy to meet."*
+//
+// This deck's any-colour mana is a LAND AURA -- Fertile Ground `{1}{G}` and Trace of Abundance
+// `{R/W}{G}`, both `land_aura_produces: []` with `land_aura_extra_mana: 1`, i.e. "one mana of any
+// color" riding the host land's tap. Eight of them in sixty cards. `HasColorSource` already
+// counts one that is ON the battlefield (MTG_COMBO_OFF_UB_AURA, Session 15f, which is what made
+// the user's own `claude_s1_gi0` turn-3 kill offerable). The same card one card deeper -- in hand,
+// or in the library with a repeatable draw engine live -- was invisible, and that is the identical
+// omission one zone over: rule WISH-DRAW's whole premise is that the loop DRAWS ITS DECK, so a
+// card in the library behind a live draw engine is a card the line reaches, exactly as
+// `WishReachesFinisher` already argues for the Living Wish.
+//
+// EXACTNESS, stated as conditions rather than hope:
+//   * `draws` -- a repeatable draw source must be live, or the library is unreachable. In HAND it
+//     counts unconditionally (it is castable this turn), which is `WishReachesFinisher`'s own rule.
+//   * the board must be able to PAY for it (`BoardCanPayColors`) -- green is this deck's native
+//     colour, and a Trace `{R/W}{G}` on a board with neither red nor white is refused here the
+//     same way `FinishNeedMana` refuses an Essence Depleter on a blackless board.
+//   * there must be a HOST: a land this player controls that is not already shrouded. An Aura
+//     spell targets its host (CR 303.4a) and shroud stops that (CR 702.18a), so a board whose only
+//     land already carries a Trace of Abundance cannot take another one. `LandHasShroud` is the
+//     same predicate the real host-selection sites consult, so this cannot admit a cast the
+//     executor would refuse.
+// What it deliberately does NOT charge is the dig itself -- consistent with the rest of this
+// table, whose header states the policy: "deliberately the CHEAPEST possible reading of each path
+// ... because under-counting keeps the display permissive, which is the user's stated preference".
+// The iteration count (`FlickerGoOffCount`) and the trial apply are where the dig is really priced.
+// ONE definition, hoisted above ScanHandSinks so the COUNT SIZER can ask the same question -- see
+// EdfDigReachesAnyColorAura's header for the whole rationale, the exactness conditions and why the
+// lever ships default OFF. This is the rule table's alias for it and nothing more.
+inline bool DigReachesAnyColorAura(const GameState& s, int c, bool draws)
+{
+    return EdfDigReachesAnyColorAura(s, c, draws);
+}
+
 // A DIFFERENT question from ColorlessSourceCount: does the loop's OUTLET carry no {C} pip? Emiel
 // {3} does not, Eldrazi Displacer {2}{C} does (and Training Grounds cannot remove it -- reductions
 // take the generic half first and the one-mana floor keeps the pip).
@@ -17010,7 +17289,7 @@ inline bool GorgeKillLive(const GameState& s, int c, const FlickerLoop& loop)
 inline long long BankableMana(const FlickerLoop& loop)
 {
     return static_cast<long long>(std::max(0, loop.net))
-         * static_cast<long long>(FlickerMaxIterations());
+         * static_cast<long long>(FlickerIterationCeiling());
 }
 
 // --- THE BANK IS TWO NUMBERS, NOT ONE (MTG_COMBO_OFF_EXACT, default on) ------------------------
@@ -17145,7 +17424,7 @@ struct LoopSupply
 inline LoopSupply SupplyFor(const GameState& s, int c, const FlickerLoop& loop, int pin_id = 0)
 {
     LoopSupply o;
-    o.k = FlickerMaxIterations();
+    o.k = FlickerIterationCeiling();
     // THE OUTLET THE LOOP WILL ACTUALLY RUN WITH -- lockstep with FlickerGoOffCount's `eff_net_c`.
     // When ApplyBlinkLoop is going to swap in a pip-free outlet out of hand, this loop's own {C} pip
     // stops being spent and the per-iteration colourless net becomes the refund outright.
@@ -17186,8 +17465,19 @@ inline bool Fundable(const LoopSupply& sup, long long need_mana, long long need_
 // its own cast when it is not on the battlefield yet, plus `setup` (a wish that still has to fetch
 // it). `on_board` prices the activation through EffectiveActivationCost (a Training Grounds is
 // real); off-board it uses the printed cost, which over-pays and so under-admits nothing.
+// What the finisher `d` costs to RUN to a kill from here: activations x per-activation cost, plus
+// its own cast when it is not on the battlefield yet, plus `setup` (a wish that still has to fetch
+// it). `on_board` prices the activation through EffectiveActivationCost (a Training Grounds is
+// real); off-board it uses the printed cost, which over-pays and so under-admits nothing.
+//
+// `dig_aura` is DigReachesAnyColorAura's answer, threaded through because the colour veto below
+// and that predicate have to agree: if the line will draw a Fertile Ground and cast it, then the
+// Dimensional Infiltrator's `{1}{U}` IS payable and vetoing it here would re-impose the very
+// blindness MTG_COMBO_OFF_DIG_COLOR removes one layer up. It buys exactly ONE colour, which is
+// what one Aura hands back.
 inline long long FinishNeedMana(const GameState& s, int c, const CardDefinition* d,
-                                bool on_board, long long setup, long long* out_pips = nullptr)
+                                bool on_board, long long setup, long long* out_pips = nullptr,
+                                bool dig_aura = false)
 {
     if (out_pips) { *out_pips = 0; }
     if (d == nullptr) { return -1; }
@@ -17198,7 +17488,7 @@ inline long long FinishNeedMana(const GameState& s, int c, const CardDefinition*
     // colour-blindness MTG_COMBO_FINISH_COLOR fixed in the deploy; the rule table has to agree with
     // it or the two aim at different cards. Only for a finisher NOT yet in play: one already on the
     // battlefield has had its cast paid, and its activation pips are {C}, which C1 covers.
-    if (!on_board && !BoardCanPayColors(s, c, d->card.m_mana_cost)) { return -1; }
+    if (!on_board && !EdfCastColorReachable(s, c, d->card.m_mana_cost, dig_aura)) { return -1; }
     // The ACTIVATION, priced through the same reduction the payer applies when the card is already
     // in play. `out_c` is that activation's {C} PIP count, which is the second resource the go-off
     // is bound by and the one no mana value can express: Essence Depleter's drain and Dimensional
@@ -17242,13 +17532,13 @@ inline long long FinishNeedMana(const GameState& s, int c, const CardDefinition*
 // `judge` returns "this path is fundable"; `MTG_COMBO_OFF_BANKABLE=0` passes everything.
 template <typename Judge>
 inline bool AnyFinishFundable(const GameState& s, int c, int where /*0=bf,1=hand,2=wish*/,
-                              const Judge& judge)
+                              const Judge& judge, bool dig_aura = false)
 {
     bool any = false;
     const auto take = [&](const CardDefinition* d, bool on_board, long long setup) {
         if (any) { return; }
         long long pips = 0;
-        const long long n = FinishNeedMana(s, c, d, on_board, setup, &pips);
+        const long long n = FinishNeedMana(s, c, d, on_board, setup, &pips, dig_aura);
         if (n >= 0 && judge(n, pips)) { any = true; }
     };
     if (where == 0)
@@ -17374,7 +17664,24 @@ bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller
     const bool D  = HasRepeatableDrawSource(s, controller);
     const int  nC = ColorlessSourceCount(s, controller);
     const bool C1 = nC >= 1, C2 = nC >= 2;
-    const bool UB = HasBlueOrBlackSource(s, controller);
+    // AURA -- "if you have infinite draw you can always draw into Fertile Ground and get all the
+    // colours you need" (USER, 2026-09-11). See DigReachesAnyColorAura. It widens UB (the gate on
+    // three of the five rows) and the finisher's own cast-colour veto in FinishNeedMana, which
+    // have to move together or the table and the price aim at different cards.
+    //
+    // DEFAULT OFF, AND THE REASON IS THE EXECUTOR, NOT THE ARITHMETIC. `ApplyBlinkLoop` has
+    // exactly three hand-cast sites -- DeployPipFreeOutletFromHand (an outlet),
+    // ComboFinishFromHand route 1 (a {T}-less finisher), route 2 (a wish) -- and every one of
+    // them is gated on `IsCreature()` (src/core/SpellEffects.h:12280, :11523). The only code that
+    // can attach a land Aura is ResolveEnchantTarget, reachable solely from the ordinary
+    // CastFromHand resolution (TurnSolver's `apply_one`, EffectHandler), which the go-off apply
+    // never enters. So a line that has to DRAW a Fertile Ground and cast it mid-loop is not a line
+    // this engine can run yet, and firing on it would be firing on hope -- the one thing this
+    // table is not allowed to do. Turning it on is `MTG_COMBO_OFF_DIG_COLOR=1`, and it should
+    // become the default the day a `DeployLandAuraFromHand` sibling of
+    // DeployPipFreeOutletFromHand exists and is called from the iteration loop.
+    const bool AURA = DigReachesAnyColorAura(s, controller, D);
+    const bool UB = HasBlueOrBlackSource(s, controller) || AURA;
     const bool E  = EmielInPlay(s, controller);
     const bool W  = WishReachesFinisher(s, controller, D);
 
@@ -17406,7 +17713,7 @@ bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller
         return s_exact ? Fundable(sup, need, pips) : (need <= bank);
     };
     const auto finish = [&](int where)
-    { return AnyFinishFundable(s, controller, where, affords); };
+    { return AnyFinishFundable(s, controller, where, affords, AURA); };
 
     if (GorgeKillLive(s, controller, loop)
         && (!s_bankable

@@ -1,0 +1,130 @@
+{
+  "_comment": [
+    "THE USER WAS RIGHT AND THE ENGINE WAS WRONG: THIS BOARD WINS. It needs 158 iterations.",
+    "",
+    "(Renamed 2026-09-11 from edf_co_10_seed9_t4_thin_loop_absent.json, which asserted the",
+    "opposite. The rename is the finding, so the old name is recorded here rather than dropped.)",
+    "",
+    "USER, 2026-09-10, on a clicked Combo Off that did not finish: 'Seed 9: Combo Off failure ...",
+    "Note that I was later able to Combo off, but it didn't work here.' Their T4 board is four",
+    "lands -- Kitchen 1+2 (Overgrowth) = 3, Conservatory 1+1 (Wild Growth) = 2, Conservatory 1,",
+    "Mariposa 1 -- with Cloud of Faeries (untaps TWO) and Emiel ({3} a blink), and a Living Wish",
+    "ten cards down a 45-card library.",
+    "",
+    "TWO SESSIONS TOLD THEM IT COULD NOT BE DONE, AND BOTH DERIVATIONS WERE CAP-BOUND.",
+    "",
+    "  * Session 14c/15b (MTG_COMBO_OFF_BANKABLE): 'a pass refunds 4 against a cost of 3, net +1,",
+    "    and ApplyBlinkLoop is capped at FlickerMaxIterations = 60, so that loop is worth 60 mana,",
+    "    total -- while the deck-out alone wants ~100.' Every term of that is correct except the",
+    "    60, which is not a property of the board.",
+    "  * Session 19 (MTG_COMBO_OFF_EXACT) went further and called it a PROOF: with the bank as a",
+    "    (mana, pips) pair, 'fifty pips forces a >= 49, giving 7 + 49x1 + 11x2 = 78 mana against",
+    "    104. Short under EVERY schedule.' That arithmetic is also right -- and every one of its",
+    "    three terms is multiplied by k = 60. It proved the board unwinnable IN SIXTY ITERATIONS,",
+    "    and then the word 'sixty' fell out of the sentence.",
+    "",
+    "With MTG_COMBO_OFF_MAX_ITER (default 400, human play only) the same board is offered, and",
+    "the trial apply WINS: 'blink Cloud of Faeries x158 -- COMBO OFF: wins this turn' [WISH-DRAW].",
+    "The independent re-derivation this harness runs -- a fresh re-apply through the public",
+    "TurnSolver::ApplyPlan, not a re-read of the gate's own flag -- also kills the opponent.",
+    "",
+    "THE LESSON, WRITTEN HERE BECAUSE IT IS WHERE IT WILL BE READ NEXT: a refusal derived from an",
+    "engine BUDGET is not a statement about the position. Both sessions called their result a",
+    "proof and it was a measurement of the cap. The cap was chosen against the SEARCH's cost, and",
+    "the button had been silently paying the search's budget ever since.",
+    "",
+    "ITS OWN NEGATIVE CONTROL, which is what keeps this from being a rule that stopped checking:",
+    "  CO_ENV='MTG_COMBO_OFF_MAX_ITER=60' bash test/combo_off_check.sh",
+    "reproduces the old behaviour exactly -- 'x60 -- COMBO OFF (NOT PROVEN)', apply does not win --",
+    "so the fixture fails, and it is the only one that does besides edf_co_26.",
+    "",
+    "The boards that must stay ABSENT are unaffected and still are: edf_co_3 (no {C} source at",
+    "all), edf_co_4 (a Displacer whose single {C} the blink itself eats, net_c 0), edf_co_12 (a",
+    "two-untap Gorge board that makes no red in the set the untap restores), edf_co_23 (no wish",
+    "anywhere in the library), edf_co_25 (no any-colour Aura to dig to). None of those is a budget",
+    "refusal -- each is a resource the board does not have at any iteration count, which is",
+    "exactly the distinction this fixture's old comment failed to draw."
+  ],
+  "_library_comment": [
+    "A Living Wish ten cards down is what makes this fixture REPRODUCE rather than merely pass.",
+    "Rule WISH-DRAW's W counts a wish still in the library (the draw engine can go and get it), and",
+    "the go-off COUNT is sized by ScanHandSinks' library route, which only scans the top 20. With a",
+    "filler-only library the button is absent for the WRONG reason -- no wish at all -- and the",
+    "fixture would pass without testing anything. With this, the pre-fix binary offers exactly what",
+    "the user saw: 'blink Cloud of Faeries x60 -- COMBO OFF [WISH-DRAW]', unverified, and the apply",
+    "does not win."
+  ],
+  "active_life": 20,
+  "battlefield": [
+    {
+      "controller": 0,
+      "name": "Conservatory",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Kitchen",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Conservatory",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Mariposa Military Base",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Conservatory",
+      "name": "Wild Growth",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Kitchen",
+      "name": "Overgrowth",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Cloud of Faeries",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Emiel the Blessed",
+      "tapped": false
+    }
+  ],
+  "budget_ms": 20,
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "depth": 3,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "expect_combo_off": true,
+  "hand": [
+    "Eldrazi Displacer"
+  ],
+  "library_filler": "Forest",
+  "library_size": 45,
+  "library_top": [
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Living Wish"
+  ],
+  "on_the_play": false,
+  "opponent_library_size": 50,
+  "opponent_life": 20,
+  "turn": 4
+}

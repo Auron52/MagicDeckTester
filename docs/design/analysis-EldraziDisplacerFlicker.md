@@ -6027,3 +6027,404 @@ gated on the integrated tree; nothing pushed; no generation launched.
    lands (two Gorge boards where the branch should return 5) are one trace line away.
 5. `MTG_COMBO_OFF_FLOAT_ING` and `MTG_COMBO_OFF_PROSPECTIVE` measure inert on both populations and
    ship ON as the correct reading; deleting them is small if inert levers are unwanted.
+
+## Session 22 (2026-09-11): the metric becomes the GAP -- and the "proof" that was a BUDGET
+
+**USER, opening:** *"The key here is that the sooner the Combo Off line kicks in the better. The
+reason is that the search should have an easy way to query it and be able to skip a huge chain of
+operations."* Bounding how early "as early as it correctly can" may be: *"I think it's fair that
+some of the pieces (those to generate mana at least) should be on board first. That said, most of
+the work happens after this point."* And on how easy the rest should be: *"with one colourless on
+board, one draw land on board and a mana producing engine you can always win the game."*
+
+Sessions 14-21 optimised a per-state question -- *on this board, is the button right?* -- and by the
+end of Session 21 it was answered well: offered->wins 87.5% on the sweep, 2 executor failures left
+on 939 true-fidelity states, `combo_off_verified` a perfect oracle. This session changes the
+question. The button being *eventually* right is worth nothing to a search shortcut; what a shortcut
+saves is every decision between the first frame where the kill is provable and the frame where the
+rule says so. **Neither thing that closed that gap was in the rule table.**
+
+### 1. The metric, instrumented -- `test/combo_off_replay_hunt.py --first-fire`
+
+Five marks per game, each an index into that game's own walked main-phase frames (which is exactly
+"decisions"), with `main_ordinal` carried alongside:
+
+* **engine** -- first frame whose board holds the mana engine (outlet + untapper + the lands they
+  cycle: `loop.ok`). The user's floor, and therefore the ORIGIN the gap is measured from. Taken from
+  the python arithmetic oracle, deliberately NOT from the engine, so the measurement does not grade
+  the engine with its own ruler.
+* **sized** -- first frame at which any plan carries a multi-activation go-off.
+* **oracle** -- first frame at which the TRIAL APPLY WINS. Forced by re-walking the identical line
+  with `MTG_COMBO_OFF_RULES=0 MTG_COMBO_OFF_PROJECT=0`: with the table silent `offered_idx` is -1,
+  so `combo_off_offered` can only come from `combo_off_verified`. `PROJECT=0` is needed too, because
+  the cheap lethal projection gates whether a trial is paid for at all.
+* **rule** / **verified** -- first `combo_off` / first `combo_off_verified`.
+
+Both arms are one pooled queue, and the two are asserted to have walked the same line frame-for-frame
+before any gap is reported.
+
+**`sized` is the mark that mattered, and it exists only because the first cut of the report did not
+have it.** "The rule is silent" and "the rule was never asked" look identical from outside and have
+opposite fixes: `EnumerateMainPlans` computes `rules_ok = (best_any >= 0) && ComboOffPossible(...)`,
+so on a frame where `FlickerGoOffCount` sizes nothing, **`ComboOffPossible` is never called** -- and
+neither is the trial, because there is no plan to apply. That population is invisible to both arms.
+
+### 2. Defect one: a twenty-card blindfold (`MTG_EDF_GOFF_LIB_DEPTH`)
+
+The user's `claude_s6_gi5` (saved today, won T4, 71 decisions). Their mana engine -- Eldrazi
+Displacer under Training Grounds, two Peregrine Drakes, a Cloud of Faeries, three lands worth six --
+is on the battlefield from **main ordinal 8**, and `RecogniseFlickerLoop` says so on every frame
+after it (`ok=1 net=5 refund=6 cost=1`). The button first appeared at **ordinal 60**.
+
+Nothing in the rule table was responsible. At ordinal 20 -- pool `{C:11 G:33 W:11}`, three untapped
+lands, empty hand -- the frame enumerates **nine plans, every blink `x=1`**, and `MTG_EDF_GOFF_DEBUG`
+prints `... drain=0/0 exile=0 n=0`. `best_any < 0`, so the table was never consulted, for fifty-two
+consecutive decisions.
+
+**The term:** `ScanHandSinks`' library route -- the one that prices *dig until the Living Wish turns
+up, wish for a finisher, kill* -- scanned `lib_cap = min(20, library.size())`. The wish was at index
+**24**. Five Clue cracks later it was at 19, slid under the cap, and the button appeared. Nothing
+about the board's ability to win changed at ordinal 60; only the scan's reach did.
+
+The cap's own rationale is about the SEARCH -- *"a deeper dig costs more setup mana than
+FlickerMaxIterations of any real board's net can bank, and the cap bounds this scan on the
+recognizer's hot path."* Both halves stop being true on the button's path: the scan runs once per
+human main-phase frame, not once per rollout node, and "cannot bank it" is an assumption about `net`,
+not a fact -- the bank is `avail + k x net`, the dig is `(i+1) x draw_mv`, and a net-5 board with a
+6-mana dig funds a 25-deep wish out of 300 banked mana with 150 to spare. The cap never priced
+anything; it stopped looking.
+
+`MTG_EDF_GOFF_LIB_DEPTH` (default ON, `=0` restores the flat 20) scans the whole library, scoped to
+`for_combo_off`, which requires `HumanPlayActive()` -- so the SEARCH's own reading of this route
+(`MTG_EDF_LIB_ROUTE`, default off, measured negative twice) keeps its 20-card bound exactly. It is a
+widening, not a loosening: the route still charges the dig as `hand_setup_mv`, `FlickerGoOffCount`
+still sizes an affordable count, `Fundable`'s (mana, pips) pair still has to clear, and
+`ApplyBlinkLoop` re-prices every activation.
+
+On s6 ordinal 20 the widened sizer prints `[edf-goff-human] net=5 net_c=1 lib=49 dig=25 setup=155
+drain=1/2 n2=60` and the frame offers `blink Peregrine Drake x60 -- COMBO OFF: wins this turn`,
+**verified**.
+
+### 3. Defect two: sixty iterations is a SEARCH budget, and the button was paying it
+
+**USER's live seed-16 game**, turn 4 ordinal 61 -- a state they said should always win. Emiel and
+Cloud of Faeries out; Adarkar Wastes carrying **both** Fertile Ground and Trace of Abundance (so the
+board makes any colour); Brushland, Kitchen (the `{4}{T}` Investigate), Yavimaya Coast; pool
+`{G:17 C:2}`; a Living Wish ~20 cards down a 46-card library. Cloud untaps two, the best two are
+worth 4, Emiel blinks for `{3}`: **net +1 a pass** against a dig costing **6 a card**. The dig alone
+wants ~120 iterations. The rule fired WISH-DRAW correctly and the click failed twice.
+
+```
+MTG_EDF_MAX_ITER=60  (tip) -> blink Cloud of Faeries x60  -- COMBO OFF (NOT PROVEN); click fails
+                      =400 -> blink Cloud of Faeries x210 -- COMBO OFF: wins this turn.  T4.
+                     =1000 -> the same win; the whole replay takes 0.2 s either way.
+```
+
+**It could not simply be raised.** `FlickerMaxIterations` also sizes `FlickerGoOffCount` for the
+SEARCH -- `BlinkActivationCounts` on every enumeration, `EdfAutoGoOffAfterCasts` on every autonomous
+turn, inside every rollout -- so a global raise re-prices every go-off the engine plans for itself
+and moves GT, the value leaf and the keep tables. **`FlickerIterationCeiling`**
+(`MTG_COMBO_OFF_MAX_ITER`, default **400**, `=60` restores the old behaviour) is
+`HumanPlayActive()`-gated instead.
+
+**Every consumer reads the same number, and that is load-bearing:** the count sizer, the exact
+(mana, pips) bank (`BankableMana` / `SupplyFor` / `GorgeFundable`) and the cheap lethal projection
+that decides whether a trial is paid for at all (`ExtraLethalDamage` / `ProjectsAlternateWin`). A
+bank sized at 400 behind a projection still bounded at 60 would show a button it could never verify.
+The one deliberate exception is the DRAW-LAND route, which is search-only.
+
+#### 3a. THE USER WAS RIGHT AND TWO SESSIONS WERE WRONG -- fixture 10 flips
+
+`edf_co_10_seed9_t4_thin_loop_absent` has pinned `offered=0` since Session 14c. On the new ceiling
+the same board is offered, **verified**, and the harness's independent re-derivation (a fresh
+re-apply through the public `TurnSolver::ApplyPlan`, not a re-read of the gate's flag) kills the
+opponent: `blink Cloud of Faeries x158 -- COMBO OFF: wins this turn` [WISH-DRAW].
+
+That is the user's seed-9 T4 frame, about which they said *"Note that I was later able to Combo off,
+but it didn't work here."* Two sessions told them it could not be done and **both derivations were
+cap-bound**:
+
+* Session 14c/15b: *"net +1, and `ApplyBlinkLoop` is capped at FlickerMaxIterations = 60, so that
+  loop is worth 60 mana, total -- while the deck-out alone wants ~100."* Every term correct except
+  the 60, which is not a property of the board.
+* Session 19 went further and called it a **proof**: *"fifty pips forces a >= 49, giving
+  7 + 49x1 + 11x2 = 78 mana against 104. Short under EVERY schedule."* That arithmetic is right --
+  and all three of its terms are multiplied by `k = 60`. It proved the board unwinnable **in sixty
+  iterations**, and then the word "sixty" fell out of the sentence.
+
+**A refusal derived from an engine BUDGET is not a statement about the position.** The cap was chosen
+against the search's cost, and the button had been paying the search's budget ever since. The fixture
+is renamed `edf_co_10_seed9_t4_thin_loop_needs_headroom.json` and asserts the win, with
+`CO_ENV='MTG_COMBO_OFF_MAX_ITER=60'` reproducing the old behaviour exactly.
+
+**The same staleness was in the harness.** `test/combo_off_sweep.py` hard-coded
+`FLICKER_MAX_ITERATIONS = 60`, so its python oracle would have gone on calling such boards
+`e_absent_unwinnable` and grading a correct offer as a rule defect. It now mirrors
+`FlickerIterationCeiling`, escape hatch and all.
+
+**The boards that must stay ABSENT are unaffected and still are:** `edf_co_3` (no `{C}` source),
+`edf_co_4` (`net_c = 0`), `edf_co_12` (a two-untap Gorge board making no red in the untap set),
+`edf_co_23`, `edf_co_25`. None of those is a budget refusal -- each is a resource the board does not
+have at any iteration count, which is exactly the distinction fixture 10's old comment failed to draw.
+
+#### 3b. What the ceiling buys, and what it costs
+
+s6's ordinal-8 board (net +5, empty pool, 45-card library, wish sunk to depth `d`). Cell = the trial
+apply WINS:
+
+| wish depth | cap 40 | cap 60 | cap 80 | cap 100 | cap 140 | cap 200 |
+|---|---|---|---|---|---|---|
+| 16 drains, d = 0 / 10 | WIN | WIN | WIN | WIN | WIN | WIN |
+| 16 drains, d = 20 | -- | WIN | WIN | WIN | WIN | WIN |
+| 16 drains, d = 30 | -- | -- | WIN | WIN | WIN | WIN |
+| 16 drains, d = 43 | -- | -- | -- | WIN | WIN | WIN |
+| 40 exiles, d = 0 | -- | WIN | WIN | WIN | WIN | WIN |
+| 40 exiles, d = 10 | -- | -- | WIN | WIN | WIN | WIN |
+| 40 exiles, d = 20 | -- | -- | -- | WIN | WIN | WIN |
+| 40 exiles, d = 30 / 43 | -- | -- | -- | -- | WIN | WIN |
+| either, d = 44 | -- | -- | -- | -- | -- | -- |
+
+Depth 44 -- the last card of a 45-card library -- fails at every cap up to 300, and that is not the
+cap: seeing it costs 45 draws out of 45 cards and the loop may not deck its own controller. The
+deepest REACHABLE wish is `library_size - 2`, and it wins at 140 on this board; the thinner seed-16
+board (net +1) answers **400**.
+
+**Cost, paired on the user's own seed-16 line -- identical 66 frames, identical 56 trial applies:**
+
+| | ceiling 60 | ceiling 400 |
+|---|---:|---:|
+| trial apply, per trial | **0.29 ms** | **0.81 ms** |
+| whole walk, enumeration | 72.8 ms | 161.4 ms |
+| `ComboOffPossible`, per call | ~1.5 us | ~1.5 us |
+| the click | NOT PROVEN, fails | **WIN T4** |
+
+~+0.5 ms per trial, free whenever the exact requirement is below 60 (every route computes an exact
+requirement and clamps), and a failed trial is rolled back whole (`MTG_COMBO_OFF_ROLLBACK`), so an
+over-large ceiling costs time and nothing else. **400 rather than a computed budget is a choice:**
+`FlickerGoOffCount` already has the exact dig+kill number in hand at the clamp site, so making the
+ceiling BE that number is a two-line change if the user prefers no constant at all.
+
+### 4. THE NUMBER -- first-fire, ONE binary, both levers `=0` vs default
+
+Marks are `frame/ordinal`; `gapE` = first fire minus engine-on-board, in decisions.
+
+| reference | frames | engine | rule BEFORE | rule AFTER | gapE before | gapE after |
+|---|---|---|---|---|---:|---:|
+| **claude_s6_gi5** | 67 | 14/8 | 66/60 | **14/8** | **52** | **0** |
+| claude_s12_gi11 | 55 | 10/4 | 48/42 | 41/35 | 38 | 31 |
+| claude_s8_gi7 | 68 | 8/4 | 36/32 | 36/32 | 28 | 28 |
+| **claude_s9_gi8** | 54 | 10/4 | 19/13 | **11/5** | 9 | **1** |
+| s1, s2, s3, s5, s7, s10, s11 | -- | -- | = engine | = engine | 0 | 0 |
+| claude_s4_gi3 | 30 | 12/6 | never | never | -- | -- |
+
+| population | metric | before | after |
+|---|---|---:|---:|
+| reference (12 games) | mean gap from engine-on-board | **11.55** | **5.45** |
+| | median / max | 0 / 52 | 0 / **31** |
+| | mean gap to first **VERIFIED** fire | 13.73 | **5.45** |
+| | mean (first fire - first trial win) | -2.00 | **+0.09** |
+| | frames in the gap with NO go-off plan sized | **108** | **18** |
+| autonomous driven (12 seeds) | mean gap from engine-on-board | 2.33 | **0.67** |
+| | mean gap to first VERIFIED fire | 2.67 | **1.00** |
+
+The verified-gap collapsing onto the rule-gap (13.73 -> 5.45, and `first fire - first trial win`
+going from -2.00 to +0.09) is the qualitative change: **the display and the proof now coincide on
+every reference**. Before, s9_gi8 showed an unproven button for 22 decisions before the trial could
+back it; now it shows a proven one at frame 11.
+
+**Per-term attribution of every remaining positive gap** -- this is what stops the number being a
+score:
+
+* **s12 (31) and s8 (28) are not rule defects, and the oracle proves it.** On every frame of both
+  gaps `loop.net_c == 0` -- the Displacer eats one colourless pip a pass and the board's `{C}`
+  sources restore no more -- and the pool is entirely green, so `Fundable`'s pip demand is
+  unsatisfiable under EVERY untap schedule (`c_res <= c_yield` -> refuse). Each fires at exactly the
+  frame `net_c` becomes 1, and **`gapO` is 0 for both**: the trial cannot win any earlier either.
+  This is Session 20's `net_c <= 0` separator behaving as measured.
+* **s9 (1)** is one frame of banking, and it is now VERIFIED at that frame.
+* **s4 never offers, and should not.** Its board is Azorius Chancery + Wild Growth, Brushland,
+  Yavimaya Coast + Trace of Abundance -- and **no repeatable draw source at all**. The user's own
+  rule (`L + D + C1`) is not met, so the library route returns immediately (`draw_mv <= 0`). The
+  hunt independently classes all 30 of its frames `e_absent_unwinnable`; the game was won by combat.
+* **The 18 reference frames still unsized** are the early part of s12/s8's `net_c = 0` stretch.
+
+### 5. Both corpora, one binary, diffed on stable state ids
+
+**`test/combo_off_replay_hunt.sh --quick`, 939 TRUE-FIDELITY states** (real pools, shuffle, exile,
+energy):
+
+| | levers OFF | levers ON |
+|---|---:|---:|
+| `a_offered_wins` | 81 | **84** |
+| `b_executor_failure` | 2 | 2 |
+| `c_missed_offer` | 7 | 7 |
+| `verified` -> wins | 81/81 | **84/84** |
+
+3 states moved `e_absent -> a_offered_wins`, **0 moved the other way**. Per rule: WISH-DRAW 63/62 ->
+66/65; DEPLOYED, IN-HAND, GORGE identical.
+
+**`test/combo_off_sweep.sh`, 1074 states** (synthetic matrix + 12 references + 60 autonomous games):
+
+| | levers OFF | levers ON |
+|---|---:|---:|
+| `a_offered_wins` | 230 | **304** |
+| `b_executor_failure` | 5 | **12** |
+| `c_missed_offer` | 26 | 23 |
+| `c_missed_offer_combat` | 45 | 42 |
+| `e_absent_unwinnable` | 767 | 693 |
+| offered -> wins | 97.9% | 96.2% |
+| **`verified` -> wins** | **230/230** | **304/304** |
+
+**74 states gained a WINNING offer; 7 gained an honest unproven one that loses.** Stated plainly
+because `b` is the metric three sessions drove down: all 7 are `verified=False`, so the button reads
+*"COMBO OFF (NOT PROVEN -- may not finish)"*, and a failed click is rolled back whole. `FALSE FIRE`
+(offered where the arithmetic refutes) is **0** in both arms, and `d_rule_too_loose` stays **0** --
+the display is never wrong in the dangerous direction. `combo_off_verified` remains a perfect oracle
+in both directions on both corpora.
+
+### 6. The search-facing API -- measured, NOT wired
+
+Deliberately not wired into the search: that is a GT-moving decision the user makes. What it would
+cost, from `MTG_PLAY_STEP_TIMING=1` on the user's own `claude_s6_gi5` walk (67 main-phase frames):
+
+```
+[play-timing] frames=67 trials=53 | enum=82.1ms (base=58.2 rules=0.2 project=0.1 trial=23.1) apply=0.5ms
+```
+
+* **`ComboOffPossible(state)` costs ~1.5-3.0 us per call** (0.1-0.2 ms over 67 frames; Session 18's
+  independent measurement on a different line reads 0.6 ms over 268 frames = 2.2 us). Against this
+  deck's 20 ms per-decision budget that is **~0.01% of one decision**. It is O(board + library):
+  `WishReachesFinisher` and the widened `ScanHandSinks` route each walk the library, so a per-state
+  "is a wish still in the library" flag maintained on draw/cast would make it O(board).
+* **One trial apply costs 0.29 ms at ceiling 60 and 0.81 ms at 400** on a real line, rising to
+  3-5 ms on a 45-card dig. That is the price of `verified`, and `verified` is the only sound
+  trigger: `offered` would be wrong 14.6% of the time in autonomous play, while `combo_off_verified`
+  has been right 100% of the time on every population ever measured (268/268, 206/206, 227+80, and
+  now 304/304 + 84/84).
+* **What a shortcut would skip:** `enum` is 82.1 ms over 67 frames = **1.2 ms of plan enumeration
+  per decision** (2.4 ms at the raised ceiling). The rule call is ~1/800th of one frame's
+  enumeration.
+
+**Catalogue §5, recomputed on the same 565 autonomous states over 60 games, one binary:**
+
+| | levers OFF | levers ON |
+|---|---:|---:|
+| offered | 16 (2.8%) | **41 (7.3%)** |
+| of those verified | 16 (100%) | 35 (85.4%) |
+| **FALSE FIRE** (offered, arithmetic refutes) | **0** | **0** |
+| MISSED FIRE (absent, engine wins that turn) | 22 (3.89%) | **19 (3.36%)** |
+| **games with any fire** | **12/60** | **24/60** |
+| at FIRST fire: further main-phase decisions | 0.25 | **0.83** |
+| at FIRST fire: further turns to the engine's own win | 0.25 | **0.62** |
+
+So the work a `verified`-keyed shortcut would skip has **more than tripled**, and it now covers
+**twice as many games**. Read the absolute numbers honestly, though: 0.83 decisions is still small
+**on the autonomous population**, because the autonomous engine assembles and kills inside one turn
+-- it does not hand-blink fifty times. The population where the gap is large is the one a human
+actually sits in: the reference corpus, where it was 52 decisions on s6 alone.
+
+### 7. "Infinite draw is a colour source" -- built, measured, and NOT default-on
+
+**USER:** *"Another thing that should be possible for the Blue or Black requirement is drawing into
+Fertile Ground. If you have infinite draw you can always draw into Fertile Ground and get all the
+colours you need."*
+
+`MTG_COMBO_OFF_DIG_COLOR` implements exactly that: an any-colour land Aura (Fertile Ground `{1}{G}`,
+Trace of Abundance `{R/W}{G}` -- `land_aura_produces: []`, eight in sixty cards) counts toward `UB`
+when it is in hand, or in the library with a repeatable draw source live. Conditions rather than
+hope: the board must be able to pay for the Aura (`BoardCanPayColors`), and there must be an
+unshrouded land to host it (`LandHasShroud` -- an Aura targets its host, CR 303.4a; shroud stops
+that, CR 702.18a).
+
+**It has to move in three places at once, and that is the finding.** Widening only the ingredient
+left the lever completely inert, measured: the finisher's cast-colour veto lives in
+`comborules::FinishNeedMana` *and* in `ScanHandSinks::consider` (the COUNT sizer), and with the sizer
+still refusing to price a finisher whose colour the board lacks, no multi-activation plan is built
+and `best_any >= 0` means the table is never called. One shared helper (`EdfCastColorReachable`) now
+answers for all three.
+
+**It ships DEFAULT OFF, and the reason is the executor, not the arithmetic.** `ApplyBlinkLoop` has
+exactly three hand-cast sites and every one is gated on `IsCreature()`:
+
+| site | casts | gate |
+|---|---|---|
+| `DeployPipFreeOutletFromHand` (SpellEffects.h:12272, called pre-loop at :12635) | a pip-free blink OUTLET | `:12280 !IsCreature()` |
+| `ComboFinishFromHand` route 1 (:11591, deploy :11653) | a `{T}`-less FINISHER | `sink_act_mv :11523 !IsCreature()` |
+| `ComboFinishFromHand` route 2 (:11670, cast :11714) | a WISH | same |
+
+The only code that can ATTACH a land Aura is `ResolveEnchantTarget` (:2547), whose two callers
+(`TurnSolver`'s `apply_one` :21593, `EffectHandler` :288) are both on the ordinary `CastFromHand`
+resolution path, which the go-off apply never enters. `DeployCreatureFromHand` cannot substitute: it
+builds a bare `Permanent` and never sets `aura_attached_to`, and both `LandAuraBonus` and
+`LandAuraColorMask` match on that field first, so an aura pushed that way makes zero mana.
+Fixture `edf_co_24` records the state of affairs precisely: offered, rule WISH-DRAW, `verified=0`.
+
+*(Session 15d's "ComboFinishFromHand deploys `{T}`-less FINISHERS and casts WISHES, and nothing else"
+is now stale -- `MTG_COMBO_OFF_OUTLET_SWITCH` added a third class. Corrected above.)*
+
+**What the executor needs, precisely:** a `DeployLandAuraFromHand` sibling of
+`DeployPipFreeOutletFromHand`, called from INSIDE the iteration loop rather than only before it,
+doing its own attach (`ResolveEnchantTarget(..., land_aura=true)` plus `aura_attached_to`). The host
+choice is already right by construction: `LandAuraHostCandidates` scores
+`PermanentManaYield * 4 + 2 if untapped`, and `PermanentManaYield` includes `LandAuraBonus`, which is
+the same ranking `ApplyBlinkLoop`'s ETB untap priority uses -- so an aura'd land is preferentially
+re-untapped every iteration.
+
+**The same gap blocks the drawn-Emiel half of the user's third ruling.**
+`DeployPipFreeOutletFromHand` iterates `hand` only and is called ONCE, pre-loop
+(`if (s_switch && ComboOffFinishActive() && iterations > 1)`). An Emiel drawn at iteration 5 is never
+cast. Making *"you only need 1 colourless to produce infinite with Emiel which can be drawn if you
+don't have it"* true in execution needs that call repeated inside the loop. **No rule widening was
+shipped for it**, because a rule that fires on a swap the executor will not make is firing on hope.
+
+### 8. Fixtures
+
+`test/combo_off_check.sh` **21 -> 26**, all passing, and every earlier negative still passes.
+
+| fixture | pins | its control |
+|---|---|---|
+| `edf_co_22_wish_deep_in_library` | s6 ordinal-8 board, wish at index 24: OFFERED + VERIFIED | `CO_ENV='MTG_EDF_GOFF_LIB_DEPTH=0'` -> ABSENT, and **only this fixture fails** |
+| `edf_co_23_no_wish_in_library_absent` | same board, no wish anywhere: ABSENT with the lever ON | also pins that the search-only DRAW-LAND route did not leak into human play |
+| `edf_co_24_dig_for_the_colour` | no blue/black on board, Fertile Ground in library, draw live: OFFERED, `combo_off_verify: false` (the executor cannot cast it) | lever forced off -> ABSENT |
+| `edf_co_25_no_aura_to_dig_absent` | same board, no any-colour Aura anywhere: ABSENT with the lever ON | -- |
+| `edf_co_26_sixty_iterations_is_not_enough` | the user's seed-16 board: `x207 -- COMBO OFF: wins this turn`, VERIFIED | `CO_ENV='MTG_COMBO_OFF_MAX_ITER=60'` -> `x60`, NOT PROVEN, apply does not win |
+| `edf_co_10_..._needs_headroom` (renamed) | the user's seed-9 T4 board: `x158`, VERIFIED -- the flip described in 3a | same `=60` control |
+
+`edf_co_22` uses `opponent_life: 16` rather than 20, stated rather than quietly chosen: at 20 the
+board is still offered and the apply lands sixteen of the twenty drains, because the pool the real
+frame carried is the one thing a `--scenario` fixture cannot stage.
+
+### 9. Instrument gap closed (Session 21 open item 4)
+
+`MTG_EDF_GOFF_DEBUG` now prints `[edf-goff-human]` from the human count-sizing path, carrying `dig`,
+`setup`, the sized `drain`/`exile` and `n2`. The existing `[edf-goff]` fires from the board-only
+recognizer, so on every frame whose count comes from the hand/library route it printed `n=0` and
+stopped -- which reads as *"the sizer refused"* when the truth may be *"the sizer was never given a
+sink to price"*. Opposite diagnoses, indistinguishable from outside. It is the line that found this
+session's first defect.
+
+### 10. Gates (final binary)
+
+`./build.sh`; `test/scenarios.sh` **79/79**; `test/combo_off_check.sh` **26/26** (plus one run per
+new lever at its off value, each failing exactly its own fixture and nothing else);
+`test/regression.sh --smoke` **73 passed / 0 failed, ALL PASS**, audit `configs changed: 0
+unchanged: 73`, `[searched] play-changed=0`, `[d0] play-changed=0`; `test/viewer_checks.sh` (strict)
+**PASS** -- protocol sweep **13 ok, 297 repaired, 0 play-drift, 0 shuffle-dead, 0 enum-gap,
+0 mull-drift, 0 contract-fail (310 refs)**, validate-line **1482 accept, 218 choose, 0 REGRESSION**.
+The raised ceiling moves no saved reference.
+
+### 11. Open, carried forward (nothing blocked on)
+
+1. **The executor cannot cast a land Aura or a drawn outlet mid-loop** (§7). Two named functions,
+   both small. Until then `MTG_COMBO_OFF_DIG_COLOR` stays off and no drawn-Emiel widening exists.
+2. **s12/s8's remaining 31/28-decision gaps are `net_c == 0` and honest** -- the trial cannot win
+   any earlier either. Closing them would need a `{C}` source the board does not have.
+3. **The ceiling is a constant (400), not the computed dig+kill need.** `FlickerGoOffCount` has the
+   exact number at the clamp site; making the ceiling BE it is two lines and removes a magic number.
+4. **The 7 new `b` states on the sweep** are honest unproven offers whose click loses and is rolled
+   back. If the user would rather the display never show an unproven button on those, the narrowing
+   is `net_c` plus a dig term -- but it would also withdraw real kills.
+5. **GORGE's row was deliberately NOT widened by `MTG_COMBO_OFF_DIG_COLOR`.** Its binding resource
+   is red *in the set the untap restores each pass*, which a not-yet-drawn Aura cannot be proved to
+   join; crediting it would be firing on hope. The one remaining hunt GORGE offer is a net-0 board
+   the ping cannot fund at any ceiling.
