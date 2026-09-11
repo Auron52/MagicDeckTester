@@ -11532,8 +11532,18 @@ inline bool LoopDrawSinkOn()
 // library) and the `keep_payable` guard still holds. Split out because both halves of the draw sink
 // below feed it: an Investigate makes a Clue, and the Clue is where the card actually comes from.
 // Terminates because SacDraw removes the token it cracked.
+// MTG_COMBO_OFF_DRAW_TRIAL -- the draw half of MTG_COMBO_OFF_SINK_TRIAL. Shared by the Clue crack
+// and the {T} draw sources below, so the two halves of "draw a card" cannot disagree about whether
+// they are allowed to spend the loop's entry price.
+inline bool DrawTrialOn()
+{
+    static const bool v = EnvOn("MTG_COMBO_OFF_DRAW_TRIAL", true);
+    return v;
+}
+
 inline int CrackCluesForCards(GameState& state, int controller, const ManaCost& keep_payable,
-                              const std::function<bool(const ManaCost&)>& pay)
+                              const std::function<bool(const ManaCost&)>& pay,
+                              const StateManaPayer* probe_pay = nullptr)
 {
     int drawn = 0;
     for (int guard = 0; guard < 128; ++guard)
@@ -11551,6 +11561,18 @@ inline int CrackCluesForCards(GameState& state, int controller, const ManaCost& 
             break;
         }
         if (id < 0) { break; }
+        // A REAL TRIAL, not a pooled projection (COMBO OFF only) -- the same repair, and the same
+        // reasoning, as SpendSurplusOnDamageSinks'. `ManaPool::CanPay` answers over a POOL, which
+        // cannot see that one land serves one of its modes (Brushland taps for {C} OR {G}/{W}) nor
+        // that the sequential payment picks greedily. A Clue crack is only {2}, and on the seed-6
+        // board those two generic pips were paid off the board's last colourless source, leaving
+        // Eldrazi Displacer's {C} unpayable.
+        if (probe_pay != nullptr && ComboOffFinishActive() && DrawTrialOn())
+        {
+            GameState probe = state;
+            if (!((*probe_pay)(probe, c) && (*probe_pay)(probe, keep_payable))) { break; }
+        }
+        else
         {
             ManaPool have = AvailableManaPool(state, nullptr);
             have.AddPool(state.floating_mana);
@@ -11740,7 +11762,8 @@ inline bool ExileFinisherReachableFromHand(const GameState& state, int controlle
 }
 
 inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaCost& keep_payable,
-                                   const std::function<bool(const ManaCost&)>& pay)
+                                   const std::function<bool(const ManaCost&)>& pay,
+                                   const StateManaPayer* probe_pay = nullptr)
 {
     if (!LoopDrawSinkOn()) { return 0; }
     // DRAW ONLY TO FIND. The draw is not a payoff, it is a SEARCH for one: the user's third
@@ -11760,7 +11783,7 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
     // sideboard sixty times a loop for an answer that can only change when we DRAW A CARD is pure
     // cost. The caller re-evaluates exactly when this returns non-zero.
     if (state.players[controller].library.size() <= 1)
-    { return CrackCluesForCards(state, controller, keep_payable, pay); }
+    { return CrackCluesForCards(state, controller, keep_payable, pay, probe_pay); }
 
     // Collect ids FIRST, then re-find each by id before use: pay() can tap sources and remove
     // permanents, so no index or reference survives a payment (SpendSurplusOnDamageSinks' hazard).
@@ -11821,13 +11844,53 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
         // COMBO OFF ONLY. This guard also runs in autonomous play, where its economics are a
         // measured artifact; tightening it there would move GT and needs its own A/B.
         // MTG_DRAW_GUARD_SELFTAP=0 restores the pre-tap projection.
+        // ...AND TAPPING FIRST IS NOT ENOUGH EITHER, because the projection ITSELF is the lie.
+        //
+        // `MTG_DRAW_GUARD_SELFTAP` (above) fixed a real over-count -- the source's own yield --
+        // and the sweep then showed the guard still passing and the payment still stranding. With
+        // the Living Wish thirteen cards down, the loop died at iteration SIX having paid ten
+        // draws, and `MTG_EDF_LOOP_TRACE` printed the whole story in one line:
+        //
+        //   k=6 enter             cost={C} float{c1} avail{g3 c1 *5}
+        //   k=6 post-draw-sink    cost={C} float{}   avail{}
+        //   STOP at k=6: pay-failed
+        //
+        // Nine mana and a colourless went in; nothing came out, and the activation the guard was
+        // protecting costs ONE MANA. The numbers are IDENTICAL at every wish depth past the cliff
+        // (6 blinks, 10 draws), which is the tell: the failure is not about the dig at all, it is
+        // the guard. `ManaPool::CanPay` answers over a POOL -- it cannot see that one land serves
+        // one of its modes (Brushland taps for {C} OR {G}/{W}) and it cannot see that the
+        // SEQUENTIAL payment picks greedily, so `{4}` can be paid off the very sources the pending
+        // `{C}` needed.
+        //
+        // So the guard becomes a REAL TRIAL, exactly as SpendSurplusOnDamageSinks' did: on a copy
+        // of the state, tap the source, pay the draw through the same payer the loop uses, and
+        // require `keep_payable` to pay as well. That is the actual question -- "after this draw,
+        // can I still blink?" -- put to the actual mana solver.
+        //
+        // COMBO OFF ONLY. `probe_pay` is null at both autonomous ApplyBlinkLoop call sites and
+        // `ComboOffFinishActive()` is false in every autonomous run, every rollout and ordinary
+        // human play, so the measured draw economics (2,002,759 paid activations over 8 games --
+        // see the header) and therefore GT, the value leaf and the keep tables are untouched.
+        // MTG_COMBO_OFF_DRAW_TRIAL=0 restores the projection guard.
         static const bool s_guard_selftap = EnvOn("MTG_DRAW_GUARD_SELFTAP", true);
         const bool honest_guard = s_guard_selftap && ComboOffFinishActive();
         if (honest_guard) { state.battlefield[i].tapped = true; }
         {
-            ManaPool have = AvailableManaPool(state, nullptr);
-            have.AddPool(state.floating_mana);
-            if (!have.CanPay(AddManaCosts(c, keep_payable)))
+            bool ok;
+            if (probe_pay != nullptr && ComboOffFinishActive() && DrawTrialOn())
+            {
+                GameState probe = state;          // the source is already tapped on this copy
+                if (!honest_guard) { SetPermTapped(probe, controller, id, true); }
+                ok = (*probe_pay)(probe, c) && (*probe_pay)(probe, keep_payable);
+            }
+            else
+            {
+                ManaPool have = AvailableManaPool(state, nullptr);
+                have.AddPool(state.floating_mana);
+                ok = have.CanPay(AddManaCosts(c, keep_payable));
+            }
+            if (!ok)
             {
                 if (honest_guard) { SetPermTapped(state, controller, id, false); }
                 if (finishstats::On())
@@ -11844,7 +11907,7 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
         if (mode == PermAbilityMode::TapDraw) { ++drawn; }
     }
     // The Investigate half only made Clues; the CARD comes from cracking them.
-    drawn += CrackCluesForCards(state, controller, keep_payable, pay);
+    drawn += CrackCluesForCards(state, controller, keep_payable, pay, probe_pay);
     return drawn;
 }
 
@@ -13118,7 +13181,7 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // answer can only change when a card is drawn, so it is re-evaluated exactly then.
         if (cash_sinks && want_draw)
         {
-            if (SpendSurplusOnDrawSinks(state, controller, c, pay) > 0)
+            if (SpendSurplusOnDrawSinks(state, controller, c, pay, probe_pay) > 0)
             { want_draw = !ComboFinisherReachable(state, controller); }
         }
         if (lt) { blinkloop::TraceStep(k, "post-draw-sink", state, controller, c); }
