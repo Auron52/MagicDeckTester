@@ -45,6 +45,47 @@ a reason** rather than quietly fixed. Filters, feed-cost lands, one-shot sacrifi
 restricted mana are not offered: they stay with the engine's payment. Full design:
 `docs/design/viewer-manual-tap-pay.md`; `MTG_HUMAN_PRE_TAP=0` removes the feature entirely.
 
+### Grinding a loop without clicking it out (the ⟲ macros)
+
+Some turns are the same two or three activations over and over — on EldraziDisplacerFlicker,
+*activate Kitchen (investigate) → blink a Drake to untap the lands → crack the Clue to draw*, twenty
+times. Three plan-bar gestures cover that, and all three are **pure queue edits**: they push
+ordinary entries into the turn plan, which commit as ordinary consecutive lines, so a macro'd game
+is saved as exactly the clicks a human would have made.
+
+| gesture | what it repeats |
+|---|---|
+| **click an Investigate source** | queues the investigate **and** the crack of the Clue it makes (one click, no dialog — a global option under ⚙ Options; turn it off to crack the Clue yourself) |
+| **⟲ Repeat ×N** | the block you have **queued but not committed** — set the loop up once, then stack it |
+| **⟲ Loop last lines ×N** | the last **K lines you already committed this turn** — play the loop once by hand, then ask for twenty more |
+
+`⟲ Loop last lines` is the one for a loop you have already discovered. It opens a central dialog
+that names the actual lines it is about to repeat, asks how many of them make up one turn of the
+loop (K) and how many times to run it (N), and queues K×N lines; press **Commit Line** once and they
+commit back to back. Each iteration is validated on the board the previous one left — so the engine
+pays every one for real, and at the first iteration it cannot, the macro **stops and says where**:
+the lines already committed stay played, the rest are dropped, and the reject panel leads with
+*"Loop (2 lines ×10) stopped here. 7 of 20 lines committed (3 complete iterations)"*.
+
+Offered only when it is real: same turn only, an empty queue, and never across a land drop or a
+Land's Edge discard (once-per-turn resources — the control is withheld rather than offered and then
+rejected). Manual `⛏ tap` entries inside a looped line ride through verbatim, since the loop is
+usually the very thing that untaps that land again. Undo is unchanged: every iteration is its own
+committed line and steps back one at a time. Full design + the failure modes:
+`docs/design/viewer-line-macros.md`.
+
+### "The play server is out of date — restart it"
+
+Your browser re-reads `index.html` from disk on every load; `node server.js` does **not** — it keeps
+whatever it was started with. So after any change to `server.js`, a viewer left open is a new client
+on an old server: same routes, same payloads, different behaviour underneath. The client now checks
+(`serverApi` on `/api/decks`) and shows a red banner when they disagree — including when the server
+is too old to report a version at all, which is the case that matters, since such a server cannot
+answer the question. The bite: a server started before the per-game engine pin runs
+`build/Release/mtg` **unpinned**, so anything that rebuilds the binary mid-session changes the engine
+under your game *and* under the save, which re-runs the whole choice stream in a fresh process.
+Restart with `./play.sh` when you see it.
+
 No clairvoyance: play is deliberately run **without** `--reveal`, so your win-turn is an honest
 no-foresight ground-truth bound a good AI should be able to match. On any reject you can **Store
 as artifact** (`logs/play/rejections/`). A **clean** completed game (no rejects) saves to the

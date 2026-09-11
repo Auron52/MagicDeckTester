@@ -81,7 +81,11 @@ function makeFetch() {
     const u = new URL(pathUrl, 'http://localhost');
     let out;
     if (u.pathname === '/api/decks') {
-      out = { decks: server.listDecks(), binExists: fs.existsSync(server.BIN) };
+      // serverApi from the REAL server module, so the client's stale-server handshake
+      // (checkServerFresh) is exercised on the same value a live server would send -- and so a
+      // bump to one side without the other shows up here rather than as a banner in the user's face.
+      out = { decks: server.listDecks(), binExists: fs.existsSync(server.BIN),
+              serverApi: server.SERVER_API };
     } else if (u.pathname === '/api/reference-exists') {
       out = { exists: false, path: null, suboptimal: false, suboptimalPath: null };
     } else if (u.pathname === '/api/step') {
@@ -118,6 +122,9 @@ function buildDom() {
   // only seam we need: the client's own bookkeeping state, read exactly as the code mutates it.
   const acc = win.document.createElement('script');
   acc.textContent = 'window.__getS = function(){ return S; };'
+    // CLIENT_API is a top-level `const` (lexical, not a window property) -- the stale-server
+    // handshake check needs the client's own number, not a copy of it that could drift.
+    + 'window.__clientApi = CLIENT_API;'
     + 'window.__fb = { panel: firebreathePanelHtml, commit: commitFirebreathe, rollback: rollbackStep };'
     + 'window.__sh = { panel: storageHoldPanelHtml, commit: commitStorageHold, rollback: rollbackStep };'
     + 'window.__co = { apply: applyAccepted, rollback: rollbackStep };'
@@ -594,6 +601,175 @@ function testClueFuseOption(win) {
   return fails;
 }
 
+// LOOP THE LAST K COMMITTED LINES (docs/design/viewer-line-macros.md, feature 3).
+// USER 2026-09-11, mid-game on EldraziDisplacerFlicker: "it would be nice if loops like kitchen
+// activate -> untap were possible to repeat".
+//
+// The EXPANSION is linebuild's and is pinned there (viewer_linebuild_check.js); what only a DOM can
+// see is the half that decides whether the human can reach it at all: is the control offered, is it
+// offered only when it is real, does the central dialog wire through to the queue, and does the
+// committed-segment log it reads survive an undo. Every one of those fails SILENTLY -- a control
+// that never appears looks exactly like a feature that was never built, which is how the loop the
+// user asked for would ship inert.
+//
+// DOM-only, off synthetic frames: the loop's own arithmetic is engine truth and is driven for real
+// against the user's saved game in test/viewer_line_macros_check.py.
+function testLoopMacro(win) {
+  const S = win.__getS(), fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  let di = 7000;
+  const frame = (turn) => {
+    S.decision = {
+      type: 'main_phase', decision_index: ++di, turn: turn || 4, phase: 'pre_main', main_ordinal: 9,
+      me: { hand: [], battlefield: [{ name: 'Kitchen', num: 29, is_land: true }], land_drops_left: 0 },
+      opponent: { life: 20 }, plans: [{ index: 0, summary: 'pass', actions: [] }],
+    };
+    S.plan = []; S.over = false; S.loopPick = null; S.macroRun = null;
+    return S.decision;
+  };
+  // The two lines one EDF iteration commits as: the fused Investigate, then the deferred crack
+  // together with the blink that untaps the land it just tapped.
+  const segA = () => [{ name: 'Kitchen', src: 'Kitchen', kind: 'activate', verb: 'cast', fuse: 'clue' }];
+  const segB = () => [{ name: 'Clue Token', src: 'Clue Token', kind: 'activate', verb: 'cast',
+                        defer: true, fused: 'clue' },
+                      { name: 'Eldrazi Displacer', src: 'Eldrazi Displacer', kind: 'activate',
+                        verb: 'blink', repeatable: true, blinkTarget: 42, blinkCount: 1 }];
+  const commit = (entries, turn, at) => ({ at, turn: turn || 4, entries });
+
+  // ---- not offered when there is nothing to loop ------------------------------------------------
+  frame(); S.steps = []; S.committed = [];
+  chk(win.loopAvailable() === false, 'the loop control is offered with no committed line');
+
+  // ---- offered once the loop has been played once -----------------------------------------------
+  S.steps = [{ n: 1 }, { n: 1 }];
+  S.committed = [commit(segA(), 4, 1), commit(segB(), 4, 2)];
+  chk(win.loopAvailable() === true, 'the loop control is NOT offered after committing a loopable line');
+  chk(win.loopTail().length === 2, `loopTail saw ${win.loopTail().length} lines, expected 2`);
+
+  // ...and it is a real BOARD control, not a history-panel affordance (the play-viewer decision
+  // principle: central dialog or board clicks, never the history panel).
+  win.renderBoard();
+  chk(!!win.document.getElementById('loopp'), 'the ⟲ Loop button does not render in the plan bar');
+  chk(!win.document.getElementById('hist').querySelector('[id^=loop]'),
+      'a loop control leaked into the history panel');
+
+  // ---- the two-step central dialog reaches the queue --------------------------------------------
+  win.document.getElementById('loopp').click();
+  chk(S.loopPick && S.loopPick.k === null, 'clicking ⟲ Loop did not open the "how many lines?" step');
+  let panel = win.document.getElementById('decpanel');
+  chk(panel.className.indexOf('modal') >= 0 && panel.querySelectorAll('[data-loopk]').length === 2,
+      `step 1 offered ${panel.querySelectorAll('[data-loopk]').length} line counts, expected 2 (k=1,2)`);
+  panel.querySelector('[data-loopk="2"]').click();
+  chk(S.loopPick && S.loopPick.k === 2, 'picking k did not advance to the "how many times?" step');
+  panel = win.document.getElementById('decpanel');
+  const ns = panel.querySelectorAll('[data-loopn]');
+  chk(ns.length > 0, 'step 2 offered no repeat counts');
+  // Pick ×3 and assert the QUEUE, which is the whole product: 2 lines x 3 = 6 committable segments,
+  // each still the two separate lines a fused iteration has to be.
+  const three = panel.querySelector('[data-loopn="3"]');
+  chk(!!three, 'step 2 has no ×3');
+  if (three) {
+    three.click();
+    chk(S.loopPick === null, 'the loop dialog stayed open after the pick');
+    const segs = win.LineBuild.encodeSegments(S.plan);
+    chk(segs.length === 6, `loop ×3 queued ${segs.length} lines, expected 6`);
+    chk(segs.every((s, i) => s === (i % 2 ? 'cast=Clue Token;blink=Eldrazi Displacer@42*1' : 'cast=Kitchen')),
+        `loop ×3 queued the wrong lines: ${JSON.stringify(segs)}`);
+    chk(S.macroRun && S.macroRun.kind === 'loop' && S.macroRun.segs === 6,
+        `macroRun not set for the honest stop: ${JSON.stringify(S.macroRun)}`);
+  }
+
+  // ---- not offered while a queue is half-built (that is ⟲ Repeat's job) -------------------------
+  chk(win.loopAvailable() === false, 'the loop control is still offered with a queue already built');
+
+  // ---- THE HONEST STOP. A macro that meets a line the board cannot pay must say how much of it
+  // really happened, and must not leave the rest queued to re-commit on the next click. Driven
+  // through handleVerdict's own reject branch (the live path), with two of six lines landed.
+  S.macroRun = { kind:'loop', k:2, n:3, segs:6, perIter:2, done:2 };
+  S.plan = win.LineBuild.loopBlock([segA(), segB()], 3);
+  win.handleVerdict({ verdict:'illegal', reason:"'Clue Token' is not in hand",
+                      decision:{ plans:[] } }, 'cast=Kitchen;cast=Clue Token');
+  const vtxt = win.document.getElementById('verdict').textContent;
+  chk(/2 of 6 lines committed/.test(vtxt), `the reject panel does not say what landed: ${vtxt.slice(0, 160)}`);
+  chk(/1 complete iteration\b/.test(vtxt), `the reject panel does not count iterations: ${vtxt.slice(0, 200)}`);
+  chk(/stay played/.test(vtxt), 'the reject panel does not say the committed lines stay played');
+  chk(S.plan.length === 0, `the stale rest of the macro stayed queued (${S.plan.length} entries)`);
+  chk(S.macroRun === null, 'macroRun survived the stop and would mis-count the next one');
+  // ...and an ordinary (non-macro) rejection is untouched: no count, no queue wipe.
+  S.plan = segA().concat(); S.macroRun = null;
+  win.handleVerdict({ verdict:'illegal', reason:'nope', decision:{ plans:[] } }, 'cast=Kitchen');
+  chk(!/lines committed/.test(win.document.getElementById('verdict').textContent),
+      'a plain rejection grew a macro count');
+  chk(S.plan.length === 1, 'a plain rejection cleared the queue');
+  S.plan = [];
+
+  // ---- a committed line from ANOTHER TURN is not part of this turn's loop ------------------------
+  frame(5); S.steps = [{ n: 1 }, { n: 1 }];
+  S.committed = [commit(segA(), 4, 1), commit(segB(), 4, 2)];
+  chk(win.loopAvailable() === false, "last turn's lines are offered as this turn's loop");
+
+  // ---- a once-per-turn resource is refused rather than offered and then rejected -----------------
+  frame(4); S.steps = [{ n: 1 }, { n: 1 }];
+  S.committed = [commit([{ name: 'Kitchen', kind: 'land' }], 4, 1), commit(segB(), 4, 2)];
+  chk(win.loopTail().length === 1,
+      `loopTail crossed a land drop (${win.loopTail().length} lines, expected 1)`);
+
+  // ---- UNDO drops the records whose step is gone --------------------------------------------------
+  // Keyed on S.steps.length, so this needs no undo hook -- which is the point: the castOrder and
+  // firebreathe side channels each grew a bug from a hook that fell out of step.
+  frame(4); S.steps = [{ n: 1 }, { n: 1 }];
+  S.committed = [commit(segA(), 4, 1), commit(segB(), 4, 2)];
+  S.steps.pop();
+  chk(win.pruneCommitted().length === 1,
+      `pruneCommitted kept ${win.pruneCommitted().length} records after an undo, expected 1`);
+  S.steps = []; S.committed = []; S.plan = []; S.macroRun = null;
+  return fails;
+}
+
+// STALE SERVER HANDSHAKE (tools/play/server.js SERVER_API <-> index.html CLIENT_API).
+// index.html is re-read from disk on every load; `node server.js` is not, so a viewer left open
+// across a server.js change runs a NEW client against an OLD server -- same routes, same payloads,
+// different behaviour underneath. That is not hypothetical: a server started before the per-game
+// engine pin (cee518af) runs build/Release/mtg unpinned, and a rebuild by anything else mid-session
+// changes the engine under the game AND under the save, which re-runs the whole choice stream.
+//
+// The load-bearing case is the MISSING field: a server too old to know about the handshake cannot
+// report a version, so `undefined` has to read as stale rather than as fine. Asserted here because
+// getting it backwards makes the guard inert against precisely the servers it exists to catch.
+function testStaleServerHandshake(win) {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const el = win.document.getElementById('staleserver');
+  chk(!!el, 'there is no #staleserver banner element to warn in');
+  chk(typeof win.__clientApi === 'number', 'index.html declares no CLIENT_API to compare against');
+  // The two constants must be in step on THIS tree, or the banner fires for every user on every
+  // load -- a false alarm is how a real one gets ignored.
+  chk(win.__clientApi === server.SERVER_API,
+      `CLIENT_API (${win.__clientApi}) != SERVER_API (${server.SERVER_API}) -- bump both together`);
+  if (!el) return fails;
+  const shown = () => el.style.display !== 'none' && el.innerHTML.length > 0;
+
+  el.style.display = 'none'; el.innerHTML = '';
+  win.checkServerFresh({ decks: [], binExists: true, serverApi: win.__clientApi });
+  chk(!shown(), 'a CURRENT server was reported as stale');
+
+  el.style.display = 'none'; el.innerHTML = '';
+  win.checkServerFresh({ decks: [], binExists: true });          // the pre-handshake server
+  chk(shown(), 'a server with NO serverApi was treated as current -- the guard is inert against '
+             + 'exactly the servers it exists to catch');
+  chk(/restart/i.test(el.textContent), 'the stale banner does not tell the user to restart');
+
+  el.style.display = 'none'; el.innerHTML = '';
+  win.checkServerFresh({ decks: [], binExists: true, serverApi: win.__clientApi - 1 });
+  chk(shown(), 'an OLDER reported serverApi was treated as current');
+  // Dismissible, never modal: the game underneath is still playable and the user may be mid-turn.
+  const x = win.document.getElementById('stalex');
+  chk(!!x, 'the stale banner cannot be dismissed');
+  if (x) { x.click(); chk(!shown(), 'dismissing the stale banner did not hide it'); }
+  el.style.display = 'none'; el.innerHTML = '';
+  return fails;
+}
+
 // MDFC LAND BACK on a nonland front (Turntimber Symbiosis // Turntimber, Serpentine Wood). The hand
 // card's `kind` is the FRONT's ("nonpermanent"), so every route on the thumb -- double-click, drag --
 // casts the {4}{G}{G}{G} sorcery, and the land drop the engine enumerates as `land=<front name>` had
@@ -1017,6 +1193,14 @@ async function testColorlessFirstTapOrder() {
     const cfFails = testClueFuseOption(win);
     if (cfFails.length) { anyFail = true; console.log(`✗ clue fuse option: ${cfFails.length} fail`); cfFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ clue fuse is a persisted GLOBAL option (one click, no modal, either state)'); }
+    // "Do that loop again ×N", read off the COMMITTED lines (fast, DOM-only).
+    const lpFails = testLoopMacro(win);
+    if (lpFails.length) { anyFail = true; console.log(`✗ loop macro: ${lpFails.length} fail`); lpFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ loop macro (board control → central 2-step dialog → k×n committable lines; turn-scoped, undo-safe)'); }
+    // New client on an OLD server must say so out loud (fast, DOM-only).
+    const ssFails = testStaleServerHandshake(win);
+    if (ssFails.length) { anyFail = true; console.log(`✗ stale server handshake: ${ssFails.length} fail`); ssFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ stale-server handshake (a missing/older serverApi warns loudly and is dismissible)'); }
     // MDFC land back reachable from the palette (fast, DOM-only).
     const lfFails = testMdfcLandFace(win);
     if (lfFails.length) { anyFail = true; console.log(`✗ mdfc land face: ${lfFails.length} fail`); lfFails.forEach(m => console.log('  - ' + m)); }

@@ -445,6 +445,77 @@ function checkLineMacros() {
   if (LB.removeFusedAt(withOther, 0).length !== 2)
     fails.push('removing an ordinary entry disturbed the fused pair');
 
+  // ---- REPEAT MUST NOT FLATTEN A BLOCK'S OWN SEGMENT BOUNDARY (the EDF loop bug, 2026-09-11) ----
+  // USER, mid-game: "it would be nice if loops like kitchen activate -> untap were possible to
+  // repeat ... Currently that bugs out when I try it."
+  //
+  // The block the user repeats is the Kitchen loop, which with clue fusion ON (the default) is
+  // queued as a FUSED investigate + its DEFERRED crack + a blink. repeatBlock used to stamp
+  // `defer:false` on every non-first entry of each copy, which erased that deferral and collapsed
+  // iterations 2..N into ONE line -- `cast=Kitchen;cast=Clue Token;blink=...`, the exact one-line
+  // form test/scenarios/edf_fused_clue_needs_two_lines.json pins as ILLEGAL, because the Clue does
+  // not exist while the Investigate is being committed. Iteration 1 played, iteration 2 was
+  // rejected, and the game picked up a reject it can never be saved as a clean reference with.
+  const kitchen = () => LB.fusedInvestigateEntries('Kitchen', { verb:'cast', mode:null });
+  const dis = () => ({ name:'Eldrazi Displacer', src:'Eldrazi Displacer', kind:'activate',
+                       verb:'blink', repeatable:true, blinkTarget:42, blinkCount:1 });
+  const loopBlk = kitchen().concat([dis()]);
+  const KITCH = 'cast=Kitchen', CRACK = 'cast=Clue Token;blink=Eldrazi Displacer@42*1';
+  const want3 = [KITCH, CRACK, KITCH, CRACK, KITCH, CRACK];
+  const got3 = LB.encodeSegments(LB.repeatBlock(loopBlk, 0, loopBlk.length, 3));
+  if (!eq(got3, want3)) fails.push(`repeat over a FUSED block flattened its deferral -> ${JSON.stringify(got3)}`);
+  // ...and the flat (unfused) block is unchanged by the same fix: no internal boundary, one line
+  // per iteration, exactly as before.
+  const flatBlk = [{ name:'Kitchen', src:'Kitchen', kind:'activate', verb:'cast' }, dis()];
+  if (!eq(LB.encodeSegments(LB.repeatBlock(flatBlk, 0, 2, 3)),
+          ['cast=Kitchen;blink=Eldrazi Displacer@42*1', 'cast=Kitchen;blink=Eldrazi Displacer@42*1',
+           'cast=Kitchen;blink=Eldrazi Displacer@42*1']))
+    fails.push('the defer fix disturbed an unfused repeat');
+
+  // ---- LOOP: repeat the last K COMMITTED segments ------------------------------------------------
+  // Same expansion, read off committed history instead of the queue -- which is the only way to ask
+  // for the loop AFTER playing it once, when the queue is empty.
+  const committed = [[kitchen()[0]], [kitchen()[1], dis()]];   // the two lines one iteration commits as
+  if (!eq(LB.encodeSegments(LB.loopBlock(committed, 3)), want3))
+    fails.push(`loopBlock x3 -> ${JSON.stringify(LB.encodeSegments(LB.loopBlock(committed, 3)))}`);
+  if (!eq(LB.encodeSegments(LB.loopBlock(committed, 1)), [KITCH, CRACK]))
+    fails.push('loopBlock x1 is not one plain iteration');
+  if (LB.loopBlock([], 5).length) fails.push('an empty committed tail produced a loop');
+  if (LB.loopBlock(committed, 0).length) fails.push('n=0 produced a loop');
+  // Every segment head is deferred, INCLUDING the block's first: that is what makes the expansion
+  // commit as k*n separate lines rather than fusing with whatever the queue already holds.
+  const lb3 = LB.loopBlock(committed, 3);
+  if (!eq(lb3.map(p => !!p.defer), [true, true, false, true, true, false, true, true, false]))
+    fails.push(`loopBlock defer flags -> ${JSON.stringify(lb3.map(p => !!p.defer))}`);
+  // Entries are COPIES, not the committed records themselves -- expanding a loop must not mutate
+  // the history it was read from (dropFirstSegment peels by identity and would eat the record).
+  if (lb3.some(p => committed[0].indexOf(p) >= 0 || committed[1].indexOf(p) >= 0))
+    fails.push('loopBlock returned the committed records themselves, not copies');
+  if (committed[0][0].defer === true) fails.push('loopBlock mutated the committed record it read');
+  // ...and it peels cleanly: k*n segments, each individually committable.
+  let lrest = lb3, lpeeled = 0;
+  while (lrest.length && lpeeled < 20) { lrest = LB.dropFirstSegment(lrest); lpeeled++; }
+  if (lpeeled !== 6) fails.push(`loopBlock x3 peeled in ${lpeeled} segments, want 6`);
+  // A MANUAL TAP rides through verbatim: the loop repeats a line that already committed once, and
+  // the loop itself is usually what untaps that land again. (The queue-time Repeat refuses a
+  // pre-tap because there the block has never been played -- see segmentLoopable's note.)
+  const tapSeg = [{ kind:'pretap', name:'Kitchen', num:29, color:'U' },
+                  { name:'Kitchen', src:'Kitchen', kind:'activate', verb:'cast' }];
+  if (!eq(LB.encodeSegments(LB.loopBlock([tapSeg], 2)),
+          ['tap=Kitchen#29:U;cast=Kitchen', 'tap=Kitchen#29:U;cast=Kitchen']))
+    fails.push(`a looped pre-tap did not survive -> ${JSON.stringify(LB.encodeSegments(LB.loopBlock([tapSeg], 2)))}`);
+  // ...and a pre-tap keeps its BOARD m_number, while a hand cast loses its stamped hand m_number
+  // (that one belongs to the frame it was queued on; stampPlanNums re-stamps it on the new frame).
+  const handSeg = [{ name:'Training Grounds', kind:'permanent', num:17 }];
+  if (LB.loopBlock([handSeg], 2).some(p => p.num != null))
+    fails.push('a looped hand cast kept its stale hand m_number');
+  if (LB.loopBlock([tapSeg], 2)[0].num !== 29) fails.push('a looped pre-tap lost its board m_number');
+  // A once-per-turn resource is refused rather than offered and then rejected.
+  if (LB.segmentLoopable([{ kind:'land', name:'Forest' }])) fails.push('a land drop is loopable');
+  if (LB.segmentLoopable([{ kind:'le', name:'Mountain' }])) fails.push("a Land's Edge discard is loopable");
+  if (LB.segmentLoopable([])) fails.push('an empty segment is loopable');
+  if (!LB.segmentLoopable(tapSeg)) fails.push('a hand-paid segment is not loopable');
+
   // ---- the need= token --------------------------------------------------------------------------
   const pips = p => ({ 'Eldrazi Displacer':'C', 'Cloud of Faeries':'U', 'Emiel the Blessed':'' }[p.name] || '');
   if (LB.untapNeedToken([{ name:'Eldrazi Displacer' }, { name:'Cloud of Faeries' }], pips) !== 'need=UC')

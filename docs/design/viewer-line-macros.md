@@ -4,13 +4,23 @@
 > draw + untap since it is really slow doing it manually, especially when the engine slows down."
 > — USER, EldraziDisplacerFlicker sessions, 2026-09
 
-Status: **shipped**, human play only. Two viewer gestures (always available, no flag) plus one new
+> "it would be nice if loops like kitchen activate -> untap were possible to repeat … Currently
+> that bugs out when I try it."
+> — USER, EldraziDisplacerFlicker, 2026-09-11 (feature 3, and the bug it exposed in feature 2)
+
+Status: **shipped**, human play only. Three viewer gestures (always available, no flag) plus one new
 engine behaviour they depend on, `MTG_UNTAP_LINE_DEMAND` (default **ON**, `=0` disables).
 
 These are the convenience layer for the turns that are **not** a proven finish. A turn the engine can
 prove is a kill is absorbed by the **COMBO OFF** button, which submits a verified plan index directly
 and is untouched by any of this. What is left — building up, digging, partial loops — is where the
-human clicks the same two activations twenty times, and that is what these two gestures are for.
+human clicks the same two activations twenty times, and that is what these gestures are for.
+
+| gesture | acts on | where |
+|---|---|---|
+| **Investigate & crack** | one board click | the Investigate source's thumb (global option, no dialog) |
+| **⟲ Repeat ×N** | the block still **queued** | plan bar → central dialog |
+| **⟲ Loop last lines ×N** | the last K lines **committed this turn** | plan bar → central dialog |
 
 ## The design decision that shapes everything: expand in the VIEWER, not the engine
 
@@ -139,6 +149,33 @@ entry rather than another engine-published predicate. No entry the viewer built 
 carries one, so **every recorded line partitions exactly as it always did** (verified: all 1907
 main-phase lines across 307 references still reconstruct).
 
+### The bug this shipped with: a repetition must keep the block's OWN boundaries
+
+> "it would be nice if loops like kitchen activate -> untap were possible to repeat … Currently that
+> bugs out when I try it."
+> — USER, EldraziDisplacerFlicker, 2026-09-11, mid-game
+
+`repeatBlock` stamped `{ defer: false }` on **every non-first entry** of every copy. On a
+homogeneous block that is a no-op, and every block the feature was written against was homogeneous.
+The block the user actually repeats is not: with clue fusion ON (the default) one click on Kitchen
+queues a fused Investigate **plus its deferred crack**, so the boundary lives *inside* the block —
+and clearing it fused the two lines into one:
+
+```
+want   cast=Kitchen                               ⏎  cast=Clue Token;blink=Eldrazi Displacer@42*1
+got    cast=Kitchen;cast=Clue Token;blink=Eldrazi Displacer@42*1        ← illegal, on every board
+```
+
+That is the exact one-line form `test/scenarios/edf_fused_clue_needs_two_lines.json` pins as
+**illegal** — the Clue does not exist while the Investigate is being committed, which is the whole
+reason the crack is deferred. So iteration 1 committed, iteration 2 came back
+*"'Clue Token' is not in hand"*, the chain stopped, and the game picked up a reject it can never be
+saved as a clean reference with. Reproduced against the user's own board
+(`claude_s6_gi5`, prefix 60) before it was fixed, and pinned in both directions.
+
+The rule is now: **entry 0 of a repetition has `defer` forced on; every other entry keeps its own.**
+A boundary inside the block is part of the block's shape, not noise to normalise away.
+
 Two implementation notes that are load-bearing rather than tidy:
 
 * **The deferred scan starts at index 1.** A deferred entry at position 0 is already the head of the
@@ -159,6 +196,78 @@ ability (one action, so the `acts.length >= 2` guard already declined) — but a
 genuine multi-action line, and unscoped the test compares 2 actions against all 6 queued entries,
 fails, and drops the macro back to **enumerator order**. Which is precisely the defect
 `human-line-order-as-is.md` exists to fix, re-introduced one layer up.
+
+## Feature 3 — loop the last K COMMITTED lines
+
+`⟲ Loop last lines ×N` on the plan bar takes the last **K** lines you committed **this turn**,
+re-queues them as a block, and stacks that block **N** times. Same expansion as Repeat, read off
+committed history instead of the queue.
+
+**Why Repeat was not enough, in one sentence:** Repeat can only act on a block that is still
+*queued*, so it has to be set up **before** the first iteration is played — and a loop is discovered
+by playing it. On EDF the human activates Kitchen, blinks a Drake to untap the lands, cracks the
+Clue to draw, sees it work, *and only then* wants "do that twenty more times" — at which point the
+queue is empty and the block exists only as history. That is the gesture the user asked for, and it
+is the one gesture the existing macro structurally could not offer.
+
+```
+S.committed[]   { at, turn, entries[] }   one record per committed SEGMENT
+LB.loopBlock(segments, n)                 -> the expanded queue block
+```
+
+### What it reads, and how it stays honest about it
+
+* **One record per committed segment**, logged in `applyAccepted` from the same `seg0` the
+  cast-order pin is scoped to — so what the loop repeats is exactly what committed, not a
+  re-derivation of it.
+* **Keyed on `S.steps.length`** (`pruneCommitted`). `rollbackStep` pops steps, so a record whose
+  step is gone is dropped with no undo hook to keep in step — which is how both the `castOrder` and
+  `firebreathe` side channels grew bugs.
+* **Same turn only, and a contiguous tail.** Mana, the land drop and the board all reset between
+  turns, so "do last turn's lines again" is a different play, not a loop. The scan stops at the
+  first segment that is not loopable rather than skipping over it: a loop is a contiguous block,
+  and hopping a land drop would repeat something the human never played as one unit.
+* **Offered only with an EMPTY queue.** A half-built queue plus "repeat what I already played" is
+  two lines with no defined order between them. Repeat owns the queue you have built; Loop owns the
+  one you have not. Both are plan-bar buttons opening a central dialog — never the history panel
+  (`play-viewer-decision-principle`).
+
+### What rides through unchanged
+
+| | |
+|---|---|
+| **clue fusion** | The fused pair's `fuse` / `fused` / `defer` markers are on the *entries*, so a fused iteration replays as its two lines whatever the option says now. The option shaped the committed segments; the loop repeats the segments. |
+| **`need=` steering** | Free. `applyAccepted` derives the token from whatever is still queued behind the committing segment, and a loop expansion IS a queued continuation — which is why the user's own `claude_s6_gi5` carries `need=C` on ~40 consecutive lines. |
+| **`tap=` manual pays** | Carried **verbatim**, and this is the one place Loop differs from Repeat. Repeat refuses a block containing a pre-tap because that block has never been played, so a tap naming a specific untapped copy is a guess about a board that does not exist yet. Here the segment already committed once, and the loop being repeated is usually the very thing that untaps that land again — so the honest move is to replay the declared tap and let the per-iteration validation say no, rather than withhold the control from every hand-paid loop. |
+| **hand `num` stamps** | Dropped on copy and re-stamped by `stampPlanNums` on the current frame. A board id — a `pretap`'s permanent, a blink target, an equip host — is the human's declared choice and is kept. |
+
+### Stopping honestly
+
+Each iteration is validated on the frame the previous one produced (the existing `advanceTo` chain;
+no new mechanism). At the first line that does not validate:
+
+* the lines before it **stay played** — they are ordinary committed lines and nothing is rolled back;
+* the rest of the expansion is **dropped**, because it was written against a board the chain never
+  reached and leaving it queued would re-commit it on the next click;
+* the reject panel leads with a count: *"Loop (2 lines ×10) stopped here. 7 of 20 lines committed
+  (3 complete iterations) and they stay played; the 13 still queued were dropped."*
+
+**The plan-space bound can stop one too, and it means something different.** `MTG_VIEWER_PLAN_CAP`
+(`7d58bfe3`) drops whole plan *groups* above 65 536 positions — and a long loop builds exactly the
+board that reaches it, since every committed iteration mints another Clue and so another odometer
+digit. On such a frame an iteration can come back `legal · not enumerated` because the menu was
+bounded, not because the line is wrong. The frame says so (`plans_truncated`), so the stop message
+says so too and points at the fallback the cap's design already guarantees: **every action is still
+reachable one click at a time.** Reporting this is the difference between "the engine bounded the
+menu" and "your loop is wrong", which are the same text otherwise.
+
+**A loop can legitimately stop early, and here is the one that will.** The enumerator keeps ONE
+representative of a group of interchangeable permanents. Two Peregrine Drakes are distinguishable
+while one is tapped and the other is not — but a Displacer blink returns its target **tapped**, so
+after one iteration the copies match and only the lowest-numbered one is still offered as a target.
+A loop recorded against the *other* copy is then rules-legal and not enumerated, and stops. Picking
+a target the engine keeps offering (in practice: the one you looped on) runs indefinitely; this is
+measured, not asserted — `viewer_line_macros_check.py` drives both branches on the user's own board.
 
 ## The wrinkle: an untap between iterations must serve the CONTINUATION
 
@@ -249,8 +358,9 @@ viewer path emits and no digest folds.
 | layer | what it pins |
 |---|---|
 | `test/viewer_client_check.js` (`testClueFuseOption`) | the pair collapses to **one** option in BOTH states (so neither pops a modal); the survivor is the right flavour; the default is ON; the pref round-trips through `localStorage` (it must outlive a game *and* a server restart); a non-investigate source is untouched; clicking a fused Investigate off takes its deferred crack with it. The only layer that can see any of this — linebuild knows nothing of options or pickers, and the committed line is identical either way |
-| `test/viewer_linebuild_check.js` (`checkLineMacros`) | `repeatBlock` expands to N committable segments with the right `defer` flags; `dropFirstSegment` converges; a deferred entry carries its whole block; an **un**deferred plan partitions exactly as before; the fused pair encodes as two segments and removes as one unit; the `need=` token is a stable, order-independent, deduped set and is empty for a pip-less continuation |
-| `test/viewer_line_macros_check.py` (in `test/viewer_checks.sh`) | `need=C` diverts **exactly one** pick and says so in the trace; `need=U` on an already-served board diverts **nothing**; no declaration diverts nothing; `MTG_UNTAP_LINE_DEMAND=0` is a real off switch; the investigate half really creates a Clue and the deferred crack is enumerated on the frame it produces; a repeated block's second iteration validates against the frame the first produced |
+| `test/viewer_linebuild_check.js` (`checkLineMacros`) | `repeatBlock` expands to N committable segments with the right `defer` flags; **a repeat over a FUSED block keeps its internal boundary** (the 2026-09-11 bug, pinned both ways) and an unfused repeat is unchanged by that fix; `dropFirstSegment` converges; a deferred entry carries its whole block; an **un**deferred plan partitions exactly as before; the fused pair encodes as two segments and removes as one unit; `loopBlock` expands committed segments to k×n committable lines, defers every segment head, returns **copies** (it must not mutate the history it read), carries a `tap=` and its board `num` through while dropping a stale hand `num`; `segmentLoopable` refuses a land drop / Land's Edge and accepts a hand-paid segment; the `need=` token is a stable, order-independent, deduped set and is empty for a pip-less continuation |
+| `test/viewer_client_check.js` (`testLoopMacro`) | the only layer that can see whether the loop is REACHABLE: the `⟲ Loop` button renders in the plan bar (and nothing loop-shaped leaks into the history panel), the central two-step dialog offers exactly the available K and wires a pick through to k×n queued lines, it is withheld with an empty history / a half-built queue / a previous turn's lines / across a land drop, and `pruneCommitted` sheds a record whose step an undo removed. A control that never appears looks exactly like a feature that was never built |
+| `test/viewer_line_macros_check.py` (in `test/viewer_checks.sh`) | `need=C` diverts **exactly one** pick and says so in the trace; `need=U` on an already-served board diverts **nothing**; no declaration diverts nothing; `MTG_UNTAP_LINE_DEMAND=0` is a real off switch; the investigate half really creates a Clue and the deferred crack is enumerated on the frame it produces; a repeated block's second iteration validates against the frame the first produced; and — on the USER'S OWN loop (`claude_s6_gi5`, prefix 60) — one iteration is played by hand, handed to the **real `tools/play/linebuild.js`** via node, and the resulting k×n lines are driven one at a time with the BOARD asserted per iteration (a Clue made, that Clue spent, a card drawn, the lands untapped again, a constant non-zero pool cost), plus that the pre-fix flattened line is **illegal for the Clue**, plus that a stale-target loop stops after a whole iteration rather than mid-one |
 | `test/scenarios/edf_fused_clue_*.json` (in `test/scenarios.sh`, gated by `regression.sh`) | both halves of the fused gesture validate on a synthetic board, and the one-line form is **illegal** — the tripwire for the deferral |
 
 ## Deliberately not done
@@ -277,3 +387,14 @@ viewer path emits and no digest folds.
   *queued* remainder, and undo rolls back the committed segments one at a time as it always has —
   they are grouped under the existing `auto:` marker, so a step back rolls the declared line rather
   than half of it.
+* **Re-targeting a loop iteration automatically.** When the enumerator stops offering the blinked
+  copy the loop was recorded against (two Peregrine Drakes becoming interchangeable, above), the
+  macro stops and says so rather than silently substituting the surviving representative. The
+  target is the human's declared choice; picking a different one for them is the class of thing
+  `human-line-order-as-is.md` exists to prevent, and the substitution is one click away anyway.
+* **Looping across turns, or across a land drop.** Both are refused at the point the tail is built
+  rather than offered and then rejected — the same rule the queue-time Repeat follows for the same
+  once-per-turn resources.
+* **Auto-committing a loop expansion.** It queues; the human presses Commit Line once and the chain
+  runs. Keeping it a pure queue edit is what lets the chips be inspected, a `✕` drop one iteration,
+  and `Clear` abandon the whole thing before anything is spent.

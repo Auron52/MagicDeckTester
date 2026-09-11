@@ -74,7 +74,10 @@ function buildDom() {
     beforeParse(window) {
       window.fetch = async (u) => {
         if (String(u).includes('/api/decks')) {
-          return { json: async () => ({ decks: DECKS, binExists: true }) };
+          // serverApi answered from the real module: this check is about deck/version resolution,
+          // and a stale-server banner rendering over it would be noise, not a finding.
+          return { json: async () => ({ decks: DECKS, binExists: true,
+                                        serverApi: require(path.join(PLAY, 'server.js')).SERVER_API }) };
         }
         // checkReference() fires on every selection change; answer it inertly.
         return { json: async () => ({ exists: false }) };
