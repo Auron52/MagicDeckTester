@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>   // std::strchr -- the pre-tap colour alphabet lookup
+#include <deque>     // PaySnapScratch's stable-address pool
 #include <functional>
 #include <vector>
 
@@ -53,6 +54,52 @@ struct PermPaySnap
 };
 
 static const bool g_pay_snap_verify = EnvOn("MTG_PAY_SNAP_VERIFY");
+
+// ---- WARM SCRATCH FOR THE SNAPSHOT BUFFERS (perf, 2026-09-11) -------------------------------
+//
+// The compact snapshot above removed the deep Permanent copies but left the BUFFERS themselves
+// freshly allocated per payment: every TapForCostSharedOnce builds a `vector<PermPaySnap>` and a
+// `vector<Card>` graveyard copy, and each of the two TapForCostSharedImpl wrappers builds another
+// pair. Those are four-to-six malloc/free round trips on a path that runs millions of times a
+// game -- TapForCostSharedOnce alone is 43% of EDF instructions (perf, seed 9 gi=8) and the
+// snapshot/restore machinery under it was already measured at 18.1% of all instructions.
+//
+// Same fix, same contract and the same soundness argument as TurnSolver.cpp's PayScratch: hand
+// out a per-thread buffer and copy-ASSIGN into it, so steady state reuses the previous call's
+// capacity and only the element copy remains. Nothing observable changes -- the bytes written are
+// the bytes the fresh vector would have held; only a vector's CAPACITY differs, and no key,
+// digest or log folds a capacity or a heap address.
+//
+// A POOL RATHER THAN ONE BUFFER PER TYPE, and that is load-bearing here for two reasons: the
+// payment path NESTS (the hybrid wrapper re-enters TapForCostShared once per colour assignment,
+// and TapForCostSharedOnce holds its own snapshot live across the backtracker), and a single
+// function can hold two of these alive at once. Each scratch object takes the next free depth on
+// construction and releases it on destruction, so an inner frame can never write the buffer an
+// outer frame is still holding. std::deque, not std::vector, because growing the pool must not
+// relocate a buffer an outer frame already references.
+template <class T>
+class PaySnapScratch
+{
+public:
+    PaySnapScratch()
+    {
+        static thread_local std::deque<std::vector<T>> pool;
+        static thread_local std::size_t                depth = 0;
+        while (pool.size() <= depth) { pool.emplace_back(); }
+        m_buf   = &pool[depth];
+        m_depth = &depth;
+        ++depth;
+    }
+    ~PaySnapScratch() { --(*m_depth); }
+    PaySnapScratch(const PaySnapScratch&)            = delete;
+    PaySnapScratch& operator=(const PaySnapScratch&) = delete;
+
+    std::vector<T>& Buf() const { return *m_buf; }
+
+private:
+    std::vector<T>* m_buf   = nullptr;
+    std::size_t*    m_depth = nullptr;
+};
 
 static void SnapPayFields(const std::vector<Permanent>& bf, std::vector<PermPaySnap>& out)
 {
@@ -480,7 +527,21 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // allow_ramp: may a ramp filter (Ferrous Lake) be used? false when called to FEED a
     // ramp filter's {1}, so ramp filters never feed each other (avoids recursion; the
     // unmodelled ramp->ramp chain is inert unless 2+ ramp filters are the ONLY sources).
-    std::function<bool(Color,bool,bool)> produce = [&](Color needed, bool any, bool allow_ramp) -> bool
+    //
+    // SELF-REFERENCE WITHOUT std::function (perf, 2026-09-11). This closure is recursive -- two
+    // sites below feed a ramp filter's {1} through it -- and the only reason it was a
+    // std::function was to give the lambda a name it could call itself by. That type erasure was
+    // the single hottest symbol on EldraziDisplacerFlicker (perf task-clock, seed 21 gi=20: 8.66%
+    // self, 22.4% inclusive), and it cost twice over: the closure captures a dozen enclosing
+    // locals by reference, far past libstdc++'s 16-byte small-object buffer, so CONSTRUCTING it
+    // heap-allocated and freed on EVERY TapForCostSharedOnce call (43% of the game's instructions
+    // are under that function), and every call THROUGH it was an indirect call the optimiser could
+    // neither inline nor specialise.
+    // The Y-combinator form keeps the closure a plain lambda -- no allocation, direct calls -- by
+    // passing it its own self-reference. `produce` below is the unchanged three-argument name every
+    // call site already used; only the two RECURSIVE sites inside the body say `self(self, ...)`.
+    // Pure mechanics: same body, same order, same result -> byte-identical.
+    auto produce_impl = [&](auto& self, Color needed, bool any, bool allow_ramp) -> bool
     {
         // Snow pips skip the floating shortcut: mid-payment floating carries no snow provenance
         // (conservatively non-snow), so an {S} pip must tap a fresh snow source. Fungibility keeps
@@ -944,7 +1005,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 }
                 else if (def->params.produces.empty()) { continue; }
                 // Pay the {1}: use floating if any, else feed one mana from a non-ramp source.
-                if (floating.Total() == 0 && !produce(Color::Colorless, true, false)) { continue; }
+                if (floating.Total() == 0 && !self(self, Color::Colorless, true, false)) { continue; }
                 Color took;
                 if (!ConsumeFloatingAny(floating, took)) { continue; }
                 p.tapped = true;
@@ -969,7 +1030,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 bool match = false;
                 for (Color c : def->params.produces) { if (c == needed) { match = true; break; } }
                 if (!match) { continue; }
-                if (floating.Total() == 0 && !produce(Color::Colorless, true, false)) { continue; }
+                if (floating.Total() == 0 && !self(self, Color::Colorless, true, false)) { continue; }
                 Color took;
                 if (!ConsumeFloatingAny(floating, took)) { continue; }
                 p.tapped = true;
@@ -980,6 +1041,9 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         }
         return false;
     };
+    // The three-argument name the call sites use; threads the self-reference for them.
+    auto produce = [&](Color needed, bool any, bool allow_ramp) -> bool
+    { return produce_impl(produce_impl, needed, any, allow_ramp); };
 
     auto pay = [&](Color needed, bool any) -> bool
     {
@@ -992,7 +1056,9 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // (e.g. Throes of Chaos via a Cascade Bluffs + Ferrous Lake chain). Snapshot so the
     // greedy's success path is byte-identical (no GT churn) and only previously-FAILING
     // casts gain the chain solution. See TapForCostBacktrack.
-    std::vector<PermPaySnap> bf_pre;          // compact rollback -- see PermPaySnap's header
+    // Warm per-thread buffers rather than fresh vectors -- see PaySnapScratch.
+    PaySnapScratch<PermPaySnap> _bf_pre_scratch;
+    std::vector<PermPaySnap>&   bf_pre = _bf_pre_scratch.Buf();   // compact rollback -- see PermPaySnap's header
     SnapPayFields(state.battlefield, bf_pre);
     std::vector<Permanent> bf_pre_full;       // verify mode only (MTG_PAY_SNAP_VERIFY)
     if (g_pay_snap_verify) { bf_pre_full = state.battlefield; }
@@ -1000,7 +1066,9 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     const int opp_pre = state.players[1 - active].life;
     const bool oll_pre = state.opponent_lost_life_this_turn;
     // Deathrite: a tap may exile a graveyard land; failed attempts must put it back.
-    const std::vector<Card> gy_pre = state.players[active].graveyard;
+    PaySnapScratch<Card> _gy_pre_scratch;
+    std::vector<Card>&   gy_pre = _gy_pre_scratch.Buf();
+    gy_pre = state.players[active].graveyard;
     // Aether Hub: a coloured tap SPENDS {E} (tap_source, the same activation-cost class as the
     // Deathrite exile above) -- a failed attempt must refund it. This leaked: the aura-host
     // reserved attempt tapped the Hub coloured, failed on the remainder, and the unreserved retry
@@ -2561,13 +2629,16 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
     if (cost_in.hybrid_count > 0)
     {
         const int a = state.active_player_index;
-        std::vector<PermPaySnap> bf_snap;      // compact rollback -- see PermPaySnap's header
+        PaySnapScratch<PermPaySnap> _bf_snap_scratch;                        // see PaySnapScratch
+        std::vector<PermPaySnap>&   bf_snap = _bf_snap_scratch.Buf();        // compact rollback -- see PermPaySnap's header
         SnapPayFields(state.battlefield, bf_snap);
         std::vector<Permanent> bf_snap_full;
         if (g_pay_snap_verify) { bf_snap_full = state.battlefield; }
         const ManaPool               fm_snap = state.floating_mana;
         const ManaPool               av_snap = available ? *available : ManaPool{};
-        const std::vector<Card>      gy_snap = state.players[a].graveyard;   // Deathrite exile
+        PaySnapScratch<Card>         _gy_snap_scratch;
+        std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();       // Deathrite exile
+        gy_snap = state.players[a].graveyard;
         const int  la  = state.players[a].life;
         const int  lo  = state.players[1 - a].life;
         const bool oll = state.opponent_lost_life_this_turn;
@@ -2604,13 +2675,16 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
     if (rmask != 0)
     {
         const int a = state.active_player_index;
-        std::vector<PermPaySnap> bf_snap;      // compact rollback -- see PermPaySnap's header
+        PaySnapScratch<PermPaySnap> _bf_snap_scratch;                        // see PaySnapScratch
+        std::vector<PermPaySnap>&   bf_snap = _bf_snap_scratch.Buf();        // compact rollback -- see PermPaySnap's header
         SnapPayFields(state.battlefield, bf_snap);
         std::vector<Permanent> bf_snap_full;
         if (g_pay_snap_verify) { bf_snap_full = state.battlefield; }
         const ManaPool               fm_snap  = state.floating_mana;
         const ManaPool               av_snap  = available ? *available : ManaPool{};
-        const std::vector<Card>      gy_snap  = state.players[a].graveyard;   // Deathrite exile
+        PaySnapScratch<Card>         _gy_snap_scratch;
+        std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();       // Deathrite exile
+        gy_snap = state.players[a].graveyard;
         const int  la  = state.players[a].life;
         const int  lo  = state.players[1 - a].life;
         const bool oll = state.opponent_lost_life_this_turn;
