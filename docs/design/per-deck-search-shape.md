@@ -414,3 +414,26 @@ a small UNITS increase at one configuration -- Minotaur +2.65 for 1.009x at d5b4
 configuration for both. By the standing rule (a clean win regresses on NO axis) these are the user's call, not
 an agent's. The recommendation is to take both: the units axis is a proxy for cost and the real-time axis
 moved the other way.
+
+## FLEET STATE after 2026-09-11 (7 of 20 decks now run leafless)
+
+| shape | decks |
+|---|---|
+| `{leaf: none, alpha: relaxed}` (shape #2) | Fluctuator, **StompySurprise, Goblins, treasure_hunt, Dragonstorm, Mirrorwing Dragon, Dragons** (7) |
+| default (escalation + model leaf, shape #1) | Anti-Lifegain, Auras, BreachingDragonstorm, Creature Giving, CritterLifegain, FiveColour, Hinata2, KittyEquipment, Knights, Melira Pod, Minotaur, burn, slivers_vial (13) |
+
+**AN OPERATIONAL CONSEQUENCE WORTH ACTING ON: those 7 decks no longer need their value leaf REGENERATED.**
+`leaf: "none"` is applied in `AttachValueSidecar`'s `apply_leaf_policy()`, which parses the sidecar and then
+replaces `value_model` with `MidGameEvaluator::Constant()` and sets `value_trust_depth = 0`. The 120-tree
+model is therefore loaded and immediately discarded -- never consulted for any decision. So when a play-logic
+change invalidates the fleet's value sidecars (the usual trigger for a regeneration sweep), these 7 decks can
+be SKIPPED: only their `value_play` block and the keep table matter.
+
+**But the FILE must stay.** Sidecar presence is what activates the hybrid at all, and the H-cell ladder is
+guarded on the sidecar EXISTING (a missing model silently costs 1.35-84.8x, per `value-leaf.md`). This is
+exactly why these adoptions set `leaf: "none"` instead of renaming to `.value.DISABLED.json`.
+
+**One caveat on the adopted decks, and a possible further gain.** Each deck's exhaustive keep table and its
+`mull_gen` settings were fitted under the MODEL-leaf play, and the shape keys apply during mulligan generation
+too. Every measurement above was taken WITH the shipped keep table live, so the results are valid for what
+ships; but a keep table re-fitted to the leafless play could add further gain on these 7 decks. Untested.
