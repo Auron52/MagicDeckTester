@@ -4781,3 +4781,67 @@ save the mid-session rebuild corrupted) and `claude_s12_gi11` (won T4, 60 decisi
 **Rulings still open:** "bankable" reading of infinite mana vs raising `MTG_EDF_MAX_ITER`; the
 rule-2/3 rider; rule 4's missing graveyard-Emiel guard; ×N coalescing vs expanded lines; the clue
 toggle in ⚙ options vs a header control.
+
+## Session 15d (2026-09-10): seed 6 T4 -- the guard that priced a land it was about to tap
+
+USER: *"Seed 6: Combo Off failure"*, and then the sharper half: *"Even worse, that combo off failure
+didn't leave any mana up."* Their T4 board is Kitchen (+Overgrowth +Trace of Abundance) 4, Brushland
+(+Fertile Ground +Wild Growth) 3, Adarkar Wastes 1; Peregrine Drake x2 (untaps all three lands),
+Cloud of Faeries, Eldrazi Displacer under Training Grounds -- `{2}{C}` becomes `{C}`, so **net +7 a
+pass** with two colourless sources against one `{C}` pip. Unlike seed 9 this board satisfies the
+user's rule outright, so the failure was in EXECUTION.
+
+Reproduced as `test/combo_off/edf_co_11_seed6_t4_draw_the_deck.json`: `blink Peregrine Drake x60 --
+COMBO OFF (NOT PROVEN) [WISH-DRAW]`, and in the scenario re-apply the loop managed **zero blinks**
+(`[finish] draw seen=2 paid=2, finish calls=0`, `history events=0`).
+
+### Cause 1 -- the draw guard priced the source's own tap
+
+`SpendSurplusOnDrawSinks` guards each activation with "can the pool still pay this cost AND the next
+blink" -- and ran that projection **before** paying the `{T}` half. So `AvailableManaPool` still
+counted the source's own yield: Kitchen is the investigate source AND worth 4, so the guard saw 8
+mana against `{4}` + `{C}` and said yes. Tapping Kitchen left Brushland 3 + Adarkar 1, whose FOUR
+units exactly paid the `{4}` -- and those two are the board's ONLY colourless sources, so the
+Displacer's `{C}` had nothing left to tap. `pay(c)` failed on iteration ZERO, the loop broke at
+`done=0`, and it broke having already spent the float and tapped every land. That is precisely the
+"didn't leave any mana up" report: the failure mode and the stranding are the same event.
+
+Tapping first and pricing after is both the honest order and the one the comment already claimed
+("so the source cannot tap itself toward its own cost"). `MTG_DRAW_GUARD_SELFTAP`, COMBO OFF only --
+the same guard runs in autonomous play where its economics are a measured artifact.
+**Measured: 0 blinks -> 6, 2 draws -> 10.**
+
+### Cause 2 -- a failed Combo Off must cost NOTHING
+
+`MTG_COMBO_OFF_ROLLBACK` (default ON): the apply runs, and if the opponent has not lost the whole
+GameState is restored and the event/draw/reveal sinks are truncated to their pre-attempt length. A
+button offered on INVENTORY rather than on proof will sometimes be wrong; what it must never do is
+charge for the attempt. The failure event now ends *"Your board, mana and hand are UNCHANGED"*.
+On clairvoyance: a rolled-back attempt has still shown the player their library order -- but the
+un-rolled-back failure revealed exactly the same cards AND stranded the board, so this is no worse
+on information and strictly better on state.
+
+### What is FIXED, and the OPEN residual -- stated plainly
+
+With the wish one card down, the seed-6 board now **wins at x31, verified**: bank, Kitchen
+investigate, crack the Clue, draw, cast Living Wish, fetch Dimensional Infiltrator (blue -- the
+board makes no black, and `MTG_COMBO_FINISH_COLOR` picks accordingly), deploy it inside the loop,
+exile fifty cards. The finish CHAIN is whole.
+
+**Still open:** with the wish thirteen cards down -- where the user's actually was -- the loop
+reaches ten draws and then stops. It is NOT the iteration ceiling (`MTG_EDF_MAX_ITER=200` gives an
+identical 6 blinks / 10 draws) and it is not the outlet's own `{C}` pip (a hold for that was built
+and measured to change nothing). At +7 a pass against a 6-mana-per-card engine the board should
+reach thirteen draws inside sixty iterations, so a third defect is still in there. Recorded, not
+papered over: fixture 11 pins the chain, and the deep dig is the next thing to instrument.
+
+### Two capability boundaries worth knowing
+
+* **`ApplyBlinkLoop` cannot cast an arbitrary DRAWN card mid-loop.** `ComboFinishFromHand` deploys
+  `{T}`-less FINISHERS and casts WISHES, and nothing else. So drawing into an Emiel does not give
+  the loop a pip-free outlet to switch to -- the rationale behind the user's rule 4 ("you can draw
+  into Emiel and cast it if you can draw your deck") is NOT something the executor can currently do.
+  It did not bite on this board (two `{C}` sources, `{C}` a pass), but it will on a Displacer-only
+  board that runs out of colourless.
+* The dig prices at Kitchen's `{4}` investigate plus the Clue's own `{2}` -- six mana a card. Any
+  rule that assumes "draw the deck" should be read against that number, not against "free".

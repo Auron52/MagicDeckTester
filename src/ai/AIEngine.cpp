@@ -2292,12 +2292,51 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // instead of the asymmetry. See ComboOffApplyPause; MTG_COMBO_OFF_SILENT=0 restores
                 // the live-chooser apply (one-binary A/B).
                 static const bool s_co_silent = EnvOn("MTG_COMBO_OFF_SILENT", true);
+                // COMBO OFF NEVER CHANGES THE BOARD UNLESS IT WINS (MTG_COMBO_OFF_ROLLBACK=0 to
+                // disable). USER, 2026-09-10, on a click that did not finish: *"Even worse, that
+                // combo off failure didn't leave any mana up."* -- the failed attempt had spent the
+                // float, tapped every land and drawn thirteen cards, leaving the player strictly
+                // worse off than if they had never pressed it. A button offered on INVENTORY rather
+                // than on proof will sometimes be wrong; what it must never do is cost anything.
+                //
+                // The apply is already re-runnable on a copy -- that is exactly what the gate's
+                // trial does, and trial and apply are identical under ComboOffApplyPause -- so
+                // committing only on a win is free. The three viewer-facing sinks are truncated to
+                // their pre-attempt length too: after a rollback the draws did not happen, and a
+                // history that lists them would be describing a board that no longer exists.
+                //
+                // ON CLAIRVOYANCE, because it is the one real objection: a discarded attempt that
+                // drew cards has still SHOWN the player their library order. But today's failure
+                // reveals exactly the same cards AND strands the board, so the rollback is no worse
+                // on information and strictly better on state. Noted for the user rather than
+                // decided quietly.
+                static const bool s_co_rollback = EnvOn("MTG_COMBO_OFF_ROLLBACK", true);
+                const bool try_rollback = s_co_rollback && !OpponentHasLost(state);
+                GameState  co_before;
+                size_t sv_ev = 0, sv_dr = 0, sv_rv = 0;
+                if (try_rollback)
+                {
+                    co_before = state;
+                    if (g_play_event_sink)  { sv_ev = g_play_event_sink->size(); }
+                    if (g_play_draw_sink)   { sv_dr = g_play_draw_sink->size(); }
+                    if (g_play_reveal_sink) { sv_rv = g_play_reveal_sink->size(); }
+                }
                 if (s_co_silent)
                 {
                     ComboOffApplyPause co_quiet;
                     TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main);
                 }
                 else { TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main); }
+                if (try_rollback && !OpponentHasLost(state))
+                {
+                    state = std::move(co_before);
+                    if (g_play_event_sink  && g_play_event_sink->size()  > sv_ev)
+                    { g_play_event_sink->resize(sv_ev); }
+                    if (g_play_draw_sink   && g_play_draw_sink->size()   > sv_dr)
+                    { g_play_draw_sink->resize(sv_dr); }
+                    if (g_play_reveal_sink && g_play_reveal_sink->size() > sv_rv)
+                    { g_play_reveal_sink->resize(sv_rv); }
+                }
                 // FAIL LOUDLY, NEVER SILENTLY (USER 2026-09-10: a click that does not win must
                 // "fail loudly/visibly, never phantom-win"). The rule table offers the button on
                 // board INVENTORY, so a plan can be offered without a trial apply having proved the
@@ -2306,14 +2345,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // failure still (the verify and the apply disagreed), and says so.
                 if (!OpponentHasLost(state))
                 {
+                    const std::string restored = try_rollback
+                        ? std::string(" Your board, mana and hand are UNCHANGED -- the attempt was "
+                                      "rolled back, so nothing was spent.")
+                        : std::string(" The loop ran; the kill did not land.");
                     EmitPlayEvent(state.turn_number, "combo_off_failed",
                         chosen.combo_off_verified
                             ? std::string("⚠ COMBO OFF did NOT win -- the verified line and the "
                                           "applied line disagree. Please report this frame.")
+                                  + restored
                             : std::string("⚠ COMBO OFF did not finish the game (offered by rule ")
                                   + (chosen.combo_off_rule.empty() ? std::string("?")
                                                                    : chosen.combo_off_rule)
-                                  + "). The loop ran; the kill did not land.");
+                                  + ")." + restored);
                 }
             }
             else { TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main); }
