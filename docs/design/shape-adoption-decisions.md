@@ -281,3 +281,51 @@ diff rather than trusting.
 **The plan-cache global pool (commit `e839f489`) is already validated against the suite:** smoke is
 80/80 with the per-game audit reporting **0 of 80 configs changed, 0 play-changed**. It is
 result-neutral and needs no rebaseline.
+
+## 11. The FIT defect: it discards the measured crossover (2026-09-11)
+
+User framing that led here: *"The main issue I have with full-ladder is simply that we waste time on
+leaf entries that are not valuable. We do still need to go through the depths exactly once."* That is
+FIT's specification — and measuring against it found FIT was the bigger waster.
+
+**The defect.** The FIT path ends `line = hl; return line;` — unconditional, with an early return, so
+it never reaches the escalation's `taken = hcommitted >= value_fallback_take_at[committed]`. FIT
+throws the measured crossover away and always takes the heuristic line. One fact, three explanations:
+
+| deck | `take_at` | what FIT did |
+|---|---|---|
+| breaching | `take_at[5] = 6`, FIT reaches ≤ 5 | all 3 passes were ones the ladder computes and **discards** |
+| melira | `[1,2,3,4,5,5,6,6]` — strictest in the repo | discards the value line the table would have **kept** (+0.0027 at 0.90x) |
+| dragons | `take_at[1..3] = 1` | table takes nearly everything, so FIT **agrees** — and wins by dropping the ladder's 35-of-67 partial passes |
+
+So the two wastes are distinct and both measurable, and `redo_short` vs excess `redos` separates them:
+
+* **ladder waste** — leaf entries on passes that never reach the depth that gets committed.
+  Dragons: **35 of 67** escalations per 120 games.
+* **FIT waste** — passes the crossover would reject, plus a per-game R calibration paid before the
+  probe whether or not any pass runs. Breaching: **120 calibrations costing 32,090 units for 3
+  passes**, and the calibration's second half *is* a d1 rollout.
+
+**Two gates, both default OFF pending the A/B** (commit `ba2494ee`):
+`MTG_ESC_FIT_CROSSOVER` skips a pass the table could not take — applied R-free first (`dpass ≤ d1`
+always, since the overrun path only steps shallower), then again once `dpass` is known.
+`MTG_ESC_FIT_LAZY_R` defers the calibration to first use; not result-neutral (it charges `budget`),
+hence its own flag, and FIT-only since mode 1's reserve gate needs R before the probe.
+
+**Ordering is the whole point.** The crossover gate alone bought ~1% on breaching (422 → 419 ms). It
+only pays once it runs *before* the calibration it makes unnecessary:
+
+| breaching, 120 games | ms | digest | calibrations | skips |
+|---|---|---|---|---|
+| ship (full ladder) | 52 | `d72f75039b181476` | — | — |
+| FIT, flags off | 422 | `d72f75039b181476` | 120 | — |
+| + crossover gate | 419 | `d72f75039b181476` | 120 | 3 |
+| **+ lazy R** | **53** | `d72f75039b181476` | **0** | 3 |
+
+FIT reaches **parity with the ladder** at byte-identical play. Flags off: smoke 80/80, per-game audit
+0 of 80 configs changed; 86/86 unit tests.
+
+This also retires the "fast decks need a depth ceiling" recommendation from §1. A ceiling would have
+hidden breaching's 3 rejectable passes instead of preventing them, and would have capped dragons
+where FIT is already correct. The right fix is the crossover the engine had already measured and was
+ignoring.
