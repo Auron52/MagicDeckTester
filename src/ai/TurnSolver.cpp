@@ -31416,13 +31416,73 @@ namespace plancache
             static_cast<long long>(EnvInt("MTG_PLAN_CACHE_KB", 0)) * 1024LL;
         return v;
     }
+    // GLOBAL POOL (2026-09-11, user-approved). The budget used to be thread_local, so
+    // MTG_PLAN_CACHE_KB DIVIDED the memory by the worker count instead of pooling it.
+    // MTG_ENUM_HIWATER_KB measured what that costs on Melira: 162 single enumerations over 256 MB in
+    // ~40 jobs (site m1 154, bp 8), the largest 1,545 MB and the median of the giants 776 MB -- so a
+    // 256 MB/thread slice REFUSED every one of them (-> recompute) while 31 other workers sat on idle
+    // reservations. Same shape and same rationale as the FSL byte pool below: a shared pool lets the
+    // rare monster draw GBs while typical workers hold little, and the GLOBAL bound holds no matter
+    // which workers peak together. A per-thread cap cannot do both -- it is a LIMIT, not a
+    // reservation, so raising it to fit one giant (1.5 GB x 32 = 49 GB) recreates the unbounded OOM.
+    // Result-neutral either way (a refused store just recomputes): digest AND total units verified
+    // byte-identical at unbounded / 256 MB / 64 MB before this change.
+    inline std::atomic<long long>& PoolUsed()    { static std::atomic<long long> v{0}; return v; }
+    inline std::atomic<long long>& PoolHiwater() { static std::atomic<long long> v{0}; return v; }
+    // Each thread's BORROWED amount, so a release returns exactly what that thread took.
     inline thread_local long long t_enum_bytes = 0;   // enummemo::t_cache promoted plan vectors
     inline thread_local long long t_bp_bytes   = 0;   // BpEnumEntryFor's continuation cache
+    // THREAD EXIT -- the leak MTG_PLAN_POOL_STATS caught on this change's very first run. Every
+    // IN-thread clear pairs with a Release, but a worker's FINAL balance used to die with the thread:
+    // t_bp_bytes above all, because the bp cache is deliberately never epoch- or game-cleared (see
+    // BpEnumEntryFor), so each worker accumulates for its whole life. Under the OLD thread_local
+    // budget that was self-correcting -- the budget died with the counter. Against a GLOBAL pool it
+    // is permanent: 32 workers x ~22 MB left 716 MB of an 805 MB hiwater reserved by threads that no
+    // longer existed. The symptom is precisely the silent one Release warns about -- play stays
+    // byte-identical while every thread recomputes, so nothing looks broken. Destruction order is
+    // safe: Acquire odr-uses this, so it is constructed on the thread's first acquisition and hence
+    // destroyed BEFORE the caches it accounts for -- we zero the accounting, the memory frees moments
+    // later. Destructor defined out-of-line below because it calls Release.
+    struct ThreadReleaser { ~ThreadReleaser(); };
+    inline thread_local ThreadReleaser t_releaser;
     inline bool Fits(long long add)
     {
         const long long b = BudgetBytes();
-        return b <= 0 || t_enum_bytes + t_bp_bytes + add <= b;
+        if (b <= 0) { return true; }                 // 0/unset = unbounded = byte-identical, unchanged
+        return PoolUsed().load(std::memory_order_relaxed) + add <= b;
     }
+    // Relaxed atomics for the reason the FSL pool documents: the counter guards MEMORY, not results,
+    // and the store rate is far below the lookup rate.
+    inline void Acquire(long long n, long long& local)
+    {
+        (void)&t_releaser;   // odr-use: guarantees this thread's exit-releaser is constructed
+        local += n;
+        const long long now = PoolUsed().fetch_add(n, std::memory_order_relaxed) + n;
+        long long hi = PoolHiwater().load(std::memory_order_relaxed);
+        while (now > hi && !PoolHiwater().compare_exchange_weak(hi, now, std::memory_order_relaxed)) {}
+    }
+    // INVARIANT: every site that zeroes a borrowed counter MUST release through here. A single missed
+    // release leaks the pool permanently, and the symptom is the nastiest available -- "pool full
+    // forever" => recompute everywhere => a uniform silent slowdown with BYTE-IDENTICAL play, because
+    // the contract is result-neutral. Nothing looks broken. MTG_PLAN_POOL_STATS is the leak detector:
+    // a residual far above 0 at exit means a release site was missed.
+    inline void Release(long long& local)
+    {
+        if (local > 0) { PoolUsed().fetch_sub(local, std::memory_order_relaxed); }
+        local = 0;
+    }
+    inline ThreadReleaser::~ThreadReleaser() { Release(t_enum_bytes); Release(t_bp_bytes); }
+    struct PoolDumper
+    {
+        ~PoolDumper()
+        {
+            if (!EnvOn("MTG_PLAN_POOL_STATS")) { return; }
+            std::fprintf(stderr, "[plan-pool] budget=%lld KB hiwater=%lld KB residual=%lld KB%s\n",
+                         BudgetBytes() >> 10, PoolHiwater().load() >> 10, PoolUsed().load() >> 10,
+                         (PoolUsed().load() >> 20) > 1 ? "   <-- LEAK: a release site was missed" : "");
+        }
+    };
+    inline PoolDumper g_pool_dumper;
     inline std::size_t ApproxPlansBytes(const std::vector<TurnSolver::Plan>& plans)
     {
         std::size_t b = plans.capacity() * sizeof(TurnSolver::Plan);
@@ -31587,7 +31647,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
 
     auto& cache = enummemo::t_cache;
     if (enummemo::t_epoch_seen != g_decision_epoch)
-    { cache.clear(); plancache::t_enum_bytes = 0; enummemo::t_epoch_seen = g_decision_epoch; }
+    { cache.clear(); plancache::Release(plancache::t_enum_bytes); enummemo::t_epoch_seen = g_decision_epoch; }
     TranspositionTable::Key k = BuildBreakpointKey(state, is_pre_combat);
     // ENUMERATION-OBSERVABLE GLOBALS the key does not fold (audit §6.4 class, same hatch as the
     // m2 host tag): (a) g_fresh_axis_enum -- only FSLineWin's enumeration emits freshmode
@@ -31667,7 +31727,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans));
         if (plancache::Fits(psz))
         {
-            plancache::t_enum_bytes += psz;
+            plancache::Acquire(psz, plancache::t_enum_bytes);
             it->second.has_plans     = true;
             it->second.max_dropped   = own_md;
             it->second.plans         = plans;
@@ -31682,7 +31742,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         if (cache.size() >= enummemo::Cap())
         {
             cache.clear();
-            plancache::t_enum_bytes = 0;
+            plancache::Release(plancache::t_enum_bytes);
             enummemo::g_clears.fetch_add(1, std::memory_order_relaxed);
         }
         cache[k] = enummemo::Entry{ g_decision_epoch, own_md, false, {}, {},
@@ -31711,7 +31771,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
 
     auto& cache = enummemo::t_cache;
     if (enummemo::t_epoch_seen != g_decision_epoch)
-    { cache.clear(); plancache::t_enum_bytes = 0; enummemo::t_epoch_seen = g_decision_epoch; }
+    { cache.clear(); plancache::Release(plancache::t_enum_bytes); enummemo::t_epoch_seen = g_decision_epoch; }
     TranspositionTable::Key k = BuildBreakpointKey(state, false);
     // HOST NAMESPACE (audit §6.4): this host's body (EnumerateM2PlansBody: cast-only plus the
     // MTG_M2_AXES fan-out; no land axis / no appended breakpoint variants) differs from
@@ -31784,7 +31844,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         const long long psz = static_cast<long long>(plancache::ApproxPlansBytes(plans));
         if (plancache::Fits(psz))
         {
-            plancache::t_enum_bytes += psz;
+            plancache::Acquire(psz, plancache::t_enum_bytes);
             it->second.has_plans     = true;
             it->second.max_dropped   = own_md;
             it->second.plans         = plans;
@@ -31798,7 +31858,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         if (cache.size() >= enummemo::Cap())
         {
             cache.clear();
-            plancache::t_enum_bytes = 0;
+            plancache::Release(plancache::t_enum_bytes);
             enummemo::g_clears.fetch_add(1, std::memory_order_relaxed);
         }
         cache[k] = enummemo::Entry{ g_decision_epoch, own_md, false, {}, {},
@@ -31815,7 +31875,7 @@ void TurnSolver::ClearPerGameCaches()
     solvememo::t_cache.clear();
     solvememo::t_m2cache.clear();
     enummemo::t_cache.clear();
-    plancache::t_enum_bytes = 0;
+    plancache::Release(plancache::t_enum_bytes);
 }
 
 
@@ -41567,11 +41627,11 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         {
             if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }
             cache.clear();
-            plancache::t_bp_bytes = 0;
+            plancache::Release(plancache::t_bp_bytes);
         }
         if (plancache::Fits(psz))
         {
-            plancache::t_bp_bytes += psz;
+            plancache::Acquire(psz, plancache::t_bp_bytes);
             BpEnumEntry ent;
             ent.plans = std::move(plans);
             return &cache.emplace(key, std::move(ent)).first->second;
