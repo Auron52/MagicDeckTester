@@ -14841,6 +14841,9 @@
     ]
   },
   "value_play": {
+  "leaf": "none",
+  "alpha": "relaxed",
+  "leaf_note": "ADOPTED 2026-09-11: NO-LEAF escalation (shape #2). The value leaf does not change this deck's play -- it wins on turn ~3.79 inside a 6-ply horizon, so the search PROVES its win and the leaf's estimates are never load-bearing (probe-failure rate 5/65 decisions). 4,000 games per cell, seeds 9,000,000+: on-policy d6b40 0 better/0 worse at 0.914x units / 0.939x wall; d5b40 0/0 at 0.840x/0.808x; d5b20 0/0 at 0.893x/0.853x; d3b20 BYTE-IDENTICAL at 0.976x; d3b10 0/1 (z -1.00, 1 game in 4,000) at 0.970x; d0b0 byte-identical. Reproduced on seeds 7,000,000+ (0/0, d_avg 0.0000, 0.914x). The sidecar STAYS in place: its presence gates the H-cell ladder and the mull_gen settings are read from it. See docs/design/per-deck-search-shape.md (on-policy re-screen + fleet leaf-necessity screen, 2026-09-11)",
     "target_depth": 6,
     "budget_ms": 40,
     "enabled": true,

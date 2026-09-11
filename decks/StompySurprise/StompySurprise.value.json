@@ -14927,6 +14927,9 @@
   "note": "eval_model retrained on rows dumped at SHIPPED play WITH the deck profile, so the exhaustive keep model was live. Labels are searched K=3 for every deck (a pooled dump forces one label mode). value_leaf_table/crossover here are the OLD ones until the regenerated matrix lands."
  },
  "value_play": {
+  "leaf": "none",
+  "alpha": "relaxed",
+  "leaf_note": "ADOPTED 2026-09-11: NO-LEAF escalation (shape #2). This deck's value leaf was a NET NEGATIVE -- removing it is BETTER on quality AND cheaper on both axes at every configuration the deck is played at. Paired sign test (better/worse on identical games), 4,000 games per cell, fresh seeds 9,000,000+: on-policy d6b20 14/0 z +3.74 at 0.760x units / 0.720x wall; d5b20 18/1 z +3.90 at 0.797x/0.680x; d5b40 10/1 z +2.71 at 0.750x/0.640x; d3b20 2/0 z +1.41 at 0.990x/0.950x; d3b10 0/0 at 0.972x/0.928x; d0b0 byte-identical (greedy, no leaf possible). Independently reproduced on seeds 7,000,000+ (28/5 z +4.00). Mechanism: with no leaf only PROVEN in-horizon wins are banked, so the trust escalation can no longer commit an unverified line the crossover table then keeps. Also measured and REJECTED here: escalation_fresh_frac 0.5 (byte-identical play in all 16 blocks -- the shared-escalation-budget \"starvation\" is inert on this deck) and dropping escalation_cap (15/16 blocks identical). See docs/design/per-deck-search-shape.md (on-policy re-screen + fleet leaf-necessity screen, 2026-09-11)",
   "enabled": true,
   "target_depth": 6,
   "escalation_cap": 5,

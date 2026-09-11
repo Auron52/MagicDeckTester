@@ -1,6 +1,5 @@
-# Regression ground truth -- commit 42323e23  date 2026-09-10
+# Regression ground truth -- commit 6ce7bab5  date 2026-09-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-09-10): REBASE REPAIR + the cast_draw logging fix. The rebase onto upstream's value_play shape arc split the two GT halves (48 keys STALE per check_gt_logs.py): non-conflicting gt_logs/*.wins replayed to MY side while the conflicted regression_gt.txt aggregate took upstream's, so the halves named different runs. Repaired the only correct way -- re-run and re-accept under the REBASED binary, never by hand-merging numbers. This run: 8 keys, 0 of 8 with a changed average, searched slower=0/faster=0, d0 slower=0/faster=0, per-game play-changed=0 (the .wins half was already correct). Carries the cast_draw LogDraw fix at both resolvers (fingerprints move, no play decision does).
 # accepted-with-regressions (regression, 2026-09-10): REBASE REPAIR + the cast_draw logging fix. The rebase onto upstream's value_play shape arc split the two GT halves (check_gt_logs.py: 48 STALE) -- non-conflicting gt_logs/*.wins replayed to MY side while the conflicted regression_gt.txt aggregate took upstream's. Repaired by re-running and re-accepting under the REBASED binary, never by hand-merging numbers. This run: 12 keys, 0 of 12 with a changed average, searched slower=0/faster=0, d0 slower=0/faster=0, per-game play-changed=0, reference reproducibility byte-identical (25 ok / 291 repaired / 0 play-drift / 0 contract-fail).
 # accepted-with-regressions (overnight, 2026-09-10): REBASE REPAIR + the cast_draw logging fix. The rebase onto upstream's value_play shape arc split the two GT halves (check_gt_logs.py: 48 STALE) -- non-conflicting gt_logs/*.wins replayed to MY side while the conflicted regression_gt.txt aggregate took upstream's, so the halves named different runs. Repaired by re-running and re-accepting each tier under the REBASED binary, never by hand-merging numbers (GT is a measurement). This run: 28 keys, 0 of 28 with a changed average, searched slower=0/faster=0, d0 slower=0/faster=0, per-game play-changed=0 -- i.e. the .wins half was already correct and only the aggregate was stale. Upstream's own overnight accept (Fluctuator relaxed alpha) is preserved; the only content this adds is the cast_draw LogDraw fingerprints.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -15,7 +14,7 @@ burn_smoke_d3_s1001=4.3400/d9e7ab8f17545973
 burn_smoke_d5_s1001=4.3520/21b35632704eff49
 th_smoke_d0_s1001=5.5480/2c26a469bba22630
 th_smoke_d3_s1001=4.0800/beb0417423f640b5
-th_smoke_d5_s1001=4.0000/9ee3c4128fe8de29
+th_smoke_d5_s1001=4.0000/bbc5ebd17666f99e
 knights_smoke_d0_s1001=4.5400/c25cdc82b946acb0
 knights_smoke_d3_s1001=4.3960/00cbfb13e70f8833
 knights_smoke_d5_s1001=4.3867/c524b6e9828eef90

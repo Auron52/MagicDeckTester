@@ -13958,6 +13958,9 @@
   ]
  },
  "value_play": {
+  "leaf": "none",
+  "alpha": "relaxed",
+  "leaf_note": "ADOPTED 2026-09-11: NO-LEAF escalation (shape #2). Neutral-or-better quality and cheaper on both axes at every configuration. 4,000 games per cell, seeds 9,000,000+: d5b20 8/3 z +1.51 at 0.904x units / 0.835x wall; d5b80 4/1 z +1.34 at 0.866x/0.772x; d3b80 BYTE-IDENTICAL at 0.991x; d3b10 1/1 z 0.00 at 0.988x/0.961x; d0b0 byte-identical. Also measured and REJECTED: escalation_fresh_frac 0.5 (1.083x units at z +0.71) and dropping escalation_cap (1.004x at z -0.58, 4/16 blocks identical) -- this deck's cap needs no repair. See docs/design/per-deck-search-shape.md (on-policy re-screen + fleet leaf-necessity screen, 2026-09-11)",
   "target_depth": 5,
   "budget_ms": 20,
   "enabled": true,

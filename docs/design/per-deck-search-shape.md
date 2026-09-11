@@ -320,3 +320,69 @@ route; that cliff was the stand-in discarding the deck's tuned cap/beam/R, not t
 **burn rejects both shapes on the UNITS axis while looking fine on wall** (escnl 1.087x units but 0.969x
 wall). Units is the deterministic axis and the decision axis; wall falls because skipped leaf evaluations are
 unmetered. Do not read a wall-only improvement as a saving.
+
+## THE FLEET LEAF-NECESSITY SCREEN (2026-09-11): is each deck's value leaf worth its cost?
+
+One pooled batch, **1,222 jobs / 462,000 games**, fresh seeds 9,000,000+. For twelve modelled decks, `ship`
+against `{leaf: "none", alpha: "relaxed"}` **at every configuration that deck is actually played at** (its own
+locked config plus every `regression_cases.sh` tier), on the sidecar route via a `value_profile` override --
+which shares the deck's real keep table between arms, so only the sidecar differs. 4,000 games per cell;
+`d0b0` run as a 1,000-game DIGEST-EQUALITY proof rather than a statistic.
+
+### Two structural facts that shrink the question
+
+**At depth 0 the leaf cannot participate, and at depth 3 it does not matter.** Every `d0b0` cell came back
+byte-identical on all twelve decks (greedy, no lookahead). And at d3 the leaf is inert or nearly so --
+`auras_d3b80`, `breach_d3b10/d3b20`, `critter_d3b10/d3b20`, `gob_d3b20`, `knights_d3b20`, `thl_d3b80`
+BYTE-IDENTICAL, the rest within 1-3% of 1.000x. Every trust depth is >= 4, so below that the model is never
+consulted. **Consequence: a leaf change can only move the suite's d5 cases.**
+
+### Per deck, at every configuration it is played at
+
+| deck | verdict | quality (worst cell) | units | wall |
+|---|---|---|---|---|
+| StompySurprise | **ADOPTED** | +1.41 (d3b20), +3.90 d5b20, +3.74 own | 0.750x - 0.990x | 0.640x - 0.950x |
+| treasure_hunt | **ADOPTED** | 0.00 (d3b10), +1.51 d5b20 | 0.866x - 0.991x | 0.772x - 0.983x |
+| Dragonstorm | **ADOPTED** | 0.00 (d3b10), +1.29 d5b20 | 0.916x - 0.995x | 0.814x - 0.971x |
+| Goblins | **ADOPTED** | −1.00 (d3b10, 1 game in 4,000) | 0.840x - 0.976x | 0.808x - 0.970x |
+| slivers_vial | **STAGED -- a TRADE** | **+3.46** (12/0) at d3b10, 0/0 d5b20 | **1.023x** d3b10, 0.878x d5b20 | 0.674x d5b20 |
+| Knights | rejected | neutral everywhere | **1.096x** d5b40 | 0.714x - 0.991x |
+| Auras | rejected | **−2.00** d5b20 | 0.945x - 0.997x | |
+| Anti-Lifegain | rejected | **−2.50** d5b20 | **1.212x** d5b20 | |
+| Creature Giving | rejected | **−2.59** d5b20, −2.24 d5b40 | 0.747x | (finding 12, reproduced) |
+| CritterLifegain | rejected | +1.73 | **2.069x - 3.298x** | 1.698x - 2.567x |
+| BreachingDragonstorm | rejected | 0/0 | **2.947x - 4.019x** | **6.080x - 9.281x** |
+| Hinata2 (shape #3) | rejected | **−4.33** d3b10 (+0.17 own) | 0.788x - 0.852x | 0.737x - 0.793x |
+| burn / FiveColour | rejected | −1.73 / −3.73 | 1.087x / 1.298x | |
+| Melira Pod | rejected (all shapes) | best −1.25 | 0.892x at **1.398x wall** | |
+
+**Do NOT generalise "drop the leaf".** The spread is 0.75x to 4.02x units on the SAME one-line change.
+BreachingDragonstorm leafless costs 9.3x wall; Creature Giving buys 0.747x units for z −2.59. Per-deck
+measurement at per-deck configurations is the only thing that separates these.
+
+### Hinata2 is the cautionary row, and it vindicates an existing warning
+
+Shape #3 measured **+0.17 at Hinata2's own d5b30 for 0.788x units / 0.737x wall** -- a 21% saving at dead-
+neutral quality, confirmed on two disjoint seed blocks (+0.30 on 7,000,000+, +0.17 on 9,000,000+). Adopting on
+that row alone would have shipped a **z −4.33 regression at d3b10** (18 better / 55 worse), which is a tier
+the suite runs. That is exactly what "the single pass is a DIAL, not a free win" already predicted for a small
+budget, and it is the whole reason the adoption rule says *every configuration the deck is played at*.
+
+This leaves an open DESIGN question (not actioned): the shape keys apply unconditionally at sidecar-load,
+while the cap and `escalation_fresh_frac` are gated on-policy (`vp_here`). If shape were likewise gated,
+Hinata2 could take its 21% saving and the d3 tiers would be untouched. It cannot simply reuse `vp_here`,
+because that requires `value_play.drives()` and Fluctuator -- the deck whose adopted shape this would
+protect -- locks no depth at all, so the gate would silently switch its shape off.
+
+### Two suspected config defects, both closed as NON-defects
+
+`escalation_cap` on five decks runs the built-in 120 prior with no `escalation_fresh_frac`, which makes the
+escalation budget the shared remainder and was measured starving it (StompySurprise 21.8% of escalations at
+`units==0`, treasure_hunt 20.8%). Measured directly, on-policy, 4,000 games:
+
+* **StompySurprise + `escalation_fresh_frac: 0.5` -- byte-identical play in all 16 blocks** at 1.011x units.
+* treasure_hunt + frac: 1.083x units at z +0.71. Dropping `escalation_cap` entirely: 1.004x at z −0.58
+  (StompySurprise 15/16 blocks identical).
+
+So the starvation is real in the counters and inert in the play. Neither deck needed repair, and the
+`units==0` counter is not by itself evidence of a defect -- a conclusion only digest equality could deliver.

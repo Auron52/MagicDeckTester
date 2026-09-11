@@ -3590,3 +3590,61 @@ It is live anyway (commit e75ac8ba, "adopted on the user's direction"). Revertin
 
 **Process note:** the preceding run was launched as 16 jobs on 32 workers — it could never use more than half
 the box and its tail was single-core. Pool MORE jobs than workers (80/32 here), splitting games per job.
+
+### 2026-09-11 — THE MODE QUESTION, SETTLED: every alternative is worse, and the revert premise was measured off-policy
+
+**USER DIRECTION:** *"We don't need to revert Melira's value-leaf, but we will want to change the mode we are
+using. We could revert the value-leaf for testing so that we start from a better baseline. But overall we want
+to go to the best solution."*
+
+So the no-leaf baseline was included as a first-class arm, and every mode available to this deck was measured
+at the configuration it is actually played at. **Result: the shipped mode is the best one. No change.**
+
+**Ten arms, d5b20 (production), 4,000 games each, fresh seeds 9,000,000+, ONE pooled batch:**
+
+| arm | `value_play` | better/worse | z | d_avg | units | wall |
+|---|---|---|---|---|---|---|
+| **ship** | (default: escalation + model leaf) | — | — | — | 1.000x | 1.000x |
+| nlrelax | `leaf: none, alpha: relaxed` | 117/137 | −1.25 | +0.0017 | 0.892x | **1.398x** |
+| nlstrict | `leaf: none` | 101/194 | −5.41 | +0.0212 | 0.816x | 1.230x |
+| nlv | `leaf: none, commit: model` | 95/235 | −7.71 | +0.0327 | 0.589x | 0.672x |
+| nlsingle | `leaf: none, alpha: relaxed` + FIT single | 88/257 | **−9.10** | +0.0432 | 0.533x | 0.523x |
+| **nomodel** | no sidecar at all (the "previous setting") | 100/163 | **−3.88** | +0.0132 | 0.692x | 0.948x |
+| nomodel @ b24 | iso-cost bracket | 102/147 | −2.85 | +0.0085 | 0.774x | 1.047x |
+| nomodel @ b27 | iso-cost bracket | 105/142 | −2.35 | +0.0065 | 0.831x | 1.136x |
+| nomodel @ b30 | iso-cost bracket | 105/138 | −2.12 | +0.0052 | 0.876x | 1.183x |
+| nlstrict @ b27 | iso-cost bracket | 103/147 | −2.78 | +0.0087 | 0.946x | 1.405x |
+
+**Not one arm is neutral-or-better.** The best is `nlrelax` at z −1.25 (not significant) and it costs **1.398x
+WALL** -- disqualifying on the one deck whose wall time is the actual problem.
+
+**The iso-cost bracket is the part that settles it.** Spending the leaf's cost on raw BUDGET instead walks the
+no-model arm monotonically toward neutral -- z −3.88 (b20) → −2.85 (b24) → −2.35 (b27) → −2.12 (b30) -- but it
+is *still behind at 0.876x of ship's units*. Extrapolating the two trends (units +0.0184/ms, z +0.176/ms)
+puts parity at roughly b37, i.e. ~1.0x units and z ≈ −0.9: a wash at best, and ~1.3x wall. **The value leaf is
+the better way to spend this deck's budget.** That extrapolation is an extrapolation; what is MEASURED is that
+no leafless or model-less configuration matched ship's quality at or below ship's cost.
+
+**This corrects the premise for reverting.** The 2026-09-08b verdict ("the heuristic rollout is AHEAD of the
+value leaf at every unbounded rung; H4 4.7440 vs V4 4.7500; do not adopt") and the 2026-09-08d reading ("on
+Melira the heuristic with more budget dominates every value-leaf form") were both taken at UNBOUNDED rungs.
+At the bounded configuration Melira is actually played at, removing the leaf costs **z −3.88**. The revert
+premise was an off-policy measurement -- the same class of error the on-policy re-screen exists to fix. The
+user's instinct not to revert was right, and for a reason the earlier record did not contain.
+
+**The emulated family was already re-screened post-fix and also loses** (`logs/emul_screen/decide_fix.txt`,
+d5b20: emulv 1.122x/+0.0042, emulnlv 1.186x/+0.0035, escnlv 0.888x/+0.0251 -- "choice: ship"). Together with
+the ten arms above, **every shape on the menu, the whole emulated family, the no-model baseline and four
+iso-cost budget points have now been measured on Melira at its production configuration, and ship wins all
+of them.** The mode question is closed.
+
+**What IS available, as a deliberate trade the user may want:** `nlsingle` buys **0.533x units / 0.523x wall**
+-- Melira roughly twice as fast -- for +0.0432 turns (z −9.10). That is the dial to reach for if Melira's cost
+ever has to come down (e.g. to make a generation stage affordable); it is not an improvement and is not
+adopted.
+
+**One methodological finding worth carrying:** on Melira the two cost axes DISAGREE for leafless shapes --
+`nlrelax` is 0.892x UNITS but 1.398x WALL, and `nlstrict` 0.816x/1.230x. Units is normally the decision axis
+because wall is contention-sensitive, but here both came from the same pooled batch, so the disagreement is
+real: a leafless pass does more real work per metered unit. **Report both axes; a units-only read would have
+called `nlrelax` a 11% saving when it is a 40% slowdown.**
