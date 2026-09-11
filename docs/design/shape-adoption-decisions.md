@@ -433,3 +433,45 @@ not simply "FIT ignores the crossover". That is the open question for the mornin
 **Caveat on scope:** no deck currently ships `ladder: single`, so `MTG_ESC_FIT_LAZY_R` is inert in
 production today. It is a prerequisite that makes FIT worth adopting, not a standalone production
 gain.
+
+### 11c. Melira: three hypotheses tested, two refuted — it is the MULTIPLICITY of passes
+
+Melira is the last holdout for "the ladder should always be dominated". Every one-pass variant loses
+to it (FIT ungated +0.0032, FIT lazy-R +0.0126, FIT gated +0.0248, cold-cap +0.019). Three candidate
+explanations, tested:
+
+**1. "FIT discards the value line that `take_at` would keep" — REFUTED.**
+`MTG_VALUE_TRUST_OFFSET=9` forces the ladder to TAKE every escalation instead of discarding it.
+Result: **avg 4.9333, identical to the default ladder's 4.9333** (digest differs, so play did change).
+Forcing the ladder to always take costs Melira nothing, so the take decision is not what makes the
+ladder good. (The same override is a no-op on FIT — it returns early and never reaches the take
+decision at all, which is §11's defect and made the first version of this test invalid.)
+
+**2. "Shallow heuristic search is better than deep on Melira" — REFUTED.**
+The h-depth histograms made this look obvious: the ladder reaches `h1:215, h2:152, h3:34, h4:20,
+h5:50` (421 of 471 escalations never reach user depth) while FIT sits at `h2:83, h3:149, h4:146,
+h5:89`. But sweeping the escalation depth directly (16 blocks, held-out base 9920000):
+
+| arm | Δ turn ± se | bett/wors | units |
+|---|---|---|---|
+| cap2 | +0.0197 ± 0.0031 | 10/76 | 0.890x |
+| cap3 | +0.0197 ± 0.0031 | 10/76 | 0.895x |
+| cap4 | +0.0197 ± 0.0031 | 10/76 | 0.897x |
+| cap5 | +0.0187 ± 0.0032 | 9/73 | 0.904x |
+
+Identical to four decimals across cap 2–5. **Depth is not the variable** — and this re-confirms the
+cap is inert on Melira, because the affordability predictor picks 1–3 and a ceiling of 2–5 never
+binds.
+
+**3. What survives: the multiplicity of passes itself.** Depth is ruled out, the take decision is
+ruled out, and skipping the passes entirely is the *worst* arm. The only thing several passes give
+that one pass does not — at equal final depth, with the result used or discarded alike — is the
+transposition/memo state they leave behind. That is the same memo-priming mechanism diagnosed on
+Creature Giving in §6, and here it is worth ~0.019 turns.
+
+**Consequence.** "Go through the depths exactly once" is still the right shape, but on Melira the
+single pass must **build the memo as it climbs** rather than jumping to the fitted depth cold. That is
+exactly the anytime-climbing single pass, and Melira is now its clearest case — lazy-R removed the
+need for it on Creature Giving, but not here. Leading hypothesis, not proven: the decisive test
+(run the passes, discard every result, measure) needs a flag that does not exist yet, because FIT's
+early return puts it out of reach of `MTG_VALUE_TRUST_OFFSET`.
