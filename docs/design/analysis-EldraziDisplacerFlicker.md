@@ -5139,6 +5139,50 @@ graveyard-Emiel guard; the search shortcut is deferred (the table fires on 3.2% 
 states and, at first fire, the engine is already 0.29 turns from its own win -- so it saves almost
 nothing until the rules widen, and it must key on `verified`, never on `offered`).
 
+## Session 15g (2026-09-11): the third seed-6 defect, and the draw sink gets the trial
+
+Session 15e located it and left it to its owner; this closes it.
+
+**What it was.** `MTG_DRAW_GUARD_SELFTAP` had already fixed a real over-count in
+`SpendSurplusOnDrawSinks`' guard, and the guard still passed while the payment still stranded. The
+evidence that named the remaining cause was the SHAPE of the bisection, not any single run: walking
+the Living Wish's depth gave a cliff between 4 and 6 cards down and then **identical numbers at
+every depth past it** -- 6 blinks, 10 draws, no wish, every time. A dig that is genuinely too deep
+degrades with depth; one that is constant is not about the dig at all. `MTG_EDF_LOOP_TRACE`:
+
+```
+k=6 enter             cost={C} float{c1} avail{g3 c1 *5}
+k=6 post-draw-sink    cost={C} float{}   avail{}
+STOP at k=6: pay-failed
+```
+
+Nine mana and a colourless in, nothing out, and the activation the guard existed to protect costs
+ONE MANA. `ManaPool::CanPay` answers over a POOL: it cannot see that one land serves one of its
+modes (Brushland taps for `{C}` OR `{G}`/`{W}`), and it cannot see that the sequential payment
+picks greedily -- so Kitchen's `{4}` was paid off the very sources the pending `{C}` needed.
+
+**`MTG_COMBO_OFF_DRAW_TRIAL`** replaces it with a real trial on a copy of the state -- tap the
+source, pay the draw through the loop's own payer, require the next activation to pay too -- and
+applies it to BOTH halves of "draw a card", the `{T}` sources and `CrackCluesForCards` (same pooled
+guard for its `{2}`). COMBO OFF only; `probe_pay` is null at both autonomous call sites, so the
+measured draw economics, GT, the value leaf and the keep tables are untouched.
+
+**Measured by wish depth** (1/2/4 were already green): 6, 9, 11, 12 and **13 -- the user's real
+depth** -- all go from 6 blinks and no kill to **60 blinks and a win**; at 13 it pays 26 draws,
+casts the wish, fetches Dimensional Infiltrator and decks them. `guard-refused=12` is the trial
+declining exactly the draws that would have starved the loop.
+
+**Fixture 11 now sits at thirteen cards down**, which strictly subsumes the one-draw chain it
+pinned before, and it is verified. With the lever off it does not win.
+
+**Sweep, one binary, 1051 states, this lever alone:** won 198 -> **206**, offered-but-lost 76 ->
+**68**, and *nothing else moved* -- identical offers per rule -- because it is purely an execution
+fix. `draw-to-find-starves-loop` 13 -> 0, `apply-did-nothing` 9 -> 0, `loop-zero-iterations`
+14 -> 1.
+
+Against the phase-1 baseline (184 wins / 84 failures), the branch now stands at **206 / 68**, with
+`combo_off_verified` still a perfect oracle at 206/206.
+
 ## Session 16 (2026-09-11): the per-click clock -- the persistent child was being thrown away
 
 **USER, standing complaint:** *"The current version is still too difficult to make work in the
