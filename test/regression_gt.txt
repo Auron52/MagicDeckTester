@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 1a6ebf6f  date 2026-09-11
+# Regression ground truth -- commit 7a4344fe  date 2026-09-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -20,7 +20,7 @@ antilife_smoke_d0_s1001=4.8930/ea45a9ecc08bd11a
 antilife_smoke_d3_s1001=4.1920/73898b9d931e6096
 antilife_smoke_d5_s1001=4.1800/1cd88b09b93a0b07
 hinata_smoke_d0_s1001=6.9720/fe60b59fab678938
-hinata_smoke_d3_s1001=5.7400/d05d2a8d0bb3e4f9
+hinata_smoke_d3_s1001=5.7400/088fd474d3022f10
 hinata_smoke_d5_s1001=5.7733/5b67ec01d3ea5f18
 dragonstorm_smoke_d0_s1001=5.4320/f5da38d6684d4ce0
 dragonstorm_smoke_d3_s1001=4.5467/56d8fb88e2252448
@@ -35,7 +35,7 @@ creature_giving_smoke_d0_s1001=5.5160/dbd1edeb6f3ec1b8
 creature_giving_smoke_d3_s1001=4.7067/317ddbb0d6d2d226
 creature_giving_smoke_d5_s1001=4.6667/ae3e7c5e37a15aa5
 mirrorwing_smoke_d0_s1001=5.8750/7b10f802e622da62
-mirrorwing_smoke_d3_s1001=4.2467/8e2ef89150e46a84
+mirrorwing_smoke_d3_s1001=4.2467/30490dc947a1902d
 mirrorwing_smoke_d5_s1001=4.3333/036eca1757a6048b
 fivecolour_smoke_d0_s1001=5.7830/3fcfb0a295fe3a1b
 fivecolour_smoke_d3_s1001=4.9600/94247794612f3f57
@@ -74,16 +74,16 @@ th2hg_smoke_d3_s1001=4.5000/4507a7e2d44b44c5
 dragonstorm2hg_smoke_d3_s1001=4.7800/54b39760e1efd818
 auras2hg_smoke_d3_s1001=4.5800/1c77361b9deb6fd5
 creature_giving2hg_smoke_d3_s1001=5.0000/41efcd6079fb2e3b
-mirrorwing2hg_smoke_d3_s1001=4.6800/b9b6fc23154b75e9
+mirrorwing2hg_smoke_d3_s1001=4.7000/b812e80e4740e3a7
 stompy2hg_smoke_d3_s1001=5.0000/73d0994752ca4e51
 kitty2hg_smoke_d3_s1001=4.9400/436f255dcee200b0
 dragons2hg_smoke_d3_s1001=6.3000/43872dc33fccb094
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
 critter2hg_smoke_d3_s1001=5.2000/4e1d2b89c377cd77
-melira2hg_smoke_d3_s1001=5.0800/3059da02fa50a29b
+melira2hg_smoke_d3_s1001=5.1200/87491d70572fd6e1
 fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
 fluctuator_smoke_d3_s1001=3.6400/b174974742419f91
-fluctuator_smoke_d5_s1001=3.6400/3f0ec5adc68dcc56
+fluctuator_smoke_d5_s1001=3.6400/84dfa2633b219319
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6790/990aaa21c4bc567e
