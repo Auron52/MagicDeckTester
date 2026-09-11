@@ -58,6 +58,16 @@ struct Arm
     // the crossover take decision) and not its depth. That pairing is the whole point of having both
     // per-job: the two arms must run at the same seeds in the same pool to be comparable.
     int         esc_depth_cap      = -1;    // -1 unset | 0 no cap | >0 the ceiling
+    // Let FIT's single pass REACH above the probe's committed depth (MTG_ESC_FIT_REACH), to the user
+    // depth, extrapolating cost/leaves above the probe's record. FIT is otherwise capped at the depth
+    // the PROBE reached while the ladder is not, which is the measured source of Melira's gap -- see
+    // TurnSolver.cpp. Per-job so the on/off arms share one pool and one tail.
+    int         esc_fit_reach      = -1;    // -1 unset | 0 off | 1 on
+    // Multiplier on FIT's affordability gate (MTG_ESC_FIT_ALPHA). FIT admits a depth only if its
+    // estimate fits 1.10x the REMAINING budget, while the ladder admits ~5x over and leans on its
+    // incumbent + the 25x overrun ceiling. This is the dial that tests whether that conservatism is
+    // the gap. Per-job so the whole sweep (1/2/4/8) is one pool.
+    double      esc_fit_alpha      = -1.0;  // <=0 unset => env, env default 1.0 = off
     // CONSTANT-LEAF EXHAUSTION MULTIPLE (MTG_CONSTANT_EXHAUST_MULT, default 1): a leafless pass stops at
     // used >= mult x the decision budget. The MODEL pass has no such stop (it runs to the proportional overrun
     // ceiling, 25x, because its truncated line is still rated); a leafless pass past exhaustion can only pay off

@@ -585,6 +585,69 @@ what FIT measures before choosing its depth — so it cannot make a line better.
 that could transfer an *answer* rather than a speedup are the **order-free** ones (`of_wave`,
 `memo_win_orderfree`, both default ON), and those are measured in the same pool.
 
+### 11f. Melira SOLVED as a diagnosis: FIT's affordability gate is 8x stricter than the ladder's
+
+Three screens on one seed base (12500000, 16x250), each arm paired to the others.
+
+**(a) MATCHED DEPTH — the gap is not depth, and it vanishes where ID has nothing to do.**
+Cap the ladder and cap FIT to the same final depth:
+
+| pair | Δ (FIT worse →) ± se | bett/wors | FIT units |
+|---|---|---|---|
+| `lcap1` → `fit1` | **−0.0040 ± 0.0048** | 128/133 | 1.009x |
+| `lcap2` → `fit2` | +0.0065 ± 0.0046 | 93/123 | 0.951x |
+| `lcap3` → `fit3` | +0.0080 ± 0.0047 | 90/125 | 0.924x |
+| `ship` → `single` | +0.0080 ± 0.0047 | 90/125 | 0.900x |
+
+At depth 1 — the one depth where iterative deepening has no climb to make — the two are a **coin
+flip**. The gap appears only once ID has ≥2 depths and saturates at 3 (matching the code's own
+"converges ~d3"). And at every matched cap FIT does **less** work, so it is landing shallower than its
+own cap more often than the ladder is.
+
+**(b) ORDER-FREE MEMO REUSE is not the mechanism.** The ship-vs-single gap by memo setting:
++0.0080 ± 0.0047 at defaults, **+0.0093 ± 0.0038 with `of_wave` off** — it does not shrink. The
+`memo_win_orderfree` arm came back **byte-identical to ship**, i.e. that feature never fires on
+Melira, so it is uninformative rather than supporting. Combined with the sound-memo argument in §11e,
+family (1) is closed.
+
+**(c) The telemetry names the cause.** `MTG_ROLLOUT_STATS`, ship + single pooled (the ladder's
+counters and FIT's do not collide):
+
+```
+reserved single pass: completed=7103 overruns=0 (partial kept=0, escalated=0)
+heuristic-ladder by committed depth: d1=3169 d2=8335 d3=7549 d4=6920 d5=4728   (n=30701, mean 3.06)
+id_depth n=23589 mean=3.39  hist=1:73 2:5730 3:6842 4:6740 5:4204
+```
+
+**FIT's pass never overruns — not once in 7,103 passes.** It only ever attempts what it is certain it
+can finish. The ladder, by contrast, admits passes it may *not* finish: the value-leaf start gate
+comment at `TurnSolver.cpp:35049` records it taking *"Melira T1 d5: 67,890 units for a 44k estimate
+against 9.2k remaining"* — ~5x over — because an admitted pass that exhausts the budget still leaves an
+incumbent and memoised WIN subtrees behind. FIT's fit loop gates at `kStartGateAlpha * remaining` =
+**1.10x**, so it refuses exactly the passes the ladder profits from. That is the asymmetry, and with
+depth monotone (§11e) refusing depth costs quality directly.
+
+**Also correct §11d's commit depth.** "The ladder commits mean 1.39" came from a **33-decision**
+sample. Over 30,701 decisions it is **3.06**, with 38% of decisions at d4–d5 — *above* the probe's mean
+`id_depth` of 3.39. That stale figure is what made "the ladder wins by being shallow" look plausible;
+it was never true.
+
+**(d) `MTG_ESC_FIT_REACH` — tested, and INERT.** FIT is also *structurally* capped at the probe's
+depth (`d1 == max(1, committed)`, and the walk only admits depths the probe recorded). Lifting that to
+the user depth, with cost/leaves extrapolated geometrically above the probe's record, is
+**byte-identical 16/16** on Melira. So the structural cap is real but never the *binding* constraint —
+the budget gate binds first, and there is no headroom for a deeper pass to be admitted into. Kept as a
+flag (default off) because it is a prerequisite for the gate relaxation to have anywhere to go, not a
+change in its own right.
+
+**(e) The live lever: `MTG_ESC_FIT_ALPHA`** (per-job `esc_fit_alpha`, default 1.0 = off) multiplies
+FIT's affordability gate. FIT holds the same safety net the ladder relies on — the value-leaf `line` as
+incumbent, the anytime-partial keep, and the step-shallower retry — so the strict 1.10 looks like
+unearned conservatism rather than a soundness requirement. Under measurement now (1/2/4/8 × reach
+off/on). **If this is the mechanism it is a one-constant fix, it needs no heuristic ladder of rollouts,
+and it plausibly generalises to the two decks where FIT currently fails on COST (breaching 1.28x,
+critter 1.29x) — those may be mis-gated in the same direction.**
+
 **Standing recommendation.** Adopt one depth everywhere it holds (19 of 20) and carry Melira as a
 known open defect — not as a reason to keep full-ladder rollouts fleet-wide. The mechanism is still
 unidentified after eliminating depth, budget, the take decision, two incumbent bounds and probe-rank

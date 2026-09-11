@@ -614,6 +614,8 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("esc_deck_r"))   { j.arm.esc_deck_r   = jspec["esc_deck_r"].get<double>(); }
     if (jspec.contains("esc_fit_depth_cap")) { j.arm.esc_fit_depth_cap = jspec["esc_fit_depth_cap"].get<int>(); }
     if (jspec.contains("esc_depth_cap"))     { j.arm.esc_depth_cap     = jspec["esc_depth_cap"].get<int>(); }
+    if (jspec.contains("esc_fit_reach"))     { j.arm.esc_fit_reach     = jspec["esc_fit_reach"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("esc_fit_alpha"))     { j.arm.esc_fit_alpha     = jspec["esc_fit_alpha"].get<double>(); }
     if (jspec.contains("ladder_emulated")) { j.arm.ladder_emulated = jspec["ladder_emulated"].get<bool>() ? 1 : 0; }
     if (jspec.contains("ladder_emul_direct")) { j.arm.ladder_emul_direct = jspec["ladder_emul_direct"].get<bool>() ? 1 : 0; }
     if (jspec.contains("ladder_emul_commit_model")) { j.arm.ladder_emul_commit = jspec["ladder_emul_commit_model"].get<bool>() ? 1 : 0; }

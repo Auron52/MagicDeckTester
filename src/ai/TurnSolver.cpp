@@ -38632,6 +38632,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // rated a win is kept (anytime); nothing rated => the heuristic escalation below.
             static const double s_sres_mult = []{ const char* e = std::getenv("MTG_OVERRUN_MULT");
                                                   return (e && *e) ? std::atof(e) : 25.0; }();
+            // Read here rather than at its use below because the crossover gate's soundness argument
+            // depends on it: that gate assumes dpass <= d1, which REACH deliberately breaks.
+            static const bool s_fit_reach_env = EnvOn("MTG_ESC_FIT_REACH");
+            const bool fit_reach = (valuearm::t_arm.esc_fit_reach >= 0)
+                                 ? (valuearm::t_arm.esc_fit_reach != 0) : s_fit_reach_env;
             // R-FREE CROSSOVER GATE. dpass <= d1 always (FIT's overrun path only steps SHALLOWER), so if a
             // pass at d1 could not be taken then no pass at any depth can be -- decidable without R, and
             // therefore BEFORE the calibration. That ordering is the point: it is what collapses
@@ -38641,7 +38646,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // use the uniform rule instead, so the gate MUST stand down there -- otherwise it would skip
             // on the table while the take decision judged by the offset, i.e. exactly the drift
             // TakeAtForCommitted exists to prevent. Guard copied from that decision verbatim.
-            const bool xo_live = s_fit_crossover && !line_constant
+            // `!fit_reach`: the gate's whole argument is "dpass <= d1 always, so a pass at d1 that could
+            // not be taken means no pass at any depth could be". REACH lets dpass EXCEED d1, which voids
+            // that implication -- the gate would then skip a pass that was going to be deep enough. Both
+            // flags default off; this keeps them from quietly contradicting each other if both are set.
+            const bool xo_live = s_fit_crossover && !line_constant && !fit_reach
                               && !value_fallback_take_at.empty() && s_vto_override < 0;
             const int  xo_need = xo_live ? TakeAtForCommitted(value_fallback_take_at, committed) : 0;
             if (xo_live && d1 < xo_need)
@@ -38659,11 +38668,78 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 // escalation_r else 120 (the same constant the reserve uses).
                 const double R = single_R_now();
                 const double rem = static_cast<double>(std::max<long long>(0, budget->Remaining()));
-                dpass = 1;
-                for (int d = std::min(d1, 15); d >= 1; --d)
+                // REACH ABOVE THE PROBE (MTG_ESC_FIT_REACH / per-job esc_fit_reach, default OFF).
+                //
+                // FIT is structurally capped at the PROBE's depth: d1 == max(1, committed), and the walk
+                // below only admits a depth the probe RECORDED (g_probe_cost[d] > 0). The ladder has no
+                // such cap -- its escalation searches to the USER depth whatever the probe committed.
+                // Melira, MTG_ROLLOUT_STATS over 30,701 ladder decisions: the ladder commits
+                // d1:3169 d2:8335 d3:7549 d4:6920 d5:4728 (mean 3.06), so 38% of its decisions land
+                // DEEPER than the probe's mean id_depth of 3.39, while FIT's pass completed 7,103 times
+                // with overruns=0 -- it never once had to step shallower, i.e. it always stopped at a
+                // depth it could comfortably afford and never discovered it could go further. Since depth
+                // is MONOTONE on Melira (capping FIT costs +0.0115 at d1, +0.0005 at d2, +0.0002 at d3),
+                // that conservatism is the whole gap to the ladder.
+                //
+                // With this on the walk starts at the user `depth` and costs above the probe's record are
+                // EXTRAPOLATED geometrically from its last two measured passes (the same device the
+                // reserve path uses for leaves). Still exactly ONE rollout -- at the deepest AFFORDABLE
+                // depth rather than the deepest PROBED one -- so it spends no leaf entries on depths it
+                // will not commit, which is the constraint that rules out a full heuristic ladder.
+                const int dtop = fit_reach ? std::min(std::max(d1, depth), 15) : std::min(d1, 15);
+                // Probe record, extended upward. Growth ratio from the deepest two RECORDED depths; a
+                // single recorded depth has no measured growth, so fall back to a deliberately
+                // pessimistic 8x per depth (the gate then simply refuses, which is the old behaviour).
+                double ecost[16] = {0.0}, eleaf[16] = {0.0};
+                int top_rec = 0;
+                for (int d = 1; d <= 15; ++d)
                 {
-                    const double est_h = static_cast<double>(g_probe_cost[d]) + R * static_cast<double>(std::max<long long>(0, g_probe_leaves[d]));
-                    if (g_probe_cost[d] > 0 && est_h <= kStartGateAlpha * rem) { dpass = d; break; }
+                    if (g_probe_cost[d] > 0)
+                    {
+                        ecost[d] = static_cast<double>(g_probe_cost[d]);
+                        eleaf[d] = static_cast<double>(std::max<long long>(0, g_probe_leaves[d]));
+                        top_rec = d;
+                    }
+                }
+                if (fit_reach && top_rec >= 1)
+                {
+                    const int prev = top_rec - 1;
+                    const double gc = (prev >= 1 && ecost[prev] > 0.0) ? (ecost[top_rec] / ecost[prev]) : 8.0;
+                    const double gl = (prev >= 1 && eleaf[prev] > 0.0) ? (eleaf[top_rec] / eleaf[prev]) : 8.0;
+                    // Clamp: a ratio below 1 would make deeper look CHEAPER and admit an unaffordable pass.
+                    const double rc = gc < 1.0 ? 1.0 : (gc > 64.0 ? 64.0 : gc);
+                    const double rl = gl < 1.0 ? 1.0 : (gl > 64.0 ? 64.0 : gl);
+                    for (int d = top_rec + 1; d <= dtop; ++d)
+                    {
+                        ecost[d] = ecost[d - 1] * rc;
+                        eleaf[d] = eleaf[d - 1] * rl;
+                    }
+                }
+                // FIT GATE RELAXATION (MTG_ESC_FIT_ALPHA / per-job esc_fit_alpha, default 1.0 = off).
+                //
+                // The walk below admits a depth only if its estimate fits kStartGateAlpha (1.10) x the
+                // REMAINING budget. The ladder is far bolder: its own start gate runs under the same 25x
+                // proportional overrun ceiling this pass does, and the comment at the value-leaf start gate
+                // records it admitting "Melira T1 d5: 67,890 units for a 44k estimate against 9.2k
+                // remaining" -- roughly 5x over -- on the grounds that an admitted pass which exhausts the
+                // budget still leaves an incumbent and memoised WIN subtrees behind. FIT refuses precisely
+                // those passes, which is why it completed 7,103 times with overruns=0: it never attempts
+                // anything it might not finish, and so never finds the depth the ladder reaches.
+                //
+                // FIT has the same safety net the ladder relies on -- the value-leaf `line` as incumbent,
+                // the anytime-partial keep, and the step-shallower retry on overrun -- so the strict 1.10
+                // is unearned conservatism rather than a soundness requirement. This makes it a dial so
+                // the claim can be measured instead of argued.
+                static const double s_fit_alpha_env = []{ const char* e = std::getenv("MTG_ESC_FIT_ALPHA");
+                                                          return (e && *e) ? std::atof(e) : 1.0; }();
+                const double fit_alpha = (valuearm::t_arm.esc_fit_alpha > 0.0)
+                                       ? valuearm::t_arm.esc_fit_alpha : s_fit_alpha_env;
+                const double gate = kStartGateAlpha * (fit_alpha > 0.0 ? fit_alpha : 1.0) * rem;
+                dpass = 1;
+                for (int d = dtop; d >= 1; --d)
+                {
+                    const double est_h = ecost[d] + R * eleaf[d];
+                    if (ecost[d] > 0.0 && est_h <= gate) { dpass = d; break; }
                 }
             }
             // TIGHTER GATE, now that dpass is known: the affordable depth may be shallower than d1, so a
