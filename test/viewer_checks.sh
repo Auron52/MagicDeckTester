@@ -51,6 +51,12 @@
 #     declaration is human-play-only and default-inert, and yield order and demand order usually
 #     agree, so the end-of-turn board cannot tell a steered untap from a lucky one (see its header).
 #     SKIPS itself when the board shape it drives is not reachable.
+#   * pay line colour (engine) -- pay_line_color_check.py commits the user's seed-6 turn-4 line and
+#     asserts its last segment's generic pips respect the LINE's remaining coloured demand: the
+#     choice source taps the colour a later cast still owes, and the generic pip eats the surplus
+#     colour. Both halves are human-play-only, so nothing else in the suite can witness them, and no
+#     SAVED reference plays this line. Pins both `=0` hatches -- either defect alone reproduces the
+#     bug. Needs python3 + the binary; ~3 s. SKIPS itself when the board is not reachable.
 #   * protocol (engine<->GUI) -- viewer_protocol_check.py replays each reference's chosen plan
 #     indices through the binary and asserts the decision-JSON contract holds (well-formed,
 #     valid index, clean terminal). Needs python3 + the binary. FULL sweep ~35 min; --sample
@@ -252,6 +258,31 @@ if [ "$MODE" != line ]; then
       echo "--- line macros (a queued continuation steers the untap; a fused gesture's halves land) ---"
       if MTG_BIN="$BIN" python3 "$HERE/viewer_line_macros_check.py"; then :; else
         echo "FAIL: a declared queued continuation no longer steers the untap pick (or a fused half no longer lands)."
+        rc=1
+      fi
+    fi
+  fi
+fi
+
+#   * pay line colour (engine) -- pay_line_color_check.py commits the user's seed-6 turn-4 line and
+#     asserts that the last segment's generic pips respect the LINE's own remaining coloured demand:
+#     a choice source taps for the colour a later cast still owes, and a generic pip eats the colour
+#     most in surplus. Both halves are HumanPlayActive-gated and default-inert to every other layer,
+#     so GT, the scenarios and the autonomous reference digests stay green whatever they do -- and no
+#     SAVED reference plays this line (the user hand-repaired it with `tap=` tokens, which is exactly
+#     what a reference would then not contain). The witnesses are a life total, a tapped bit and
+#     which colour survived, so those are asserted, not the outcome. Both `=0` hatches are pinned
+#     because EITHER defect alone reproduces the bug. Needs python3 + the binary; ~3 s.
+#     SKIPS itself (exit 0) when the board it drives is not reachable.
+if [ "$MODE" != line ]; then
+  if command -v python3 >/dev/null 2>&1 && [ -f "$HERE/pay_line_color_check.py" ]; then
+    if [ ! -f "$BIN" ]; then
+      echo "FAIL: pay line colour check needs the binary but '$BIN' is missing."
+      rc=1
+    else
+      echo "--- pay line colour (a line's later cast keeps the colour it still owes) ---"
+      if MTG_BIN="$BIN" python3 "$HERE/pay_line_color_check.py"; then :; else
+        echo "FAIL: a committed line's generic pips again spent the mana a later cast in that same line needed."
         rc=1
       fi
     fi

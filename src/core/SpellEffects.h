@@ -16089,18 +16089,105 @@ inline bool ConsumeFloating(ManaPool& floating, Color c)
 // never refuses: a pool holding nothing but colourless still pays the pip on the final tier, so no
 // cast can become unpayable because of it (the s1_gi0 lesson -- a hold must be a preference with
 // fall-through). Off everywhere but human play, so every autonomous game is byte-identical.
+//
+// ...AND AMONG THE COLOURS, SURPLUS FIRST while the human's LINE still owes coloured pips
+// (MTG_PAY_LINE_GENERIC_ORDER, default ON, human play only). The WUBRG list above is an arbitrary
+// ranking, and it is the second half of the seed-6 T4 defect: the pool this payment had just built
+// was {U:1, G:2} with `Training Grounds` ({U}) still unpaid in the SAME committed line, and the two
+// generic pips of `Eldrazi Displacer` ({2}{W}) ate the {U} first -- so the {U} had to be re-bought
+// from Adarkar Wastes, the board's last untapped land AND its last {C} source, for a point of pain.
+// This is exactly the rule SpendFloatingTowardCost's MTG_LINE_SURPLUS_GENERIC already applies to
+// the mana that was floating BEFORE the payment (same signal, `g_line_unpaid_cost`, same doctrine:
+// "if we have a lot of a colour and nothing requesting all of it, use that colour"); the pool a
+// payment builds AS IT TAPS was the layer it did not reach -- the same two-layer split as
+// g_hold_colorless_for_pips vs g_hold_colorless_in_payment above.
+//
+// A REORDER, never a refusal: every colour is still tried, so nothing becomes unpayable. Colourless
+// keeps its existing position (first, or last under the {C} hold) -- that tier is already decided by
+// a separate, measured rule and this one only breaks ties among the five colours.
+// `g_line_unpaid_cost` is zero outside a plan application and the gate is HumanPlayActive(), so
+// rollouts and every autonomous game are byte-identical by construction.
 inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
 {
     static const Color kCFirst[] = { Color::Colorless, Color::White, Color::Blue,
                                      Color::Black, Color::Red, Color::Green };
     static const Color kCLast[]  = { Color::White, Color::Blue, Color::Black,
                                      Color::Red, Color::Green, Color::Colorless };
+    static const bool s_line_order = EnvOn("MTG_PAY_LINE_GENERIC_ORDER", true);   // DEFAULT ON; =0 off
+    const ManaCost& lu = g_line_unpaid_cost;
+    if (s_line_order && HumanPlayActive()
+        && (lu.white + lu.blue + lu.black + lu.red + lu.green) > 0)
+    {
+        struct Ent { Color c; int surplus; };
+        Ent e[5] = {
+            { Color::White, floating.white - lu.white },
+            { Color::Blue,  floating.blue  - lu.blue  },
+            { Color::Black, floating.black - lu.black },
+            { Color::Red,   floating.red   - lu.red   },
+            { Color::Green, floating.green - lu.green },
+        };
+        std::stable_sort(std::begin(e), std::end(e),
+                         [](const Ent& a, const Ent& b) { return a.surplus > b.surplus; });
+        if (!g_hold_colorless_in_payment
+            && ConsumeFloating(floating, Color::Colorless)) { took = Color::Colorless; return true; }
+        for (const Ent& x : e)
+        { if (ConsumeFloating(floating, x.c)) { took = x.c; return true; } }
+        if (ConsumeFloating(floating, Color::Colorless)) { took = Color::Colorless; return true; }
+        return false;
+    }
     const Color* order = g_hold_colorless_in_payment ? kCLast : kCFirst;
     for (int i = 0; i < 6; ++i)
     {
         if (ConsumeFloating(floating, order[i])) { took = order[i]; return true; }
     }
     return false;
+}
+
+// WHICH COLOUR a CHOICE SOURCE takes when it is tapped for a GENERIC pip (human play only;
+// MTG_PAY_LINE_TAP_COLOR, default ON).
+//
+// The payment's generic tap has always taken `prod[0]` -- the card's first declared colour, i.e.
+// decklist order. That is the first half of the seed-6 T4 defect (USER, 2026-09-10, *"Still have
+// the incorrect float issue on seed 6"*): the committed line was `cast: Eldrazi Displacer, Training
+// Grounds` off Kitchen (`{G}` or `{U}`, +Overgrowth's `{G}{G}`) and an untapped Adarkar Wastes.
+// Kitchen took prod[0] = {G}, its three green covered the Displacer's `{2}` with one to spare, and
+// Training Grounds' `{U}` then had to tap Adarkar Wastes -- coloured, so a point of pain -- leaving
+// the board with NO untapped land, NO {C}, and a stranded `{2}{C}` Displacer. Committed to {U}
+// instead, Kitchen alone pays the whole segment ({U} + {G}{G}) and Adarkar Wastes stays up as the
+// {C} the blink needs.
+//
+// So: among the colours this source can make, prefer one the REST OF THE LINE still owes and does
+// not already have floating (`g_line_unpaid_cost` net of both pools -- the same demand signal
+// SpendFloatingTowardCost's surplus order and ConsumeFloatingAny above read, so the three halves of
+// one payment cannot disagree). Largest shortfall wins; ties keep `produces` order, so a source
+// whose colours the line does not want is unchanged. The cast's OWN coloured pips need no tier
+// here: the greedy settles every coloured pip before any generic one, so by the time this runs they
+// are paid.
+//
+// The caller still routes the result through DripLandAnyPipColor, so a PAINLAND keeps its painless
+// {C} mode (a demanded colour must not be bought with life on a generic pip) and a Grove keeps its
+// drip guard -- this only decides which COLOUR a choice source offers up for that final override.
+inline Color LineDemandAnyPipColor(const GameState& state, const std::vector<Color>& prod,
+                                   const ManaPool& payment_float, Color fallback)
+{
+    static const bool s_on = EnvOn("MTG_PAY_LINE_TAP_COLOR", true);   // DEFAULT ON; =0 restores prod[0]
+    if (!s_on || prod.size() < 2 || !HumanPlayActive()) { return fallback; }
+    const ManaCost& lu = g_line_unpaid_cost;
+    const int owed[5] = { lu.white, lu.blue, lu.black, lu.red, lu.green };
+    if (owed[0] + owed[1] + owed[2] + owed[3] + owed[4] <= 0) { return fallback; }
+    const ManaPool& r = state.floating_mana;
+    const int have[5] = { r.white + payment_float.white, r.blue  + payment_float.blue,
+                          r.black + payment_float.black, r.red   + payment_float.red,
+                          r.green + payment_float.green };
+    Color best = fallback; int best_short = 0;
+    for (Color c : prod)
+    {
+        const int ci = static_cast<int>(c);
+        if (ci >= 5) { continue; }                       // {C} is not a colour the line can owe here
+        const int shortfall = owed[ci] - have[ci];
+        if (shortfall > best_short) { best_short = shortfall; best = c; }
+    }
+    return best;
 }
 
 // Spend pre-produced RESERVE ("floating") mana toward a cost, BEFORE any permanent is tapped.

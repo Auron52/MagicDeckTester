@@ -750,8 +750,12 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             {
                 // {C}-only for a non-creature colored_creature_only land -> the generic tap uses {C}
                 // (prod[0]) rather than a colour that could leak to pay a coloured pip.
+                // LineDemandAnyPipColor (human play, default ON) replaces prod[0] -- decklist order --
+                // with a colour the REST OF THIS LINE still owes; DripLandAnyPipColor still has the
+                // last word, so a painland keeps its painless {C}. See its header (EDF seed 6 T4).
                 const std::vector<Color>& prod = pay_produces(*bdef, &bp);
-                tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, prod[0]) : needed);
+                const Color gen_pick = LineDemandAnyPipColor(state, prod, floating, prod[0]);
+                tap_source(bp, *bdef, any ? DripLandAnyPipColor(state, active, *bdef, gen_pick) : needed);
                 return true;
             }
             if (best_kind == 3)
@@ -830,7 +834,11 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             if (any)
             {
                 if (prod.empty()) { continue; }
-                col = DripLandAnyPipColor(state, active, *def, prod[0]);  // Grove {C} mode for generic
+                // Same line-demand pick as the scarcity path above (human play, default ON), so the
+                // MTG_TAP_LEGACY baseline and the shipped path cannot disagree about which colour a
+                // choice source offers a generic pip. Grove {C} mode for generic still has last word.
+                col = DripLandAnyPipColor(state, active, *def,
+                                          LineDemandAnyPipColor(state, prod, floating, prod[0]));
             }
             else
             {

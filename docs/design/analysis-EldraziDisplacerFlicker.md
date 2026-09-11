@@ -4782,6 +4782,138 @@ save the mid-session rebuild corrupted) and `claude_s12_gi11` (won T4, 60 decisi
 rule-2/3 rider; rule 4's missing graveyard-Emiel guard; ×N coalescing vs expanded lines; the clue
 toggle in ⚙ options vs a header control.
 
+## Session 15c (2026-09-10): seed 6's float, again -- and this time it is the PAYMENT, not the untap
+
+**USER:** *"Still have the incorrect float issue on seed 6:"*, with the whole game attached. This is
+the THIRD report on this seed. The first two were both in the ETB tap-ahead and both are still
+fixed; this one is in a different subsystem entirely, which is why the earlier fixes did not touch
+it. Reproduced exactly on the tip (`42d35bd9`) at `--seed 6 --game-index 5`, content-driven (every
+pick matched by plan SUMMARY, never a recorded index).
+
+### The board, and what each T4 segment SHOULD leave floating
+
+Three lands, two of them painlands, two of them enchanted:
+
+| land | modes | aura | yield |
+|---|---|---|---|
+| Kitchen | `{T}: {G}` or `{U}` | Overgrowth: `+{G}{G}` (green, **not** wild -- cannot pay `{C}`) | 3 |
+| Brushland | `{T}: {C}` painless, or `{G}`/`{W}` for 1 damage | Fertile Ground: `+1` any colour (wild, **not** wild_c) | 2 |
+| Adarkar Wastes | `{T}: {C}` painless, or `{W}`/`{U}` for 1 damage | -- | 1 |
+
+Six mana on a full untap. The user's six committed T4 segments, with the float after each:
+
+| # | segment | available | cost | expected float (and why) | ON TIP | FIXED |
+|---|---|---|---|---|---|---|
+| 1 | `cast: Living Wish, Living Wish` | 3+2 = 5 | 2+2 = 4 | 1 spare; a colour the board makes and the hand wants -> `{U}` | `{U:1}` L20 ✓ | same |
+| 2 | `land=Adarkar Wastes; cast: Cloud of Faeries` | float 1 + Adarkar 1 = 2 | `{1}{U}` = 2 | 0 spare. Cloud untaps the two best (Kitchen 3, Brushland 2), so Adarkar stays tapped | `{}` L20 ✓ | same |
+| 3 | `cast: Peregrine Drake` | 3+2 = 5, all tapped ahead | `{4}{U}` = 5 | 0 spare; Drake untaps 5 >= 3 lands, so all three come back up | `{}` L20 ✓ | same |
+| 4 | `cast: Peregrine Drake` | tap-ahead banks all 3 = 6 | `{4}{U}` = 5 | 1 spare. NO `{C}` sink is live yet (Displacer is neither on the battlefield nor in hand -- it arrives via the next segment's tutor), and the next cast is Eladamri's Call `{G}{W}`, so GREEN is the right survivor | `{G:1}` L20 ✓ | same |
+| 5 | `cast: Eladamri's Call -> Eldrazi Displacer` | 1+6 = 7 | `{G}{W}` = 2 | `{G}` from float; `{W}` taps Brushland (1 pain) and Fertile Ground rides it -> 1 spare -> `{W:1}` | `{W:1}` L19 ✓ | same |
+| 6 | `cast: Eldrazi Displacer, Training Grounds` | float 1 + Kitchen 3 + Adarkar 1 = 5 | `{2}{W}` + `{U}` = 4 | `{W}` from float; **Kitchen alone pays the rest** -- its own unit as `{U}` for Training Grounds, Overgrowth's `{G}{G}` for the `{2}`. Adarkar Wastes is never tapped: no pain, and it is still up as the `{C}` the Displacer's blink needs. float `{}` | **`{G:1}`, ALL THREE LANDS TAPPED, life 18, no blink offered** ✗ | **`{}`, Adarkar UNTAPPED, life 19, blink offered** ✓ |
+
+So five of the six steps were already right, and the divergence is entirely in step 6 -- which is
+exactly where the user reached for the viewer's MANUAL TAP, declaring `Kitchen for {U}` and
+`Adarkar Wastes for {C}` by hand before starting to blink. They were hand-repairing this payment.
+
+### Cause: TWO independent defects, and either one alone reproduces it
+
+Neither is in the ETB tap-ahead. Both are in the ordinary per-cast payment
+(`TapForCostSharedOnce`), and both are about a LINE with more than one cast in it:
+
+1. **Which colour a choice source takes for a GENERIC pip** was `prod[0]` -- literally the card's
+   first declared colour, i.e. decklist order. Kitchen took `{G}`, so its three green covered the
+   Displacer's `{2}` with one to spare, and Training Grounds' `{U}` had nowhere left to come from
+   but Adarkar Wastes, coloured, for a point of pain.
+2. **Which colour a generic pip EATS out of the pool the payment has just built**
+   (`ConsumeFloatingAny`) was a fixed WUBRG list, so even with Kitchen correctly committed to `{U}`
+   the pool `{U:1, G:2}` had its `{U}` spent on the first generic pip and left `{G:1}` behind.
+
+Measured with the two hatches, on the user's frame -- each `=0` alone reproduces the report exactly
+(`life=18, float={G:1}, all lands tapped, no blink offered`), and only both ON give the right
+answer. A one-sided fix would have looked like no fix at all.
+
+The signal both halves now read is `g_line_unpaid_cost`, the line's still-unpaid cast costs --
+already the demand model for `SpendFloatingTowardCost`'s `MTG_LINE_SURPLUS_GENERIC`
+(session 15, EDF seed 9 gi=8). That lever fixed the *pre-existing* float; these two are the same
+rule at the two layers it never reached: the tap, and the pool the payment builds as it taps.
+Same two-layer split as `g_hold_colorless_for_pips` vs `g_hold_colorless_in_payment`.
+
+* `MTG_PAY_LINE_TAP_COLOR` (default ON, `=0` restores `prod[0]`) -- `LineDemandAnyPipColor` in
+  `SpellEffects.h`, called from both generic-tap sites in `ManaPayment.cpp` (the scarcity path and
+  the `MTG_TAP_LEGACY` baseline, so the two cannot disagree). It only chooses which colour to OFFER:
+  `DripLandAnyPipColor` still has the last word, so a painland keeps its painless `{C}` and a Grove
+  keeps its drip guard -- a demanded colour is never bought with life on a generic pip.
+* `MTG_PAY_LINE_GENERIC_ORDER` (default ON, `=0` restores WUBRG) -- surplus-first among the five
+  colours in `ConsumeFloatingAny`. A REORDER, never a refusal: every colour is still tried, so no
+  cast can become unpayable (the `s1_gi0` lesson). Colourless keeps its existing tier, first or last
+  under the `{C}` hold, because that one is separately measured.
+
+Both are `HumanPlayActive()`-gated, so rollouts (`HumanPlaySuppress`) and every autonomous game are
+byte-identical by construction, and `g_line_unpaid_cost` is zero outside a plan application anyway.
+
+### It is not a display bug
+
+Checked separately, per the two-bug rule: the decision JSON emits `state.floating_mana` verbatim and
+the GUI renders it field for field (`floatingManaHtml`), so the shown float and the engine float
+never disagreed -- the engine really did hold `{G:1}` with nothing untapped.
+
+One REAL display residual was found and deliberately left alone: at a SUB-DECISION frame inside a
+plan apply (here the `tutor_etb` frames for the two Living Wishes and for Eladamri's Call) the pool
+still shows a `wild` unit -- rendered `◇`, i.e. the "generic mana" the user's own doctrine says
+should not exist in a pool. That is `ConcreteDeferScope` doing its job: committing a colour between
+the casts of one line is what stranded FiveColour `s9_gi8` T4, so the commitment is deliberately
+deferred to the decision boundary (`ConcreteSite::Frame`). Every main-phase frame is concrete; only
+a mid-apply sub-decision is not. Reported, not changed.
+
+### Guard
+
+`test/pay_line_color_check.py`, wired into `test/viewer_checks.sh` (~3 s). It drives the user's
+line content-first through one `--interactive` child and asserts the step-6 result frame: Adarkar
+Wastes untapped, no pain, float empty, and a blink OFFERED -- then re-drives with each hatch at `=0`
+and asserts each one alone restores `life-1 / float {G:1} / Adarkar tapped / no blink`, AND that it
+changes no frame before step 6. Skips itself (exit 0) when the board is unreachable. Nothing else in
+the suite can see this: both levers are human-play-only, and no SAVED reference plays this line --
+the user hand-repaired it with `tap=` tokens, which is exactly what a reference would then not
+contain.
+
+### Gates (final binary)
+
+`./build.sh`; `test/scenarios.sh` **79/79**; `test/combo_off_check.sh` **10/10**;
+`build/Release/mtg-test` **SUCCESS** (74 cases, 938 assertions);
+`test/regression.sh --smoke` **73 passed / 0 failed, ALL PASS, every digest byte-identical**, audit
+`configs changed: 0  unchanged: 73`, `play-changed=0` -- which is the load-bearing one: both levers
+are human-play-only, so autonomous play must not move, and it does not.
+`test/viewer_checks.sh` **PASS** (exit 0). Protocol sweep over all **309** references:
+`12 ok, 296 repaired, 1 play-drift, 0 shuffle-dead, 0 ENUM-GAP, 0 mull-drift, 0 contract-fail`.
+Validate-line: `1478 accept, 218 choose, 0 unsupported, 251 skipped (non-hand cast), 0 known-fail,
+0 REGRESSION` -- **identical numbers with the fix ON and with both hatches at `=0`**, run
+standalone both ways, so the fix moves no reference line.
+
+**The one play-drift is PRE-EXISTING and is NOT this fix** -- reported, not reverted, and the file
+was not touched. `EldraziDisplacerFlicker/claude_s9_gi8` (saved by the user at `b3189f50`, recorded
+**won T4**) replays to **won T8**. Attribution, three ways, all agreeing: with both hatches `=0`
+(i.e. exactly the `42d35bd9` code path) it drifts identically; and it drifts identically under the
+**shared checkout's 23:09 binary**, the image the user's own live session is running. So it arrived
+with something in tonight's late batch (`3c475f08` / `67f2da4f` are the only engine-side candidates
+after the save) and needs its own diagnosis. Flagging it here because a reference losing four turns
+is exactly the signal the reference corpus exists to raise.
+
+*(One in-script artefact, for the record: the same validate layer run INSIDE `viewer_checks.sh`
+while the box was loaded reported `577 accept / 144 choose` and 157 `no alignment` SKIPs across
+whole decks. That is `--emit-resolved` children hitting the 4 GB `MTG_REPLAY_AS_CAP_MB` address-space
+cap under memory pressure, not a behaviour change: both standalone arms report 0 unaligned. Worth
+knowing, because "an entire deck went unaligned" reads like a regression and is a resource symptom.)*
+
+### Residual noticed, NOT fixed (needs a ruling)
+
+Step 5's point of pain is avoidable and the engine cannot see it: for the `{W}` pip of Eladamri's
+Call it tapped Brushland's COLOURED `{W}` mode (1 damage) when tapping Brushland's painless `{C}`
+mode and paying the `{W}` from Fertile Ground's any-colour rider costs nothing and leaves a `{C}`
+behind. The payment picks a source for a coloured pip and then taps it FOR that colour; "tap the
+host painlessly and let its aura's wild pay the pip" is not a move it can express. That is a
+strictly larger change (it reaches every coloured pip on every aura'd painland) and was left out of
+a fix the user reported as a float bug.
+
 ## Session 15d (2026-09-10): seed 6 T4 -- the guard that priced a land it was about to tap
 
 USER: *"Seed 6: Combo Off failure"*, and then the sharper half: *"Even worse, that combo off failure
