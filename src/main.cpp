@@ -3177,30 +3177,115 @@ struct ClaudePlayHarness
 
     void Install(AIEngine& ai);
 
-    // --interactive: after a chooser emits its decision block, block for ONE stdin line of
-    // comma-separated picks, append them to the --choices stream, and return true -- the caller
-    // jumps back to its consume branch (the claude_retry label). Stateless mode returns false
-    // immediately, so every emission site still exits 70 exactly as before. EOF, a blank line or
-    // an unparseable token also return false: the server treats the child as dead and falls back
-    // to a full stateless respawn. The three side-channel PROMPT frames (firebreathe / jitte /
-    // storage-hold) deliberately keep their unconditional exit(70): their answers arrive as keyed
-    // args (--firebreathe "turn:count", never a --choices slot), so a respawn is the only way to
-    // deliver them -- they are rare, and the fallback is exactly today's behaviour.
-    bool AwaitMoreChoices()
+    // --interactive: after a chooser emits its decision block, block on stdin until the viewer
+    // says what to do next, then either jump back to the consume branch (the claude_retry label)
+    // or exit 70. Stateless mode gives up immediately, so every emission site still exits 70
+    // exactly as before. EOF, a blank line or an unparseable token also give up: the server treats
+    // the child as dead and falls back to a full stateless respawn. The three side-channel PROMPT
+    // frames (firebreathe / jitte / storage-hold) deliberately keep their unconditional exit(70):
+    // their answers arrive as keyed args (--firebreathe "turn:count", never a --choices slot), so
+    // a respawn is the only way to deliver them -- they are rare, and the fallback is exactly
+    // today's behaviour.
+    //
+    // A line is either PICKS (comma-separated, appended to the --choices stream) or a DIRECTIVE
+    // beginning '@' -- see pending_validate_line below for the two directives and why they exist.
+    //
+    // What broke the wait: Picks = resume the game; Validate = answer `pending_validate_line`
+    // against THIS frame and keep waiting; Give_up = exit 70 and let the server respawn.
+    enum class Await { Give_up, Picks, Validate };
+
+    Await AwaitNext()
     {
-        if (!interactive) { return false; }
+        if (!interactive) { return Await::Give_up; }
         std::string line;
-        if (!std::getline(std::cin, line)) { return false; }
-        const std::size_t before = choices.size();
-        std::stringstream ss(line);
-        std::string tok;
-        while (std::getline(ss, tok, ','))
+        while (std::getline(std::cin, line))
         {
-            try { choices.push_back(std::stoi(tok)); }
-            catch (...) { return false; }
+            if (!line.empty() && line.back() == '\r') { line.pop_back(); }   // defensive
+            // A line beginning '@' is a DIRECTIVE, not picks.
+            if (!line.empty() && line[0] == '@')
+            {
+                const std::size_t sp   = line.find(' ');
+                const std::string name = line.substr(1, sp == std::string::npos
+                                                            ? std::string::npos : sp - 1);
+                const std::string payload = (sp == std::string::npos) ? std::string()
+                                                                      : line.substr(sp + 1);
+                if (name == "cast-order")
+                {
+                    for (auto& kv : ParseCastOrderSpec(payload))
+                    { cast_order_by_main[kv.first] = kv.second; }
+                    continue;
+                }
+                if (name == "validate-line")
+                {
+                    pending_validate_line = payload;
+                    return Await::Validate;
+                }
+                return Await::Give_up;   // unknown directive -> stateless fallback
+            }
+            const std::size_t before = choices.size();
+            std::stringstream ss(line);
+            std::string tok;
+            while (std::getline(ss, tok, ','))
+            {
+                try { choices.push_back(std::stoi(tok)); }
+                catch (...) { return Await::Give_up; }
+            }
+            return choices.size() > before ? Await::Picks : Await::Give_up;
         }
-        return choices.size() > before;
+        return Await::Give_up;   // EOF -> the server treats the child as dead and respawns
     }
+
+    // The 28 non-main-phase emission sites: only PICKS can resume them. A validate directive
+    // reaching one of them is the server asking a question this frame cannot answer, so it falls
+    // through to exit 70 and the stateless `runValidate` spawn handles it -- the same
+    // "anything unusual is the fallback's job" rule the rest of --interactive follows.
+    bool AwaitMoreChoices() { return AwaitNext() == Await::Picks; }
+
+    // Emit the <<<CLAUDE_VALIDATION>>> block for `line` against the frame currently on offer.
+    // ONE writer for both routes -- the argv `--validate-line` spawn and the interactive
+    // `@validate-line` directive -- because the whole point of answering a validation in the live
+    // child is that the verdict is the SAME verdict, and two copies of this could not stay that way.
+    void WriteValidation(std::ostream& os, const std::string& line, const GameState& s,
+                         const std::vector<TurnSolver::Plan>& plans, bool is_pre, int di,
+                         int this_main_ordinal);
+
+    // --interactive SIDE-CHANNEL DIRECTIVES.
+    //
+    // `@cast-order <spec>` -- the same "<ord>:A|B;<ord>:X" string --cast-order takes, merged into
+    // cast_order_by_main before the picks on the NEXT line are consumed.
+    //
+    // WHY THE PROTOCOL NEEDED THIS. The keyed side channels are argv-baked, and the viewer's
+    // session key is "every argv except --choices" -- so a click that records a new cast-order pin
+    // changed the key and forced a full stateless respawn, which re-simulates the ENTIRE prefix.
+    // On EldraziDisplacerFlicker that is not an edge case: the human sequences almost every
+    // go-off line by hand, and claude_s12_gi11 records a pin on 31 of its 60 decisions -- so 31 of
+    // 61 clicks paid a whole-game replay (measured 2026-09-11: 100-190 ms per pinning click against
+    // 5-20 ms for a cached one, 32 engine spawns for 61 clicks). The persistent child exists
+    // precisely to stop that, and this is what lets it hold.
+    //
+    // TIMING IS THE WHOLE CORRECTNESS ARGUMENT, and it is exact rather than lucky: a pin is keyed
+    // by MAIN-PHASE ORDINAL and is read at ONE place -- AIEngine's segment loop, immediately AFTER
+    // m_external_chooser returns that ordinal's pick. The pick for ordinal N arrives on the very
+    // line this directive precedes, so the pin is in the map strictly before its only reader runs,
+    // and no ALREADY-CONSUMED decision can see it (their reads are long past). A pin that CHANGES
+    // or REMOVES an earlier ordinal would be a different statement about a decision already
+    // applied; the server refuses to deliver one and respawns instead (see runStepCached), and a
+    // rewind fails the prefix-extension test there anyway.
+    //
+    // `@validate-line <spec>` -- the same string --validate-line takes, answered AGAINST THE FRAME
+    // THE CHILD IS PARKED ON and without consuming a pick, so the child stays exactly where it was.
+    //
+    // This is the OTHER full-prefix spawn a viewer click paid for, and on this deck it is the one
+    // that survived the cache fix above: the queue workflow commits through `Commit Line`, which
+    // POSTs /api/validate first and /api/step only after the verdict -- so every committed line
+    // cost one whole-game stateless replay before the (now cached) step. The frame the stateless
+    // spawn would reconcile against is BY CONSTRUCTION the frame the live child is holding (both
+    // are "the first un-chosen main-phase decision" for the same prefix), so the verdict is the
+    // same verdict -- and one writer, WriteValidation, guarantees it byte-for-byte.
+    //
+    // Unknown directive -> Give_up -> exit 70 -> the server's stateless fallback, which is the
+    // same "anything unusual is the fallback's job" rule the rest of --interactive follows.
+    std::string pending_validate_line;
 
   private:
     // Install() in five parts, grouped by how a chooser gets its answer. Member functions, so
@@ -3211,6 +3296,71 @@ struct ClaudePlayHarness
     void InstallSideChannelChoosers(AIEngine& ai);
     void InstallLandAndSoulfireChoosers(AIEngine& ai);
 };
+
+// ONE writer for both validation routes (see the declaration). Byte-identical output to the
+// pre-2026-09-11 inline block it was lifted from -- the extraction is what lets the interactive
+// `@validate-line` directive answer with the same verdict the `--validate-line` spawn would.
+void ClaudePlayHarness::WriteValidation(std::ostream& os, const std::string& line,
+                                        const GameState& s,
+                                        const std::vector<TurnSolver::Plan>& plans, bool is_pre,
+                                        int di, int this_main_ordinal)
+{
+    TurnSolver::LineSpec spec = ParseLineSpec(line);
+    // Hand CheckLine the menu the engine just enumerated -- the SAME list `--choices`
+    // will index when the viewer commits the variant it picks. Without this the two
+    // lists disagree and the human's chosen variant applies a different plan.
+    TurnSolver::LineCheck chk = TurnSolver::CheckLine(s, is_pre, spec, &plans);
+    using Vd = TurnSolver::LineCheck::Verdict;
+    const char* vstr =
+        chk.verdict == Vd::Accept             ? "accept" :
+        chk.verdict == Vd::Choose             ? "choose" :
+        chk.verdict == Vd::LegalNotEnumerated ? "legal_not_enumerated" :
+        chk.verdict == Vd::Unsupported        ? "unsupported" :
+                                                "illegal";
+    os << "<<<CLAUDE_VALIDATION>>>\n{\n";
+    os << "  \"decision_index\": " << di << ",\n";
+    os << "  \"verdict\": \""  << vstr << "\",\n";
+    os << "  \"plan_index\": " << chk.plan_index << ",\n";
+    os << "  \"matched_summary\": "; JsonStr(os, chk.matched_summary); os << ",\n";
+    os << "  \"failed_action\": ";   JsonStr(os, chk.failed_action);   os << ",\n";
+    os << "  \"reason\": ";          JsonStr(os, chk.reason);          os << ",\n";
+    os << "  \"variants\": [";
+    for (size_t vi = 0; vi < chk.variants.size(); ++vi)
+    {
+        if (vi) { os << ", "; }
+        os << "{ \"plan_index\": " << chk.variants[vi].plan_index
+           << ", \"label\": "; JsonStr(os, chk.variants[vi].label);
+        os << ", \"cards\": [";
+        for (size_t ci = 0; ci < chk.variants[vi].cards.size(); ++ci)
+        { if (ci) os << ", "; JsonStr(os, chk.variants[vi].cards[ci]); }
+        os << "]";
+        // Structured sub-decision breakdown so the GUI can ask one dimension at a time
+        // (fetch target, then tutor target, ...) and filter variants after each pick.
+        os << ", \"subs\": [";
+        for (size_t si = 0; si < chk.variants[vi].subs.size(); ++si)
+        {
+            const auto& sub = chk.variants[vi].subs[si];
+            if (si) { os << ", "; }
+            os << "{ \"key\": ";    JsonStr(os, sub.key);
+            os << ", \"choice\": "; JsonStr(os, sub.choice);
+            os << ", \"card\": ";   JsonStr(os, sub.card);
+            os << ", \"kind\": ";   JsonStr(os, sub.kind);
+            // `num` = the m_number the choice names (an enchant/equip host, a sacrifice
+            // victim), so the GUI can auto-resolve a DRAGGED attach target by identity
+            // rather than by a display name two creatures can share. Omitted when the
+            // choice names no board object (an X value, a mode, a count).
+            if (sub.num != 0) { os << ", \"num\": " << sub.num; }
+            os << " }";
+        }
+        os << "] }";
+    }
+    os << "],\n";
+    os << "  \"decision\": ";
+    WriteDecisionJson(os, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log,
+                      this_main_ordinal, reveal_log);
+    os << "}\n<<<END_VALIDATION>>>\n";
+    os.flush();
+}
 
 void ClaudePlayHarness::Install(AIEngine& ai)
 {
@@ -3290,68 +3440,24 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
             // legal-but-not-enumerated) so the GUI can offer to store it as an artifact.
             if (!validate_line.empty())
             {
-                TurnSolver::LineSpec spec = ParseLineSpec(validate_line);
-                // Hand CheckLine the menu the engine just enumerated -- the SAME list `--choices`
-                // will index when the viewer commits the variant it picks. Without this the two
-                // lists disagree and the human's chosen variant applies a different plan.
-                TurnSolver::LineCheck chk = TurnSolver::CheckLine(s, is_pre, spec, &plans);
-                using Vd = TurnSolver::LineCheck::Verdict;
-                const char* vstr =
-                    chk.verdict == Vd::Accept             ? "accept" :
-                    chk.verdict == Vd::Choose             ? "choose" :
-                    chk.verdict == Vd::LegalNotEnumerated ? "legal_not_enumerated" :
-                    chk.verdict == Vd::Unsupported        ? "unsupported" :
-                                                            "illegal";
-                std::cout << "<<<CLAUDE_VALIDATION>>>\n{\n";
-                std::cout << "  \"decision_index\": " << di << ",\n";
-                std::cout << "  \"verdict\": \""  << vstr << "\",\n";
-                std::cout << "  \"plan_index\": " << chk.plan_index << ",\n";
-                std::cout << "  \"matched_summary\": "; JsonStr(std::cout, chk.matched_summary); std::cout << ",\n";
-                std::cout << "  \"failed_action\": ";   JsonStr(std::cout, chk.failed_action);   std::cout << ",\n";
-                std::cout << "  \"reason\": ";          JsonStr(std::cout, chk.reason);          std::cout << ",\n";
-                std::cout << "  \"variants\": [";
-                for (size_t vi = 0; vi < chk.variants.size(); ++vi)
-                {
-                    if (vi) { std::cout << ", "; }
-                    std::cout << "{ \"plan_index\": " << chk.variants[vi].plan_index
-                              << ", \"label\": "; JsonStr(std::cout, chk.variants[vi].label);
-                    std::cout << ", \"cards\": [";
-                    for (size_t ci = 0; ci < chk.variants[vi].cards.size(); ++ci)
-                    { if (ci) std::cout << ", "; JsonStr(std::cout, chk.variants[vi].cards[ci]); }
-                    std::cout << "]";
-                    // Structured sub-decision breakdown so the GUI can ask one dimension at a time
-                    // (fetch target, then tutor target, ...) and filter variants after each pick.
-                    std::cout << ", \"subs\": [";
-                    for (size_t si = 0; si < chk.variants[vi].subs.size(); ++si)
-                    {
-                        const auto& sub = chk.variants[vi].subs[si];
-                        if (si) { std::cout << ", "; }
-                        std::cout << "{ \"key\": ";    JsonStr(std::cout, sub.key);
-                        std::cout << ", \"choice\": "; JsonStr(std::cout, sub.choice);
-                        std::cout << ", \"card\": ";   JsonStr(std::cout, sub.card);
-                        std::cout << ", \"kind\": ";   JsonStr(std::cout, sub.kind);
-                        // `num` = the m_number the choice names (an enchant/equip host, a sacrifice
-                        // victim), so the GUI can auto-resolve a DRAGGED attach target by identity
-                        // rather than by a display name two creatures can share. Omitted when the
-                        // choice names no board object (an X value, a mode, a count).
-                        if (sub.num != 0) { std::cout << ", \"num\": " << sub.num; }
-                        std::cout << " }";
-                    }
-                    std::cout << "] }";
-                }
-                std::cout << "],\n";
-                std::cout << "  \"decision\": ";
-                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log);
-                std::cout << "}\n<<<END_VALIDATION>>>\n";
-                std::cout.flush();
+                WriteValidation(std::cout, validate_line, s, plans, is_pre, di, this_main_ordinal);
                 std::exit(71);   // distinct code: "validation verdict emitted"
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
             WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
-            if (AwaitMoreChoices()) { goto claude_retry_1; }
-            std::exit(70);   // distinct code: "more input needed"
+            // --interactive: the wait can be broken by PICKS (resume the game) or by a
+            // `@validate-line` DIRECTIVE, which is answered in place and does NOT consume a pick
+            // -- the child stays parked on this same frame and waits again. See AwaitNext.
+            for (;;)
+            {
+                const Await a = AwaitNext();
+                if (a == Await::Picks) { goto claude_retry_1; }
+                if (a != Await::Validate) { std::exit(70); }   // "more input needed"
+                WriteValidation(std::cout, pending_validate_line, s, plans, is_pre, di,
+                                this_main_ordinal);
+            }
         });
 
     // Vial-as-a-choice: claude decides each Aether Vial upkeep charge. Shares the single
@@ -4543,7 +4649,17 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
             auto it = cast_order_by_main.find(main_ordinal);
             return it != cast_order_by_main.end() ? it->second : std::vector<std::string>{};
         };
-    if (!cast_order_by_main.empty()) { g_play_cast_order_chooser = &cast_order_chooser; }
+    // ...and ALWAYS under --interactive, because there a pin can arrive AFTER install: the viewer
+    // records it when the human commits the line and delivers it on stdin (`@cast-order`, see
+    // AwaitMoreChoices). Gating the install on the map being non-empty at startup would silently
+    // drop every pin of a session that began with none -- the common case, since the first
+    // main-phase decision of a game is always un-pinned. Behaviour-neutral when the map stays
+    // empty: the chooser returns {} and ReorderPlanCasts' first line is `if (order_in.empty())
+    // return;`, so an unordered plan is untouched, and the trace writer's `cast_order` key is
+    // likewise emitted only for a non-empty order. Stateless runs are unaffected (interactive is
+    // false), which is what keeps every reference replay byte-identical.
+    if (!cast_order_by_main.empty() || interactive)
+    { g_play_cast_order_chooser = &cast_order_chooser; }
 
     // Forced attackers (reference replay): the recorded game's per-turn attack sets. Keyed by TURN
     // (--force-attackers "turn:A|B;turn:"), NOT the positional --choices stream -- absent turns

@@ -282,45 +282,195 @@ function awaitIsession(sess, start) {
   });
 }
 
-// Split buildArgs' argv into (everything-but-choices, choices[]) -- the former is the session key.
+// Same wait, for the VALIDATION block a `@validate-line` directive produces. A validation does not
+// advance the game, so the child is still parked on the same frame afterwards and the session stays
+// reusable -- which is the whole point.
+function awaitIvalidation(sess, start) {
+  return new Promise((resolve) => {
+    let timer = null;
+    const settle = (v) => { if (timer) clearTimeout(timer); sess.wake = null; sess.busy = false; resolve(v); };
+    const check = () => {
+      const end = sess.buf.indexOf('<<<END_VALIDATION>>>', start);
+      if (end >= 0) {
+        const begin = sess.buf.indexOf('<<<CLAUDE_VALIDATION>>>', start);
+        if (begin < 0 || begin > end) return settle(null);
+        const raw = sess.buf.slice(begin + '<<<CLAUDE_VALIDATION>>>'.length, end).trim();
+        try { return settle({ kind: 'validation', ...JSON.parse(raw) }); }
+        catch (e) { return settle(null); }
+      }
+      if (sess.dead) return settle(null);
+    };
+    timer = setTimeout(() => settle(null), STEP_TIMEOUT_MS);
+    sess.wake = check;
+    check();
+  });
+}
+
+// Split buildArgs' argv into (everything-but-choices, choices[]) -- plus the --cast-order spec,
+// pulled OUT of the session key.
+//
+// WHY --cast-order IS NOT PART OF THE KEY. The key is "every argv except --choices", which is the
+// right rule for an argv-baked channel: change one and the live child is executing a different
+// invocation, so it must be respawned. But --cast-order is not like the others in the one way that
+// matters here: the viewer ADDS a pin on the ordinary commit path (index.html records the applied
+// order under the just-committed decision's main_ordinal), so on a deck where the human sequences
+// their own lines the argv changes on nearly every click. Measured on EldraziDisplacerFlicker
+// claude_s12_gi11 (2026-09-11): 31 of 60 decisions carry a pin, so 31 of 61 clicks respawned and
+// re-simulated the whole prefix -- 32 engine spawns for 61 clicks, 100-190 ms per pinning click
+// against 5-20 ms for a cached one. The persistent child existed and was being thrown away.
+//
+// The pin is delivered to the LIVE child instead, on stdin, immediately before the picks it
+// belongs to (`@cast-order`; ClaudePlayHarness::AwaitNext in src/main.cpp carries the timing
+// argument). The other keyed channels (--firebreathe / --jitte / --storage-hold) stay IN the key
+// deliberately: their answers only ever arrive in response to a PROMPT frame, and those frames
+// exit 70 unconditionally by design, so the child is already gone and a respawn is what has to
+// happen anyway.
+const CAST_ORDER_FLAG = '--cast-order';
 function argsAndChoices(p, logDir) {
   const args = buildArgs(p, logDir, null, false);
   const i = args.indexOf('--choices');
-  return { rest: args.slice(0, i).concat(args.slice(i + 2)),
+  const rest = args.slice(0, i).concat(args.slice(i + 2));
+  const ci = rest.indexOf(CAST_ORDER_FLAG);
+  const castOrder = ci >= 0 ? rest[ci + 1] : '';
+  const stable = ci >= 0 ? rest.slice(0, ci).concat(rest.slice(ci + 2)) : rest;
+  return { rest, stable, castOrder,
            choices: args[i + 1] ? args[i + 1].split(',') : [] };
+}
+
+// "<ord>:A|B;<ord>:X" -> Map(ord -> "A|B"). Mirrors ParseCastOrderSpec in main.cpp closely enough
+// for the ONE question asked of it below: are these two specs the same statement about the same
+// ordinals? Entry ORDER is irrelevant (the engine keys a map), so comparing the raw strings would
+// respawn on a re-serialisation that says exactly the same thing.
+function parseCastOrder(spec) {
+  const out = new Map();
+  for (const entry of String(spec || '').split(';')) {
+    const c = entry.indexOf(':');
+    if (c < 0) continue;
+    const ord = parseInt(entry.slice(0, c), 10);
+    if (!Number.isFinite(ord)) continue;
+    out.set(ord, entry.slice(c + 1));
+  }
+  return out;
+}
+
+// May the live child be brought up to date with `next` by MERGING, or must it be respawned?
+//
+// Only an ADDITIVE change is deliverable. The engine merges a directive into its map, so a pin
+// the child already holds cannot be withdrawn, and a pin that CHANGED is a different statement
+// about a decision whose apply has already run -- delivering either would make the child's game
+// diverge from the one the browser is showing, which is the whole class of bug the save audit
+// exists to catch. An undo (index.html deletes S.castOrder[st.co]) and a rewind both land here as
+// non-additive / non-extending and respawn, which is correct and cheap: those are rare.
+function castOrderExtends(prev, next) {
+  const a = parseCastOrder(prev), b = parseCastOrder(next);
+  for (const [ord, v] of a) { if (b.get(ord) !== v) return false; }
+  return true;
 }
 
 async function runStepCached(p, logDir) {
   if (!INTERACTIVE || logDir) return runStep(p, logDir);
-  const { rest, choices } = argsAndChoices(p, logDir);
-  const key = JSON.stringify(rest);
+  const { rest, stable, castOrder, choices } = argsAndChoices(p, logDir);
+  const key = JSON.stringify(stable);
   const s = isession;
+  // RE-STEP AT THE SAME PREFIX: hand back the frame the child is already parked on, with no
+  // engine work at all. This is the REJECT/RETRY path -- a rejected line re-steps into the very
+  // decision it was rejected at -- and it used to fall through to the respawn below, because the
+  // fast path requires the stream to GROW. A whole-game re-simulation to be told what we were
+  // just told, at exactly the moment the human is already fighting the viewer.
+  if (s && !s.dead && !s.busy && s.key === key && s.castOrder === castOrder &&
+      s.pendingDecision && choices.length === s.sent.length &&
+      s.sent.every((c, i) => c === choices[i])) {
+    return { kind: 'decision', decision: s.pendingDecision };
+  }
   if (s && !s.dead && !s.busy && s.key === key &&
-      choices.length > s.sent.length && s.sent.every((c, i) => c === choices[i])) {
+      choices.length > s.sent.length && s.sent.every((c, i) => c === choices[i]) &&
+      castOrderExtends(s.castOrder, castOrder)) {
     // Fast path: this step extends the live child's stream -- feed it only the delta.
     s.busy = true;
     const start = s.buf.length;
-    try { s.child.stdin.write(choices.slice(s.sent.length).join(',') + '\n'); }
+    try {
+      // The pin BEFORE the picks, always: the engine reads ordinal N's order immediately after
+      // consuming N's pick, so the directive has to be in the map by then.
+      if (castOrder !== s.castOrder) { s.child.stdin.write('@cast-order ' + castOrder + '\n'); }
+      s.child.stdin.write(choices.slice(s.sent.length).join(',') + '\n');
+    }
     catch (e) { s.busy = false; killIsession(); return runStep(p, logDir); }
     const r = await awaitIsession(s, start);
-    if (r) { s.sent = choices; if (r.kind === 'result') killIsession(); return r; }
+    if (r) {
+      s.sent = choices; s.castOrder = castOrder;
+      s.pendingType = r.kind === 'decision' ? r.decision.type : null;
+      s.pendingDecision = r.kind === 'decision' ? r.decision : null;
+      if (r.kind === 'result') killIsession();
+      return r;
+    }
     killIsession();
     return runStep(p, logDir);   // stateless fallback decides what this step really is
   }
-  // (Re)spawn: new game, rewind, changed side-channel args, or a busy/dead child.
+  // (Re)spawn: new game, rewind, changed side-channel args, or a busy/dead child. `rest` (not
+  // `stable`) -- the spawn's argv is unchanged, cast-order pin and all.
   killIsession();
   const child = spawn(sessionBin(p), rest.concat(['--choices', choices.join(','), '--interactive']),
                       { cwd: ROOT });
-  const ns = { key, child, sent: choices, buf: '', dead: false, busy: true, wake: null };
+  const ns = { key, child, sent: choices, castOrder, pendingType: null, pendingDecision: null,
+               buf: '', dead: false, busy: true, wake: null };
   child.stdout.on('data', (d) => { ns.buf += d; if (ns.wake) ns.wake(); });
   child.stderr.on('data', () => {});   // [play] chatter; the stateless fallback surfaces real errors
   child.on('error', () => { ns.dead = true; if (ns.wake) ns.wake(); });
   child.on('close', () => { ns.dead = true; if (ns.wake) ns.wake(); });
   isession = ns;
   const r = await awaitIsession(ns, 0);
-  if (r) { if (r.kind === 'result') killIsession(); return r; }
+  if (r) {
+    ns.pendingType = r.kind === 'decision' ? r.decision.type : null;
+    ns.pendingDecision = r.kind === 'decision' ? r.decision : null;
+    if (r.kind === 'result') killIsession();
+    return r;
+  }
   killIsession();
   return runStep(p, logDir);
+}
+
+// Reconcile a line against the LIVE child instead of a fresh full-prefix spawn.
+//
+// THE OTHER FULL-PREFIX SPAWN A CLICK PAID FOR. The queue workflow commits through `Commit Line`,
+// which POSTs /api/validate and only then /api/step -- so with the step cached (above) the
+// validation became the whole cost of a commit: one stateless re-simulation of the entire prefix,
+// measured at 0.36-0.42 s CPU on EldraziDisplacerFlicker claude_s9_gi8's turn-4 go-off.
+//
+// The frame a stateless `--validate-line` spawn would reconcile against IS the frame the live child
+// is parked on: both are "the first un-chosen main-phase decision" for the same choice prefix. So
+// the directive asks the same question of the same state, and WriteValidation (one writer, both
+// routes) answers it with the same bytes. A validation consumes no pick, so the child is still
+// parked on that frame afterwards and the next step is still a cached one.
+//
+// STRICTLY CONSERVATIVE about when it may be used, because a validation that answered about the
+// wrong frame would be a verdict on a line the human is not looking at:
+//   * the prefix must be EXACTLY the child's (a validation does not extend the stream);
+//   * the cast-order map must be EXACTLY the child's (the line's own taps ride --validate-line;
+//     a pin is only recorded AFTER a verdict is accepted, so this is the normal state);
+//   * the pending frame must be a main_phase -- the 28 other emission sites cannot answer a
+//     validation, and the stateless path's behaviour there is to fall through and re-emit the
+//     pending decision, which the caller already has.
+// Anything else, and anything malformed, falls back to `runValidate` -- unchanged.
+async function runValidateCached(p, line) {
+  // An EMPTY line is not a validation at all on the stateless path (`validate_line.empty()` falls
+  // through to re-emitting the decision), and a line carrying a newline would desync the stdin
+  // protocol. Neither can be served here; both are already handled correctly by the spawn.
+  if (!INTERACTIVE || !line || /[\r\n]/.test(line)) return runValidate(p, line);
+  const { stable, castOrder, choices } = argsAndChoices(p, null);
+  const key = JSON.stringify(stable);
+  const s = isession;
+  if (s && !s.dead && !s.busy && s.key === key && s.pendingType === 'main_phase' &&
+      s.castOrder === castOrder && choices.length === s.sent.length &&
+      s.sent.every((c, i) => c === choices[i])) {
+    s.busy = true;
+    const start = s.buf.length;
+    try { s.child.stdin.write('@validate-line ' + line + '\n'); }
+    catch (e) { s.busy = false; killIsession(); return runValidate(p, line); }
+    const r = await awaitIvalidation(s, start);
+    if (r) return r;
+    killIsession();
+  }
+  return runValidate(p, line);
 }
 
 // Spawn the binary ASYNCHRONOUSLY (child_process.spawn, not spawnSync) so the up-to-tens-of-seconds
@@ -1120,7 +1270,9 @@ const server = http.createServer(async (req, res) => {
       // against the model at the current decision. Accept -> the GUI appends plan_index and
       // advances; reject -> the GUI shows the classified verdict and offers an artifact save.
       const p = await readBody(req);
-      const out = runValidate(p, String(p.line == null ? '' : p.line));
+      // Served by the LIVE interactive child when it is parked on exactly this frame (see
+      // runValidateCached); otherwise the unchanged full-prefix spawn.
+      const out = await runValidateCached(p, String(p.line == null ? '' : p.line));
       // A validation carries the same pending decision frame; a rejected line then re-steps into it,
       // so ledgering here keeps the audit complete across a reject/retry.
       // Both shapes carry the pending frame under `decision` (a verdict nests it; a non-main-phase
@@ -1243,7 +1395,7 @@ module.exports = { runStep, runValidate, listDecks, resolveDeck, buildArgs, BIN,
                    // unbound http.Server, so that check can listen(0) and drive the REAL routes --
                    // the route wiring (does /api/step ledger? does /api/save audit?) is not
                    // reachable by calling the helpers directly, and that wiring is the whole fix.
-                   runStepCached, saveTrace, auditTrace, frameFingerprint, recordFrame,
+                   runStepCached, runValidateCached, saveTrace, auditTrace, frameFingerprint, recordFrame,
                    sessionBin, sessionFor, gameKey, PIN_BIN, SESSION_DIR, httpServer: server,
                    // deck maturity, for test/viewer_deck_beta_check.js
                    tierFrom, benchState, deckMaturity, countOptimalRefs, MIN_OPTIMAL_REFS, STABLE_REFS, KEEPMODEL_EXTS,

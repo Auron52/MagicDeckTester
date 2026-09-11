@@ -192,6 +192,35 @@ UI does not change.** That is why the GUI is built against the protocol, not the
 - `GET /api/reference-exists` — reports `{exists, path, suboptimal, suboptimalPath}` for a game.
 - `POST /api/save` — re-runs with `--log-dir logs/play` (used for a game that had rejects).
 
+### What a click actually costs (the persistent child, and the two things that defeated it)
+
+The stateless protocol re-simulates the WHOLE `--choices` prefix, so step N pays for re-enumerating
+all N−1 earlier plan fans and a long combo turn gets progressively slower. `--interactive` fixes
+that: the engine blocks on stdin after emitting a decision instead of exiting 70, and continues the
+SAME in-process game, so a step costs only its own frame. `server.js` keeps at most one such child
+(`isession`) and falls back to a stateless respawn for anything unusual (rewind/undo, a side-channel
+PROMPT frame, child death, a timeout). `PLAY_INTERACTIVE=0` opts out.
+
+Keeping the child is the whole game, and two ordinary things used to throw it away every click:
+
+* **A cast-order pin.** The session key is every argv except `--choices`, and committing a
+  hand-sequenced line records a `--cast-order` pin — so the key changed on nearly every click of a
+  deck whose lines the human orders (EldraziDisplacerFlicker `claude_s12_gi11`: a pin on 31 of 60
+  decisions). Pins now ride stdin as `@cast-order <spec>` and `--cast-order` is out of the key.
+* **`Commit Line` validates first.** The commit flow is `/api/validate` then `/api/step`, and the
+  validation was always a fresh full-prefix spawn. It is now asked of the live child as
+  `@validate-line <spec>`, answered against the frame the child is parked on, consuming no pick.
+
+Both directives are **`--interactive` only**; a stateless replay of the same prefix is unaffected,
+which is what keeps every saved reference replaying byte-for-byte. Measured 2026-09-11, commit-line
+flow, per game: `claude_s12_gi11` 4.5 s / 87 engine spawns → 0.58 s / 1 spawn; `claude_s9_gi8`
+7.8 s / 56 spawns → 2.3 s / 1 spawn; worst single click 231 ms → 90 ms. Gated by
+`test/interactive_parity_check.py` (layer 1g of `test/viewer_checks.sh`), which byte-compares every
+frame AND every in-child validation against the stateless spawn. Measure with
+`node test/viewer_click_latency.js <reference.json> --validate` (per-click wall time + engine spawn
+count) and `python3 test/viewer_step_latency.py --ref <reference.json>` (engine CPU per prefix;
+add `--env MTG_PLAY_STEP_TIMING=1` for the enumerate/combo-off/apply split).
+
 ### A saved log IS the game you played (the engine is pinned, the save is audited)
 
 Both save routes RE-RUN the whole accumulated choice stream in a **fresh process** and publish the

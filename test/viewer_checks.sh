@@ -228,7 +228,10 @@ fi
 #     game the human played. On 2026-09-10 that re-run picked up a binary rebuilt two minutes earlier,
 #     veered at decision 27 of a turn-4 go-off, and wrote a won-on-turn-7 log for a game still in
 #     turn 4 -- no error, right filename. This check drives real sessions and saves them, and would
-#     have caught it twice over (out-of-range pick at 27, board mismatch at 28).
+#     have caught it twice over (out-of-range pick at 27, board mismatch at 28). Since 2026-09-11
+#     it also asks every main-phase frame for an /api/validate verdict BOTH ways -- live child vs
+#     stateless spawn -- and requires byte-identical bodies AND that the child actually answered
+#     (0 engine spawns), so the routing cannot quietly go dead. ~25 s.
 if [ "$MODE" != line ]; then
   if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_save_parity_check.js" ]; then
     if [ ! -f "$BIN" ]; then
@@ -288,6 +291,33 @@ if [ "$MODE" != line ]; then
       echo "--- pay line colour (a line's later cast keeps the colour it still owes) ---"
       if MTG_BIN="$BIN" python3 "$HERE/pay_line_color_check.py"; then :; else
         echo "FAIL: a committed line's generic pips again spent the mana a later cast in that same line needed."
+        rc=1
+      fi
+    fi
+  fi
+fi
+
+# 1g) INTERACTIVE PARITY (python + binary). ~1 min. The persistent --interactive child is what
+#     every ordinary viewer click now runs on (tools/play/server.js runStepCached), and its whole
+#     claim is that it emits the frames a stateless respawn would. Nothing else here can check
+#     that: every other layer -- the protocol sweep, the client check, the save audit -- drives the
+#     STATELESS path, so the child could drift arbitrarily and they would all stay green.
+#     Two claims, both gated:
+#       * a child fed its picks one line at a time == a fresh --choices invocation per prefix;
+#       * a CAST-ORDER PIN delivered late, on stdin (`@cast-order`, 2026-09-11), == the same pin
+#         baked into argv. That one is the newer risk: a pin applied one frame off reorders a line
+#         the human already committed, and the end-of-turn board usually cannot tell. It caught
+#         exactly that off-by-one on its first run.
+#     WIRED IN 2026-09-11; the file existed since --interactive shipped and ran from nowhere.
+if [ "$MODE" != line ]; then
+  if command -v python3 >/dev/null 2>&1 && [ -f "$HERE/interactive_parity_check.py" ]; then
+    if [ ! -f "$BIN" ]; then
+      echo "FAIL: interactive parity check needs the binary but '$BIN' is missing."
+      rc=1
+    else
+      echo "--- interactive parity (the persistent child == a stateless respawn, pins and all) ---"
+      if MTG_BIN="$BIN" python3 "$HERE/interactive_parity_check.py"; then :; else
+        echo "FAIL: the --interactive child no longer reproduces the stateless frames."
         rc=1
       fi
     fi

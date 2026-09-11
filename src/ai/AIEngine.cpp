@@ -2281,6 +2281,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // does not happen (EDF seed 10 T4: nine blinks, opponent still on 20). The flag is set
             // only on the verified branch of the human-play COMBO OFF gate, so no other plan and no
             // autonomous run can enter this scope.
+            // MTG_PLAY_STEP_TIMING (diagnostic, default off): the APPLY half of a viewer click.
+            // Braced so the scope closes on the apply and not on the rest of the segment loop.
+            {
+            playtiming::Scope tm_apply(&playtiming::T().apply);
             if (chosen.combo_off_verified || chosen.combo_off_offered)
             {
                 ComboOffFinishScope co_finish;
@@ -2361,6 +2365,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
             }
             else { TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main); }
+            }   // end MTG_PLAY_STEP_TIMING apply scope
             // The opponent is DEAD -- stop asking. Under the commit-the-line rule the loop would
             // otherwise re-enumerate and keep prompting inside an already-won turn (the Dragons
             // sweep saw three Scourge ETB pings take the opponent to -1 and then still be offered a

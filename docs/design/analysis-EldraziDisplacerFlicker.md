@@ -5138,3 +5138,105 @@ Rules 2/3's `(D or E or C2)` rider is still inference, not the user's words; rul
 graveyard-Emiel guard; the search shortcut is deferred (the table fires on 3.2% of autonomous
 states and, at first fire, the engine is already 0.29 turns from its own win -- so it saves almost
 nothing until the rules widen, and it must key on `verified`, never on `offered`).
+
+## Session 16 (2026-09-11): the per-click clock -- the persistent child was being thrown away
+
+**USER, standing complaint:** *"The current version is still too difficult to make work in the
+viewer."* Session 15 cut the blink click from 230-812 ms to 30-37 ms by shrinking the FAN. This
+session asks the other half of the question -- how many times does a click re-simulate the game at
+all -- and the answer turned out to be "nearly every one of them, twice".
+
+### Measure first: where a replay's time actually goes
+
+New instrument `MTG_PLAY_STEP_TIMING` (diagnostic, default off; `src/ai/EngineFlags.h`
+`playtiming`) splits one replay into enumerate / combo-off rules / projection / trial apply /
+apply. `perf` cannot help in this container (no hardware counters; `perf record` fails to write),
+which is precisely why the split had to be in-engine. Share of TOTAL for the full-prefix replay:
+
+| workload | enum | of which base fan | co rules | co projection | co trial | apply |
+|---|---|---|---|---|---|---|
+| `claude_s9_gi8` k=54 (54 frames, 0 trials) | 744.3 ms | **739.5 (99.4%)** | 0.4 | 0.7 | 0.0 | 5.3 |
+| `claude_s12_gi11` k=59 (55 frames, 7 trials) | 61.1 ms | **52.8 (86%)** | 0.1 | 0.0 | 7.4 (12%) | 4.3 |
+
+So the standing hypothesis -- that the `combo_off_verified` trial applies dominate a replayed
+decision -- is **REFUTED**. On seed 9 the trial does not run at all (the projection declines and
+the rules do not fire on that path); on seed 12 it is 12%. `EnumeratePlansWithLand` is 86-99% of
+every replayed frame, and it cannot be cheapened without changing the fan, which the recorded pick
+indexes into. The leverage is therefore not in making a replayed frame cheaper. It is in **not
+replaying**.
+
+### What a click cost, and why the `--interactive` child was not helping
+
+`--interactive` (session 15's persistent child) already existed and already worked. It was simply
+being discarded, by two ordinary actions:
+
+1. **A cast-order pin.** `server.js`'s session key is every argv except `--choices`. Committing a
+   hand-sequenced line makes `index.html` record a `--cast-order` pin under that decision's
+   `main_ordinal` and send it with the NEXT step -- so the key changed and the child was killed.
+   On this deck that is the normal case, not an edge case: `claude_s12_gi11` records a pin on
+   **31 of its 60 decisions**, so 31 of 61 clicks paid a whole-game replay (100-190 ms against
+   5-20 ms for a cached click; **32 engine spawns for 61 clicks**).
+2. **`Commit Line` validates first.** The commit flow is `/api/validate` then `/api/step`, and the
+   validation was ALWAYS a fresh full-prefix spawn. With the step cached, the validation became
+   the entire cost of a commit -- and it is the more expensive half on a long turn (0.36-0.42 s
+   CPU at seed 9's turn-4 go-off). Measured end-to-end: **87 engine spawns for 61 clicks.**
+
+### The fix: two `--interactive` stdin directives, viewer-only
+
+* `@cast-order <spec>` -- merged into `cast_order_by_main` immediately before the picks it belongs
+  to. The timing argument is exact, not lucky: a pin is read at ONE site (AIEngine's segment loop,
+  right after the external chooser returns that ordinal's pick), and the directive precedes that
+  pick on the wire. `--cast-order` leaves the session key; the server delivers only ADDITIVE
+  changes and respawns on anything else (an undo deletes a pin, a rewind fails the prefix test).
+* `@validate-line <spec>` -- answered against the frame the child is parked on, consuming no pick,
+  so the child stays parked and the next step is still cached. The frame a stateless
+  `--validate-line` spawn would use IS that frame (both are "the first un-chosen main-phase
+  decision" for the same prefix), and `ClaudePlayHarness::WriteValidation` is now ONE writer for
+  both routes so the verdict cannot drift between them.
+* Third, free: a `/api/step` at an UNCHANGED prefix (the reject/retry path -- a rejected line
+  re-steps into the decision it was rejected at) now returns the parked frame with no engine work.
+  It used to respawn, i.e. re-simulate the whole game to repeat what it had just said, at exactly
+  the moment the human is already fighting the viewer.
+* The cast-order chooser is installed unconditionally under `--interactive` (a pin can now arrive
+  after install). Behaviour-neutral with an empty map -- `ReorderPlanCasts` returns on an empty
+  order and the trace writer only emits a non-empty one.
+
+### Before / after (interleaved A/B, d8f700bb server+binary vs this commit; commit-line flow)
+
+| game | clicks | before | after | spawns | worst click |
+|---|---|---|---|---|---|
+| `claude_s12_gi11` | 61 | 4541 / 4491 ms | **576 / 559 ms** | 87 → 1 | 133 → 53-59 ms |
+| `claude_s9_gi8` | 56 | 7826 / 7549 ms | **2361 / 2229 ms** | 56 → 1 | 231 → 80-90 ms |
+
+Bare plan clicks (no `Commit Line`): `claude_s12_gi11` 2056/2155 ms → 282/307 ms, 32 spawns → 1.
+
+**Nothing about the engine's per-frame work changed, and that is deliberate.** The k-table (engine
+CPU for a stateless prefix replay) is unchanged within noise, and the exit-70 dumps for
+k = 0,10,20,30,40,50,59 on both references are **byte-identical** to the d8f700bb binary's. The
+stateless cost was not reduced; it was made unnecessary.
+
+### New gate
+
+`test/interactive_parity_check.py` is now layer **1g** of `test/viewer_checks.sh` -- it existed
+since `--interactive` shipped and ran from nowhere. It gains a late-pin layer: replay a reference's
+own picks with the pins delivered on stdin and byte-compare every frame, plus every in-child
+validation, against the argv/stateless arm (`claude_s12_gi11`: 60 frames + 55 validations;
+FiveColour `claude_s13_gi12`: 15 + 11). It earned its keep immediately -- it caught an off-by-one
+in the harness's own pin timing on its first run.
+
+Two measurement tools, both reusable: `node test/viewer_click_latency.js <ref> [--validate]`
+(per-click wall time and engine SPAWN COUNT, through server.js's real entry points -- the spawn
+count is the number no engine-side timer can see) and `python3 test/viewer_step_latency.py --ref
+<ref>` (engine CPU per prefix; `--env MTG_PLAY_STEP_TIMING=1` for the attribution split).
+
+### Found, not fixed
+
+* The base plan fan is 86-99% of every replayed frame and ~18 ms per frame at seed 9's 316-plan
+  turn-4 boards. Cheapening it means changing the fan, which renumbers recorded picks -- out of
+  scope for a byte-identical change, and the display cap already covers the UI side.
+* `/api/ai-hint` and `/api/keep-hint` still spawn statelessly. They are background fill-ins for
+  the `bottom`/`mulligan` modals only, fire once per game, and never block a main-phase click.
+* A side-channel PROMPT frame (firebreathe / jitte / storage-hold) still exits 70 unconditionally
+  and costs a respawn. Correct by design (the answer is argv-keyed) and rare; EDF hits none.
+* The baseline protocol sweep at d8f700bb reads `12 ok, 296 repaired, 1 play-drift, 0 enum-gap,
+  0 contract-fail (309 refs)` -- the 1 play-drift predates this session.
