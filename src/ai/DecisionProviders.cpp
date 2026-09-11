@@ -15298,7 +15298,9 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
 
 const bool s_edf_goff = !EnvOn("MTG_NO_ELDRAZI_GOFF");
 
-// PROSPECTIVE go-off recognition (2026-09-03) -- MEASURED AND REFUTED, so the default is OFF.
+// PROSPECTIVE go-off recognition (2026-09-03) -- refuted ALONE in 2026-09-03, ADOPTED IN
+// COMBINATION in 2026-09-11 (Session 22). The 2026-09-03 record is kept verbatim below because it
+// is still true of this lever on its own; the adoption note at the bottom says what changed.
 //
 // It was default ON while under measurement, on the "a lever behind a default-off gate is dead
 // code" rule. That rule is about levers still awaiting a verdict; this one HAS its verdict. The
@@ -15317,7 +15319,28 @@ const bool s_edf_goff = !EnvOn("MTG_NO_ELDRAZI_GOFF");
 // ride ONE pooled batch. Two sequential per-arm batches is the wave pattern CLAUDE.md forbids, and
 // it is what the first two attempts at this measurement did: the arms could not backfill each
 // other's tail, and the second arm ran on a differently-loaded box than the first.
-const bool s_edf_prospective_env = EnvOn("MTG_EDF_PROSPECTIVE", false);
+//
+// 2026-09-11, SESSION 22 -- RE-MEASURED IN COMBINATION AND NOW DEFAULT ON. The paragraph above
+// invited exactly this: "the horizon that made it inert moves, and this is worth re-measuring with
+// one flag". `MTG_EDF_GOFF_EXACT_AUTO` moved it, and the pair is not the sum of its parts:
+//
+//   * ALONE, on the 14 saved references at the shipped d5/20 ms, this lever recovers `claude_s2_gi1`
+//     and `claude_s5_gi4` to the human's T4 but COSTS `claude_s7_gi6` a turn -- mean 5.714 -> 5.857,
+//     i.e. worse, and not a strict improvement. That is the verdict the paragraph above records.
+//   * ON TOP OF the exact-sizing lever the s7 regression DISAPPEARS and the two gains remain:
+//     mean 5.429 -> **5.286**, references matching the human 4 -> 6, and every other cell identical.
+//     This is the repo's standing "sweep levers in COMBINATION" lesson -- a lever that measures
+//     negative alone and positive in company.
+//   * Deck average, 200 games (seeds 3001/3061 x 50, both arms chunk-interleaved in ONE pooled
+//     queue): 5.450 -> 5.460, i.e. +0.010 turns, 1 chunk better / 2 worse / 7 tied -- neutral. And
+//     it is 21% CHEAPER in summed wall (5,399 s -> 4,278 s): a prospective projection lets the
+//     search commit its go-off a turn earlier, and going off ends the fat games.
+//   * Reference replay is unaffected: `MTG_EDF_PROSPECTIVE=1 test/viewer_protocol_check.py --only
+//     EldraziDisplacerFlicker --strict` gives 0 play-drift / 0 enum-gap / 0 contract-fail over all
+//     fourteen, every recorded win turn reproduced.
+//
+// `MTG_EDF_PROSPECTIVE=0` is the hatch and restores the measured-and-refuted baseline exactly.
+const bool s_edf_prospective_env = EnvOn("MTG_EDF_PROSPECTIVE", true);
 inline bool EdfProspectiveOn()
 { return heurarm::Flag(heurarm::EDF_PROSPECTIVE, s_edf_prospective_env); }
 
