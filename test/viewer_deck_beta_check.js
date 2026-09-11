@@ -283,7 +283,11 @@ if (!JSDOM) {
     runScripts: 'dangerously', url: 'http://localhost/',
     beforeParse(window) {
       window.fetch = (u) => Promise.resolve({ ok: true, json: () => Promise.resolve(
-        String(u).startsWith('/api/decks') ? { decks: FIXTURE, binExists: true } : {}) });
+        // serverApi: this fixture is about the maturity grading, not the stale-server handshake --
+        // answer it so the banner does not render over what the check is reading.
+        String(u).startsWith('/api/decks')
+          ? { decks: FIXTURE, binExists: true, serverApi: require(path.join(PLAY, 'server.js')).SERVER_API }
+          : {}) });
     },
   });
   const win = dom.window;

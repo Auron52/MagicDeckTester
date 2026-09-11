@@ -116,6 +116,25 @@ function intParam(v, dflt) {
   return Number.isFinite(n) ? n : dflt;
 }
 
+// ---- STALE-SERVER DETECTION -----------------------------------------------------------------
+// index.html is read from DISK on every request, so a browser reload always gets the newest client.
+// This file is not: `node server.js` holds whatever server.js said when it was STARTED, and the
+// viewer is a long-running local process the user leaves open for hours. So "new client, old
+// server" is the normal state of this repo after any server.js change, and it fails SILENTLY --
+// same routes, same payloads, different behaviour underneath.
+//
+// It has already cost a real game. A server started before 2026-09-10 12:10 (cee518af) has no
+// sessionBin, so it runs build/Release/mtg unpinned: an agent rebuilding the binary mid-session
+// makes the very next step, and the SAVE, run on a different engine than the rest of the game --
+// which is exactly the turn-4 session that got published as a won-on-turn-7 log.
+//
+// So the client checks. Bump this whenever a server.js change alters what the client can rely on
+// (a new route, a new response field, a new engine-pinning or routing behaviour); the client
+// compares it against its own constant and, crucially, treats its ABSENCE as "older than the day
+// this check was added" -- which is the only way a stale server can be detected at all, since a
+// stale server cannot serve a field it has never heard of.
+const SERVER_API = 3;   // 3 = sessionBin pin + @cast-order/@validate-line stdin directives
+
 // Build the argv for one --claude-play invocation.
 // #10 cast-order side-channel, as argv. `map` is a { mainOrdinal: [entry, ...] } map of the human's
 // declared order for that main-phase decision. Passed as "<ord>:A|B|C;..." (pipe-separated, since
@@ -1219,7 +1238,8 @@ const server = http.createServer(async (req, res) => {
       return res.end(js);
     }
     if (req.method === 'GET' && url.pathname === '/api/decks') {
-      return sendJson(res, 200, { decks: listDecks(), binExists: fs.existsSync(BIN) });
+      return sendJson(res, 200, { decks: listDecks(), binExists: fs.existsSync(BIN),
+                                  serverApi: SERVER_API });
     }
     if (req.method === 'GET' && url.pathname === '/api/reference-exists') {
       // Does a saved reference game already exist for this (deck, seed, game#)? The top bar shows a
@@ -1399,4 +1419,7 @@ module.exports = { runStep, runValidate, listDecks, resolveDeck, buildArgs, BIN,
                    sessionBin, sessionFor, gameKey, PIN_BIN, SESSION_DIR, httpServer: server,
                    // deck maturity, for test/viewer_deck_beta_check.js
                    tierFrom, benchState, deckMaturity, countOptimalRefs, MIN_OPTIMAL_REFS, STABLE_REFS, KEEPMODEL_EXTS,
-                   pySlug, referenceOwners };
+                   pySlug, referenceOwners,
+                   // stale-server detection (see SERVER_API): the client warns when the running
+                   // server is older than the page it just served.
+                   SERVER_API };

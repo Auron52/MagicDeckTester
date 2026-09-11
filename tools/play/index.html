@@ -109,6 +109,12 @@
   .betanote { font-size:12px; font-weight:600; color:#0c1116; border-radius:8px;
               padding:2px 9px; white-space:nowrap; cursor:help; background:#e0a33a; }
   .betanote.alpha { background:#e07a5f; }
+  /* STALE SERVER banner (checkServerFresh). Full width, above the board, alpha-red: it is the one
+     warning here about the TOOL rather than the game, and the failure it names is silent. */
+  .staleserver { margin:8px 14px; padding:9px 12px; border-radius:8px; font-size:13px; line-height:1.45;
+                 color:#0c1116; background:#e07a5f; }
+  .staleserver code { background:rgba(0,0,0,.18); border-radius:4px; padding:0 4px; }
+  .staleserver button { margin-left:8px; }
 
   .thumb { width:90px; text-align:center; position:relative; }
   .thumb.sm { width:62px; }
@@ -525,6 +531,13 @@
   <span class="hint">no clairvoyance — your win-turn is a ground-truth bound</span>
 </header>
 
+<!-- STALE SERVER (see checkServerFresh). This page is re-read from disk on every load; the node
+     process serving it is not, so a viewer left open across a server.js change runs a new client on
+     an old server with the same routes and different behaviour. Full-width and above the board
+     because the failure it warns about is silent and, in the engine-pinning case, corrupts the
+     saved game. -->
+<div id="staleserver" class="staleserver" style="display:none"></div>
+
 <main>
   <section id="board"><div class="hint">Start a new game.</div></section>
   <aside id="side">
@@ -569,6 +582,9 @@ const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+enc
 // the no-win turn), so changing it changes the engine's own decisions and would make every saved
 // reference replay against a different game. 8 covers every deck's win turn with room to spare.
 const MAX_TURNS = 8;
+// The server behaviour this page assumes (see SERVER_API in server.js and checkServerFresh below).
+// Bump BOTH together when a server.js change alters what the client can rely on.
+const CLIENT_API = 3;
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
           plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{}, castOrder:{}, jitte:{},
           // MANUAL TAP/PAY (docs/design/viewer-manual-tap-pay.md). `tapMode` armed => clicking one of
@@ -581,7 +597,12 @@ let S = { choices:[], history:[], decision:null, prev:null, over:false, result:n
           // queued block how many times?" dialog -- null when closed. There is no armed MODE here:
           // a repeat acts on the line the human has already built, so it needs no board click and
           // must not change what one does.
-          repeatPick:null };
+          repeatPick:null,
+          // LOOP the last K COMMITTED lines. `committed` is the per-segment history the loop reads
+          // ({at, turn, entries}); `loopPick` is the open two-step dialog ({k:null} = "how many
+          // lines?", {k:N} = "how many times?"); `macroRun` describes an expansion currently
+          // committing, so a mid-chain rejection can say WHICH iteration stopped it.
+          committed:[], loopPick:null, macroRun:null };
 
 // The SELECTED deck entry (see /api/decks): carries the decklist file name and, for an
 // archived list, the version folder it lives in. Both travel on every request.
@@ -821,7 +842,7 @@ function retargetPlanAura(planIdx, num) {
   renderBoard();
   return true;
 }
-function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.tapMode=false; S.tapPick=null; S.repeatPick=null; hideVerdict(); renderBoard(); }
+function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.tapMode=false; S.tapPick=null; S.repeatPick=null; S.loopPick=null; S.macroRun=null; hideVerdict(); renderBoard(); }
 
 // ---- rendering -------------------------------------------------------------
 // Colored counter badges for a permanent {counters:[{kind,label,count}]}. One circle per kind.
@@ -1341,10 +1362,104 @@ function renderRepeatPicker(){
     el.onclick=()=>{ const n=+el.dataset.rep; S.repeatPick=null;
       if (n>1) {
         S.plan = LB.repeatBlock(S.plan, 0, S.plan.length, n);
+        const segs = LB.segmentParts(S.plan).length;
+        S.macroRun = { kind:'repeat', n, segs, perIter:Math.max(1, Math.round(segs/n)), done:0 };
         flashHint(`Queued ×${n} — ${S.plan.length} actions, committing as ${n} consecutive lines. ✕ on a chip removes one; Clear starts over.`);
       }
       renderBoard(); };
   });
+}
+
+// ---- LOOP the last K COMMITTED lines (docs/design/viewer-line-macros.md) ---------------------
+// USER 2026-09-11, mid-game on EldraziDisplacerFlicker: "it would be nice if loops like kitchen
+// activate -> untap were possible to repeat".
+//
+// `⟲ Repeat ×N` above can only act on a block that is still QUEUED, so it has to be set up BEFORE
+// the first iteration is played. The loop this deck actually grinds is discovered by playing it --
+// activate Kitchen (investigate), blink a Drake to untap the lands, crack the Clue to draw -- and
+// by the time you know it works the queue is empty and the block exists only as committed history.
+// This reads that history back.
+//
+// Still a PURE QUEUE EDIT, for all three of the reasons the doc gives: the expansion is ordinary
+// entries in S.plan, each iteration commits as its own segment through the existing chain, and the
+// saved game is therefore just the clicks a human would have made. No new protocol, no engine
+// count token, nothing the save path or viewer_protocol_check.py has to learn.
+const LOOP_KS = [1,2,3,4];
+// Committed records whose step has been undone describe a line that no longer happened. rollbackStep
+// pops S.steps, so comparing against its length is a self-healing prune -- no undo hook to keep in
+// step, which is how the castOrder/firebreathe side channels each grew a bug.
+function pruneCommitted(){
+  const n = (S.steps||[]).length;
+  S.committed = (S.committed||[]).filter(c => c.at <= n);
+  return S.committed;
+}
+// The committed lines this turn that the loop may repeat, oldest first. SAME TURN only: mana, the
+// land drop and the board all reset between turns, so "do last turn's lines again" is not a loop,
+// it is a different play. Stops at the first segment that is not loopable (a land drop / Land's
+// Edge discard), because a loop is a CONTIGUOUS tail -- skipping over a land drop in the middle
+// would repeat a block the human never played as one.
+function loopTail(){
+  if (!S.decision || S.decision.type!=='main_phase') return [];
+  const out=[]; const all=pruneCommitted();
+  for (let i=all.length-1; i>=0 && out.length<LOOP_KS[LOOP_KS.length-1]; --i){
+    const c=all[i];
+    if (c.turn !== S.decision.turn) break;
+    if (!LB.segmentLoopable(c.entries)) break;
+    out.unshift(c);
+  }
+  return out;
+}
+// Offered only when there is at least one loopable committed line this turn AND the queue is empty.
+// A half-built queue plus "repeat what I already played" is two different lines with no defined
+// order between them; `⟲ Repeat ×N` is the control for a queue you have built, this one is for a
+// queue you have not.
+function loopAvailable(){ return !(S.plan||[]).length && loopTail().length > 0; }
+// One committed segment as the line it encodes -- the human's own words for it, so the dialog can
+// say WHICH lines it is about to repeat instead of "the last 2".
+function loopSegLabel(c){ return LB.encodeLine(c.entries); }
+function loopPickerHtml(){
+  const tail=loopTail(), k=S.loopPick && S.loopPick.k;
+  if (!tail.length) return `<h3>Nothing to loop yet</h3><div class="sub">Play the loop once — the lines you commit this turn become the block.</div>`
+    + `<div class="pbtns" style="margin-top:10px"><span class="spacer"></span><button class="ghost" data-loopcancel="1">Close</button></div>`;
+  if (!k) {
+    let h=`<h3>Loop the last how many lines?</h3>`;
+    h+=`<div class="sub">The lines you already committed this turn, newest last. Pick how many of them make up one turn of the loop — then how many times to run it. Each iteration commits as the same lines again, validated on the board the one before it left.</div>`;
+    h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+    LOOP_KS.filter(n=>n<=tail.length).forEach(n=>{
+      const lines=tail.slice(tail.length-n).map(loopSegLabel).join('  ⏎  ');
+      h+=`<button class="primary" data-loopk="${n}" title="${esc(lines)}">last ${n} — ${esc(lines.length>70?lines.slice(0,70)+'…':lines)}</button>`;
+    });
+    h+=`<button class="ghost" data-loopcancel="1">Cancel</button></div>`;
+    return h;
+  }
+  const block=tail.slice(tail.length-k);
+  let h=`<h3>Run this loop how many times?</h3>`;
+  h+=`<div class="sub">${block.map(c=>`<div>⏎ ${esc(loopSegLabel(c))}</div>`).join('')}</div>`;
+  h+=`<div class="sub">Each run commits as ${k} consecutive line${k===1?'':'s'}, exactly as if you clicked them out again. The engine pays every iteration for real and stops at the first one it cannot — the ones before it stay played.</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+  REPEAT_COUNTS.forEach(n=>{ h+=`<button class="primary" data-loopn="${n}">×${n}</button>`; });
+  h+=`<button class="ghost" data-loopback="1">← Back</button><button class="ghost" data-loopcancel="1">Cancel</button></div>`;
+  return h;
+}
+function renderLoopPicker(){
+  const panel=$('decpanel'), back=$('decback');
+  back.className='modal'; back.style.display='block';
+  panel.className='show modal'; panel.innerHTML=loopPickerHtml();
+  panel.querySelectorAll('[data-loopcancel]').forEach(el=>{ el.onclick=()=>{ S.loopPick=null; renderBoard(); }; });
+  panel.querySelectorAll('[data-loopback]').forEach(el=>{ el.onclick=()=>{ S.loopPick={k:null}; renderBoard(); }; });
+  panel.querySelectorAll('[data-loopk]').forEach(el=>{ el.onclick=()=>{ S.loopPick={k:+el.dataset.loopk}; renderBoard(); }; });
+  panel.querySelectorAll('[data-loopn]').forEach(el=>{ el.onclick=()=>{
+    const n=+el.dataset.loopn, k=S.loopPick && S.loopPick.k; S.loopPick=null;
+    const tail=loopTail();
+    if (!(n>0) || !k || tail.length<k) { renderBoard(); return; }
+    const block=tail.slice(tail.length-k).map(c=>c.entries);
+    S.plan=(S.plan||[]).concat(LB.loopBlock(block, n));
+    // Stamp the hand m_numbers of THIS frame onto anything the copy dropped (loopBlock strips a
+    // hand entry's `num` because it belonged to the frame the line was first queued on).
+    LB.stampPlanNums(S.decision, S.plan);
+    S.macroRun = { kind:'loop', k, n, segs:k*n, perIter:k, done:0 };
+    flashHint(`Loop queued: ${k} line${k===1?'':'s'} ×${n} — ${k*n} lines. Press Commit Line once; they commit back to back and stop at the first one the board cannot pay.`);
+    renderBoard(); }; });
 }
 function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const land = !!o.is_land;
@@ -1807,6 +1922,7 @@ function renderBoard() {
   else if (S.actPick) renderActivationPicker();   // queue-time "which ability?" (see below)
   else if (S.tapPick) renderTapPicker();          // queue-time "tap it for which mana?" (manual tap/pay)
   else if (S.repeatPick) renderRepeatPicker();    // queue-time "repeat the block how many times?" (line macros)
+  else if (S.loopPick) renderLoopPicker();        // queue-time "loop the last K committed lines ×N?" (line macros)
   else hideDecPanel();
 }
 
@@ -1889,6 +2005,10 @@ function renderPlanbar() {
     // LINE MACROS: repeat the queued block. Offered only when the block really is repeatable (see
     // repeatableBlock), so it is never a dead control -- the same rule the ⛏ Tap mana toggle follows.
     (repeatableBlock()?`<button id="repeatp" class="ghost" title="Stack the whole queued line N times — it commits as N consecutive lines without another click. For grinding a loop (draw, untap, draw, untap...) without clicking every activation.">⟲ Repeat ×N</button>`:'')+
+    // ...and the same idea for a loop you have ALREADY PLAYED once: repeat the last K committed
+    // lines. Offered only when there is a loopable committed tail this turn and the queue is empty
+    // (see loopAvailable), so like Repeat it is never a dead control.
+    (loopAvailable()?`<button id="loopp" class="ghost" title="Repeat the last lines you committed this turn, N times — e.g. activate Kitchen, blink to untap, crack the Clue. They commit back to back and stop at the first iteration the board cannot pay.">⟲ Loop last lines ×N</button>`:'')+
     `<span class="lbl">Turn plan</span>`+
     (empty?`<span class="empty">double-click or drag cards in hand to build a line</span>`:`<div class="chips">${chips}${leChip}</div>`)+
     tip+
@@ -1898,6 +2018,7 @@ function renderPlanbar() {
   wireComboOffButton();
   if ($('clearp')) $('clearp').onclick = clearPlan;
   if ($('repeatp')) $('repeatp').onclick = ()=>{ S.repeatPick = true; renderBoard(); };
+  if ($('loopp'))   $('loopp').onclick   = ()=>{ S.loopPick = { k:null }; renderBoard(); };
   pb.querySelectorAll('.x[data-rm]').forEach(x=>x.onclick=()=>removePlanAt(+x.dataset.rm));
   // Aura chips: drag onto a creature in the field to (re)assign the enchant target (routes through
   // the #playfield drop handler via the stamped text/planidx; see retargetPlanAura).
@@ -2575,11 +2696,24 @@ function applyAccepted(planIndex, label) {
   // for undo, so stepping back rolls the whole human-declared line, not half of it.
   const chaining = (S.segmentsLeft||0) > 0;
   (S.steps=S.steps||[]).push({ n:1, auto:!!(S.decision && S.decision._autoStep) || chaining, co:coKey });
+  // LOOP MACRO: log the segment that just committed, so "do that again ×N" can be asked AFTER the
+  // loop has been played once rather than having to be set up before it. Keyed by S.steps.length so
+  // an undo drops it for free (pruneCommitted) -- rollbackStep pops steps, and a record whose step
+  // is gone describes a line that no longer happened.
+  if (seg0.length) {
+    (S.committed=S.committed||[]).push({ at:S.steps.length, turn:dec0 && dec0.turn,
+                                         entries:seg0.map(p => Object.assign({}, p)) });
+    if (S.committed.length > 60) { S.committed.splice(0, S.committed.length - 60); }
+  }
+  // A macro expansion is mid-flight: count the line it just landed, so a rejection further down the
+  // chain can report how much of it really happened (see handleVerdict).
+  if (S.macroRun) { S.macroRun.done = (S.macroRun.done||0) + 1; }
   // Peel off exactly the segment that just committed and leave the rest queued. Generalised from
   // "drop the first land" when repeated activations became segments too (LB.dropFirstSegment is
   // identical to the old filter for a multi-land line, which is the only shape that had segments).
   if (chaining) { S.plan = LB.dropFirstSegment(S.plan); }
   else          { S.plan=[]; }
+  if (!S.plan.length) { S.macroRun = null; }   // the whole expansion landed -> nothing left to report
   S.leMode=false; S.vialMode=null; S.blinkMode=null;
   renderHistory(); hideVerdict(); step();
 }
@@ -2594,6 +2728,38 @@ function handleVerdict(v, line) {
   // Pass phase / Pass turn on the next decision. (Commit-phase never sets the flag, so it's unaffected.)
   S.commitTurn = null; S.commitTurnPasses = 0;
   S.segmentsLeft = 0;   // a rejected segment stops the multi-land chain (viewer issue #7)
+  // A MACRO STOPS HONESTLY, AND SAYS WHERE (line macros). A Repeat/Loop expansion is many queued
+  // lines; when one of them does not validate the ones before it ARE played and the ones after it
+  // are stale -- they were written against a board the chain never reached. So: drop the rest of
+  // the expansion (rather than leave it queued to re-commit on the next click) and lead the reject
+  // panel with a plain count of what did happen. Nothing is rolled back: "keeping the iterations
+  // that did" is the whole contract, and every one of them is an ordinary committed line.
+  let macroNote = '';
+  if (S.macroRun) {
+    const m=S.macroRun, per=Math.max(1,m.perIter||1), done=m.done||0;
+    const iters=Math.floor(done/per), why=m.kind==='loop'?`Loop (${m.k} line${m.k===1?'':'s'} ×${m.n})`:`Repeat ×${m.n}`;
+    // The count of what is being DROPPED is read off the live queue, not `segs - done`: a ✕ on a
+    // chip between the expansion and the commit changes the queue and not the plan it came from, and
+    // a stop message that misreports what it threw away is worse than none.
+    const left = LB.segmentParts(S.plan||[]).length;
+    macroNote = `<div class="hint"><b>${why} stopped here.</b> ${done} of ${m.segs} line${m.segs===1?'':'s'} `
+      + `committed (${iters} complete iteration${iters===1?'':'s'}) and they stay played; the ${left} `
+      + `still queued ${left===1?'was':'were'} dropped, because they were built against a board this `
+      + `chain never reached. The line that stopped it is below.`
+      // A TRUNCATED frame changes what "not enumerated" means, so say it here rather than leave the
+      // player to read it as "my loop is wrong". The viewer plan-space bound (MTG_VIEWER_PLAN_CAP,
+      // 7d58bfe3) drops whole plan GROUPS on a monster board -- exactly the board a long loop
+      // builds, since every committed iteration mints another Clue and another odometer digit. The
+      // action is still reachable one click at a time; it is the bulk menu that was bounded.
+      + ((v.decision && v.decision.plans_truncated)
+          ? ` <b>Note:</b> the engine bounded this frame's plan menu (${v.decision.plans_truncated.positions}`
+            + ` of ${v.decision.plans_truncated.positions_full} positions kept), so a line it "never`
+            + ` enumerated" here may simply have fallen outside that bound — try the iteration as`
+            + ` individual clicks.`
+          : '')
+      + `</div>`;
+    S.macroRun = null; S.plan = [];
+  }
   const cls=v.verdict==='legal_not_enumerated'?'legal':(v.verdict==='unsupported'?'unsupported':'illegal');
   const tag=v.verdict==='legal_not_enumerated'?'legal · not enumerated':(v.verdict==='unsupported'?'unsupported':'illegal');
   const head=v.verdict==='legal_not_enumerated'?'Rules-legal, but the model never enumerated it.'
@@ -2620,7 +2786,7 @@ function handleVerdict(v, line) {
     // carries the real count). The line-check still validates against the FULL list.
     +((v.decision&&v.decision.plans_total)?`<div class="hint">showing top ${plans.length} of ${v.decision.plans_total} enumerated plans — hand-built lines are still checked against all of them</div>`:'');
   const ve=$('verdict'); ve.className=cls;
-  ve.innerHTML=`<span class="vtag">${tag}</span><h4>${head}</h4>`+
+  ve.innerHTML=`<span class="vtag">${tag}</span>${macroNote}<h4>${head}</h4>`+
     `<div>${esc(v.reason||'')}${v.failed_action?`<br><span class="hint">at: ${esc(v.failed_action)}</span>`:''}</div>`+
     `<div class="modelplans"><b>What the model would accept${plans.length?' (click to play)':''}:</b>${mp}</div>`+
     `<div class="actions"><button id="artbtn" class="primary">Store as artifact</button>`+
@@ -4057,7 +4223,7 @@ function autoResolveDecision(dec){
   return true;
 }
 function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n));
-  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.repeatPick=null; S.boardSel=null; S._selFor=null;
+  S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null; S.repeatPick=null; S.loopPick=null; S.boardSel=null; S._selFor=null;
   S.actPick=null;   // a half-open activation picker belongs to the decision it was opened on
   // ...and so does an armed MANUAL TAP/PAY mode or a half-open face picker: `taps` is computed
   // per frame off the board the engine just sent, so carrying either across a decision would
@@ -4191,7 +4357,11 @@ async function newGame() {
   // a turn-keyed answer applied to a board that never earned it. Found by the 2026-09-10
   // choice-carrier audit (the save-divergence bug); harmless in decks without a Jitte, silent in
   // the ones with it.
-  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set(), firebreathe:{}, storageHold:{}, castOrder:{}, jitte:{} };
+  S={ choices:[], steps:[], history:[], checkpoints:[], decision:null, prev:null, over:false, result:null, plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, lastGy:{}, lastCasts:new Set(), firebreathe:{}, storageHold:{}, castOrder:{}, jitte:{},
+      // The committed-segment log the LOOP macro reads, and its dialog/run state. A new game has
+      // no committed lines, so all three reset with everything else -- carrying `committed` across
+      // would offer to loop a block from the previous game.
+      committed:[], loopPick:null, macroRun:null };
   hideDecPanel(); renderHistory(); $('endcontrols').style.display='none'; hideVerdict(); checkReference(); await step();
 }
 // Bump Seed and start the next game — for playing several in a row. (Game index is always 0;
@@ -4235,6 +4405,10 @@ function rollbackStep() {
   (S.checkpoints||[]).length=S.steps.length;   // drop this + the returned decision's cp; advanceTo recreates it
   S.plan=[]; S.prev=null; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.blinkMode=null;
   S.boardSel=null; S._selFor=null; S.divAlloc=null; S._divFor=null; hideDecPanel();
+  // A macro in flight is over the moment a step is rolled back (its queue is gone with S.plan), and
+  // the committed-segment log the LOOP macro reads must shed every record whose step just vanished
+  // -- pruneCommitted keys on S.steps.length, so this is the whole of the undo bookkeeping.
+  S.macroRun=null; S.loopPick=null; pruneCommitted();
   return true;
 }
 async function undo() {
@@ -4368,8 +4542,38 @@ async function loadDecks() {
   }).join('');
   fillVersions();
   if(!j.binExists) showError('Simulator binary not found — build it first:\n  Linux/macOS:  ./build.sh\n  Windows:      build.cmd\n\nOr start the viewer with ./play.sh (play.cmd on Windows), which builds it for you.');
+  checkServerFresh(j);
   showBetaNote();     // reflect the initially-selected deck
   checkReference();   // reflect the initial deck/seed/game# on load
+}
+
+// STALE SERVER: the page you are reading was read off disk just now; the process serving it was
+// not. `node server.js` holds whatever server.js said when it STARTED, and this viewer is a
+// long-running local process left open for hours — so "new client, old server" is the normal state
+// of this repo after any server.js change, and it fails silently: same routes, same payloads,
+// different behaviour underneath.
+//
+// The absence of `serverApi` is itself the signal, and has to be: a server too old to know about
+// this check cannot report a version, so "missing" means "older than the day this landed" rather
+// than "fine". Loud, permanent, and dismissible — never a modal, because the game underneath is
+// still playable and the user may well be mid-turn (CLAUDE.md's play-viewer principle: surface it,
+// don't block on it).
+function checkServerFresh(j){
+  const have = (j && typeof j.serverApi === 'number') ? j.serverApi : null;
+  if (have === CLIENT_API) return;
+  const el = $('staleserver'); if (!el) return;
+  const what = have === null
+    ? 'It predates the version handshake entirely, so it is at least as old as 2026-09-11.'
+    : `It reports API ${have}; this page needs ${CLIENT_API}.`;
+  el.style.display = '';
+  el.innerHTML = `⚠ <b>The play server is out of date — restart it.</b> ${esc(what)} `
+    + `Your browser reloads <code>index.html</code> from disk, but <code>node server.js</code> keeps `
+    + `whatever it was started with. The one that bites: a server started before the per-game engine `
+    + `pin runs <code>build/Release/mtg</code> unpinned, so a rebuild by anything else mid-game `
+    + `changes the engine under your session — and under the SAVE, which re-runs the whole game. `
+    + `Stop it and run <code>./play.sh</code> again. `
+    + `<button id="stalex" class="ghost">Dismiss</button>`;
+  const x = $('stalex'); if (x) x.onclick = ()=>{ el.style.display='none'; };
 }
 
 // drag from hand onto YOUR FIELD (#playfield) — the area where cards get played — queues the card

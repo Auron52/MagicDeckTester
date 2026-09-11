@@ -182,18 +182,78 @@
   //
   // Entries are COPIED (never shared), because `dropFirstSegment` peels by object IDENTITY: two
   // repetitions sharing one object would both vanish when the first segment committed.
+  //
+  // A REPETITION KEEPS THE BLOCK'S OWN INTERNAL BOUNDARIES. Only entry 0 of each repetition has its
+  // `defer` FORCED on (it is the entry that starts the repetition's first line); every other entry
+  // keeps whatever flag it already carried, because a boundary INSIDE the block is part of the
+  // block's shape, not noise to normalise away.
+  //
+  // This used to write `{ defer: false }` on every non-first entry, and that was the EDF loop bug
+  // (2026-09-11). The block the user repeats is the Kitchen loop, which is queued as a FUSED
+  // "Investigate & crack" plus a blink -- and the crack is DEFERRED by construction, because the
+  // Clue does not exist while the Investigate is being committed. Clearing that flag on the copies
+  // collapsed every iteration after the first into ONE line:
+  //
+  //      want   cast=Kitchen                | cast=Clue Token;blink=Eldrazi Displacer@42*1
+  //      got    cast=Kitchen;cast=Clue Token;blink=Eldrazi Displacer@42*1        <- illegal
+  //
+  // which is exactly the one-line form test/scenarios/edf_fused_clue_needs_two_lines.json pins as
+  // ILLEGAL ("'Clue Token' is not in hand"). So iteration 1 committed, iteration 2 was rejected, the
+  // chain stopped, and the game picked up a reject it can never be saved as a clean reference with.
   function repeatBlock(plan, from, to, n) {
     const block = plan.slice(from, to);
     if (!block.length || !(n > 1)) { return plan; }
     const out = plan.slice(0, to);
     for (let r = 1; r < n; ++r) {
       block.forEach((p, j) => {
-        // Only the FIRST entry of each repetition carries the flag: the rest of the block belongs
-        // with it, and marking them all would split one iteration into one segment per action.
-        out.push(Object.assign({}, p, j === 0 ? { defer: true } : { defer: false }));
+        out.push(j === 0 ? Object.assign({}, p, { defer: true }) : Object.assign({}, p));
       });
     }
     return out.concat(plan.slice(to));
+  }
+
+  // ---- LOOP: repeat the last K COMMITTED segments (docs/design/viewer-line-macros.md) ----------
+  // `repeatBlock` above repeats what is still QUEUED, so it has to be set up before the first
+  // iteration is committed. The loop the EDF player actually grinds is discovered by playing it:
+  // activate Kitchen, blink a Drake to untap, crack the Clue -- and only THEN "do that again, twenty
+  // times". By that point the queue is empty and the block exists only as committed history.
+  //
+  // So this takes the SEGMENTS that were committed (each an array of the plan entries that made up
+  // one line) and rebuilds them as a queue block. The head of every segment is deferred, which is
+  // what makes the block commit back as the same K lines rather than one fused line -- the same
+  // primitive, applied to a boundary that is already known rather than one being invented.
+  //
+  // A segment's entries are COPIED, and the copy drops `num` for the HAND kinds: that field is the
+  // m_number of the specific hand copy the entry was stamped with (stampPlanNums), which belongs to
+  // the frame it was queued on. A board id -- a `pretap`'s permanent, an activation's source, an
+  // equip/enchant host -- is the human's declared choice and is kept verbatim, so a looped `tap=`
+  // token names the same land it named the first time.
+  const HAND_KINDS = { land: true, nonpermanent: true, permanent: true, vial: true,
+                       retrace: true, channel: true, suspend: true };
+  function loopBlock(segments, n) {
+    const flat = [];
+    (segments || []).forEach(seg => (seg || []).forEach((p, j) => {
+      const c = Object.assign({}, p);
+      if (HAND_KINDS[c.kind]) { delete c.num; }
+      if (j === 0) { c.defer = true; }
+      flat.push(c);
+    }));
+    if (!flat.length || !(n > 0)) { return []; }
+    return n > 1 ? repeatBlock(flat, 0, flat.length, n) : flat;
+  }
+
+  // Is a committed segment one the loop may repeat? A LAND DROP and a LAND'S EDGE discard are
+  // once-per-turn resources, so a second iteration is a line the engine simply rejects -- the
+  // control is not offered rather than offered and then refused, exactly as for `repeatBlock`.
+  //
+  // A `pretap` is NOT refused here, and that is the one place this differs from the queue-time
+  // Repeat. There the block has never been played, so a tap naming a specific untapped copy is a
+  // guess about a board that does not exist yet. Here the segment ALREADY committed once, and the
+  // loop being repeated is usually the very thing that untaps that land again -- so the honest
+  // answer is to replay the human's declared tap and let the per-iteration validation say no if the
+  // board really has moved, rather than to withhold the control from every hand-paid loop.
+  function segmentLoopable(seg) {
+    return !!(seg && seg.length) && !seg.some(p => p.kind === 'land' || p.kind === 'le');
   }
 
   // The `need=<COLOURS>` token for a committing segment: the non-generic pips every entry STILL
@@ -484,7 +544,8 @@
            stampPlanNums, isPreTap, preTapToken,
            // segmentParts is exported (not just encodeSegments) because applyAccepted needs the
            // committing segment's ENTRIES, not its encoded string, to scope the full-order pin.
-           segmentParts, isDeferred, repeatBlock, untapNeed, untapNeedToken,
+           segmentParts, isDeferred, repeatBlock, loopBlock, segmentLoopable,
+           untapNeed, untapNeedToken,
            fusedInvestigateEntries, removeFusedAt, CLUE_TOKEN,
            nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };
 });
