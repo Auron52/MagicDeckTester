@@ -5696,3 +5696,197 @@ twelve gained and twelve lost.
    them (a pool-carrying frame whose battlefield lacks the colour; a frame whose loop is entirely in
    hand) are exactly the ones a human reaches in the viewer and a sweep under-samples. If the user
    would rather not carry inert levers, `=0` is one env var and deleting them is small.
+
+## Session 20 (2026-09-11): the COMBO OFF EXECUTOR -- five spends that ate the loop they were funded by
+
+**USER, opening the session:** *"we should be using rules as optimal and accurate as possible to
+Combo Off. Any additional work we can do to make this the case should be done."* This session owns
+only the EXECUTOR half of that -- a click must never fail on a winnable board. The display rule
+table is another agent's, and nothing in `ComboOffPossible`, `comborules::*`, `BankableMana`,
+`FinishNeedMana`, `CheapestFinishNeed` or `RecogniseFlickerLoop`'s net projection was touched
+(verified by diff: the only code changed is `ApplyBlinkLoop` / `ComboFinishFromHand` /
+`SpendSurplusOn*` / `CrackCluesForCards` in `SpellEffects.h`, and `FlickerGoOffCount` in
+`DecisionProviders.cpp`).
+
+### The one sentence that covers four of the five
+
+**A SPEND INSIDE THE LOOP MUST LEAVE THE LOOP PAYABLE, AND ONLY THE REAL MANA SOLVER KNOWS WHETHER
+IT DOES.** Sessions 15f/15g had already made that repair for the damage sink
+(`MTG_COMBO_OFF_SINK_TRIAL`) and the draw sink (`MTG_COMBO_OFF_DRAW_TRIAL`). What this session found
+is that the *same* defect was sitting unrepaired on every other thing the loop spends mana on: the
+drain, the library exile, the pre-loop outlet swap and the in-loop finisher deploy. Each of them
+either projected over a flat `ManaPool` -- which cannot see that Brushland taps for `{C}` **or**
+`{G}`/`{W}`, nor that the sequential payment picks greedily -- or, in two cases, had no guard at all.
+
+### The five landings
+
+| # | lever (default ON) | what it repairs | first repro |
+|---|---|---|---|
+| 1 | `MTG_COMBO_OFF_CRACK_FIRST` | `SpendSurplusOnDrawSinks` cracked its Clues only AFTER activating every `{T}` source, so a board whose per-iteration budget is below `Investigate + crack` made a Clue every pass and never cracked one: **eighteen iterations, eighteen Clues, ZERO cards drawn** | replay-hunt `RR-0a59241227` (`claude_s10_gi9` T4) -- cluster C6 |
+| 2 | `MTG_COMBO_OFF_TLESS_TRIAL` | the two `{T}`-less sinks (`SpendSurplusOnDrain`, `SpendSurplusOnExile`'s instalment route) kept the flat-pool guard. They run at the very END of an iteration, so a pooled "yes" the payment then contradicts takes the colourless the NEXT blink needed | hunt `RR-9f29089519` (`claude_s3_gi2` T4) -- cluster C5 |
+| 3 | `MTG_EDF_GOFF_PHASES` | `FlickerGoOffCount` sized a wish-fetched kill as `max(mana, digs, pips)`. The dig and the kill are SEQUENTIAL phases -- a finisher is not on the battlefield until the dig has found the wish -- so their counts **add** | hunt `RR-9261bc55b5` (`claude_s1_gi0` T3, ordinals 6-8) |
+| 4 | `MTG_COMBO_OFF_SWITCH_TRIAL` | the pre-loop pip-free outlet swap cast Emiel `{2}{W}{W}` out of hand with **no guard at all**, ate the whole board, and the loop ran **zero** of fifty -- on a board whose `net_c` is **+1**, i.e. it was not starving on pips and the swap was pure cost | sweep `R-b655effc8b` (`claude_s2_gi1` decision 14) |
+| 5 | `MTG_COMBO_OFF_DEPLOY_TRIAL` | the in-loop `ComboFinishFromHand` fires immediately after `ApplyBlink`, i.e. when the ETB untap has just put the loop's whole income on the table, and its bar was only "can I pay the CAST". It cast TWO Living Wishes and deployed BOTH finishers -- nine mana out of six -- and the loop died at k=1 | sweep `R-2681076122` (`claude_s7_gi6` decision 17) |
+
+Every one is `ComboOffFinishActive()`-gated and/or needs the `probe_pay` state-taking payer that only
+`TurnSolver`'s `ActivateBlink` apply supplies, so autonomous play, every rollout, GT, the value leaf
+and the keep tables are byte-identical by construction -- and measured so (smoke
+`configs changed: 0  unchanged: 73`, `play-changed=0`).
+
+### Why C6 read as a "finisher SELECTION" defect and was not one
+
+The replay hunt's largest cluster (103 states) was catalogued as *"the loop runs, the wish is seen,
+and the finisher is NEVER a candidate -- `none_found == calls`, `pay_fail = 0`, `no_mana = 0`: a
+selection bug, not a mana bug"*. It is neither. `MTG_EDF_LOOP_TRACE` on its own exemplar prints the
+same two lines eighteen times running:
+
+```
+k=N enter           cost={C} float{}  avail{g1 c1 *4}     <- six mana on the board
+k=N post-draw-sink  cost={C} float{}  avail{c1}           <- five went into ONE Investigate
+```
+
+Kitchen's Investigate is `{4}` plus its own `{T}`, so it takes five of the six; the Clue's `{2}` then
+cannot be paid alongside the blink's `{C}`, so the Clue is banked -- and next iteration the ETB untap
+refills the board and the SAME Investigate is activated again, in front of the Clue still sitting
+there. **Zero cards were ever drawn, so the selection was never given a card to select.**
+`none_found == calls` with `wish > 0` is not a selection signature: the `wish > 0` in the catalogue is
+`[finish]`'s process-cumulative counter reading OTHER frames' trial applies, which is exactly the
+instrument caveat the hunt itself documents in its §5.
+
+Cracking first is not a heuristic trade, it is strictly cheaper: a Clue in play is a card already paid
+for except for `{2}`, so it buys a card at a quarter of a fresh Investigate, and it carries the same
+`keep_payable` real trial, so it cannot starve the loop.
+
+### Measured -- ONE binary, levers `=0` vs default, diffed on stable state ids
+
+**`test/combo_off_sweep.sh --reuse-games`, 1021 states** (57 autonomous games, the user's eleven
+references, the synthetic rule-ingredient matrix):
+
+| class | levers OFF | levers ON |
+|---|---:|---:|
+| `a_offered_wins` | 203 | **227** |
+| `b_executor_failure` | 68 | **44** |
+| `c_missed_offer` | 25 | 25 |
+| `c_missed_offer_combat` | 46 | 46 |
+| `e_absent_unwinnable` | 679 | 679 |
+
+24 states flipped b -> a and **0 flipped the other way**. The DISPLAY is untouched: the per-rule offer
+counts and both `c` classes are identical in the two arms.
+
+Per population, and this is the line that matters most:
+
+| population | OFF | ON |
+|---|---|---|
+| **reference** (the user's own saved games) | a=81 **b=14** | a=95 **b=0** |
+| engine (autonomous, deck's shipped settings) | a=9 b=6 | a=13 b=2 |
+| synthetic (rule-ingredient matrix) | a=113 b=48 | a=119 b=42 |
+
+Per mechanism tag (OFF -> ON): `loop-stopped-early` 19 -> **0**, `draw-loop-stopped-early` 8 -> **0**,
+`wish-never-cast` 8 -> **0**, `damage-sink-starves-loop` 1 -> **0**, `loop-zero-iterations` 1 -> **0**,
+`finish-fired-short` 31 -> 16, `wish-in-library-dig` 20 -> 9, `loop-ran-finish-never-fired` 36 -> 28,
+`c-net-nonpositive` 20 -> 20.
+
+**`test/combo_off_replay_hunt.sh --quick`, 939 TRUE-FIDELITY states** (real pools, real shuffle, real
+exile zone, real energy):
+
+| | levers OFF | levers ON |
+|---|---:|---:|
+| `a_offered_wins` | 60 | **80** |
+| `b_executor_failure` | 23 | **3** |
+| `c_missed_offer` | 7 | 7 |
+| clusters | C1b 18, C2 3, loop-zero 2 | **C2 3** |
+
+20 fixed, 0 broken. **Cluster C1b is gone, and C1a does not occur at all on this tip.**
+
+**`combo_off_verified` is still a perfect oracle, in both directions on both populations:** sweep
+`(verified, won)` = 227 True/True + 44 False/False; hunt = 80 True/True + 3 False/False. Not one
+verified click failed, and not one unverified click won.
+
+### Per-lever ownership (each of the 24 flipped sweep states re-run with each lever alone at 0)
+
+`TLESS_TRIAL` 18, `CRACK_FIRST` 5, `DEPLOY_TRIAL` 3, `GOFF_PHASES` 1, `SWITCH_TRIAL` 1 -- four states
+are owned jointly. `logs/edf_phase3/attrib.py` is the driver, and it caught its own bug on the first
+run (a `subprocess.run` that built an env dict and never passed it, so every lever reported as owning
+nothing -- a green-looking "no lever matters" that was pure harness).
+
+### Fixtures -- five new, each with its lever as the negative control
+
+`test/combo_off_check.sh` 15 -> **20**, and the discrimination is checked one lever at a time:
+
+| fixture | provenance | with its lever at 0 |
+|---|---|---|
+| `edf_co_16_clue_dig_crack_first` | `claude_s10_gi9` T4 (hunt C6 exemplar) | offered, NOT verified |
+| `edf_co_17_drain_trial_keeps_the_loop` | `claude_s5_gi4` decision 44 | offered, NOT verified |
+| `edf_co_18_outlet_switch_needs_a_trial` | `claude_s2_gi1` decision 14 | 50 blinks promised, **0 run** |
+| `edf_co_19_deploy_must_keep_the_loop` | `claude_s7_gi6` decision 17 | 24 promised, **1 run** |
+| `edf_co_20_dig_then_drain_phases_add` | autonomous turn-5 board | count x35 -> **x22**, no win |
+
+The four existing NEGATIVE fixtures (3, 4, 10, 12 -- boards that must *not* be offered) all still
+pass, which is what makes a widening of this size safe to ship.
+
+### What is LEFT, and whose it is
+
+**44 sweep failures, and 39 of them have `loop.net_c <= 0`.** On this population that predicate
+separates *perfectly*: all 227 wins have `net_c > 0`, and the 39 `net_c <= 0` offers won ZERO times.
+Every one is synthetic or engine -- **not one reference state is left**. The mechanism is arithmetic
+and is not repairable in the executor: the outlet eats one colourless pip a pass and the untap
+restores no more than one, so a `{1}{C}` drain or library-exile is fed only by the board's opening
+stock, whatever order the executor spends in.
+
+> **For the rule agent, stated with its caveat.** `net_c <= 0` is an exact separator on the SWEEP
+> (empty-pool `--scenario` reconstructions) and it is NOT safe as a veto on replayed boards: the
+> hunt's §3 measured only 49 of 295 failures carrying it at `d8f700bb`, because a real floating pool
+> can hold colourless the per-pass net does not model. The honest narrowing is therefore
+> `net_c <= 0 AND the pool holds no {C}-capable mana`, which is the same shape as `18c404d6`'s
+> "bankable count adds the floating pool".
+
+**The other 5** (`A-5ef1a17ac1`, `A-c2d08ef901`, `A-6b917b83c4`, `A-ca08b4b8e4`, `F-c85abd33ac`) are
+one synthetic family: all `net_c = 1`, all "Living Wish in the LIBRARY only", and the whole chain
+WORKS -- the wish is cast, the Infiltrator is deployed, and the deck-out runs short (4 exiles of 12,
+14 of 49). Root-caused and **not fixed, deliberately**: the count is not coming from the exile branch
+at all. `MTG_EDF_GOFF_C_ITERS=0` and `MTG_EDF_MAX_ITER=200` both leave it at exactly x9, which proves
+the pip term and the iteration cap are inert -- `loop.exile_cost_mv` is 0 on that board's
+count-sizing path, so `FlickerGoOffCount` falls through to the DRAW-LAND route, which sizes "draw my
+own library down to one card" and prices no kill whatsoever. Fixing it means making the recognizer's
+library route fill `exile_cost_mv` / `exile_c_pips` on the human count-sizing path; that is
+`RecogniseFlickerLoop`'s `ScanHandSinks`, not this session's code, and no reference or replayed state
+is affected by it.
+
+**3 hunt failures, all rule-level.** `AA-60e2a97f7f` and `AA-deecdcbaef` are rule GORGE on boards that
+cannot fund a ping: on the first, Cloud of Faeries untaps TWO and the sink promotion must spend one
+slot on the Gorge itself, so a pass refunds 3 against Emiel's `{3}` -- **net 0** -- while the ping
+costs `{2}{R}` = 3 and the opponent is on 18. `MTG_EDF_LOOP_TRACE` shows the real trial declining the
+ping 59 times out of 60, correctly. `FlickerGoOffCount`'s `MTG_COMBO_OFF_GORGE_SLOT` already refuses
+to SIZE a Gorge kill on such a board, so the arithmetic exists -- it is the GORGE row of the rule
+table that does not consult it. `AA-82c1edadaa` is the same thing for WISH-DRAW at net +1: sixty
+iterations buy sixty mana against a six-mana-per-card dig.
+
+### Capability boundary from Session 15d -- re-checked, and it does NOT bite
+
+*"`ApplyBlinkLoop` cannot cast an arbitrary DRAWN card mid-loop ... it will bite on a Displacer-only
+board that runs out of colourless."* `MTG_COMBO_OFF_OUTLET_SWITCH` (15f) covers the outlet being in
+HAND; the remaining gap is an Emiel **drawn during the dig**. Searched for across both populations:
+the hunt's own finding that phase-1's C3 (`net_c <= 0`) never occurs on a replayed board still holds
+here, and of the 44 residual sweep states not one is a board where a pip-free outlet arrives mid-loop
+and is left uncast -- the 39 `net_c <= 0` states are refuted by the pip arithmetic regardless of which
+outlet runs. **Not implemented, because no measured state needs it**, and this session's fix #4 is the
+counter-evidence: an unguarded switch cost a fifty-blink loop every one of its iterations.
+
+### Gates (final binary)
+
+`./build.sh`; `test/scenarios.sh` **79/79**; `test/combo_off_check.sh` **20/20** (plus one run per
+lever at `=0`, each failing exactly its own fixture and nothing else); `build/Release/mtg-test`
+**SUCCESS** (74 cases, 938 assertions); `test/regression.sh --smoke` **73 passed / 0 failed, ALL
+PASS**, audit `configs changed: 0  unchanged: 73`, `[searched] play-changed=0`, `[d0]
+play-changed=0`; `test/viewer_checks.sh` (strict, 309 references) **PASS**.
+
+### Open, carried forward (none blocked on)
+
+1. The `net_c <= 0` display narrowing above -- the rule agent's, with the floating-pool caveat.
+2. GORGE's row does not consult the per-pass ping arithmetic `FlickerGoOffCount` already computes.
+3. `RecogniseFlickerLoop`'s library route leaves `exile_cost_mv` unset on the human count-sizing path,
+   so five synthetic boards size a dig with no kill priced into it.
+4. The user's standing question from the hunt (§10.1) is untouched and still open: 59% of the
+   pre-session "failures" were the button firing a turn or more EARLY rather than a broken combo.
+   After this session the remaining unproven offers are mostly genuine refusals, but the *wording*
+   question -- "Combo Off -- wins turn 6" versus narrowing the rule -- is still the user's call.

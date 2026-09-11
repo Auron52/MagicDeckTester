@@ -1,0 +1,146 @@
+{
+  "_comment": [
+    "THE IN-LOOP FINISHER DEPLOY MUST LEAVE THE LOOP PAYABLE -- MTG_COMBO_OFF_DEPLOY_TRIAL.",
+    "",
+    "Reconstructed from the user's own reference `claude_s7_gi6`, decision 17 (turn 5); it is the",
+    "COMBO OFF sweep's state R-2681076122.",
+    "",
+    "Four mana lands (Adarkar Wastes, Brushland, Conservatory+Fertile Ground, Kitchen+Trace of",
+    "Abundance) = six a tap; Eldrazi Displacer's printed {2}{C} (no Training Grounds) and Peregrine",
+    "Drake untapping all four: net +3 a pass, 24 iterations sized, TWO Living Wishes in hand.",
+    "",
+    "MTG_COMBO_OFF_EARLY_DEPLOY fires ComboFinishFromHand right after ApplyBlink, i.e. at the exact",
+    "moment the ETB untap has put the loop's whole per-iteration income back on the table -- and its",
+    "affordability bar there is only 'can I pay the CAST'.  So at k=0 it cast BOTH Living Wishes and",
+    "deployed BOTH finishers, nine mana out of the six that had just untapped, and the loop died:",
+    "",
+    "    [edf-loop] k=0 post-tapahead  cost={2}{C} float{g2 c2 *2} avail{g2 c2 *2}",
+    "    [edf-loop] k=1 enter          cost={2}{C} float{}         avail{}",
+    "    [edf-loop] STOP at k=1: pay-failed",
+    "",
+    "One blink of twenty-four, the opponent on 17, and 49 cards still in their library.",
+    "",
+    "Every cast in the deploy is now trialled on a COPY through the loop's own payer -- pay the cast,",
+    "then require the loop's next activation to pay too.  A decline is a DELAY, not a refusal: the",
+    "loop banks one more pass at +3 and the next iteration retries.  (And if the board never affords",
+    "both, ApplyBlinkLoop's post-loop call passes no keep_payable, so the deploy still happens.)",
+    "",
+    "A/B on this fixture (one binary):",
+    "    default                          -> 24 blinks, COMBO OFF verified, opponent dead",
+    "    MTG_COMBO_OFF_DEPLOY_TRIAL=0     -> 1 blink, offered but NOT verified, apply does not win"
+  ],
+  "active_life": 19,
+  "battlefield": [
+    {
+      "controller": 0,
+      "name": "Adarkar Wastes",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Brushland",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Conservatory",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Eldrazi Displacer",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Kitchen",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Peregrine Drake",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Conservatory",
+      "name": "Fertile Ground",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Kitchen",
+      "name": "Trace of Abundance",
+      "tapped": false
+    }
+  ],
+  "budget_ms": 20,
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "depth": 3,
+  "hand": [
+    "Living Wish",
+    "Living Wish",
+    "Peregrine Drake"
+  ],
+  "library_filler": "Forest",
+  "library_size": 0,
+  "library_top": [
+    "Adarkar Wastes",
+    "Aether Hub",
+    "Aether Hub",
+    "Aether Hub",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Cloud of Faeries",
+    "Cloud of Faeries",
+    "Cloud of Faeries",
+    "Conservatory",
+    "Conservatory",
+    "Conservatory",
+    "Eladamri's Call",
+    "Eldrazi Displacer",
+    "Eldrazi Displacer",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Kitchen",
+    "Living Wish",
+    "Living Wish",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Shivan Gorge",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Training Grounds",
+    "Training Grounds",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast"
+  ],
+  "on_the_play": false,
+  "opponent_library_size": 49,
+  "opponent_life": 17,
+  "turn": 5,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "expect_combo_off": true
+}

@@ -1,0 +1,81 @@
+{
+  "_comment": [
+    "THE REPLAY HUNT'S LARGEST CLUSTER, C6 (103 of 295 failures) -- 'the loop runs to completion",
+    "and the finisher never activates once'.  This is the user's `claude_s10_gi9` turn-4 board",
+    "(hunt id RR-0a59241227), reconstructed.",
+    "",
+    "Brushland = 1, Brushland (+Fertile Ground +Wild Growth) = 3, Kitchen = 1, Mariposa = 1: six",
+    "mana a tap.  Peregrine Drake untaps up to FIVE, so every blink recovers all four lands, and",
+    "Eldrazi Displacer's {2}{C} is {C} under Training Grounds -- net +5 a pass.  The kill is rule",
+    "WISH-DRAW: dig with Kitchen's '{4},{T}: Investigate' until a Living Wish turns up, wish for a",
+    "finisher and cash the loop into it.",
+    "",
+    "WHY IT USED TO DRAW NOTHING AT ALL.  A card off the Investigate route costs SIX -- the {4}",
+    "activation plus the Clue's own {2} -- and the iteration only has five to spend once the blink's",
+    "{C} is kept back.  SpendSurplusOnDrawSinks cracked its Clues at the BOTTOM of the routine,",
+    "after activating every {T} source, so each iteration spent its whole budget making a Clue it",
+    "could not then crack, the ETB untap refilled the board, and the next iteration made ANOTHER",
+    "one in front of the Clue still sitting there.  MTG_EDF_LOOP_TRACE printed the same two lines",
+    "eighteen times:",
+    "",
+    "    k=N enter           cost={C} float{}  avail{g1 c1 *4}",
+    "    k=N post-draw-sink  cost={C} float{}  avail{c1}",
+    "",
+    "-- eighteen iterations, eighteen Clues, ZERO cards drawn, and [finish] `calls=18",
+    "none-found=18 wish=0`.  The loop was healthy and the mana was there; the dig never produced a",
+    "single card, which is why the cluster reads as a finisher-SELECTION defect from the counters",
+    "alone.",
+    "",
+    "MTG_COMBO_OFF_CRACK_FIRST cracks the Clues already in play before making another.  A Clue is a",
+    "card already paid for except for {2}, so it buys a card at a quarter of a fresh Investigate,",
+    "and it carries the same keep_payable real trial, so it cannot starve the loop.  The iteration",
+    "then alternates (crack, Investigate, crack, ...) and the dig runs.",
+    "",
+    "A/B ON THE REAL REPLAY (one binary, the hunt's own repro):",
+    "    default                            -> COMBO OFF wins on turn 4",
+    "    MTG_COMBO_OFF_CRACK_FIRST=0        -> the click does nothing; the game is won on turn 8",
+    "",
+    "This fixture must be OFFERED and VERIFIED, and it must FAIL with the lever at 0."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 18,
+  "opponent_life": 20,
+  "opponent_library_size": 50,
+  "library_filler": "Forest",
+  "library_size": 20,
+  "_library_comment": [
+    "The Living Wish is SIX cards down, so the dig has to run and cannot be satisfied by the",
+    "leading crack alone: at one card per two iterations the loop needs about twelve of its",
+    "iterations before the wish is in hand, and the rest to deploy Essence Depleter and drain."
+  ],
+  "library_top": [
+    "Brushland",
+    "Conservatory",
+    "Overgrowth",
+    "Yavimaya Coast",
+    "Fertile Ground",
+    "Living Wish"
+  ],
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    { "name": "Brushland", "controller": 0, "tapped": false },
+    { "name": "Brushland", "controller": 0, "tapped": false },
+    { "name": "Kitchen", "controller": 0, "tapped": false },
+    { "name": "Mariposa Military Base", "controller": 0, "tapped": false },
+    { "name": "Fertile Ground", "controller": 0, "tapped": false, "equips": "Brushland" },
+    { "name": "Wild Growth", "controller": 0, "tapped": false, "equips": "Brushland" },
+    { "name": "Peregrine Drake", "controller": 0, "tapped": false },
+    { "name": "Eldrazi Displacer", "controller": 0, "tapped": false },
+    { "name": "Training Grounds", "controller": 0, "tapped": false }
+  ],
+  "hand": [
+    "Eldrazi Displacer"
+  ],
+  "expect_combo_off": true
+}

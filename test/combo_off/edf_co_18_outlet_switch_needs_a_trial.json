@@ -1,0 +1,146 @@
+{
+  "_comment": [
+    "THE PRE-LOOP OUTLET SWITCH MUST LEAVE A LOOP BEHIND -- MTG_COMBO_OFF_SWITCH_TRIAL.",
+    "",
+    "Reconstructed from the user's own reference `claude_s2_gi1`, decision 14 (turn 4); it is the",
+    "COMBO OFF sweep's state R-b655effc8b, and before this fix it was the sweep's single worst",
+    "executor failure: a plan promising FIFTY blinks that ran ZERO.",
+    "",
+    "Eldrazi Displacer is the outlet and Dimensional Infiltrator (a {1}{C} library-exile sink) is",
+    "already on the battlefield, so MTG_COMBO_OFF_OUTLET_SWITCH's two conditions hold -- the outlet",
+    "spends a {C} pip and a {C}-pip sink is live -- and Emiel the Blessed is sitting in hand. The",
+    "switch fired, paid Emiel's {2}{W}{W} out of the board, and left nothing:",
+    "",
+    "    [edf-loop] OUTLET SWITCH -> id=9 (pip-free, {C} sink live)",
+    "    [edf-loop] k=0 enter  cost={3} float{} avail{}",
+    "    [edf-loop] STOP at k=0: pay-failed",
+    "",
+    "And the swap was not even needed: this loop's net_c is +1, so the Displacer was not starving on",
+    "colourless at all -- the switch was pure cost. The trigger is board INVENTORY (a pip outlet plus",
+    "a pip sink), which says nothing about whether the payment is affordable.",
+    "",
+    "The switch now runs as a REAL TRIAL first, on a copy of the state and through the loop's own",
+    "payer: deploy the pip-free outlet, then require the NEW outlet's first activation to be payable.",
+    "Here it is not, the swap is declined, and the Displacer loop runs 49 of its 50 iterations and",
+    "decks the opponent.",
+    "",
+    "A/B on this fixture (one binary):",
+    "    default                          -> 49 blinks, COMBO OFF verified, opponent decked",
+    "    MTG_COMBO_OFF_SWITCH_TRIAL=0     -> 0 blinks, offered but NOT verified, apply does not win"
+  ],
+  "_lib_approx": true,
+  "active_life": 17,
+  "battlefield": [
+    {
+      "controller": 0,
+      "name": "Conservatory",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Conservatory",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Dimensional Infiltrator",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Eldrazi Displacer",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Peregrine Drake",
+      "tapped": true
+    },
+    {
+      "controller": 0,
+      "name": "Shivan Gorge",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Yavimaya Coast",
+      "tapped": true
+    },
+    {
+      "controller": 0,
+      "equips": "Conservatory",
+      "name": "Wild Growth",
+      "tapped": false
+    }
+  ],
+  "budget_ms": 20,
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "depth": 3,
+  "hand": [
+    "Emiel the Blessed",
+    "Kitchen"
+  ],
+  "library_filler": "Forest",
+  "library_size": 0,
+  "library_top": [
+    "Adarkar Wastes",
+    "Adarkar Wastes",
+    "Aether Hub",
+    "Aether Hub",
+    "Aether Hub",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Cloud of Faeries",
+    "Cloud of Faeries",
+    "Cloud of Faeries",
+    "Conservatory",
+    "Conservatory",
+    "Eladamri's Call",
+    "Eldrazi Displacer",
+    "Eldrazi Displacer",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Kitchen",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Overgrowth",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Training Grounds",
+    "Training Grounds",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast"
+  ],
+  "on_the_play": false,
+  "opponent_library_size": 50,
+  "opponent_life": 20,
+  "turn": 4,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "expect_combo_off": true
+}
