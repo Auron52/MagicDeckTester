@@ -38595,6 +38595,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // line, the escalation was skipped or its line discarded and the executor was left with nothing. Under a
     // leafless line the escalation is the PLAIN ladder and its result is always taken.
     const bool line_constant = nl_esc && !nl_value_line && !verified;
+    // MTG_VALUE_TRUST_OFFSET overrides the crossover offset (experiments): a LARGE value => always TAKE the
+    // escalation (never fall back to the value-leaf line) = "never trust the leaf once we've escalated";
+    // useful to test whether the crossover is what leaks value-leaf quality on a deck (e.g. hinata).
+    // HOISTED here (was declared at the take decision) so the FIT crossover gate below can stand down
+    // under the same condition the take decision uses -- one read, one meaning.
+    static const int s_vto_override = []{ const char* e = std::getenv("MTG_VALUE_TRUST_OFFSET");
+                                          return (e && *e) ? std::atoi(e) : -1; }();
     bool single_failed = false;   // the reserved single pass overran with nothing rated: escalate instead
     if (s_esc_at_committed && value_active && !verified)
     {
@@ -38617,7 +38624,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             // therefore BEFORE the calibration. That ordering is the point: it is what collapses
             // breaching's 120 per-game calibrations to 0 rather than merely skipping its 3 rollouts.
             static const bool s_fit_crossover = EnvOn("MTG_ESC_FIT_CROSSOVER");
-            const bool xo_live = s_fit_crossover && !line_constant && !value_fallback_take_at.empty();
+            // `s_vto_override >= 0` (MTG_VALUE_TRUST_OFFSET) makes the take decision ignore the table and
+            // use the uniform rule instead, so the gate MUST stand down there -- otherwise it would skip
+            // on the table while the take decision judged by the offset, i.e. exactly the drift
+            // TakeAtForCommitted exists to prevent. Guard copied from that decision verbatim.
+            const bool xo_live = s_fit_crossover && !line_constant
+                              && !value_fallback_take_at.empty() && s_vto_override < 0;
             const int  xo_need = xo_live ? TakeAtForCommitted(value_fallback_take_at, committed) : 0;
             if (xo_live && d1 < xo_need)
             {
@@ -38750,11 +38762,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         // so the remaining budget is nearly the whole decision budget. kValueTrustOffset=3 is uniform across all
         // measured decks (value-leaf-d5 ~= heuristic-d2). g_force_heuristic_leaf makes FSLineWin use the exact
         // rollout leaf; the shared tt holds only leaf-independent tail rollouts, so it is uncontaminated.
-        // MTG_VALUE_TRUST_OFFSET overrides the crossover offset (experiments): a LARGE value => always TAKE the
-        // escalation (never fall back to the value-leaf line) = "never trust the leaf once we've escalated";
-        // useful to test whether the crossover is what leaks value-leaf quality on a deck (e.g. hinata).
-        static const int s_vto_override = []{ const char* e = std::getenv("MTG_VALUE_TRUST_OFFSET");
-                                              return (e && *e) ? std::atoi(e) : -1; }();
         const int kValueTrustOffset = (s_vto_override >= 0) ? s_vto_override : 3;
         const int old_wt = line.win_turn;
         // Confidence-gate: skip escalations predicted to be no-ops (byte-identical when unset). The gate
