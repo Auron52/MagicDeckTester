@@ -61,8 +61,13 @@
 #     indices through the binary and asserts the decision-JSON contract holds (well-formed,
 #     valid index, clean terminal). Needs python3 + the binary. FULL sweep ~35 min; --sample
 #     runs one reference per deck (fast contract sanity across every archetype).
-#     Behaviour drift (won/win_turn changed) is INFORMATIONAL -- re-save the reference when
-#     satisfied; only a CONTRACT break (exit 1) fails this script.
+#     Runs --strict (2026-09-11): a reference that replays to a DIFFERENT outcome (play-drift) or
+#     whose recorded plan the engine stopped offering on an identical hand (ENUM-GAP) FAILS this
+#     script, exactly as test/regression.sh already runs it. A saved reference is the user's own
+#     hand-played game and its win turn is invariant: the same clicks replaying to a different turn
+#     means the ENGINE changed under them, never that the file needs re-saving. It was informational
+#     before, and EDF claude_s9_gi8 sat at T4->T8 through several green runs of this script until
+#     two agents found it by hand (BankableMana ignoring the floating pool, Session 15e).
 #
 # Usage (from repo root, after building Release):
 #   bash test/viewer_checks.sh               # full: line-build + protocol (all refs, ~35 min)
@@ -296,10 +301,12 @@ if [ "$MODE" != line ]; then
       echo "FAIL: protocol check needs the binary but '$BIN' is missing (build Release first, or set MTG_BIN)."
       rc=1
     else
-      PROTO_ARGS=""; [ "$MODE" = sample ] && PROTO_ARGS="--sample"
-      echo "--- viewer protocol check (engine<->GUI contract${PROTO_ARGS:+, $PROTO_ARGS}) ---"
+      PROTO_ARGS="--strict"; [ "$MODE" = sample ] && PROTO_ARGS="--strict --sample"
+      echo "--- viewer protocol check (engine<->GUI contract, $PROTO_ARGS) ---"
       if MTG_BIN="$BIN" python3 "$HERE/viewer_protocol_check.py" $PROTO_ARGS; then :; else
-        echo "FAIL: viewer protocol check reported a CONTRACT failure (malformed/invalid decision)."
+        echo "FAIL: viewer protocol check reported a CONTRACT failure (malformed/invalid decision)"
+        echo "      or, under --strict, a PLAY-DRIFT / ENUM-GAP on a saved reference (the engine"
+        echo "      replays a user's recorded clicks to a different outcome -- an engine defect)."
         rc=1
       fi
     fi

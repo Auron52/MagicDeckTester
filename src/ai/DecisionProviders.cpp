@@ -17136,8 +17136,18 @@ bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller
     // "infinite mana" on a board where the go-off is capped at 60 iterations, and the user's seed-9
     // T4 board (net +1, so 60 mana, against a ~104-mana deck-out) is the frame that proved it.
     // MTG_COMBO_OFF_BANKABLE=0 restores the count-free rules.
+    //
+    // PLUS WHAT IS ALREADY FLOATING. The bank is the loop's future yield; mana the player has
+    // banked BEFORE clicking is just as real and the go-off spends it first. The user's own
+    // reference `claude_s9_gi8` decision 53 is the proof: the same seed-9 board with G:80 floated
+    // (28 hand-blinks of banking) was offered "COMBO OFF: wins this turn" and WON on T4 -- and with
+    // the pool ignored the same frame counted 60 against ~104 and refused to fire, so the saved
+    // game replayed to a T8 combat win (viewer_protocol_check: play-drift). The user's doctrine is
+    // that display may be narrowed ONLY by exact arithmetic; a bank that cannot see the pool is
+    // not exact. No new flag: this is the same lever counting correctly.
     static const bool s_bankable = EnvOn("MTG_COMBO_OFF_BANKABLE", true);
-    const long long bank = BankableMana(loop);
+    const long long bank = BankableMana(loop)
+                         + static_cast<long long>(s.floating_mana.Total());
     const auto affords = [&](long long need)
     { return !s_bankable || (need >= 0 && need <= bank); };
 
