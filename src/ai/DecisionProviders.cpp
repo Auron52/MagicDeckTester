@@ -15226,9 +15226,17 @@ inline bool PipFreeOutletFromHandLive(const GameState& s, int controller, const 
 // `PipFreeOutletFromHandLive` is deliberately NOT included: its paired apply-side swap in
 // ApplyBlinkLoop is `ComboOffFinishActive()`-gated, so lifting only the sizing half would size a swap
 // that never happens.
+//
+// ADOPTED DEFAULT ON (2026-09-11, Session 22). One binary, the 14 saved references at the shipped
+// d5/20 ms with their recorded openings forced: mean win turn **5.714 -> 5.429**, with
+// `claude_s9_gi8` 7 -> 5, `claude_s14_gi13` 7 -> 6 and `claude_s6_gi5` 6 -> 5, and **no reference
+// worse**. The deck AVERAGE (200 games, seeds 3001/3061 x 50, both arms in one pooled queue) is
+// neutral. `MTG_EDF_GOFF_EXACT_AUTO=0` is the hatch; human play is unaffected either way, because
+// `GoffExactHere()` short-circuits on `HumanPlayActive()`, so every saved reference replays
+// identically with the lever in either position.
 static bool GoffExactAutoOn()
 {
-    static const bool env_on = EnvOn("MTG_EDF_GOFF_EXACT_AUTO", false);   // DEFAULT OFF; =1 enables
+    static const bool env_on = EnvOn("MTG_EDF_GOFF_EXACT_AUTO", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::EDF_GOFF_EXACT_AUTO, env_on);
 }
 
