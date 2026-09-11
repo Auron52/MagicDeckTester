@@ -12378,6 +12378,9 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         LoopDrawSinkOn()
         && (!s_draw_promote || !ComboOffFinishActive()
             || !ComboFinisherReachable(state, controller));
+    // The DAMAGE-only prefix, kept so the draw promotion can be withdrawn mid-loop -- see
+    // MTG_COMBO_OFF_DRAW_UNPROMOTE below. Byte-identical when nothing is ever withdrawn.
+    const std::vector<int> sinks_damage_only = sinks;
     if (promote_draw_lands)
     {
         for (const Permanent& p : state.battlefield)
@@ -12758,7 +12761,51 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
             const std::function<bool(const ManaCost&)> decline =
                 [](const ManaCost&) { return false; };
             EtbOptionalPayerScope   _eops(last_pass ? &pay : &decline);
-            EtbUntapPriorityScope   _eups(sinks.empty() ? nullptr : &sinks);
+            // WITHDRAW THE DRAW PROMOTION WHEN THE DRAW SPEND STANDS DOWN
+            // (MTG_COMBO_OFF_DRAW_UNPROMOTE, default ON, COMBO OFF only).
+            //
+            // The rule this set exists under is stated at its construction and is absolute:
+            // "Promoting a sink the loop cannot cash is a measured LOSS ... The two go on and off
+            // together, ALWAYS." Session 14b fixed the ENTRY condition -- the promotion is gated on
+            // the spend's own `!ComboFinisherReachable` predicate. But the spend is `want_draw`, and
+            // `want_draw` goes FALSE the instant a draw turns up a Living Wish, mid-loop, while the
+            // promotion was computed once before iteration 0 and never revisited. So from the
+            // moment the dig succeeds -- which is the moment the loop most needs its mana -- every
+            // untap slot is still being spent on draw lands no iteration will ever activate again.
+            //
+            // Measured on fixture 10's board with the wish on top (Emiel + Cloud of Faeries, four
+            // draw lands, Cloud untaps TWO): the wish is drawn at k=1 and from k=3 the loop reads
+            //
+            //   k=N enter  cost={3} float{} avail{g1 c1 *1}     <- three mana, and the blink is {3}
+            //
+            // i.e. NET ZERO, forever, because the two untap slots go to Mariposa (the {C}
+            // reservation) and a bare Conservatory instead of the Overgrowth'd Kitchen. Nothing
+            // banks, `[finish] calls=60 wish=0 no-mana=58` -- the Living Wish sat in hand for
+            // fifty-eight iterations against a `{1}{G}` + `{1}{U}` it could never afford in one
+            // payment. That is the "bank across iterations" failure reported from the rule side,
+            // and its cause is not the affordability bar, it is the loop's own refund.
+            //
+            // Withdrawing the promotion restores the yield order for the rest of the loop, which is
+            // exactly what the ordered-set doctrine prescribes once the sink can no longer be
+            // cashed. AUTONOMOUS PLAY IS UNTOUCHED: there `LoopDrawSinkOn()` is unconditional and
+            // `want_draw` is the only gate on the spend too, but ComboOffFinishActive() is false, so
+            // this branch is never taken and the measured promotion arm is byte-identical.
+            static const bool s_unpromote = EnvOn("MTG_COMBO_OFF_DRAW_UNPROMOTE", true);
+            const bool draw_promo_live =
+                !(s_unpromote && ComboOffFinishActive() && promote_draw_lands && !want_draw);
+            const std::vector<int>& prio = draw_promo_live ? sinks : sinks_damage_only;
+            if (lt && !draw_promo_live && promote_draw_lands)
+            {
+                static thread_local int s_said = 0;
+                if (s_said++ < 3)
+                {
+                    std::fprintf(stderr, "[edf-loop] draw promotion WITHDRAWN at k=%d "
+                                         "(the dig found its card; %d -> %d promoted)\n",
+                                 k, static_cast<int>(sinks.size()),
+                                 static_cast<int>(sinks_damage_only.size()));
+                }
+            }
+            EtbUntapPriorityScope   _eups(prio.empty() ? nullptr : &prio);
             ApplyBlink(state, controller, cur_source, target_id,
                        cur_outlet->blink_returns_tapped);
         }

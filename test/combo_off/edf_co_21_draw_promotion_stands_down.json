@@ -1,0 +1,114 @@
+{
+  "_comment": [
+    "THE DRAW PROMOTION MUST STAND DOWN WHEN THE DRAW SPEND DOES --",
+    "MTG_COMBO_OFF_DRAW_UNPROMOTE.",
+    "",
+    "This is fixture 10's board -- the user's seed-9 turn-4 frame -- with two deliberate changes: the",
+    "Living Wish is ON TOP of the library, and the opponent's library is SIX cards.  Fixture 10 itself",
+    "must stay ABSENT (its 50-card deck-out is genuinely out of reach at this board's net) and still",
+    "does; this variant isolates the loop's own economics with the dig and the kill both small enough",
+    "to finish.",
+    "",
+    "Conservatory (+Wild Growth) = 2, Kitchen (+Overgrowth) = 3, Conservatory = 1, Mariposa = 1, and",
+    "Cloud of Faeries untaps TWO against Emiel's {3}.  All FOUR of those lands are draw/investigate",
+    "sources, so ApplyBlinkLoop's untap-priority set promotes all four -- and the set is consulted in",
+    "battlefield order, so the two slots go to a bare Conservatory and Mariposa (the {C} reservation)",
+    "rather than to the Overgrowth'd Kitchen.  Refund 3 against a cost of 3: **net ZERO**.",
+    "",
+    "That promotion is correct only while the loop can CASH it.  The spend is `want_draw`, which goes",
+    "FALSE the instant a draw turns up the Living Wish -- and the promotion was computed once before",
+    "iteration 0 and never revisited.  So from the moment the dig SUCCEEDS the loop is pinned to lands",
+    "it will never activate again, banks nothing, and the Living Wish sits in hand against a {1}{G} +",
+    "{1}{U} it can never afford in one payment:",
+    "",
+    "    [finish] calls=60 hand=0 wish=0 no-mana=58 none-found=60",
+    "",
+    "Withdrawing the promotion when the spend stands down restores the yield order for the rest of the",
+    "loop -- which is exactly what the ordered-set doctrine at the set's construction prescribes:",
+    "'Promoting a sink the loop cannot cash is a measured LOSS ... The two go on and off together,",
+    "ALWAYS.'  Session 14b fixed the ENTRY condition; this fixes the MID-LOOP one.",
+    "",
+    "A/B on this fixture (one binary):",
+    "    default                           -> x24, COMBO OFF verified, opponent decked",
+    "    MTG_COMBO_OFF_DRAW_UNPROMOTE=0    -> x24, offered but NOT verified, the apply does not win",
+    "",
+    "On the same board at the shipped 50-card opponent library the counters go from",
+    "`wish=0 no-mana=58` to `wish=1 hand=1 no-mana=0` -- the finish CHAIN completes either way now;",
+    "what the 50-card version still cannot do is pay fifty {C} pips at one per untap, which is why",
+    "fixture 10 stays absent."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 6,
+  "library_filler": "Forest",
+  "library_size": 45,
+  "library_top": [
+    "Living Wish",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Forest",
+    "Living Wish"
+  ],
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Kitchen",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Wild Growth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Conservatory"
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Cloud of Faeries",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Emiel the Blessed",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Eldrazi Displacer"
+  ],
+  "expect_combo_off": true
+}

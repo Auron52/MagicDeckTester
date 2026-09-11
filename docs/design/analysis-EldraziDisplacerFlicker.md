@@ -5890,3 +5890,103 @@ play-changed=0`; `test/viewer_checks.sh` (strict, 309 references) **PASS**.
    pre-session "failures" were the button firing a turn or more EARLY rather than a broken combo.
    After this session the remaining unproven offers are mostly genuine refusals, but the *wording*
    question -- "Combo Off -- wins turn 6" versus narrowing the rule -- is still the user's call.
+
+### Session 18b: the rule agent's three asks, and a SIXTH executor defect
+
+The rule-table agent landed its exact `(mana, pips)` bank in parallel (offers 271 -> 232 on the same
+1021 states with all 203 of its arm's wins kept), which makes every remaining offered-but-lost state
+executor-side by its own arithmetic. It sent three concrete needs. Taken in order:
+
+**(1) "the draw and damage sinks must never spend below the next activation's price at EVERY call
+site."** Already true after Session 18's landing, and now audited line by line: all five in-loop
+sink calls (`SpendSurplusOnDamageSinks`, `SpendSurplusOnDrawSinks`, `CrackCluesForCards`,
+`SpendSurplusOnDrain`, `SpendSurplusOnExile`) carry `keep_payable = c` AND the `probe_pay` real
+trial. The four POST-loop calls pass `ManaCost{}` deliberately -- the loop is over, there is no next
+activation to protect. C1b (18 of the 23 real-board failures at the start of this session) and the
+`loop-zero-iterations` pair are gone; C2 is down to 2 and is not a spend-ordering defect (below).
+
+**(2) "`ComboFinishFromHand`'s in-loop `affordable` must let the wish + finisher be reached by
+BANKING ACROSS ITERATIONS."** This one was real, and the cause is not the affordability bar -- it is
+the loop's own REFUND.
+
+`MTG_COMBO_OFF_DRAW_UNPROMOTE` (default ON, COMBO OFF only). `ApplyBlinkLoop` promotes every draw /
+investigate land to the front of the ETB untap priority, under a rule its own comment states
+absolutely: *"Promoting a sink the loop cannot cash is a measured LOSS ... The two go on and off
+together, ALWAYS."* Session 14b fixed the ENTRY condition. But the SPEND is `want_draw`, and
+`want_draw` goes false the instant a draw turns up a Living Wish -- mid-loop -- while
+`promote_draw_lands` was computed once before iteration 0 and never revisited. So from the moment
+the dig SUCCEEDS, every untap slot is still being spent on lands no iteration will activate again.
+
+Measured on the rule agent's own repro (fixture 10's board with the Living Wish on top). All four of
+that board's lands are draw sources and Cloud of Faeries untaps two, so the promotion hands the
+slots to a bare Conservatory and Mariposa instead of the Overgrowth'd Kitchen:
+
+```
+k=N enter  cost={3} float{} avail{g1 c1 *1}     <- three mana, and the blink costs {3}
+```
+
+**Net zero, forever.** Nothing banks, and `[finish] calls=60 hand=0 wish=0 no-mana=58` -- the Living
+Wish sat in hand for fifty-eight iterations against a `{1}{G}` + `{1}{U}` it could never afford in
+one payment. That is exactly the reported symptom, and it is not about `affordable`'s bar: the pool
+it reads never grows because the refund was sabotaged. With the promotion withdrawn the same board
+reads `wish=1 hand=1 no-mana=0` -- the chain completes. (The shipped fixture 10 still correctly
+refuses: paying fifty `{C}` pips at one per untap is out of reach whatever the refund, which is why
+that negative fixture is unchanged.)
+
+**(3) "`FlickerGoOffCount` sizes NO go-off plan on 9 sweep frames where a funded loop exists."**
+Checked, and **most of it is a reconstruction artefact, not a sizer refusal.** Of the 25
+`c_missed_offer` states, 11 are `unwinnable` by the python oracle itself, and of the remaining 14,
+**6 have zero or one untapped land** -- `R-8cedf64d98` and `R-15516e9279` have 0 of 4,
+`X-509184baa7` has 1 of 5 with a 48-card hand and a 1-card library. The `arith.loop.bank` those
+states report (240, 180, 720) is the flat board yield with tapped state ignored, so "a funded loop
+exists" is the ORACLE's claim, not the board's. On those the absence of an offer is honest.
+
+That leaves **6 genuinely-untapped boards** (`E-22404cab21`, `E-ba6de8153a`, `X-a8a22704b9`,
+`X-95caf509ac`, `X-314bdf9f10`, `X-9b48004d66`) where a live loop is sized at zero. **Not fixed, and
+the reason is an instrument gap worth closing first:** `MTG_EDF_GOFF_DEBUG` prints only from
+`EdfAutoGoOffAfterCasts`, which returns before the trace under `HumanPlayActive()`, so every
+`[edf-goff]` line on these fixtures comes from a rollout and not from the human count-sizing path
+(`BlinkActivationCounts` with `for_human_count_sizing`) that actually decides the button. Two of the
+six (`E-22404cab21`, `E-ba6de8153a`) are Shivan Gorge boards at opponent life 5 with
+`refund 7 > cost 3 + gorge 3`, i.e. the GORGE branch's own test passes and it should be returning 5
+-- so there is a real finding in here, and the honest next step is one `[edf-goff-human]` line on
+the sizing path rather than a guess. Recorded as the first item of the next executor pass.
+
+**One correction to the brief, from the rule agent, and it is right:** the binding resource for
+Dimensional Infiltrator is the `{C}` PIP (`{1}{C}` per exile), not `{U}`. The code and the phase
+sizing already treat it that way (`exile_c_pips`); only the brief's prose said `{U}`.
+
+### Measured, after the sixth lever -- ONE binary, all six `=0` vs default
+
+| | sweep 1021 OFF | sweep 1021 ON | hunt 939 OFF | hunt 939 ON |
+|---|---:|---:|---:|---:|
+| `a_offered_wins` | 203 | **227** | 60 | **81** |
+| `b_executor_failure` | 68 | **44** | 23 | **2** |
+| `c_missed_offer` | 25 | 25 | 7 | 7 |
+| clusters | -- | -- | C1b 18, C2 3, loop-zero 2 | **C2 2** |
+
+24 fixed / 0 broken on the sweep; **21 fixed / 0 broken** on the hunt. `combo_off_verified` stays a
+perfect oracle in both directions on both populations (sweep 227 True/True + 44 False/False; hunt
+81 True/True + 2 False/False).
+
+The un-promote is **neutral on the sweep** (227/44 either way) and worth one more real-board state
+plus the whole `no-mana=58` family: the sweep's `--scenario` reconstructions start with every land
+untapped and mostly finish their dig before the refund matters, which is precisely the fidelity gap
+the replay hunt exists to cover.
+
+**The two hunt states left are both rule GORGE and neither is an executor defect.**
+`AA-60e2a97f7f`: Adarkar+Trace, Brushland, Kitchen+Fertile Ground, Shivan Gorge; Cloud of Faeries
+untaps TWO and the damage sink takes one of those slots, so a pass refunds 3 against Emiel's `{3}` --
+**net 0** -- while the ping costs `{2}{R}` = 3 and the opponent is on 18. `MTG_EDF_LOOP_TRACE` shows
+the real trial declining the ping 59 times out of 60, correctly. `AA-deecdcbaef` is the same shape at
+net +1. `FlickerGoOffCount`'s `MTG_COMBO_OFF_GORGE_SLOT` already refuses to SIZE a Gorge kill on such
+a board; the arithmetic exists and the GORGE row of the rule table does not consult it.
+
+### Fixture 21
+
+`edf_co_21_draw_promotion_stands_down` -- fixture 10's board with the wish on top and a six-card
+opponent library, so the dig and the kill are both small enough to finish and the loop's REFUND is
+the only thing under test. `combo_off_check.sh` 20 -> **21**, and the six-lever matrix now reads:
+`CRACK_FIRST` owns 16, `TLESS_TRIAL` owns 17/19/20/21, `GOFF_PHASES` owns 20, `SWITCH_TRIAL` owns 18,
+`DEPLOY_TRIAL` owns 19/21, `DRAW_UNPROMOTE` owns 21 -- every lever has at least one fixture that
+fails when it alone is switched off, and all 21 pass by default.
