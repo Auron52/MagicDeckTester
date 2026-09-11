@@ -1,0 +1,97 @@
+{
+  "_comment": [
+    "SHIVAN GORGE WITH TWO UNTAP SLOTS: the button must NOT appear, and the arithmetic is why.",
+    "",
+    "A Gorge ping has {T} in its cost, so it is once-per-untap, and ApplyBlinkLoop promotes the",
+    "damage sink to the FRONT of the untap priority precisely so the loop gets it back. Cloud of",
+    "Faeries untaps TWO lands, so one slot is the Gorge (yield 1) and exactly one is a yield land",
+    "(Kitchen, 5). The iteration therefore budgets 5 + 1 = 6 against the blink's {2}{C} (3) plus",
+    "the ping's {2}{R} (3): net ZERO. The loop coasts on its opening float and stops.",
+    "",
+    "Measured before the fix, with the branch sizing `life` iterations off an unreserved refund:",
+    "opponent life 20 -> 20 blinks, 10 pings, no kill; life 5 -> 5 blinks, 3 pings, no kill. The",
+    "GORGE rule was offered 17 times across the sweep and won ZERO of them",
+    "(docs/design/combo-off-sweep-catalogue.md, cluster C2).",
+    "",
+    "MTG_COMBO_OFF_GORGE_SLOT reserves the slot the sink will take, so the branch declines and the",
+    "board is honestly absent. The POSITIVE control is edf_co_13: the identical board with",
+    "Peregrine Drake instead of Cloud -- five untap slots, so the Gorge AND four yield lands come",
+    "back -- which is offered and wins."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "opponent_library_size": 49,
+  "library_filler": "Forest",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    {
+      "name": "Kitchen",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Wild Growth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Conservatory"
+    },
+    {
+      "name": "Brushland",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Fertile Ground",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Brushland"
+    },
+    {
+      "name": "Shivan Gorge",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Eldrazi Displacer",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Cloud of Faeries",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [],
+  "expect_combo_off": false
+}

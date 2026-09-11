@@ -1,45 +1,34 @@
 {
   "_comment": [
-    "CLUSTER 3 -- THE GO-OFF IS SIZED IN GENERIC MANA WHILE THE FINISHER IS PAID IN {C} PIPS.",
+    "CLUSTER 3 -- {C} PIP SUPPLY, the residue after the phase-2 fixes.",
     "",
-    "Rule DEPLOYED fires (loop + Essence Depleter on the battlefield + three {C} sources + a draw",
-    "source) and the plan promises `blink Cloud of Faeries x14`. The apply runs all fourteen and",
-    "drains exactly NINE times: opponent 20 -> 11, and stops.",
+    "Rule DEPLOYED fires and the plan promises 14 blinks. All fourteen run, and Essence Depleter",
+    "drains exactly NINE times: opponent 20 -> 11, then nothing. Cloud of Faeries untaps two lands,",
+    "the {C}-starved reservation makes exactly one of them colourless, and Eldrazi Displacer's",
+    "{2}{C} eats that one every pass -- so the loop's colourless net is ZERO and the drain is fed",
+    "only by the board's opening supply. Across the sweep, `loop.net_c <= 0` produced 39 offers and",
+    "ZERO wins; `net_c > 0` won 80.9%.",
     "",
-    "THE ARITHMETIC. The recognizer's own trace says the loop is healthy:",
+    "THE RULING WAS TAKEN AND IMPLEMENTED (fix execution, do not narrow display): ApplyBlinkLoop",
+    "now swaps in a pip-free outlet out of hand when a {C}-pip sink is live, and the recognizer",
+    "sizes the count on the POST-SWAP colourless net. On THIS BOARD PLUS AN EMIEL IN HAND that is",
+    "a clean conversion -- 14 blinks / 9 drains / no kill becomes 20 blinks / 20 drains / WIN --",
+    "and it is pinned as test/combo_off/edf_co_14_outlet_switch_to_emiel.json.",
     "",
-    "   [edf-goff] t5 ... net=3 refund=6 cost=3 drain=1/2 kmax=3 afford=3 n=14",
+    "WHY THIS FIXTURE STILL FAILS. As authored it has no Emiel anywhere: not on the battlefield,",
+    "not in hand, and not in the library (the synthetic matrix fills the library with Forests). The",
+    "user's own route for exactly this board is rule 4's -- 'you can draw into Emiel and cast it if",
+    "you can draw your deck' -- and the draw engine that would find it is cluster C1a/C1b, which is",
+    "owned by another agent and not yet fixed. Once the draw route works, the swap this fixture",
+    "needs is already in place and will fire on the drawn copy.",
     "",
-    "14 iterations x net 3 = 42 generic mana against the Depleter's 20 drains x {1}{C} = 40. On",
-    "GENERIC mana the sizing is right. On COLOURLESS it is not: Cloud of Faeries untaps TWO lands,",
-    "the yield order takes Kitchen (5) and the {C}-starved reservation forces the other slot onto a",
-    "{C} land (1), and Eldrazi Displacer's {2}{C} eats that one {C} every single pass. So the loop's",
-    "colourless net per iteration is ZERO, while the drain needs one {C} per activation -- the only",
-    "{C} the Depleter ever sees is the initial untapped supply. Nine drains, then nothing.",
-    "",
-    "WHAT THE RULE TABLE CHECKS, AND WHAT IT DOES NOT. comborules::ColorlessSourceCount counts {C}",
-    "SOURCES ON THE BOARD (three here, so C1 and C2 both hold) and MTG_COMBO_OFF_BANKABLE prices the",
-    "path in generic mana. Neither consults the recognizer's loop.net_c -- the per-iteration",
-    "colourless NET -- even though FlickerLoop already computes it and it is the quantity that",
-    "actually gates a {C}-pip finisher. A board can hold five colourless sources and still feed the",
-    "sink at net zero.",
-    "",
-    "SWAP THE OUTLET AND IT WINS. Emiel the Blessed's blink cost is {3} with no {C} pip, so the same",
-    "untap leaves its {C} free: the sibling synthetic state A_emiel_cloud_fin-bf-depleter is class",
-    "(a), offered and winning. This is the same Displacer-vs-Emiel divide the committed fixtures",
-    "edf_co_4 (single {C}, ABSENT) and edf_co_5 (two {C} + Drake, OFFERED) already pin at the",
-    "display end; it simply is not pinned at the EXECUTION end.",
-    "",
-    "WHICH CLASS THIS IS is a question for the user, and that is why it is catalogued rather than",
-    "fixed: either the go-off count must be sized by the {C} pip supply as well as the mana (the",
-    "MTG_EDF_GOFF_C_ITERS axis, which does not bind on this path), or the rules must require",
-    "loop.net_c > 0 for any {C}-pip finisher -- and the second narrows the display, which is the",
-    "user's call under the aggressive-display doctrine.",
-    "",
-    "EXPECTED TO FAIL until that ruling lands."
+    "So this is no longer an unattributed failure: it is a KNOWN board waiting on one other fix,",
+    "and the mechanism it exercises is separately proven green."
   ],
   "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
-  "env": { "MTG_HUMAN_PLAY": "1" },
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
   "turn": 5,
   "on_the_play": false,
   "active_life": 20,
@@ -50,17 +39,64 @@
   "depth": 3,
   "budget_ms": 20,
   "battlefield": [
-    { "name": "Kitchen",                  "controller": 0, "tapped": false },
-    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
-    { "name": "Overgrowth",               "controller": 0, "tapped": false, "equips": "Kitchen" },
-    { "name": "Conservatory",             "controller": 0, "tapped": false },
-    { "name": "Wild Growth",              "controller": 0, "tapped": false, "equips": "Conservatory" },
-    { "name": "Mariposa Military Base",   "controller": 0, "tapped": false },
-    { "name": "Adarkar Wastes",           "controller": 0, "tapped": false },
-    { "name": "Yavimaya Coast",           "controller": 0, "tapped": false },
-    { "name": "Eldrazi Displacer",        "controller": 0, "tapped": false },
-    { "name": "Cloud of Faeries",         "controller": 0, "tapped": false },
-    { "name": "Essence Depleter",         "controller": 0, "tapped": false }
+    {
+      "name": "Kitchen",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Kitchen"
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Wild Growth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Conservatory"
+    },
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Adarkar Wastes",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Yavimaya Coast",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Eldrazi Displacer",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Cloud of Faeries",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Essence Depleter",
+      "controller": 0,
+      "tapped": false
+    }
   ],
   "hand": [],
   "expect_combo_off": true,
