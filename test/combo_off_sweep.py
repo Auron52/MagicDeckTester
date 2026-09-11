@@ -140,7 +140,32 @@ def deck_main_and_side():
 # (comborules::BankableMana / CheapestFinishNeed / RecogniseFlickerLoop), written from the card
 # data rather than from the engine, so the two can DISAGREE -- which is the whole point.
 # ---------------------------------------------------------------------------------------------
-FLICKER_MAX_ITERATIONS = 60      # DecisionProviders.cpp FlickerMaxIterations()
+# THE ORACLE HAS TO TRACK THE ENGINE'S CEILING, or its "unwinnable" is about a different engine.
+#
+# This was a hard-coded 60, matching DecisionProviders.cpp's FlickerMaxIterations(). Session 22
+# gave the COMBO OFF path its own, much larger ceiling (FlickerIterationCeiling /
+# MTG_COMBO_OFF_MAX_ITER, default 400, human play only) because 60 is a SEARCH budget and the
+# button had been silently paying it -- the user's own seed-9 T4 board was declared "provably
+# unwinnable" by two sessions and wins at x158. Left at 60, this oracle would go on classifying
+# every such board `e_absent_unwinnable` and grading a correct offer as a rule defect.
+#
+# Mirrors the C++ exactly, including the escape hatch: MTG_COMBO_OFF_MAX_ITER=0 (or 60) falls back
+# to the shared MTG_EDF_MAX_ITER ceiling, which is what a one-binary A/B of the lever needs.
+def _flicker_ceiling():
+    try:
+        base = int(os.environ.get("MTG_EDF_MAX_ITER") or 60)
+    except ValueError:
+        base = 60
+    base = base if base > 0 else 60
+    raw = os.environ.get("MTG_COMBO_OFF_MAX_ITER")
+    try:
+        co = int(raw) if raw not in (None, "") else 400
+    except ValueError:
+        co = 400
+    return max(co, base) if co > 0 else base
+
+
+FLICKER_MAX_ITERATIONS = _flicker_ceiling()
 MAX_UNTAPS = 5                   # kFlickerMaxUntaps (Peregrine Drake is the ceiling)
 
 
@@ -976,7 +1001,7 @@ def mechanism(rec):
             tags.append("loop-stopped-early")
     it = goff.get("iterations")
     if it is not None and it >= FLICKER_MAX_ITERATIONS:
-        tags.append("iteration-cap-60")
+        tags.append("iteration-cap-%d" % FLICKER_MAX_ITERATIONS)
     if loop["ok"] and loop["bank"] < (a["cheapest_need"] or 10 ** 9):
         tags.append("bank-short")                 # the rule fired on a loop that cannot pay
 

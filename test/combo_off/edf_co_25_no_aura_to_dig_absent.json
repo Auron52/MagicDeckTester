@@ -1,0 +1,79 @@
+{
+  "_comment": [
+    "THE NEGATIVE CONTROL FOR MTG_COMBO_OFF_DIG_COLOR -- the same board, and no colour to dig to.",
+    "",
+    "edf_co_24's board exactly (Conservatory+Overgrowth, Brushland, Emiel the Blessed, two",
+    "Peregrine Drakes; not one blue or black source, a live {4},{T} Investigate, net +1 with",
+    "net_c +1), and the library still holds the Living Wish -- but every any-colour land Aura has",
+    "been removed from it.",
+    "",
+    "The lever is still pinned ON here, which is the whole point: the widening must find a colour",
+    "that is REALLY reachable. With no Fertile Ground and no Trace of Abundance anywhere, the",
+    "board can never pay Dimensional Infiltrator's {1}{U} or Essence Depleter's {2}{B}, so UB",
+    "stays false, FinishNeedMana keeps refusing both finishers on colour, ScanHandSinks prices",
+    "nothing, FlickerGoOffCount sizes nothing -- and the button must be ABSENT.",
+    "",
+    "Without this control, edf_co_24 would pass equally well on a rule that had simply stopped",
+    "checking colour at all."
+  ],
+  "active_life": 20,
+  "battlefield": [
+    {
+      "controller": 0,
+      "name": "Conservatory",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "equips": "Conservatory",
+      "name": "Overgrowth",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Brushland",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Emiel the Blessed",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Peregrine Drake",
+      "tapped": false
+    },
+    {
+      "controller": 0,
+      "name": "Peregrine Drake",
+      "tapped": false
+    }
+  ],
+  "budget_ms": 20,
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "depth": 3,
+  "env": {
+    "MTG_COMBO_OFF_DIG_COLOR": "1",
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "expect_combo_off": false,
+  "hand": [],
+  "library_filler": "Forest",
+  "library_size": 0,
+  "library_top": [
+    "Brushland",
+    "Conservatory",
+    "Conservatory",
+    "Overgrowth",
+    "Overgrowth",
+    "Peregrine Drake",
+    "Wild Growth",
+    "Wild Growth",
+    "Living Wish"
+  ],
+  "on_the_play": true,
+  "opponent_library_size": 40,
+  "opponent_life": 16,
+  "turn": 5
+}

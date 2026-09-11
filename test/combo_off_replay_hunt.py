@@ -1340,6 +1340,291 @@ def report(path):
     return 0
 
 
+# =============================================================================================
+# --first-fire -- THE GAP, MEASURED IN MAIN-PHASE DECISIONS
+# =============================================================================================
+#
+# USER, 2026-09-11: *"The key here is that the sooner the Combo Off line kicks in the better. The
+# reason is that the search should have an easy way to query it and be able to skip a huge chain
+# of operations."*  And, bounding how early "as early as it correctly can" may be: *"I think it's
+# fair that some of the pieces (those to generate mana at least) should be on board first. That
+# said, most of the work happens after this point."*
+#
+# So the metric is NOT "does the button eventually appear" -- the a/b/c/e classification above
+# already answers that, per state, and answers it well.  It is the DISTANCE, counted in
+# main-phase decisions, between the first frame at which the rule COULD correctly have fired and
+# the frame at which it did.  Every decision in that gap is a whole plan enumeration a search
+# shortcut could have skipped.
+#
+# FOUR MARKS PER GAME, all counted as an index into that game's own list of walked main-phase
+# frames (which is exactly "decisions"), with the frame's `main_ordinal` carried alongside for
+# legibility:
+#
+#   engine   the first frame whose board holds the mana ENGINE -- outlet + untapper + the lands
+#            they cycle, `loop.ok` in the recognizer's sense.  This is the user's floor: nothing
+#            before it may fire, so it is the ORIGIN the gap is measured from.  Taken from the
+#            python arithmetic oracle (combo_off_sweep.arith), deliberately NOT from the engine,
+#            so the measurement does not grade the engine with its own ruler.
+#   oracle   the first frame at which the TRIAL APPLY WINS.  Forced by re-walking the identical
+#            line with MTG_COMBO_OFF_RULES=0 MTG_COMBO_OFF_PROJECT=0: with the rule table silent
+#            `offered_idx` is -1, so `combo_off_offered` can only come from `combo_off_verified`
+#            (src/ai/TurnSolver.cpp), i.e. an offer in that arm IS a trial win.  PROJECT=0 is
+#            needed as well, because the cheap lethal projection gates whether the trial is paid
+#            for at all; with it forced, every go-off-carrying plan gets a real apply.
+#   rule     the first frame at which `combo_off` appears on a plan in the DEFAULT arm.
+#   verified the first frame at which that offer also carries `combo_off_verified`.
+#
+# THE ORACLE HAS A FLOOR OF ITS OWN, and it has to be said out loud rather than buried: the trial
+# can only run on a plan that CARRIES a multi-activation go-off, because `EnumerateMainPlans`
+# short-circuits on `best_any >= 0`.  On a frame where `FlickerGoOffCount` sizes nothing there is
+# no plan to apply, so neither the rule table nor the trial is ever consulted -- the state is
+# invisible to BOTH arms.  `goff_sized` is recorded per frame precisely so that population is
+# countable, because it is the one place where "the rule is silent" and "the rule was never
+# asked" look identical from outside and have completely different fixes.
+ORACLE_ENV = {"MTG_COMBO_OFF_RULES": "0", "MTG_COMBO_OFF_PROJECT": "0"}
+
+
+def ff_read_frame(dec):
+    """The handful of bits --first-fire needs from one live main-phase frame.
+
+    Read BEFORE `compact_frame` would drop the plan list, because `goff_sized` is a question
+    about the plans that are NOT combo-off ones.
+    """
+    plans = dec.get("plans") or []
+    goff = False
+    for p in plans:
+        for a in (p.get("actions") or []):
+            if a.get("verb") == "blink" and (a.get("x") or 0) > 3:
+                goff = True
+                break
+        if goff:
+            break
+    cos = [p for p in plans if p.get("combo_off")]
+    ver = any(p.get("combo_off_verified") for p in cos)
+    rule = next((p.get("combo_off_rule") for p in cos if p.get("combo_off_rule")), None)
+    srec = sweep_record(dec, bool(cos), ver, rule, None, None, None, None)
+    loop = ((srec or {}).get("arith") or {}).get("loop") or {}
+    b = board_summary(dec)
+    return {
+        "main_ordinal": dec.get("main_ordinal"),
+        "turn": dec.get("turn"),
+        "phase": dec.get("phase"),
+        "n_plans": len(plans),
+        "goff_sized": goff,
+        "offered": bool(cos),
+        "verified": ver,
+        "rule": rule,
+        "loop_ok": bool(loop.get("ok")),
+        "loop_net": loop.get("net"),
+        "loop_net_c": loop.get("net_c"),
+        "pool": b.get("floating_mana"),
+        "library_size": b.get("library_size"),
+    }
+
+
+def ff_drive(seed, gi, force, side, mt, picks, env_extra):
+    """Walk one line (a fixed pick stream, or the driven policy when `picks` is None)."""
+    frames, win_turn, anomalies = [], None, []
+    s = Session(seed, gi, force, side, mt, env_extra)
+    try:
+        for i in range(MAX_DRIVEN_DECISIONS if picks is None else len(picks) + 8):
+            kind, obj = s.read()
+            if kind == "result":
+                win_turn = obj.get("win_turn")
+                break
+            if kind == "eof":
+                anomalies.append("walk ended without a terminal after %d picks" % len(s.picks))
+                break
+            if obj.get("type") == "main_phase":
+                frames.append(ff_read_frame(obj))
+                if picks is None:
+                    s.send(drive_pick(obj))
+                    continue
+            if picks is None:
+                s.send(vpc.engine_default(obj)[0])
+            else:
+                s.send(picks[i] if i < len(picks)
+                       else (-1 if obj.get("type") == "main_phase"
+                             else vpc.engine_default(obj)[0]))
+    finally:
+        s.close()
+    return frames, win_turn, anomalies
+
+
+def ff_game(kind, payload, max_turns):
+    """Both arms of one game.  Returns the per-game first-fire record."""
+    if kind == "ref":
+        c = {}
+        try:
+            vpc.check_reference(payload, collect=c)
+        except Exception as exc:                               # noqa: BLE001 -- report, never die
+            return {"game": os.path.basename(payload), "population": "reference",
+                    "error": repr(exc)}
+        ref = json.load(open(payload))
+        seed, gi = ref["seed"], ref["game_index"]
+        force, side, mt = c.get("force"), c.get("side"), c.get("mt", 8)
+        picks = c.get("resolved") or []
+        name, pop = os.path.basename(payload), "reference"
+    else:
+        seed, gi = payload
+        force, side, mt, picks = None, None, max_turns, None
+        name, pop = "seed %d gi %d" % (seed, gi), "autonomous"
+    dflt, dwin, danom = ff_drive(seed, gi, force, side, mt, picks, None)
+    orc, owin, oanom = ff_drive(seed, gi, force, side, mt, picks, ORACLE_ENV)
+    rec = {"game": name, "population": pop, "seed": seed, "gi": gi,
+           "frames": len(dflt), "win_turn": dwin, "oracle_win_turn": owin,
+           "anomalies": danom + ["oracle: " + a for a in oanom],
+           "default": dflt, "oracle": orc}
+    if kind == "ref":
+        rec["recorded_win_turn"] = ref.get("win_turn")
+    # The two arms must walk the SAME line, or a gap is a comparison of two different games.
+    # Non-go-off plans keep their indices whatever the rule table says (every go-off plan is
+    # stripped and at most one re-APPENDED, src/ai/TurnSolver.cpp), so this should hold exactly;
+    # it is asserted rather than assumed because a silent divergence would be invisible.
+    if len(orc) != len(dflt):
+        rec["anomalies"].append("arms walked different lengths: default %d, oracle %d"
+                                % (len(dflt), len(orc)))
+    else:
+        drift = [i for i, (a, b) in enumerate(zip(dflt, orc))
+                 if (a["main_ordinal"], a["turn"], a["library_size"], a["pool"])
+                 != (b["main_ordinal"], b["turn"], b["library_size"], b["pool"])]
+        if drift:
+            rec["anomalies"].append("arms diverged at frame(s) %s" % drift[:5])
+
+    def first(rows, key):
+        return next((i for i, f in enumerate(rows) if f.get(key)), None)
+
+    marks = {
+        "engine": first(dflt, "loop_ok"),
+        "sized": first(dflt, "goff_sized"),
+        "rule": first(dflt, "offered"),
+        "verified": first(dflt, "verified"),
+        "oracle": first(orc, "offered"),          # rules off => offered iff the trial won
+    }
+    rec["mark"] = marks
+    rec["ordinal"] = {k: (dflt[v]["main_ordinal"] if (v is not None and v < len(dflt)) else None)
+                      for k, v in marks.items()}
+    rec["rule_name"] = (dflt[marks["rule"]]["rule"] if marks["rule"] is not None else None)
+    rec["gap_from_engine"] = (None if marks["engine"] is None or marks["rule"] is None
+                              else marks["rule"] - marks["engine"])
+    rec["gap_verified_from_engine"] = (None if marks["engine"] is None
+                                       or marks["verified"] is None
+                                       else marks["verified"] - marks["engine"])
+    rec["gap_from_oracle"] = (None if marks["oracle"] is None or marks["rule"] is None
+                              else marks["rule"] - marks["oracle"])
+    # How many frames sat between the engine landing and the first fire with NO go-off plan sized
+    # at all -- i.e. frames on which ComboOffPossible was never even called.
+    if marks["engine"] is not None:
+        end = marks["rule"] if marks["rule"] is not None else len(dflt)
+        rec["unsized_in_gap"] = sum(1 for f in dflt[marks["engine"]:end] if not f["goff_sized"])
+        rec["frames_after_engine"] = len(dflt) - marks["engine"]
+    return rec
+
+
+def ff_report(games, title):
+    """Per-game table plus the mean/median gap per population."""
+    print("\n=== FIRST FIRE: %s ===" % title)
+    hdr = ("%-26s %4s %6s %6s %6s %6s %6s  %5s %5s %5s  %-10s"
+           % ("game", "frms", "engine", "sized", "oracle", "rule", "verif",
+              "gapE", "gapV", "gapO", "rule"))
+    for pop in ("reference", "autonomous"):
+        rows = [g for g in games if g.get("population") == pop and not g.get("error")]
+        if not rows:
+            continue
+        print("\n-- %s (%d games) --" % (pop, len(rows)))
+        print(hdr)
+
+        def cell(v):
+            return "-" if v is None else str(v)
+
+        for g in sorted(rows, key=lambda r: r["game"]):
+            m, o = g["mark"], g["ordinal"]
+
+            def mo(k):
+                return "-" if m[k] is None else "%d/%s" % (m[k], cell(o[k]))
+            print("%-26s %4d %6s %6s %6s %6s %6s  %5s %5s %5s  %-10s"
+                  % (g["game"][:26], g["frames"], mo("engine"), mo("sized"), mo("oracle"),
+                     mo("rule"), mo("verified"), cell(g.get("gap_from_engine")),
+                     cell(g.get("gap_verified_from_engine")), cell(g.get("gap_from_oracle")),
+                     g.get("rule_name") or "-"))
+        for label, key in (("gap: first fire - engine on board", "gap_from_engine"),
+                           ("gap: first VERIFIED fire - engine", "gap_verified_from_engine"),
+                           ("gap: first fire - first trial win", "gap_from_oracle")):
+            vals = sorted(g[key] for g in rows if g.get(key) is not None)
+            if not vals:
+                print("  %-36s  (no game has both marks)" % label)
+                continue
+            mean = sum(vals) / len(vals)
+            mid = (vals[len(vals) // 2] if len(vals) % 2
+                   else (vals[len(vals) // 2 - 1] + vals[len(vals) // 2]) / 2.0)
+            print("  %-36s n=%2d  mean %6.2f  median %5.1f  max %3d"
+                  % (label, len(vals), mean, mid, vals[-1]))
+        never = [g["game"] for g in rows if g["mark"]["engine"] is not None
+                 and g["mark"]["rule"] is None]
+        if never:
+            print("  engine on board and NEVER offered: %d  %s" % (len(never), never[:6]))
+        uns = [g.get("unsized_in_gap") for g in rows if g.get("unsized_in_gap") is not None]
+        if uns:
+            print("  frames in the gap with NO go-off plan sized (rule never consulted): "
+                  "total %d over %d games" % (sum(uns), len(uns)))
+    anom = [(g["game"], a) for g in games for a in g.get("anomalies", [])]
+    if anom:
+        print("\nanomalies: %d" % len(anom))
+        for gname, a in anom[:12]:
+            print("   %-26s %s" % (gname[:26], a))
+
+
+def first_fire(args):
+    """Run the first-fire measurement over both populations and print the table."""
+    if not os.path.exists(MTG):
+        print("ERROR: %s not found -- build Release first (./build.sh)." % MTG, file=sys.stderr)
+        return 2
+    skip = {s.strip() for s in args.skip.split(",") if s.strip()}
+    lo, hi = (13, 24) if args.quick else (13, 72)
+    if args.seeds:
+        lo, hi = (int(x) for x in args.seeds.split(":"))
+    max_turns = min(args.max_turns, 6) if args.quick else args.max_turns
+    jobs = []
+    if "reference" not in skip:
+        refs = sorted(p for p in os.listdir(REFDIR)
+                      if p.startswith("claude_s") and p.endswith(".json")
+                      and args.ref_filter in p)
+        jobs += [("ref", os.path.join(REFDIR, p)) for p in refs]
+    if "autonomous" not in skip:
+        jobs += [("seed", (s, s - 1)) for s in range(lo, hi + 1)]
+    print("[first-fire] %d games, 2 arms each, %d workers" % (len(jobs), args.workers))
+    t0 = time.time()
+    games, done = [], 0
+    # ONE pooled queue over both populations and (inside ff_game) both arms -- no per-arm wave.
+    with futures.ThreadPoolExecutor(max_workers=args.workers) as ex:
+        futs = {ex.submit(ff_game, k, p, max_turns): (k, p) for k, p in jobs}
+        for fu in futures.as_completed(futs):
+            g = fu.result()
+            games.append(g)
+            done += 1
+            print("  [%3d/%3d] %-30s frames=%3s gapE=%-5s (%.0fs)"
+                  % (done, len(jobs), g["game"][:30], g.get("frames"),
+                     g.get("gap_from_engine"), time.time() - t0), flush=True)
+    out = args.out if args.out != os.path.join(OUTDIR, "results.json") \
+        else os.path.join(OUTDIR, "first_fire.json")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    payload = {
+        "generated": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "commit": subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
+                                 cwd=ROOT).stdout.strip(),
+        "binary": os.path.relpath(MTG, ROOT),
+        "oracle_env": ORACLE_ENV,
+        "seeds": [lo, hi],
+        "wall_s": round(time.time() - t0, 1),
+        "games": games,
+    }
+    with open(out, "w") as f:
+        json.dump(payload, f, indent=1, sort_keys=True)
+    ff_report(games, os.path.relpath(out, ROOT))
+    print("\nwrote %s  (%.0fs)" % (os.path.relpath(out, ROOT), time.time() - t0))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1356,6 +1641,11 @@ def main():
                          "PRECEDING committed line and re-ask whether the button appears")
     ap.add_argument("--float-offer-class", default="c_missed_offer",
                     help="comma list of classes the --float-offer pass selects")
+    ap.add_argument("--first-fire", action="store_true",
+                    help="measure the GAP, in main-phase decisions, between the mana engine "
+                         "landing on the battlefield / the trial apply first winning, and the "
+                         "rule table first firing.  Two arms per game (default, and the trial "
+                         "forced with MTG_COMBO_OFF_RULES=0 MTG_COMBO_OFF_PROJECT=0); no clicks")
     ap.add_argument("--quick", action="store_true",
                     help="gate mode, minutes: 4 references + 12 driven seeds, horizon 6")
     ap.add_argument("--seeds", default=None,
@@ -1384,6 +1674,8 @@ def main():
             only_class=tuple(s for s in args.float_offer_class.split(",") if s),
             workers=args.workers,
             out=os.path.join(os.path.dirname(args.float_offer), "float_offer.json"))
+    if args.first_fire:
+        return first_fire(args)
     if not os.path.exists(MTG):
         print("ERROR: %s not found -- build Release first (./build.sh)." % MTG, file=sys.stderr)
         return 2
