@@ -94,6 +94,58 @@ def builtin_default_play(hdr="src/ai/MulliganProfile.h"):
     return int(d.group(1)), int(b.group(1))
 
 
+def write_mull_gen(vpath, depth, budget):
+    """Set value_play.mull_gen_{depth,budget_ms} with a TEXT edit, preserving the file's bytes.
+
+    A `json.dump(..., indent=1)` re-serialises the WHOLE sidecar, which reformats every file that
+    was not already stored at indent=1 -- these are 50-60 KB models, so writing 9 decks produced a
+    110,991-line diff for 18 keys (2026-09-08), and it also destroys hand formatting a dump cannot
+    reproduce (Fluctuator carries a blank line before its final brace). So edit in place: replace
+    the two values if present, else insert them before the value_play object's closing brace,
+    matching the indentation of the keys already there (or staying on one line if minified).
+    """
+    txt = vpath.read_text()
+    i = txt.find('"value_play"')
+    if i < 0:
+        raise SystemExit("no value_play object in %s" % vpath)
+    open_br = txt.index("{", i)
+    depth_ct, end = 0, None
+    for j in range(open_br, len(txt)):            # brace-match to find this object's end
+        if txt[j] == "{":
+            depth_ct += 1
+        elif txt[j] == "}":
+            depth_ct -= 1
+            if depth_ct == 0:
+                end = j
+                break
+    if end is None:
+        raise SystemExit("unbalanced braces in %s" % vpath)
+    span = txt[open_br:end + 1]
+
+    if '"mull_gen_depth"' in span:                 # update in place
+        new = re.sub(r'("mull_gen_depth"\s*:\s*)\d+', r"\g<1>%d" % depth, span)
+        new = re.sub(r'("mull_gen_budget_ms"\s*:\s*)\d+', r"\g<1>%d" % budget, new)
+    else:                                          # insert before the closing brace
+        body = span[1:-1]
+        if "\n" in body:
+            m = re.search(r'\n([ \t]*)"', body)     # indentation of the first key
+            ind = m.group(1) if m else "  "
+            m2 = re.search(r"\n([ \t]*)$", body)    # indentation of the closing brace
+            close_ind = m2.group(1) if m2 else ""
+            new = ("{" + body.rstrip() +
+                   ',\n%s"mull_gen_depth": %d,\n%s"mull_gen_budget_ms": %d\n%s}'
+                   % (ind, depth, ind, budget, close_ind))
+        else:
+            new = ("{" + body.rstrip() +
+                   ', "mull_gen_depth": %d, "mull_gen_budget_ms": %d}' % (depth, budget))
+
+    out = txt[:open_br] + new + txt[end + 1:]
+    d = json.loads(out)                            # must still parse, and carry what we meant
+    assert d["value_play"]["mull_gen_depth"] == depth
+    assert d["value_play"]["mull_gen_budget_ms"] == budget
+    vpath.write_text(out)
+
+
 def score(binary, deck, cards, depth, budget, hands, R, seed):
     """-> (labels, units_per_rollout). Labels are the play/draw mean per opener."""
     env = dict(os.environ,
@@ -175,8 +227,15 @@ def main():
               % (trust, " <= play depth" if trust <= play_d else " > play depth"))
     cands = [(1, 3), (2, 3), (3, 3), (3, 20)]
     if trust is not None:
-        cands.append((trust, 3))
-        cands.append((trust, play_b))
+        # A BUDGET LADDER at the trust depth, not just b3 and play_b (USER, 2026-09-08: "trust at 5
+        # means we seriously consider d5 b20 or equivalent"). Reaching the leaf TERMINATES the
+        # rollout, but only if the budget COMPLETES the depth -- so a starved budget pays for an
+        # abandoned pass AND plays the game out, and cost is NOT monotonic in budget. The old pair
+        # {b3, play_b} could not express the middle, and on slivers the optimum lives exactly there:
+        # d5 b10 is rho 1.0000 at 0.962x play, while the b3 it used to pick reorders hands (0.9986)
+        # and d5 b40/b80 cost 1.13x/1.36x. Knights shows the same basin (d5 b6 at 0.960x).
+        for b in sorted({3, 6, 10, 20, play_b}):
+            cands.append((trust, b))
     cands.append((play_d, play_b))
     seen, ordered = set(), []
     for c in cands:
@@ -213,17 +272,50 @@ def main():
               "measurably\nreorders hands is not a saving, it is a different policy.")
         return
 
-    pick = min(ok, key=lambda r: r["cost"])
-    print("\nPICK: d%d b%d  (rho %.4f >= floor %.3f, cheapest clearing it; %.2fx the play cost)"
-          % (pick["d"], pick["b"], pick["rho"], args.floor_rho,
-             pick["cost"] / ref_cost if ref_cost else float("nan")))
+    # PREFER AN EXACT ARM THAT IS CHEAPER THAN PLAY. rho 1.0 means the labeller orders hands
+    # IDENTICALLY to the policy the deck ships, i.e. zero policy distortion -- categorically
+    # different from merely clearing the floor, because the floor's whole justification is that a
+    # labeller which reorders hands produces a DIFFERENT policy. When such an arm also costs less
+    # than play there is no trade to arbitrate (the trust-question doc's rule 1, made operational):
+    # take it. Otherwise fall through to the cheapest arm clearing the floor, unchanged.
+    # Measured effect: slivers d5 b3 (0.9986, 0.927x) -> d5 b10 (1.0000, 0.962x); Knights
+    # d5 b3 -> d5 b6 (both already exact, 0.7% cheaper). Auras/burn/hinata UNCHANGED, because
+    # their only exact arm IS play settings, so nothing is cheaper and the cheap arm still wins
+    # (Auras 0.493x at 0.9970, burn 0.221x at 0.9991 -- exactness there would cost 2x and 4.5x).
+    # ...but the preference is BOUNDED, because "exact" is not worth any price. Generation speed is
+    # the binding constraint ("for profile generation speed is actually more important than quality
+    # ... within reason"), so exactness is taken only when its premium over the cheapest ACCEPTABLE
+    # arm is small. Measured premiums, 2026-09-08: Knights +0% and slivers +3.8% (clearly worth it
+    # -- slivers' b3 reorders hands for a 3.5% saving), Goblins +15%, CritterLifegain +39%,
+    # Fluctuator +152% (d1 b3 0.389x rho 0.9963 -> d4 b20 0.982x rho 1.0000 -- 2.5x the cost for
+    # +0.0037 rho, which is exactly the trade this cap exists to refuse). An unbounded version of
+    # this rule was written and reverted the same day for that Fluctuator case.
+    EXACT = 0.99995
+    PREMIUM_CAP = 1.25          # judgement constant; retune with the measured premiums above
+    cheap = min(ok, key=lambda r: r["cost"])
+    exact_cheaper = [r for r in rows if r["rho"] >= EXACT and r["cost"] < ref_cost]
+    best_exact = min(exact_cheaper, key=lambda r: r["cost"]) if exact_cheaper else None
+    if best_exact is not None and best_exact["cost"] <= cheap["cost"] * PREMIUM_CAP:
+        pick = best_exact
+        print("\nPICK: d%d b%d  (rho %.4f EXACT, cheaper than play, and only %+.1f%% over the "
+              "cheapest acceptable arm; %.2fx the play cost)"
+              % (pick["d"], pick["b"], pick["rho"],
+                 100.0 * (pick["cost"] / cheap["cost"] - 1.0),
+                 pick["cost"] / ref_cost if ref_cost else float("nan")))
+    else:
+        pick = cheap
+        if best_exact is not None:
+            print("\n  (exact arm d%d b%d rejected: %+.1f%% over the cheapest acceptable arm, "
+                  "past the %.0f%% cap)"
+                  % (best_exact["d"], best_exact["b"],
+                     100.0 * (best_exact["cost"] / cheap["cost"] - 1.0), 100.0 * (PREMIUM_CAP - 1.0)))
+        print("\nPICK: d%d b%d  (rho %.4f >= floor %.3f, cheapest clearing it; %.2fx the play cost)"
+              % (pick["d"], pick["b"], pick["rho"], args.floor_rho,
+                 pick["cost"] / ref_cost if ref_cost else float("nan")))
     if (pick["d"], pick["b"]) == (play_d, play_b):
         print("  == play settings; emit no override.")
     elif args.write:
-        vp["mull_gen_depth"] = pick["d"]
-        vp["mull_gen_budget_ms"] = pick["b"]
-        vjson["value_play"] = vp
-        json.dump(vjson, open(vpath, "w"), indent=1)
+        write_mull_gen(vpath, pick["d"], pick["b"])
         print("  written to %s" % vpath.name)
     else:
         print("  (re-run with --write to record it)")

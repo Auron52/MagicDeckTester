@@ -147,6 +147,57 @@ roughly uniformly, not weighted by draw frequency. Frequency weighting is arguab
 (the policy matters most on hands you actually see) and wrong for COST. Treat a cost ratio inside
 ~2x as unresolved, and prefer the fidelity ordering, which is stable across both populations.
 
+## USER RULE (2026-09-08): trust at D => seriously consider `dD b20` OR EQUIVALENT
+
+Verbatim: *"I think it is a good rule in general that trust at 5 means we seriously consider d5 b20
+or equivalent."* Raised when the USER challenged a written setting — *"Is d5 b3 actually correct for
+slivers? What happens with a higher budget?"* — and it was not: the deriver had picked `d5 b3`
+(rho 0.9986) over `d3 b3` by **0.4%** of cost while taking WORSE fidelity, a near-tie reported as a
+result.
+
+**The candidate set could not express the answer.** `cands` held only `(trust, 3)` and
+`(trust, play_b)`, so with `play_b` conventionally 20 the whole b6–b10 region was unreachable — and
+that is exactly where the optimum sits, because the leaf terminates the rollout only if the budget
+COMPLETES the depth. slivers, reference d5 b20:
+
+| arm | rho | units/roll | cost_x |
+|---|---:|---:|---:|
+| d5 b3 | 0.9986 | 3412 | 0.927  ← was written |
+| d5 b6 | **1.0000** | 3567 | 0.969 |
+| **d5 b10** | **1.0000** | 3543 | **0.962** |
+| d5 b20 | 1.0000 | 3681 | 1.000 (play) |
+| d5 b40 | 1.0000 | 4165 | 1.132 |
+| d5 b80 | 1.0000 | 4988 | 1.355 |
+
+`d5 b10` is EXACT *and* cheaper than play — it strictly dominates the reference the rule points at.
+Cost is non-monotonic (b6 3567 > b10 3543) and turns up past b20, so the basin is real and bounded.
+
+**Implemented as two changes to `derive_mullgen_setting.py`:** a budget LADDER
+`{3, 6, 10, 20, play_b}` at the trust depth, and a preference for the cheapest arm at
+**rho >= 0.99995** when it costs less than play — rho 1.0 means zero hand reordering, i.e. the
+deck's own policy, which is categorically different from merely clearing the floor.
+
+**The preference is CAPPED at +25% over the cheapest acceptable arm, and the cap is load-bearing.**
+An unbounded version was written and reverted the same day: it moved Fluctuator from `d1 b3`
+(0.389x, rho 0.9963) to `d4 b20` (0.982x, rho 1.0000) — **2.5x the generation cost for +0.0037
+rho**, precisely the trade this doc says to refuse, since for generation "speed is actually more
+important than quality ... within reason". Measured premiums: Knights +0%, slivers +3.8%,
+Goblins +15.2% (taken); CritterLifegain +38.7%, Fluctuator +152.4% (refused). 1.25 is a JUDGEMENT
+constant, not a measured one — retune it against that spread.
+
+**Net effect across the 10 trust-bearing decks** (6 at V5, 2 at V6, 2 at V4 — the fix is not
+depth-5-specific): slivers `d5 b3`→**`d5 b10`**, Knights `d5 b3`→**`d5 b6`**,
+Goblins `d3 b3`→**`d6 b6`** (exact AND 0.716x — its old setting was neither faithful nor cheapest),
+FiveColour `d2 b1`→**`d2 b3`** (b1 could not complete the pass). Auras (0.493x, rho 0.9970),
+burn (0.221x, 0.9991), Minotaur and BreachingDragonstorm unchanged — their only exact arm IS play
+settings, so the cheap arm rightly wins and the rule is *considered and declined*. Decks with no
+`value_trust_depth` are provably unaffected (no new candidates, preference cannot fire).
+
+**Also fixed: `--write` destroyed file formatting.** It re-serialised the whole sidecar at
+`indent=1`, so writing 9 decks produced a **110,991-line diff for 18 keys** and clobbered hand
+formatting a dump cannot reproduce (Fluctuator carries a blank line before its final brace). It now
+edits the two values in place via brace-matching, then parses and asserts. Diffs are +1/-1 per file.
+
 ## Open
 
 * `Goblins` has trust V6, so the `d5 b3` arm is BELOW its trust depth and should behave like an
