@@ -32244,12 +32244,27 @@ static bool OfWaveProbeOn()
     return on;
 }
 // How large a share of the REMAINING budget a node's re-search must be worth before it is allowed to
-// take its twin's answer instead. Smaller = stricter (reuse only the very expensive nodes).
+// take its twin's answer instead: the gate is `twin_units > share * Remaining()`.
+//
+// DIRECTION -- read it off the inequality, because the intuitive reading is BACKWARDS and a comment
+// here once said so ("smaller = stricter"), which is how this constant got sized the wrong way.
+// A SMALLER share is a LOWER bar, so MORE nodes clear it and MORE reuse happens; a LARGER share
+// reuses LESS and searches more. Whatever the value, `Remaining() -> inf` sends the threshold to
+// infinity, so reuse vanishes at unlimited budget and the search converges on the exact answer:
+// share sets how FAST soundness arrives, never WHETHER. Only 0 would break that (threshold pinned
+// at 0 => always reuse), so the flag must stay strictly positive.
+//
+// 0.0005 measured on 80,000 paired games across TWO seed bases (20 decks x 2,000 x 2), the floor of
+// a monotone curve: it is the LARGEST share at which the engine is indistinguishable from the old
+// UNSOUND reuse (11 games better / 8 worse, sign p=0.65) while costing 0.916x its work. The previous
+// 0.005 cost +0.0005 t (24 better / 64 worse, p<0.001) -- it was sized on 200 games of one deck,
+// where every share <= 0.005 read an identical average because that sample cannot resolve an effect
+// that lives at ~1 game in 1,000. See docs/design/order-free-reuse-wave.md.
 static double OfWaveShare()
 {
     static const double v = []() -> double
     { const char* e = std::getenv("MTG_OF_WAVE_SHARE");
-      return (e != nullptr && *e != '\0') ? std::strtod(e, nullptr) : 0.005; }();
+      return (e != nullptr && *e != '\0') ? std::strtod(e, nullptr) : 0.0005; }();
     return v;
 }
 
