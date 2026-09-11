@@ -15177,27 +15177,108 @@ inline int FlickerMaxIterations()
 // `FlickerGoOffCount`'s DRAW-LAND route, which is search-only (`DrawLandGoOffOn` returns false
 // under human play) and keeps the shared ceiling.
 //
-// 400 rather than "as many as it takes": the count is still an EXACT requirement that every route
-// computes and clamps, so on a board that needs 30 this changes nothing at all; it only binds where
-// the requirement genuinely exceeds 60, which is a deep dig plus a 40-50 card deck-out. It is a
-// ceiling on a cost that is already paid lazily -- `ApplyBlinkLoop` re-prices every activation and
-// stops at the first it cannot pay, and a trial that fails is rolled back whole
-// (`MTG_COMBO_OFF_ROLLBACK`), so an over-large ceiling costs time and nothing else.
-inline int FlickerIterationCeiling()
+// ...AND SINCE SESSION 24 IT IS THE BOARD'S OWN NUMBER, NOT 400 (MTG_COMBO_OFF_EXACT_ITER).
+//
+// Session 22 shipped the 400 and said so in its own open item 3: *"The ceiling is a constant (400),
+// not the computed dig+kill need. `FlickerGoOffCount` has the exact number at the clamp site;
+// making the ceiling BE it is two lines and removes a magic number."* Two borrowed budgets hid real
+// wins that same week -- a 20-card library scan and this cap at 60 -- so a constant here is not a
+// tidiness question, it is the same hazard twice removed.
+//
+// THE SHAPE. `FlickerGoOffCount` already computes an EXACT requirement for this board and then
+// clamps it. Run that computation once with the clamp lifted to a sanity bound and you have the
+// number; make it the ceiling and every `std::clamp(want, 1, cap)` below becomes an identity. It is
+// not circular: the exact pass is marked by a thread-local, and inside it every ceiling read
+// returns the sanity bound, so the recursion is exactly one level deep.
+//
+// THE CONSTANT SURVIVES AS A FLOOR, AND THAT IS MEASURED RATHER THAN CAUTIOUS
+// (`MTG_COMBO_OFF_ITER_FLOOR`). The exact number is what the SIZER's chosen branch needs -- the
+// cheapest recognised sink -- while the display prices EVERY reachable finisher through
+// `FinishNeedMana`, so it is not an upper bound on what the path the human clicks may want. Using
+// it as the display's bank therefore WITHDRAWS offers, which is the one direction that costs real
+// kills. `=0` gives the pure exact form and is the arm this was A/B'd in.
+//
+// WHAT CHANGES AND WHAT DOES NOT. `MTG_COMBO_OFF_MAX_ITER` is now a HARD CAP rather than the
+// operating ceiling, and it is unset by default -- `=60` still reproduces the pre-Session-22 shared
+// cap exactly (fixtures 10 and 26 use it as their control) and `=400` still reproduces Session 22.
+// `MTG_COMBO_OFF_EXACT_ITER=0` restores the flat 400. The sanity bound is `MTG_COMBO_OFF_ITER_HARD`
+// (default 2000), which exists only so a corrupt loop record cannot hang a trial apply: every term
+// the sizer adds is bounded by a library size or a life total, and the worst board that can be
+// constructed out of this deck's cards -- a 45-card dig at 6 mana a card on a net-1 loop, plus a
+// 50-card deck-out at one {C} pip each -- computes under a thousand.
+inline thread_local int g_flicker_ceiling_exact = 0;
+
+struct FlickerExactCeilingScope
 {
-    static const int co = []() {
-        const char* v = std::getenv("MTG_COMBO_OFF_MAX_ITER");
+    int prev;
+    explicit FlickerExactCeilingScope(int v)
+        : prev(g_flicker_ceiling_exact) { g_flicker_ceiling_exact = v; }
+    ~FlickerExactCeilingScope() { g_flicker_ceiling_exact = prev; }
+};
+
+inline bool FlickerExactIterOn()
+{
+    static const bool on = EnvOn("MTG_COMBO_OFF_EXACT_ITER", true);
+    return on;
+}
+
+inline int FlickerCeilingHardBound()
+{
+    static const int n = []() {
+        const char* v = std::getenv("MTG_COMBO_OFF_ITER_HARD");
+        return (v && *v) ? std::atoi(v) : 2000;
+    }();
+    return std::max(1, n);
+}
+
+inline int FlickerCeilingFloor()
+{
+    static const int n = []() {
+        const char* v = std::getenv("MTG_COMBO_OFF_ITER_FLOOR");
         return (v && *v) ? std::atoi(v) : 400;
     }();
-    if (co > 0 && HumanPlayActive()) { return std::max(co, FlickerMaxIterations()); }
-    return FlickerMaxIterations();
+    return std::max(0, n);
+}
+
+// The CONSTANT form: the hard cap under the button, the shared 60 everywhere else. Every consumer
+// that has a loop in hand calls the two-argument overload below instead.
+inline int FlickerIterationCeiling()
+{
+    if (g_flicker_ceiling_exact > 0) { return g_flicker_ceiling_exact; }
+    static const int co = []() {
+        const char* v = std::getenv("MTG_COMBO_OFF_MAX_ITER");
+        return (v && *v) ? std::atoi(v) : 0;        // 0 / unset = no constant cap
+    }();
+    if (!HumanPlayActive()) { return FlickerMaxIterations(); }
+    const int base = (co > 0) ? co
+                              : (FlickerExactIterOn() ? FlickerCeilingHardBound() : 400);
+    return std::max(base, FlickerMaxIterations());
+}
+
+int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop);
+
+// THE EXACT form. `FlickerGoOffCount` run once with the clamp lifted, floored and hard-capped.
+inline int FlickerIterationCeiling(const GameState& s, const FlickerLoop& loop)
+{
+    if (g_flicker_ceiling_exact > 0) { return g_flicker_ceiling_exact; }   // already in the pass
+    const int cap = FlickerIterationCeiling();
+    if (!FlickerExactIterOn() || !HumanPlayActive() || !loop.ok) { return cap; }
+    int exact = 0;
+    {
+        FlickerExactCeilingScope _s(std::max(cap, FlickerMaxIterations()));
+        exact = FlickerGoOffCount(s, loop);
+    }
+    return std::clamp(std::max(exact, FlickerCeilingFloor()), FlickerMaxIterations(),
+                      std::max(cap, FlickerMaxIterations()));
 }
 
 // Iterations needed to bank `want_mana` of surplus, given the loop's per-iteration net.
-static int FlickerIterationsForMana(int want_mana, int net)
+// `cap` is the caller's already-computed ceiling -- passed rather than re-read, so one
+// FlickerGoOffCount costs exactly ONE exact pass rather than one per clamp site.
+static int FlickerIterationsForMana(int want_mana, int net, int cap)
 {
     if (net <= 0 || want_mana <= 0) { return 0; }
-    return std::clamp((want_mana + net - 1) / net, 1, FlickerIterationCeiling());
+    return std::clamp((want_mana + net - 1) / net, 1, cap);
 }
 
 // MTG_EDF_DRAWLAND_GOFF -- see the draw-land branch below. DEFAULT ON: it more than DOUBLES the
@@ -15404,6 +15485,11 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
 {
     if (!loop.ok) { return 0; }
     const int life = std::max(1, s.Opponent().life);
+    // ONE ceiling read for the whole function (Session 24). Outside the EXACT pass this triggers
+    // that pass exactly once and then every clamp below is an identity; inside it, it is the
+    // sanity bound, so the requirement is computed unclamped. The DRAW-LAND route at the bottom
+    // deliberately keeps `FlickerMaxIterations()` -- it is search-only.
+    const int cap = FlickerIterationCeiling(s, loop);
 
     if (loop.gorge_dmg > 0)
     {
@@ -15451,7 +15537,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
             refund = FlickerTopLandYields(s, me, loop.untaps - 1) + sink_yield;
         }
         if (refund > loop.cost_mv + loop.gorge_cost_mv)
-        { return std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, FlickerIterationCeiling()); }
+        { return std::clamp((life + loop.gorge_dmg - 1) / loop.gorge_dmg, 1, cap); }
     }
 
     // THE TWO {T}-LESS SINKS. Sized by MANA rather than by iterations, which is the structural
@@ -15501,7 +15587,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         // is settled out of the colourless bank.
         pips_needed += loop.hand_setup_mv + swap_setup;
         const long long it = (pips_needed + eff_net_c - 1) / eff_net_c;
-        return static_cast<int>(std::min<long long>(it, FlickerIterationCeiling()));
+        return static_cast<int>(std::min<long long>(it, cap));
     };
     // THE DIG AND THE KILL ARE SEQUENTIAL PHASES, SO THEIR COUNTS ADD (human play only;
     // MTG_EDF_GOFF_PHASES=0 restores the flat max).
@@ -15539,20 +15625,20 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
     // every board measured before this session is unchanged.
     const int  dig_iters = phases_on
         ? std::max({ loop.dig_draws, swap_dig,
-                     FlickerIterationsForMana(loop.hand_setup_mv + swap_setup, loop.net) })
+                     FlickerIterationsForMana(loop.hand_setup_mv + swap_setup, loop.net, cap) })
         : loop.dig_draws;
     const auto size_for = [&](int mana_iters, int pip_iters) {
         const int want = phases_on
             ? std::max({ mana_iters, dig_iters, dig_iters + pip_iters })
             : std::max({ mana_iters, loop.dig_draws, pip_iters });
-        return std::clamp(want, 1, FlickerIterationCeiling());
+        return std::clamp(want, 1, cap);
     };
     if (loop.drain_amount > 0 && loop.drain_cost_mv >= 0)
     {
         const int activations = (life + loop.drain_amount - 1) / loop.drain_amount;
         const int iters = FlickerIterationsForMana(loop.hand_setup_mv
                                                        + activations * std::max(1, loop.drain_cost_mv),
-                                                   loop.net);
+                                                   loop.net, cap);
         // A library-dug sink needs its DRAWS as well as its mana: one draw-land untap per
         // iteration, so at least dig_draws iterations -- the draw-land route's max(cards, by_mana),
         // applied to a bounded dig. Without it a high-net loop affords the mana before the dig
@@ -15569,7 +15655,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         // the game goes on (they draw one at the end of each of our turns) and as we exile.
         const int cards = static_cast<int>(s.players[1 - s.active_player_index].library.size());
         const int iters = FlickerIterationsForMana(loop.hand_setup_mv + cards * loop.exile_cost_mv,
-                                                   loop.net);
+                                                   loop.net, cap);
         if (iters > 0)
         {
             return size_for(iters, c_iterations(static_cast<long long>(cards) * loop.exile_c_pips));
@@ -15646,7 +15732,8 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
             else { continue; }
             const int cards = static_cast<int>(s.players[s.active_player_index].library.size()) - 1;
             if (cards <= 0) { continue; }
-            const int by_mana = FlickerIterationsForMana(cards * std::max(1, cost), loop.net);
+            const int by_mana = FlickerIterationsForMana(cards * std::max(1, cost), loop.net,
+                                                        FlickerMaxIterations());
             if (by_mana <= 0) { continue; }
             return std::clamp(std::max(cards, by_mana), 1, FlickerMaxIterations());
         }
@@ -15668,7 +15755,7 @@ int FlickerGoOffCount(const GameState& s, const FlickerLoop& loop)
         const int want_mana = static_cast<int>(s.players[s.active_player_index].library.size())
                             + d->card.m_mana_cost.ManaValue();
         const int iters = (want_mana + loop.net - 1) / loop.net;
-        return std::clamp(iters, 1, FlickerIterationCeiling());
+        return std::clamp(iters, 1, cap);
     }
     return 0;   // no way to cash the mana -> no go-off candidate
 }
@@ -17279,7 +17366,8 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
         if (loop.refund > loop.cost_mv + loop.gorge_cost_mv
             && startable(loop.cost_mv + loop.gorge_cost_mv))
         {
-            const long long dmg = static_cast<long long>(FlickerIterationCeiling()) * loop.gorge_dmg;
+            const long long dmg = static_cast<long long>(FlickerIterationCeiling(s, loop))
+                                * loop.gorge_dmg;
             return dmg > 1000000 ? 1000000 : static_cast<int>(dmg);
         }
     }
@@ -17297,7 +17385,8 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
         // projection never claims a kill the deploy would have eaten.
         if (loop.net > 0 && startable(loop.cost_mv + per + loop.hand_setup_mv))
         {
-            const long long bank = static_cast<long long>(FlickerIterationCeiling()) * loop.net
+            const long long bank = static_cast<long long>(FlickerIterationCeiling(s, loop))
+                                     * loop.net
                                  - loop.hand_setup_mv;
             long long acts = bank > 0 ? bank / per : 0;
             // ...AND THE DRAIN'S {C} PIP HAS ITS OWN BUDGET. Total mana is not the binding
@@ -17314,7 +17403,7 @@ int EldraziFlickerProvider::ExtraLethalDamage(const GameState& s,
             if (s_c_budget && loop.drain_c_pips > 0)
             {
                 const long long c_bank =
-                    static_cast<long long>(FlickerIterationCeiling()) * loop.net_c;
+                    static_cast<long long>(FlickerIterationCeiling(s, loop)) * loop.net_c;
                 const long long c_acts = c_bank > 0 ? c_bank / loop.drain_c_pips : 0;
                 acts = std::min(acts, c_acts);
             }
@@ -17372,7 +17461,8 @@ bool EldraziFlickerProvider::ProjectsAlternateWin(
     // the zone. Below that it is a clock, not a kill, and the ordinary search can price it.
     const long long cards = static_cast<long long>(s.players[1 - s.active_player_index].library.size());
     const long long need  = cards * loop.exile_cost_mv + loop.hand_setup_mv;
-    if (need > static_cast<long long>(FlickerIterationCeiling()) * loop.net) { return false; }
+    if (need > static_cast<long long>(FlickerIterationCeiling(s, loop)) * loop.net)
+    { return false; }
     // The exile's {C} pip has its own budget, exactly as the drain's does above: emptying the zone
     // needs `cards` colourless pips, and only `net_c` of one is bankable per iteration.
     static const bool s_c_budget_env = EnvOn("MTG_EDF_C_BUDGET", true);
@@ -17380,7 +17470,8 @@ bool EldraziFlickerProvider::ProjectsAlternateWin(
     if (s_c_budget && loop.exile_c_pips > 0)
     {
         const long long c_need = cards * loop.exile_c_pips;
-        if (c_need > static_cast<long long>(FlickerIterationCeiling()) * loop.net_c) { return false; }
+        if (c_need > static_cast<long long>(FlickerIterationCeiling(s, loop)) * loop.net_c)
+        { return false; }
     }
     return true;
 }
@@ -17755,10 +17846,10 @@ inline bool GorgeKillLive(const GameState& s, int c, const FlickerLoop& loop)
 // CHEAPEST possible reading of each path (activations x cost, plus casts that have not happened
 // yet, and no dig term at all), because under-counting keeps the display gate permissive -- which
 // is the user's stated preference -- and the seed-9 board is refuted by a factor of two even so.
-inline long long BankableMana(const FlickerLoop& loop)
+inline long long BankableMana(const GameState& s, const FlickerLoop& loop)
 {
     return static_cast<long long>(std::max(0, loop.net))
-         * static_cast<long long>(FlickerIterationCeiling());
+         * static_cast<long long>(FlickerIterationCeiling(s, loop));
 }
 
 // --- THE BANK IS TWO NUMBERS, NOT ONE (MTG_COMBO_OFF_EXACT, default on) ------------------------
@@ -17893,7 +17984,7 @@ struct LoopSupply
 inline LoopSupply SupplyFor(const GameState& s, int c, const FlickerLoop& loop, int pin_id = 0)
 {
     LoopSupply o;
-    o.k = FlickerIterationCeiling();
+    o.k = FlickerIterationCeiling(s, loop);
     // THE OUTLET THE LOOP WILL ACTUALLY RUN WITH -- lockstep with FlickerGoOffCount's `eff_net_c`.
     // When ApplyBlinkLoop is going to swap in a pip-free outlet out of hand, this loop's own {C} pip
     // stops being spent and the per-iteration colourless net becomes the refund outright.
@@ -18177,7 +18268,7 @@ bool EldraziFlickerProvider::ComboOffPossible(const GameState& s, int controller
     // scalar cannot say that a schedule with the mana has no pips and the schedule with the pips
     // has no mana, which is precisely the shape of the user's seed-9 board.
     static const bool s_exact = EnvOn("MTG_COMBO_OFF_EXACT", true);
-    const long long bank = BankableMana(loop)
+    const long long bank = BankableMana(s, loop)
                          + static_cast<long long>(s.floating_mana.Total());
     const LoopSupply sup = s_exact ? SupplyFor(s, controller, loop) : LoopSupply{};
     const auto affords = [&](long long need, long long pips)
