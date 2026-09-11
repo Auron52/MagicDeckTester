@@ -182,9 +182,36 @@ held out, fivecolour goes 2/6 the other way and cancels it. Treat any single-bas
 effect size as provisional.
 
 `0.001` holds direction on both bases independently (train -0.0007, 32/5; held out -0.0002, 22/14) and
-is decisive pooled. **The pick is therefore `0.001`: the LARGEST share still indistinguishable from the
-unsound engine** (p=0.44 vs 0.049 at 0.002), which is the original convergence tie-break applied to a
-curve that now has enough data to have a shape.
+is decisive pooled.
+
+### ADOPTED: `share = 0.0005`, where the soundness cost reaches ZERO
+
+USER: *"even with budget churn it is important that we minimize it. That's the purpose of effective
+use of our budget."* — and that is the right standard: *"it recovers at 4x the budget"* is no defence
+when the budget IS the thing being optimised. So the curve was extended down until it stopped moving:
+
+| share | delta vs unsound (80k paired) | better / worse | sign p | units | vs 0.005 head-to-head |
+|---|---|---|---|---|---|
+| 1e-5 | -0.0000 | 10 / 8 | 0.82 | 0.912x | — |
+| 2e-4 | -0.0000 | 10 / 8 | 0.82 | 0.912x | -0.0006, 63 / 21 |
+| **5e-4 (ADOPTED)** | **-0.0000** | **11 / 8** | **0.65** | **0.916x** | **-0.0006, 63 / 20, p<0.001** |
+| 1e-3 | +0.0001 | 11 / 16 | 0.44 | 0.923x | -0.0005, 54 / 19 |
+| 5e-3 (was shipped) | +0.0005 | 24 / 64 | 0.000 | 0.940x | — |
+
+**The curve is FLAT below 2e-4 on both bases** (1e-5, 1e-4 and 2e-4 give identical results), so this is
+a floor, not a point on a slope — and the floor says something the arc had not established:
+**parity with the unsound engine is this mechanism's CEILING, not a waypoint.** No share beats it. The
+wave can return 100% of what soundness cost and no more, at 0.916x the unsound engine's own work.
+
+`0.0005` is the LARGEST share that reaches the floor, so the convergence tie-break picks it: the gate
+closes soonest as budget grows, and soundness therefore arrives at the lowest budget.
+
+**Per-deck shares were tested and REJECTED.** Picked per deck on the training base and scored on the
+held-out one, they are worth **0.000025 t** — a hundredth of what this global move buys. And the case
+that looked most compelling, `mirrorwing` at **+2.0** on train (the one deck that appeared to want the
+opposite setting), **does not replicate at all**: 0.0 at every low share on the second base. Only
+hinata (wants low) and fivecolour (wants high) reproduce in direction, at ~1-2 thousandths of a turn.
+Not worth a sidecar field, a calibration pass and freeze semantics.
 
 ### Every residual loss is CHURN — 36 of 36 recover with budget
 
