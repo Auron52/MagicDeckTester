@@ -465,6 +465,18 @@ deterministic):
 `python3 test/combo_off_replay_hunt.py --skip reference --seeds 51:51 --workers 1`.
 This is also why `--quick` pins the horizon at 6.
 
+> **ROOT-CAUSED AND FIXED 2026-09-11** — `analysis-EldraziDisplacerFlicker.md` §Session 18. The
+> hunch above is right in class and wrong in one detail worth recording: the frames are **turn 6**
+> (`main_ordinal` 196–260), the odometer carries **one digit per Clue token** on top of four
+> Eldrazi Displacer digits so the product *doubles every few clicks* (1.15e5 → 4.61e5 within one
+> turn, 448,195 plans and 15.75 s CPU on the worst frame), and the guard that should have stopped it
+> — `CapGroupsBySituationalRank`'s `MTG_PLAN_SPACE_CAP` — is returned out of by
+> `DecisionUnpruned(UnprunedGate::GroupCap)`, which `--claude-play`'s blanket `MTG_UNPRUNED` opens.
+> `MTG_PLAY_STEP_TIMING` also clears the Combo Off trial apply completely: 47 ms of trials against
+> 548.9 s of base enumeration. Fix: `MTG_VIEWER_PLAN_CAP` (human play only, default on), which
+> bounds the product and *reports* the truncation (`plans_truncated`) instead of hanging. Worst
+> click on this exact line 15.75 s → 1.76 s. Gate: `test/viewer_plan_space_check.py`.
+
 **ANOM-1 — 45 offered plans carry an EMPTY `combo_off_rule`.** All 45 are reference frames, all are
 `combo_off_verified`, all win — so it is a provenance/display defect, not a correctness one, but the
 viewer's rule badge renders blank and a saved decision JSON cannot say which rule fired. Phase 1 saw

@@ -5352,3 +5352,173 @@ not mana). 173 of the 295 "failures" still win within a median +2 turns (the but
 Three `--interactive` replays that never terminated (seeds 39/51/71) are recorded as HANG repros.
 On this tip its `--quick` mode (939 states, 13 s) reads a=60 b=23 (C1b 18, C2 3, loop-zero 2),
 c=7 -- the baseline for the next executor pass; re-run diffs on stable state ids.
+
+---
+
+## Session 18 (2026-09-11): the click that never came back -- the VIEWER had no plan-space bound
+
+Root-causes Session 17's open item 4 (HANG-1/2/3 in `docs/design/combo-off-replay-hunt.md` §7):
+three `--claude-play --interactive` children that burned 80-100 minutes at ~95% CPU inside a single
+decision. Measured on `9ac47499`. Autonomous play, rollouts and GT are untouched.
+
+### 1. The frame, and the function
+
+**Frame.** Seed 51 / game-index 50, **turn 6, post-combat main, `main_ordinal` 231** -- 246 decisions
+into the Displacer/Emiel blink loop. Board: **43 permanents**, 23 cards in hand, floating
+`{W:334 U:52 R:1 G:1202 C:107}` (1,801 mana). That one frame enumerated **448,195 plans** and cost
+**15.75 s of CPU** (38.61 s wall). It is not a distinguished frame -- it is simply the last one before
+the driven line left the loop.
+
+**Function.** `EnumeratePlans(GameState const&, bool)` -- its per-position `consider` lambda, and the
+`std::sort` of the `std::vector<TurnSolver::Plan>` it builds. Four `gdb` samples of the live child
+(launched *under* gdb; `ptrace_scope=1` forbids attaching), three of them here:
+
+```
+#0 EnumeratePlans(...)::{lambda(vector<int> const&)}::operator()     <- plan.actions push_back
+#1 EnumeratePlans(GameState const&, bool)
+#2 EnumeratePlansWithLandUncached  #3 EnumeratePlansWithLand
+#4 TurnSolver::EnumerateMainPlans  #5 AIEngine::TakeTurn  #6 GameEngine::MainPhase
+```
+
+(the other two of those three: `jemalloc free` under the same lambda, and `Plan::~Plan` inside
+`__merge_sort_with_buffer` over the plan vector. The fourth sample was in `WriteDecisionJson`.)
+
+**Not an infinite loop, and not the Combo Off executor.** `MTG_PLAY_STEP_TIMING=1` over the whole
+walk settles the attribution outright:
+
+```
+[play-timing] frames=268 trials=54 | enum=552228.3ms
+              (base=548877.2  rules=0.6  project=8.5  trial=47.3  other=3294.7)  apply=33.2ms
+```
+
+**99.4% of the walk is the BASE plan enumeration.** The Combo Off rule table (0.6 ms), its lethal
+projection (8.5 ms) and its 54 trial applies (47.3 ms) together cost **56 ms**; `ApplyPlan` -- every
+`ApplyBlinkLoop` / `ComboFinishFromHand` the committed line ran -- cost **33 ms**. Nothing in either
+live agent's area is implicated, so nothing there was touched.
+
+### 2. The growth law
+
+`MTG_ENUM_STATS` gives the odometer shape, and it is the deck's own combo:
+
+```
+bound=1.15e+05 groups=8   [g1 Peregrine Drake][g1 Conservatory][g6 Eldrazi Displacer]
+                          [g5 Emiel][g6 Eldrazi Displacer][g6 Eldrazi Displacer]
+                          [g6 Eldrazi Displacer][g1 Clue Token]
+bound=4.61e+05 groups=10  ... the same, plus THREE more Clue Token digits
+```
+
+Four Eldrazi Displacers, each a digit of 6-7 blink targets, times Emiel's 5-6 -- and **one further
+digit per Clue token**, which the loop mints one per committed segment. So the position product
+**doubles every few clicks**, without limit. Two things remove every other brake at the same time:
+the floating pool grows past every cost, so the odometer's affordability gate (`payable`) rejects
+nothing and every position becomes a materialised `Plan`; and the turn never ends, because the
+commit-the-line rule re-prompts after each segment. Within one turn:
+
+| `main_ordinal` | permanents | float | plans enumerated | CPU for that one click |
+|---|---|---|---|---|
+| 214 | 36 |   830 |   4,999 | 0.14 s |
+| 219 | 41 | 1,190 |  60,220 | 1.88 s |
+| 229 | 41 | 1,646 | 237,720 | 9.04 s |
+| 230 | 42 | 1,696 | 330,357 | 11.30 s |
+| 231 | 43 | 1,801 | **448,195** | **15.75 s** |
+
+**Honest statement of what was and was not observed.** No single frame was seen to run forever; what
+was measured is an *unbounded exponential growth law* with no guard anywhere on the path. This exact
+line terminates (291 picks, 659 s wall / 248 s CPU) because the driver leaves the loop around ordinal
+260; a line a handful of clicks longer does not, and the user's own saved games run 45+ segments in
+one go-off turn. The three HANG children were killed, so nobody ever observed their termination
+either. Seed 71's driven line replays in 0.8 s at this tip and seed 39's peaked at one 3.5 s frame,
+so the hunt's 80-100 minutes was the same growth reached through its *probe* pass (a `click()`
+Session per recorded frame, each re-walking the prefix), not a different defect.
+
+### 3. Why nothing stopped it -- the viewer was the one unbounded mode
+
+The engine already owns the right guard. `CapGroupsBySituationalRank` carries **`MTG_PLAN_SPACE_CAP`**
+(262,144 positions), added 2026-09-06 for precisely this class on Melira. But its first line is
+
+```cpp
+if (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap)) { return; }
+```
+
+and `--claude-play` does `EnvPut("MTG_UNPRUNED", "1")` for the whole session (`src/main.cpp:6431`),
+which makes `DecisionUnpruned(g)` true for **every** gate. So the play viewer -- the one mode a human
+is sitting in front of -- ran with **no plan-space bound at all**. Un-pruning the viewer is right (the
+human, not a heuristic, owns the decision); un-*bounding* it never was. This is the third time the
+blanket unprune has produced a viewer pathology: `claude-play-unprune-blowup.md` (SacColor, 10 M
+plans) and the `TrickTarget` human exemption (Mirrorwing, 30 ms -> past the 120 s step timeout).
+
+### 4. The fix -- `MTG_VIEWER_PLAN_CAP` (human play only, default ON, `=0` to lift)
+
+`viewerplancap` in `src/ai/EngineFlags.h`; the valve itself is a few lines in
+`CapGroupsBySituationalRank` (`src/ai/TurnSolver.cpp`).
+
+* **Exact where it can be.** Human play only, and only when the odometer product exceeds
+  `MTG_VIEWER_PLAN_CAP_POSITIONS` (default **65,536** -- the same order as the engine's own profiled
+  ceiling for legitimate rich combo states, 28K-65K). Below it the valve returns before touching
+  anything, so every ordinary frame and every saved reference enumerates exactly what it did before.
+* **Where it must cut, it cuts the way the autonomous cap does** -- drop the lowest
+  `SituationalCardRank` groups until the product fits, always keeping at least one. The group COUNT
+  cap stays lifted: only the product is bounded.
+* **And it says so.** The decision JSON gains `plans_truncated { dropped_groups, positions,
+  positions_full, why }` on exactly the frames where it fired, and `AIEngine` emits a
+  `plans_truncated` play event so the history panel tells the player the menu is a top-ranked slice
+  and that every action is still reachable one click at a time (`tools/play/index.html` colours it
+  as a warning). A viewer that quietly hands you a short menu is the thing this deck's viewer work
+  exists to prevent; a viewer that hangs is worse.
+* **GT-neutral by construction.** `HumanPlayActive()` is false with `MTG_HUMAN_PLAY` unset and inside
+  every `HumanPlaySuppress` scope, and the valve only ever runs on the branch the unprune gate had
+  already turned off.
+
+### 5. Before / after on the offending replay (seed 51 / gi 50, identical driven line)
+
+| | before | after |
+|---|---|---|
+| worst single click | **15.75 s CPU** (ordinal 231) | **1.67 s CPU** (ordinal 193) |
+| biggest plan list | 448,195 | 57,343 |
+| whole walk (same 268 main frames) | 248.1 s CPU | **67.3 s CPU** |
+| picks / terminal | 291 / reached | 291 / reached |
+| frames reporting truncation | -- | 17 of 268 |
+
+(CPU, not wall: the box was shared. The driven line is *identical* either way -- same 291 picks, same
+terminal -- because the plan the driver commits is top-ranked and so survives the shrink.)
+
+**The lever is an EXACT restore, not an approximation of one.** The fixed binary run with
+`MTG_VIEWER_PLAN_CAP=0` reproduces the pre-fix numbers digit for digit on the same line -- 51,143 at
+ordinal 197, 83,711 at 198, 237,720 at 210, and the same 448,195 peak. So the valve is provably
+inert when off, and the entire behavioural delta is the bound itself.
+
+Seed 39 / gi 38 with its recorded `--cast-order` float staging: 300 decisions in 17.9 s wall / 5.3 s
+CPU, worst frame 3.49 s (114,705 plans = 55,296 positions x 2 land options -- the valve bounds each
+odometer walk, and `EnumeratePlansWithLand` runs one per land option, which is the multiplier the
+regression check's `--max-plans` default allows for).
+
+### 6. Regression check
+
+`test/viewer_plan_space_check.py` (standalone, **not** wired into `viewer_checks.sh` -- it costs 2-4
+minutes, and the board that explodes is ~210 committed segments into a go-off turn with a real
+floating pool, which no `--scenario` fixture can stage). It replays the HANG-1 line with
+`combo_off_replay_hunt.drive_pick` verbatim and asserts: every frame returns and the line reaches a
+terminal; no frame exceeds `--max-plans`; no frame exceeds `--max-frame-cpu` (8 s); and every
+truncation is reported with self-consistent numbers. `--control` re-runs the same line with
+`MTG_VIEWER_PLAN_CAP=0` to show the lever is live. Run it after touching plan enumeration, the
+group/plan-space caps, the unprune gates, or the blink-activation fan-out.
+
+### 7. Open, carried forward (nothing blocked on)
+
+1. **A worst-case click is still ~2-4 s** (65,536 positions x up to a few land options x ~30 us per
+   plan). Bounded, reported, and tunable via `MTG_VIEWER_PLAN_CAP_POSITIONS`; 32,768 would halve it
+   at the cost of truncating some genuinely rich states. Left at the value that keeps every profiled
+   legitimate state exact -- say the word and it tightens.
+2. **The per-land-option multiplier is outside the bound.** `EnumeratePlansWithLand` runs the
+   odometer once per land choice, so a frame's plan count is `positions x land_options`. Bounded in
+   practice (a handful of options) but not by this valve.
+3. **`2^num_independent` is outside the bound too** -- the shrink can only drop *groups*. Every EDF
+   shape measured here had `ind=0`, so it is not the live mechanism; the reported `positions` stays
+   honest if it ever is.
+4. **The lossless fix was not taken, deliberately.** Four Eldrazi Displacers are interchangeable
+   *outlets*: "blink X with copy #1" and "with copy #2" are the same outcome, and a multi-outlet
+   segment is reachable by clicking twice -- the identical argument the human-play fan-out control
+   already uses to fold blink COUNTS and duplicate TARGETS. Folding interchangeable outlets would
+   cut 7^4 to 7 losslessly. It is not in this commit because it would reorder the menu on *every* EDF
+   frame with two or more Displacers, which moves recorded reference indices; it belongs with a
+   reference re-verification pass, not with a hang fix.

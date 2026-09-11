@@ -2242,6 +2242,22 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             std::vector<TurnSolver::Plan> plans =
                 TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
+            // VIEWER PLAN-SPACE VALVE: if the bound had to trim this board's plan space, SAY SO in
+            // the history. The decision JSON carries the numbers (`plans_truncated`), but the
+            // player is looking at the board, and a menu that is quietly missing lines is exactly
+            // the kind of silent narrowing this viewer exists to avoid. One line per frame that
+            // fired, and only ever on a board so wide the alternative was a frozen click.
+            // See EngineFlags.h viewerplancap for the measurement that set the bound.
+            if (viewerplancap::Last().Fired())
+            {
+                EmitPlayEvent(state.turn_number, "plans_truncated",
+                    "⚠ This board's plan space is too large to enumerate in full ("
+                    + std::to_string(static_cast<long long>(viewerplancap::Last().full_positions))
+                    + " combinations); the menu shows the top-ranked "
+                    + std::to_string(static_cast<long long>(viewerplancap::Last().kept_positions))
+                    + ". Every action is still reachable one click at a time. "
+                      "(MTG_VIEWER_PLAN_CAP=0 enumerates in full.)");
+            }
             // AN EMPTY MENU IS STILL A FRAME. "cast nothing is always enumerated" was not true:
             // EnumerateMainPlans returns an EMPTY vector when it believes there is nothing to do,
             // and breaking on that skipped the phase before the always-prompt rule below could see

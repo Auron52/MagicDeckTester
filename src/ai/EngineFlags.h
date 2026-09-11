@@ -864,3 +864,85 @@ struct Dumper
 };
 inline Dumper g_dumper;
 }   // namespace playtiming
+
+// ---- VIEWER PLAN-SPACE VALVE (MTG_VIEWER_PLAN_CAP; HUMAN PLAY ONLY, DEFAULT ON) ---------------
+//
+// THE BUG IT FIXES: a play-viewer click that never comes back. EDF seed 51 / gi 50, turn 6, in the
+// Displacer/Emiel blink loop -- every committed segment mints another Clue token and leaves more
+// mana floating, and the main-phase plan odometer multiplies one digit per Clue on top of four
+// Eldrazi Displacer digits of 6-7 blink targets each. Measured over ten consecutive clicks of that
+// one turn: odometer bound 1.15e5 -> 4.61e5, plans materialised 24,695 -> 330,357, one click
+// 0.6 s -> 11.3 s of CPU and still doubling when it was killed. Three such replays burned 80-100
+// minutes at ~95% CPU inside ONE decision (docs/design/combo-off-replay-hunt.md §7 HANG-1..3).
+// A human on that board does not get a slow viewer, they get a frozen one.
+//
+// WHY NOTHING STOPPED IT. The engine already owns the right guard: CapGroupsBySituationalRank's
+// MTG_PLAN_SPACE_CAP (262,144 positions), added 2026-09-06 for exactly this class on Melira. But
+// `--claude-play` does `EnvPut("MTG_UNPRUNED", "1")` for the whole session (src/main.cpp), and that
+// makes DecisionUnpruned(UnprunedGate::GroupCap) true -- so the cap returns immediately and the
+// VIEWER is the one mode in the engine running with no plan-space bound at all. Un-pruning the
+// viewer is right (the human, not a heuristic, owns the decision); un-bounding it is not.
+//
+// WHAT THIS DOES. Human play only, and only when the odometer product exceeds `Positions()`:
+// below the bound the valve returns before touching anything, so every ordinary frame -- and every
+// saved reference replay -- enumerates exactly what it does today. Above it, the SAME ranked shrink
+// the autonomous cap uses drops the lowest SituationalCardRank groups until the product fits, and
+// the drop is RECORDED (Last()) so the decision JSON can say the menu is truncated and the viewer's
+// history can tell the player. A cut the player is told about is a usable viewer; a hang is not.
+//
+// Autonomous play, rollouts and GT are untouched by construction: HumanPlayActive() is false with
+// MTG_HUMAN_PLAY unset and inside every HumanPlaySuppress scope, and the valve only ever runs on
+// the branch the unprune gate had already turned OFF.
+//
+// MTG_VIEWER_PLAN_CAP=0 restores the unbounded viewer (the one-binary A/B and the escape hatch);
+// MTG_VIEWER_PLAN_CAP_POSITIONS=<n> retunes the bound. Default 65536 positions, chosen from the
+// measurement above: the frames at ~25k plans cost ~0.6 s per click, the ones past 100k cost 3-11 s.
+namespace viewerplancap
+{
+inline bool On()
+{
+    static const bool v = EnvOn("MTG_VIEWER_PLAN_CAP", true);
+    return v;
+}
+
+// Positions the odometer may walk per enumeration. <= 0 means UNBOUNDED, the same convention
+// MTG_PLAN_SPACE_CAP uses -- so either flag alone turns the valve off and neither can surprise
+// someone who reached for the one they remembered.
+inline double Positions()
+{
+    static const double v = []() -> double {
+        const char* e = std::getenv("MTG_VIEWER_PLAN_CAP_POSITIONS");
+        if (e == nullptr || *e == '\0') { return 65536.0; }
+        const double d = std::strtod(e, nullptr);
+        return d > 0.0 ? d : 0.0;
+    }();
+    return v;
+}
+
+// One frame's truncation record. SINGLE-THREADED BY ASSUMPTION, stated rather than enforced, and
+// the assumption is the same one playtiming above makes: this is only ever written under
+// HumanPlayActive(), which is one viewer game on one thread.
+struct Trunc
+{
+    int    dropped_groups = 0;   // groups the valve removed (max over the per-land inner calls)
+    double full_positions = 0;   // odometer product before the shrink
+    double kept_positions = 0;   //   ... and after
+    bool   Fired() const { return dropped_groups > 0; }
+};
+
+// Live accumulator, written by CapGroupsBySituationalRank.
+inline Trunc& Acc()
+{
+    static Trunc t;
+    return t;
+}
+
+// The record for the frame currently being offered: EnumerateMainPlans clears Acc() before the
+// base enumeration and latches it here afterwards, so a combo-off TRIAL apply's own nested
+// enumerations cannot overwrite the menu's number.
+inline Trunc& Last()
+{
+    static Trunc t;
+    return t;
+}
+}   // namespace viewerplancap
