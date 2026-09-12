@@ -1,6 +1,5 @@
-# Regression ground truth -- commit cdb16b5c  date 2026-09-12
+# Regression ground truth -- commit a2eb2e0c  date 2026-09-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-09-11): rebase onto origin d8de10f5 (tip 38842e3f): 42/268 configs moved, 11 slower / 9 faster / 41 same-score line changes, net +0.016t summed over per-config means, d0 canaries 0/0; classify_turn_later: 9 churn (recover at 4x/16x), 2 PERSIST = draw-divergence variance (burn gi661 from T5, th gi916 from T2, explain_game --old-bin origin tip)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -357,14 +356,14 @@ minotaur_overnight_d0_s4004=5.3610/71078cbf76bc9efa
 minotaur_overnight_d0_s6006=5.3380/ba9622b8b28910aa
 minotaur_overnight_d0_s8008=5.3390/39f3f9aa2f299c89
 minotaur_overnight_d0_s10010=5.3195/2d1c0537685c9184
-minotaur_overnight_d3_s4004=4.8760/7b3991a7f7da8a8d
-minotaur_overnight_d3_s5005=4.8540/ec4476068d5bdfd8
-minotaur_overnight_d3_s6006=4.8900/8e33ba962704e324
-minotaur_overnight_d3_s7007=4.8490/6b18018baa3d0f43
+minotaur_overnight_d3_s4004=4.8760/60d7b00173c156b7
+minotaur_overnight_d3_s5005=4.8550/72bf59b89f1b4424
+minotaur_overnight_d3_s6006=4.8910/7376801eff9f2e50
+minotaur_overnight_d3_s7007=4.8480/c1ee9f7f258c93d5
 minotaur_overnight_d5_s4004=4.8580/9e7a75938b818570
 minotaur_overnight_d5_s5005=4.8380/ef96fda085eb9c6e
 minotaur_overnight_d5_s6006=4.8860/078b614895c7d5d3
-minotaur_overnight_d5_s7007=4.8280/4a63a21b503995d5
+minotaur_overnight_d5_s7007=4.8280/2b5c3ba07cadb536
 kitty_overnight_d0_s4004=4.9630/086eda371a6e2a1e
 kitty_overnight_d0_s6006=4.9790/cb335a9ee6411f34
 kitty_overnight_d0_s8008=4.9520/6572d8c6148650c5
@@ -381,13 +380,13 @@ dragons_overnight_d0_s4004=5.9865/51ef069d21efee46
 dragons_overnight_d0_s6006=5.9980/aca30c27ef943501
 dragons_overnight_d0_s8008=6.0050/47b0e76c52837881
 dragons_overnight_d0_s10010=6.0055/79e8864c466d72f3
-dragons_overnight_d3_s4004=5.5310/21e881a9fcfbefcd
-dragons_overnight_d3_s5005=5.6200/773c873baf8db647
-dragons_overnight_d3_s6006=5.5600/ea99cbf600466dbf
-dragons_overnight_d3_s7007=5.6020/6fdd9f929a91ad8c
+dragons_overnight_d3_s4004=5.5310/dd3e3bb71acf60eb
+dragons_overnight_d3_s5005=5.6200/974128147378abfb
+dragons_overnight_d3_s6006=5.5600/271591fc72f66ecc
+dragons_overnight_d3_s7007=5.6020/43cb139c15e7419a
 dragons_overnight_d5_s4004=5.5340/19c2a5531a517a8a
-dragons_overnight_d5_s5005=5.6300/0f9121bbe04e6c26
-dragons_overnight_d5_s6006=5.5900/e789357559eeaf21
+dragons_overnight_d5_s5005=5.6300/cf0e258b2dfd6acb
+dragons_overnight_d5_s6006=5.5900/9df0549f7aebf45e
 dragons_overnight_d5_s7007=5.6140/bf315f5e66a9d178
 breaching_overnight_d0_s4004=4.8710/3b8802cea3ff3b75
 breaching_overnight_d0_s6006=4.8055/55eba3aca18a77b0
@@ -435,7 +434,7 @@ antilife2hg_overnight_d5_s6006=4.1033/440bd17a8994f9ed
 antilife2hg_overnight_d5_s7007=4.0667/efbb0bdef6695d57
 minotaur2hg_overnight_d5_s4004=5.3267/017e5e410a876dd0
 minotaur2hg_overnight_d5_s5005=5.3267/bc8bbc0717069431
-minotaur2hg_overnight_d5_s6006=5.4067/642c135d26f96e54
+minotaur2hg_overnight_d5_s6006=5.4067/32866f881570d937
 minotaur2hg_overnight_d5_s7007=5.2800/46685b51291b546c
 goblins2hg_overnight_d5_s4004=4.2600/689955ead6dac25e
 goblins2hg_overnight_d5_s5005=4.2400/c9fe5d6ad83310b5
