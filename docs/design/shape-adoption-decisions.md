@@ -1,7 +1,16 @@
 # Per-deck search-shape adoption: the decision sheet
 
-**Status (2026-09-11):** every mode cell is measured, including held-out confirmation of each
-recommended change. **Nothing here is adopted.** What remains is rulings, not measurement.
+> **STATUS (2026-09-12) — START WITH [`search-shape-open-items.md`](search-shape-open-items.md).**
+> That file is the pick-up-later summary: what shipped, what is still open, and how to resume. This
+> sheet is the underlying evidence, and **parts of it are superseded**. Specifically: `ladder: single`
+> is adopted on **Dragons and Minotaur only** (§11h); hinata, fivecolour and Melira were staged and
+> then **reverted** after a rebase moved the cost axis; and §3's "hardcode `escalation_fresh_frac`"
+> was implemented and **reverted** (§3a). **Every `units` figure measured before 2026-09-12 is now
+> provisional** — see §11h for why cost-axis results do not survive an engine rebase.
+
+**Status (2026-09-11, superseded — see above):** every mode cell is measured, including held-out
+confirmation of each recommended change. **Nothing here is adopted.** What remains is rulings, not
+measurement.
 
 Reading the tables: **Δ < 0 means fewer turns to win = BETTER.** `±se` is the standard error over 16
 blocks of 250 games (4,000 games/cell). `bett/wors` counts individual games whose win turn moved.
