@@ -32,28 +32,30 @@ These are the levers the shape screen was about. "Tier" is the activation gate:
 
 | lever | tier | meaning | who sets it today |
 |---|---|---|---|
-| `target_depth` | — | the deck's play depth; also the gate for the two tiers below | 11 decks |
-| `budget_ms` | — | per-decision budget | 11 decks |
-| `enabled` | — | `true` = adopted, drives and locks play. `false` = a recorded recommendation only | 11 true, 1 false (kitty) |
-| `ladder` | load | `""`/`"escalation"` = value hybrid; `"single"` = **FIT** one-depth; `"emulated"` = dead (§7) | `single`: hinata, fivecolour, dragons, minotaur, melira. `escalation`: fluctuator |
+| `target_depth` | — | the deck's play depth; also the gate for the two tiers below | 13 decks |
+| `budget_ms` | — | per-decision budget | 13 decks |
+| `enabled` | — | `true` = adopted, drives and locks play. `false` = a recorded recommendation only | 12 true, 1 false (kitty) |
+| `ladder` | load | `""`/`"escalation"` = value hybrid; `"single"` = **FIT** one-depth; `"emulated"` = dead (§7) | `single`: **dragons, minotaur** only. `escalation`: fluctuator |
 | `leaf` | load | `""`/`"model"` = the learned value model; `"none"` = leafless (`Constant()`) | `none`: dragons, dragonstorm, fluctuator, goblins, minotaur, mirrorwing, stompy, th |
 | `alpha` | load | start-gate alpha of a **leafless** probe: `"relaxed"` / `"strict"` | `relaxed` on all 8 leafless decks |
-| `fit_alpha` | load | multiplier on FIT's affordability gate. 0 = unset = the strict 1.10x-remaining gate | **melira only (4.0)** |
-| `fit_lazy_r` | load | defer FIT's per-game R calibration. −1 = unset = engine default (**ON**) | **melira only (false)** |
+| `fit_alpha` | load | multiplier on FIT's affordability gate. 0 = unset = the strict 1.10x-remaining gate | **nobody** (see §11h) |
+| `fit_lazy_r` | load | defer FIT's per-game R calibration. −1 = unset = engine default (**ON**) | **nobody** (see §11h) |
 | `commit` | load | emulated ladder's committing pass | **nobody** — dead with `ladder: emulated` |
 | `exhaust_mult` | load | how far past budget a leafless pass may run | **nobody** |
 | `beam_width` | `drives()` | keep only top-N value-ranked plans near the leaf | antilife, cgiving, dragonstorm, hinata (all 3) |
 | `beam_leafdepth` | `drives()` | how near the leaf the beam applies | same 4 decks (all 2) |
-| `escalation_cap` | `vp_here` | single-pass predicted-affordable escalation, capped | 10 decks (5 or 6) |
-| `escalation_r` | `vp_here` | frozen heuristic cost-per-probe-leaf for that walk | 6 decks (16…240) |
+| `escalation_cap` | `vp_here` | single-pass predicted-affordable escalation, capped | 12 decks (5 or 6) |
+| `escalation_r` | `vp_here` | frozen heuristic cost-per-probe-leaf for that walk | 7 decks (16…240) |
 | `escalation_fresh_frac` | `vp_here` | escalation budget renewal. −1 = legacy shared remaining | 7 decks, all 0.5 |
-| `regime` | — | **informative only**, never read at runtime | 9 decks |
+| `regime` | — | **informative only**, never read at runtime | 10 decks |
 | `leaf_cost_ms` / `heur_cost_ms` | — | **informative only** — lets `target_depth` be re-derived | a few |
 
-**Two of these are levers only in principle.** `commit` and `exhaust_mult` are set by **no deck at
-all**; `regime`, `leaf_cost_ms` and `heur_cost_ms` are never read by the engine. `escalation_cap` is
-additionally *provably inert* under `ladder: single` — so on the five decks that now ship `single` it
-is a key that looks set and does nothing.
+**Four of these are levers only in principle.** `commit`, `exhaust_mult`, `fit_alpha` and
+`fit_lazy_r` are set by **no deck at all** — the last two because the Melira adoption that justified
+them did not survive the 2026-09-12 rebase (§11h); they are kept as the instrument that diagnosed it.
+`regime`, `leaf_cost_ms` and `heur_cost_ms` are never read by the engine at all. And `escalation_cap`
+is *provably inert* under `ladder: single`, so on dragons and minotaur it is a key that looks set and
+does nothing.
 
 **`escalation_fresh_frac` is the cautionary tale.** Collapsing it to a constant 0.5 was recommended,
 implemented, and reverted within a day — it silently overrode `treasure_hunt`'s own later on-policy
@@ -69,8 +71,8 @@ its shipped play settings.
 
 | lever | meaning | who sets it |
 |---|---|---|
-| `mull_gen_depth` | rollout depth for bucket labelling (0 ⇒ inherit `target_depth`) | 11 decks (1…4) |
-| `mull_gen_budget_ms` | rollout budget for labelling (0 ⇒ inherit `budget_ms`) | 11 decks (1 or 3) |
+| `mull_gen_depth` | rollout depth for bucket labelling (0 ⇒ inherit `target_depth`) | 20 decks (1…4) |
+| `mull_gen_budget_ms` | rollout budget for labelling (0 ⇒ inherit `budget_ms`) | 20 decks (all 3) |
 | `expected_buckets` | **recorded once, thereafter CHECKED.** K decides what a generation *is* (hand space is C(K+6,7)), so the generator refuses on a mismatch rather than silently producing an unpoolable table | 9 decks (11…23) |
 
 ## 3. Per-deck *artifacts* — levers by their existence
