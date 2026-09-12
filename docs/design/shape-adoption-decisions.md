@@ -74,8 +74,16 @@ Training seeds base 9900000; held-out base 9970000. Both 16×250.
 | dragons | `ladder: single` | 0/0 @ 0.621x | **0/0 @ 0.613x** | **0.613x** | 39% work cut, zero games changed twice |
 | minotaur | `ladder: single` | 0/0 @ 0.969x | **0/0 @ 0.964x** | 0.964x | zero games changed twice |
 
+> **⚠ SUPERSEDED IN PART — read §11h before acting on this table.** These four rows were measured
+> before the 2026-09-12 rebase onto ~250 files of upstream work, which included engine changes. On
+> re-measurement, **dragons and minotaur held and are adopted; hinata and fivecolour flipped to
+> TRADES** (their quality gains grew, but units went 0.991x → 1.245x and 0.995x → 1.021x) and are
+> **reverted pending your call**. Melira (§11g) likewise did not replicate and is reverted.
+
 The `0/0` rows are the strongest evidence available: across 8,000 games over two seed sets, **not one
-game changed its win turn.** Cost decides alone; no significance test needed.
+game changed its win turn.** Cost decides alone; no significance test needed. (These are also the two
+rows that survived the rebase — see §11h; identical-play-and-cheaper is the most robust shape there
+is, because only the size of the cost win can move.)
 
 Hinata and fivecolour both replicated within noise of their training estimates — no selection
 shrinkage worth worrying about.
@@ -119,6 +127,43 @@ budget of `max(1, round(0 × budget_ms))` = **1 ms**, a pathological sliver
 **One honest gap:** every measurement applied frac *at `target_depth`* (it is `vp_here`-gated).
 A constant applied at **every** depth is broader than anything measured. Under one depth the
 distinction collapses, which is a further reason to settle §1 first.
+
+### 3a. NOT ADOPTED after all — the 0.5 *default* was tried and reverted (2026-09-12)
+
+The recommendation above was implemented as a change of the `ValuePlay::escalation_fresh_frac`
+struct/parse default from `-1.0` to `0.5`, and then **reverted the same day**. Two reasons, one of
+them decisive:
+
+1. **It silently overrides a deck-specific rejection.** `treasure_hunt`'s own sidecar records, from
+   the *later* on-policy re-screen (2026-09-11, newer than the fleet screen above):
+   *"measured and REJECTED: escalation_fresh_frac 0.5 (1.083x units at z +0.71)"*. A default of 0.5
+   reaches that deck precisely because it omits the key — so the fleet default was overruling the
+   deck's own better-targeted measurement. The two screens genuinely disagree, and the on-policy one
+   wins.
+2. **"Free or better on all 13" did not survive contact with the suite.** The regression tier flagged
+   `auras_regression_d5_s3003` and `th_regression_d5_s2002` — the only two failures outside the decks
+   this session actually adopted. Isolation was exact: forcing `MTG_ESCALATION_FRESH_FRAC=-1`
+   reproduced the committed GT digests `22fd5ff9bfeb756d` / `7112444519b32d4e` byte-for-byte, and the
+   as-shipped default reproduced the new run's. Score was unchanged on both (4.1740, 4.0667), so this
+   was a *line* change, not a quality loss — but it is an unmeasured-on-policy change to two decks
+   that were not part of the adoption, which is not something to ship inside an unrelated batch.
+
+**Blast radius, for the record:** frac is tier-3 (`vp_here` = `drives() && lookahead_depth ==
+target_depth`), so the default can only reach a deck with `target_depth > 0 && enabled` *and* the key
+absent — exactly **Auras, Knights, StompySurprise, slivers_vial, treasure_hunt**. It never reached
+Dragons/Minotaur/Melira (no `target_depth`, no `enabled` ⇒ `drives()` false, AIEngine passes the
+`-2.0` sentinel), and Hinata2/FiveColour carry `0.5` explicitly. **So the revert does not touch any
+of this session's `ladder: single` adoptions** — they were measured and are shipped in the same state.
+
+**An earlier claim in this session's reporting was wrong and is retracted:** I described the default
+change as "behaviourally inert", on the strength of a probe that came back byte-identical on the four
+testable decks. That probe ran at configurations that never reach `vp_here`, so it proved nothing —
+the same `drives()`-voids-gated-arms trap this sheet documents in §7. The smoke tier agreeing was
+equally uninformative for the same reason (auras' smoke case *is* d5, but the effect is rare enough
+that 250 games missed it; the regression tier's 500 caught one).
+
+**If frac is wanted fleet-wide, the route is:** measure it on-policy per deck and write `0.5` into the
+sidecars that want it — not a struct default that overrides the decks that measured it as a loss.
 
 ## 4. TRADES — every one re-measured on held-out seeds, and **three did not replicate**
 
@@ -229,7 +274,7 @@ Until then one depth is adoptable broadly but **must not** be forced on Melira o
 | `regime` | **behaviourally dead** | parsed at `MulliganProfileIO.h:1273`, stored, **never read** by any decision. A documentation string; fold into the existing `note` fields. |
 | `alpha` | **never independent** | set by exactly the 8 decks that set `leaf: none`, always `relaxed`. Fold into `leaf: none`. |
 | `beam_width` / `beam_leafdepth` | **single-valued** | 3 and 2 on the only 4 decks that set them. Hardcode. |
-| `escalation_fresh_frac` | **KEEP as a constant 0.5** | load-bearing (§3). Hardcoding removes the knob without losing the quality. |
+| `escalation_fresh_frac` | **KEEP as a PER-DECK key, default `-1`** | load-bearing (§3), but hardcoding 0.5 was tried and **reverted** — it overrides treasure_hunt's own on-policy rejection (§3a). The knob stays. |
 | `exhaust_mult` | **unused but NOT dead** | a real monotonic dial (§4). Deleting it forgoes an option. |
 
 **Retraction.** `commit: model` was previously reported as "earning its key" on Knights 0.435x wall,
@@ -244,7 +289,7 @@ A key's presence in a sidecar does **not** mean it is live:
 
 | tier | gate | keys |
 |---|---|---|
-| always, at load | sidecar exists | `leaf`, `alpha`, `ladder`, `commit`, `exhaust_mult` |
+| always, at load | sidecar exists | `leaf`, `alpha`, `ladder`, `commit`, `exhaust_mult`, `fit_alpha`, `fit_lazy_r` |
 | `drives()` | `target_depth > 0 && enabled` | `beam_width`, `beam_leafdepth` |
 | `vp_here` | `drives() && lookahead_depth == target_depth` | `escalation_cap`, `escalation_r`, `escalation_fresh_frac` |
 
@@ -708,3 +753,55 @@ the narrative had left open for a day.
 **Current recommendation: one depth is adoptable on 20 of 20.** No deck now requires the full
 heuristic ladder. Per-deck settings still differ (`esc_fit_alpha` 4 on Melira, 1 elsewhere; lazy-R for
 breaching/critter), and the ordinary replication and rebaseline discipline in §2 and §10 still applies.
+
+### 11h. POST-REBASE RE-CONFIRMATION — three of the five adoptions did NOT survive (2026-09-12)
+
+Everything above §11h was measured on a binary that was then **rebased onto ~250 files of upstream
+work**, including real engine changes: `perf(search)` winless-turn certificates, `perf(mana)`,
+`perf(rollout)` unbudgeted-leaf memo, and `adopt(wave) MTG_OF_WAVE_SHARE 0.005 → 0.0005`. The repo
+rule after such a rebase is to re-verify before trusting a measurement, and a byte-identity smoke
+check is **not** sufficient here, because what is being re-tested is an A/B *delta*.
+
+Re-run on a **fresh third seed base (14500000)**, 16×250 per cell, both arms pooled in one batch. The
+deck sidecar is the candidate and a synthesized sidecar with the adopted keys stripped is the control
+(asserted to differ in exactly those keys and no other block).
+
+| deck | Δ vs pre-adoption | units | verdict | was (pre-rebase) |
+|---|---|---|---|---|
+| dragons | **0 better / 0 worse** | **0.759x** | CLEAN WIN — **adopted** | 0/0 @ 0.613x |
+| minotaur | **0 better / 0 worse** | **0.893x** | CLEAN WIN — **adopted** | 0/0 @ 0.964x |
+| fivecolour | −0.0085 ± 0.0017 (5.0σ) | 1.021x | **TRADE — reverted, your call** | −0.0050 @ 0.995x (clean win) |
+| hinata | −0.0127 ± 0.0033 (3.8σ) | **1.245x** | **TRADE — reverted, your call** | −0.0080 @ 0.991x (clean win) |
+| melira `single`+`a4` | −0.0025 ± 0.0026 (1.0σ) | 1.000x | **null — reverted** | −0.0125 ± 0.0040 @ 1.006x |
+| melira `single` alone | **+0.0200 ± 0.0036** (82/163) | 0.885x | clearly worse | +0.0032 ± 0.0031 (null) |
+
+**What changed, and it is one mechanism.** Upstream's perf work made the **ladder** cheaper as well as
+FIT. FIT's advantage was always partly that it does less work; when the work the ladder does gets
+cheaper, that margin shrinks. It shows up cleanly as a cost-axis move on every row: dragons 0.613 →
+0.759, hinata 0.991 → 1.245, fivecolour 0.995 → 1.021. The two decks whose win was **pure cost at
+identical play** survive, because a 24%/11% work cut is still a work cut. The two whose win was
+*marginally* cheaper flipped to costing more.
+
+**Quality did not degrade — it improved.** hinata −0.0080 → −0.0127 and fivecolour −0.0050 → −0.0085
+are both *larger* gains than before. These are reverted purely because they now regress the cost axis,
+and the standing rule is that a clean win must not regress on **any** axis, so a trade is the user's
+call and stays reserved until then.
+
+**Melira is the sharpest reversal, and `fit_alpha` is not the thing that failed.** Plain `single` on
+this engine is **+0.0200 ± 0.0036 worse** — far worse than the +0.0032 null it measured before — and
+`fit_alpha: 4.0` still repairs almost all of that, a +0.0225 swing. The diagnosis in §11f (FIT's
+affordability gate is too strict) therefore still stands and reproduces. What changed is the
+*destination*: the repair now lands at **parity** with the pre-adoption ladder rather than ahead of
+it. Shipping three per-deck keys to arrive exactly where the simpler config already is buys nothing,
+so Melira reverts. This is not a trade for the user — it is declining a null.
+
+**The machinery is kept.** `MTG_ESC_FIT_ALPHA` / `esc_fit_alpha`, `MTG_ESC_FIT_LAZY_R` /
+`esc_fit_lazy_r` and their per-deck `value_play` keys stay, and lazy-R stays default ON — it is part
+of the configuration that the surviving dragons/minotaur cells were measured under. **No deck
+currently sets `fit_alpha` or `fit_lazy_r`.** They stay because they are the instrument that diagnosed
+Melira and would be needed again the moment a trade is approved.
+
+**The honest summary of the whole §11 arc:** the diagnosis held up and replicated; the *adoption* it
+justified did not survive the engine moving underneath it. Two of five adoptions stand, both on the
+strongest evidence shape (identical play, cheaper), and both now confirmed on three disjoint seed
+bases.

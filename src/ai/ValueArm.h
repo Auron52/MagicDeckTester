@@ -62,12 +62,15 @@ struct Arm
     // depth, extrapolating cost/leaves above the probe's record. FIT is otherwise capped at the depth
     // the PROBE reached while the ladder is not, which is the measured source of Melira's gap -- see
     // TurnSolver.cpp. Per-job so the on/off arms share one pool and one tail.
-    int         esc_fit_reach      = -1;    // -1 unset | 0 off | 1 on
-    // Multiplier on FIT's affordability gate (MTG_ESC_FIT_ALPHA). FIT admits a depth only if its
-    // estimate fits 1.10x the REMAINING budget, while the ladder admits ~5x over and leans on its
-    // incumbent + the 25x overrun ceiling. This is the dial that tests whether that conservatism is
-    // the gap. Per-job so the whole sweep (1/2/4/8) is one pool.
-    double      esc_fit_alpha      = -1.0;  // <=0 unset => env, env default 1.0 = off
+    // Multiplier on FIT's affordability gate (MTG_ESC_FIT_ALPHA / value_play.fit_alpha). FIT admits a
+    // depth only if its estimate fits 1.10x the REMAINING budget, while the ladder admits ~5x over and
+    // leans on its incumbent + the 25x overrun ceiling. Per-job so the whole sweep (1/2/4/8) is one pool.
+    double      esc_fit_alpha      = -1.0;  // <=0 unset => deck, then env (default 1.0 = off)
+    // Defer FIT's per-game R calibration to first use (MTG_ESC_FIT_LAZY_R / value_play.fit_lazy_r).
+    // Per-job for the usual reason: it is a process-wide static, so an A/B of it otherwise costs one
+    // `mtg --batch` per arm -- and Melira needs it OFF while the fleet wants it ON, which is exactly
+    // the comparison that has to share a pool.
+    int         esc_fit_lazy_r     = -1;    // -1 unset | 0 off | 1 on
     // CONSTANT-LEAF EXHAUSTION MULTIPLE (MTG_CONSTANT_EXHAUST_MULT, default 1): a leafless pass stops at
     // used >= mult x the decision budget. The MODEL pass has no such stop (it runs to the proportional overrun
     // ceiling, 25x, because its truncated line is still rated); a leafless pass past exhaustion can only pay off
@@ -148,6 +151,15 @@ inline thread_local int         t_deck_single = -1;
 inline thread_local int         t_deck_alpha_relaxed = -1;
 // value_play.exhaust_mult: <=0 unset.
 inline thread_local double      t_deck_exhaust_mult = 0.0;
+// value_play.fit_alpha: multiplier on FIT's affordability gate. <=0 unset => env (default 1.0 = the
+// strict 1.10x-remaining gate). ADOPTED per-deck 2026-09-11 because it is genuinely per-deck: Melira
+// wants 4 (-0.0125 +/- 0.0040 vs the full ladder at parity cost) while hinata/fivecolour want 1, where
+// raising it converts a FREE clean win into a paid trade. Tier 1 (acts wherever FIT acts).
+inline thread_local double      t_deck_fit_alpha = 0.0;
+// value_play.fit_lazy_r: defer FIT's per-game R calibration to first use. -1 unset => env (default ON).
+// Per-deck because Melira is the one deck it HURTS (+0.0126 +/- 0.0025) while it is a 4-7 sigma gain on
+// hinata/fivecolour/cgiving/kitty and frees cost on ten more.
+inline thread_local int         t_deck_fit_lazy_r = -1;
 inline thread_local std::string t_deck_key;
 
 // Reset to "use the env default for everything". Called by a worker before a job with no arm block,

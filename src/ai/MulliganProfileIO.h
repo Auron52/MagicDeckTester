@@ -1255,7 +1255,8 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                                    || vp.contains("mull_gen_budget_ms")
                                    || vp.contains("expected_buckets")
                                    || vp.contains("ladder") || vp.contains("leaf") || vp.contains("commit")
-                                   || vp.contains("alpha") || vp.contains("exhaust_mult")))
+                                   || vp.contains("alpha") || vp.contains("exhaust_mult")
+                                   || vp.contains("fit_alpha") || vp.contains("fit_lazy_r")))
             {
                 profile.value_play.ladder       = vp.value("ladder", std::string(""));
                 profile.value_play.leaf         = vp.value("leaf", std::string(""));
@@ -1266,6 +1267,9 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                 profile.value_play.budget_ms    = vp.value("budget_ms", 0);
                 profile.value_play.enabled      = vp.value("enabled", false);
                 profile.value_play.escalation_fresh_frac = vp.value("escalation_fresh_frac", -1.0);
+                profile.value_play.fit_alpha  = vp.value("fit_alpha", 0.0);
+                profile.value_play.fit_lazy_r = vp.contains("fit_lazy_r")
+                                              ? (vp["fit_lazy_r"].get<bool>() ? 1 : 0) : -1;
                 profile.value_play.beam_width     = vp.value("beam_width", 0);
                 profile.value_play.beam_leafdepth = vp.value("beam_leafdepth", 2);
                 profile.value_play.escalation_cap = vp.value("escalation_cap", 0);
