@@ -1,17 +1,18 @@
-# The bottoming argmin's winner's curse — diagnosis and offline fix
+# The bottoming argmin's "winner's curse" — a REFUTED diagnosis, and what survived it
 
-**Status: FIXED and measured (2026-09-12).** FiveColour's confounded bottoming A/B went from
-**+0.018375 t (reject, 0/16 seeds)** to **−0.0021 t (table wins, 9/16 seeds)** with **no
-regeneration, no engine change and no schema change** — only a change to how a policy is built from
-an existing raw sidecar.
+**Status: REFUTED and REMOVED (2026-09-14).** An earlier revision of this document claimed FiveColour's
+failing confounded bottoming A/B was caused by sampling noise in `best_sub`'s argmin, and that a
+shrinkage-plus-gate correction fixed it (+0.018375 t → −0.0021 t). **The diagnosis was wrong and the
+"fix" was forbidden.** The code was reverted; this document is kept because the measurements it
+produced are sound and reusable, and because the failure of the reasoning is itself the lesson.
 
-This document exists because the failure mode is **generic to every deck that ships an exhaustive
-bottoming table**, and because the repair route (re-policy an existing raw offline) was not
-previously known to be exact.
+> **Do not re-implement the gate.** It is closed by policy *and* by evidence — see §3. There is a
+> pointer to this document in the comment above `BuildPolicyFromTables` in
+> `src/analyzer/ExhaustiveKeep.cpp`.
 
 ---
 
-## 1. The symptom
+## 1. The symptom that started it
 
 FiveColour's 20-day generation (55.66 M rollouts, frozen `2f7822a2`) produced a keep table that
 *won* decisively and a bottoming table that *lost*:
@@ -25,24 +26,22 @@ Per `mulligan-profile.md` the response to a bad confounded bottoming A/B is "rai
 bottoming heuristic, **not** ship bottoming off" (there is no off switch). Raising R meant
 regenerating. The user's constraint: *"I'm not regenerating something that took 3 weeks."*
 
-## 2. The cause, measured rather than assumed
+## 2. The hypothesis, and the measurements behind it (these are still valid)
 
 `BuildPolicyFromTables::best_sub` picks a hand's bottoming target by `argmin` over its
 subcompositions' estimated values. Those estimates are rollout means at finite R, so the argmin over
-N noisy candidates systematically selects the **luckiest estimate, not the best hand**. That is a
-bias at *any* finite R, and it is the mechanism
-`keepgen-subtable-starvation-detection.md` already named ("a winner's curse picks the luckiest
-estimate, not the best hand").
+N noisy candidates systematically selects the **luckiest estimate, not the best hand**. The bias is
+real at any finite R — it is the mechanism `keepgen-subtable-starvation-detection.md` already names.
 
-Everything below is measured from the raw sidecar by the `test/keepraw_*.py` tools.
+Everything in this section is measured from the raw sidecar by the `test/keepraw_*.py` tools and
+remains accurate. **What was wrong was the inference from it, not the numbers.**
 
 **Sub-cell precision.** FiveColour's sub-table rollout counts are **trimodal: exactly R = 2, 18 or
 30** (floor / one refine step / cap). 41–43 % of size-4…6 cell-sides sit at the floor. Per-rollout
 sd is **0.74–0.80 t**, so se ranges 0.52 t (R=2) → 0.14 t (R=30).
 
 **Exposure.** A `--gen-mulligan fast` run has `adaptive_bottom=true`, so `best_sub` receives
-`bottom_floor = r0 = 2` and the argmin is already restricted to refined cells. That filter helps, but
-is not sufficient — on the refined candidate set:
+`bottom_floor = r0 = 2` and the argmin is already restricted to refined cells. On that refined set:
 
 | depth m | hand size | candidates N | se | tau (true spread) | **noise share** | no-refined fallback |
 |---|---|---|---|---|---|---|
@@ -50,116 +49,108 @@ is not sufficient — on the refined candidate set:
 | 2 | 5 | 10.3 | 0.218 | 0.377 | 37.4 % | 1.9 % |
 | 3 | 4 | 16.2 | 0.217 | 0.413 | 31.0 % | 0.7 % |
 
-"Noise share" = `mean(se²)/var_observed` — the fraction of the apparent spread between candidates
-that is pure sampling noise. At the depth that dominates play, **half of it**.
+"Noise share" = `mean(se²)/var_observed`. At the depth that dominates play, half the apparent spread
+between candidates is sampling noise.
 
-**Quantitative confirmation against the A/B.** Bottoming runs only when `mulligan_count > 0`
-(`AIEngine.cpp:590`), so `delta_overall = f · (regret_table − regret_lookahead)`. Measured by Monte
-Carlo backward induction over the real hypergeometric hand distribution:
+**The arithmetic that appeared to confirm it — and why it proved nothing.** Bottoming runs only when
+`mulligan_count > 0` (`AIEngine.cpp:579`), so `delta_overall = f · (regret_table − regret_lookahead)`.
+Monte Carlo over the real hypergeometric hand distribution gave `f = 0.586` (mix m1 62 % / m2 30 % /
+m3 7 %) and a simulated table regret of 0.0495 t, hence
+`0.586 × (0.0495 − 0.0185) = 0.0182` against the measured **+0.0184**.
 
-* `f = P(mulligan > 0) = 0.586`, mix m1 62 % / m2 30 % / m3 7 %
-* simulated table regret at that mix = **0.0495 t** → implied confounded-lookahead regret **0.0185 t**
-* `0.586 × (0.0495 − 0.0185) = 0.0182` vs the **measured +0.0184**
+That agreement is **an artifact of circular reasoning**: the lookahead's regret L = 0.0185 t was
+*solved for* from the very A/B being explained. Any table regret whatsoever can be matched by
+choosing L to absorb the residual, so the identity had **no power to discriminate** — it could not
+have come out any other way. The original revision flagged this as a "caveat"; it was in fact fatal.
 
-The curse accounts for the entire deficit. Note `keep%_opt` in the gen report is **unweighted over
-compositions** and is *not* the mulligan rate; do not reuse it as one.
+Useful byproduct: `keep%_opt` in the gen report is **unweighted over compositions** and is *not* the
+mulligan rate. Do not reuse it as one.
 
-## 3. What does NOT work (measured, so nobody re-tries it)
+## 3. The refutation: a control the hypothesis could not survive
+
+**Melira Pod ships the same `fast`/R30 recipe, is WORSE on every metric the theory relies on, and
+PASSES.**
+
+| | FiveColour (**fails** +0.0184) | Melira Pod (**passes** −0.091, 16/16, mean/se −31.4) |
+|---|---|---|
+| mean sub-table R | 13.84 | 13.58 |
+| % of sub cell-sides at floor R=2 | 41.2 % | **45.4 %** |
+| m=1 noise share | 50.0 % | 48.4 % |
+| m=1 no-refined-candidate fallback | 6.3 % | **8.2 %** |
+
+If argmin sampling noise at this magnitude sank FiveColour, Melira should have sunk harder. It did
+not. The user made the same objection from first principles before any of this was measured —
+*"I would still expect the confounded bottoming test to succeed because testing N versions is less
+noisy than 1"*, and *"this has never failed in the past"* on other decks — and was right.
+
+**A broader survey agrees.** Across all 20 decks' raws, every deck that passes its confounded
+bottoming A/B has uniform sub-tables at cap (minR == cap, 0 % at floor): Dragons, Mirrorwing, Auras,
+Minotaur, Fluctuator, Dragonstorm, KittyEquipment, StompySurprise, Anti-Lifegain,
+BreachingDragonstorm, CritterLifegain at R=40; Knights, burn, slivers_vial at R=60; treasure_hunt 41;
+Hinata2 22. Only the four `fast`/adaptive runs have floor cells at all — FiveColour 41.2 %, Melira
+45.4 %, Creature Giving 35.8 %, Goblins 58.2 % — and Goblins (adopted 2026-08-08, before the
+confounded gate existed) is the only one of those not independently confirmed to pass. **Floor cells
+do not predict failure.**
+
+## 4. Why the "fix" was inadmissible regardless of what it measured
+
+The gate emitted a bottoming target only where the winner's margin cleared the top two candidates'
+combined noise, and **emitted an empty vector otherwise** — 67.9 % of slots for FiveColour.
+`ExhaustiveKeepPolicy::DecideBottom` rejects a slot failing its `size() != K` check and
+`AIEngine::BottomCards` falls through to the **lookahead bottomer**. That is:
+
+1. **Against an explicit user directive.** *"Lookahead bottoming should be on nowhere for decks with
+   profiles."* Two thirds of a shipped profile's bottoming decisions were being handed back to it.
+2. **Against the repo's own artifact check.** `scripts/mullgen.sh:290` counts any row with
+   `len(r) != K` as **malformed**; validate failed with
+   `ARTIFACT CHECK FAILED: ... malformed_bottom_keep=1977326`. The profile could never legitimately
+   have been adopted whatever the A/B said.
+3. **Structurally unfalsifiable as an improvement.** As k rises the policy converges to the very arm
+   it is measured against, so "it beats the lookahead" degenerates toward "it *is* the lookahead".
+   The original revision listed this bounded downside as a *virtue*. It is the opposite: a knob whose
+   limit is the control cannot demonstrate that the table is good.
+
+A measured −0.0021 t at k=1.0 therefore established nothing worth keeping.
+
+## 5. What does NOT work on the estimator, measured (so nobody re-tries it)
 
 **Shrinking every candidate toward a common mean recovers ~6 % of the regret (0.0037 of 0.0609 t).**
-This is not a tuning failure, it is arithmetic: with equal per-candidate precision, shrinking by a
-common factor toward a common mean is a **monotone transform of the estimates, so the argmin is
-unchanged**. All of its leverage comes from *differences* in precision, and among refined candidates
-ours differ only R=18 vs R=30. **Re-weighting the same numbers adds no information.**
+Arithmetic, not a tuning failure: with equal per-candidate precision, shrinking toward a common mean
+is a **monotone transform of the estimates, so the argmin is literally unchanged**. All its leverage
+comes from *differences* in precision, and among refined candidates ours differ only R=18 vs R=30.
+**Re-weighting the same numbers adds no information.**
 
-**A structural prior helps but is not enough on its own.** A quadratic (pairwise-interaction) fit of
-the cell mean on bucket counts explains **50–89 %** of true between-cell variance (size-5 draw:
-tau 0.689 → 0.224), because a cell can borrow strength from every other cell holding those cards.
-It recovers 24 % of the regret — projected +0.0184 → +0.0133. Still a reject.
+**A structural prior carries real signal but did not close the gap.** A quadratic
+(pairwise-interaction) fit of the cell mean on bucket counts explains **50–89 %** of true between-cell
+variance (size-5 draw: tau 0.689 → 0.224), because a cell borrows strength from every other cell
+holding those cards. It recovered 24 % of the (mis-attributed) regret. This measurement stands on its
+own and may be worth revisiting for an *in-generation* estimator — but never as a gate.
 
-## 4. What works: decline to answer when the margin is noise
+## 6. What genuinely survived — the durable results
 
-The table is **not uniformly worse** than the engine's lookahead bottomer — it is worse *on average*
-only because near-ties are settled by noise. Where its margin is decisive it is near-perfect. So:
-
-> emit a bottoming target only when the winner's margin clears the combined noise of the top two
-> candidates; otherwise **emit nothing**.
-
-```
-Z_i    = Vhat_i + lam_i (V_i - Vhat_i)     posterior mean, lam_i = tau^2/(tau^2 + se_i^2)
-sig_i  = se_i * sqrt(lam_i)                posterior sd
-emit iff  Z_(2) - Z_(1)  >=  k * sqrt(sig_(1)^2 + sig_(2)^2)
-```
-
-**This required no engine change and no schema change.** `ExhaustiveKeepPolicy::DecideBottom`
-already rejects a slot whose target vector fails its `size() != K` check, and
-`AIEngine::BottomCards` then falls through to the lookahead bottomer — which is exactly arm A of the
-A/B. An empty per-slot vector round-trips through both the JSON writer and the bincache. So "no
-opinion" was already expressible; nothing needed to learn a new concept.
-
-Simulated on the measured `(se, tau, candidate-set)` structure, weighted by the real mulligan mix:
-
-| gate k | defer % | blended regret | predicted delta |
-|---|---|---|---|
-| 0.00 | 0 % | 0.0345 | +0.0094 |
-| 0.50 | 33 % | 0.0166 | −0.0011 |
-| **1.00** | **56 %** | **0.0131** | **−0.0032** |
-| 2.00 | 82 % | 0.0153 | −0.0019 |
-| 3.00 | 92 % | 0.0171 | −0.0008 |
-
-Two properties worth keeping in mind:
-
-* **The downside is bounded.** As k rises the policy converges to the lookahead it is being compared
-  against, so a mis-specified gate degrades toward parity — it cannot regress to the old deficit.
-* **There is an interior optimum**, which is the signature of a real effect rather than a degenerate
-  "always defer".
-
-**Measured outcome at k=1.0** (16 seeds × 1000 games, `MTG_CONFOUND_BOTTOM=1`): **−0.0021 t, 9/16
-seeds, se 0.0018**, against a predicted −0.0032. Deferral was 67.9 % of all emitted slots (a larger
-denominator than the simulation's 56 %, which weighted by decision frequency). The profile also
-shrank 1.78 GB → 956 MB, since deferred slots serialize as `[]`.
-
-**Caveat, stated plainly:** the lookahead's regret L = 0.0185 t is *derived* from this same A/B plus
-the regret model, not independently measured, so absolute predictions inherit its error. The ranking
-of gate values is robust to L; the absolute delta is not. The confounded A/B remains the gate.
-
-## 5. Implementation
-
-`src/analyzer/ExhaustiveKeep.cpp`, all **off by default**:
-
-* `BottomRefineCfg { shrink, gate_k }`, passed to `BuildPolicyFromTables` as a nullable pointer —
-  `nullptr` keeps the generation path and every other deck **byte-identical**.
-* `BottomFeatSparse` / `FitBottomPrior` / `BottomSolve` — precision-weighted ridge least squares,
-  quadratic → additive → none depending on how many cells the table has to support the design.
-  The fit **refuses itself** if `tau >= tau_raw`, so a useless model cannot make things worse.
-* Per-cell `Z`/`SIG` are precomputed once per table; predicting per decision would dominate the
-  build (a size-7 table asks `best_sub` ~2 M × (max_mull+1) × 2 times).
-* `KeepVal`, `ComputeDopt` and the keep flags are **untouched** — the keep A/B already passed, so it
-  is not disturbed. Verified: rebuilt `D_opt` is identical to 6 figures.
-
-Flags (merge path): `MTG_KEEP_BOTTOM_REFINE` (off), `MTG_KEEP_BOTTOM_SHRINK` (default on),
-`MTG_KEEP_BOTTOM_GATE_K` (1.0), `MTG_MERGE_BOTTOM_FLOOR` (−1).
-
-## 6. The offline rebuild is EXACT — and two merge bugs that hid it
+### 6a. The offline rebuild is EXACT
 
 **A 3-week generation can be re-policied in ~20 minutes with zero rollouts.** Verified: with
 `MTG_KEEP_MERGE` + `MTG_MERGE_BOTTOM_FLOOR=2` over the single raw sidecar, the rebuilt profile's
 `entries` section is **byte-identical** to the generated one and `D_opt` matches to 6 figures
-(draw 4.77341 / play 5.01141). **The raw sidecar, not the profile, is the durable asset.**
+(draw 4.77341 / play 5.01141). **The raw sidecar, not the profile, is the durable asset** — a failed
+A/B does not oblige a regeneration if the question is about how the policy is *derived*.
 
-Establishing that control exposed two merge-path defects that affect *every* merged profile:
+### 6b. Two merge-path bugs, fixed and KEPT
+
+Establishing that control exposed two defects affecting *every* merged profile. Both fixes are
+retained; only the gate was reverted.
 
 1. **`t.cnt` was never populated and `t.se` was pushed as `{0,0}`.** Because `best_sub`'s filter
    short-circuits on `bottom_floor < 0`, a plain merge silently rebuilt an **unfiltered** bottoming
    policy — re-admitting exactly the floor-R cells an adaptive-bottom generation deliberately
-   excluded. A merged profile was therefore *not* a faithful rebuild of the profile it replaced, and
-   no bias correction could see a cell's standard error. Any pooled/merged bottoming profile built
-   before this fix is suspect.
+   excluded. A merged profile was therefore *not* a faithful rebuild of the profile it replaced.
+   **Any pooled/merged bottoming profile built before this fix is suspect.**
 2. **`ek.play_digest` was dropped by the merge.** That field is the real pooling identity (`commit`
    over-approximates), and `RunKeepMerge` itself uses it to decide whether sidecars may pool. Every
    merged profile shipped without it, so it could not be pooled against or audited later.
 
-## 7. Measurement tools
+### 6c. Measurement tools
 
 Pure-python, read only the raw sidecar, no engine and no rollouts:
 
@@ -169,16 +160,58 @@ Pure-python, read only the raw sidecar, no engine and no rollouts:
 | `test/keepraw_shrinkage_sim.py` | what shrink-to-mean can recover (the null result) |
 | `test/keepraw_structural_prior.py` | how much signal a structural prior carries |
 | `test/keepraw_mullrate.py` | Dopt, mulligan mix, and `f = P(bottoming fires)` |
-| `test/keepraw_hybrid_sim.py`, `..._quad.py` | the gate sweep and predicted A/B delta |
+| `test/keepraw_hybrid_sim.py`, `..._quad.py` | the (now-dead) gate sweep; retained for the machinery |
 
-## 8. Open follow-ups
+## 7. The live hypothesis: the labels describe play that no longer exists
 
-* **Apply the gate at generation time**, not just on the merge path, so a fresh deck never ships an
-  ungated bottoming table. The correction currently lives only where a policy is rebuilt.
-* **Fold the other pd's observation into the prior.** A cell's play and draw true values correlate
-  at **0.885** (sizes 5–6), so each is strong evidence about the other — unused information that
-  would tighten tau further. Not pursued because the gate, not the estimator, dominates the result.
-* **Tune k per mulligan depth.** The optimum was taken globally; m=1 and m=3 have different N, se
-  and tau.
-* The producer-side barrier of `keepgen-producer-barrier-and-durability.md` remains OPEN at HEAD;
-  it is unrelated to this defect.
+What remains specific to FiveColour, after noise is eliminated, is that it is the **only deck
+generated by the pre-fix generator**. Frozen `2f7822a2`, started 2026-08-21 — before the
+Dragons/Mirrorwing starvation fix (09-01/09-02) that added `sub_target` to the raw meta.
+**FiveColour's raw has no `sub_target`; every later deck's does.** It then ran 20 days on that frozen
+binary and is being validated ~230 commits later.
+
+Measured 2026-09-14, recomputing the rollout-config play digest at the labeller config (d2/b1) in a
+scratch deck dir with **no exhaustive profile present** (presence-gating would otherwise change the
+very play being fingerprinted):
+
+```
+recorded at generation:                          b79a141457869ca5
+current binary + CURRENT value sidecar:          8fca5f52d662de5f
+current binary + GEN-TIME value sidecar:         8fca5f52d662de5f
+```
+
+A == B, so the sidecar edits (`mull_gen_budget_ms` 1→3, `escalation_r` / `escalation_fresh_frac`
+added by `54931b3a` / `6a938099`) are **not** the cause — **the engine's own play moved under the
+labels.**
+
+**Counterweight, kept in view so this is not another unfalsifiable story:** Mirrorwing shipped with a
+known-stale `play_digest` and still passed at −0.0918. A moved digest is **necessary but not
+sufficient**. The causal test is to rebuild `2f7822a2` in a worktree and re-run the confounded
+bottoming A/B there with the original profile — negative there plus +0.0184 at HEAD means drift
+invalidated a good table; positive there too means the defect is in the generation itself.
+(`logs/FiveColour_gen/drift_test.sh`.)
+
+## 8. Guard blind spots found along the way
+
+* **`scripts/check_keep_subtables.py:57`** requires `rollsub=...sub=N/M` in the monitor line. A
+  **continuous** (`--gen-mulligan fast`) run emits `fed=`/`frozen=` instead — `grep -c rollsub=` over
+  FiveColour's entire 20-day log returns **0**. The script returns "inconclusive" and **exits 0**,
+  and the doc legend reads "0 = healthy or inconclusive". Asked mid-run whether FiveColour had the
+  Dragons/Mirrorwing problem, this tool was consulted and its silence reported as a clean bill of
+  health. **It structurally could not have answered.** Either teach it the continuous format or make
+  "inconclusive" a distinct non-zero exit.
+* **`scripts/mullgen.sh:313-315`** falls back to `target = 2` when the raw has no `sub_target`.
+  FiveColour's doesn't, so it passes the sampling gate **trivially** rather than on evidence. A
+  missing field should be reported as unverifiable, not defaulted.
+
+## 9. Method lessons
+
+* **A model fitted to explain one number, using a parameter solved for from that same number, has not
+  explained anything.** Check whether the account could have failed before treating agreement as
+  confirmation.
+* **Find a control before building the fix.** Melira was sitting in the repo the whole time, cost
+  minutes to check, and would have killed the hypothesis before ~300 lines of code, a push, and a
+  bad profile reaching origin.
+* **A knob whose limit is the control arm cannot prove the treatment works.**
+* **A repo guard that rejects your output is evidence about the design, not an obstacle to route
+  around.** `mullgen.sh`'s artifact check failed this profile immediately and was correct to.

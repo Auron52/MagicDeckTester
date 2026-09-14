@@ -367,177 +367,28 @@ std::vector<double> ComputeDopt(const std::vector<SizeTable>& tables, int K,
     return Dopt;
 }
 
-// ---- Offline bottoming bias correction ----------------------------------------------------------
-// WHY THIS EXISTS. best_sub picks a hand's bottoming target by argmin over its subcompositions'
-// estimated values. Those estimates are rollout means at finite R (FiveColour's sub-cells sit at
-// R=18 or R=30), and an argmin over 4-30 noisy candidates systematically selects the LUCKIEST
-// estimate rather than the best hand -- a winner's curse. Measured on FiveColour's raw sidecar: at
-// the dominant mulligan depth m=1, HALF the apparent spread between refined candidates is sampling
-// noise, and the resulting policy LOST the confounded bottoming A/B by +0.0184 t.
-//
-// Re-weighting the same numbers cannot fix that. With equal per-candidate precision, shrinking every
-// estimate toward a common mean is a MONOTONE transform -- the argmin is unchanged and the gain is
-// exactly zero (measured recovery: 6% of the regret, since our candidates differ in precision only
-// slightly, R=18 vs R=30). What DOES carry new information is a STRUCTURAL prior: a hand's value is
-// largely predictable from which cards it holds, and every other cell containing those cards is
-// evidence about it. A quadratic (pairwise-interaction) fit of the cell mean on bucket counts
-// explains ~89% of the true between-cell variance at size 5 and halves the residual spread, so each
-// cell can borrow strength from the whole table.
-//
-// Two corrections, both OFF unless a config is supplied -- the generation path and every other deck
-// stay byte-identical:
-//   SHRINK  posterior mean  Z_i = Vhat_i + lam_i (V_i - Vhat_i),  lam_i = tau^2 / (tau^2 + se_i^2)
-//   GATE    emit a target only when the winner's margin clears the noise; otherwise emit NOTHING.
-//           An empty target vector already means "no opinion": ExhaustiveKeepPolicy::DecideBottom
-//           rejects it on its `size() != K` check and AIEngine::BottomCards falls through to the
-//           lookahead bottomer -- exactly the arm the A/B measured as the comparison. So the table
-//           overrides the lookahead only where it has a real edge, and this needs NO engine change,
-//           NO schema change and NO regeneration.
-// Both JSON and bincache round-trip an empty per-slot vector, so the deferral survives serialization.
-struct BottomRefineCfg
-{
-    bool   shrink = true;    // structural-prior shrinkage of the candidate estimates
-    double gate_k = 1.0;     // defer unless margin >= gate_k * sd(margin); <= 0 disables the gate
-};
-
-// Sparse quadratic features of a composition: [1, counts..., pairwise products (i<=j)]. A hand of
-// size H has at most H non-zero buckets, so this stays tiny (28 terms at H=6) no matter how large K
-// is -- which is what keeps the fit affordable over half a million cells.
-static void BottomFeatSparse(const std::vector<int>& c, int K, bool quad,
-                             std::vector<std::pair<std::size_t, double>>& out)
-{
-    out.clear();
-    out.emplace_back(static_cast<std::size_t>(0), 1.0);
-    for (int i = 0; i < K; ++i) { if (c[i]) { out.emplace_back(static_cast<std::size_t>(1 + i), static_cast<double>(c[i])); } }
-    if (!quad) { return; }
-    const std::size_t base = 1 + static_cast<std::size_t>(K);
-    for (int i = 0; i < K; ++i)
-    {
-        if (!c[i]) { continue; }
-        // offset of the (i,j) cell in the row-major upper triangle, i <= j
-        const std::size_t row = static_cast<std::size_t>(i) * K
-                              - static_cast<std::size_t>(i) * (i - 1) / 2;
-        for (int j = i; j < K; ++j)
-        {
-            if (!c[j]) { continue; }
-            out.emplace_back(base + row + static_cast<std::size_t>(j - i),
-                             static_cast<double>(c[i]) * static_cast<double>(c[j]));
-        }
-    }
-}
-
-// Per (table, pd) structural prior + the residual spread of TRUE values around it.
-struct BottomPrior
-{
-    bool                valid = false;
-    bool                quad  = false;
-    int                 K     = 0;
-    std::vector<double> beta;
-    double              tau   = 0.0;   // residual sd of truth around the fit (NOT of the estimates)
-};
-
-// Dense solve of (A + ridge I) x = b by Gauss-Jordan with partial pivoting. d is at most
-// 1 + K + K(K+1)/2 (406 at K=27), so an O(d^3) solve is milliseconds.
-static std::vector<double> BottomSolve(std::vector<double>& A, std::vector<double>& b, std::size_t d)
-{
-    for (std::size_t c = 0; c < d; ++c)
-    {
-        std::size_t piv = c;
-        for (std::size_t r = c + 1; r < d; ++r)
-        { if (std::fabs(A[r * d + c]) > std::fabs(A[piv * d + c])) { piv = r; } }
-        if (std::fabs(A[piv * d + c]) < 1e-12) { continue; }
-        if (piv != c)
-        {
-            for (std::size_t k = 0; k < d; ++k) { std::swap(A[c * d + k], A[piv * d + k]); }
-            std::swap(b[c], b[piv]);
-        }
-        const double pv = A[c * d + c];
-        for (std::size_t r = 0; r < d; ++r)
-        {
-            if (r == c) { continue; }
-            const double f = A[r * d + c] / pv;
-            if (f == 0.0) { continue; }
-            for (std::size_t k = c; k < d; ++k) { A[r * d + k] -= f * A[c * d + k]; }
-            b[r] -= f * b[c];
-        }
-    }
-    std::vector<double> x(d, 0.0);
-    for (std::size_t i = 0; i < d; ++i)
-    { if (std::fabs(A[i * d + i]) > 1e-12) { x[i] = b[i] / A[i * d + i]; } }
-    return x;
-}
-
-// Fit the prior for one (table, pd), precision-weighted by each cell's rollout count. Falls back
-// additive -> none as the table gets too small to support the richer design, and REFUSES a fit that
-// does not actually beat the unconditional mean (tau >= tau_raw), so a useless model can never make
-// the policy worse than leaving the estimates alone.
-static BottomPrior FitBottomPrior(const SizeTable& t, int K, int pd)
-{
-    BottomPrior p;
-    p.K = K;
-    if (t.cnt.empty() || t.comps.empty()) { return p; }
-    std::vector<std::size_t> rows;
-    for (std::size_t i = 0; i < t.comps.size(); ++i)
-    { if (t.cnt[i][pd] > 1) { rows.push_back(i); } }
-    const std::size_t dq = 1 + static_cast<std::size_t>(K)
-                             + static_cast<std::size_t>(K) * (static_cast<std::size_t>(K) + 1) / 2;
-    const std::size_t da = 1 + static_cast<std::size_t>(K);
-    if      (rows.size() >= 5 * dq) { p.quad = true; }
-    else if (rows.size() >= 5 * da) { p.quad = false; }
-    else                            { return p; }
-    const std::size_t d = p.quad ? dq : da;
-    std::vector<double> A(d * d, 0.0), b(d, 0.0);
-    std::vector<std::pair<std::size_t, double>> f;
-    for (std::size_t r : rows)
-    {
-        BottomFeatSparse(t.comps[r], K, p.quad, f);
-        const double w = static_cast<double>(t.cnt[r][pd]);
-        const double y = t.V[r][pd];
-        for (const std::pair<std::size_t, double>& fi : f)
-        {
-            const double wxi = w * fi.second;
-            double* Ai = &A[fi.first * d];
-            for (const std::pair<std::size_t, double>& fj : f) { Ai[fj.first] += wxi * fj.second; }
-            b[fi.first] += wxi * y;
-        }
-    }
-    double tr = 0.0;
-    for (std::size_t i = 0; i < d; ++i) { tr += A[i * d + i]; }
-    const double ridge = std::max(1e-9, (tr / static_cast<double>(d)) * 1e-7);
-    for (std::size_t i = 0; i < d; ++i) { A[i * d + i] += ridge; }
-    p.beta = BottomSolve(A, b, d);
-    // tau^2 = (weighted residual variance) - (mean sampling variance): the part of the residual that
-    // is real structure the model missed, not rollout noise. Same decomposition for tau_raw about
-    // the weighted mean, which is what the model has to beat.
-    double sw = 0.0, rv = 0.0, my = 0.0, msq = 0.0;
-    for (std::size_t r : rows)
-    {
-        BottomFeatSparse(t.comps[r], K, p.quad, f);
-        double yh = 0.0;
-        for (const std::pair<std::size_t, double>& fi : f) { yh += p.beta[fi.first] * fi.second; }
-        const double w = static_cast<double>(t.cnt[r][pd]);
-        sw  += w;
-        rv  += w * (t.V[r][pd] - yh) * (t.V[r][pd] - yh);
-        my  += w * t.V[r][pd];
-        msq += w * t.se[r][pd] * t.se[r][pd];
-    }
-    if (sw <= 0.0) { return p; }
-    const double mu = my / sw;
-    double vy = 0.0;
-    for (std::size_t r : rows)
-    { const double w = static_cast<double>(t.cnt[r][pd]); vy += w * (t.V[r][pd] - mu) * (t.V[r][pd] - mu); }
-    const double tau_raw = std::sqrt(std::max(0.0, vy / sw - msq / sw));
-    p.tau   = std::sqrt(std::max(0.0, rv / sw - msq / sw));
-    p.valid = (p.tau > 0.0) && (tau_raw > 0.0) && (p.tau < tau_raw);
-    return p;
-}
-
+// ---- A ROUTE THAT IS CLOSED: do not re-add an offline bottoming "bias correction" ----------------
+// 2026-09-13 an empirical-Bayes shrinkage + margin GATE was added here to cure a presumed winner's
+// curse in best_sub's argmin: where the winner's margin did not clear the candidates' combined
+// noise it emitted an EMPTY target, which DecideBottom rejects on its size()!=K check so the engine
+// falls through to the LOOKAHEAD bottomer. Removed 2026-09-14 for two independent reasons:
+//   1. FORBIDDEN. Lookahead bottoming must be on NOWHERE for a deck that ships a profile (user
+//      directive). scripts/mullgen.sh's artifact check agrees -- it counts any row with len != K as
+//      malformed and FAILS validation. A profile built this way (67.9% of FiveColour's slots empty)
+//      cannot legitimately be adopted whatever it measures.
+//   2. THE DIAGNOSIS WAS WRONG. Melira Pod ships the same fast/R30 recipe with a WORSE sub-table
+//      profile on every metric the theory used (45.4% of cell-sides at floor R=2 vs 41.2%, mean R
+//      13.58 vs 13.84) and PASSES the confounded bottoming A/B at -0.091 t, 16/16. Sampling noise in
+//      the argmin is therefore not what ails a failing deck, and the supporting arithmetic was
+//      circular -- it derived the lookahead's regret from the very A/B it was explaining.
+// If a bottoming table loses its confounded A/B, the answer is to find the real cause (see
+// docs/design/keepgen-bottoming-winners-curse.md for the refutation and the drift hypothesis), not
+// to hand those decisions back to the lookahead.
 ExhaustiveKeepPolicy BuildPolicyFromTables(
     const std::vector<SizeTable>& tables, const std::vector<int>& count,
     const std::vector<std::vector<std::string>>& bucket_members, int deck_size, int max_mull,
     int effective_R, bool bottoming_enabled = false, long long bottom_floor = -1,
-    std::array<std::vector<double>, 2>* Dopt_out = nullptr,
-    const BottomRefineCfg* refine = nullptr, std::ostream* rlog = nullptr)
+    std::array<std::vector<double>, 2>* Dopt_out = nullptr)
 {
     const int K = static_cast<int>(count.size());
     const SizeTable& H7 = tables[0];
@@ -554,55 +405,9 @@ ExhaustiveKeepPolicy BuildPolicyFromTables(
     // cells excluded are near-ties (EV-negligible) or genuinely worse. Fall back to the unfiltered argmin
     // only if NO subcomp is refined (shouldn't happen for a kept hand). bottom_floor < 0 => no filter =>
     // byte-identical to the previous unconditional argmin.
-    // Optional bias correction (see BottomRefineCfg). Z holds the score the argmin ranks on -- the
-    // posterior mean when shrinking, the raw estimate otherwise -- and SIG its posterior sd, which
-    // the gate measures the winner's margin against. Precomputed per cell ONCE rather than per
-    // decision: a size-7 table asks best_sub ~2M x (max_mull+1) x 2 times, and re-predicting a
-    // quadratic model at each of those would dominate the build.
-    std::vector<std::vector<std::array<double, 2>>> Zt(tables.size()), SIGt(tables.size());
-    if (refine)
-    {
-        for (std::size_t ti = 1; ti < tables.size(); ++ti)     // ti == m; size-7 is never a bottom target
-        {
-            const SizeTable& t = tables[ti];
-            Zt[ti].assign(t.comps.size(), { 0.0, 0.0 });
-            SIGt[ti].assign(t.comps.size(), { 0.0, 0.0 });
-            for (int pd = 0; pd < 2; ++pd)
-            {
-                BottomPrior pr;
-                if (refine->shrink) { pr = FitBottomPrior(t, K, pd); }
-                std::vector<std::pair<std::size_t, double>> f;
-                long long shrunk = 0;
-                for (std::size_t i = 0; i < t.comps.size(); ++i)
-                {
-                    const double v  = t.V[i][pd];
-                    const double se = t.se.empty() ? 0.0 : t.se[i][pd];
-                    double z = v, sg = se;
-                    if (pr.valid && se > 0.0)
-                    {
-                        BottomFeatSparse(t.comps[i], K, pr.quad, f);
-                        double vh = 0.0;
-                        for (const std::pair<std::size_t, double>& fi : f) { vh += pr.beta[fi.first] * fi.second; }
-                        const double t2  = pr.tau * pr.tau;
-                        const double lam = t2 / (t2 + se * se);
-                        z  = vh + lam * (v - vh);
-                        sg = se * std::sqrt(lam);
-                        ++shrunk;
-                    }
-                    Zt[ti][i][pd]   = z;
-                    SIGt[ti][i][pd] = sg;
-                }
-                if (rlog)
-                {
-                    *rlog << "  bottom-refine: size " << (HAND - static_cast<int>(ti)) << " pd " << pd
-                          << (pr.valid ? (pr.quad ? "  prior=quad" : "  prior=additive") : "  prior=NONE")
-                          << "  tau=" << pr.tau << "  shrunk " << shrunk << "/" << t.comps.size() << "\n";
-                }
-            }
-        }
-    }
-
-    long long gate_defer = 0, gate_total = 0;
+    // best_sub ALWAYS returns a full-length target: the refined-only argmin, or the unfiltered one if
+    // no subcomp cleared the floor. Never an empty vector -- that would route the decision to the
+    // engine's lookahead bottomer (see the closed-route note above BuildPolicyFromTables).
     auto best_sub = [&](const std::vector<int>& h, int m, int pd) -> std::vector<int>
     {
         const int target = HAND - m;
@@ -611,7 +416,7 @@ ExhaustiveKeepPolicy BuildPolicyFromTables(
         EnumComps(0, target, cur, h, subs);
         const int ti = HAND - target;
         const SizeTable& t = tables[ti];
-        double best = 1e9, best2 = 1e9, sig1 = 0.0, sig2 = 0.0;
+        double best = 1e9;
         std::vector<int> arg = h;                              // refined-only argmin
         double best_any = 1e9; std::vector<int> arg_any = h;   // unfiltered fallback
         for (const std::vector<int>& s : subs)
@@ -619,24 +424,12 @@ ExhaustiveKeepPolicy BuildPolicyFromTables(
             auto it = t.index.find(s);
             if (it == t.index.end()) { continue; }
             const int idx = it->second;
-            const double v = (refine && !Zt[ti].empty()) ? Zt[ti][idx][pd] : t.V[idx][pd];
+            const double v = t.V[idx][pd];
             if (v < best_any) { best_any = v; arg_any = s; }
             if (!(bottom_floor < 0 || (!t.cnt.empty() && t.cnt[idx][pd] > bottom_floor))) { continue; }
-            const double sg = (refine && !SIGt[ti].empty()) ? SIGt[ti][idx][pd] : 0.0;
-            if (v < best)       { best2 = best; sig2 = sig1; best = v; sig1 = sg; arg = s; }
-            else if (v < best2) { best2 = v;    sig2 = sg; }
+            if (v < best) { best = v; arg = s; }
         }
         if (best >= 1e9) { return arg_any; }
-        // THE GATE: a margin that does not clear the combined noise of the top two candidates is not
-        // evidence, it is a coin flip -- decline to speak and let the engine's lookahead bottom this
-        // hand instead. An empty vector is the "no opinion" encoding DecideBottom already honours.
-        if (refine && refine->gate_k > 0.0 && best2 < 1e9)
-        {
-            ++gate_total;
-            const double sd = std::sqrt(sig1 * sig1 + sig2 * sig2);
-            if (sd > 0.0 && (best2 - best) < refine->gate_k * sd)
-            { ++gate_defer; return std::vector<int>(); }
-        }
         return arg;
     };
 
@@ -658,13 +451,6 @@ ExhaustiveKeepPolicy BuildPolicyFromTables(
             }
         ek.keep[H7.comps[i]]        = std::move(flags);
         ek.bottom_keep[H7.comps[i]] = std::move(bk);
-    }
-    if (rlog && refine && refine->gate_k > 0.0)
-    {
-        *rlog << "  bottom-refine: gate k=" << refine->gate_k << " deferred " << gate_defer << "/"
-              << gate_total << " ("
-              << (gate_total ? 100.0 * static_cast<double>(gate_defer) / static_cast<double>(gate_total) : 0.0)
-              << "%) bottoming slots to the engine's lookahead\n";
     }
     ek.Index();
     if (Dopt_out) { *Dopt_out = Dopt_pd; }
@@ -4879,7 +4665,7 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         }
     }
 
-    // ---- Bottoming argmin: floor filter + offline bias correction -------------------------------
+    // ---- Bottoming argmin: floor filter ---------------------------------------------------------
     // MTG_MERGE_BOTTOM_FLOOR=<n> reproduces an adaptive-bottom generation's refined-only argmin
     // (the gen passes bottom_floor = r_floor; a plain merge defaults to -1 = NO filter, so without
     // this a rebuild does NOT reproduce the profile it is rebuilding -- it re-admits the floor-R
@@ -4888,27 +4674,11 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         const char* bf = std::getenv("MTG_MERGE_BOTTOM_FLOOR");
         if (bf && *bf && recon_bottom_floor < 0) { recon_bottom_floor = std::atoll(bf); }
     }
-    // MTG_KEEP_BOTTOM_REFINE (default OFF => byte-identical merges) enables the winner's-curse
-    // correction documented at BottomRefineCfg: shrink each candidate toward a structural prior, and
-    // emit NO target where the winner's margin does not clear the noise (the engine's lookahead then
-    // bottoms that hand). MTG_KEEP_BOTTOM_SHRINK=0 isolates the gate; MTG_KEEP_BOTTOM_GATE_K=0
-    // isolates the shrinkage.
-    BottomRefineCfg  brc;
-    BottomRefineCfg* brc_p = nullptr;
-    if (EnvOn("MTG_KEEP_BOTTOM_REFINE"))
-    {
-        brc.shrink = EnvOn("MTG_KEEP_BOTTOM_SHRINK", true);
-        const char* gk = std::getenv("MTG_KEEP_BOTTOM_GATE_K");
-        brc.gate_k = (gk && *gk) ? std::atof(gk) : 1.0;
-        brc_p = &brc;
-        os << "BOTTOM-REFINE: shrink=" << (brc.shrink ? "on" : "off") << " gate_k=" << brc.gate_k
-           << " bottom_floor=" << recon_bottom_floor << "\n";
-    }
 
     std::array<std::vector<double>, 2> Dopt;
     ExhaustiveKeepPolicy ek = BuildPolicyFromTables(
         tables, count, buckets, static_cast<int>(deck.mainboard.size()), max_mull, effective_R,
-        bottoming_enabled, recon_bottom_floor, &Dopt, brc_p, brc_p ? &os : nullptr);
+        bottoming_enabled, recon_bottom_floor, &Dopt);
     ek.commit = commit;
     // Carry the POOLING IDENTITY through a merge. This was dropped, so every merged profile shipped
     // without a play_digest -- the one field that says which rollout-config play the table was fitted
