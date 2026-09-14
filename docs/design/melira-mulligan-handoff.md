@@ -1,9 +1,42 @@
 # Melira Pod — exhaustive mulligan profile: run record + machine handoff
 
-Launched 2026-09-12 on the primary box (32 cores). This document is the **standalone runbook for
-moving the run to a second machine** if it has not finished in the user's window (~70 h). It lives in
-`docs/design/` on purpose: `logs/` and the generation artifacts are gitignored, so a handoff note
-written there would never reach the other machine. Everything needed to resume is below.
+## OUTCOME: finished on the primary in ~51.2 h — the handoff was never needed
+
+Ran 2026-09-12T03:32Z → 2026-09-14T06:47Z, inside the ~70 h window. **Validation PASSED and the
+profile is adopted**; ground truth re-accepted on all three tiers 2026-09-14.
+
+| check | delta | seeds | mean/se |
+|---|---|---|---|
+| keep (exhaustive vs static) | **−0.186 t** | 16/16 | −22.8 |
+| bottoming (blind vs lookahead, **confounded**) | **−0.091 t** | 16/16 | −31.4 |
+
+`artifact check OK: K=23 entries=788081 bottoming_enabled=True sub_cells=600866 min_rollouts=2` —
+note `min_rollouts=2` clears the sub-table sampling gate that caught the silently-broken Dragons and
+Mirrorwing tables. The confounded bottoming gate **passed**, putting Melira on the healthy side of
+the open `docs/design/confounded-bottoming-gate-failures.md` question.
+
+The scout projected ~87.6 h for `fast` and advised "use another machine or a weekend run"; actual was
+51.2 h, so the projection over-predicted by ~1.7x — it does not model how hard adaptive keep trims
+the schedule. `complete` projected ~175 h and genuinely would have needed the handoff.
+
+**Every GT key that moved is attributable to the profile, verified not assumed.** With the profile
+renamed away (presence-gating deactivates it) the regression tier re-ran and all 5 melira keys PASSED
+on an *exact* match of both avg and play digest — so engine drift since melira's last accept is zero.
+Net direction is faster on every tier: regression searched 39 faster / 24 slower, smoke 27/9,
+overnight 265/227 (d0 1756/1691).
+
+That diagnostic also corrected a wrong first reading. `explain_game` reports **"kept hand + draws
+IDENTICAL -> a clean like-for-like LINE change"** for the slower games, and
+`classify_turn_later.sh` calls most of them PERSISTS at 4x and 16x budget — which normally reads as a
+real play regression, and is *not* the mulligan churn you would expect. The actual mechanism is
+bottoming: it rewrites the **library tail**, which the search rolls out into, while the cards actually
+drawn in a ~5-turn game are unchanged. Hence identical draws, a changed line, and a difference that
+budget cannot wash out. Do not re-derive this from scratch next time a profile lands.
+
+The rest of this document is the **handoff runbook**, retained because it is the run record and
+because the next deck's generation will need the same mechanics. It lives in `docs/design/` on
+purpose: `logs/` and the generation artifacts are gitignored, so a handoff note written there would
+never reach the other machine.
 
 Read alongside `.claude/skills/mulligan-profile.md` (the authoritative skill); this file only pins
 *this* run's parameters and the transfer mechanics.
