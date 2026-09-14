@@ -8,15 +8,34 @@ DecideBottom's argmin selects on noise. It shipped on Dragons and Mirrorwing.
 
 Works on a run IN FLIGHT (read-only; never touches the job):
 
-    python3 scripts/check_keep_subtables.py <gen.log>              # fastest, most direct
+    python3 scripts/check_keep_subtables.py <gen.log>              # BATCHED runs only -- see below
     python3 scripts/check_keep_subtables.py <deck>....raw.json.journal
     python3 scripts/check_keep_subtables.py <deck>....raw.json[.gz]   # a FINISHED run
 
-Any mix of the three; each is auto-detected. Exit 0 = healthy//unknown, 1 = starvation found.
+Any mix of the three; each is auto-detected.
+
+    exit 0  healthy -- sub-tables verified to be sampled
+    exit 1  STARVED
+    exit 2  CANNOT DETERMINE -- this is NOT a pass, and must never be reported as one
+    exit 64 usage
+
+READ THIS BEFORE TRUSTING A QUIET RESULT. A gen.log only answers for a BATCHED run, whose monitor
+line carries `rollsub=` and `sub=N/M`. A CONTINUOUS run (`--gen-mulligan fast`) emits a different
+monitor line entirely -- `fed=` / `frozen=` / `cap=` -- which contains **no sub-table counters at
+all**. There is nothing there to read, so on a continuous log this tool cannot answer and now says
+so with exit 2. It used to fall through to "inconclusive" and exit 0, under a legend reading
+"0 = healthy or inconclusive"; asked mid-run whether FiveColour's 20-day continuous generation had
+the Dragons/Mirrorwing problem, that silence was reported as a clean bill of health. For a
+continuous run use the JOURNAL (in flight) or the RAW (finished) instead -- both carry real per-cell
+rollout counts.
 """
 import sys, os, re, json, gzip, collections
 
 HAND = 7
+
+# Verdicts. None means "this source had nothing to say yet" (benign, e.g. a 3-minute-old run);
+# UNREADABLE means "this source structurally cannot answer" -- a different thing, and never a pass.
+UNREADABLE = "unreadable"
 
 
 def _open(p):
@@ -38,30 +57,55 @@ def _last_run(path):
     if len(starts) > 1:
         print(f"  NOTE: {len(starts)} runs appended in this log -- reading only the last "
               f"(from line {starts[-1] + 1})")
-    return lines[starts[-1]:] if starts else lines
+    return (lines[starts[-1]:] if starts else lines), lines
 
 
 def check_genlog(path):
     """The monitor line is the primary signal: `sub=N/M` is sub-table batches DONE / TOTAL."""
     resumed_refine = False
     monitors = []          # (elapsed, phase, rollsub, sub_done, sub_total)
-    floor_complete = False
+    continuous = 0         # monitor lines in the CONTINUOUS format, which has no sub-table counters
     recommend_probe = False
-    for ln in _last_run(path):
+    last, allines = _last_run(path)
+    # The FLOOR-COMPLETE signal is scoped to the WHOLE file, not the last run block. `_last_run`
+    # exists so an earlier starved run cannot condemn the healthy one now in flight, but for this
+    # one signal it inverts: a legitimate RESUME (an OOM recovery, a deliberate pause) opens a new
+    # settings banner and restores refs from a journal whose floor completed in an EARLIER block, so
+    # scoping it to the last block prints "resumed into refine YES / floor NO" -- precisely the
+    # Dragons/Mirrorwing starvation signature -- for a run that is fine. FiveColour is that case:
+    # floor completed at 1056351s in block 1, and block 2 is the OOM recovery.
+    # What actually distinguishes the bug is refs restored with the floor never having completed
+    # ANYWHERE, so that is what gets tested.
+    floor_complete = any("floor complete, refs fixed" in ln for ln in allines)
+    floor_in_last = any("floor complete, refs fixed" in ln for ln in last)
+    for ln in last:
         if "refs restored from journal -> resuming refine" in ln:
             resumed_refine = True
-        if "floor complete, refs fixed" in ln:
-            floor_complete = True
         if "probe carry" in ln and "ON" in ln:
             recommend_probe = True
         m = re.search(r"monitor:\s*(\d+)s\s+phase=(\w+).*?rollsub=(\d+).*?sub=(\d+)/(\d+)", ln)
         if m:
             monitors.append((int(m.group(1)), m.group(2), int(m.group(3)),
                              int(m.group(4)), int(m.group(5))))
+        elif re.search(r"monitor:\s*\d+s\s+phase=\w+.*?\bfed=\d+", ln):
+            continuous += 1
 
-    print(f"  resumed straight into refine : {'YES  <-- the trigger' if resumed_refine else 'no'}")
-    print(f"  floor phase completed        : {'yes' if floor_complete else 'NO'}")
+    danger = resumed_refine and not floor_complete
+    print(f"  resumed straight into refine : "
+          f"{('YES  <-- the trigger' if danger else 'yes (but the floor DID complete earlier -- benign resume)') if resumed_refine else 'no'}")
+    print(f"  floor phase completed        : "
+          f"{'yes' if floor_in_last else ('yes, in an EARLIER run block' if floor_complete else 'NO')}")
     print(f"  probe carry active           : {'yes' if recommend_probe else 'no'}")
+    if not monitors and continuous:
+        # The whole point of exit 2: a continuous monitor line reports fed/frozen/cap and carries no
+        # sub-table counters whatsoever, so absence of a starvation signal here is absence of ANY
+        # signal. Saying "looks fine" off this log is not a weak answer, it is a wrong one.
+        print(f"  monitor lines                : {continuous}, all in the CONTINUOUS format "
+              f"(fed=/frozen=/cap=)")
+        print("\n  *** CANNOT DETERMINE from this log. A continuous (--gen-mulligan fast) run's")
+        print("      monitor line carries NO sub-table counters -- there is nothing here to read.")
+        print("      Check the .journal (in flight) or the .raw.json (finished) instead. ***")
+        return UNREADABLE
     if not monitors:
         print("  monitor lines               : none yet (run <5 min old, or a log without them)")
         return None
@@ -153,12 +197,22 @@ def check_raw(path):
         print("  no sub-table cells in this raw (keep-only). Not the bug.")
         return None
     print(f"  R={meta.get('R')}  depth={meta.get('depth')}  budget={meta.get('budget_ms')}ms")
-    print(f"  sub_target                   : {target}{'  (legacy raw -> floor)' if legacy else ''}")
+    print(f"  sub_target                   : {target}"
+          f"{'  <-- ASSUMED; raw predates the field' if legacy else ''}")
     print(f"  sub-table cell-sides         : {tot}")
     print(f"  min rollouts per sub cell    : {mn}")
     if under:
         print(f"\n  *** STARVED: {under}/{tot} sub cell-sides below sub_target. ***")
         return False
+    if legacy:
+        # Do NOT report a pass here. Without meta.sub_target there is no record of what this run
+        # was aiming for, so all that has been shown is the absence of the R=1 signature -- a raw
+        # generated to a target of 30 and stalled at 2 clears this check exactly as cleanly as a
+        # healthy one. FiveColour's raw is such a legacy raw and passed here trivially.
+        print(f"\n  ?  CANNOT DETERMINE: this raw predates meta.sub_target, so the real target is")
+        print(f"     unknown and only the floor of {target} could be checked (min seen: {mn}).")
+        print(f"     Absence of the R=1 signature is NOT evidence the run reached its cap.")
+        return UNREADABLE
     print("\n  OK: every sub-table cell reached its target.")
     return True
 
@@ -166,7 +220,7 @@ def check_raw(path):
 def main(argv):
     if not argv:
         print(__doc__)
-        return 2
+        return 64
     verdicts = []
     for p in argv:
         print(f"\n=== {p} ===")
@@ -185,11 +239,21 @@ def main(argv):
         print("VERDICT: STARVED bottoming sub-tables -- see "
               "docs/design/keepgen-subtable-starvation-detection.md for what to do.")
         return 1
-    if all(v is None for v in verdicts):
-        print("VERDICT: inconclusive (too early, or nothing sub-table-related to read).")
+    if any(v is True for v in verdicts):
+        # A positive reading from any source settles it; an unreadable source alongside it is just
+        # a source that had nothing to add.
+        if any(v == UNREADABLE for v in verdicts):
+            print("VERDICT: sub-tables look healthy (one source could not answer; another could).")
+        else:
+            print("VERDICT: sub-tables look healthy.")
         return 0
-    print("VERDICT: sub-tables look healthy.")
-    return 0
+    if any(v == UNREADABLE for v in verdicts):
+        print("VERDICT: CANNOT DETERMINE -- no source given could answer the question.")
+        print("         This is NOT a clean bill of health. Do not report it as one.")
+        return 2
+    print("VERDICT: inconclusive (too early, or nothing sub-table-related to read).")
+    print("         Nothing has been verified yet -- check again once the run has produced data.")
+    return 2
 
 
 if __name__ == "__main__":

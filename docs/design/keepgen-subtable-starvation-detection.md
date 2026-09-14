@@ -20,11 +20,39 @@ python3 scripts/check_keep_subtables.py <path>
 
 | what you have | pass this | when |
 |---|---|---|
-| the generation's stdout/stderr log | `.../gen.log` | **best** — works from ~10 min in |
-| the live journal | `<deck>.keepmodel.exhaustive.raw.json.journal` | any time after cells start landing |
+| the live journal | `<deck>.keepmodel.exhaustive.raw.json.journal` | **best** — any time after cells start landing |
 | a finished run | `<deck>.keepmodel.exhaustive.raw.json[.gz]` | after the run ends |
+| the generation's stdout/stderr log | `.../gen.log` | only for a **BATCHED** run — see the warning below |
 
-Exit `1` = starved (act on it), `0` = healthy or inconclusive. It is read-only.
+```
+exit 0   healthy — sub-tables verified to be sampled
+exit 1   STARVED — act on it
+exit 2   CANNOT DETERMINE — NOT a pass, and must never be reported as one
+```
+
+> ### ⚠ The gen.log route does not work for a continuous run
+>
+> A **continuous** (`--gen-mulligan fast`) run's monitor line reports `fed=` / `frozen=` / `cap=` and
+> carries **no sub-table counters at all**. There is nothing in it to read, so the checker cannot
+> answer from that log and now exits **2**. Since the continuous-only conversion (`dd4b112`) *every*
+> keepgen run emits this format — `grep -c rollsub=` returns 0 across every log in the repo — so the
+> `rollsub=`/`sub=N/M` route below applies only to a historical batched log. **Use the journal or the
+> raw.**
+>
+> This legend previously read "`0` = healthy or inconclusive". Asked mid-run whether FiveColour's
+> 20-day continuous generation had this bug, an agent ran the checker, got exit 0, and reported a
+> clean bill of health. The tool had not examined anything. A check that cannot fail is not a check.
+>
+> Two related traps, both now fixed in the script:
+> * **A legitimate resume looked exactly like the bug.** The checker scoped its signals to the last
+>   run block, so an OOM recovery or a deliberate pause (new settings banner, refs restored from a
+>   journal whose floor completed in an *earlier* block) printed "resumed into refine YES / floor NO"
+>   — the starvation signature — for a healthy run. Floor completion is now checked across the whole
+>   file; only refs-restored-with-floor-never-completed-anywhere is the trigger.
+> * **A legacy raw passed trivially.** Raws predating `meta.sub_target` have no record of what the run
+>   was aiming for, so only the floor of 2 could be checked. A raw generated to a cap of 30 and
+>   stalled at 2 cleared that exactly as cleanly as a healthy one. This now reports exit 2 rather than
+>   "OK: every sub-table cell reached its target".
 
 **If you have no log** (e.g. output went to a terminal that is gone), use the journal — it sits next
 to the deck's raw sidecar and is written continuously.
@@ -35,16 +63,24 @@ The script may postdate the checkout on the machine running the job. **You do no
 do not need to pull — everything below reads files the run is already writing:
 
 ```bash
-# 1. Is the sub-table counter moving? (the whole test)
+# 1. Is the sub-table counter moving? (the whole test) -- BATCHED runs only; a continuous run
+#    prints nothing matching this, and empty output here means "wrong tool", NOT "healthy".
 grep -o "rollsub=[0-9]* .*sub=[0-9]*/[0-9]*" <gen.log> | tail -3
 
-# 2. Did this run skip the floor phase? (the trigger)
+# 2. Did this run skip the floor phase? (the trigger) -- grep the WHOLE log, not the last block:
+#    a resume legitimately restores refs from a journal whose floor completed earlier.
 grep -E "RESUME\(journal\)|resuming refine|floor complete" <gen.log> | head
+
+# 3. CONTINUOUS run (every current run): the gen.log cannot answer. Read per-cell counts from the
+#    journal instead -- "n" is a sub cell-side's rollout count, and H<7 are the sub-tables.
+grep -o '"H":[0-6],[^}]*"n":[0-9]*' <deck>.keepmodel.exhaustive.raw.json.journal \
+  | grep -o '"n":[0-9]*$' | sort -t: -k2 -n | uniq -c | head
 ```
 
-Grep 1 is the verdict: **`sub=0/<big number>` and `rollsub=0` on the latest lines, with the run well
-underway, means starved.** Grep 2 says why: `resuming refine` without a preceding `floor complete` is
-the failing path.
+Grep 1 is the verdict **only if it produces output**: `sub=0/<big number>` and `rollsub=0` on the
+latest lines, with the run well underway, means starved. Grep 2 says why — but `resuming refine` is
+the failing path only when **no** `floor complete` appears anywhere in the file. Grep 3 is the one
+that applies to a run started today: if every sub cell-side sits at 1, it is starved.
 
 *(Pulling the repo is safe for a running generation — it rewrites source files, not the loaded binary
 or the journal. But you only need to pull if you intend to rebuild, per §5.)*
