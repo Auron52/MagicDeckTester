@@ -1,0 +1,12 @@
+{
+ "jobs": [
+  {
+   "name": "cg_kitty",
+   "deck": "decks/KittyEquipment/KittyEquipment.cod",
+   "profile": "decks/KittyEquipment/KittyEquipment.profile.json",
+   "games": 6,
+   "seed": 1001,
+   "budget_ms": 20
+  }
+ ]
+}

@@ -1,0 +1,14 @@
+{
+ "jobs": [
+  {
+   "name": "cg_fluctuator",
+   "deck": "decks/Fluctuator/Fluctuator.cod",
+   "profile": "decks/Fluctuator/Fluctuator.profile.json",
+   "games": 6,
+   "seed": 1001,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  }
+ ]
+}

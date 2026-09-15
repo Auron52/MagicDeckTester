@@ -252,6 +252,17 @@ void CardDatabase::RebuildInternedIndex()
         const CardDefinition* d = LookupInterned(kv.second.card.m_name);
         kv.second.card.m_def = d ? d : NotInDb();
     }
+
+    // Largest hand_size_anthem_max over every loaded definition; -1 when no card has one.
+    // ComputeLordBonus's conditional-anthem scan can only ever fire for a controller whose hand
+    // is at or below SOME card's threshold, so this is the exact bound that lets it skip the
+    // whole battlefield walk. See MaxHandSizeAnthemMax().
+    m_max_hand_anthem = -1;
+    for (const auto& kv : m_cards)
+    {
+        if (kv.second.params.hand_size_anthem_max > m_max_hand_anthem)
+        { m_max_hand_anthem = kv.second.params.hand_size_anthem_max; }
+    }
 }
 
 std::vector<std::string> CardDatabase::MdfcBackFaceNames() const

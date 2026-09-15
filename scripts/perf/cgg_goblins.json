@@ -1,0 +1,14 @@
+{
+ "jobs": [
+  {
+   "name": "cg_goblins",
+   "deck": "decks/Goblins/Goblins.cod",
+   "profile": "decks/Goblins/Goblins.profile.json",
+   "games": 6,
+   "seed": 1001,
+   "budget_ms": 10,
+   "depth": 3,
+   "ignore_play_profile": true
+  }
+ ]
+}

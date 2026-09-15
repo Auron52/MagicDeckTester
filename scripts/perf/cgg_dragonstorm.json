@@ -1,0 +1,12 @@
+{
+ "jobs": [
+  {
+   "name": "cg_dragonstorm",
+   "deck": "decks/Dragonstorm/Dragonstorm.cod",
+   "profile": "decks/Dragonstorm/Dragonstorm.profile.json",
+   "games": 6,
+   "seed": 1001,
+   "budget_ms": 20
+  }
+ ]
+}
