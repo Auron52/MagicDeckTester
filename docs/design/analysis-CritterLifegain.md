@@ -565,6 +565,113 @@ additively. Held-out confirm of the winner (seed 1440000): -0.3005 +-0.0041, shr
 - **NOT ADOPTED.** Deckbuilding is the user's call, and an adopted list owes its own artifacts
   (value leaf + mulligan) — the screen's number is a RANKING, not that deck's measured strength.
 
+## Screens 4–5 (2026-09-15) — the user's rulings: keep 2 Archangels, a 4th Remote Farm, and Sol Ring
+
+### USER RULING that reframes screen 3
+> *"No, I don't want to cut all of the Archangels. 2 of them + 2 other cards might be okay, but in
+> games that drag out and the board is stuck the Archangels are key."*
+
+**This is not something the harness can price, and that is the point.** The passive goldfish
+opponent never blocks, never attacks and never casts, so *"the board is stuck"* is a game state that
+**does not exist in this simulator**. Screen 3's -0.049 for cutting two Archangels measures them
+purely as expensive cards in a deck that wants to curve out; the stalled-board payoff they are
+actually in the deck for is structurally invisible here. So **Archangel of Thune 2 is treated as a
+FIXED CONSTRAINT from here on**, not a hypothesis to re-test, and the job becomes optimising around
+it. Heliod 2 / Ranger-Captain 1 are held for the separate, *measured* reason (screen 2: cutting them
+is +0.034).
+
+### Screen 4 — `logs/deckcmp/critter_ocelot_thune2.json` → `logs/ocelot/thune2.out` (base 4.7676)
+
+Archangel of Thune pinned at 2, Ocelot Pride 4; vary which other 2 slots pay for it, and sweep the
+Remote Farm count.
+
+| arm | the other 2 slots + land config | delta | se |
+|---|---|---|---|
+| *t0_ocelot4_rf3* | *(user-REJECTED reference: all 4 Thune cut, rf3)* | *-0.3003* | *0.0042* |
+| t2_auriok2_rf4 | Auriok Champion 4->2, rf4 — **FLAGGED, see caveat** | -0.2915 | 0.0044 |
+| **t2_ajani2_serra1_rf4** | **Ajani walker 3->2 + Serra Ascendant 2->1, rf4** | **-0.2849** | 0.0044 |
+| t2_pm2_rf5 | Ajani's Pridemate 4->2, rf5 | -0.2309 | 0.0043 |
+| t2_voice2_rf4 | Voice of the Blessed 4->2, rf4 | -0.2265 | 0.0043 |
+| t2_pm2_rf4 | Ajani's Pridemate 4->2, rf4 | -0.2263 | 0.0042 |
+| t2_pm2_rf3 | Ajani's Pridemate 4->2, rf3 | -0.2176 | 0.0040 |
+
+**The 4th Remote Farm: YES, but small.** Paired, holding the spells fixed:
+rf4 vs rf3 = **-0.0086**, and a 5th is a further **-0.0046** (rf5 vs rf4). Land count stays 24
+throughout (the 4th comes out of a Plains, exactly as the user proposed). Diminishing but not yet
+negative at 5 — the enters-tapped, two-use, self-sacrificing battery has not turned over by then,
+which is mildly surprising for an aggro deck and is worth remembering if the list ever gets greedier.
+
+**WHERE the other 2 slots come from matters far more than the Remote Farm count.** Funding Ocelot
+Pride out of **Ajani walker + Serra Ascendant** (-0.2849) instead of Ajani's Pridemate (-0.2263) is
+worth **0.059t** — and it changes the price of the user's Archangel constraint dramatically:
+
+| funded from | cost of keeping 2 Archangels vs cutting all 4 |
+|---|---|
+| Ajani's Pridemate 4->2 | 0.074t |
+| **Ajani walker 3->2 + Serra 2->1** | **0.015t** |
+
+i.e. with the right 2 slots, honouring the user's ruling costs almost nothing in goldfish terms.
+Cutting Ajani's Pridemate or Voice of the Blessed for Ocelot Pride is the expensive way to do it —
+consistent with screen 1's `op4_pridemate` (+0.0092): Ocelot Pride is *not* an upgrade on those.
+
+### Screen 5 — "is Sol Ring's colourless-only a notable cost, or does it make it back on pure power?"
+
+> USER: *"The question is whether Sol Ring's colourless only is a notable cost or whether it makes it
+> back with pure power-level."*
+
+Sol Ring was already in `cards.json` (mana_rock, produces C, amount 2; matches live Scryfall
+verbatim; four other decks run it) — no implementation needed. The question is decomposable, so it
+was decomposed rather than argued: a **measurement-only twin, `Test White Ring`** (Sol Ring with
+`produces: ["W"]`), was added to the working tree, measured on the same seeds, and **reverted before
+any commit** — it is not in git and must never be. `delta(twin)` is the pure power level;
+`delta(Sol Ring) - delta(twin)` is exactly what colourlessness costs.
+
+`logs/deckcmp/critter_solring.json` → `logs/ocelot/solring.out`, base 4.7728, 20,000 paired games:
+
+| arm | delta | se |
+|---|---|---|
+| whitering1 — the SAME rock tapping for {W}{W} | **-0.0865** | 0.0024 |
+| solring1 — the real Sol Ring, {C}{C} | **+0.0036** | 0.0024 |
+| whitering2 — two of the white twin | -0.1582 | 0.0034 |
+| solring2 — two Sol Rings | +0.0215 | 0.0035 |
+
+**ANSWER: the colourless restriction is a notable cost, and it eats the entire power advantage —
+almost exactly.** Paired directly:
+
+```
+power of a 1-mana 2-mana rock here          = -0.0865      (the white twin)
+cost of that mana being colourless          = +0.0901      (solring1 - whitering1, paired)
+--------------------------------------------------------
+net for one Sol Ring                        = +0.0036 +-0.0024   (a wash, slightly negative)
+```
+
+**And the second copy is actively bad**, because the two halves scale differently: the colour cost
+is very nearly LINEAR (+0.0901 -> +0.1796 for two, paired) while the rock's power is SUBLINEAR
+(-0.0865 -> -0.1582). A deck with fourteen of its sixty cards costing `{W}` or `{W}{W}` cannot spend
+the second Ring's colourless mana.
+
+On the working list the same verdict holds: `best_solring1` -0.2746 vs `best_norING` -0.2785, i.e.
+Sol Ring costs **+0.0040 +-0.0031 (t = -1.28)** there — indistinguishable from zero, and pointing
+the wrong way. **Recommendation: do not run Sol Ring in this deck.** Not because the card is weak —
+the twin proves the slot is worth 0.087t if the mana were white — but because this specific mana
+base cannot use colourless.
+
+### Current best list (NOT adopted — the user's call)
+
+```
+4 Soul Warden          4 Voice of the Blessed    2 Heliod, Sun-Crowned     20 Plains
+4 Soul's Attendant     1 Daxos, Blessed by the Sun   4 Auriok Champion      4 Remote Farm
+1 Serra Ascendant      2 Ajani, Strength of the Pride 1 Ranger-Captain of Eos
+4 Ajani's Pridemate    2 Archangel of Thune      3 Unexpectedly Absent      4 Ocelot Pride
+```
+= 60; 24 lands. `t2_ajani2_serra1_rf4` -0.2849 +-0.0044 vs base 4.7676 (screen 4, NOT yet
+held-out confirmed — that is the next step if the user wants this list).
+
+**Caveat carried forward:** `t2_auriok2_rf4` (-0.2915) edges it, but it cuts **Auriok Champion**,
+whose protection from black and red is INERT on all four DEBT axes against this opponent — the same
+class of un-modelled upside the user already ruled on for Unexpectedly Absent. Its 0.007t edge over
+the Ajani/Serra line is inside that bias, so it is not a real winner.
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-09-08)
 
