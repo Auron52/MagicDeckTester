@@ -17,4 +17,5 @@ Run one by hand:
 |---|---|---|---|---|
 | edf_ref_s6_t4_drake_chain_before_reducer | claude_s6_gi5 T4, 3rd frame | 4 | 5 | [Drake, Drake, Call -> Displacer, Training Grounds] then the loop from the float left over. NB the REAL board (scripts/ref_handoff.py --turn 4 --frame 2) wins T4 with MTG_EDF_PAYLOAD_FIRST on; this frozen copy still loses a turn -- the difference between the frame and its fixture (sick flags / the used land drop / the opponent library) is itself the open question |
 | edf_ref_s6_t4_float_keeps_c_for_blink | claude_s6_gi5 T4, 5th frame | 4 | 5 | cast the outlet from a mixed float keeping {C} (MTG_HOLD_C_FOR_LINE does that), THEN the loop's draw sink must not spend the next crank's {C} |
-| edf_ref_s8_t3_bank_dig_wish_drain | claude_s8_gi7 T3 | 3 | 5 | hand go-off (Fertile Ground, Cloud, Displacer) whose first crank needs the {C} the casts must leave; then bank -> dig 17 cards -> Living Wish -> Essence Depleter -> drain |
+
+Closed and promoted to `test/scenarios/`: `edf_ref_s8_t3_bank_dig_wish_drain` (2026-09-15, `MTG_EDF_DRAW_SINK_HONEST`).

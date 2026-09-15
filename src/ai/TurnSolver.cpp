@@ -3853,7 +3853,9 @@ static int FsRootDumpTurn()
     static const int v = EnvInt("MTG_FS_ROOT_DUMP", 0);
     return v;
 }
-static void FsDumpPlan(const char* tag, const TurnSolver::Plan& p, int win)
+// One plan as text: "land=<land>: <cast> + <cast>". Shared by the root dump and the rollout trace
+// below so the two print the same plan the same way.
+static std::string FsPlanText(const TurnSolver::Plan& p)
 {
     std::string s;
     for (const Action& a : p.actions)
@@ -3865,6 +3867,9 @@ static void FsDumpPlan(const char* tag, const TurnSolver::Plan& p, int win)
         // An Aura's HOST is a searched variant (one plan per legal host); print it, or two host
         // variants of the same Aura read as one plan scanned twice (claude_s12_gi11 T3).
         if (a.enchant_target > 0) { s += "->#" + std::to_string(a.enchant_target); }
+        // A tutor's TARGET is a searched variant too (one plan per wish target at the tutor
+        // width): without it eight "Living Wish" lines read as one plan scanned eight times.
+        if (!a.tutor_target.empty()) { s += ">" + a.tutor_target; }
     }
     // The LAND half of the plan is not in `actions` (land_to_play + its searched sub-decisions),
     // so print it too -- a T1/T2 root on a land-only turn is otherwise five identical blank lines.
@@ -3873,8 +3878,39 @@ static void FsDumpPlan(const char* tag, const TurnSolver::Plan& p, int win)
     if (!p.land_face.empty()) { land += "/" + p.land_face; }
     if (p.rad_mode >= 0)      { land += p.rad_mode ? "[rad]" : "[no-rad]"; }
     if (p.scry_choice >= 0)   { land += "[scry" + std::to_string(p.scry_choice) + "]"; }
-    std::fprintf(stderr, "[fs-root] %s win=%d bp=%d pc=%d val=%d land=%s: %s\n",
-                 tag, win, p.bp_choice, p.ponder_choice, p.value, land.c_str(), s.c_str());
+    return "land=" + land + ": " + s;
+}
+static void FsDumpPlan(const char* tag, const TurnSolver::Plan& p, int win)
+{
+    std::fprintf(stderr, "[fs-root] %s win=%d bp=%d pc=%d val=%d %s\n",
+                 tag, win, p.bp_choice, p.ponder_choice, p.value, FsPlanText(p).c_str());
+}
+// MTG_FS_ROOT_DUMP_SIM=1 (diagnostic, print-only, DEFAULT OFF; needs MTG_FS_ROOT_DUMP=<turn>): under
+// the dumped root, also print every GREEDY ROLLOUT the tails run -- its start board, each simulated
+// turn's chosen plan, and its win turn. A shallow pass's tail is mostly this rollout, so "why does
+// Kitchen T1 read 6 and Mariposa 5" (claude_s9_gi8, d1 at 20 ms) is a read of what the greedy did
+// after each, not an inference. Scoped by a thread_local depth so nested tails under the dumped
+// root print too and nothing else does.
+static bool FsRootDumpSimOn() { static const bool v = EnvOn("MTG_FS_ROOT_DUMP_SIM"); return v; }
+static thread_local int g_fs_sim_trace = 0;
+struct FsSimTraceScope
+{
+    bool on;
+    explicit FsSimTraceScope(bool o) : on(o) { if (on) { ++g_fs_sim_trace; } }
+    ~FsSimTraceScope() { if (on) { --g_fs_sim_trace; } }
+};
+static std::string FsSimBoardText(const GameState& st)
+{
+    std::string bf, hand;
+    for (const Permanent& pm : st.battlefield)
+    {
+        if (pm.controller_index != st.active_player_index) { continue; }
+        if (!bf.empty()) { bf += ","; }
+        bf += pm.card.m_name; if (pm.tapped) { bf += "(T)"; }
+    }
+    for (const Card& c : st.players[st.active_player_index].hand)
+    { if (!hand.empty()) { hand += ","; } hand += c.m_name; }
+    return "bf=[" + bf + "] hand=[" + hand + "]";
 }
 
 struct SeqChainTrace
@@ -32868,6 +32904,12 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         }
         int life_before_pl = state.Opponent().life;
         ApplyPlanDirect(state, pre_plan, true);   // future turn: no stamp (root-turn authority)
+        if (g_fs_sim_trace > 0)
+        {
+            std::fprintf(stderr, "[fs-sim]    t%d m1 %s | after: %s opp=%d\n", state.turn_number,
+                         FsPlanText(pre_plan).c_str(), FsSimBoardText(state).c_str(),
+                         state.Opponent().life);
+        }
         AnimateLandsShared(state, nullptr);
         ActivateTapTokensShared(state, nullptr);
 
@@ -32918,6 +32960,11 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             const bool m2fix_here = M2FixModeFor(state) != 0;   // per-deck (DecisionProviders.h)
             if (m2fix_here) { g_bp_fired_last = 0; }
             ApplyPlanDirect(state, post_plan, false);
+            if (g_fs_sim_trace > 0)
+            {
+                std::fprintf(stderr, "[fs-sim]    t%d m2 %s | opp=%d\n", state.turn_number,
+                             FsPlanText(post_plan).c_str(), state.Opponent().life);
+            }
             if (OpponentHasLost(state))
             { leafeval::Publish(leafeval::kInvalid); leafeval::t_inf = state.inf_life_turn;
               return state.turn_number; }
@@ -32981,6 +33028,11 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         if (cached != nullptr)
         {
             PROF_INC(tt_hits); ++g_tt_hit_n;
+            if (g_fs_sim_trace > 0)
+            {
+                std::fprintf(stderr, "[fs-sim] tt-hit from t%d d%d -> win=%d  %s\n", state.turn_number,
+                             depth, *cached, FsSimBoardText(state).c_str());
+            }
             // SOUNDNESS HARNESS (MTG_LEAF_VERIFY): recompute this hit fresh (loose cutoff, no tt/budget so it
             // fully resolves) and compare. A mismatch means two states shared a BuildSimKey but roll out
             // differently => the key omits some rollout-determining state. Counts mismatches + dumps the first.
@@ -33052,7 +33104,13 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
     const unsigned long long drops_at_entry = g_condemn_drops;
 
+    if (g_fs_sim_trace > 0)
+    {
+        std::fprintf(stderr, "[fs-sim] >> rollout from t%d d%d cutoff=%d  %s\n", state.turn_number,
+                     depth, cutoff_turn, FsSimBoardText(state).c_str());
+    }
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
+    if (g_fs_sim_trace > 0) { std::fprintf(stderr, "[fs-sim] << win=%d\n", result); }
 
     if (tt != nullptr && result <= max_turns) { PROF_INC(tt_stores); tt->Store(key, result); }
     else if (tt != nullptr)
@@ -36379,6 +36437,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             winlesscert::MaybeProgress();
         }
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
+        // Rollout trace for this root plan's tail (MTG_FS_ROOT_DUMP_SIM; see FsSimTraceScope).
+        FsSimTraceScope _fst(bp_root && FsRootDumpTurn() == state.turn_number && FsRootDumpSimOn());
         ConsumeAt(budget, unitsite::kFsPre);   // one interior node (plan applied)
         if (s_rollout_stats)
         {

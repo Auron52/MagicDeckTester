@@ -7885,3 +7885,136 @@ significant; the wall is the levers-off arm's again. Shipped ON on that reading 
 brief put the references first and performance next, and this is the cost of the references' own
 lever -- with both sides here and the flag to flip.
 
+
+### 9. The three shortfalls, closed by ONE guard (10:45-12:00 UTC)
+
+USER: *"prioritize the reference cases first"*; then, on the budget question: *"we cannot really
+afford a 2.6x wall cost. Hence we need something that can help drop the cost. Beyond that, we
+absolutely need to fix the case here that is not fixed by increasing the budget"*; and on the land
+tie-breakers: *"it may just be papering up the root issue."* It was. This section is the diagnosis
+of s9 and s14 (the "budget-bound" pair), the price of the budget, and the one construct fix that
+turned out to close all three.
+
+**9.1 Where the 20 ms root loses each reference (`scripts/ref_handoff.py`, `MTG_FORCE_T1_LAND`,
+`MTG_FS_ROOT_DUMP`).** One pooled budget ladder (`logs/edf_budget/ladder`, s9 + s14 at 20/30/40/
+60/80/100 ms) and one hand-off per turn:
+
+| reference | human | 20 | 30 | 40 | 60 | 80 | 100 ms | the ONE decision that misses at 20 ms |
+|---|---|---|---|---|---|---|---|---|
+| s9_gi8 | T4 | 5 | 5 | **4** | 4 | 4 | 4 | T1 land: Mariposa (untapped, {C}) instead of a tapped dual. `MTG_FORCE_T1_LAND=Kitchen` at 20 ms wins T4. |
+| s14_gi13 | T5 | 6 | 6 | 6 | **5** | 5 | 5 | T2: Living Wish -> Mariposa instead of Wild Growth + Trace. Hand-off at T3 (after the human's T2) wins T5 at 20 ms. |
+
+Every digest is identical on each side of its threshold, so past 40 / 60 ms the extra budget buys
+nothing. Depth counts TURNS here, so both wins sit inside the d5 window on paper; what 20 ms
+actually commits is depth 1 at s9's T1 (`id_depth hist=1:3 2:2`) and depth 2 at s14's T2
+(`1:1 2:4`), against depth 2 / 3 at 100 ms -- the *effective* window is what the user asked about.
+
+**The root dumps say the deeper pass is not "seeing further", it is escaping a bad estimate.**
+s9 T1 at depth 1: Kitchen 6, Conservatory 6, Mariposa 5, defer 5, Mariposa[rad] 5 -> Mariposa on
+the tail. At depth 2 all five read 5 and the land comparator's tapped-first rule picks Kitchen --
+principled, not hand-order luck. s14 T2 at depth 2: `Trace + Wild Growth` reads **8**, the
+Mariposa wish 6; at depth 3 the Aura plan reads 5.
+
+**9.2 What the shallow tail actually plays: `MTG_FS_ROOT_DUMP_SIM=1`** (new, print-only; with
+`MTG_FS_ROOT_DUMP=<turn>` it prints every greedy rollout under the dumped root: the start board,
+each simulated turn's plan, the win turn; `FsDumpPlan` now also prints a tutor's `>target`). The
+greedy that scores every leaf plays this deck creature-first -- Cloud, then Displacer, then Emiel,
+the Auras last (`plan.value` prices a body as a combat clock, an Aura at the generic floor: the
+§`MTG_EDF_VAL_*` mechanism) -- so every tail under Kitchen read 7-9, and the rollouts' own
+go-off loops died at their third crank (9.4). Two conclusions: the "budget" class on this deck is a
+*leaf-policy* class, and the fix has to be inside the rollout, not in the root's tie-breaks.
+
+**9.3 The price of the budget (paired deck average, the SAME 100 games per arm, one pool of 30
+jobs, `deckavg_b4060`):**
+
+| arm | mean win turn | paired vs 20 ms | chunks better / worse / tied | paired t | wall |
+|---|---|---|---|---|---|
+| d5 / 20 ms | 4.6800 | -- | -- | -- | 2281 s |
+| d5 / 40 ms (matches s9) | 4.6500 | -0.0300 | 2 / 1 / 7 | -0.90 | +104% |
+| d5 / 60 ms (matches both) | 4.6400 | -0.0400 | 4 / 1 / 5 | -1.50 | +161% |
+| d5 / 100 ms (§6.5) | | -0.0900 | 6 / 0 / 4 | -3.25 | +240% |
+
+The user's ruling: not affordable. Nothing adopted from this table.
+
+**9.4 The construct: the loop's draw sink was starving the loop (`MTG_EDF_DRAW_SINK_HONEST`,
+default ON).** s8 T3 with the trace's new `up=[...] tapped=[...]` columns, on the fixture:
+
+```
+k=3 enter           float{g5} up=[Conservatory,Mariposa]   (bank +2 a crank: 0,1,3,5)
+    draw-sink Conservatory paid {4} (keep {2}{C})
+k=3 post-draw-sink  float{g1} up=[]                         <- Mariposa tapped for the CLUE crack
+STOP at k=3: pay-failed
+```
+
+`SpendSurplusOnDrawSinks` admits an Investigate on "can I pay {4} and still pay the next blink";
+under CLUE FUSION (`MTG_CLUE_FUSE`, `ApplyPermAbility`) the Investigate cracks its Clue in the same
+step for another {2}, unguarded, and in autonomous play the projection also still counts the
+source's own yield (the `MTG_DRAW_GUARD_SELFTAP` repair was gated to the button, though the exact
+executor has been ON autonomously since `MTG_EDF_EXACT_EXECUTOR`). Ten mana against seven says
+fire; the fused {2} taps Mariposa, the board's only {C}; the blink finds one mana. Priced honestly
+(10 - 2 own yield against {4}+{2}+{2}{C}) the sink waits ONE crank, and the loop digs: 36
+Investigates, the outlet swap at k=78 once a pip-free outlet and a {C} sink are live, 221/221
+cranks, the kill. The fixture reads **3** with the guard alone -- `MTG_EDF_HAND_GOFF_REFUND` and
+`MTG_LINE_C_HOLD` (§7) are NOT needed for it and stay parked.
+
+**Bench, five arms, one pool (`sinkhonest/run.log`, d5 / 20 ms):**
+
+| arm | mean | short | s8 | s9 | s14 |
+|---|---|---|---|---|---|
+| off | 4.643 | 3 | 4 | 5 | 6 |
+| **honest** | **4.429** | **0** | **3** | **4** | **5** |
+| honest + refund / + hold / all three | 4.429 | 0 | 3 | 4 | 5 |
+
+Every reference on the human's turn, nothing worse, mean == human. Digests moved on 11 of 14:
+the guard changes what every rollout's loop realises, which is why s9's T1 and s14's T2 -- the
+"budget" pair -- flip too. The root was ranking on tails whose loops died at crank three.
+
+**9.5 Gates -- all green (11:48-12:02 UTC, `logs/gate_sink/`, one step at a time on the rebuilt
+default-ON binary).**
+
+| gate | result |
+|---|---|
+| `test/scenarios.sh` | **89 passed, 0 failed, 0 error** (the promoted s8 fixture included) |
+| `test/combo_off_check.sh` | 33 passed, 0 failed |
+| `regression.sh --smoke` | 76 / 4, all **80 job lines byte-identical** (played / avg / digest) to the committed tree's `gate_levers/smoke_guard.log`; the 4 are the known stale FiveColour GT lines, unchanged. EDF is not in the suite and the guard reached no other deck. Two EDF *scenario* lines moved by a life total only, both still PASS at the same win turn: `edf_blink_loop_cashes_gorge` active_life 19 -> 20, `edf_land_aura_multicast_offered` opponent_life 17 -> 16 (the loop spends its cranks differently) |
+| real-frame hand-off s8 T3 (`ref_handoff.py --turn 3`) | win turn **3** with the guard alone (`s8_t3_honest.log`), and 3 with refund + hold added (`s8_t3_all3.log`) |
+| real-frame hand-off s14 T4 (after the human's T3) | win turn **5** (`s14_t4_honest.log`) -- it read **8** on the old guard (`s14_t4_b20.log`); 9.6's second open item closes with the same construct, no bisect needed |
+| fleet re-stamp (`ref_bench.py --stale-only`, 361 games, one pool) | the stamp commit that follows this one carries the numbers |
+
+**Paired deck average off / on (the SAME 100 games per arm, 10-game chunks, seeds 3001 / 3061,
+max_turns 12, one pool of 20 jobs, `deckavg_sinkhonest`):**
+
+| chunk | off | on |
+|---|---|---|
+| 3001+0 | 4.60 | 4.60 |
+| 3001+10 | 5.80 | 5.50 |
+| 3001+20 | 5.20 | 4.90 |
+| 3001+30 | 4.40 | 4.00 |
+| 3001+40 | 4.60 | 4.40 |
+| 3061+0 | 4.80 | 4.50 |
+| 3061+10 | 4.60 | 4.50 |
+| 3061+20 | 4.40 | 4.20 |
+| 3061+30 | 4.20 | 3.90 |
+| 3061+40 | 4.20 | 4.10 |
+| **MEAN** | 4.6800 | **4.4600** |
+| wall s | 2109 | 1905 |
+
+**on vs off: -0.2200 t paired, chunks better 9 / worse 0 / tied 1, paired t = -5.66, wall -9.7%.**
+Set beside 9.3: the budget bought -0.03 / -0.04 / -0.09 t for +104 / +161 / +240% wall; the
+guard buys -0.22 t for -9.7%. The rollouts' loops were dying at crank three on every dig, and a
+loop that runs to its kill is both a better estimate and a shorter game to simulate.
+
+Adopted at default ON (commit "fix(EDF): the loop's draw-sink guard prices the fused Clue crack +
+the source's own yield"); the fleet stamp is the commit after it; Windows + parity CI recorded in
+Session 29.
+
+**9.6 Open after this section.**
+* The greedy's valuation (9.2) is the residual leaf-policy defect: `MTG_EDF_VAL_RAMP+COMBO` on
+  the bench (`leafpol/run.log`, off 4.643 / 3 short) fixes s9 (4) and loses s6 (5) -- 4.643 / 3
+  short, same mean; `MTG_ROLLOUT_LAND_RANKER` / `MTG_LAND_IDLE_TAPPED_FIRST` move no reference
+  (digests on s7, s11 only). Re-measure both value halves on top of the honest guard before
+  judging them: the bench they lost on was scoring tails through the dead loop.
+* ~~s14 T4 hand-off (after the human's T3) read **8** at 20 ms on the old guard~~ -- **5** under the
+  new default (9.5); closed by the same construct.
+* The two s6 fixtures in `test/scenarios/open/` still read 5 under the guard.
+* Cost: the per-ply price is unchanged; §8's candidates (A/B) stand for when the user says so.

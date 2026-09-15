@@ -11603,13 +11603,25 @@ inline void TraceStep(int k, const char* where, const GameState& state, int cont
     if (g_trace_n.fetch_add(1, std::memory_order_relaxed) >= TraceCap()) { return; }
     ManaPool avail = AvailableManaPool(state, nullptr);
     const ManaPool& f = state.floating_mana;
+    // Which sources are still UNTAPPED: the pooled `avail` cannot say whether the one {C} land is
+    // among them, and that is the question every pay-failed stop asks (claude_s8_gi7 T3 k=3).
+    std::string up, down;
+    for (const Permanent& pm : state.battlefield)
+    {
+        if (pm.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+        if (!d || !d->card.IsLand()) { continue; }
+        std::string& dst = pm.tapped ? down : up;
+        if (!dst.empty()) { dst += ","; }
+        dst += pm.card.m_name;
+    }
     std::fprintf(stderr,
                  "[edf-loop] k=%d %-17s cost=%s float{w%d u%d b%d r%d g%d c%d *%d} "
-                 "avail{w%d u%d b%d r%d g%d c%d *%d}\n",
+                 "avail{w%d u%d b%d r%d g%d c%d *%d} up=[%s] tapped=[%s]\n",
                  k, where, c.ToString().c_str(),
                  f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild,
                  avail.white, avail.blue, avail.black, avail.red, avail.green,
-                 avail.colorless, avail.wild);
+                 avail.colorless, avail.wild, up.c_str(), down.c_str());
 }
 inline void TraceStop(bool on, int k, const char* why)
 {
@@ -12033,6 +12045,41 @@ inline bool ExileFinisherReachableFromHand(const GameState& state, int controlle
     return false;
 }
 
+// MTG_EDF_DRAW_SINK_HONEST -- DEFAULT ON (=0 disables). The draw sink's admission guard below asks
+// "after this draw, can the loop still pay its next blink?" over a POOLED projection, and in
+// autonomous play that projection lies twice on the same board:
+//   1. it counts the draw source's OWN yield (the mana the ability spends by tapping itself -- the
+//      MTG_DRAW_GUARD_SELFTAP repair, which ships COMBO OFF only), and
+//   2. it prices an Investigate at its {4} while CLUE FUSION (MTG_CLUE_FUSE, ApplyPermAbility) pays
+//      the Clue's {2} crack in the same step, unguarded by `keep_payable`.
+// claude_s8_gi7 T3 (fixture edf_ref_s8_t3_bank_dig_wish_drain, MTG_EDF_LOOP_TRACE): at k=3 the
+// bank is five floating green with Conservatory and Mariposa up; the guard sees 10 against
+// {4}+{2}{C} and fires; Conservatory taps for its {T}, the {4} comes off the float, the fused {2}
+// then taps Mariposa -- the board's only {C} -- and the blink's {2}{C} finds one mana. Priced
+// honestly (10 - 2 own yield against {4}+{2}+{2}{C} = 9) the sink waits ONE crank and the loop
+// keeps digging. ON: both corrections apply in every mode.
+//
+// MEASURED (2026-09-15, d5/20 ms, 14 EDF references, one pooled batch, logs/ref_bench_edf/sinkhonest):
+// off 4.643 / 3 short (s8 4, s9 5, s14 6) -> ON **4.429 / 0 short**, every reference on the human's
+// turn, nothing worse; digests moved on 11 of 14, i.e. the ROLLOUTS' loops were dying at the same
+// crank and mis-scoring every tail that passed through a dig. DEFAULT ON; =0 restores the old
+// guard. A heurarm slot so a pooled batch can A/B it per job.
+inline bool DrawSinkHonestEnabled()
+{
+    static const bool env = EnvOn("MTG_EDF_DRAW_SINK_HONEST", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::EDF_DRAW_SINK_HONEST, env);
+}
+// The Clue crack CLUE FUSION will pay right after an Investigate resolves (ApplyPermAbility,
+// TapInvestigate): the token's own sac-draw cost, or an empty cost when the fuse will not fire.
+inline ManaCost FusedClueCrackCost(const GameState& state, int controller)
+{
+    static const bool s_fuse = EnvOn("MTG_CLUE_FUSE", true);   // the same read ApplyPermAbility makes
+    if (!s_fuse || HumanPlayActive() || state.players[controller].library.size() <= 1) { return ManaCost{}; }
+    const CardDefinition* td = CardDatabase::Instance().Lookup("Clue Token");
+    if (td == nullptr || !td->params.sac_draw_cost.has_value()) { return ManaCost{}; }
+    return td->params.sac_draw_cost.value();
+}
+
 inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaCost& keep_payable,
                                    const std::function<bool(const ManaCost&)>& pay,
                                    const StateManaPayer* probe_pay = nullptr)
@@ -12184,7 +12231,12 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
         // see the header) and therefore GT, the value leaf and the keep tables are untouched.
         // MTG_COMBO_OFF_DRAW_TRIAL=0 restores the projection guard.
         static const bool s_guard_selftap = EnvOn("MTG_DRAW_GUARD_SELFTAP", true);
-        const bool honest_guard = s_guard_selftap && ComboOffExactApplyActive();
+        // MTG_EDF_DRAW_SINK_HONEST (see DrawSinkHonestEnabled): the self-tap correction in every
+        // mode, and the fused Clue crack priced into the admission test.
+        const bool sink_honest = DrawSinkHonestEnabled();
+        const bool honest_guard = s_guard_selftap && (ComboOffExactApplyActive() || sink_honest);
+        const ManaCost fused_crack = (sink_honest && mode == PermAbilityMode::TapInvestigate)
+                                   ? FusedClueCrackCost(state, controller) : ManaCost{};
         if (honest_guard) { state.battlefield[i].tapped = true; }
         {
             bool ok;
@@ -12192,13 +12244,15 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
             {
                 GameState probe = state;          // the source is already tapped on this copy
                 if (!honest_guard) { SetPermTapped(probe, controller, id, true); }
-                ok = (*probe_pay)(probe, c) && (*probe_pay)(probe, keep_payable);
+                ok = (*probe_pay)(probe, c)
+                  && (fused_crack.ManaValue() == 0 || (*probe_pay)(probe, fused_crack))
+                  && (*probe_pay)(probe, keep_payable);
             }
             else
             {
                 ManaPool have = AvailableManaPool(state, nullptr);
                 have.AddPool(state.floating_mana);
-                ok = have.CanPay(AddManaCosts(c, keep_payable));
+                ok = have.CanPay(AddManaCosts(AddManaCosts(c, fused_crack), keep_payable));
             }
             if (!ok)
             {

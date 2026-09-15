@@ -182,6 +182,7 @@ enum Slot : int
     LINE_C_HOLD,              // MTG_LINE_C_HOLD         the casts' payer holds the {C} SOURCES the plan's own activation still needs (default OFF)
     EDF_HAND_GOFF_REFUND,     // MTG_EDF_HAND_GOFF_REFUND the hand go-off's mana floor credits a hand PAYLOAD's own ETB untap (default OFF)
     EDF_AURA_HOST_SIG_KAROO,  // MTG_EDF_AURA_HOST_SIG_KAROO the host signature applies only to plans whose land drop is a karoo (perf)
+    EDF_DRAW_SINK_HONEST,     // MTG_EDF_DRAW_SINK_HONEST the loop's draw-sink guard prices the fused Clue crack + the source's own lost yield (default ON)
     COUNT
 };
 
@@ -341,6 +342,7 @@ inline const char* Name(int slot)
         "MTG_LINE_C_HOLD",
         "MTG_EDF_HAND_GOFF_REFUND",
         "MTG_EDF_AURA_HOST_SIG_KAROO",
+        "MTG_EDF_DRAW_SINK_HONEST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
