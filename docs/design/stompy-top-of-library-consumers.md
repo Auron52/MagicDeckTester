@@ -4,6 +4,10 @@
 default OFF pending its adoption A/B, measured in stompy-order-and-top-resolve.md. **Item 2 IS BUILT
 — `MTG_UPKEEP_CALL` (2026-09-15), default OFF, measured (−0.0019 on the shipped deck, 39 games
 faster and 0 slower), NOT adopted: human play still needs a chooser.** Item 3 remains deferred.
+Every number in Item 2 was **re-derived on 2026-09-15** at 2x the games on held-out seeds; the two
+lever deltas reproduced exactly, and the screening-bias estimate was corrected from 0.0014 to
+**0.0005** (the old figure differenced two different decklists — see "The re-measurement that
+replaced the bias estimate").
 
 **Status of the ITEMS BELOW that are still deferred: not being built yet.** Recorded per the deferred-work rule after the
 StompySurprise cast-order review (USER, 2026-08-21; the order itself is implemented behind
@@ -124,6 +128,27 @@ missing. 1.5% was flagged at the time as a **lower bound**, because the engine h
 to plan toward — with the window built the real rate is **5%** (20 upkeep puts in the same 400
 games), confirming the search does set the line up deliberately once it can.
 
+**Re-measured on 1,000 logged games per deck, 2026-09-15** (`logs/callput/`), the 5% holds and the
+copy-count dependence shows up here too:
+
+| deck | games with an upkeep put | creature puts |
+|---|---|---|
+| shipped StompySurprise (4 Call of the Wild) | 44 / 1000 (**4.4%**) | 45 (4.5%/game) — 39 Craterhoof, 3 Worldspine, 2 Terastodon, 1 Elderscale |
+| the recommended list (2 Call of the Wild) | 22 / 1000 (**2.2%**) | 22 — 19 Craterhoof, 2 Terastodon, 1 Worldspine |
+| either deck, lever OFF | **0** | **0** |
+
+Halving the Call of the Wild count halves the put rate (4.4% → 2.2%), which is the same ~2x the
+lever-value ladder shows between 4 and 2 copies — two independent measurements of the same thing
+agreeing. The body is almost always **Craterhoof Behemoth**: it is the tutor target whose value is
+most timing-sensitive, so getting it a turn earlier is exactly what the window buys.
+
+**A METHOD TRAP in this count.** The rate is measured by diffing the battlefield across the turn
+boundary (end of turn T vs the DRAW-phase board of T+1), because reveals log under `MAIN_1` and there
+is no `UPKEEP` phase to key on. That diff also catches **ETB tokens created by the put creature** — a
+Terastodon put brings 3 Elephants, so the raw diff read 28 "puts" where only 22 were puts. Diff by
+the permanent's `card` NUMBER and filter tokens; counting names alone inflates the rate by ~27%
+whenever Terastodon is the body.
+
 ### How it is built
 
 | piece | where | precedent it follows |
@@ -167,6 +192,46 @@ On the shipped deck it is **strictly one-sided** — 39 games faster, not one sl
 small because the line, while real, is rare (5% of games) and often redundant with a Natural Order
 that would have deployed the same body anyway.
 
+Both rows were **recomputed from the saved per-game dumps on 2026-09-15** (`logs/upkeep_ab/*.wins`)
+and reproduce exactly: −0.00195 (t = −6.25, 39/0) and −0.00050 (t = −2.67, 12/2). The win SETS are
+identical across lever states in both decks (`only_on = only_off = 0`), so dropping the games that
+never win inside `max_turns` does not bias the pairing — worth checking, because a lever that pulled
+a win inside the horizon would have been silently dropped from the intersection and undercounted.
+
+### The re-measurement that replaced the bias estimate (2026-09-15)
+
+The two rows above are two DIFFERENT decklists, run at different seeds under different profiles, so
+differencing them attributes to *Call of the Wild copy count* something that also contains every
+other difference between the two lists. Redone properly as **one axis on one shell** — Call of the
+Wild ↔ World War Hulk across 5 combined slots on the recommended shell, 40,000 paired games per arm,
+the whole ladder run twice on the same seeds (`logs/stompy_screen/callrecheck.json`):
+
+| Call copies | avg, lever OFF | avg, lever ON | lever value (ON−OFF) | se | t | faster / slower |
+|---|---|---|---|---|---|---|
+| 1 (Hulk 4) | 4.3493 | 4.3491 | −0.00018 | 0.00007 | −2.65 | 7 / 0 |
+| 2 (Hulk 3) — **the recommended list** | 4.3637 | 4.3633 | −0.00043 | 0.00011 | −3.71 | 19 / 2 |
+| 3 (Hulk 2) | 4.3810 | 4.3804 | −0.00058 | 0.00013 | −4.43 | 25 / 2 |
+| 4 (Hulk 1) | 4.3972 | 4.3963 | −0.00093 | 0.00016 | −5.78 | 39 / 2 |
+
+The lever's value scales monotonically with the number of Call of the Wild in the deck, as it must.
+
+**Two numbers in this doc were wrong and are corrected here.**
+
+* **The bias on the 4 → 2 decision is 0.0005, not 0.0014** — the lever is worth 0.00093 at 4 copies
+  and 0.00043 at 2, so the OFF measurement understated the 4-copy arm by **0.00050 ± 0.00020**. The
+  old 0.0014 was the confounded cross-deck difference; it overstated the bias by 2.8x, which at
+  least erred in the cautious direction.
+* **The per-copy value of the trade is 0.0142–0.0172, not "~0.015–0.02."** The ladder's adjacent
+  steps are +0.0144 / +0.0172 / +0.0162 with the lever OFF and +0.0142 / +0.0170 / +0.0159 with it
+  ON (adjacent-pair se ±0.0007). The top of the old range was not supported. Note what this quantity
+  actually is: not the standalone value of a Call of the Wild, but the cost of **trading one for a
+  World War Hulk**, which is the trade the screen decided.
+
+**The conclusion is now measured rather than inferred, and it holds.** With the lever ON the ladder
+keeps its exact ordering and very nearly its slope; the 4 → 2 decision is worth 0.0334 turns OFF and
+0.0329 ON. The bias is **1.5% of the decision it could have distorted** (~67x margin), so no screen
+result from that evening moves.
+
 ### The heuristic is DELIBERATELY not searched, and it costs nothing
 
 USER, 2026-09-15: *"How about if you always activate it in upkeep if we Worldly Tutored up a threat
@@ -198,9 +263,12 @@ delta off sequential runs; interleave, and look at whether the sign is stable.**
 **Why this number mattered beyond the card.** The same evening's deck screening
 (`analysis-StompySurprise.md`) cut Call of the Wild 4 -> 2 in favour of World War Hulk, which is a
 comparison where the engine modelled one side less completely — exactly the judgement the
-deck-screening skill says no guard can make. The bias is the DIFFERENCE of the two rows above,
-**0.0014 turns**, against a measured per-copy value of ~0.015–0.02. Under a tenth of one copy: the
-screening conclusions are unaffected. Recording it because the check, not the outcome, is the point.
+deck-screening skill says no guard can make. The bias is **0.0005 turns** (the one-axis ladder
+above; the cross-deck difference of the two rows, 0.0014, was confounded), against a measured
+per-copy trade value of 0.0142–0.0172. Around a thirtieth of one copy, and 1.5% of the decision it
+could have distorted: the screening conclusions are unaffected, and running the ladder at both lever
+states shows that directly instead of arguing it from a ratio. Recording it because the check, not
+the outcome, is the point.
 
 ### Adoption blocker — human play has no chooser (the ONLY one left)
 

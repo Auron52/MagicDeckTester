@@ -734,3 +734,28 @@ faster, which is the Altisaur's price and is bought deliberately for removal thi
 
 Specs and raw output: `logs/stompy_screen/screen{D,E,F,G,H,I}.json` + `.out`,
 `confirmH{1,2,3}.out`, `confirmI1.out` (gitignored).
+
+### The Call of the Wild count, re-verified with the card fully modelled (2026-09-15)
+
+Every screen above ran with the upkeep Call of the Wild window MISSING (`MTG_UPKEEP_CALL` defaults
+OFF), which under-plays the card and therefore flatters the arms that cut it — the `[bracket note]`
+question. That was re-run as a dedicated one-axis ladder (Call of the Wild ↔ World War Hulk over 5
+combined slots on this shell, 40,000 paired games per arm on held-out seeds, the whole ladder run at
+both lever states): `logs/stompy_screen/callrecheck.json`, `callrecheck_{off,on}.out`.
+
+| Call / Hulk | lever OFF | lever ON |
+|---|---|---|
+| 1 / 4 | 4.3493 | 4.3491 |
+| **2 / 3 — this list** | **4.3637** | **4.3633** |
+| 3 / 2 | 4.3810 | 4.3804 |
+| 4 / 1 | 4.3972 | 4.3963 |
+
+Each Call of the Wild traded in for a World War Hulk costs **+0.016 turns** (+0.0144 / +0.0172 /
++0.0162 OFF; +0.0142 / +0.0170 / +0.0159 ON, adjacent-pair se ±0.0007). Modelling the card fully
+moves the 4 → 2 decision by 0.0005 of the 0.0334 turns it is worth — **1.5%** — and changes neither
+the ordering nor, materially, the slope. **The cut stands, and it is now measured rather than
+argued.** Full derivation in `stompy-top-of-library-consumers.md`.
+
+Read the ladder in the other direction and it also prices the user's constraint: holding Call of the
+Wild at 2 rather than 1 costs 0.0144 turns. That is the measured price of the toolbox rule on this
+axis, and it is small.
