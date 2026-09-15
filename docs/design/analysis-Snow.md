@@ -1154,7 +1154,44 @@ blocker — and leaves budgeted play untouched.
 question) is unaffected by design, and so is the BOTTOMING loop, which is budgeted — the 28.9 h
 monster is a bottoming game and gains nothing here. Those are separate levers.
 
-### 6. Operational hazard found the hard way: the label path OOMs at high worker counts
+### 6. The gain is REGIME-DEPENDENT: big on the label ladder, and NOTHING on the phase-C H arm
+
+> **SUPERSEDED 2026-09-15 — read §8 first.** This section's premise ("`Unlimited()` arms the
+> certificate on the H arm too") was a DEFECT, not a feature, and it has been removed: the
+> certificate is now scoped to the label ladder alone. The H-arm speed in the table below was
+> never the certificate's — it belonged to the go-off SEED, which `MTG_WINLESS_CERT` also gates,
+> and which costs a turn on one of these very games. The measurement is kept because the *shape*
+> of the argument (edge-node density is what the certificate feeds on) survives; the numbers do
+> not. **After the fix the certificate's H-arm effect is exactly zero, by construction.**
+
+Phase C runs `budget_ms: 0` (`--ignore-play-profile --depth <d> --max-turns 8`), so `Unlimited()`
+arms the certificate there too — and phase C's own slow-game log is **68.5% unwon games**, the
+certificate's exact target. That makes "the certificate also unblocks the 13-17 day matrix" a
+tempting claim. **It is only partly true, and the first measurement of it was noise.**
+
+Replaying the `H5 / s8008` cell and pairing per game against phase C's `slow_games.log`:
+
+| seed | phase C (no cert) | cert ON | ratio |
+|---|---|---|---|
+| 8017 | 2,465.5 s | 223.7 s | **11.02x** |
+| 8016 | 1,500.2 s | 847.8 s | 1.77x |
+| 8008 | 160.2 s | 114.3 s | 1.40x |
+| **paired total** | 4,126 s | **1,186 s** | **3.48x** |
+
+**~3.5x here, against >=19x on the label path.** The mechanism explains it: the certificate fires
+at nodes where `state.turn_number == cutoff`, and the LABEL ladder manufactures those in bulk (it
+sweeps a horizon cutoff, so every pass has a full edge layer — 89.3% of its nodes). A fixed-depth
+H-arm play search at `depth 5 / max_turns 8` reaches that edge far less often relative to its
+interior work, so there is simply less for the certificate to remove.
+
+**A WALL-CLOCK TRAP, recorded because it nearly became a reported regression.** The first pass at
+this comparison ran the replica while a 500-game batch was still using the box, and three of four
+paired games came back SLOWER (0.64x, 0.75x, 0.93x) — which would have read as the certificate
+costing something. Re-run on an idle box the same seed 8008 went 0.93x -> 1.40x. Those were pure
+contention artifacts. On this deck wall is only meaningful with the box to yourself, which the
+earlier sections of this document already say twice.
+
+### 7. Operational hazard found the hard way: the label path OOMs at high worker counts
 
 A 20-worker audited batch **OOM-killed the box** (`anon-rss:30570732kB` — 30.5 GB in one process,
 109 GB virtual) and took the session with it. `scripts/valueleaf.sh` already documents this class
@@ -1164,6 +1201,132 @@ under 8 minutes on 32 workers... per-game footprint is fine solo") — which is 
 go-off apply at every certified node (~13k extra applies per game at Snow's fire rate); it is a
 diagnostic and must never be left on. Run label batches at 4–8 threads on this box, with a
 memory watchdog beside them.
+
+### 8. The certificate was armed in PLAY, and that was a bug (found 2026-09-15)
+
+**What set this off.** The clean H-arm A/B came back `avg 5.7500` with `MTG_WINLESS_CERT=0` and
+`5.8333` with it on — over 12 games, exactly one game moving one turn. A certificate that only
+deletes provably-unwinnable plan space must not be able to do that, so the difference was chased
+rather than absorbed as noise. It was not noise, and the thing it found is not what the search was
+looking for.
+
+**Isolating it took two cheap steps, not a big batch.** The 7 slow games already print their win
+turn in the SLOW-GAME line of *both* arms' logs, and all 7 matched — so the differing game was one
+of the 5 fast ones. Re-running just those 5 solo (18 s each) found it immediately:
+
+| arm | gi2 | gi3 | **gi6** | gi10 | gi11 |
+|---|---|---|---|---|---|
+| `MTG_WINLESS_CERT=0` | 6 | 6 | **5** | 7 | 5 |
+| `MTG_WINLESS_CERT=1` | 6 | 6 | **6** | 7 | 5 |
+
+`--seed 8014 --game-index 6`, 4 seconds, reproducible. And 4 of the 5 games had a *changed play
+digest* even where the win turn held — so the flag was moving play broadly, not nudging one game.
+
+**Root cause 1: the scope predicate.** `WinlessCertificateActive` armed on
+
+```cpp
+g_unbounded_label_search != 0 || (budget != nullptr && budget->Unlimited())
+```
+
+That second arm is wrong twice over, and the tree already said so in two places:
+
+* It **never served the label path at all.** `EnumerateEarliestWins` raises the
+  `g_unbounded_label_search` latch precisely *because* its budget is a 1e6-virtual-ms backstop and
+  is therefore **not** `Unlimited()` — the comment at the `UnboundedSearchScope _ubs` declaration
+  says exactly this. So the first arm is what covers the labeller, and the second arm's entire
+  population was *other* things.
+* Those other things are **unbudgeted play** and — per `EngineFlags.h:707`, which names this test
+  as a trap — **default-constructed sub-budgets inside a genuinely budgeted search** (the
+  escalation's `probe_cap_budget` / `esc_alloc_budget` / `meas_budget`). That comment was written
+  for `g_unbudgeted_play` and explicitly declines to use `budget->Unlimited()` for this reason.
+
+And arming in play is a real loss, because a certified node returns `{max_turns + 1, {}}` — no win
+**and no actions**. For "what is the earliest turn we win?" that is exact. For "what should I do
+this turn?" it is a bare pass where the caller wanted a line to develop with. The go-off dominance
+cut 80 lines below already had the right scope for the right reason: *"the label-only scope is what
+keeps play and GT byte-identical."* The certificate simply disagreed with its neighbour.
+
+**Fixed** by splitting the predicate in two, deliberately not one — an earlier draft of the
+candidate-dedup work had folded them together, which is what made this worth writing down:
+
+* `LabelSearchScopeActive()` → `g_unbounded_label_search != 0`. The certificate and nothing else.
+* `UnbudgetedWorkScopeActive()` → `g_unbounded_label_search != 0 || g_unbudgeted_play != 0`. For
+  mechanisms that drop **no line at all** and whose only hazard is the work-unit count (the dedup
+  skip, the develop closure). Both latches are structural; neither is a leaf budget test.
+
+**Root cause 2, and the actual culprit: it was never the certificate.** With the scope fixed, the
+certificate reports `checks=0 fired=0` on the H arm — fully inert — and gi6 *still* lost its turn.
+`MTG_WINLESS_CERT` also gates the **canonical go-off seed**, which `seed_scope` still arms under
+`budget->Unlimited()`:
+
+```
+cert=0                  -> wt=5
+cert=1 (seed default on) -> wt=6
+cert=1 MTG_WINLESS_SEED=0 -> wt=5
+```
+
+and across all 5 probe games `cert=1 seed=0` is **byte-identical to `cert=0`** (5/5 digests). So:
+
+* The whole play-side effect of `MTG_WINLESS_CERT` on this deck is the **seed**, not the bound.
+* The seed is **pre-existing** — `36dcbf86` added no TurnSolver code, and the seed is deck-agnostic
+  (`WinlessSeedWins` casts nothing and lets the apply's tail run), so it has been active on Snow's
+  unbudgeted play all along. This is a bug the certificate work *exposed*, not one it introduced.
+* Therefore **§6's H-arm table measured the FLAG, not the bound.** How the old 1.42x split between
+  certificate and seed is not recoverable without rebuilding the pre-fix binary, and is not worth
+  recovering: after the fix the certificate's H-arm contribution is **zero by construction**
+  (`checks=0`), so the only part of that 1.42x still on offer is the seed's — and the seed buys it
+  with a lost turn on gi6. The label-path result, where the certificate fires on 84.3% of 109,909
+  checks, is untouched.
+
+**Why a "win" makes play worse.** The seed returns `{state.turn_number, {plan}}` and short-circuits
+the rest of the plan space on the argument that a this-turn win is minimal. That is sound for
+earliest-win. In play the node is a *lookahead* node, and handing its parent an optimistic win the
+real game will not reproduce steers the root into a line that then takes an extra turn. Its own
+header comment names the hazard — *"its failure mode is FABRICATING a win"* — and treats executing
+rather than proving as the mitigation; executing is faithful *to that state*, which is not the same
+as faithful to the game that has to get there.
+
+**Status.** The scope fix is in. The seed's behaviour in unbudgeted play is a pre-existing,
+now-measured defect and is NOT fixed here — tightening `seed_scope` onto the latches would also
+remove go-off wins from Eldrazi's unbudgeted play, which has not been measured. Left as-is with the
+trap written down at the call site.
+
+**The method worth keeping.** A one-turn average difference is one game, and finding *which* game
+is usually cheap: the batch already logs per-game win turns for the slow half for free, which
+narrowed 12 games to 5 without running anything. Then re-run the 5 solo. The instinct to reach for
+a bigger batch would have cost an hour and answered less.
+
+### 9. `MTG_CAND_DEDUP_UNBOUNDED` — built, measured, REJECTED, removed (2026-09-15)
+
+The next lever after the certificate was to give the lossless candidate-dedup skip the same
+unbounded-only scoping: `MTG_CAND_DEDUP` is a *state-identity* skip (same post-apply state ⇒ same
+future), and both reasons it ships default-OFF are reasons about a budget. `la_cand` being 43% of
+H-arm units made it look like the obvious next target.
+
+**It is inert on the label path.** Two arms over 19 Snow label games (36–250 s each, one worker per
+game, sequential on an idle box):
+
+| arm | wall | `units_total` |
+|---|---|---|
+| `MTG_CAND_DEDUP_UNBOUNDED=1` | 175 s | 94,481,425 |
+| `MTG_CAND_DEDUP_UNBOUNDED=0` | 178 s | **94,481,425** |
+
+Identical to the digit. This is the [silent-noop](../../CLAUDE.md) red flag exactly as recorded —
+*a byte-identical A/B on a feature you just added means it never fired* — and the cause is
+structural rather than a tuning matter: **the two call sites are in `SolveWithLookahead`, the
+play-side lookahead, and the label path runs through `EnumerateEarliestWins`, which never reaches
+them.** The premise written into the flag's comment ("on the label path it saves an entire unbounded
+recursion beneath the candidate") was wrong about which code the label path executes.
+
+**Where it does fire it is real but too small.** In unbudgeted play (5 Snow games, d5/budget 0) it
+is lossless as claimed — 5/5 play digests identical — and worth `units 4,617,276 → 4,510,864`,
+**−2.3%**, wall inside noise. And `units.la_cand` is **unchanged** across those arms: the candidate
+is charged before the skip runs, so this never touched the 43%-of-units site it was aimed at.
+
+**Rejected and removed**, not left as a default-OFF near-duplicate of `MTG_CAND_DEDUP`. A −2.3%
+unit move that also adds uncounted `BuildDedupKey` hashing leaves the shipped "total cost is NOT
+RESOLVED" verdict precisely where it already was. **If this is re-raised, aim at the enumerator, and
+measure units on the LABEL path first — that is the arm that decides it.**
 
 ## Open questions for the user (surfaced, not blocking)
 

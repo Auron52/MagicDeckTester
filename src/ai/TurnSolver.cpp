@@ -290,6 +290,30 @@ static bool CandDedupOn()
     static const bool on = EnvOn("MTG_CAND_DEDUP");
     return on;
 }
+// SCOPING THE SKIP TO UNBOUNDED SEARCH WAS TRIED AND MEASURED. IT DOES NOT PAY. (2026-09-15)
+//
+// The idea: both reasons this skip ships default-OFF are reasons about a BUDGET ("it moves 17 GT
+// keys" -- because freeing work changes what fits inside a budget; "it trades search for hashing,
+// total cost unresolved"), and neither exists under an unbounded search. So arm it only where a
+// structural latch says no budget is reading the unit count, and the label ladder gets it free.
+//
+// WHAT THE MEASUREMENT SAID. Two arms, 19 Snow label games (36-250 s each, one worker per game):
+//     units_total  94,481,425  vs  94,481,425      -- IDENTICAL TO THE DIGIT
+// The lever is INERT on the label path, and the reason is structural, not a tuning matter: the two
+// call sites live in SolveWithLookahead, the PLAY-side lookahead. The label path runs through
+// EnumerateEarliestWins and never reaches them. The premise "on the label path it saves an entire
+// unbounded recursion beneath the candidate" was simply wrong about which code the label path runs.
+//
+// Where it DOES fire -- unbudgeted play (5 Snow games at d5/budget 0) -- it is lossless as claimed
+// (5/5 play digests identical) and worth  units 4,617,276 -> 4,510,864, **-2.3%**, with wall inside
+// noise. Note `units.la_cand` is UNCHANGED across those arms: the candidate is charged before the
+// skip, so this never touched the 43%-of-units site it was aimed at. A -2.3% unit move that also
+// adds uncounted BuildDedupKey hashing leaves the shipped "total cost is NOT RESOLVED" verdict
+// exactly where it was, so the flag was removed rather than left as a default-OFF duplicate of
+// MTG_CAND_DEDUP above.
+//
+// IF YOU RE-RAISE THIS, aim at the enumerator, not here -- and measure units on the LABEL path
+// first, because that is the arm that decides it.
 static bool CandDedupActive() { return CandDedupOn() || CostReframeEnabled(); }
 static std::atomic<long long> g_condemn_drops_total{0};
 // ...and SPLIT by which action collector was running. SolveUncached is the GREEDY path ("d0
@@ -33597,6 +33621,34 @@ struct UnboundedSearchScope
     UnboundedSearchScope()  { ++g_unbounded_label_search; }
     ~UnboundedSearchScope() { --g_unbounded_label_search; }
 };
+// TWO SCOPES, DELIBERATELY NOT ONE. An earlier draft folded the winless certificate and the
+// candidate-dedup skip onto a single "unbounded" predicate. That was wrong: the two mechanisms are
+// answer-preserving over DIFFERENT questions, so they are safe over different scopes.
+//
+//   LabelSearchScopeActive -- the certificate. A certified node returns {max_turns+1, {}}: no win,
+//   and NO ACTIONS. For the earliest-win query that is exact (a turn that cannot be won contributes
+//   nothing to "earliest win turn"). For PLAY it is a silent quality loss -- the node wanted a line
+//   to develop with and gets a bare pass. Measured: Snow seed 8014/gi 6 wins on turn 5 with the
+//   certificate off and turn 6 with it on, and 4 of 5 probe games had a changed play digest. So the
+//   certificate is armed on the LABEL LADDER ONLY. This is the same scope the go-off dominance cut
+//   below already uses, for the same stated reason ("the label-only scope is what keeps play and GT
+//   byte-identical") -- the certificate simply had a looser one, and it disagreed.
+//
+//   UnbudgetedWorkScopeActive -- the dedup skip, which drops no line and so cannot move an answer
+//   at all. Its only hazard is the work-unit COUNT, which matters wherever a budget reads it; both
+//   latches here mean "no budget is reading it on this thread".
+//
+// NEITHER may be written as `budget->Unlimited()`. That leaf test is true for default-constructed
+// sub-budgets inside a genuinely BUDGETED search (EngineFlags.h:707), and it was the `|| budget->
+// Unlimited()` arm -- not the label latch -- that let the certificate into unbudgeted play.
+static bool LabelSearchScopeActive()
+{
+    return g_unbounded_label_search != 0;
+}
+static bool UnbudgetedWorkScopeActive()
+{
+    return g_unbounded_label_search != 0 || g_unbudgeted_play != 0;
+}
 namespace winlesscert
 {
 inline bool Enabled()
@@ -33882,11 +33934,10 @@ inline void DumpCounters(const char* tag) { (void)tag; DumperBody::Run(); }
 // True when this node's horizon ends on THIS turn and the deck's provider can PROVE no line wins
 // it. Ordered cheapest-test-first: the turn compare, then the scope, then the flag, then the scan.
 static inline bool WinlessCertificateActive(const GameState& s, int cutoff,
-                                            const SearchBudget* budget, winlesscert::Site site)
+                                            winlesscert::Site site)
 {
     if (s.turn_number < cutoff) { return false; }   // later turns are still inside the horizon
-    if (g_unbounded_label_search == 0
-        && !(budget != nullptr && budget->Unlimited())) { return false; }
+    if (!LabelSearchScopeActive()) { return false; }
     if (!winlesscert::Enabled()) { return false; }
     const int si = static_cast<int>(site);
     if (winlesscert::StatsOn())
@@ -33927,7 +33978,7 @@ static inline bool WinlessCertificateActive(const GameState& s, int cutoff,
 // GENERALITY. The mechanism here is deck-agnostic -- it asks the search's own state identity, not
 // anything about Eldrazi. What is deck-specific is the PROOF that arms it, and that lives behind
 // DecisionProvider::ProvenWinlessThisTurn. Any archetype that can prove a turn winless gets this
-// for free; today only EldraziDisplacerFlicker implements the proof.
+// for free; today EldraziDisplacerFlicker and Snow implement the proof.
 //
 // WHAT IT IS NOT, yet: the user's rule says to STOP GENERATING once no action yields an unseen
 // state. This collapses the enumeration's RESULTS rather than terminating the generator, so the
@@ -33936,11 +33987,12 @@ static inline bool WinlessCertificateActive(const GameState& s, int cutoff,
 //
 // Same scoping as the certificate (unbounded/label search only). It can only fire at INTERIOR
 // nodes: an edge node has already returned via the certificate before this is consulted.
-static inline bool WinlessDevelopActive(const GameState& s, const SearchBudget* budget)
+static inline bool WinlessDevelopActive(const GameState& s)
 {
     if (!winlesscert::DevelopOn()) { return false; }
-    if (g_unbounded_label_search == 0
-        && !(budget != nullptr && budget->Unlimited())) { return false; }
+    // The develop closure collapses DUPLICATE end-of-turn states, so like the dedup skip it drops
+    // no distinct line and is safe wherever no budget is reading the unit count.
+    if (!UnbudgetedWorkScopeActive()) { return false; }
     if (!winlesscert::Enabled()) { return false; }
     const bool proven = ResolveProvider(s).ProvenWinlessThisTurn(s, s.active_player_index);
     if (proven && winlesscert::StatsOn())
@@ -34939,7 +34991,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // only advances the turn into a node the cutoff guard rejects anyway, so checking there
         // bought nothing and cost a board scan per plan of every edge node -- measured as 184k of
         // 184k fires with a ~0 saving on EldraziDisplacerFlicker, which is single-main.
-        if (WinlessCertificateActive(state, cutoff, budget, winlesscert::Site::M2))
+        if (WinlessCertificateActive(state, cutoff, winlesscert::Site::M2))
         { return { max_turns + 1, {} }; }
         // With the main-2 land drop open (Main2DropEnabled, EngineFlags.h) the second main's
         // enumeration folds the still-unused drop exactly like the first main's -- this is the
@@ -35989,14 +36041,20 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // "STUCK -- PASS THE TURN" (UnboundedSearchScope / WinlessCertificateActive above). This node
     // sits on the horizon edge, so the only line that can score is one that kills THIS turn; if the
     // provider can PROVE none exists, the whole pre-combat plan space below is answer-preserving
-    // waste. Placed after the memo probe (a cached answer is cheaper still) and before the
-    // enumeration, which is the 33.8%-self-time step this exists to skip. Never armed under a real
-    // budget -> the suite is byte-identical.
-    const bool cert_scope = (g_unbounded_label_search > 0
+    // waste -- for the EARLIEST-WIN question. It is not waste for play, which wanted a line to
+    // develop with, so the certificate is label-scoped (see LabelSearchScopeActive).
+    //
+    // seed_scope is deliberately WIDER than that, and is NOT the certificate's scope. What it gates
+    // is an EXECUTION that can only return a this-turn WIN with a real plan attached -- strictly
+    // better play wherever it fires -- so the argument that confined the certificate does not apply
+    // to it. Kept as it was found; the `budget->Unlimited()` arm here is the leaf test EngineFlags.h
+    // :707 warns about and is a candidate for tightening onto the latches, but that would remove
+    // go-off wins from Eldrazi's unbudgeted play and has not been measured.
+    const bool seed_scope = (g_unbounded_label_search > 0
                              || (budget != nullptr && budget->Unlimited()));
     // Live counter dump (MTG_WINLESS_STATS_EVERY); off by default, one relaxed load when off.
-    if (cert_scope) { winlesscert::MaybeProgress(); }
-    const bool certified = WinlessCertificateActive(state, cutoff, budget, winlesscert::Site::M1);
+    if (seed_scope) { winlesscert::MaybeProgress(); }
+    const bool certified = WinlessCertificateActive(state, cutoff, winlesscert::Site::M1);
     // Read the decline's provenance IMMEDIATELY -- the seeds below run applies, and an apply may
     // consult the provider again for its own reasons. See winlesscert::GoffDomOn.
     const bool goff_decline = !certified && EdfCertLastDeclineWasGoOff();
@@ -36069,7 +36127,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // CANONICAL GO-OFF SEED (see WinlessSeedWins). Not a bound -- an execution. If the deck's own
     // go-off machinery kills from here, this turn IS the node's earliest win (a this-turn win is
     // the minimum), so the plan space below cannot improve on it and is skipped outright.
-    if (cert_scope && winlesscert::SeedOn() && winlesscert::Enabled())
+    if (seed_scope && winlesscert::SeedOn() && winlesscert::Enabled())
     {
         const bool at_edge = (state.turn_number >= cutoff);
         if (winlesscert::StatsOn())
@@ -36370,7 +36428,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // each distinct state once. `nullptr` -- every node not proven stuck, and every run outside the
     // unbounded label/matrix scope -- leaves this loop byte-identical.
     EotStateSet  eot_seen;
-    EotStateSet* eot_ptr = WinlessDevelopActive(state, budget) ? &eot_seen : nullptr;
+    EotStateSet* eot_ptr = WinlessDevelopActive(state) ? &eot_seen : nullptr;
     // EXACT EDGE-TAIL ELISION (MTG_LABEL_EDGE_TAIL). On a SINGLE-MAIN deck FSLineTail is nothing
     // but "simulate end of turn, then FSLineWin at turn+1" -- and at `turn >= cutoff` that call's
     // very first line refuses `turn > cutoff`. So every plan of every horizon-edge node pays a
@@ -36426,7 +36484,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // position. This cut concedes a no-win, it does not fail to answer.
         if (gdom_width > 0 && static_cast<int>(scanned) >= gdom_width) { break; }
         ++scanned;
-        if (cert_scope && winlesscert::ProgEvery() > 0)
+        if (seed_scope && winlesscert::ProgEvery() > 0)
         {
             winlesscert::g_cur_turn.store(state.turn_number, std::memory_order_relaxed);
             winlesscert::g_cur_cut.store(cutoff, std::memory_order_relaxed);
