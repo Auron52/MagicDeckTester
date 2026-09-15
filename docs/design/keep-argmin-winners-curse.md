@@ -35,8 +35,11 @@ strictly noisier candidate set.
 
 | candidate set | plain | EB-model | EB-xpd | recovered |
 |---|---|---|---|---|
-| **bottoming** (refined-only, `floor=2`) | 0.0593 | 0.0451 | 0.0348 | 41.2 % |
-| **keep** (unfiltered, `floor=1`) | **0.1766** | 0.0658 | 0.0440 | **75.1 %** |
+| **bottoming** (refined-only, `floor=2`) | 0.0593 | 0.0451 | 0.0363 | 38.7 % |
+| **keep** (unfiltered, `floor=1`) | **0.1766** | 0.0658 | 0.0474 | **73.2 %** |
+
+(Cross-pd figures use the corrected per-size rho of §4. An earlier draft used an invalid
+rho of 0.990 and overstated these as 0.0348/41.2 % and 0.0440/75.1 %.)
 
 Per-decision regret on the keep side is **0.1766 t against bottoming's 0.0593 t**. The noise-share
 diagnostic agrees: `keepraw_argmin_noise.py` puts the keep argmin at **48.3 %** noise share at m=1
@@ -67,14 +70,17 @@ keeps every decision inside the table. Two levers, both offline, both already me
 1. **Structural prior** (already implemented for bottoming as `MTG_KEEP_BOTTOM_SHRINK`): recovers
    **62.7 %** of the keep-side curse, far more than the 23.9 % it recovers on the bottoming side,
    because the unfiltered set is noisier and therefore has more to gain from shrinkage.
-2. **Cross-pd conditioning** (documented as unused in the bottoming doc's §8): a further 12.4 %.
+2. **Cross-pd conditioning** (documented as unused in the bottoming doc's §8): a further 10.4 %.
    The doc's **0.885 is correct** and an earlier draft of this document was wrong to "correct" it:
    computing rho on *structural residuals* with `tau_r` in the denominator gave **1.142**, an
    impossible value that silently hit a 0.99 clamp. Disattenuated on the raw cell values the
    correlation is 0.885 (size 6), 0.887 (5), 0.836 (4), 0.697 (3), 0.551 (2) — so it must be a
    per-size measured rho, not a global constant, and the gains below use those.
 
-Together: **0.1766 → 0.0440 t, ~75 % of the curse removed, with no deferral and no new rollouts.**
+Together: **0.1766 → 0.0474 t, ~73 % of the curse removed, with no deferral and no new rollouts.**
+
+But note §5b: most of that is available from a *filter*, not an estimator — and the filter is
+one condition that `best_sub` already carries.
 
 ## 5. What is NOT established
 
