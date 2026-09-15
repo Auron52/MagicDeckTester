@@ -8151,3 +8151,21 @@ labelled under superseded play, frozen at `2a913b0b`) was moved aside by hand pe
 KNOWN LIMIT. Nothing is adopted by the run; its artifacts land staged.
 
 **10.6 Fleet stamp and CI for the adoption push.** Fleet: **2/361 short** (EDF 0/14 short). CI run 35012182437: build (windows-latest): ;build (ubuntu-latest): success; Smoke identity was taken against a fresh baseline smoke on the committed HEAD with the edit stashed (IDENTICAL, 80 job lines, 169/169 scenario lines); the first check had diffed against a pre-rebase baseline and flagged the four FiveColour configs whose keep table the rebase had brought in. A Windows-Update reboot at ~13:00 UTC cut the baseline smoke during its report-only audit and cost the afternoon; the chain resumed at 19:10 UTC from the build. Closed 2026-09-15T19:18:20Z.
+
+**10.7 Addenda after the chain closed (19:20 UTC).** (i) CI run 35012182437 final: build (ubuntu-latest)
+**success**, build (windows-latest) **success**, Linux/Windows determinism parity **success** (10.6 was
+written while Windows was still running; the watch had died on a network EOF). (ii) The fleet's second
+short is `critterlifegain claude_s3_gi2` (**HAND-MISMATCH**): upstream replaced that deck's list, profile,
+keep table and value sidecar between the two stamps (the v2 decklist adoption, `25d92282` and before),
+so the recorded reference now plays a different game -- upstream's, not this lever's, which no other
+provider reads. (iii) s6 frame-4, two 5-second probes on the shipped default (`f4_probe.sh`,
+`f4_finstats.err`, `f4_holdc_loop_full.err`): `[finish] draw seen=394 guard-refused=227 paid=167 |
+finish calls=198 hand=4 wish=4 no-mana=3 none-found=194 pay-fail=0` -- the wish IS cast and the finisher
+IS deployed, so hypothesis (a) of 10.3 is refuted; and the root trial's loop ends at k=188 holding
+`float{g424 c262}` -- typed colourless, not wild -- so hypothesis (b) is refuted too. The trial cashes.
+What loses T4 is the EXECUTOR's apply: its first crank enters with `cost={C} float{g1} avail{g1}
+up=[] tapped=[Kitchen,Brushland,Adarkar Wastes]` -- the real cast of Eldrazi Displacer paid its generic
+pips from the floating {C} (the frame floats {W}{G}{G}{C}), leaving {G} for a {C} activation. Neither
+`MTG_HOLD_C_FOR_LINE` (the root's line accounting) nor `MTG_LINE_C_HOLD` governs THAT payment, which is
+why neither flipped the fixture (chain3). The fix, if pursued, is the executor's cast payer reserving a
+{C} the same-main go-off plan is about to need; it is not started, and both s6 fixtures stay open.
