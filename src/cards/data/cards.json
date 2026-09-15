@@ -7830,6 +7830,41 @@
      }
     ]
    }
+  },
+  {
+   "name": "Apex Altisaur",
+   "mana_cost": "{7}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Dinosaur"
+   ],
+   "keywords": [],
+   "power": 10,
+   "toughness": 10,
+   "oracle_text": "When this creature enters, it fights up to one target creature you don't control.\nEnrage — Whenever this creature is dealt damage, it fights up to one target creature you don't control. [BOTH fight abilities are PROVABLY INERT in this sim and are modelled as NO-OPS, leaving a vanilla 10/10 for {7}{G}{G}. (1) The passive goldfish opponent NEVER CONTROLS A CREATURE: it never casts and never blocks (Combat.cpp has no blocker logic; Card.h:87), and the only path to an opposing permanent is our own Terastodon -- which, per its own note, finds no opponent noncreature permanents in this sim and so destroys OURS, giving US the Elephants. So the ETB fight has zero legal targets in every reachable state. (2) 'UP TO one target' makes the trigger legal with ZERO targets chosen (CR 115.4), so resolving it as a no-op is RULES-CORRECT here, not a simplification -- unlike a mandatory 'target', which would have no legal choice. (3) Enrage never fires: nothing in this sim deals damage to our creatures (the opponent never blocks or attacks, and this 60 holds no self-damage source; the only life loss we take is Turntimber's pay-3). USER ACKNOWLEDGED 2026-09-15, before implementation, that this ships deliberately as a vanilla body: the creature removal the card is played for does not exist against a goldfish, so its measured value here is a FLOOR, not its real-game value.]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "World War Hulk",
+   "mana_cost": "{3}{G}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Saga"
+   ],
+   "keywords": [],
+   "oracle_text": "(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI — The next red or green creature spell you cast this turn can be cast without paying its mana cost.\nII — Put three +1/+1 counters on target creature you control.\nIII — Choose target creature you control. Until end of turn, double its power and toughness and it gains trample. [FIRST SAGA IN THIS ENGINE (CR 714). SCHEDULING: Permanent::lore_counters -- one as it enters (CR 714.2a, an as-enters replacement, so chapter I resolves the turn it lands), one after the controller's DRAW STEP (CR 714.2b, the post-2022 wording printed on the card; .claude/skills/mtg-rules.md still summarises the PRE-2022 'each precombat main phase' rule -- the two are equivalent here, nothing happens in between against a passive opponent), sacrificed once chapter III resolves (CR 714.4). Advanced by AdvanceSagas() after the draw in BOTH worlds; the enter is deferred through g_pending_saga_enters because chapter I appends a permanent and callers of the enter cascade hold saved slot indices. lore_counters is folded into the TT key (nonzero-only, so other decks stay byte-identical) and is an EqualRequired dominance axis -- more counters is not better, it is also closer to the sacrifice. CHAPTER I is the card in this deck (a free Worldspine Wurm, mana value ELEVEN). Deliberately NOT routed through GameState::free_casts_available: that bank is a PHASE-BOUNDARY mechanism (filled by combat damage, spent post-combat) and the plan enumerator only emits free-cast variants when the bank is already nonzero at enumeration time, which a mid-main grant cannot express without reworking subset validity/ordering/dedup in the hottest code in the repo. Modelled instead as resolving INSIDE the Saga's own resolution -- the house pattern for a resolution-time choice (Terastodon's put path picks K the same way; so do the Lackey put and the sac-tutor put-list). The ordering freedom given up is DOMINATED: the controller already chooses when in the main phase to cast the Saga, so 'deploy the elves, THEN cast this and free-cast Craterhoof' is expressible; only 'cast this early and the freed spell later in the same turn' is lost, which is never better since the freed spell costs nothing either way. CHOICE, NO SEARCHED AXIS (disclosed, matching Terastodon's put path): candidates are the distinct CREATURE names in hand that are red or green, scored by the attack damage they add THIS turn -- measured by performing the put on a COPY of the state, so a Craterhoof team-pump or a Hornet Queen token wave is measured rather than guessed -- tie-broken by the board power left behind. That distinction is load-bearing: a hasty Craterhoof can beat a summoning-sick Worldspine Wurm, which a naive highest-mana-value pick would get backwards. Scoring is skipped when only one candidate exists. DISCLOSED SIMPLIFICATION: the freed creature is PUT onto the battlefield through the shared ETB cascade rather than moving through the stack as a cast spell. Inert for this 60 (no 'whenever you cast' trigger, no opponent to counter it, nothing reads storm count or mv_cast_this_turn); a deck that cared would need the real cast path. CHAPTER II: counters_on_target 3 via the shared Counter::Type::PlusOnePlusOne push (Scale the Heights' precedent). CHAPTER III: 'double its power and toughness' == +X/+Y until end of turn where X/Y are its values AS THE ABILITY RESOLVES, applied to temp_power_bonus/temp_tough_bonus (the cleanup-cleared accumulators). The 'gains trample' half is NOT modelled -- provably inert, the passive opponent never blocks so excess damage through blockers never occurs, the same disclosure Craterhoof's trample grant carries. TARGETING for II and III: DefaultSagaChapterTarget -- prefer a body that can still SWING THIS TURN (a chapter resolves before combat), then highest EffectivePower, ties to the lowest battlefield index so executor and rollout agree. With no creature the chapter has no legal target and is removed from the stack (CR 608.2b), a no-op here.]",
+   "template": "custom",
+   "parameters": {
+    "saga_chapters": 3,
+    "saga_ch1_free_cast_creature_colors": "RG",
+    "saga_ch2_counters_on_target": 3,
+    "saga_ch3_double_pt_target": true
+   }
   }
  ]
 }
