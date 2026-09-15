@@ -8149,3 +8149,5 @@ EDF value leaf is launched on that commit (`bash scripts/valueleaf.sh run decks/
 `MTG_MEM_BUDGET_MB=16384`, default threads), after the stale 2026-09-09 queue (2053 phase-A rows
 labelled under superseded play, frozen at `2a913b0b`) was moved aside by hand per the driver's
 KNOWN LIMIT. Nothing is adopted by the run; its artifacts land staged.
+
+**10.6 Fleet stamp and CI for the adoption push.** Fleet: **2/361 short** (EDF 0/14 short). CI run 35012182437: build (windows-latest): ;build (ubuntu-latest): success; Smoke identity was taken against a fresh baseline smoke on the committed HEAD with the edit stashed (IDENTICAL, 80 job lines, 169/169 scenario lines); the first check had diffed against a pre-rebase baseline and flagged the four FiveColour configs whose keep table the rebase had brought in. A Windows-Update reboot at ~13:00 UTC cut the baseline smoke during its report-only audit and cost the afternoon; the chain resumed at 19:10 UTC from the build. Closed 2026-09-15T19:18:20Z.
