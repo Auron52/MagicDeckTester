@@ -564,3 +564,34 @@ shipped config.
 4. The two modelling items in `stompy-top-of-library-consumers.md` (upkeep Call activation on an
    intentionally-stacked top; the late "tutor for Craterhoof" line the static rank cannot express)
    remain deferred, as does the Worldly-Tutor HOLD idea in the addendum above.
+
+## New-card screening, 2026-09-15 (World War Hulk / 4 Natural Order / Apex Altisaur)
+
+Full write-up: **`docs/design/saga-world-war-hulk.md`** (includes the first Saga implementation,
+CR 714, and its two traps). Headline, 20,000 paired games per arm against the shipped R=40/K=15
+table with the new cards aliased into the bucket they replace, base ≈ 4.54 avg win turn:
+
+| list | delta (40,000 games, held-out confirmed) |
+|---|---|
+| `wwh4_no4` — +4 World War Hulk, Natural Order 2→4, −4 Call of the Wild, −Mirri's Guile, −Elderscale Wurm | **−0.2272** |
+| `wwh4_no4_altisaur` — the same plus Apex Altisaur 1 / Worldspine Wurm 4→3 | **−0.1927** |
+| Natural Order 2→4 alone (−Mirri's Guile, −Elderscale Wurm) | −0.1635 |
+
+Findings that constrain future edits to this list:
+
+* **Natural Order is the deck's best card** (+0.596 per-copy in the shipped profile, 2.4x the next)
+  and wants to be a 4-of. 4 > 3 > 2 monotonically.
+* **Hornet Queen is a keep.** Cutting her for Natural Order measured *worse* than cutting Mirri's
+  Guile + Elderscale Wurm. Her Insect tokens are green — Natural Order fodder and Craterhoof bodies.
+* **Craterhoof Behemoth is untouchable.** Trading it for a second Hornet Queen swings the list from
+  −0.22 to +0.04.
+* **Worldly Tutor must not pay for World War Hulk** — the worst spot tested (+0.038). The
+  tutor→draw→free-cast line is real.
+* **Apex Altisaur costs 0.0345 turns**, and that is a FLOOR: both its fight abilities are provably
+  inert against a passive opponent that never controls a creature. User acknowledged, shipped
+  deliberately as a vanilla 10/10.
+* The apparatus bias floor is UNMEASURED on the alias route (`--floor` generates per arm, which the
+  route forbids). Headline effects clear a typical floor by 20–45x; adjacent-arm gaps (~0.012) do not.
+
+Not yet done for these lists: mulligan profile, value leaf, regression GT. The numbers are a
+ranking, not an adopted deck's strength.
