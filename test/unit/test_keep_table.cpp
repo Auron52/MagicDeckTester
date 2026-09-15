@@ -116,6 +116,15 @@ std::filesystem::path TmpDir()
     std::filesystem::create_directories(d);
     return d;
 }
+
+// Best-effort cleanup. On Windows a file cannot be deleted while a handle is open on it, and the
+// Table keeps its ifstream open for its lifetime (the loader case holds it in a process-global cache
+// for the rest of the run) -- so cleanup must never be able to fail a test that already passed.
+void Cleanup(const std::filesystem::path& p)
+{
+    std::error_code ec;
+    std::filesystem::remove_all(p, ec);
+}
 }  // namespace
 
 TEST_CASE("keep table: the on-disk backing decides identically to the in-memory maps")
@@ -123,46 +132,45 @@ TEST_CASE("keep table: the on-disk backing decides identically to the in-memory 
     // 40k cells x 258 B records = ~10 MB: past the writer's 8 MB buffer, so records straddle a flush.
     const ExhaustiveKeepPolicy mem = MakePolicy(40000);
     const std::filesystem::path p = TmpDir() / "agree.keeptable";
-    std::filesystem::remove(p);
+    Cleanup(p);
     std::string err;
     REQUIRE_MESSAGE(WriteTable(p, mem, "src.gz", 1234, 5678, &err), err);
     CHECK(std::filesystem::file_size(p) > (8u << 20));
+    {   // scoped so the table's handle is closed before the file is removed
+        std::string why;
+        auto t = keeptable::Table::Open(p, "src.gz", 1234, 5678, &why);
+        REQUIRE_MESSAGE(t, why);
+        CHECK(t->size() == mem.keep.size());
+        CHECK(t->header().K == 4);
+        CHECK(t->header().F_keep == 14);
+        CHECK(t->header().F_bot == 14);
+        const ExhaustiveKeepPolicy dsk = DiskBacked(t);
+        CHECK_FALSE(dsk.empty());
+        CHECK(dsk.table_size() == mem.keep.size());
+        CHECK(dsk.buckets == mem.buckets);
+        CHECK(dsk.commit == mem.commit);
+        CHECK(dsk.play_digest == mem.play_digest);
+        CHECK(dsk.effective_R == mem.effective_R);
+        CHECK(dsk.bottoming_enabled == mem.bottoming_enabled);
 
-    std::string why;
-    auto t = keeptable::Table::Open(p, "src.gz", 1234, 5678, &why);
-    REQUIRE_MESSAGE(t, why);
-    CHECK(t->size() == mem.keep.size());
-    CHECK(t->header().K == 4);
-    CHECK(t->header().F_keep == 14);
-    CHECK(t->header().F_bot == 14);
-    const ExhaustiveKeepPolicy dsk = DiskBacked(t);
-    CHECK_FALSE(dsk.empty());
-    CHECK(dsk.table_size() == mem.keep.size());
-    CHECK(dsk.buckets == mem.buckets);
-    CHECK(dsk.commit == mem.commit);
-    CHECK(dsk.play_digest == mem.play_digest);
-    CHECK(dsk.effective_R == mem.effective_R);
-    CHECK(dsk.bottoming_enabled == mem.bottoming_enabled);
+        for (const auto& kv : mem.keep) { CheckAgree(mem, dsk, kv.first); }
 
-    for (const auto& kv : mem.keep) { CheckAgree(mem, dsk, kv.first); }
-
-    // Absent compositions (never generated) and an unbucketed card: both backings decline.
-    std::mt19937 rng(7);
-    for (int i = 0; i < 2000; ++i)
-    {
-        const std::vector<int> comp{ 40 + static_cast<int>(rng() % 20), static_cast<int>(rng() % 32),
-                                     static_cast<int>(rng() % 32), static_cast<int>(rng() % 32) };
-        REQUIRE(mem.keep.find(comp) == mem.keep.end());
-        CheckAgree(mem, dsk, comp);
-    }
-    {
+        // Absent compositions (never generated) and an unbucketed card: both backings decline.
+        std::mt19937 rng(7);
+        for (int i = 0; i < 2000; ++i)
+        {
+            const std::vector<int> comp{ 40 + static_cast<int>(rng() % 20), static_cast<int>(rng() % 32),
+                                         static_cast<int>(rng() % 32), static_cast<int>(rng() % 32) };
+            REQUIRE(mem.keep.find(comp) == mem.keep.end());
+            CheckAgree(mem, dsk, comp);
+        }
         bool present = true;
         CHECK_FALSE(dsk.Decide({ "Not A Card" }, 0, true, present));
         CHECK_FALSE(present);
         std::vector<int> tgt;
         CHECK_FALSE(dsk.DecideBottom({ "Not A Card" }, 1, true, tgt));
     }
-    std::filesystem::remove(p);
+    Cleanup(p);
 }
 
 TEST_CASE("keep table: a table with no bottom rows anywhere is keep-only")
@@ -170,14 +178,16 @@ TEST_CASE("keep table: a table with no bottom rows anywhere is keep-only")
     ExhaustiveKeepPolicy mem = MakePolicy(500);
     mem.bottom_keep.clear();
     const std::filesystem::path p = TmpDir() / "keeponly.keeptable";
-    std::filesystem::remove(p);
+    Cleanup(p);
     REQUIRE(WriteTable(p, mem, "s", 1, 1));
-    auto t = keeptable::Table::Open(p, "s", 1, 1);
-    REQUIRE(t);
-    CHECK(t->header().F_bot == 0);
-    const ExhaustiveKeepPolicy dsk = DiskBacked(t);
-    for (const auto& kv : mem.keep) { CheckAgree(mem, dsk, kv.first); }
-    std::filesystem::remove(p);
+    {
+        auto t = keeptable::Table::Open(p, "s", 1, 1);
+        REQUIRE(t);
+        CHECK(t->header().F_bot == 0);
+        const ExhaustiveKeepPolicy dsk = DiskBacked(t);
+        for (const auto& kv : mem.keep) { CheckAgree(mem, dsk, kv.first); }
+    }
+    Cleanup(p);
 }
 
 TEST_CASE("keep table: shape and order violations are refused at build time")
@@ -223,14 +233,14 @@ TEST_CASE("keep table: shape and order violations are refused at build time")
         keeptable::Header h;
         CHECK_FALSE(w.Finish(h));                                  // no entries
     }
-    std::filesystem::remove(p);
+    Cleanup(p);
 }
 
 TEST_CASE("keep table: source fingerprint and length exactness gate Open")
 {
     const ExhaustiveKeepPolicy mem = MakePolicy(300);
     const std::filesystem::path p = TmpDir() / "gate.keeptable";
-    std::filesystem::remove(p);
+    Cleanup(p);
     REQUIRE(WriteTable(p, mem, "the/source.gz", 100, 200));
     CHECK(keeptable::Table::Open(p, "the/source.gz", 100, 200));
     CHECK_FALSE(keeptable::Table::Open(p, "the/source.gz", 101, 200));   // size moved
@@ -240,13 +250,13 @@ TEST_CASE("keep table: source fingerprint and length exactness gate Open")
 
     // A byte short (a torn write / a concurrent rebuild shrinking the file) and a byte long (a tail
     // from a non-atomic rename) must both be rejected: the trailer and the record region no longer
-    // account for the file exactly.
+    // account for the file exactly. (Every Open above returned a temporary, so no handle is open.)
     const auto sz = std::filesystem::file_size(p);
     std::filesystem::resize_file(p, sz - 1);
     CHECK_FALSE(keeptable::Table::Open(p, "the/source.gz", 100, 200));
     std::filesystem::resize_file(p, sz + 1);
     CHECK_FALSE(keeptable::Table::Open(p, "the/source.gz", 100, 200));
-    std::filesystem::remove(p);
+    Cleanup(p);
 }
 
 TEST_CASE("keep table: the loader builds the table from a JSON sidecar and it matches the parsed maps")
@@ -255,7 +265,7 @@ TEST_CASE("keep table: the loader builds the table from a JSON sidecar and it ma
     // what lets the build stream), CachedExhaustiveKeep builds the table under MTG_KEEP_TABLE_DIR and
     // returns a DISK-backed policy; LoadDeckProfile is the in-memory reference for the same file.
     const std::filesystem::path dir = TmpDir() / "loader";
-    std::filesystem::remove_all(dir);
+    Cleanup(dir);
     std::filesystem::create_directories(dir);
     REQUIRE(EnvPut("MTG_KEEP_TABLE_DIR", (dir / "cache").string().c_str(), true));
 
@@ -293,5 +303,8 @@ TEST_CASE("keep table: the loader builds the table from a JSON sidecar and it ma
     const uint64_t sz = std::filesystem::file_size(sidecar);
     const uint64_t mt = static_cast<uint64_t>(std::filesystem::last_write_time(sidecar).time_since_epoch().count());
     CHECK(keeptable::Table::Open(table, std::filesystem::weakly_canonical(sidecar).string(), sz, mt));
-    std::filesystem::remove_all(dir);
+    // `cached` lives on in CachedExhaustiveKeep's process-global cache with the table open, so on
+    // Windows the table file itself cannot be removed here; everything else is, best-effort.
+    EnvPut("MTG_KEEP_TABLE_DIR", "", true);
+    Cleanup(dir);
 }
