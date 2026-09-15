@@ -8,6 +8,21 @@ Companions: [no-lookahead-bottoming.md](no-lookahead-bottoming.md) (the constrai
 [keep-argmin-winners-curse.md](keep-argmin-winners-curse.md) (a lead that was **refuted** — read its
 §7), [keepgen-bottoming-winners-curse.md](keepgen-bottoming-winners-curse.md) (the original fix).
 
+> ### Picked up 2026-09-15 — read this first
+>
+> * **§5's "what is still live" (play drift) is CLOSED.** Tested causally on the generating commit:
+>   +0.0165t there vs +0.018375t at HEAD. The table was never good, it is not stale. **All four
+>   hypotheses are now eliminated and the failure is unexplained** — do not re-tread them.
+> * **Scope narrowed to FiveColour.** The user deferred the fleet-wide re-policy (§2, §6).
+> * **The gate is deleted from the code, not merely defaulted off** (`6f82c66c`), and the flags are
+>   collapsed to one: `MTG_KEEP_BOTTOM_SHRINK`. `MTG_KEEP_BOTTOM_REFINE` / `_GATE_K` **no longer
+>   exist**, so every recipe in these docs that sets them is stale — §2's build command is updated,
+>   as is no-lookahead-bottoming.md's.
+> * **Shrinkage survived, the gate did not.** An earlier revert removed both; the restore keeps your
+>   adoptable result and makes the non-compliant configuration unrepresentable.
+> * **§3's "compliance costs +0.0142t" is a diagnostic, not a decision number** — it prices the
+>   table against a lookahead that may not ship. See the update in §3.
+
 ---
 
 ## 1. The constraint you are working under
@@ -58,11 +73,25 @@ spread min -0.0160  median -0.0040  max +0.0080   sd 0.0053  se 0.0009  mean/se 
 Per-decision *subcomposition-selection* regret, `test/keepraw_crosspd_prior.py`. Only the Melira row
 has been confirmed in play.
 
-### Suggested first action
+### Suggested first action — DEFERRED by the user 2026-09-15
 
-Re-policy every deck with `GATE_K=0 SHRINK=1`, A/B each against its incumbent, adopt the winners.
-Recipe in [no-lookahead-bottoming.md](no-lookahead-bottoming.md) §"How to build a compliant profile".
-**Per-deck A/B is not optional** — Melira is one deck and −0.0044t is a small effect.
+> *"I don't really care about doing this for other decks for the time being. If we find it is
+> necessary for Melira, is not prohibitively expensive and seems helpful elsewhere then we can
+> consider doing it on a machine."*
+
+The fleet-wide re-policy is **not being pursued**. Scope is FiveColour only. Revisit only if
+Melira's own need resurfaces. If it is ever picked up: re-policy each deck, A/B against its
+incumbent, adopt per deck — **per-deck A/B is not optional**, Melira is one deck and −0.0044t is a
+small effect. Recipe in [no-lookahead-bottoming.md](no-lookahead-bottoming.md) §"How to build a
+compliant profile".
+
+One logistical fact established while scoping it, worth recording for whoever does pick it up:
+**a single pooled manifest CAN span decks.** `AttachExhaustiveSidecar` resolves the exhaustive
+sidecar directory-relative off each job's own `profile` path, so per-deck scratch dirs give per-job
+tables without the process-global `MTG_EXHAUSTIVE_PROFILE`. The binding constraint is memory, not
+the harness: these profiles are 0.6–1.8 GB each and 40 of them will not co-reside in 10 GB, so such
+a run must be chunked by resident set. That is a genuine data dependency, not a forbidden wave.
+The arms themselves still cannot share a batch — `MTG_EXHAUSTIVE_BOTTOM` is process-global.
 
 ---
 
@@ -91,10 +120,28 @@ So compliance costs FiveColour ~0.014 turns. Routes to recover it, both complian
 
 * **cross-pd conditioning** — predicted to take +0.0142 → ~+0.0104. Not yet implemented in C++.
 * **more R** — regret scales **~1/R, not 1/√R**. Pooling one more R30 chunk to R=60 with the
-  correction reaches ~+0.003t, near parity. Costs another generation run (the original was 20 days).
+  correction reaches ~+0.003t, near parity. Costs another generation run (the original was 20 days),
+  which the user has ruled out: *"I'm not regenerating something that took 3 weeks."*
 
-A compliant k=0 rebuild of FiveColour exists at `/tmp/fc_k0.profile.json` (not committed, /tmp will
-not survive).
+**Update 2026-09-15 — the framing of "the cost of compliance" needs one correction.** Both figures
+above price the compliant table against the **lookahead bottomer**, which §1 forbids shipping. That
+is the right diagnostic number and the wrong decision number. The decision is between the compliant
+profile and **no profile at all**, and the keep half — measured in isolation at **−0.125t, 16/16
+seeds** — is not in dispute and dwarfs a +0.014t bottoming deficit. So "compliance costs FiveColour
+~0.014 turns" is true only relative to an option that does not exist; relative to the shipping
+alternative the profile is expected to be a large net win. `logs/fc_repolicy/decide.sh` measures the
+combined effect directly rather than composing the two separately-measured halves.
+
+Two compliant rebuilds now exist, both **verified zero-deferral** (5.6 M `bottom_keep` rows streamed
+from each, every row length K=27):
+* `/tmp/fc_plain.profile.json` — the generated table, and **byte-identical to the generated profile**
+  (whole file, 1,784,066,360 bytes). Worth noting for its own sake: the *originally generated*
+  FiveColour profile was already compliant. The gate is the only thing that made it non-compliant.
+* `/tmp/fc_shrink.profile.json` — same raw with the structural-prior shrinkage; identical `D_opt`,
+  so it differs from `plain` in the bottoming targets alone.
+
+Neither is committed and **/tmp will not survive a reboot** — re-merge from the raw (~20 min, zero
+rollouts) if they vanish.
 
 ---
 
@@ -198,13 +245,51 @@ table *confidently wrong*, which a margin-based gate cannot see — so this refu
 up as low confidence", not abstraction outright. But it does refute the gate's benefit being
 fetchland-driven, which was the testable part.)
 
+### Eliminated 4 — play drift (RESOLVED 2026-09-15; this section's "still live" item is now closed)
+
+The hypothesis: FiveColour's raw carries `commit 2f7822a2` / `play_digest b79a141457869ca5`, every
+A/B ran at HEAD ~230 commits later, so the labels describe play that no longer exists.
+
+**Drift is real but is NOT the cause.** Two measurements, in order.
+
+*Screen.* Recomputing the rollout-config play digest at the labeller config (d2/b1), in a scratch
+deck dir with **no exhaustive profile present** — presence-gating would otherwise change the very
+play being fingerprinted:
+
+```
+recorded at generation:                  b79a141457869ca5
+current binary + CURRENT value sidecar:  8fca5f52d662de5f
+current binary + GEN-TIME value sidecar: 8fca5f52d662de5f
+```
+
+Equal in rows 2 and 3, so the value-sidecar edits (`mull_gen_budget_ms` 1→3, `escalation_r` /
+`escalation_fresh_frac`) are not responsible — the **engine's** play moved. But per this section's
+own Mirrorwing precedent a moved digest is necessary, not sufficient, so the screen settles nothing.
+
+*Causal test.* Rebuilt `2f7822a2` in a worktree and re-ran the confounded bottoming A/B **there**,
+with the original un-gated profile, on the same 16 bottom-block seeds — i.e. the table measured
+against the exact engine it was fitted to:
+
+```
+on 2f7822a2 (the engine the table was FIT TO):  +0.0165t   (2/16 seeds)
+on HEAD     (recorded earlier):                 +0.018375t (0/16 seeds)
+```
+
+Statistically indistinguishable. **The table was never good; it is not stale.** The Mirrorwing
+precedent flagged above held exactly as written.
+
+*Method note worth keeping:* the screen alone would have supported the drift story, and the causal
+test was designed so that neither outcome depended on the regret model that produced the original
+(refuted) diagnosis. When a hypothesis about staleness is cheap to test *against the old binary*,
+test it there rather than reasoning from fingerprints.
+
 ### What is still live
 
-**Play drift.** FiveColour's raw carries `commit 2f7822a2` / `play_digest b79a141457869ca5`, and every
-A/B here ran at HEAD. The labels were fit to play that no longer exists. Another agent was testing
-exactly this when this handoff was written — **check that result before spending anything else**, and
-note the precedent: the Mirrorwing repair recorded a stale-digest table that still shipped fine, so
-drift is not automatically disqualifying.
+**Nothing.** All four hypotheses above are eliminated. **Why FiveColour's bottoming table loses the
+confounded A/B is unexplained**, and per §1 that no longer blocks adoption: the confounded A/B is a
+diagnostic, not a gate, because neither "ship bottoming off" nor "defer to lookahead" is available.
+Treat the deficit as estimator work owed (§3's two routes: cross-pd conditioning, or more R), not as
+a veto. Do not re-tread the four.
 
 ## 5b. Why a peek-nullified lookahead can beat an ungated table (mechanism, not deck-specific)
 
@@ -247,24 +332,34 @@ Residual exposure after `best_sub`'s filter: the fallback when *no* candidate is
 
 ---
 
-## 6. Recommended order of work
+## 6. Order of work — REVISED 2026-09-15 after the user scoped this to FiveColour
 
-1. **Re-policy + A/B every deck at `GATE_K=0 SHRINK=1`.** Free, compliant, measured +0.0044t on
-   Melira. Adopt per deck on its own A/B.
-2. **Decide FiveColour.** It is non-compliant today. Making it compliant costs +0.0142t unless (3)
-   lands first.
-3. **Implement cross-pd conditioning** in `BuildPolicyFromTables` with a **per-size measured rho**
-   (it collapses to 0.55 at size 2 — a global constant is wrong). Predicted −39 % bottoming regret.
-4. **Apply the correction at generation time**, not merge-only, so fresh decks stop shipping
-   uncorrected tables. Open follow-up #1 in the original doc, now the higher priority of the two.
-5. **Then delete the flags.** User: *"once we have settings we are satisfied with we should remove
-   the other options. Too many settings is a recipe for problems."* Remove
-   `MTG_KEEP_BOTTOM_REFINE` / `MTG_KEEP_BOTTOM_SHRINK` / `MTG_KEEP_BOTTOM_GATE_K`; bake shrinkage on
-   with no gate. Consider deriving `MTG_MERGE_BOTTOM_FLOOR` from the raw's `sub_target` — omitting it
-   silently produces an unfaithful rebuild, which is a corruption footgun, not a knob.
-6. **Fix `mullgen.sh`'s quarantine path.** On a confounded *bottoming* failure it deactivates the
+~~1. Re-policy + A/B every deck.~~ **DEFERRED by the user** — see §2. Not being pursued.
+
+1. **Decide FiveColour** — IN FLIGHT. `logs/fc_repolicy/decide.sh`: three arms over one manifest,
+   32 fresh seeds × 1000 games. `noprof` (no sidecar + real lookahead = ship nothing) vs `plain`
+   (the generated table, rebuilt offline and verified byte-identical) vs `shrink`. Answers both
+   "ship anything?" and "which table?" in one run. Both candidate profiles are verified
+   zero-deferral (5.6 M `bottom_keep` rows each, all length K=27).
+2. **Partly done — the flags are already collapsed.** `MTG_KEEP_BOTTOM_REFINE` and
+   `MTG_KEEP_BOTTOM_GATE_K` are **deleted**; `MTG_KEEP_BOTTOM_SHRINK` is the only knob (default off,
+   which is what keeps a merge an exact re-policy). The gate is gone from
+   `BuildPolicyFromTables` outright rather than left switchable, so the non-compliant configuration
+   §1 warns about is now unrepresentable. Remaining from the original item: bake shrinkage on and
+   drop the last flag once it is settled, and consider deriving `MTG_MERGE_BOTTOM_FLOOR` from the
+   raw's `sub_target` — omitting it silently produces an unfaithful rebuild, a corruption footgun
+   rather than a knob.
+3. **Fix `mullgen.sh`'s quarantine path.** On a confounded *bottoming* failure it deactivates the
    profile, dropping the deck to **100 %** lookahead — the worst outcome under §1. It should report
-   and leave the table live. The *keep* half of that gate is fine.
+   and leave the table live. The *keep* half of that gate is fine. **This is the one item that can
+   still cause harm unprompted**, so it outranks the estimator work below.
+4. **Implement cross-pd conditioning** in `BuildPolicyFromTables` with a **per-size measured rho**
+   (it collapses to 0.55 at size 2 — a global constant is wrong). Predicted −39 % bottoming regret.
+   Now speculative for FiveColour specifically: worth it only if §1's result says the bottoming
+   deficit is what stands between this deck and a good profile.
+5. **Apply the correction at generation time**, not merge-only, so fresh decks stop shipping
+   uncorrected tables (`ExhaustiveKeep.cpp:1198` still passes no refine argument). Lower priority
+   under the narrowed scope — no new generation is planned.
 
 ---
 
